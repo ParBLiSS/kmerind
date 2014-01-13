@@ -74,6 +74,9 @@ if (Boost_FOUND)
 endif(Boost_FOUND)
 set(EXTRA_LIBS ${EXTRA_LIBS} ${Boost_LIBRARIES})
 
+# need this flag for boost log
+add_definitions(-DBOOST_LOG_DYN_LINK)
+
 #### MPI
 set(USE_MPI ON CACHE BOOL "Build with MPI support")
 if (USE_MPI)
