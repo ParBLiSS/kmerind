@@ -7,7 +7,9 @@ project(pbil)
 set (pbil_VERSION_MAJOR 0)
 set (pbil_VERSION_MINOR 1)
 
-# Compilation Settings
+
+##### General Compilation Settings
+
 IF(NOT CMAKE_BUILD_TYPE)
   SET(CMAKE_BUILD_TYPE Release CACHE STRING
       "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
@@ -53,7 +55,23 @@ endif()
 
 
 
-# External Library Settings
+###### External Library Settings
+#### Boost Library
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_ADDITIONAL_VERSIONS "1.54" "1.54.0" "1.52" "1.52.0")
+set(Boost_DETAILED_FAILURE_MSG ON)
+find_path(BOOST_ROOT NAMES include/boost/circular_buffer.hpp
+	HINTS /usr /usr/local /usr/local/share /opt/local ENV BOOST_HOME
+	DOC "path to Boost root directory")
+# must specify the components otherwise it's a header only usage
+find_package( Boost REQUIRED COMPONENTS log program_options)
+if (Boost_FOUND)
+    include_directories( ${Boost_INCLUDE_DIRS} )
+    link_directories( ${Boost_LIBRARY_DIRS} )
+    message(STATUS "Boost libs: " ${Boost_LIBRARIES})
+endif(Boost_FOUND)
+set(EXTRA_LIBS ${Boost_LIBRARIES})
+
 #### MPI
 set(USE_MPI ON CACHE BOOL "Build with MPI support")
 if (USE_MPI)
@@ -68,6 +86,8 @@ else(USE_MPI)
 endif(USE_MPI)
 if (MPI_FOUND)
     set(MPI_DEFINE "#define USE_MPI")
+    set(EXTRA_LIBS ${EXTRA_LIBS} ${MPI_LIBRARIES})
+
 else (MPI_FOUND)
     set(MPI_DEFINE "")    
 endif (MPI_FOUND)
@@ -83,29 +103,15 @@ else(USE_OPENMP)
     #set(OPENMP_FOUND 0)	
 endif(USE_OPENMP)
 if (OPENMP_FOUND)
-    set(OPENMP_DEFINE "#define USE_OPENMP" CACHE INTERNAL "variable that goes into config.hpp.in" FORCE)
+    set(OPENMP_DEFINE "#define USE_OPENMP")
 else (OPENMP_FOUND)
     set(OPENMP_DEFINE "")
 endif (OPENMP_FOUND)
 
-#### Boost Library
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_ADDITIONAL_VERSIONS "1.54" "1.54.0" "1.52" "1.52.0")
-set(Boost_DETAILED_FAILURE_MSG ON)
-find_path(BOOST_ROOT NAMES include/boost/circular_buffer.hpp
-	HINTS /usr /usr/local /usr/local/share /opt/local ENV BOOST_HOME
-	DOC "path to Boost root directory")
-# must specify the components otherwise it's a header only usage
-find_package( Boost REQUIRED COMPONENTS log program_options)
-if (Boost_FOUND)
-    include_directories( ${Boost_INCLUDE_DIRS} )
-    link_directories( ${Boost_LIBRARY_DIRS} )
-    message(STATUS "Boost libs: " ${Boost_LIBRARIES})
-endif(Boost_FOUND)
 
   
 
-# Executable and Libraries
+###### Executable and Libraries
 # Save libs and executables in the same place
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib CACHE PATH "Output directory for libraries" )
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
@@ -127,20 +133,14 @@ configure_file(
 include_directories("${PROJECT_BINARY_DIR}")
 
 
-## LIBRARY
+###### LIBRARY
 #set(libsrcs CmdlineParser.cpp Communicator_I.cpp CommHandler_I.cpp Process.cpp PullCommHandler.cpp PushCommHandler.cpp RandomScheduler.cpp RoundRobinScheduler.cpp NullSinkAction.cpp DataBuffer.cpp MPIDataBuffer.cpp MPISendDataBuffer.cpp MPIRecvDataBuffer.cpp)
 #set(libname runtime)
 # Add rule to generate execution engine, as a shared library (.so)
 #add_library("${libname}" SHARED ${libsrcs})
 # Link opencv stuff to the execution engine
 
-
-## EXECUTABLES
-add_executable(test test/test.cpp)
-target_link_libraries(test ${MPI_LIBRARIES})
-target_link_libraries(test ${Boost_LIBRARIES})
-
-
+add_subdirectory(test)
 
 # Install Settings
 
