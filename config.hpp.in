@@ -15,4 +15,7 @@ file comment
 // CMakeLists.txt conditionally sets OPENMP_DEFINE
 @OPENMP_DEFINE@
 
+// logger
+@LOGGER_DEFINE@
+
 #endif /* CONFIG_H */

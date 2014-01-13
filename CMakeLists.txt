@@ -57,6 +57,8 @@ endif()
 
 ###### External Library Settings
 #### Boost Library
+#set(EXTRA_LIBS pthread)
+
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_ADDITIONAL_VERSIONS "1.54" "1.54.0" "1.52" "1.52.0")
 set(Boost_DETAILED_FAILURE_MSG ON)
@@ -64,13 +66,13 @@ find_path(BOOST_ROOT NAMES include/boost/circular_buffer.hpp
 	HINTS /usr /usr/local /usr/local/share /opt/local ENV BOOST_HOME
 	DOC "path to Boost root directory")
 # must specify the components otherwise it's a header only usage
-find_package( Boost REQUIRED COMPONENTS log program_options)
+find_package( Boost REQUIRED COMPONENTS log thread system program_options)
 if (Boost_FOUND)
     include_directories( ${Boost_INCLUDE_DIRS} )
     link_directories( ${Boost_LIBRARY_DIRS} )
     message(STATUS "Boost libs: " ${Boost_LIBRARIES})
 endif(Boost_FOUND)
-set(EXTRA_LIBS ${Boost_LIBRARIES})
+set(EXTRA_LIBS ${EXTRA_LIBS} ${Boost_LIBRARIES})
 
 #### MPI
 set(USE_MPI ON CACHE BOOL "Build with MPI support")
@@ -87,7 +89,8 @@ endif(USE_MPI)
 if (MPI_FOUND)
     set(MPI_DEFINE "#define USE_MPI")
     set(EXTRA_LIBS ${EXTRA_LIBS} ${MPI_LIBRARIES})
-
+    
+    message(STATUS "EXTRA libs: " ${EXTRA_LIBS})
 else (MPI_FOUND)
     set(MPI_DEFINE "")    
 endif (MPI_FOUND)
@@ -116,6 +119,12 @@ endif (OPENMP_FOUND)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib CACHE PATH "Output directory for libraries" )
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
 
+
+#SET(LOGGER_DEFINE  CACHE STRING
+#      "Choose logging engine, options are: N."
+#      FORCE)
+      
+      
 # Check if the user want to build test applications
 option (BUILD_TEST_APPLICATIONS "Inform whether test applications should be built" OFF)
 # Check if the user want to build sample applications
@@ -131,6 +140,7 @@ configure_file(
 # add the binary tree to the search path for include files
 # so that we will find TutorialConfig.h
 include_directories("${PROJECT_BINARY_DIR}")
+include_directories("${PROJECT_SOURCE_DIR}/include")
 
 
 ###### LIBRARY

@@ -7,9 +7,15 @@
 #include "mpi.h"
 #include <omp.h>
 
+#include "utils/logging.h"
+
 int main(int argc, char* argv[])
 {
+  LOG_INIT();
+
   int rank = 0, nprocs = 1;
+
+
 
 
 #ifdef USE_MPI
@@ -37,7 +43,9 @@ int main(int argc, char* argv[])
       tid = omp_get_thread_num();
 #endif
 
-      printf("MPI rank: %d/%d OMP thread: %d/%d\n", (rank+1), nprocs, (tid+1), nthreads);
+      INFO("MPI rank: " << (rank + 1) << "/" << nprocs << " OMP Thread: " << (tid+1) << "/" << nthreads);
+
+//      printf("MPI rank: %d/%d OMP thread: %d/%d\n", (rank+1), nprocs, (tid+1), nthreads);
 
 
 #ifdef USE_OPENMP
