@@ -1,3 +1,7 @@
+# Custom ignores (project specific)
+config.hpp
+
+# General ignores:
 # Created by http://www.gitignore.io
 
 ### C++ ###
