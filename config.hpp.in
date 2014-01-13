@@ -1,0 +1,18 @@
+/**
+file comment
+*/
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#ifndef __cplusplus
+#error A C++ compiler is required!
+#endif
+
+// CMakeLists.txt conditionally sets MPI_DEFINE
+@MPI_DEFINE@
+
+// CMakeLists.txt conditionally sets OPENMP_DEFINE
+@OPENMP_DEFINE@
+
+#endif /* CONFIG_H */
