@@ -53,6 +53,13 @@ else()
     endif()
 endif()
 
+# LOGGING config
+if(NOT LOG_ENGINE)
+    set(LOG_ENGINE "BOOST_CUSTOM" CACHE STRING
+        "choose a logging engine.  options are NO_LOG CERR BOOST_TRIVIAL BOOST_CUSTOM."
+        FORCE)
+endif(NOT LOG_ENGINE)
+set(LOGGER_DEFINE "#define USE_LOGGER PBIL_LOGGING_${LOG_ENGINE}")
 
 
 ###### External Library Settings
