@@ -161,6 +161,7 @@ include_directories("${PROJECT_SOURCE_DIR}/include")
 # Link opencv stuff to the execution engine
 
 add_subdirectory(test)
+#add_subdirectory(src/index)
 
 # Install Settings
 
