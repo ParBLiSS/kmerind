@@ -11,112 +11,361 @@
 #include <vector>
 #include <random>
 #include <cmath>
+#include <chrono>
 
+#include <cstdint>
+#include <limits>
+
+#include "config.hpp"
 #include "utils/logging.h"
+
+// for debugging only
+#include <iostream>
+#include <fstream>
+#include <bitset>
+#include <cassert>
 
 /**
  * parameters
  */
-const uint8_t K = 23;
-const uint8_t BITS = 2;
-const uint8_t C = 4;
-const uint32_t R = 100000;
-const double L_MEAN = 100.0f;
-const double L_STDEV = 20.0f;
 
-typedef std::vector<uint32_t> SequenceT;
+// packed are filled from left to right
+
+// TODO: support big endian....
+
+typedef uint16_t ReadLengthType;  // length of each read.  chosen based on sequencer capability
+typedef uint64_t ReadCountType;   // total number of reads.  chosen based on sequencer capability
+typedef uint64_t KeyType;         // keys.  chosen based on k and alphabet size.  k can be related to genome size.
+typedef uint16_t WordType;  // multiple character packing.  chosen based on alphabet size and convenient machine capability
+typedef uint64_t ReadBaseCountType; // total number of bases in this round. basically total number of reads * average read length.
+                                    // this is also the total number of kmers.
+
+constexpr uint8_t WORD_BITS = sizeof(WordType) * 8;
+constexpr uint8_t KEY_BITS = sizeof(KeyType) * 8;
+constexpr uint8_t N_K = 21;
+constexpr uint8_t N_BITS = 3;
+constexpr uint8_t K_BITS = N_K * N_BITS;
+constexpr uint8_t N_PACKED_CHARS = WORD_BITS / N_BITS;
+constexpr uint8_t N_PADDING_BITS = WORD_BITS % N_BITS;
+constexpr WordType PADDING_MASK = std::numeric_limits<WordType>::max() >> N_PADDING_BITS;
+constexpr KeyType KEY_MASK = std::numeric_limits<KeyType>::max() >> ((K_BITS == WORD_BITS) ? 0 : (N_K * N_BITS));
+constexpr uint8_t N_C = 4;            // core count
+constexpr ReadCountType N_R = 100000;
+
+constexpr double L_MEAN = 100.0f;
+constexpr double L_STDEV = 20.0f;
+
+typedef std::vector<WordType> SequenceT;
 
 /**
- * allocate input array
+ * generate the lengths
  */
-std::vector<SequenceT> generateStrings() {
-  // create the array of arrays
-  INFO("arrays created");
-  std::vector<SequenceT> reads;
+template<int K>
+std::vector<ReadLengthType> generateLengths(ReadBaseCountType& total)
+{
 
-  std::vector<uint32_t> lengths;
+  std::vector<ReadLengthType> lengths(N_R, 0);
+  total = 0ull;
 
-  std::default_random_engine generator1;
-  std::normal_distribution<double> distribution1(L_MEAN, L_STDEV);
+  std::default_random_engine generator;
+  std::normal_distribution<double> distribution(L_MEAN, L_STDEV);
 
-  std::default_random_engine generator2;
-  std::uniform_int_distribution<double> distribution2;
-
-  // use a random number generator to generate the "packed string"
-  for (int i = 0; i < R; ++i)
+  for (ReadCountType i = 0; i < N_R; ++i)
   {
     // generate the random lengths of the reads
-    lengths[i] = static_cast<uint32_t>(round(distribution1(generator1)));
-    SequenceT read;
-    int idx = 0;
-    for (int j = 0; j < lengths[i]; j +=16)
-    {
-      // pack in 32 bit.
-      read[idx] = distribution2(generator2);
-      ++idx;
-    }
-
-    reads[i] = read;
+    lengths[i] = static_cast<ReadLengthType>(round(distribution(generator)));
+    total += lengths[i] + K - 1;
   }
 
+  return lengths;
 }
 
+/**
+ * allocate input array.
+ * supports packed string with padding bits.
+ */
+std::vector<SequenceT> generateStrings(std::vector<ReadLengthType> const & lengths)
+{
+  // create the array of arrays
+  std::vector<SequenceT> reads;
+  reads.reserve(N_R);
+
+  std::default_random_engine generator;
+  std::uniform_int_distribution<WordType> distribution;
+
+  // use a random number generator to generate the "packed string"
+  for (ReadCountType i = 0; i < N_R; ++i)
+  {
+    // allocate a sequence of packed string blocks.
+    SequenceT read((lengths[i] + N_PACKED_CHARS - 1) / N_PACKED_CHARS, 0);
+
+    int idx = 0;
+    for (ReadLengthType j = 0; j < lengths[i]; j += N_PACKED_CHARS)
+    {
+      // packed bits, with padding.  low order bits only.
+      read[idx] = distribution(generator) & PADDING_MASK;
+      ++idx;
+    }
+    // the last one may not be completely filled.
+    if (lengths[i] % N_PACKED_CHARS > 0)
+    {
+      WordType keep_mask = std::numeric_limits<WordType>::max() >> (WORD_BITS - (lengths[i] % N_PACKED_CHARS) * N_BITS);
+      read[idx-1] = read[idx-1] & keep_mask;
+    }
+
+    reads.push_back(read);
+  }
+
+  return reads;
+
+}
 
 /**
  * output arrays
  */
-std::vector<uint64_t> initializeKeyArray() {
+std::vector<KeyType> initializeKeyArray(ReadBaseCountType const & total_length)
+{
   // initialize to 0
+
+  std::vector<KeyType> keys;
+  keys.reserve(total_length);
+  return keys;
 }
 
-
-
 template<int CORE, int SIMD>
-void computeKeys()
+void computeKeys(std::vector<SequenceT> const & seqs,
+                 std::vector<ReadLengthType> const & lengths,
+                 std::vector<KeyType> & keys)
 {
   FATAL("BASE TEMPLATE CALLED. NOT IMPLEMENTED.");
 }
 
+template<int SIMD>
+void computeKeys(SequenceT const & seq,
+                 ReadLengthType const & length,
+                 std::vector<KeyType> & keys)
+{
+  FATAL("BASE TEMPLATE CALLED. NOT IMPLEMENTED.");
+}
+
+
 #define SERIAL 0
+
+#if defined(USE_OPENMP)
 #define OPENMP 1
+#endif
 
 #define SCALAR 0
 #define SSE2 1
 
+
+constexpr uint8_t DIV = N_K / N_PACKED_CHARS;
+constexpr uint8_t REM = N_K % N_PACKED_CHARS;
+// NOTE: if there is no remainder, then shift or no shift, REM_MASK is not used.
+constexpr WordType REM_MASK = (REM != 0) ? std::numeric_limits<WordType>::max() >> (WORD_BITS - (REM * N_BITS)) : 0;
+constexpr uint8_t SIG_BITS = WORD_BITS - N_PADDING_BITS;  // high order bits are set to 0 for padding.
+constexpr WordType CHAR_MASK = std::numeric_limits<WordType>::max() >> (WORD_BITS - N_BITS);
+
+template<>
+void computeKeys<SCALAR>(SequenceT const & seq,
+                         ReadLengthType const & length,
+                         std::vector<KeyType> & keys)
+{
+
+  /*============
+   * get the first kmer, since it requires looking at the whole kmer
+    ============*/
+  // only "paste" in the necessary length to avoid overflow.
+  KeyType key = 0;
+  KeyType temp = 0;
+
+  for (int j = 0; j < DIV ; ++j)
+  {
+    // little endian. so concat to to higher bits
+    temp = seq[j];
+    key |= temp << (j * SIG_BITS);  // high order bits are set to 0 for padding.
+  }
+  // now get the remainder if needed
+  if (REM > 0)
+  {
+    temp = seq[DIV] & REM_MASK;
+    key |= temp << (DIV * SIG_BITS);  // keep and add only the lower bits
+  }
+  keys.push_back(key);
+
+  /*=============
+   * the rest are constructed incrementally
+    =============*/
+  uint8_t last_block = DIV;  // these point to the "next" positions.
+  uint8_t last_block_pos = REM;
+  for (ReadLengthType j = 1; j < length; ++j)
+  { // for each packed char
+
+    // remove the oldest char
+    key = key >> N_BITS;
+
+    // append the new char
+    temp = (seq[last_block] >> (last_block_pos * N_BITS)) & CHAR_MASK;  // leaving it with only 1 char's bits.
+    temp = temp << ((N_K - 1) * N_BITS);
+    key |= temp;
+    keys.push_back(key);
+
+    // increment
+    ++last_block_pos;
+    if (last_block_pos % N_PACKED_CHARS == 0)
+    {
+      last_block_pos = 0;
+      ++last_block;
+    }
+  }
+
+
+}
+
 /**
  * serial version
+ *
+ * NOTE:  this assumes that entire index fits in 64 bits.
+ *   this version uses bit shifting.  another way is to do base |alphabet| math.
  */
 template<>
-void computeKeys<SERIAL, SCALAR>() {
+void computeKeys<SERIAL, SCALAR>(std::vector<SequenceT> const & seqs,
+                                 std::vector<ReadLengthType> const & lengths,
+                                 std::vector<KeyType> & keys)
+{
 
+  for (ReadCountType i = 0; i < N_R; ++i)
+  {  // for each read
+    computeKeys<SCALAR>(seqs[i], lengths[i], keys);
+  }
 }
+
 template<>
-void computeKeys<SERIAL, SSE2>() {
+void computeKeys<SERIAL, SSE2>(std::vector<SequenceT> const & seqs,
+                               std::vector<ReadLengthType> const & lengths,
+                               std::vector<KeyType> & keys)
+{
 
 }
 
+#if defined(USE_OPENMP)
 /**
  * openMP version
  */
 template<>
-void computeKeys<OPENMP, SCALAR>() {
+void computeKeys<OPENMP, SCALAR>(std::vector<SequenceT> const & seqs,
+                                 std::vector<ReadLengthType> const & lengths,
+                                 std::vector<KeyType> & keys)
+{
 
 }
 
 template<>
-void computeKeys<OPENMP, SSE2>() {
+void computeKeys<OPENMP, SSE2>(std::vector<SequenceT> const & seqs,
+                               std::vector<ReadLengthType> const & lengths,
+                               std::vector<KeyType> & keys)
+{
 
 }
-
-
+#endif
 
 /**
  * main function.
  */
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
+
+
+
+  std::chrono::high_resolution_clock::time_point t1, t2;
+  std::chrono::duration<double> time_span;
+
+  // allocate
+  t1 = std::chrono::high_resolution_clock::now();
+  ReadBaseCountType total_length = 0ull;
+  std::vector<ReadLengthType> lengths = generateLengths<N_K>(total_length);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+      t2 - t1);
+  INFO("simulate string " << "elapsed time: " << time_span.count() << "s.");
+
+  // write out the lengths
+  std::ofstream csv;
+  csv.open("lengths.csv");
+  for (ReadLengthType len : lengths) {
+    csv << len << "\n";
+  }
+  csv.close();
+
+
+  // allocate
+  t1 = std::chrono::high_resolution_clock::now();
+  std::vector<SequenceT> reads = generateStrings(lengths);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+      t2 - t1);
+  INFO("simulate string " << "elapsed time: " << time_span.count() << "s.");
+
+  // write out the packed strings
+  csv.open("string.csv");
+  csv << "length=" << lengths[0] << "\n";
+  for (WordType w : reads[0])
+  {
+    csv << std::bitset<WORD_BITS>(w) << "\n";
+  }
+  csv.close();
+
+
+  t1 = std::chrono::high_resolution_clock::now();
+  std::vector<KeyType> keys = initializeKeyArray(total_length);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+      t2 - t1);
+  INFO("allocate output " << "elapsed time: " << time_span.count() << "s.");
+
+
+  // call each and time it.
+  t1 = std::chrono::high_resolution_clock::now();
+  computeKeys<SERIAL, SCALAR>(reads, lengths, keys);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+      t2 - t1);
+  INFO("SERIAL + SCALAR " << "elapsed time: " << time_span.count() << "s.");
+
+  // write out the packed strings
+  csv.open("keys.csv");
+  csv << "length=" << lengths[0] << "\n";
+  for (int i = 0; i < lengths[0] - N_K + 1; ++i)
+  {
+    csv << std::bitset<KEY_BITS>(keys[i]) << "\n";
+  }
+  csv.close();
 
 
 
 
-	return 0;
+  t1 = std::chrono::high_resolution_clock::now();
+  computeKeys<SERIAL, SSE2>(reads, lengths, keys);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+      t2 - t1);
+  INFO("SERIAL + SCALAR " << "elapsed time: " << time_span.count() << "s.");
+
+#if defined(USE_OPENMP)
+  t1 = std::chrono::high_resolution_clock::now();
+  computeKeys<OPENMP, SCALAR>(reads, lengths, keys);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+      t2 - t1);
+  INFO("SERIAL + SCALAR " << "elapsed time: " << time_span.count() << "s.");
+
+  t1 = std::chrono::high_resolution_clock::now();
+  computeKeys<OPENMP, SSE2>(reads, lengths, keys);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+      t2 - t1);
+  INFO("SERIAL + SCALAR " << "elapsed time: " << time_span.count() << "s.");
+#endif
+
+  return 0;
 }
