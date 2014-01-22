@@ -184,6 +184,8 @@ include_directories("${PROJECT_SOURCE_DIR}/include")
 
 add_subdirectory(test)
 add_subdirectory(src/index)
+add_subdirectory(utils)
+
 
 # Install Settings
 

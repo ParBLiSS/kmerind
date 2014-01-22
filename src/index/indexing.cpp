@@ -168,7 +168,8 @@ void computeKeys(SequenceT const & seq,
   FATAL("BASE TEMPLATE CALLED. NOT IMPLEMENTED.");
 }
 
-
+// TODO:  reverse complement key, genome size sequence, putting position, compressed representation of position, etc.
+// TODO:  determine cache sizes, total memory size, MPI block size, disk page size, number of sockets, number of cores per socket,
 
 #define SCALAR 0
 #define SSE2 1
