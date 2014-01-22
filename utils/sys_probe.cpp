@@ -17,23 +17,26 @@ int checkNProcs() {
   long nprocs = -1;
   long nprocs_max = -1;
 
+  fprintf(stderr, "Does not yet compute the number of CPUs\n");
+
+
 #ifdef _SC_NPROCESSORS_ONLN
   nprocs = sysconf(_SC_NPROCESSORS_ONLN);
   if (nprocs < 1)
   {
-    fprintf(stderr, "Could not determine number of CPUs online:\n%s\n", strerror (errno));
+    fprintf(stderr, "Could not determine number of Cores online:\n%s\n", strerror (errno));
     return EXIT_FAILURE;
   }
   nprocs_max = sysconf(_SC_NPROCESSORS_CONF);
   if (nprocs_max < 1)
   {
-    fprintf(stderr, "Could not determine number of CPUs configured:\n%s\n", strerror (errno));
+    fprintf(stderr, "Could not determine number of Cores configured:\n%s\n", strerror (errno));
     return EXIT_FAILURE;
   }
   printf ("%ld of %ld processors online\n", nprocs, nprocs_max);
   return EXIT_SUCCESS;
 #else
-  fprintf(stderr, "Could not determine number of CPUs\n");
+  fprintf(stderr, "Could not determine number of Cores\n");
   return EXIT_FAILURE;
 #endif
   return 0;
