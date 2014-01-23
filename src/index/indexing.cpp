@@ -73,17 +73,14 @@ typedef std::vector<WordType> SequenceT;
  * generate the lengths
  */
 template<int K>
-std::vector<ReadLengthType> generateLengths()
+void generateLengths(std::vector<ReadLengthType>& lengths)
 {
-
-  std::vector<ReadLengthType> lengths(N_R, 0);
 
   std::default_random_engine generator;
   std::normal_distribution<double> distribution(L_MEAN, L_STDEV);
 
   ReadLengthType l;
 
-#pragma omp parallel for schedule(runtime) private(l)
   for (ReadCountType i = 0; i < N_R; ++i)
   {
     // generate the random lengths of the reads
@@ -98,24 +95,18 @@ std::vector<ReadLengthType> generateLengths()
     lengths[i] = l;
   }
 
-
-  return lengths;
 }
 
 /**
- * allocate input array.
+ * allocate input vector.
  * supports packed string with padding bits.
  */
-std::vector<SequenceT> generateStrings(std::vector<ReadLengthType> const & lengths)
+void generateStrings(std::vector<ReadLengthType> const & lengths, std::vector<SequenceT>& reads)
 {
-  // create the array of arrays
-  std::vector<SequenceT> reads(N_R);
-
   std::default_random_engine generator;
   std::uniform_int_distribution<WordType> distribution;
 
   // use a random number generator to generate the "packed string"
-#pragma omp parallel for schedule(runtime) shared(reads)
   for (ReadCountType i = 0; i < N_R; ++i)
   {
     // allocate a sequence of packed string blocks.
@@ -138,18 +129,12 @@ std::vector<SequenceT> generateStrings(std::vector<ReadLengthType> const & lengt
     reads[i] = read;
   }
 
-  return reads;
-
 }
 
 /**
- * output arrays
+ * output vectors
  */
-std::vector<KeyType> initializeKeyArray(ReadBaseCountType const & total_length)
-{
-  std::vector<KeyType> keys(total_length);
-  return keys;
-}
+
 
 template<int SIMD>
 void computeKeys(std::vector<SequenceT> const & seqs,
@@ -168,7 +153,8 @@ void computeKeys(SequenceT const & seq,
   FATAL("BASE TEMPLATE CALLED. NOT IMPLEMENTED.");
 }
 
-
+// TODO:  reverse complement key, genome size sequence, putting position, compressed representation of position, etc.
+// TODO:  determine cache sizes, total memory size, MPI block size, disk page size, number of sockets, number of cores per socket,
 
 #define SCALAR 0
 #define SSE2 1
@@ -186,7 +172,6 @@ void computeKeys<SCALAR>(SequenceT const & seq,
                          ReadLengthType const & key_count,
                          std::vector<KeyType>::iterator & key_iter)
 {
-
   /*============
    * get the first kmer, since it requires looking at the whole kmer
     ============*/
@@ -272,18 +257,18 @@ void computeKeys<SCALAR>(std::vector<SequenceT> const & seqs,
   //for (int i = 0; i < 10; i++)
 
   // runtime schedule performed the same as dynamic 0.034s (Release).  static and guided are at 0.020s.  100K reads.
-#pragma omp parallel for schedule(runtime) private(iter)
+#pragma omp parallel for schedule(static, 1) private(iter)
   for (ReadCountType i = 0; i < N_R; ++i)
   {
-    if (DIV > seqs[i].size())
-    {
-      ERROR("seq size: " << seqs[i].size() << " lastblock " << static_cast<int>(DIV) << " i " << static_cast<int>(i) );
-    }
-    else if (DIV == seqs[i].size())
-    {
-      INFO("seq size: " << seqs[i].size() << " lastblock " << static_cast<int>(DIV) << " i " << static_cast<int>(i));
-    }
-
+//    if (DIV > seqs[i].size())
+//    {
+//      //ERROR("seq size: " << seqs[i].size() << " lastblock " << static_cast<int>(DIV) << " i " << static_cast<int>(i) );
+//    }
+//    else if (DIV == seqs[i].size())
+//    {
+//      //INFO("seq size: " << seqs[i].size() << " lastblock " << static_cast<int>(DIV) << " i " << static_cast<int>(i));
+//    }
+//    DEBUG("TID: " << omp_get_thread_num() << " i: " << i);
 
     iter = keys.begin() + offsets[i];
     computeKeys<SCALAR>(seqs[i], lengths[i] - N_K + 1, iter);
@@ -314,7 +299,13 @@ int main(int argc, char* argv[])
 
   // allocate
   t1 = std::chrono::high_resolution_clock::now();
-  std::vector<ReadLengthType> lengths = generateLengths<N_K>();
+  std::vector<ReadLengthType> lengths(N_R, 0);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+      t2 - t1);
+  INFO("allocate string lengths " << "elapsed time: " << time_span.count() << "s.");
+  t1 = std::chrono::high_resolution_clock::now();
+  generateLengths<N_K>(lengths);
   t2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       t2 - t1);
@@ -330,7 +321,13 @@ int main(int argc, char* argv[])
 
   // allocate
   t1 = std::chrono::high_resolution_clock::now();
-  std::vector<SequenceT> reads = generateStrings(lengths);
+  std::vector<SequenceT> reads(N_R);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+      t2 - t1);
+  INFO("allocate strings " << "elapsed time: " << time_span.count() << "s.");
+  t1 = std::chrono::high_resolution_clock::now();
+  generateStrings(lengths, reads);
   t2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       t2 - t1);
@@ -370,9 +367,8 @@ int main(int argc, char* argv[])
   }
   csv.close();
 
-  std::vector<KeyType> keys;
   t1 = std::chrono::high_resolution_clock::now();
-  keys = initializeKeyArray(total);
+  std::vector<KeyType> keys(total);
   t2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       t2 - t1);
