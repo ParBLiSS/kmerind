@@ -4,6 +4,10 @@ config.hpp
 # kdevelop project file
 *.kdev4
 
+# build folder
+#
+build/
+
 # General ignores:
 # Created by http://www.gitignore.io
 

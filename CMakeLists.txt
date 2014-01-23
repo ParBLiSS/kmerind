@@ -144,7 +144,31 @@ else (OPENMP_FOUND)
 endif (OPENMP_FOUND)
 
 
-  
+
+
+###### Google test library
+
+# Testing can be turned off: (for now the default is: ON)
+set(ENABLE_TESTING ON CACHE BOOL "Enable Unit testing via googletest")
+if (ENABLE_TESTING)
+    # load the cmake from googletest
+    set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
+    add_subdirectory(${EXT_PROJECTS_DIR}/gtest)
+    include_directories(${EXT_PROJECTS_DIR}/gtest/include)
+    #message("include dir is ${GTEST_INCLUDE_DIRS}")
+    # enable the CMAKE testing framework
+    enable_testing()
+    
+    # add all tests from all modules
+    
+    # TODO find all test files
+    add_executable(testdum src/common/test/test_dummy.cpp)
+    add_dependencies(testdum googletest)
+    set_target_properties(testdum PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/test)
+    target_link_libraries(testdum gtest_main common)
+    add_test(NAME testdum WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/test COMMAND testdum)
+endif (ENABLE_TESTING)
+
 
 ###### Executable and Libraries
 # Save libs and executables in the same place
@@ -184,6 +208,7 @@ include_directories("${PROJECT_SOURCE_DIR}/include")
 
 add_subdirectory(test)
 add_subdirectory(src/index)
+add_subdirectory(src/common)
 
 # Install Settings
 
@@ -192,6 +217,4 @@ add_subdirectory(src/index)
 
 
 # Test Settings
-
-
 
