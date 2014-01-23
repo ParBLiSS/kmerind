@@ -71,6 +71,56 @@ int checkFileSystem()
   return EXIT_SUCCESS;
 }
 
+// from http://en.wikipedia.org/wiki/CPUID
+void cpuid(unsigned info, unsigned *eax, unsigned *ebx, unsigned *ecx, unsigned *edx)
+{
+    __asm__(
+        "xchg %%ebx, %%edi;" /* 32bit PIC: don't clobber ebx */
+        "cpuid;"
+        "xchg %%ebx, %%edi;"
+        :"=a" (*eax), "=D" (*ebx), "=c" (*ecx), "=d" (*edx)
+        :"0" (info)
+    );
+}
+
+
+void cpu_features() {
+  uint32_t eax, ebx, ecx, edx;
+
+  eax = 1; // cpu features
+
+  cpuid(1, &eax, &ebx, &ecx, &edx);  // get cpu features
+  bool mmx = edx && (1 << 23);
+  bool sse = edx && (1 << 25);
+  bool sse2 = edx && (1 << 26);
+  bool sse3 = ecx && (1);
+  bool ssse3 = ecx && (1 << 9);
+  bool sse41 = ecx && (1 << 19);
+  bool sse42 = ecx && (1 << 20);
+  bool avx = ecx && (1 << 28);
+  bool ia64 = edx && (1 << 30);
+  bool hyperthread = edx && (1 << 28);
+  bool fma = ecx && (1 << 12);
+  bool cx16 = ecx && (1 << 13);
+  bool popcnt = ecx && (1 << 23);
+
+  fprintf(stderr, "mmx: %s\n", (mmx ? "true" : "false"));
+  fprintf(stderr, "sse: %s\n", (sse ? "true" : "false"));
+  fprintf(stderr, "sse2: %s\n", (sse2 ? "true" : "false"));
+  fprintf(stderr, "sse3: %s\n", (sse3 ? "true" : "false"));
+  fprintf(stderr, "ssse3: %s\n", (ssse3 ? "true" : "false"));
+  fprintf(stderr, "sse41: %s\n", (sse41 ? "true" : "false"));
+  fprintf(stderr, "sse42: %s\n", (sse42 ? "true" : "false"));
+  fprintf(stderr, "avx: %s\n", (avx ? "true" : "false"));
+  fprintf(stderr, "ia64: %s\n", (ia64 ? "true" : "false"));
+  fprintf(stderr, "hyperthread: %s\n", (hyperthread ? "true" : "false"));
+  fprintf(stderr, "fma: %s\n", (fma ? "true" : "false"));
+  fprintf(stderr, "cx16: %s\n", (cx16 ? "true" : "false"));
+  fprintf(stderr, "popcnt: %s\n", (popcnt ? "true" : "false"));
+
+}
+
+
 void i386_cpuid_caches () {
     int i;
     for (i = 0; i < 32; i++) {
@@ -153,6 +203,7 @@ int main(int argc, char* argv[]) {
   checkFileSystem();
 
   checkMPIBuffer();
+  cpu_features();
   i386_cpuid_caches();
 
 
