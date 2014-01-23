@@ -1,6 +1,9 @@
 # Custom ignores (project specific)
 config.hpp
 
+# kdevelop project file
+*.kdev4
+
 # General ignores:
 # Created by http://www.gitignore.io
 
