@@ -165,8 +165,9 @@ if (ENABLE_TESTING)
     add_executable(testdum src/common/test/test_dummy.cpp)
     add_dependencies(testdum googletest)
     set_target_properties(testdum PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/test)
-    target_link_libraries(testdum gtest_main common)
-    add_test(NAME testdum WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/test COMMAND testdum)
+    target_link_libraries(testdum gtest_main pbil-common)
+    # generate google test XML results, to be parsed by Jenkins TODO: this is depending on the module name
+    add_test(NAME testdum WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/test COMMAND testdum ARGS "--gtest_output=xml:${PROJECT_BINARY_DIR}/Testing/gtest/pbil-common.xml")
 endif (ENABLE_TESTING)
 
 
