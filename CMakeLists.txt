@@ -151,23 +151,37 @@ endif (OPENMP_FOUND)
 # Testing can be turned off: (for now the default is: ON)
 set(ENABLE_TESTING ON CACHE BOOL "Enable Unit testing via googletest")
 if (ENABLE_TESTING)
-    # load the cmake from googletest
+    # include/load the Google Test framework
     set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
     add_subdirectory(${EXT_PROJECTS_DIR}/gtest)
     include_directories(${EXT_PROJECTS_DIR}/gtest/include)
-    #message("include dir is ${GTEST_INCLUDE_DIRS}")
+    
     # enable the CMAKE testing framework
     enable_testing()
     
-    # add all tests from all modules
+    # Set paths outside of the function so the function can
+    # be called from anywhere in the source tree
+    #   set path for output of testing binaries
+    set(TEST_BINARY_OUTPUT_DIR ${PROJECT_BINARY_DIR}/test)
+    #   set path for output of test reports (XML format)
+    set(TEST_XML_OUTPUT_DIR ${PROJECT_BINARY_DIR}/Testing)
     
-    # TODO find all test files
-    add_executable(testdum src/common/test/test_dummy.cpp)
-    add_dependencies(testdum googletest)
-    set_target_properties(testdum PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/test)
-    target_link_libraries(testdum gtest_main pbil-common)
-    # generate google test XML results, to be parsed by Jenkins TODO: this is depending on the module name
-    add_test(NAME testdum WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/test COMMAND testdum ARGS "--gtest_output=xml:${PROJECT_BINARY_DIR}/Testing/gtest/pbil-common.xml")
+    
+    function(pbil_add_test module_name)
+        # set the name for the test target and executable
+        set(test_target_name test-${module_name})
+        # add all give files
+        add_executable(${test_target_name} ${ARGN})
+        # add the googletest dependency
+        add_dependencies(${test_target_name} googletest)
+        # set binary output path for tests
+        set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
+        # link test with it's module and gtest_main
+        target_link_libraries(${test_target_name} gtest_main ${module_name})
+        # generate google test XML results, to be parsed by Jenkins
+        # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
+        add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
+    endfunction(pbil_add_test)
 endif (ENABLE_TESTING)
 
 
