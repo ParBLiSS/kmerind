@@ -188,10 +188,12 @@ if (ENABLE_TESTING)
         set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
         # link test with it's module and gtest_main
         target_link_libraries(${test_target_name} gtest_main ${module_name})
+
+        # if code coverage is to be determined: link with gcov
         if (ENABLE_COVERAGE)
             target_link_libraries(${test_target_name} gcov)
         endif(ENABLE_COVERAGE)
-        
+
         # generate google test XML results, to be parsed by Jenkins
         # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
         add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
