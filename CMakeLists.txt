@@ -150,6 +150,16 @@ endif (OPENMP_FOUND)
 
 # Testing can be turned off: (for now the default is: ON)
 set(ENABLE_TESTING ON CACHE BOOL "Enable Unit testing via googletest")
+set(ENABLE_COVERAGE ON CACHE BOOL "Enable Code Coverage reporting")
+
+if (ENABLE_COVERAGE)
+    # set flags for coverage test
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage -g")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage -g")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-arcs")
+endif()
+
 if (ENABLE_TESTING)
     # include/load the Google Test framework
     set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
@@ -178,6 +188,10 @@ if (ENABLE_TESTING)
         set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
         # link test with it's module and gtest_main
         target_link_libraries(${test_target_name} gtest_main ${module_name})
+        if (ENABLE_COVERAGE)
+            target_link_libraries(${test_target_name} gcov)
+        endif(ENABLE_COVERAGE)
+        
         # generate google test XML results, to be parsed by Jenkins
         # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
         add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
