@@ -13,7 +13,7 @@ Build requirements are:
 
 Building:
 
-```
+```sh
 git clone git@bitbucket.org:AluruLab/pbil.git
 git submodule init
 git submodule update
@@ -26,7 +26,7 @@ make
 
 Running the tests:
 
-```
+```sh
 ctest -T Test
 ```
 
