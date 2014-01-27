@@ -15,6 +15,7 @@ Building:
 
 ```sh
 git clone git@bitbucket.org:AluruLab/pbil.git
+cd pbil
 git submodule init
 git submodule update
 
