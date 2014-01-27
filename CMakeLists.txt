@@ -147,10 +147,13 @@ endif (OPENMP_FOUND)
 
 
 ###### Google test library
+# require "git submodule init" and "git submodule update"
 
 # Testing can be turned off: (for now the default is: ON)
 set(ENABLE_TESTING ON CACHE BOOL "Enable Unit testing via googletest")
-set(ENABLE_COVERAGE ON CACHE BOOL "Enable Code Coverage reporting")
+if (ENABLE_TESTING)
+    set(ENABLE_COVERAGE ON CACHE BOOL "Enable Code Coverage reporting")
+endif()
 
 if (ENABLE_COVERAGE)
     # set flags for coverage test
