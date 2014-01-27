@@ -10,7 +10,9 @@ class PackingTest : public ::testing::Test
 {
 public:
   std::vector<std::string> dna_seqs = {"", "A", "T", "C", "AC", "AAAAAAAA",
-    "TTTTTT", "GG", "CACACACA", "ACTGGGCCATAATCTCTCATGGATGCTACGAGCTGATCGTAGCTGACTAGTCGA"};
+    "TTTTTT", "GG", "CACACACA", "ACTGGGCCATAATCTCTCATGGATGCTACGAGCTGATCGTAGCTGACTAGTCGA",
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACTCTGCTCGTGATCGATCGATCGATCGATCGATCGACTAGCTAGCTACGTACGTACGTACGATCGATCGTACGATCGATCGATCGATCGATCGTACGTACGTACGTCAGCTAGCTCGATCGATATGCTAGATACACACACTACATACTCACATACACATCAACTCATACTTCATCAGACGATCGATCGATCTCGCTGATCGACTGTCGATCGTCGATCGTAGCTCGTAGCTCGTAGCTCG"
+  };
 };
 
 
@@ -62,9 +64,15 @@ TEST_F(PackingTest, TestPackedString2) {
     ASSERT_EQ(packedStr.size(), dna.size()) << "The packed sequence should be of same length as the original string.";
     ASSERT_EQ(packedStr.size(), dna_vec.size()) << "The packed sequence should be of same length as the original string.";
 
-    // unpack it
-    std::string unpacked_dna(packedStr.size(),'X');
+    // unpack it into a basic_string<DNA> container
+    std::basic_string<DNA> unpacked_dna(packedStr.size(),'X');
     packedStr.unpackSequence(unpacked_dna.begin());
+
+    // compare the values using the [] operator
+    for (unsigned int i = 0; i < packedStr.size(); ++i)
+    {
+      EXPECT_EQ(packedStr[i], unpacked_dna[i]) << "packed and unpacked strings have to compare equal";
+    }
 
     // translate back to ASCII (in place)
     AlphabetTraits<DNA>::translateToAscii(unpacked_dna.begin(), unpacked_dna.end(), unpacked_dna.begin());
