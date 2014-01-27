@@ -8,6 +8,6 @@ TEST(BlissCommonSuite, Dummy1) {
 
 
 TEST(BlissCommonSuite, Dummy2) {
-    EXPECT_EQ(getSomeNumber(-3, -3), -9) << "something went wrong!";
-    EXPECT_EQ(getSomeNumber(0, 1), 1) << "whoops, broken test case :)";
+    EXPECT_EQ(getSomeNumber(-3, -3), 9) << "something went wrong!";
+    EXPECT_EQ(getSomeNumber(0, 1), 0) << "whoops, broken test case :)";
 }
