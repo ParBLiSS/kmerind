@@ -11,6 +11,26 @@ Build requirements are:
 `cmake`, `boost_log`, `boost_system`, `boost_thread`, `boost_program-options`
 
 
+Building:
+
+```
+git clone git@bitbucket.org:AluruLab/pbil.git
+git submodule init
+git submodule update
+
+mkdir build
+cd build
+cmake ../
+make
+```
+
+Running the tests:
+
+```
+ctest -T Test
+```
+
+
 ### Configuring Eclipse:
 
 Cmake typically uses a out-of-source build.  to generate eclipse compatible `.project` and `.cproject` files, supply
