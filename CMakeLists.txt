@@ -1,11 +1,11 @@
-# CMakeLists.txt for the PBIL
+# CMakeLists.txt for the BLISS
 
 cmake_minimum_required(VERSION 2.8)
 
 # project settings
-project(pbil)
-set (pbil_VERSION_MAJOR 0)
-set (pbil_VERSION_MINOR 1)
+project(bliss)
+set (bliss_VERSION_MAJOR 0)
+set (bliss_VERSION_MINOR 1)
 
 ##### General Compilation Settings
 
@@ -81,7 +81,7 @@ if(NOT LOG_ENGINE)
         "choose a logging engine.  options are NO_LOG CERR BOOST_TRIVIAL BOOST_CUSTOM."
         FORCE)
 endif(NOT LOG_ENGINE)
-set(LOGGER_DEFINE "#define USE_LOGGER PBIL_LOGGING_${LOG_ENGINE}")
+set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
 
 
 ###### External Library Settings
@@ -193,7 +193,7 @@ if (ENABLE_TESTING)
     set(TEST_XML_OUTPUT_DIR ${PROJECT_BINARY_DIR}/Testing)
 
 
-    function(pbil_add_test module_name)
+    function(bliss_add_test module_name)
         # set the name for the test target and executable
         set(test_target_name test-${module_name})
         # add all give files
@@ -213,7 +213,7 @@ if (ENABLE_TESTING)
         # generate google test XML results, to be parsed by Jenkins
         # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
         add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
-    endfunction(pbil_add_test)
+    endfunction(bliss_add_test)
 endif (ENABLE_TESTING)
 
 

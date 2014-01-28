@@ -35,22 +35,22 @@
  * TODO add Licence
  */
 
-#ifndef PBIL_LOGGING_H
-#define PBIL_LOGGING_H
+#ifndef BLISS_LOGGING_H
+#define BLISS_LOGGING_H
 
 /// Disable logging
-#define PBIL_LOGGING_NO_LOG         1
+#define BLISS_LOGGING_NO_LOG         1
 /// Use std::cerr output for logging (not thread safe)
-#define PBIL_LOGGING_CERR           2
+#define BLISS_LOGGING_CERR           2
 /// Use boost::log::trivial for logging
-#define PBIL_LOGGING_BOOST_TRIVIAL  3
-/// Use PBIL's customized boost logging wrapper for logging
-#define PBIL_LOGGING_BOOST_CUSTOM   4
+#define BLISS_LOGGING_BOOST_TRIVIAL  3
+/// Use BLISS's customized boost logging wrapper for logging
+#define BLISS_LOGGING_BOOST_CUSTOM   4
 
 // set default logger (in case none is specified via compiler flags)
 #ifndef USE_LOGGER
 // set the default logger to the std::cerr logger
-#define USE_LOGGER PBIL_LOGGING_BOOST_CUSTOM
+#define USE_LOGGER BLISS_LOGGING_BOOST_CUSTOM
 #endif
 
 
@@ -59,7 +59,7 @@
  *                          Disable logging                          *
  *********************************************************************/
 
-#if USE_LOGGER == PBIL_LOGGING_NO_LOG
+#if USE_LOGGER == BLISS_LOGGING_NO_LOG
 
 // empty logging macros (no overhead)
 #define FATAL(MSG)
@@ -75,7 +75,7 @@
  *                     use std::cerr for logging                     *
  *********************************************************************/
 
-#elif USE_LOGGER == PBIL_LOGGING_CERR
+#elif USE_LOGGER == BLISS_LOGGING_CERR
 
 // simple output via std::cerr
 // NOTE: this is not thread safe
@@ -95,7 +95,7 @@
  *                      use boost::log::trivial                      *
  *********************************************************************/
 
-#elif USE_LOGGER == PBIL_LOGGING_BOOST_TRIVIAL
+#elif USE_LOGGER == BLISS_LOGGING_BOOST_TRIVIAL
 
 // using boost trival logging
 #include <boost/log/trivial.hpp>
@@ -113,7 +113,7 @@
  *             use a customized boost::log based logger              *
  *********************************************************************/
 
-#elif USE_LOGGER == PBIL_LOGGING_BOOST_CUSTOM
+#elif USE_LOGGER == BLISS_LOGGING_BOOST_CUSTOM
 
 #include <iostream>
 
@@ -135,7 +135,7 @@
 
 
 
-namespace pbil
+namespace bliss
 {
 
 namespace log
@@ -233,18 +233,18 @@ void init()
 #define _LOG_MSG(MSG) __FILE__ << ":" << __LINE__ << ":\t" << MSG
 
 
-#define FATAL(MSG)      BOOST_LOG_SEV(pbil::log::global_logger, pbil::log::fatal) << _LOG_MSG(MSG);
-#define ERROR(MSG)      BOOST_LOG_SEV(pbil::log::global_logger, pbil::log::error) << _LOG_MSG(MSG);
-#define WARNING(MSG)    BOOST_LOG_SEV(pbil::log::global_logger, pbil::log::warning) << _LOG_MSG(MSG);
-#define INFO(MSG)       BOOST_LOG_SEV(pbil::log::global_logger, pbil::log::info) << _LOG_MSG(MSG);
-#define DEBUG(MSG)      BOOST_LOG_SEV(pbil::log::global_logger, pbil::log::debug) << _LOG_MSG(MSG);
-#define TRACE(MSG)      BOOST_LOG_SEV(pbil::log::global_logger, pbil::log::trace) << _LOG_MSG(MSG);
+#define FATAL(MSG)      BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::fatal) << _LOG_MSG(MSG);
+#define ERROR(MSG)      BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::error) << _LOG_MSG(MSG);
+#define WARNING(MSG)    BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::warning) << _LOG_MSG(MSG);
+#define INFO(MSG)       BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::info) << _LOG_MSG(MSG);
+#define DEBUG(MSG)      BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::debug) << _LOG_MSG(MSG);
+#define TRACE(MSG)      BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::trace) << _LOG_MSG(MSG);
 
-#define LOG_INIT() pbil::log::init()
+#define LOG_INIT() bliss::log::init()
 
 } // namespace log
 
-} // namespace pbil
+} // namespace bliss
 
 
 
@@ -257,4 +257,4 @@ void init()
 #define LOG_INIT() ;
 #endif
 
-#endif // PBIL_LOGGING_H
+#endif // BLISS_LOGGING_H

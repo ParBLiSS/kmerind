@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
   LOG_INIT();
 
 
-  std::string filename("/home/tpan/src/pbil/test/test.fastq");
+  std::string filename("/home/tpan/src/bliss/test/test.fastq");
 
   int rank = 0, nprocs = 1;
 #ifdef USE_MPI

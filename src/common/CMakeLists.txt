@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
-project(pbil-common)
+project(bliss-common)
 
 add_library(${PROJECT_NAME}
     dummy.cpp)
@@ -11,5 +11,5 @@ add_library(${PROJECT_NAME}
 if (IS_DIRECTORY ./test)
     # get all files from ./test
     FILE(GLOB TEST_FILES test/*.cpp)
-    pbil_add_test(${PROJECT_NAME} ${TEST_FILES})
+    bliss_add_test(${PROJECT_NAME} ${TEST_FILES})
 endif()

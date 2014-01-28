@@ -2,7 +2,7 @@
 
 New name: **Bliss** ??
 
-Please take a look at our [Wiki](https://bitbucket.org/AluruLab/pbil/wiki/Home).
+Please take a look at our [Wiki](https://bitbucket.org/AluruLab/bliss/wiki/Home).
 
 ## Building
 
@@ -14,8 +14,8 @@ Build requirements are:
 ### Cloning:
 
 ```sh
-git clone git@bitbucket.org:AluruLab/pbil.git
-cd pbil
+git clone git@bitbucket.org:AluruLab/bliss.git
+cd bliss
 git submodule init
 git submodule update
 ```
