@@ -121,10 +121,10 @@ endif(USE_MPI)
 if (MPI_FOUND)
     set(MPI_DEFINE "#define USE_MPI")
     set(EXTRA_LIBS ${EXTRA_LIBS} ${MPI_LIBRARIES})
-    
+
     message(STATUS "EXTRA libs: " ${EXTRA_LIBS})
 else (MPI_FOUND)
-    set(MPI_DEFINE "")    
+    set(MPI_DEFINE "")
 endif (MPI_FOUND)
 
 #### OpenMP
@@ -135,7 +135,7 @@ if (USE_OPENMP)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 else(USE_OPENMP)
-    #set(OPENMP_FOUND 0)	
+    #set(OPENMP_FOUND 0)
 endif(USE_OPENMP)
 if (OPENMP_FOUND)
     set(OPENMP_DEFINE "#define USE_OPENMP")
@@ -144,6 +144,19 @@ else (OPENMP_FOUND)
 endif (OPENMP_FOUND)
 
 
+
+###### Doxygen documentation
+
+find_package(Doxygen)
+
+if(DOXYGEN_FOUND)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/docs/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile @ONLY)
+    add_custom_target(doc
+        ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/docs
+        COMMENT "Generating API documentation with Doxygen" VERBATIM
+    )
+endif(DOXYGEN_FOUND)
 
 
 ###### Google test library
@@ -168,18 +181,18 @@ if (ENABLE_TESTING)
     set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
     add_subdirectory(${EXT_PROJECTS_DIR}/gtest)
     include_directories(${EXT_PROJECTS_DIR}/gtest/include)
-    
+
     # enable the CMAKE testing framework
     enable_testing()
-    
+
     # Set paths outside of the function so the function can
     # be called from anywhere in the source tree
     #   set path for output of testing binaries
     set(TEST_BINARY_OUTPUT_DIR ${PROJECT_BINARY_DIR}/test)
     #   set path for output of test reports (XML format)
     set(TEST_XML_OUTPUT_DIR ${PROJECT_BINARY_DIR}/Testing)
-    
-    
+
+
     function(pbil_add_test module_name)
         # set the name for the test target and executable
         set(test_target_name test-${module_name})
@@ -213,8 +226,8 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output director
 #SET(LOGGER_DEFINE  CACHE STRING
 #      "Choose logging engine, options are: N."
 #      FORCE)
-      
-      
+
+
 # Check if the user want to build test applications
 option (BUILD_TEST_APPLICATIONS "Inform whether test applications should be built" OFF)
 # Check if the user want to build sample applications
@@ -253,4 +266,3 @@ add_subdirectory(utils)
 
 
 # Test Settings
-
