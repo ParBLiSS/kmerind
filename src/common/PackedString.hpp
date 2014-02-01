@@ -31,10 +31,10 @@
  *
  * The parameters are template parameters:
  *
- * @param BITS_PER_CHAR   The number of bits needed for each packed character.
- * @param CharType        The underlying type of the unpacked characters.
+ * @tparam BITS_PER_CHAR  The number of bits needed for each packed character.
+ * @tparam CharType       The underlying type of the unpacked characters.
  *                        Default = char.
- * @param WordType        The underlying type used for storage. This is usually
+ * @tparam WordType       The underlying type used for storage. This is usually
  *                        set to the biggest machine word (i.e. uint64_t for
  *                        a 64 bit system).
  */
@@ -60,8 +60,9 @@ public:
    * Any linear/contiguous STL (or custom) container can be used. This includes
    * std::string, std::basic_string<DNA>, std::vector, std::array, etc.
    *
-   * @param container   A STL container type that implements the `begin()` and
-   *                    `end()` methods.
+   * @param container[in]   A STL container that implements the `begin()` and
+   *                        `end()` methods.
+   * @tparam ContainerType  A STL container type.
    */
   template <typename ContainerType>
   PackedStringImpl(const ContainerType& container)
@@ -78,6 +79,9 @@ public:
    * @param end     An InputIterator to the final position (one after the last
    *                element) of the sequence to be packed and stored in this
    *                PackedString.
+   *
+   * @tparam IteratorType   InputIterator type for the `begin()` and `end()`
+   *                        iterators.
    */
   template <typename IteratorType>
   PackedStringImpl(const IteratorType begin, const IteratorType end)
@@ -96,6 +100,8 @@ public:
    * @returns         An iterator to the end of the destination sequence.
    *                  This iterator will point towards one element past
    *                  the last written element.
+   * @tparam  OutputIterator  A OutputIterator type that can be used in
+   *                          sequential output operations.
    */
   template <typename OutputIterator>
   OutputIterator unpackSequence(OutputIterator outIter) const
@@ -196,6 +202,7 @@ private:
    *
    * @param container   A STL container type that implements the iterator
    *                    functions `begin()` and `end()`.
+   * @tparam ContainerType  A STL container type.
    */
   template <typename container_type>
   void packChars(const container_type& container)
@@ -211,6 +218,8 @@ private:
    * @param end     An InputIterator to the final position (one after the last
    *                element) of the sequence to be packed and stored in this
    *                PackedString.
+   * @tparam IteratorType   InputIterator type for the `begin()` and `end()`
+   *                        iterators.
    */
   template <typename IteratorType>
   void packChars(const IteratorType begin, const IteratorType end)
@@ -267,7 +276,7 @@ private:
  *
  * Parameters are template parameters:
  *
- * @param T     The alphabet type. At the least, this class must implement
+ * @tparam T    The alphabet type. At the least, this class must implement
  *              the static ::SIZE attribute, which returns the size of the
  *              alphabet.
  */
