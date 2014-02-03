@@ -87,6 +87,14 @@ RangeType<T1> computeRange(const T1& total, const T1& blocksize, const T1& overl
 }
 
 
+/**
+ * adjust the range based on the first part of the partitions read from disk
+ */
+template<typename T1, typename T2>
+RangeType<T1> adjustRange(RangeType<T1> const original, const T1& blocksize, RangeType<T1> const & left, RangeType<T1> const & right)
+{
+}
+
 void readFileStream(std::string const& filename, const uint64_t& offset, const uint64_t& length, char* result)
 {
   std::ifstream ifs(filename);
@@ -113,6 +121,10 @@ void readFileC(std::string const& filename, const uint64_t& offset, const uint64
 
 }
 
+
+/**
+ * TODO: test on remotely mounted file system.
+ */
 int readFileMMap(std::string const& filename, const uint64_t& offset, const uint64_t& length, char*& result)
 {
   int fp = open(filename.c_str(), O_RDONLY);
@@ -231,59 +243,144 @@ void closeFileMMap(int fp, char* temp, uint64_t length)
  *  alternatively, do log(p) ordering - comm with neighbor, see if ambiguity resolved.  if not, comm with neighbor 2^i hops away.  repeat.
  *
  *
+ *  issue:  can we fit the raw string into memory?  can we fit the result into memory?
+ *    result has to be  able to fit.  N/P uint64_t.
+ *    if result fits, the raw string has to fit.
  *
+ *   implementation: assume file is read completely into memory.
+ *
+ *
+ *  2 pass algorithm: since we need read ids.
  */
-void scanFastQ(char const* raw, const uint64_t& length, std::vector<uint64_t>& seqOffsets, std::vector<uint64_t>& qualOffsets) {
-  // scan raw for "\n@" substring.  then check next line to see if we got line 1.
+template<typename T1>
+void scanFastQ(char const* raw, RangeType<T1> const & range,
+               std::vector<uint64_t>& seqOffsets, std::vector<uint64_t>& qualOffsets,
+               int rank, int nprocs) {
 
   char* curr = raw;
 
-  // need to look at the first 3 if possible to determine where we are.
-  std::list<char> firstCharPatterns;
-  uint64_t first_At = 0;
-  uint64_t first_Plus = 0;
-  uint64_t temp_offset = 0;
-  uint64_t i = 0;
-  bool foundOne = false;
-  bool foundEOL = false;   // toggle to make the first char on a line significant
-  bool hasCandidateAt = false;
-  bool hasCandidatePlus = false;
-
+  // need to look at 2 or 3 chars.  read 4 lines because of the line 2-3 combo below needs offset to next line 1.
+  char first[4];
+  uint64_t offsets[4] = {0, 0, 0, 0};
 
   // scan through to get the first At or Plus
-  while (i < length && !foundOne)
+  bool newlineChar = false;
+  int currLineId = -1;        // current line id in the buffer
+  int i = 0;
+  while (i < length && currLineId < 4)
   {
-    // look for \n and mark
-    if (*curr == '\n')
+    // encountered a newline.  mark newline found, increment currLineId.
+    if (*curr == '\n' && !newlineChar)
     {
-      foundEOL = true;
+      newlineChar = true;  // toggle on
     }
-    else if (foundEOL) // prev char is EOL
+    else if (*curr != '\n' && newlineChar) // first char
     {
-      // if curr char is @
-      if (*curr == '@')
-      {
-        temp_offset = i;
-        hasCandidateAt = true;
-      }
-      else if (*curr == '+')
-      {
-        temp_offset = i;
-        hasCandidatePlus = true;
-      }
-      else
-      {
-        // either we previously found a candidate (@ or +) which we needed to verify if
-        // or we are looking
-      }
+      ++currLineId;
+      first[currLineId] = *curr;
+      offsets[currLineId] = i + offset;
+      newlineChar = false;  // toggle off
+    }
+//    else  // other characters in the line - don't care.
 
-      foundEOL = false;
-
-    } //  else prev char is not EOL so move forward
-
-    ++curr;
     ++i;
+    ++curr;
   }
+
+  uint64_t offsetsToPrevNode[2] = {0, 0};  // sequence, quality
+  uint64_t startOffset = 0;   // output the current line id.
+  int firstLineId = 0;
+
+  ////// determine the position within a read record based on the first char of the first 3 lines.
+  if (first[0] == '@')
+  {
+    if (first[1] != '@')  // lines 1,2
+    {
+      startOffset = offsets[0];
+      firstLineId = 1;
+    }
+    else  // lines 4,1
+    {
+      offsetsToPrevNode[1] = offsets[0];
+      startOffset = offsets[1];
+      firstLineId = 4;
+    }
+  }
+  else if (first[0] == '+')
+  {
+    if (first[1] == '@') // ambiguous
+    {
+      if (first[2] != '@')  // lines 4, 1, 2
+      {
+        offsetsToPrevNode[1] = offsets[0];
+        startOffset = offsets[1];
+        firstLineId = 4;
+      }
+      else  // lines 3, 4, 1
+      {
+        offsetsToPrevNode[1] = offsets[1];
+        startOffset = offsets[2];
+        firstLineId = 3;
+      }
+    }
+    else  // lines 3, 4 (+, ^@)
+    {
+      offsetsToPrevNode[1] = offsets[1];
+      startOffset = offsets[2];
+      firstLineId = 3;
+    }
+  }
+  else if (first[1] == '+')  // lines 2, 3;
+  {
+    offsetsToPrevNode[0] = offsets[0];
+    offsetsToPrevNode[1] = offsets[2];
+    startOffset = offsets[3];
+    firstLineId = 2;
+  }
+  else if (first[1] == '@')  // lines 4,1
+  {
+    offsetsToPrevNode[1] = offsets[0];
+    startOffset = offsets[1];
+    firstLineId = 4;
+  }
+
+  ////// now move around data fragment  (do this to avoid rereading from file system)
+  // if firstLineId = 2 or 3, move prev node's data to here.
+  if (firstLineId == 2 || firstLineId == 3)
+  {
+    if (rank > 0)
+    {
+      // receive async (post this first)
+    }
+
+    if (rank < nprocs - 1)
+    {
+      // send async
+    }
+
+    // sync
+    MPI_Barrier(MPI_WORLD_COMM);
+  }
+  else // if firstLineId = 4 or 1, move this node's data to prev node.
+  {
+    if (rank < nprocs - 1)
+    {
+      // receive async (post this first)
+    }
+    else
+    {
+      //send
+    }
+
+    // sync
+    MPI_Barrier(MPI_WORLD_COMM);
+  }
+
+
+  seqOffsets.reserve(length);
+  qualOffsets.reserve(length);
+
+
 
   while (i < length) {
     if (*curr == '\n')
