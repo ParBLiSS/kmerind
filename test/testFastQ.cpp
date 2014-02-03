@@ -4,7 +4,17 @@
  *
  * 1,2,3,4 MPI procs, each reading a different part.
  *
- * step 1.  evaluate the speed of mmap, fopen, ifstream.
+ * step 1.  evaluate the speed of mmap, fopen, ifstream. - DONE. mmap is faster to get to an array representation.
+ *    for streaming, there may not be much difference
+ *
+ * step 2.  verify reads are correct, including using overlaps - DONE
+ * step 3.  parse fastq.
+ *          issue here is if we have long sequence, with quality scores, some nodes may only have quality score and
+ *          some may have only sequence.  for shorter reads, we also get that same situation at the boundaries.
+ *
+ *          best to do a 2 pass approach.  first pass mark the start of each read and corresponding quality score start
+ *          then if # reads >> nprocs, split by reads else split by length
+ *
  */
 
 #include <string>     // for std::string
@@ -18,21 +28,42 @@
 #include <chrono>
 #include <unistd.h>
 
-
 #include "mpi.h"
 
 #include "utils/logging.h"
 #include "config.hpp"
 
+template<typename T1>
+struct RangeType {
+    T1 offset;
+    T1 length;
+    T1 overlap;
+};
+
+/**
+ * compute the offset and length of the range for rank pid.
+ * takes into account the block size (e.g. page size) to force alignment
+ *
+ * uses overlap.  kernel handles bringing whole page in for the last (not full) page.
+ */
 template<typename T1, typename T2>
-T1 computeOffset(const T1& total, const T1& blocksize, const T2& np, const T2& pid)
+RangeType<T1> computeRange(const T1& total, const T1& blocksize, const T1& overlap, const T2& np, const T2& pid)
 {
   assert(total > 0);
+  assert(blocksize > 0);
+  assert(overlap >= 0);
   assert(np > 0);
   assert(pid >= 0 && pid < np);
 
+  RangeType<T1> output;
+  output.overlap = overlap;
+
   if (np == 1)
-    return 0;
+  {
+    output.offset = 0;
+    output.length = total;
+    return output;
+  }
 
   // spread the number of blocks first.
   T1 nblock = total / blocksize;
@@ -40,41 +71,30 @@ T1 computeOffset(const T1& total, const T1& blocksize, const T2& np, const T2& p
   T1 div = nblock / static_cast<T1>(np);
   T1 rem = nblock % static_cast<T1>(np);
   if (static_cast<T1>(pid) < rem)
-    return static_cast<T1>(pid) * (div + 1) * blocksize;
+  {
+    output.offset = static_cast<T1>(pid) * (div + 1) * blocksize;
+    output.length = (div + 1) * blocksize + overlap;
+  }
   else
-    return (static_cast<T1>(pid) * div + rem) * blocksize;
+  {
+    output.offset = (static_cast<T1>(pid) * div + rem) * blocksize;
+    if (pid == (np - 1))
+      output.length = total - ((static_cast<T1>(pid) * div + rem) * blocksize);
+    else
+      output.length = div * blocksize + overlap;
+  }
+  return output;
 }
 
-template<typename T1, typename T2>
-T1 computeLength(const T1& total, const T1& blocksize, const T2& np, const T2& pid)
-{
-  assert(total > 0);
-  assert(np > 0);
-  assert(pid >= 0 && pid < np);
-
-  if (np == 1)
-    return total;
-
-  T1 nblock = total / blocksize;
-
-  T1 div = nblock / static_cast<T1>(np);
-  T1 rem = nblock % static_cast<T1>(np);
-  if (static_cast<T1>(pid) < rem)
-    return (div + 1) * blocksize;
-  else if (pid == (np - 1))
-    return total - ((static_cast<T1>(pid) * div + rem) * blocksize);
-  else
-    return div * blocksize;
-}
 
 void readFileStream(std::string const& filename, const uint64_t& offset, const uint64_t& length, char* result)
 {
   std::ifstream ifs(filename);
   ifs.seekg(offset, ifs.beg);
 
-  ifs.read(result, length);
+  std::streamsize read = ifs.readsome(result, length);
   if (ifs)
-    std::cout << "read " << length << " at " << offset << std::endl;
+    std::cout << "read " << read << " of "<< length << " at " << offset << std::endl;
   else
     std::cout << "error: only " << ifs.gcount() << " could be read\n";
 
@@ -87,9 +107,9 @@ void readFileC(std::string const& filename, const uint64_t& offset, const uint64
 {
   FILE *fp = fopen(filename.c_str(),"r");
   fseek(fp, offset, SEEK_SET);
-  fread(result, sizeof(char), length, fp);
+  size_t read = fread_unlocked(result, sizeof(char), length, fp);
   fclose(fp);
-  std::cout << "read " << length << " at " << offset << std::endl;
+  std::cout << "read " << read << " of "<< length << " at " << offset << std::endl;
 
 }
 
@@ -120,10 +140,177 @@ void closeFileMMap(int fp, char* temp, uint64_t length)
   munmap(temp, length);
 
   close(fp);
-  std::cout << "all characters read successfully.\n";
 
 }
 
+/**
+ *  for coordinated distributed quality score reads to map back to original.
+ *    short sequence - partition and parse at read boundaries.  in FASTQ format
+ *    long sequence - 2 mmapped regions?  should be FASTA or BED formats.   (1 sequence at 150B bases).
+ *    older sequencers may have longer reads in FASTA.
+ *
+ * 1 read dataset contains 1 or more fastq files.
+ *  number of files few.
+ *  treat as virtual file?  with virtual file size offset to filename mapping?  assumption is that distributed file system
+ *  can service a small number of files to disjoint sets of clients better than 1 file to all clients.  but this may introduce
+ *  issues where different nodes may reach the same file at different times.
+ *
+ *  === assume files are relatively large.  simplify things by processing 1 file at a time.
+ *
+ *
+ * 1 fastq/fasta file contains 1 or more sequences.
+ *  6B sequences at 50 bases, or smaller
+ *
+ *  === assume files are relatively large.  simplify things by processing 1 file at a time.
+ *
+ * ids:
+ *  file id.          (fid to filename map)
+ *  read id in file   (read id to seq/qual offset map)
+ *  position in read
+ *
+ * need to scan to compute read ids.
+ *
+ *
+ * 1. determine read start positions
+ * scan fastq from partial file to get the read start positions.
+ * since parsing may start anywhere, can't rely on line 2 and 4's length equality to help.
+ * for the same reason, can't rely on having \n@ or \n+ on lines 1 and 3.
+ * DO rely on no newline char within sequence or quality.
+ *
+ * standard pattern is @x*
+ *                     l*
+ *                     +x*
+ *                     q*
+ *                     @x*
+ *                     ...
+ *
+ *    where x is any char except \n.  does not occur at position 1.
+ *          l is sequence alphabet so no + or @
+ *          q is quality char including @, +, l, t (all others).
+ *
+ * for any 2 lines, possible sequences are
+ *
+ *  @x*     lines 1 and 2. no ambiguity
+ *  l*
+ *
+ *  l*      lines 2 and 3, no ambiguity
+ *  +x*
+ *
+ *  +x*     subcases:   +x* \n @q*  - ambiguous: 3-4 or 4-1.  resolve with next line (should be @x*) or with previous line (l*)
+ *  q*                  +x* \n +q*  - lines 3 and 4, no ambiguity
+ *                      +x* \n lq*  - lines 3 and 4, no ambiguity
+ *                      +x* \n tq*  - lines 3 and 4, no ambiguity
+ *
+ *  q*      subcases:   @q* \n @x*  - lines 4 and 1, no ambiguity
+ *  @x*                 +q* \n @x*  - ambiguous: 3-4 or 4-1.  resolve with next line (should be l*) or with previous line (+x*)
+ *                      lq* \n @x*  - lines 4 and 1, no ambiguity
+ *                      tq* \n @x*  - lines 4 and 1, no ambiguity
+ *
+ *  ambiguity is whether a pair of lines can be interpreted to be at more than 1 positions
+ *
+ *  use @ and + as anchors.
+ *
+ *  Boundary Case: \n@ or \n+ split by boundary.  this is resolvable by either overlap read range (not preferred)
+ *  or by storing offsets after the 2nd or 4th \n character (at the end of range)
+ *  Boundary case: a partition contains no line break (unknown)
+ *  Boundary case: a partition contains only 1 line break (ambiguous)
+ *  Boundary case: a partition contains only 2 line breaks and it's ambiguous.
+ *
+ *  boundary cases are unlikely, but can occur.
+ *
+ *  === for now, check and report instead of solving it.
+ *
+ *  one way to deal with these boundary cases is to communicate with neighbors.  (issue is if we need to go a few hops away).
+ *  another way is to gather, then compute/scatter - 6B reads so 24B characters may be too much for the headnode directly
+ *
+ *  ===  for reads, expected lengths are maybe up to 1K in length, and files contain >> 1 seq
+ *
+ *
+ *  hybrid.  if any node has ambiguity and has a small total read count, then use the gather method  (large sequences assumption), and have close to 2p reads.
+ *      else (all have more than 2 line breaks) if any ambiguous, then enter into communication phase
+ *  alternatively, do log(p) ordering - comm with neighbor, see if ambiguity resolved.  if not, comm with neighbor 2^i hops away.  repeat.
+ *
+ *
+ *
+ */
+void scanFastQ(char const* raw, const uint64_t& length, std::vector<uint64_t>& seqOffsets, std::vector<uint64_t>& qualOffsets) {
+  // scan raw for "\n@" substring.  then check next line to see if we got line 1.
+
+  char* curr = raw;
+
+  // need to look at the first 3 if possible to determine where we are.
+  std::list<char> firstCharPatterns;
+  uint64_t first_At = 0;
+  uint64_t first_Plus = 0;
+  uint64_t temp_offset = 0;
+  uint64_t i = 0;
+  bool foundOne = false;
+  bool foundEOL = false;   // toggle to make the first char on a line significant
+  bool hasCandidateAt = false;
+  bool hasCandidatePlus = false;
+
+
+  // scan through to get the first At or Plus
+  while (i < length && !foundOne)
+  {
+    // look for \n and mark
+    if (*curr == '\n')
+    {
+      foundEOL = true;
+    }
+    else if (foundEOL) // prev char is EOL
+    {
+      // if curr char is @
+      if (*curr == '@')
+      {
+        temp_offset = i;
+        hasCandidateAt = true;
+      }
+      else if (*curr == '+')
+      {
+        temp_offset = i;
+        hasCandidatePlus = true;
+      }
+      else
+      {
+        // either we previously found a candidate (@ or +) which we needed to verify if
+        // or we are looking
+      }
+
+      foundEOL = false;
+
+    } //  else prev char is not EOL so move forward
+
+    ++curr;
+    ++i;
+  }
+
+  while (i < length) {
+    if (*curr == '\n')
+    {
+      ++i;
+      ++curr;
+      if (*curr == '@')
+      {
+        // tentatively line 1
+
+      }
+    }
+    ++i;
+    ++curr;
+  }
+
+}
+
+/**
+ * parse FASTQ actually
+ * boundary cases:
+ * 1. partition contains part of a sequence but more than 1 line.
+ * 2. partition contains part of a line. e.g. only sequence or only quality score.
+ *
+ * if long sequence, have each node read a few segmented portions.
+ *
+ */
 
 int main(int argc, char* argv[]) {
   LOG_INIT();
@@ -162,8 +349,10 @@ int main(int argc, char* argv[]) {
 
   // then compute the offsets for current node
   uint64_t page_size = sysconf(_SC_PAGE_SIZE);
-  uint64_t offset = computeOffset(file_size, page_size, nprocs, rank);
-  uint64_t length = computeLength(file_size, page_size, nprocs, rank);
+  uint64_t overlap = 20;
+  RangeType<uint64_t> range = computeRange(file_size, page_size, overlap, nprocs, rank);
+  uint64_t offset = range.offset;
+  uint64_t length = range.length;
 
   // now open the file and begin reading
   std::chrono::high_resolution_clock::time_point t1, t2;
@@ -200,7 +389,7 @@ int main(int argc, char* argv[]) {
   INFO("read from MMap " << "elapsed time: " << time_span3.count() << "s.");
 
 
-  // check to see if these are identical
+  // check to see if these are identical between the 3 methods - SAME.
   t1 = std::chrono::high_resolution_clock::now();
   int areSame = memcmp(buffer1, buffer2, length * sizeof(char));
   if (areSame != 0)
@@ -217,6 +406,36 @@ int main(int argc, char* argv[]) {
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
   INFO("compared 1 3 " << "elapsed time: " << time_span.count() << "s.");
 
+
+  // write them out, concat on file system, compare to original - SAME.
+  std::stringstream ss;
+  std::ofstream ofs;
+  ss << "result.1." << rank << ".txt";
+  ofs.open(ss.str().c_str());
+  ss.str(std::string());
+  if (rank < (nprocs - 1))
+    ofs.write(buffer1, length - overlap);
+  else
+    ofs.write(buffer1, length);
+  ofs.close();
+
+  ss << "result.2." << rank << ".txt";
+  ofs.open(ss.str().c_str());
+  ss.str(std::string());
+  if (rank < (nprocs - 1))
+    ofs.write(buffer1, length - overlap);
+  else
+    ofs.write(buffer1, length);
+  ofs.close();
+
+  ss << "result.3." << rank << ".txt";
+  ofs.open(ss.str().c_str());
+  ss.str(std::string());
+  if (rank < (nprocs - 1))
+    ofs.write(buffer1, length - overlap);
+  else
+    ofs.write(buffer1, length);
+  ofs.close();
 
 
   delete [] buffer1;
