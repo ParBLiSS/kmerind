@@ -426,6 +426,7 @@ RangeType<T1>& adjustRange(char const* raw, RangeType<T1> const & input_range, T
     //  send.
     error = MPI_Send(&lengthToPrevNode, 1, MPI_UINT64_T, rank - 1, 0, MPI_COMM_WORLD);
 
+    printf("rank %d sent %ld\n", rank, lengthToPrevNode);
     if (error != MPI_SUCCESS)
       printf("ERROR: MPI Send.  code %d\n", error);
   }
@@ -437,6 +438,7 @@ RangeType<T1>& adjustRange(char const* raw, RangeType<T1> const & input_range, T
     if (error != MPI_SUCCESS)
       printf("ERROR: MPI IRecv status wait.  code %d\n", error);
 
+    printf("rank %d received %ld\n", rank, lengthFromNextNode);
     // update the range
     output_range.length += lengthFromNextNode;
   }
