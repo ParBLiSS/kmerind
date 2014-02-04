@@ -47,7 +47,7 @@ struct RangeType {
  * uses overlap.  kernel handles bringing whole page in for the last (not full) page.
  */
 template<typename T1, typename T2>
-RangeType<T1> computeRange(const T1& total, const T1& blocksize, const T1& overlap, const T2& np, const T2& pid)
+RangeType<T1> computeRangeBlockAligned(const T1& total, const T1& overlap, const T1& blocksize, const T2& np, const T2& pid)
 {
   assert(total > 0);
   assert(blocksize > 0);
@@ -78,22 +78,77 @@ RangeType<T1> computeRange(const T1& total, const T1& blocksize, const T1& overl
   else
   {
     output.offset = (static_cast<T1>(pid) * div + rem) * blocksize;
-    if (pid == (np - 1))
-      output.length = total - ((static_cast<T1>(pid) * div + rem) * blocksize);
-    else
-      output.length = div * blocksize + overlap;
+    output.length = div * blocksize + overlap;
   }
+
+  assert(output.offset < total);
+  if ((output.offset + output.length) >= total)
+    output.length = total - output.offset;
+
   return output;
 }
 
-
-/**
- * adjust the range based on the first part of the partitions read from disk
- */
 template<typename T1, typename T2>
-RangeType<T1> adjustRange(RangeType<T1> const original, const T1& blocksize, RangeType<T1> const & left, RangeType<T1> const & right)
+RangeType<T1> computeRange(const T1& total, const T1& overlap, const T2& np, const T2& pid)
 {
+  assert(total > 0);
+  assert(overlap >= 0);
+  assert(np > 0);
+  assert(pid >= 0 && pid < np);
+
+  RangeType<T1> output;
+  output.overlap = overlap;
+
+  if (np == 1)
+  {
+    output.offset = 0;
+    output.length = total;
+    return output;
+  }
+
+  T1 div = total / static_cast<T1>(np);
+  T1 rem = total % static_cast<T1>(np);
+  if (static_cast<T1>(pid) < rem)
+  {
+    output.offset = static_cast<T1>(pid) * (div + 1);
+    output.length = div + 1 + overlap;
+  }
+  else
+  {
+    output.offset = static_cast<T1>(pid) * div + rem;
+    output.length = div + overlap;
+  }
+
+  assert(output.offset < total);
+  if ((output.offset + output.length) >= total)
+    output.length = total - output.offset;
+
+  return output;
 }
+
+template<typename T1, typename T2>
+RangeType<T1>& alignRange(RangeType<T1> const & input, RangeType<T1>& output, T1 const & total, T2 const & np)
+{
+  // change offset to align by page size.
+  uint64_t page_size = sysconf(_SC_PAGE_SIZE);
+  output.overlap = input.overlap;
+
+  if (np == 1) {
+    output.offset = input.offset;
+    output.length = input.length;
+    return output;
+  }
+
+  output.offset = (input.offset / page_size) * page_size;
+  output.length = ((input.offset + input.length + page_size - 1) / page_size) * page_size - output.offset;
+
+  assert(output.offset < total);
+  if ((output.offset + output.length) >= total)
+    output.length = total - output.offset;
+
+  return output;
+}
+
 
 void readFileStream(std::string const& filename, const uint64_t& offset, const uint64_t& length, char* result)
 {
@@ -125,17 +180,16 @@ void readFileC(std::string const& filename, const uint64_t& offset, const uint64
 /**
  * TODO: test on remotely mounted file system.
  */
-int readFileMMap(std::string const& filename, const uint64_t& offset, const uint64_t& length, char*& result)
+int readFileMMap(std::string const& filename, const uint64_t& offset, const uint64_t& length, char*& region)
 {
-  int fp = open(filename.c_str(), O_RDONLY);
 
-  // change offset to align by page size.
+  int fp = open(filename.c_str(), O_RDONLY);
 
   // allow read only. any modifications are not written back to file.  read ahead.  do not swap
 //  char* temp = (char*)mmap(nullptr, p_length, PROT_READ, MAP_PRIVATE | MAP_POPULATE | MAP_LOCKED, fp, p_offset );
-  result = (char*)mmap(nullptr, length, PROT_READ, MAP_PRIVATE, fp, offset );
+  region = (char*)mmap(nullptr, length, PROT_READ, MAP_PRIVATE, fp, offset );
 
-  if (result == MAP_FAILED)
+  if (region == MAP_FAILED)
   {
     int myerr = errno;
     fprintf(stderr, "ERROR in mmap: %d: %s\n", myerr, strerror(myerr));
@@ -146,10 +200,10 @@ int readFileMMap(std::string const& filename, const uint64_t& offset, const uint
   return fp;
 }
 
-void closeFileMMap(int fp, char* temp, uint64_t length)
+void closeFileMMap(int fp, char* region, uint64_t length)
 {
 
-  munmap(temp, length);
+  munmap(region, length);
 
   close(fp);
 
@@ -251,13 +305,25 @@ void closeFileMMap(int fp, char* temp, uint64_t length)
  *
  *
  *  2 pass algorithm: since we need read ids.
+ *
+ *  input_range:  offset is the global offset in file.  length is the length of the raw array.
+ *  read through raw for first 4 lines, and adjust the input range.
  */
 template<typename T1>
-void scanFastQ(char const* raw, RangeType<T1> const & range,
-               std::vector<uint64_t>& seqOffsets, std::vector<uint64_t>& qualOffsets,
-               int rank, int nprocs) {
+RangeType<T1>& adjustRange(char const* raw, RangeType<T1> const & input_range, T1 const & total, int rank, int nprocs, RangeType<T1>& output_range) {
 
-  char* curr = raw;
+  // init output range to same as input range
+  output_range.offset = input_range.offset;
+  output_range.length = input_range.length;
+  output_range.overlap = input_range.overlap;
+
+#if defined(USE_MPI)
+  if (nprocs == 1)
+  {
+    return output_range;
+  }
+
+  const char* curr = raw;
 
   // need to look at 2 or 3 chars.  read 4 lines because of the line 2-3 combo below needs offset to next line 1.
   char first[4];
@@ -267,7 +333,16 @@ void scanFastQ(char const* raw, RangeType<T1> const & range,
   bool newlineChar = false;
   int currLineId = -1;        // current line id in the buffer
   int i = 0;
-  while (i < length && currLineId < 4)
+  if (rank == 0)  // rank 0 should start with beginning of file.
+  {
+    currLineId = 0;
+    first[currLineId] = *curr;
+    offsets[currLineId] = input_range.offset;
+    i = 1;
+    ++curr;
+  }
+
+  while (i < input_range.length && currLineId < 4)
   {
     // encountered a newline.  mark newline found, increment currLineId.
     if (*curr == '\n' && !newlineChar)
@@ -278,7 +353,7 @@ void scanFastQ(char const* raw, RangeType<T1> const & range,
     {
       ++currLineId;
       first[currLineId] = *curr;
-      offsets[currLineId] = i + offset;
+      offsets[currLineId] = i + input_range.offset;
       newlineChar = false;  // toggle off
     }
 //    else  // other characters in the line - don't care.
@@ -287,23 +362,19 @@ void scanFastQ(char const* raw, RangeType<T1> const & range,
     ++curr;
   }
 
-  uint64_t offsetsToPrevNode[2] = {0, 0};  // sequence, quality
-  uint64_t startOffset = 0;   // output the current line id.
-  int firstLineId = 0;
 
   ////// determine the position within a read record based on the first char of the first 3 lines.
+  //     and adjust the starting positions and lengths
+  // always shift the offset to the right (don't want to try to read to the end to get an end offset.
   if (first[0] == '@')
   {
     if (first[1] != '@')  // lines 1,2
     {
-      startOffset = offsets[0];
-      firstLineId = 1;
+      output_range.offset = offsets[0];
     }
     else  // lines 4,1
     {
-      offsetsToPrevNode[1] = offsets[0];
-      startOffset = offsets[1];
-      firstLineId = 4;
+      output_range.offset = offsets[1];
     }
   }
   else if (first[0] == '+')
@@ -312,90 +383,73 @@ void scanFastQ(char const* raw, RangeType<T1> const & range,
     {
       if (first[2] != '@')  // lines 4, 1, 2
       {
-        offsetsToPrevNode[1] = offsets[0];
-        startOffset = offsets[1];
-        firstLineId = 4;
+        output_range.offset = offsets[1];
       }
       else  // lines 3, 4, 1
       {
-        offsetsToPrevNode[1] = offsets[1];
-        startOffset = offsets[2];
-        firstLineId = 3;
+        output_range.offset = offsets[2];
       }
     }
     else  // lines 3, 4 (+, ^@)
     {
-      offsetsToPrevNode[1] = offsets[1];
-      startOffset = offsets[2];
-      firstLineId = 3;
+      output_range.offset= offsets[2];
     }
   }
   else if (first[1] == '+')  // lines 2, 3;
   {
-    offsetsToPrevNode[0] = offsets[0];
-    offsetsToPrevNode[1] = offsets[2];
-    startOffset = offsets[3];
-    firstLineId = 2;
+    output_range.offset = offsets[3];
   }
   else if (first[1] == '@')  // lines 4,1
   {
-    offsetsToPrevNode[1] = offsets[0];
-    startOffset = offsets[1];
-    firstLineId = 4;
+    output_range.offset = offsets[1];
   }
+  // else - not one of the possibility.  so ignore.
 
-  ////// now move around data fragment  (do this to avoid rereading from file system)
-  // if firstLineId = 2 or 3, move prev node's data to here.
-  if (firstLineId == 2 || firstLineId == 3)
+  // and add some lengths to the previous node.
+  uint64_t lengthToPrevNode = output_range.offset - input_range.offset;
+  output_range.length = input_range.length - lengthToPrevNode;
+  uint64_t lengthFromNextNode = 0;
+  int error;
+
+  MPI_Request irreq;
+  if (rank < nprocs - 1)
   {
-    if (rank > 0)
-    {
-      // receive async (post this first)
-    }
+    // receive async (post this first)
+    error = MPI_Irecv(&lengthFromNextNode, 1, MPI_UINT64_T, rank + 1, 0, MPI_COMM_WORLD, &irreq);
 
-    if (rank < nprocs - 1)
-    {
-      // send async
-    }
-
-    // sync
-    MPI_Barrier(MPI_WORLD_COMM);
+    if (error != MPI_SUCCESS)
+      printf("ERROR: MPI IRecv.  code %d\n", error);
   }
-  else // if firstLineId = 4 or 1, move this node's data to prev node.
+
+  if (rank > 0)
   {
-    if (rank < nprocs - 1)
-    {
-      // receive async (post this first)
-    }
-    else
-    {
-      //send
-    }
+    //  send.
+    error = MPI_Send(&lengthToPrevNode, 1, MPI_UINT64_T, rank - 1, 0, MPI_COMM_WORLD);
 
-    // sync
-    MPI_Barrier(MPI_WORLD_COMM);
+    if (error != MPI_SUCCESS)
+      printf("ERROR: MPI Send.  code %d\n", error);
+  }
+
+  // make sure receive is completed.
+  if (rank < nprocs - 1)
+  {
+    error = MPI_Wait(&irreq, MPI_STATUS_IGNORE);
+    if (error != MPI_SUCCESS)
+      printf("ERROR: MPI IRecv status wait.  code %d\n", error);
+
+    // update the range
+    output_range.length += lengthFromNextNode;
   }
 
 
-  seqOffsets.reserve(length);
-  qualOffsets.reserve(length);
+  assert(output_range.offset < total);
+  if ((output_range.offset + output_range.length) >= total)
+    output_range.length = total - output_range.offset;
 
 
+#endif  // defined(USE_MPI)
 
-  while (i < length) {
-    if (*curr == '\n')
-    {
-      ++i;
-      ++curr;
-      if (*curr == '@')
-      {
-        // tentatively line 1
-
-      }
-    }
-    ++i;
-    ++curr;
-  }
+  return output_range;
 
 }
 
@@ -408,6 +462,8 @@ void scanFastQ(char const* raw, RangeType<T1> const & range,
  * if long sequence, have each node read a few segmented portions.
  *
  */
+
+
 
 int main(int argc, char* argv[]) {
   LOG_INIT();
@@ -441,15 +497,26 @@ int main(int argc, char* argv[]) {
   MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
 #endif
 
-  fprintf(stderr, "file size is %ld\n", file_size);
+  if (rank == nprocs - 1)
+    fprintf(stderr, "file size is %ld\n", file_size);
 
 
   // then compute the offsets for current node
   uint64_t page_size = sysconf(_SC_PAGE_SIZE);
-  uint64_t overlap = 20;
-  RangeType<uint64_t> range = computeRange(file_size, page_size, overlap, nprocs, rank);
-  uint64_t offset = range.offset;
-  uint64_t length = range.length;
+  printf("page size: %ld\n", page_size);
+  uint64_t overlap = 0;
+  RangeType<uint64_t> range = computeRangeBlockAligned(file_size, overlap, page_size, nprocs, rank);
+  printf("rank %d range block aligned: %ld %ld\n", rank, range.offset, range.length);
+
+  range = computeRange(file_size, overlap, nprocs, rank);
+  printf("rank %d range: %ld %ld\n", rank, range.offset, range.length);
+
+  RangeType<uint64_t> rangeAligned;
+  rangeAligned = alignRange(range, rangeAligned, file_size, nprocs);
+  printf("rank %d range aligned: %ld %ld\n", rank, rangeAligned.offset, rangeAligned.length);
+
+
+
 
   // now open the file and begin reading
   std::chrono::high_resolution_clock::time_point t1, t2;
@@ -460,18 +527,18 @@ int main(int argc, char* argv[]) {
 
 
 
-  char* buffer1 = new char[length];
-  memset(buffer1, 0, length * sizeof(char));
+  char* buffer1 = new char[range.length];
+  memset(buffer1, 0, range.length * sizeof(char));
   t1 = std::chrono::high_resolution_clock::now();
-  readFileStream(filename, offset, length, buffer1);
+  readFileStream(filename, range.offset, range.length, buffer1);
   t2 = std::chrono::high_resolution_clock::now();
   time_span1 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   INFO("read from file stream " << "elapsed time: " << time_span1.count() << "s.");
 
-  char* buffer2 = new char[length];
-  memset(buffer2, 0, length * sizeof(char));
+  char* buffer2 = new char[range.length];
+  memset(buffer2, 0, range.length * sizeof(char));
   t1 = std::chrono::high_resolution_clock::now();
-  readFileC(filename, offset, length, buffer2);
+  readFileC(filename, range.offset, range.length, buffer2);
   t2 = std::chrono::high_resolution_clock::now();
   time_span2 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   INFO("read from C file " << "elapsed time: " << time_span2.count() << "s.");
@@ -480,23 +547,23 @@ int main(int argc, char* argv[]) {
 //  memset(buffer3, 0, length * sizeof(char));
   char* buffer3;
   t1 = std::chrono::high_resolution_clock::now();
-  int fp = readFileMMap(filename, offset, length, buffer3);
+  int fp = readFileMMap(filename, rangeAligned.offset, rangeAligned.length, buffer3);
   t2 = std::chrono::high_resolution_clock::now();
   time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   INFO("read from MMap " << "elapsed time: " << time_span3.count() << "s.");
 
-
   // check to see if these are identical between the 3 methods - SAME.
   t1 = std::chrono::high_resolution_clock::now();
-  int areSame = memcmp(buffer1, buffer2, length * sizeof(char));
+  int areSame = memcmp(buffer1, buffer2, range.length * sizeof(char));
   if (areSame != 0)
     fprintf(stderr, "buffer 1 and buffer 2 are different\n");
   t2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span2;
   INFO("compared 1 2 " << "elapsed time: " << time_span.count() << "s.");
 
+  uint64_t internaloffset = (range.offset - rangeAligned.offset);
   t1 = std::chrono::high_resolution_clock::now();
-  areSame = memcmp(buffer1, buffer3, length * sizeof(char));
+  areSame = memcmp(buffer1, buffer3 + internaloffset, range.length * sizeof(char));
   if (areSame != 0)
     fprintf(stderr, "buffer 1 and buffer 3 are different\n");
   t2 = std::chrono::high_resolution_clock::now();
@@ -511,34 +578,76 @@ int main(int argc, char* argv[]) {
   ofs.open(ss.str().c_str());
   ss.str(std::string());
   if (rank < (nprocs - 1))
-    ofs.write(buffer1, length - overlap);
+    ofs.write(buffer1, range.length - overlap);
   else
-    ofs.write(buffer1, length);
+    ofs.write(buffer1, range.length);
   ofs.close();
 
   ss << "result.2." << rank << ".txt";
   ofs.open(ss.str().c_str());
   ss.str(std::string());
   if (rank < (nprocs - 1))
-    ofs.write(buffer1, length - overlap);
+    ofs.write(buffer2, range.length - overlap);
   else
-    ofs.write(buffer1, length);
+    ofs.write(buffer2, range.length);
   ofs.close();
 
   ss << "result.3." << rank << ".txt";
   ofs.open(ss.str().c_str());
   ss.str(std::string());
   if (rank < (nprocs - 1))
-    ofs.write(buffer1, length - overlap);
+    ofs.write(buffer3 + internaloffset, range.length - overlap);
   else
-    ofs.write(buffer1, length);
+    ofs.write(buffer3 + internaloffset, range.length);
+  ofs.close();
+
+  delete [] buffer1;
+  delete [] buffer2;
+
+  RangeType<uint64_t> readAlignedRange;
+  readAlignedRange = adjustRange(buffer3+internaloffset, range, file_size, rank, nprocs, readAlignedRange);
+  printf("rank %d range read aligned: %ld %ld\n", rank, readAlignedRange.offset, readAlignedRange.length);
+  closeFileMMap(fp, buffer3, rangeAligned.length);
+
+  buffer1 = new char[readAlignedRange.length];
+  memset(buffer1, 0, readAlignedRange.length * sizeof(char));
+  t1 = std::chrono::high_resolution_clock::now();
+  readFileStream(filename, readAlignedRange.offset, readAlignedRange.length, buffer1);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span1 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+  INFO("read from file stream read aligned " << "elapsed time: " << time_span1.count() << "s.");
+
+  rangeAligned = alignRange(readAlignedRange, rangeAligned, file_size, nprocs);
+  printf("rank %d range read aligned block aligned: %ld %ld\n", rank, rangeAligned.offset, rangeAligned.length);
+
+  t1 = std::chrono::high_resolution_clock::now();
+  fp = readFileMMap(filename, rangeAligned.offset, rangeAligned.length, buffer3);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+  INFO("read from MMap read aligned " << "elapsed time: " << time_span3.count() << "s.");
+
+  internaloffset = (readAlignedRange.offset - rangeAligned.offset);
+  t1 = std::chrono::high_resolution_clock::now();
+  areSame = memcmp(buffer1, buffer3 + internaloffset, readAlignedRange.length * sizeof(char));
+  if (areSame != 0)
+    fprintf(stderr, "buffer 1 and buffer 3 are different\n");
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
+  INFO("compared 1 3 read aligned" << "elapsed time: " << time_span.count() << "s.");
+
+  ss << "result.5." << rank << ".txt";
+  ofs.open(ss.str().c_str());
+  ss.str(std::string());
+  if (rank < (nprocs - 1))
+    ofs.write(buffer3 + internaloffset, readAlignedRange.length - overlap);
+  else
+    ofs.write(buffer3 + internaloffset, readAlignedRange.length);
   ofs.close();
 
 
   delete [] buffer1;
-  delete [] buffer2;
   //delete [] buffer3;
-  closeFileMMap(fp, buffer3, length);
+  closeFileMMap(fp, buffer3, readAlignedRange.length);
 
 
 #ifdef USE_MPI
