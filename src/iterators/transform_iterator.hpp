@@ -19,10 +19,6 @@ struct type_same
     bool constexpr value = false;
 };
 
-void blah(int x, int y)
-{
-  return x*y;
-}
 
 void main()
 {
@@ -42,12 +38,6 @@ void foo(func f)
     f(i);
   }
 }
-
-template <>
-struct type_same<typename S, typename S>
-{
-    bool constexpr value = true;
-};
 
 template<typename T1, typename T2>
 struct Transform {
