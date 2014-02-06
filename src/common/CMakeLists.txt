@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 2.8)
 project(bliss-common)
 
-add_library(${PROJECT_NAME}
-    dummy.cpp)
+# TODO: add .cpp files (if we have some)
+#add_library(${PROJECT_NAME}
+#    )
 
 # target_link_libraries(${PROJECT_NAME} ...)
 

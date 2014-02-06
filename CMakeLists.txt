@@ -202,8 +202,14 @@ if (ENABLE_TESTING)
         add_dependencies(${test_target_name} googletest)
         # set binary output path for tests
         set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
-        # link test with it's module and gtest_main
-        target_link_libraries(${test_target_name} gtest_main ${module_name})
+        # link test with gtest_main
+        target_link_libraries(${test_target_name} gtest_main)
+
+        # link to the tested module (but only if that module produces a linkable
+        # library)
+        if (TARGET ${module-name})
+            target_link_libraries(${test_target_name} ${module_name})
+        endif(TARGET ${module-name})
 
         # if code coverage is to be determined: link with gcov
         if (ENABLE_COVERAGE)

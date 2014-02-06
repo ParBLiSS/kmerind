@@ -14,31 +14,44 @@
 
 #include <common/base_types.hpp>
 
-inline constexpr WordType getWordBitMask(const BitSizeType nBits)
+constexpr WordType getWordBitMask(const BitSizeType nBits)
 {
-    return static_cast<WordType>((0x1 << nBits) - 1);
+  return static_cast<WordType>((0x1 << nBits) - 1);
 }
 
-inline constexpr WordType getWordBitMask(const BitSizeType nBits, const BitSizeType offset)
+constexpr WordType getWordBitMask(const BitSizeType nBits, const BitSizeType offset)
 {
-    return static_cast<WordType>(static_cast<WordType>((0x1 << nBits) - 1) << (offset));
+  return static_cast<WordType>(static_cast<WordType>((0x1 << nBits) - 1) << (offset));
 }
 
-inline constexpr CharType getCharBitMask(const BitSizeType nBits)
+constexpr CharType getCharBitMask(const BitSizeType nBits)
 {
-    return static_cast<CharType>((0x1 << nBits) - 1);
+  return static_cast<CharType>((0x1 << nBits) - 1);
 }
 
-inline constexpr WordType getCharBitMask(const BitSizeType nBits, const BitSizeType offset)
+constexpr WordType getCharBitMask(const BitSizeType nBits, const BitSizeType offset)
 {
-    return static_cast<CharType>(static_cast<CharType>((0x1 << nBits) - 1) << (offset));
+  return static_cast<CharType>(static_cast<CharType>((0x1 << nBits) - 1) << (offset));
 }
 
-constexpr unsigned Log2(unsigned n, unsigned p = 0) {
-    return (n <= 1) ? p : Log2(n >> 1, p + 1);
+template <typename T>
+constexpr T getBitMask(const BitSizeType nBits)
+{
+  return static_cast<T>((static_cast<T>(0x1) << nBits) - 1);
 }
 
-constexpr unsigned bits_per_char_needed(unsigned n_chars)
+template <typename T>
+constexpr T intCeil(const T& divident, const T& divisor)
+{
+  return 1 + ((divident - 1) / divisor);
+}
+
+constexpr unsigned Log2(unsigned int n, unsigned p = 0) {
+
+  return (n <= 1) ? p : Log2(n >> 1, p + 1);
+}
+
+constexpr unsigned ceilLog2(unsigned n_chars)
 {
     return Log2(n_chars - 1) + 1;
 }
