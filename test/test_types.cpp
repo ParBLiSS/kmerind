@@ -13,6 +13,9 @@
 
 #include <vector>
 
+#include <iterators/transform_iterator.hpp>
+
+//#include <ext/functor/Functor.h>
 
 //template<typename T>
 //void print() {
@@ -132,6 +135,13 @@ OUTPUT testFunc(INPUT v) {
 };
 
 
+template<typename T1, typename T2>
+struct Transform {
+    T2 operator()(T1 const & in) {
+
+    };
+};
+
 
 //template<typename FUNC>
 //struct function_traits
@@ -150,8 +160,8 @@ OUTPUT testFunc(INPUT v) {
 //};
 
 
-template<class Functor,
-         class Base_Iterator,
+template<typename Functor,
+         typename Base_Iterator,
          typename T >
 struct transform_iterator_base
   : public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
@@ -161,35 +171,38 @@ struct transform_iterator_base
                          T&
                          >
   {
-
+     typedef T value_type;
   };
 
-template<class Functor,
-          class Base_Iterator >
-struct trans_iter
+template<typename Functor,
+         typename Base_Iterator >
+struct transform_iterator
   : public transform_iterator_base<Functor,
                                    Base_Iterator,
-                                   typename std::remove_pointer<typename std::remove_reference< typename std::result_of<Functor(typename Base_Iterator::value_type)>::type >::type >::type
+                                   typename std::result_of<Functor(typename Base_Iterator::value_type)>::type
                                    >
 {
 
+    typedef typename std::result_of<Functor(typename Base_Iterator::value_type)>::type value_type;
 };
 
 
-// restrict to functions with form  functor(int) regardless of whether it's a type with operator() or a function pointer.
-template<class Functor,
-         class Base_Iterator >
-class transform_iterator
-    : public std::iterator<
-          typename std::iterator_traits<Base_Iterator>::iterator_category,
-          typename std::remove_pointer<typename std::remove_reference< typename std::result_of<Functor(typename Base_Iterator::value_type)>::type >::type >::type,
-          typename std::iterator_traits<Base_Iterator>::difference_type,
-          typename std::add_pointer< typename std::remove_pointer<typename std::remove_reference< typename std::result_of<Functor(typename Base_Iterator::value_type)>::type >::type >::type >::type,
-          typename std::add_lvalue_reference< typename std::remove_pointer<typename std::remove_reference< typename std::result_of<Functor(typename Base_Iterator::value_type)>::type >::type >::type >::type
-          >
-
-{
-      typedef typename std::result_of<Functor(typename Base_Iterator::value_type)>::type value_type;
+//template<typename Functor,
+//         typename Base_Iterator >
+//struct transform_iterator_functor
+//  : public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
+//                         typename Functor::ResultType,
+//                         typename std::iterator_traits<Base_Iterator>::difference_type,
+//                         typename Functor::ResultType*,
+//                         typename Functor::ResultType&
+//                         >
+//  {
+//     typedef T value_type;
+//  };
+struct addConst {
+    int operator()(int v) {
+      return v + 4;
+    }
 };
 
 
@@ -340,9 +353,35 @@ int main(int argc, char* argv[]){
 
 
 
-  // test instantiate some containers
-  transform_iterator_base<decltype(testFunc<int, float>), std::vector<int>::iterator, float> base;
+  // test instantiate some containers  This works.
+  //transform_iterator_base< testStruct<int, float>, std::vector<int>::iterator, float> base;
+  transform_iterator< testStruct<int, float>, std::vector<int>::iterator> iter3;
 
-//  trans_iter<decltype(testFunc<int, float>),std::vector<int>::iterator > iter;
-  transform_iterator<decltype(testFunc<int, float>), std::vector<int>::iterator> iter2;
+  // for function pointers - decltype returns "T (* func)(T2)".  we know T2.  can we get T's type?
+  // also, how to have compiler distinguish between function pointer and type?
+
+
+
+  printf("type of testStruct is %s\n", typeid(testStruct<int, float>).name());
+  printf("type of testSTruct output is %s\n", typeid(std::result_of< testClassWConstructor<int, float>(int)>::type).name());
+  printf("type of testClass is %s\n", typeid(testClass<int, float>).name());
+  printf("type of testFunc is %s\n", typeid(testFunc<int, float>).name());
+  printf("type of testFunc decltype is %s\n", typeid( decltype(testFunc<int, float>)).name());
+  printf("type of testFunc output is %s\n", typeid( std::result_of< decltype(&testFunc<int, float>)(int)>::type ).name());
+
+
+//  trans_iter< testFunc<int, float>, std::vector<int>::iterator> iter4;
+
+  std::vector<int> data = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+
+  typedef typename bliss::iterator::transform_iterator_base<addConst, decltype(data.begin()), int>::iterator_type iterType;
+  iterType transIter(data.begin(), addConst());
+
+  printf("created transform iterator\n");
+
+  iterType end = transIter + 10;
+  for (iterType iter = transIter; iter != end ; ++iter) {
+    printf("%d, ", *iter);
+  }
+
 }
