@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <utility>
 
+#include <vector>
 
 
 //template<typename T>
@@ -131,76 +132,65 @@ OUTPUT testFunc(INPUT v) {
 };
 
 
-// 3 types:  global function, member function, functor
-//template<typename FUNC, typename OT>
-//struct function_traits {
-//    typedef OT type;
-//};
-//
-//
+
 //template<typename FUNC>
-//struct function_traits<FUNC, std::enable_if< std::is_class<FUNC>::value && std::is_constructible<FUNC>::value,
-//                                             decltype( std::declval< FUNC >().operator()(0) ) > >
+//struct function_traits
 //{
-//    typedef decltype( std::declval< FUNC >().operator()(0)) type;
-//};
+//    typedef FUNC type2;
 //
-//template<typename FUNC>
-//struct function_traits<FUNC, std::enable_if< std::is_member_function_pointer<FUNC>::value || std::is_function<FUNC>::value,
-//                                             decltype( FUNC(0)) > >
-//{
-//    typedef decltype( FUNC(0)) type;
+//    typedef typename std::conditional< std::is_class<FUNC>::value && std::is_constructible<FUNC>::value,
+//                                        decltype( std::declval< FUNC >().operator()(0) ),
+//                                        std::conditional< std::is_function< typename FUNC >::value,
+//                                                          decltype( FUNC(0) ),
+//                                                          std::enable_if< std::is_member_function_pointer< decltype(typename FUNC) >::value,
+//                                                                          decltype( FUNC(0) )
+//                                                                          >
+//                                                          >
+//                                        >::type type;
 //};
 
-template<typename FUNC>
-struct function_traits
+
+template<class Functor,
+         class Base_Iterator,
+         typename T >
+struct transform_iterator_base
+  : public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
+                         T,
+                         typename std::iterator_traits<Base_Iterator>::difference_type,
+                         T*,
+                         T&
+                         >
+  {
+
+  };
+
+template<class Functor,
+          class Base_Iterator >
+struct trans_iter
+  : public transform_iterator_base<Functor,
+                                   Base_Iterator,
+                                   typename std::remove_pointer<typename std::remove_reference< typename std::result_of<Functor(typename Base_Iterator::value_type)>::type >::type >::type
+                                   >
 {
-    typedef typename std::conditional< std::is_class<FUNC>::value && std::is_constructible<FUNC>::value,
-                                        decltype( std::declval< FUNC >().operator()(0) ),
-                                        std::enable_if< std::is_member_function_pointer<FUNC>::value || std::is_function<FUNC>::value,
-                                                        decltype( FUNC(0) )
-                                                      >
-                                      >::type type;
-//    typedef typename std::enable_if< std::is_class<FUNC>::value && std::is_constructible<FUNC>::value,
-//                                        decltype( std::declval< FUNC >().operator()(0) ) > type2;
-//
-//    typedef typename std::enable_if< std::is_member_function_pointer<FUNC>::value || std::is_function<FUNC>::value,
-//                                        decltype( FUNC(0) ) >::type type2;
+
 };
 
 
+// restrict to functions with form  functor(int) regardless of whether it's a type with operator() or a function pointer.
+template<class Functor,
+         class Base_Iterator >
+class transform_iterator
+    : public std::iterator<
+          typename std::iterator_traits<Base_Iterator>::iterator_category,
+          typename std::remove_pointer<typename std::remove_reference< typename std::result_of<Functor(typename Base_Iterator::value_type)>::type >::type >::type,
+          typename std::iterator_traits<Base_Iterator>::difference_type,
+          typename std::add_pointer< typename std::remove_pointer<typename std::remove_reference< typename std::result_of<Functor(typename Base_Iterator::value_type)>::type >::type >::type >::type,
+          typename std::add_lvalue_reference< typename std::remove_pointer<typename std::remove_reference< typename std::result_of<Functor(typename Base_Iterator::value_type)>::type >::type >::type >::type
+          >
 
-
-//template<class FUNC, class T>
-//class container {
-//    // define bar using types of FUNC
-//    typename std::enable_if<std::is_constructible<FUNC>::value,
-//                            decltype(std::declval<FUNC>())>::type
-//    callme(T v) {
-//      return FUNC(v);
-//    }
-//
-//    typename std::enable_if<!std::is_constructible<FUNC>::value,
-//                             std::result_of<FUNC(T)>::type>::type
-//    callme(T v)
-//    {
-//      return FUNC(v);
-//    }
-//};
-
-//template<class FUNC, class BASE_VECTOR>
-//class myvec : public std::vector<
-//  typename std::enable_if<std::is_constructible<FUNC>::value,
-//                            decltype(std::declval<FUNC>())>::type >
-//{
-//};
-//
-//template<class FUNC, class BASE_VECTOR>
-//class myvec : public std::vector<
-//  typename std::enable_if<!std::is_constructible<FUNC>::value,
-//  std::result_of<FUNC(BASE_VECTOR::value_type)>::type>::type >
-//{
-//};
+{
+      typedef typename std::result_of<Functor(typename Base_Iterator::value_type)>::type value_type;
+};
 
 
 
@@ -244,7 +234,7 @@ int main(int argc, char* argv[]){
                                                                                                                                                 // need decltype for the member function pointer
 
   static_assert(std::is_same<std::result_of< decltype(&testFunc<int, float>)(int)>::type, float>::value, "7.1");
-  // static_assert(std::is_same<std::result_of< testFunc<int, float>(int) >::type, float>::value, "7.2");       // fails compile
+  //static_assert(std::is_same<std::result_of< testFunc<int, float>(int) >::type, float>::value, "7.2");       // fails compile
 
  // static_assert(std::is_same<std::result_of< testClassWPConstructor<int, float>(int)>::type, float>::value, "8.1");                               // private constructor fails, public constructor compiles
   static_assert(std::is_same<std::result_of< decltype(&testClassWPConstructor<int, float>::operator())(testClassWPConstructor<int, float>, int)>::type, float>::value, "6.2");
@@ -292,7 +282,7 @@ int main(int argc, char* argv[]){
 
   // summary:
   // this removes the runtime instance requirement.  also, there is no requirement for visibility of constructor.
-  // however, there is still a difference between
+  // it may not select the correct overloaded function, however
 
 
   // test with constructed struct and classes
@@ -340,14 +330,19 @@ int main(int argc, char* argv[]){
   printf("testFunc is class: %s\n", std::is_class< decltype(testFunc<int, float> ) >::value ? "yes" : "no");
   printf("testFunc is constructible: %s\n", std::is_constructible< decltype(testFunc<int, float>) >::value ? "yes" : "no");
 
-//  printf("testFunc is function: %s\n", std::is_function< decltype(testFunc<int, float>) >::value ? "yes" : "no");
-//  printf("testFunc is memberfunction pointer: %s\n", std::is_constructible< typename testClass<int, float> >::value ? "yes" : "no");
-//
+  printf("testFunc is function: %s\n", std::is_function< decltype(testFunc<int, float> ) >::value ? "yes" : "no");
+  printf("testFunc is member function: %s\n", std::is_member_function_pointer< decltype(testFunc<int, float>) >::value ? "yes" : "no");
 
-//  typedef function_traits<  testStruct<int, float> > tt;
-  //static_assert(std::is_same< function_traits< testFunc<int, float> >::type, float>::value, "28");
-//  typename testStruct<int, float> x;
-//  static_assert(std::is_same< function_traits< x.operator() >::type, float>::value, "29");
-//  static_assert(std::is_same< function_traits< testStruct<int, float> >::type, float>::value, "30");
+  // does not work when using decltype( std::declval<testStruct<int, float> >().operator() )  because whats' in decltype is not a pointer.
+  // can use &testStruct<int, float>::operator().  can't use a bound member function address (i.e. an object's) to form a pointer to member function.
+  printf("testStruct.operator() is function: %s\n", std::is_function< decltype(&testStruct<int, float>::operator() ) >::value ? "yes" : "no");
+  printf("testStruct.operator() is member function: %s\n", std::is_member_function_pointer< decltype(&testStruct<int, float>::operator()) >::value ? "yes" : "no");
 
+
+
+  // test instantiate some containers
+  transform_iterator_base<decltype(testFunc<int, float>), std::vector<int>::iterator, float> base;
+
+//  trans_iter<decltype(testFunc<int, float>),std::vector<int>::iterator > iter;
+  transform_iterator<decltype(testFunc<int, float>), std::vector<int>::iterator> iter2;
 }
