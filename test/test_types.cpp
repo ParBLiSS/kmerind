@@ -178,6 +178,9 @@ struct addConst {
     }
 };
 
+float addC(int v) {
+  return static_cast<float>(v) + 10.0;
+}
 
 
 int main(int argc, char* argv[]){
@@ -360,5 +363,15 @@ int main(int argc, char* argv[]){
     printf("%d -> %f, ", *(iter.getBaseIterator()), *(iter));
 
   }
+
+//  typedef typename bliss::iterator::transform_iterator<decltype(addC), typename std::vector<int>::iterator> iter2Type;
+//
+//  iter2Type iter2(data.begin(), addC);
+//  iter2Type end2(data.end(), addC);
+//
+//  for (; iter2 != end2 ; ++iter2) {
+//    printf("%d -> %f, ", *(iter2.getBaseIterator()), *(iter2));
+//
+//  }
 
 }

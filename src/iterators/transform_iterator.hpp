@@ -3,6 +3,12 @@
  *
  *  Created on: Feb 5, 2014
  *      Author: tpan
+ *
+ *  patterned after boost's transform iterator.  had to use multiple inheritance. (else get unmatched operator*()) _f is not used...
+ *  TODO:
+ *  specialization for windowed iterator and block partitioned iterator.
+ *    no need for cyclic partitioned iterator right now, and no need for skipping iterator (random access handles that)
+ *  specialization for function pointers (can't use multiple inheritance)
  */
 
 #ifndef TRANSFORM_ITERATOR_HPP_
