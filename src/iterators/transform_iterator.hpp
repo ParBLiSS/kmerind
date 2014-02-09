@@ -20,15 +20,22 @@ namespace iterator
            typename Base_Iterator,
            typename OT >
   class transform_iterator_base
-    : public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
+    : public Functor,
+      public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
                            OT,
                            typename std::iterator_traits<Base_Iterator>::difference_type,
                            OT*,
                            OT&
                            >
     {
+      protected:
+        Base_Iterator _base_iter;
+        Functor _f;
+
       public:
         typedef transform_iterator_base<Functor, Base_Iterator, OT> iterator_type;
+        typedef Base_Iterator base_iterator_type;
+        typedef Functor functor_type;
 
       protected:
         typedef std::iterator_traits<iterator_type>                     traits_type;
@@ -41,35 +48,33 @@ namespace iterator
         typedef OT&   reference;
         typedef OT*     pointer;
 
-         typedef typename base_traits_type::value_type input_value_type;
+        typedef typename base_traits_type::value_type input_value_type;
 
-         typedef Base_Iterator base_iterator_type;
-         typedef Functor functor_type;
 
-      protected:
-        functor_type _f;
-        base_iterator_type _base_iter;
-
-      public:
-       functor_type& getFunctor() const {
+       functor_type& getFunctor() {
+         return _f;
+       }
+       const functor_type& getFunctor() const {
          return _f;
        }
        base_iterator_type& getBaseIterator() {
          return _base_iter;
        }
 
-       transform_iterator_base(const Base_Iterator& base_iter, const Functor & f)
-         : _base_iter(base_iter), _f(f) {};
-
-       transform_iterator_base(Base_Iterator& base_iter, Functor & f)
-         : _base_iter(base_iter), _f(f) {};
-
-
-       // forward iterator:
-       OT operator*(const iterator_type& iter) {
-         return iter._f(*_base_iter);
+       const base_iterator_type& getBaseIterator() const {
+         return _base_iter;
        }
 
+       // forward iterator:
+
+       // can't seem to get this way to work.
+//       OT operator*(transform_iterator_base const & iter) {
+//         return _f.operator()(*(iter.getBaseIterator()));
+//       }
+       // this way works, but not with "const" on the function.
+       OT operator*() {
+         return Functor::operator()(*_base_iter);
+       }
        // no -> operator
 
        transform_iterator_base& operator++() {
@@ -92,37 +97,49 @@ namespace iterator
        }
 
        // random access iterator requirements.
-       OT operator[](const difference_type& n) {
-         return _f(_base_iter[n]);
+       OT operator[](difference_type n) {
+         return _f.operator()(_base_iter[n]);
        }
 
-       transform_iterator_base& operator+=(const difference_type& n) {
-         _base_iter += n;
+
+
+       transform_iterator_base& operator+=(difference_type n) {
+         std::advance(_base_iter, n);
          return *this;
        }
 
-       transform_iterator_base operator+(const difference_type& n)
+       transform_iterator_base operator+(difference_type n)
        {
-         return transform_iterator_base(_base_iter + n, _f);
+         transform_iterator_base other(*this);
+         std::advance(other._base_iter, n);
+         return other;
        }
 
-       transform_iterator_base& operator-=(const difference_type& n)
+       friend transform_iterator_base operator+(difference_type n, const transform_iterator_base& right)
+       {  return right + n; }
+
+       transform_iterator_base& operator-=(difference_type n)
        {
-          _base_iter -= n;
+          std::advance(_base_iter, -n);
           return *this;
        }
 
-       transform_iterator_base operator-(const difference_type& n)
+       transform_iterator_base operator-(difference_type n)
        {
-         return transform_iterator_base(_base_iter - n, _f);
+         transform_iterator_base other(*this);
+         std::advance(other._base_iter, -n);
+         return other;
        }
-
 
        // Forward iterator requirements
 
 
+       explicit
+       transform_iterator_base(const Base_Iterator& base_iter, const Functor & f)
+         : _base_iter(base_iter), _f(f) {};
 
-       transform_iterator_base() {};
+       explicit
+       transform_iterator_base() : _f(), _base_iter() {};
 
        explicit
        transform_iterator_base(const transform_iterator_base& Other) : _base_iter(Other.getBaseIterator()), _f(Other.getFunctor()) {};
@@ -131,53 +148,45 @@ namespace iterator
        transform_iterator_base(transform_iterator_base& Other) : _base_iter(Other.getBaseIterator()), _f(Other.getFunctor()) {};
 
 
-       iterator_type& operator=(const iterator_type& Other) {
-         _f = Other.getFunctor();
-         _base_iter = Other.getBaseIterator();
+       transform_iterator_base& operator=(const transform_iterator_base& Other) {
+         this->_f = Other.getFunctor();
+         this->_base_iter = Other.getBaseIterator();
          return *this;
        }
 
-       iterator_type& operator=(iterator_type& Other) {
-         _f = Other.getFunctor();
-         _base_iter = Other.getBaseIterator();
-         return *this;
-       }
 
+
+
+
+       inline friend bool operator==(const transform_iterator_base& lhs,
+            const transform_iterator_base& rhs)
+       { return lhs._base_iter == rhs._base_iter; }
+
+       inline friend bool operator!=(const transform_iterator_base& lhs,
+            const transform_iterator_base& rhs)
+       { return lhs._base_iter != rhs._base_iter;  }
+
+       // Random access iterator requirements
+       inline friend bool operator<(const transform_iterator_base& lhs,
+           const transform_iterator_base& rhs)
+       { return lhs._base_iter < rhs._base_iter; }
+
+       inline friend bool operator>(const transform_iterator_base& lhs,
+           const transform_iterator_base& rhs)
+       { return lhs._base_iter > rhs._base_iter; }
+
+       inline friend bool operator<=(const transform_iterator_base& lhs,
+            const transform_iterator_base& rhs)
+       { return lhs._base_iter <= rhs._base_iter; }
+
+       inline friend bool operator>=(const transform_iterator_base& lhs,
+            const transform_iterator_base& rhs)
+       { return lhs._base_iter >= rhs._base_iter; }
 
 
     };
 
 
-  template<typename iterator_type>
-  inline bool operator==(const iterator_type& lhs,
-       const iterator_type& rhs)
-  { return lhs.getBaseIterator() == rhs.getBaseIterator(); }
-
-  template<typename iterator_type>
-  inline bool operator!=(const iterator_type& lhs,
-       const iterator_type& rhs)
-  { return lhs.getBaseIterator() != rhs.getBaseIterator(); }
-
-  // Random access iterator requirements
-  template<typename iterator_type>
-  inline bool operator<(const iterator_type& lhs,
-      const iterator_type& rhs)
-  { return lhs.getBaseIterator() < rhs.getBaseIterator(); }
-
-  template<typename iterator_type>
-  inline bool operator>(const iterator_type& lhs,
-      const iterator_type& rhs)
-  { return lhs.getBaseIterator() > rhs.getBaseIterator(); }
-
-  template<typename iterator_type>
-  inline bool operator<=(const iterator_type& lhs,
-       const iterator_type& rhs)
-  { return lhs.getBaseIterator() <= rhs.getBaseIterator(); }
-
-  template<typename iterator_type>
-  inline bool operator>=(const iterator_type& lhs,
-       const iterator_type& rhs)
-  { return lhs.getBaseIterator() >= rhs.getBaseIterator(); }
 
   template<typename Functor,
            typename Base_Iterator >

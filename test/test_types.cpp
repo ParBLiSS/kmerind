@@ -355,7 +355,7 @@ int main(int argc, char* argv[]){
 
   // test instantiate some containers  This works.
   //transform_iterator_base< testStruct<int, float>, std::vector<int>::iterator, float> base;
-  transform_iterator< testStruct<int, float>, std::vector<int>::iterator> iter3;
+  //transform_iterator< testStruct<int, float>, std::vector<int>::iterator> iter3;
 
   // for function pointers - decltype returns "T (* func)(T2)".  we know T2.  can we get T's type?
   // also, how to have compiler distinguish between function pointer and type?
@@ -374,14 +374,18 @@ int main(int argc, char* argv[]){
 
   std::vector<int> data = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 
-  typedef typename bliss::iterator::transform_iterator_base<addConst, decltype(data.begin()), int>::iterator_type iterType;
-  iterType transIter(data.begin(), addConst());
+  typedef typename bliss::iterator::transform_iterator_base<addConst, decltype(data.begin()), int> iterType;
+  addConst a;
+
+  typename bliss::iterator::transform_iterator_base<addConst, decltype(data.begin()), int> iter(data.begin(), a);
+  iterType end(data.end(), a);
 
   printf("created transform iterator\n");
+  // iterType iter2 = iter;
+  // iterType end = iter + n;
+  for (; iter != end ; ++iter) {
+    printf("%d -> %d, ", *(iter.getBaseIterator()), *(iter));
 
-  iterType end = transIter + 10;
-  for (iterType iter = transIter; iter != end ; ++iter) {
-    printf("%d, ", *iter);
   }
 
 }
