@@ -160,33 +160,6 @@ struct Transform {
 //};
 
 
-template<typename Functor,
-         typename Base_Iterator,
-         typename T >
-struct transform_iterator_base
-  : public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
-                         T,
-                         typename std::iterator_traits<Base_Iterator>::difference_type,
-                         T*,
-                         T&
-                         >
-  {
-     typedef T value_type;
-  };
-
-template<typename Functor,
-         typename Base_Iterator >
-struct transform_iterator
-  : public transform_iterator_base<Functor,
-                                   Base_Iterator,
-                                   typename std::result_of<Functor(typename Base_Iterator::value_type)>::type
-                                   >
-{
-
-    typedef typename std::result_of<Functor(typename Base_Iterator::value_type)>::type value_type;
-};
-
-
 //template<typename Functor,
 //         typename Base_Iterator >
 //struct transform_iterator_functor
@@ -200,8 +173,8 @@ struct transform_iterator
 //     typedef T value_type;
 //  };
 struct addConst {
-    int operator()(int v) {
-      return v + 4;
+    float operator()(int v) {
+      return static_cast<float>(v) + 4.0;
     }
 };
 
@@ -354,7 +327,7 @@ int main(int argc, char* argv[]){
 
 
   // test instantiate some containers  This works.
-  //transform_iterator_base< testStruct<int, float>, std::vector<int>::iterator, float> base;
+  //transform_iterator< testStruct<int, float>, std::vector<int>::iterator, float> base;
   //transform_iterator< testStruct<int, float>, std::vector<int>::iterator> iter3;
 
   // for function pointers - decltype returns "T (* func)(T2)".  we know T2.  can we get T's type?
@@ -374,17 +347,17 @@ int main(int argc, char* argv[]){
 
   std::vector<int> data = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 
-  typedef typename bliss::iterator::transform_iterator_base<addConst, decltype(data.begin()), int> iterType;
+  typedef typename bliss::iterator::transform_iterator<addConst, decltype(data.begin())> iterType;
   addConst a;
 
-  typename bliss::iterator::transform_iterator_base<addConst, decltype(data.begin()), int> iter(data.begin(), a);
+  typename bliss::iterator::transform_iterator<addConst, decltype(data.begin())> iter(data.begin(), a);
   iterType end(data.end(), a);
 
   printf("created transform iterator\n");
   // iterType iter2 = iter;
   // iterType end = iter + n;
   for (; iter != end ; ++iter) {
-    printf("%d -> %d, ", *(iter.getBaseIterator()), *(iter));
+    printf("%d -> %f, ", *(iter.getBaseIterator()), *(iter));
 
   }
 
