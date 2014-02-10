@@ -358,7 +358,7 @@ int main(int argc, char* argv[]){
   printf("type of testSTruct output is %s\n", typeid(std::result_of< testClassWConstructor<int, float>(int)>::type).name());
   printf("type of testClass is %s\n", typeid(testClass<int, float>).name());
   printf("type of testFunc is %s\n", typeid(testFunc<int, float>).name());
-  printf("type of testFunc decltype is %s\n", typeid( decltype(testFunc<int, float>)).name());
+  printf("type of testFunc decltype is %s\n", typeid( decltype(&testFunc<int, float>)).name());
   printf("type of testFunc output is %s\n", typeid( std::result_of< decltype(&testFunc<int, float>)(int)>::type ).name());
 
 
@@ -377,34 +377,74 @@ int main(int argc, char* argv[]){
   // iterType end = iter + n;
   for (; iter != end ; ++iter) {
     printf("%d -> %f, ", *(iter.getBaseIterator()), *(iter));
+  }
+  printf("\n");
+
+
+  printf("type of addC is %s\n", typeid(decltype(&addConst2::foo)).name());
+  typedef decltype(&addConst2::foo) cf_type;
+  printf("type of testFunc decltype is %s\n", typeid( cf_type ).name());
+  printf("type of testFunc output is %s\n", typeid( std::result_of< cf_type(addConst2, int)>::type ).name());
+  printf("testFunc is class: %s\n", std::is_class< cf_type >::value ? "yes" : "no");
+  printf("testFunc is constructible: %s\n", std::is_constructible< cf_type >::value ? "yes" : "no");
+  printf("testFunc is function: %s\n", std::is_function< cf_type >::value ? "yes" : "no");
+  printf("testFunc is member function: %s\n", std::is_member_function_pointer< cf_type >::value ? "yes" : "no");
+
+  addConst2 ac2;
+  cf_type fptr2 = &addConst2::foo;
+  float f2 = (ac2.*fptr2)(4);
+
+  printf("result of calling addC2 with 4 is %f\n", f2);
+
+
+  typedef bliss::iterator::transform_iterator<decltype(&addConst2::foo), std::vector<int>::iterator > iterType2;
+
+  iterType2 iter3(data.begin(), ac2, &addConst2::foo);
+  iterType2 end3(data.end(), ac2, &addConst2::foo);
+
+  printf("created transform iterator\n");
+  // iterType iter3 = iter;
+  // iterType end = iter + n;
+  for (; iter3 != end3 ; ++iter3) {
+    printf("%d -> %f, ", *(iter3.getBaseIterator()), *(iter3));
 
   }
-
-//  typedef bliss::iterator::transform_iterator<decltype(&addConst2::foo), std::vector<int>::iterator > iterType2;
-//  addConst2 b;
-//
-//  iterType2 iter2(data.begin(), b.foo);
-//  iterType2 end2(data.end(), b.foo);
-//
-//  printf("created transform iterator\n");
-//  // iterType iter2 = iter;
-//  // iterType end = iter + n;
-//  for (; iter2 != end2 ; ++iter2) {
-//    printf("%d -> %f, ", *(iter2.getBaseIterator()), *(iter2));
-//
-//  }
+  printf("\n");
 
 
+  printf("type of addC is %s\n", typeid(decltype(&addC)).name());
+  typedef decltype(&addC) f_type;
+  typedef decltype(addC) f_type2;
+  printf("type of testFunc decltype is %s\n", typeid( f_type ).name());
+  printf("type of testFunc output is %s\n", typeid( std::result_of< f_type(int)>::type ).name());
+  printf("testFunc is class: %s\n", std::is_class< f_type >::value ? "yes" : "no");
+  printf("testFunc is constructible: %s\n", std::is_constructible< f_type >::value ? "yes" : "no");
+  printf("testFunc is function: %s\n", std::is_function< f_type >::value ? "yes" : "no");
+  printf("testFunc is member function: %s\n", std::is_member_function_pointer< f_type >::value ? "yes" : "no");
+  printf("testFunc is class: %s\n", std::is_class< f_type2 >::value ? "yes" : "no");
+  printf("testFunc is constructible: %s\n", std::is_constructible< f_type2 >::value ? "yes" : "no");
+  printf("testFunc is function: %s\n", std::is_function< f_type2 >::value ? "yes" : "no");
+  printf("testFunc is member function: %s\n", std::is_member_function_pointer< f_type2 >::value ? "yes" : "no");
 
-//  typedef typename bliss::iterator::transform_iterator<decltype(addC), typename std::vector<int>::iterator> iter2Type;
+  f_type fptr = &addC;
+  float f = (*fptr)(4);
+
+  printf("result of calling addC with 4 is %f\n", f);
 //
-//  iter2Type iter2(data.begin(), addC);
-//  iter2Type end2(data.end(), addC);
+//  printf("result %f\n", f);
+
 //
-//  for (; iter2 != end2 ; ++iter2) {
-//    printf("%d -> %f, ", *(iter2.getBaseIterator()), *(iter2));
-//
-//  }
+  typedef bliss::iterator::transform_iterator< decltype(&addC), std::vector<int>::iterator> iter2Type;
+
+  iter2Type iter2(data.begin(), &addC);
+  iter2Type end2(data.end(), &addC);
+  printf("created transform iterator 2\n");
+
+  for (; iter2 != end2 ; ++iter2) {
+    printf("%d -> %f, ", *(iter2.getBaseIterator()), *(iter2));
+
+  }
+  printf("\n");
 
 
 }
