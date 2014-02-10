@@ -440,8 +440,15 @@ int main(int argc, char* argv[]){
   iter2Type end2(data.end(), &addC);
   printf("created transform iterator 2\n");
 
-  for (; iter2 != end2 ; ++iter2) {
+  for (; iter2 != end2 ; iter2++) {
     printf("%d -> %f, ", *(iter2.getBaseIterator()), *(iter2));
+
+  }
+  printf("\n");
+  iter2 = iter2Type(data.begin(), &addC);
+
+  for (size_t i = 0; i < data.size(); ++i) {
+    printf("%d -> %f, ", iter2.getBaseIterator()[i], iter2[i]);
 
   }
   printf("\n");
