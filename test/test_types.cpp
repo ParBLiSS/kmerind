@@ -15,6 +15,7 @@
 
 #include <iterators/transform_iterator.hpp>
 
+
 //#include <ext/functor/Functor.h>
 
 //template<typename T>
@@ -178,6 +179,12 @@ struct addConst {
     }
 };
 
+struct addConst2 {
+    float foo(int v) {
+      return static_cast<float>(v) + 20.0;
+    }
+};
+
 float addC(int v) {
   return static_cast<float>(v) + 10.0;
 }
@@ -312,21 +319,30 @@ int main(int argc, char* argv[]){
 
   printf("testStruct is class: %s\n", std::is_class< testStruct<int, float> >::value ? "yes" : "no");
   printf("testStruct is constructible: %s\n", std::is_constructible< testStruct<int, float> >::value ? "yes" : "no");
+  printf("testStruct is function: %s\n", std::is_function< testStruct<int, float> >::value ? "yes" : "no");
+  printf("testStruct is member function: %s\n", std::is_member_function_pointer< testStruct<int, float> >::value ? "yes" : "no");
 
   printf("testClass is class: %s\n", std::is_class< testClass<int, float> >::value ? "yes" : "no");
   printf("testClass is constructible: %s\n", std::is_constructible< testClass<int, float> >::value ? "yes" : "no");
 
   printf("testFunc is class: %s\n", std::is_class< decltype(testFunc<int, float> ) >::value ? "yes" : "no");
   printf("testFunc is constructible: %s\n", std::is_constructible< decltype(testFunc<int, float>) >::value ? "yes" : "no");
-
   printf("testFunc is function: %s\n", std::is_function< decltype(testFunc<int, float> ) >::value ? "yes" : "no");
   printf("testFunc is member function: %s\n", std::is_member_function_pointer< decltype(testFunc<int, float>) >::value ? "yes" : "no");
 
   // does not work when using decltype( std::declval<testStruct<int, float> >().operator() )  because whats' in decltype is not a pointer.
   // can use &testStruct<int, float>::operator().  can't use a bound member function address (i.e. an object's) to form a pointer to member function.
+  printf("testStruct.operator() is class: %s\n", std::is_class< decltype(&testStruct<int, float>::operator() ) >::value ? "yes" : "no");
+  printf("testStruct.operator() is constructible: %s\n", std::is_constructible< decltype(&testStruct<int, float>::operator()) >::value ? "yes" : "no");
   printf("testStruct.operator() is function: %s\n", std::is_function< decltype(&testStruct<int, float>::operator() ) >::value ? "yes" : "no");
   printf("testStruct.operator() is member function: %s\n", std::is_member_function_pointer< decltype(&testStruct<int, float>::operator()) >::value ? "yes" : "no");
 
+  // does not work when using decltype( std::declval<testStruct<int, float> >().operator() )  because whats' in decltype is not a pointer.
+  // can use &testStruct<int, float>::operator().  can't use a bound member function address (i.e. an object's) to form a pointer to member function.
+  printf("testStruct.foo() is class: %s\n", std::is_class< decltype(&testStruct<int, float>::foo ) >::value ? "yes" : "no");
+  printf("testStruct.foo() is constructible: %s\n", std::is_constructible< decltype(&testStruct<int, float>::foo) >::value ? "yes" : "no");
+  printf("testStruct.foo() is function: %s\n", std::is_function< decltype(&testStruct<int, float>::foo ) >::value ? "yes" : "no");
+  printf("testStruct.foo() is member function: %s\n", std::is_member_function_pointer< decltype(&testStruct<int, float>::foo) >::value ? "yes" : "no");
 
 
   // test instantiate some containers  This works.
@@ -350,10 +366,10 @@ int main(int argc, char* argv[]){
 
   std::vector<int> data = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 
-  typedef typename bliss::iterator::transform_iterator<addConst, decltype(data.begin())> iterType;
+  typedef bliss::iterator::transform_iterator<addConst, std::vector<int>::iterator > iterType;
   addConst a;
 
-  typename bliss::iterator::transform_iterator<addConst, decltype(data.begin())> iter(data.begin(), a);
+  iterType iter(data.begin(), a);
   iterType end(data.end(), a);
 
   printf("created transform iterator\n");
@@ -364,6 +380,22 @@ int main(int argc, char* argv[]){
 
   }
 
+//  typedef bliss::iterator::transform_iterator<decltype(&addConst2::foo), std::vector<int>::iterator > iterType2;
+//  addConst2 b;
+//
+//  iterType2 iter2(data.begin(), b.foo);
+//  iterType2 end2(data.end(), b.foo);
+//
+//  printf("created transform iterator\n");
+//  // iterType iter2 = iter;
+//  // iterType end = iter + n;
+//  for (; iter2 != end2 ; ++iter2) {
+//    printf("%d -> %f, ", *(iter2.getBaseIterator()), *(iter2));
+//
+//  }
+
+
+
 //  typedef typename bliss::iterator::transform_iterator<decltype(addC), typename std::vector<int>::iterator> iter2Type;
 //
 //  iter2Type iter2(data.begin(), addC);
@@ -373,5 +405,6 @@ int main(int argc, char* argv[]){
 //    printf("%d -> %f, ", *(iter2.getBaseIterator()), *(iter2));
 //
 //  }
+
 
 }

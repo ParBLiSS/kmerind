@@ -8,7 +8,7 @@
  *  TODO:
  *  specialization for windowed iterator and block partitioned iterator.
  *    no need for cyclic partitioned iterator right now, and no need for skipping iterator (random access handles that)
- *  specialization for function pointers (can't use multiple inheritance)
+ *  specialization for function pointers (can't use multiple inheritance) - use std::function - general feeling is that it's slower.
  */
 
 #ifndef TRANSFORM_ITERATOR_HPP_
@@ -190,7 +190,6 @@ namespace iterator
 
 
     };
-
 
 
 

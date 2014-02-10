@@ -1,3 +1,0 @@
-Downloaded from http://www.codeproject.com/KB/cpp/genfunctors/functors_src.zip
-
-Design described in http://www.codeproject.com/Articles/10650/Yet-Another-Generalized-Functors-Implementation-in
