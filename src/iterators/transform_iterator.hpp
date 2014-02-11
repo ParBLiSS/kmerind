@@ -78,7 +78,7 @@ namespace iterator
         explicit
         transform_iterator() : _f(), _base() {};
 
-        explicit
+        // no EXPLICIT so can copy assign.
         transform_iterator(const type& Other) : _base(Other.getBaseIterator()), _f(Other.getFunctor()) {};
 
         type& operator=(const type& Other) {
@@ -257,7 +257,7 @@ namespace iterator
           explicit
           transform_iterator() : _f(), _base() {};
 
-          explicit
+          // let COMPILER provide a copy constructor.
           transform_iterator(const type& Other) : _base(Other.getBaseIterator()) { _f = Other.getFunctor(); };
 
           type& operator=(const type& Other) {
@@ -439,9 +439,6 @@ namespace iterator
           typedef typename std::add_pointer<value_type>::type             pointer_type;
 
           typedef typename base_traits::value_type                        base_value_type;
-          explicit
-          transform_iterator(type& Other) : _base(Other.getBaseIterator()) { _f = Other.getFunctorPtr(); _c = Other.getFunctorObj();  };
-
 
           explicit
           transform_iterator(const Base_Iterator& base_iter, const class_type & c, const Functor & f)
@@ -450,14 +447,14 @@ namespace iterator
           explicit
           transform_iterator() : _f(), _c(), _base() {};
 
-          explicit
-          transform_iterator(const type& Other) : _base(Other.getBaseIterator()) { _f = Other.getFunctorPtr(); _c = Other.getFunctorObj(); };
+          // NO EXPLICIT else can't copy, copy assign, etc.
+          transform_iterator(const type& Other) : _base(Other.getBaseIterator()) { _f = Other.getFunctorPtr(); _c = Other.getFunctorObject(); };
 
 
           type& operator=(const type& Other) {
             this->_f = Other.getFunctorPtr();
             this->_base = Other.getBaseIterator();
-            this->_c = Other.getFunctorObj();
+            this->_c = Other.getFunctorObject();
             return *this;
           }
 

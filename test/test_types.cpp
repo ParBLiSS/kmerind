@@ -405,13 +405,22 @@ int main(int argc, char* argv[]){
   printf("created transform iterator\n");
   // iterType iter3 = iter;
   // iterType end = iter + n;
-  for (; iter3 != end3 ; ++iter3) {
+  for (; iter3 != end3 ; iter3 = iter3 + 2) {
     printf("%d -> %f, ", *(iter3.getBaseIterator()), *(iter3));
 
   }
   printf("\n");
+  for (iter3 = iterType2(data.begin(), ac2, &addConst2::foo); iter3 != end3 ; iter3 += 2) {
+    printf("%d -> %f, ", *(iter3.getBaseIterator()), *(iter3));
 
+  }
+  printf("\n");
+  iter3 = iterType2(data.begin(), ac2, &addConst2::foo);
+  for (size_t i = 0; i < data.size(); ++i) {
+    printf("%d -> %f, ", iter3.getBaseIterator()[i], iter3[i]);
 
+  }
+  printf("\n");
   printf("type of addC is %s\n", typeid(decltype(&addC)).name());
   typedef decltype(&addC) f_type;
   typedef decltype(addC) f_type2;
