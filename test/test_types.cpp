@@ -39,6 +39,8 @@
 
 template<typename INPUT, typename OUTPUT>
 struct testStruct {
+    INPUT u;
+
     OUTPUT operator()(INPUT v) {
       return static_cast<OUTPUT>(v);
     }
@@ -50,6 +52,8 @@ struct testStruct {
 template<typename INPUT, typename OUTPUT>
 class testClass {
   public:
+    INPUT u;
+
     OUTPUT operator()(INPUT v) {
       return static_cast<OUTPUT>(v);
     }
@@ -58,6 +62,24 @@ class testClass {
     }
 };
 
+template<typename INPUT, typename OUTPUT>
+class testClassTwoOps {
+  public:
+    INPUT u;
+
+    INPUT operator()() {
+      return 0;
+    }
+    OUTPUT operator()(INPUT v) {
+      return static_cast<OUTPUT>(v);
+    }
+    INPUT operator()(INPUT v, INPUT u) {
+      return v + u;
+    }
+    OUTPUT foo(INPUT v) {
+      return static_cast<OUTPUT>(v);
+    }
+};
 
 template<typename INPUT, typename OUTPUT>
 struct testStructWDConstructor {
@@ -105,6 +127,7 @@ class testClassWConstructor {
   public:
     testClassWConstructor(INPUT v) {
     }
+    INPUT u;
 
     OUTPUT operator()(INPUT v) {
       return static_cast<OUTPUT>(v);
@@ -361,13 +384,21 @@ int main(int argc, char* argv[]){
   printf("type of testFunc decltype is %s\n", typeid( decltype(&testFunc<int, float>)).name());
   printf("type of testFunc output is %s\n", typeid( std::result_of< decltype(&testFunc<int, float>)(int)>::type ).name());
 
-
+  printf("\n");
 //  trans_iter< testFunc<int, float>, std::vector<int>::iterator> iter4;
 
   std::vector<int> data = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 
   typedef bliss::iterator::transform_iterator<addConst, std::vector<int>::iterator > iterType;
   addConst a;
+
+  typedef bliss::iterator::func_traits<addConst, std::is_class<addConst>::value> funcTraits;
+  printf("addConst func trait diagnositic: class type: %s, return type: %s\n", typeid(typename funcTraits::class_type).name(), typeid(typename funcTraits::return_type).name());
+  typedef bliss::iterator::functor_traits<addConst, funcTraits::has_class::value> functorTraits;
+  printf("addConst functor trait diagnositic: class type: %s, return type: %s\n", typeid(typename functorTraits::class_type).name(), typeid(typename functorTraits::return_type).name());
+
+  printf("addConst transform_iterator diagnositic: %s\n", typeid(iterType).name());
+
 
   iterType iter(data.begin(), a);
   iterType end(data.end(), a);
@@ -380,15 +411,16 @@ int main(int argc, char* argv[]){
   }
   printf("\n");
 
+  printf("\n");
 
-  printf("type of addC is %s\n", typeid(decltype(&addConst2::foo)).name());
+  printf("type of addConst2::foo is %s\n", typeid(decltype(&addConst2::foo)).name());
   typedef decltype(&addConst2::foo) cf_type;
-  printf("type of testFunc decltype is %s\n", typeid( cf_type ).name());
-  printf("type of testFunc output is %s\n", typeid( std::result_of< cf_type(addConst2, int)>::type ).name());
-  printf("testFunc is class: %s\n", std::is_class< cf_type >::value ? "yes" : "no");
-  printf("testFunc is constructible: %s\n", std::is_constructible< cf_type >::value ? "yes" : "no");
-  printf("testFunc is function: %s\n", std::is_function< cf_type >::value ? "yes" : "no");
-  printf("testFunc is member function: %s\n", std::is_member_function_pointer< cf_type >::value ? "yes" : "no");
+  printf("type of addConst2::foo decltype is %s\n", typeid( cf_type ).name());
+  printf("type of addConst2::foo output is %s\n", typeid( bliss::iterator::functor_traits<cf_type>::return_type ).name());
+  printf("addConst2::foo is class: %s\n", std::is_class< cf_type >::value ? "yes" : "no");
+  printf("addConst2::foo is constructible: %s\n", std::is_constructible< cf_type >::value ? "yes" : "no");
+  printf("addConst2::foo is function: %s\n", std::is_function< cf_type >::value ? "yes" : "no");
+  printf("addConst2::foo is member function: %s\n", std::is_member_function_pointer< cf_type >::value ? "yes" : "no");
 
   addConst2 ac2;
   cf_type fptr2 = &addConst2::foo;
@@ -403,8 +435,6 @@ int main(int argc, char* argv[]){
   iterType2 end3(data.end(), ac2, &addConst2::foo);
 
   printf("created transform iterator\n");
-  // iterType iter3 = iter;
-  // iterType end = iter + n;
   for (; iter3 != end3 ; iter3 = iter3 + 2) {
     printf("%d -> %f, ", *(iter3.getBaseIterator()), *(iter3));
 
@@ -421,19 +451,36 @@ int main(int argc, char* argv[]){
 
   }
   printf("\n");
-  printf("type of addC is %s\n", typeid(decltype(&addC)).name());
+
+  printf("\n");
+
+  printf("type of &addC is %s\n", typeid(decltype(&addC)).name());
   typedef decltype(&addC) f_type;
   typedef decltype(addC) f_type2;
-  printf("type of testFunc decltype is %s\n", typeid( f_type ).name());
-  printf("type of testFunc output is %s\n", typeid( std::result_of< f_type(int)>::type ).name());
-  printf("testFunc is class: %s\n", std::is_class< f_type >::value ? "yes" : "no");
-  printf("testFunc is constructible: %s\n", std::is_constructible< f_type >::value ? "yes" : "no");
-  printf("testFunc is function: %s\n", std::is_function< f_type >::value ? "yes" : "no");
-  printf("testFunc is member function: %s\n", std::is_member_function_pointer< f_type >::value ? "yes" : "no");
-  printf("testFunc is class: %s\n", std::is_class< f_type2 >::value ? "yes" : "no");
-  printf("testFunc is constructible: %s\n", std::is_constructible< f_type2 >::value ? "yes" : "no");
-  printf("testFunc is function: %s\n", std::is_function< f_type2 >::value ? "yes" : "no");
-  printf("testFunc is member function: %s\n", std::is_member_function_pointer< f_type2 >::value ? "yes" : "no");
+  printf("type of &addC decltype is %s\n", typeid( f_type ).name());
+  printf("type of &addC output is %s\n", typeid( std::result_of< f_type(int)>::type ).name());
+  printf("&addC is class: %s\n", std::is_class< f_type >::value ? "yes" : "no");
+  printf("&addC is constructible: %s\n", std::is_constructible< f_type >::value ? "yes" : "no");
+  printf("&addC is function: %s\n", std::is_function< f_type >::value ? "yes" : "no");
+  printf("&addC is member function: %s\n", std::is_member_function_pointer< f_type >::value ? "yes" : "no");
+  printf("addC is class: %s\n", std::is_class< f_type2 >::value ? "yes" : "no");
+  printf("addC is constructible: %s\n", std::is_constructible< f_type2 >::value ? "yes" : "no");
+  printf("addC is function: %s\n", std::is_function< f_type2 >::value ? "yes" : "no");
+  printf("addC is member function: %s\n", std::is_member_function_pointer< f_type2 >::value ? "yes" : "no");
+
+  // check the functor_traits
+  printf("&addC fucntor_trait result is %s\n", typeid(bliss::iterator::functor_traits<f_type>::return_type).name());
+  printf("testStruct fucntor_trait result is %s\n", typeid(bliss::iterator::functor_traits<testStruct<int, double> >::return_type).name());
+  printf("testStruct.operator() fucntor_trait result is %s\n", typeid(bliss::iterator::functor_traits<decltype(&testStruct<int, long>::operator())>::return_type).name());
+  printf("testStruct.foo fucntor_trait result is %s\n", typeid(bliss::iterator::functor_traits<decltype(&testStruct<int, int>::foo)>::return_type).name());
+
+  // should cause static assert error
+  // printf("testFunc.u fucntor_trait result is %s\n", typeid(bliss::iterator::functor_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
+
+  // with overloaded operators.  standard decltype will fail.
+//  printf("testClassTwoOps fucntor_trait result is %s\n", typeid(bliss::iterator::functor_traits<testClassTwoOps<int, double>, void>::return_type).name());
+//  printf("testClassTwoOps fucntor_trait result is %s\n", typeid(bliss::iterator::functor_traits<testClassTwoOps<int, double>, int>::return_type).name());
+//  printf("testClassTwoOps fucntor_trait result is %s\n", typeid(bliss::iterator::functor_traits<testClassTwoOps<int, double>, int, int>::return_type).name());
 
   f_type fptr = &addC;
   float f = (*fptr)(4);

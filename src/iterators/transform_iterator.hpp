@@ -21,12 +21,92 @@ namespace bliss
 
 namespace iterator
 {
+  ///////////// functor and function traits support.  These rely on
+  //   1. default values: functor_traits<T> causes Is_Class to be evaluated.
+  //   2. specialization: an matching functor_traits specialization is then chosen base on T and Is_Class.  else fall back to default and generate assert.
+  //   3. type deduction: the specialization uses T, which is represented as a composition of the template parameters of the specialization.
+  //        i.e. specialization of the generic template is itself templated with a different set of parameters.
+  //        the specialization's own template parameters are completely deduced from T.
+  // the deduction then allows us to get the class and return types, even the types of function arguments.
+  //
+  // Possible Issues:
+  //   does not deal with static function
+  //   may not do well with const functions.
+  //   may not work with lambda functions
+  //   does not deal with overloaded operator()
+  //
+  // Use:  specialized implementation of 'dereference' based on function type (functor, function pointer, or member function pointer)
+
+  // TODO: to deal with possible overloaded operators in functors, we need to specify parameters.
+  //  for functors, fortunately we can construct the list from the Base_Iterator (our use case).
+  //  for function pointers, (member, nonmember) these are already explicitly specified by the user.
+
+  // **BEST PRACTICE:  user should implement functors to have a single operator() (overloading operator() negates the simplicity of using a functor)
+  //                   ELSE specify the exact function as a member function pointer.
+
+
+
+
+  // unspecialized functor traits class.  throws a static assert error.
+  template<typename F, bool Is_Class>
+  struct func_traits {
+      static_assert(std::is_class<F>::value || std::is_function<F>::value || std::is_member_function_pointer<F>::value,
+                    "functor_traits expects template parameter of type class/struct with operator(), function pointer, or member function pointer\n");
+  };
+
+  // functor object's specialization
+  template<typename Functor>
+  struct func_traits<Functor, true> {
+      typedef std::true_type has_class;
+      typedef Functor class_type;
+      typedef typename func_traits<decltype(&Functor::operator()), false>::return_type return_type;
+  };
+
+  // member function pointer's specialization
+  template<typename Class,typename Ret,typename... Args>
+  struct func_traits<Ret (Class::*)(Args...), false>
+  {
+      typedef std::true_type has_class;
+      typedef Class class_type;
+      typedef Ret return_type;
+  };
+
+  // function pointer's specialization.
+  template<typename Ret,typename... Args>
+  struct func_traits<Ret (*)(Args...), false>
+  {
+      typedef std::false_type has_class;
+      typedef Ret return_type;
+  };
+
+
+  /////////////////////
+  // wrapper struct for types.  specialize based on whether F is a functor/member pointer (has Class), or a function pointer (no class).
+  template<typename F, bool Has_Class = func_traits<F, std::is_class<F>::value>::has_class::value>
+  struct functor_traits;
+
+  template<typename F>
+  struct functor_traits<F, true> {
+      typedef func_traits<F, std::is_class<F>::value> trait_type;
+      typedef typename trait_type::return_type return_type;
+      typedef typename trait_type::class_type class_type;
+  };
+
+  template<typename F>
+  struct functor_traits<F, false> {
+      typedef func_traits<F, std::is_class<F>::value> trait_type;
+      typedef typename trait_type::return_type return_type;
+  };
+
+
+
+
   // no Value.  can't have default value for partial specialization, so no point in having it.
   // also causes instantiation problem - Value without default here causes 'provided' error, and value with default causes incomplete type error.
   template<typename Functor,
            typename Base_Iterator,
-           typename Is_Class = void,
-           typename Is_Function = void
+           bool Is_Class = std::is_class<Functor>::value,
+           bool Is_Member_Function = std::is_member_function_pointer<Functor>::value
            >
   class transform_iterator;
 
@@ -34,10 +114,7 @@ namespace iterator
   template<typename Functor,
            typename Base_Iterator
            >
-  class transform_iterator<Functor, Base_Iterator,
-    typename std::enable_if<std::is_class<Functor>::value>::type,
-    typename std::enable_if<!std::is_function<Functor>::value>::type
-    >
+  class transform_iterator<Functor, Base_Iterator, true, false>
     : public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
                            typename std::remove_reference<typename std::result_of<Functor(typename Base_Iterator::value_type)>::type>::type,
                            typename std::iterator_traits<Base_Iterator>::difference_type,
@@ -54,8 +131,7 @@ namespace iterator
       public:
         typedef transform_iterator<Functor,
             Base_Iterator,
-            typename std::enable_if<std::is_class<Functor>::value>::type,
-            typename std::enable_if<!std::is_function<Functor>::value>::type
+            true, false
             >              type;
         typedef Base_Iterator                                           base_type;
         typedef Functor                                                 functor_type;
@@ -144,7 +220,6 @@ namespace iterator
        }
 
 
-
        type& operator+=(difference_type n) {
          std::advance(_base, n);
          return *this;
@@ -215,9 +290,7 @@ namespace iterator
            typename Base_Iterator
            >
   class transform_iterator<Functor, Base_Iterator,
-    typename std::enable_if<!std::is_class<Functor>::value>::type,
-    typename std::enable_if<!std::is_member_function_pointer<Functor>::value>::type
-    >
+    false, false>
   : public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
                          typename std::remove_reference<typename std::result_of< Functor(typename Base_Iterator::value_type)>::type>::type,
                          typename std::iterator_traits<Base_Iterator>::difference_type,
@@ -233,9 +306,7 @@ namespace iterator
 
         public:
           typedef transform_iterator<Functor, Base_Iterator,
-              typename std::enable_if<!std::is_class<Functor>::value>::type,
-              typename std::enable_if<!std::is_member_function_pointer<Functor>::value>::type
-              >                                                           type;
+              false, false>                                                           type;
           typedef Base_Iterator                                           base_type;
           typedef Functor                                                 functor_type;
           typedef std::iterator_traits<type>                              traits;
@@ -285,11 +356,7 @@ namespace iterator
 
          // forward iterator:
 
-         // can't seem to get this way to work.
-  //       OT operator*(type const & iter) {
-  //         return _f.operator()(*(iter.getBaseIterator()));
-  //       }
-         // this way works, but not with "const" on the function.
+        // this way works, but not with "const" on the function.
          value_type operator*() {
            // Functor object
            //return Functor::operator()(*_base);
@@ -299,6 +366,7 @@ namespace iterator
   //         // normal function
   //         return (*_f)(*_base);
   //       }
+
          // no -> operator
 
          type& operator++() {
@@ -389,30 +457,18 @@ namespace iterator
       };
 
 
-  // member function support
-  // does not deal with static function
-  // may not do well with const functions.
-  template<typename T> struct member_ptr_traits;
-  template<typename Class,typename Ret,typename... Args>
-  struct member_ptr_traits<Ret (Class::*)(Args...)>
-  {
-      typedef Class class_type;
-      typedef Ret return_type;
-  };
 
   // member function pointer passed in via reference, and also need an instance of the object. invoke by c.*f
   template<typename Functor,
            typename Base_Iterator
            >
   class transform_iterator<Functor, Base_Iterator,
-    typename std::enable_if<!std::is_class<Functor>::value>::type,
-    typename std::enable_if<std::is_member_function_pointer<Functor>::value>::type
-    >
+    false, true>
   : public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
-                         typename std::remove_reference<typename member_ptr_traits<Functor>::return_type>::type,
+                         typename std::remove_reference<typename functor_traits<Functor>::return_type>::type,
                          typename std::iterator_traits<Base_Iterator>::difference_type,
-                         typename std::add_pointer<typename std::remove_reference<typename member_ptr_traits<Functor>::return_type>::type>::type,
-                         typename std::add_rvalue_reference<typename std::remove_reference<typename member_ptr_traits<Functor>::return_type>::type>::type
+                         typename std::add_pointer<typename std::remove_reference<typename functor_traits<Functor>::return_type>::type>::type,
+                         typename std::add_rvalue_reference<typename std::remove_reference<typename functor_traits<Functor>::return_type>::type>::type
                          >
       {
         protected:
@@ -420,20 +476,18 @@ namespace iterator
           Base_Iterator                                                   _base;
           Functor                                                         _f;
           typedef std::iterator_traits<Base_Iterator>                     base_traits;
-          typedef typename member_ptr_traits<Functor>::class_type         class_type;
+          typedef typename functor_traits<Functor>::class_type         class_type;
           class_type                                                      _c;
 
         public:
           typedef transform_iterator<Functor, Base_Iterator,
-              typename std::enable_if<!std::is_class<Functor>::value>::type,
-              typename std::enable_if<std::is_member_function_pointer<Functor>::value>::type
-              >                                                           type;
+              false, true>                                                           type;
           typedef Base_Iterator                                           base_type;
           typedef Functor                                                 functor_type;
           typedef std::iterator_traits<type>                              traits;
 
           typedef typename base_traits::iterator_category                 iterator_category;
-          typedef typename std::remove_reference<typename member_ptr_traits<Functor>::return_type >::type   value_type;
+          typedef typename std::remove_reference<typename functor_traits<Functor>::return_type >::type   value_type;
           typedef typename base_traits::difference_type                   difference_type;
           typedef typename std::add_rvalue_reference<value_type>::type    reference_type;
           typedef typename std::add_pointer<value_type>::type             pointer_type;
