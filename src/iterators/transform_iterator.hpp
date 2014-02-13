@@ -66,6 +66,9 @@ namespace iterator
   template<typename F, bool Is_Class, typename... Args>
   struct func_traits;
 
+  // use of std::function may simplify implementation but may also make it slower.
+  // overall, need to support static function, static member function, function, member function, functor, lambda function, std::bind, and std::function
+
   // functor object's specialization
   template<typename Functor, typename... Args>
   struct func_traits<Functor, true, Args...> {
@@ -80,7 +83,8 @@ namespace iterator
   };
 
   // member function pointer's specialization.  DArgs are deduced.
-  template<typename Class, typename Ret, typename... Args>
+  // std::bind may be useful here to find f and c together.
+  template<typename Ret, typename Class, typename... Args>
   struct func_traits<Ret (Class::*)(Args...), false, Args...>
   {
       typedef std::true_type has_class;
@@ -91,6 +95,7 @@ namespace iterator
       typedef Ret (Class::*Functor)(Args...);
       static inline return_type eval(Functor& f, class_type& c, Args... inputs) {
         return (c.*f)(inputs...);
+        // return (*f)(c, inputs...);   // this form does not work for pointer to member, even though for result_of this sequence is required and fine.
       }
   };
 

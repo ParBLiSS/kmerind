@@ -13,6 +13,7 @@
 #include <chrono>
 
 #include <vector>
+#include <functional>
 
 #include <iterators/transform_iterator.hpp>
 
@@ -38,6 +39,10 @@ class testClass {
       return static_cast<OUTPUT>(v);
     }
     OUTPUT foo(INPUT v) {
+      return static_cast<OUTPUT>(v);
+    }
+
+    static OUTPUT bar(INPUT v) {
       return static_cast<OUTPUT>(v);
     }
 };
@@ -106,6 +111,11 @@ OUTPUT testFunc(INPUT v) {
   return static_cast<OUTPUT>(v);
 };
 
+template<typename INPUT, typename OUTPUT>
+static OUTPUT testFuncStatic(INPUT v) {
+  return static_cast<OUTPUT>(v);
+};
+
 template<typename T1, typename T2>
 struct addConstFunctor {
     T2 operator()(T1 v) {
@@ -145,13 +155,53 @@ T2 squareFunction(T1 v) {
 }
 
 
+// this approaches is very similar to http://en.cppreference.com/w/cpp/types/result_of impl.
+// all these are the same problems as with the traits classes, and is essentially the result_of implementation sans declval.
+// this is unlikely to work for member functions, unless class type is specified as the first parameter of the function.
+// declval is compile time only.
+//template<typename T, typename A1>
+//struct resultType {
+//    static constexpr T* obj = nullptr;
+//    static constexpr A1* par = nullptr;
+//    typedef decltype((*obj)(*par)) return_type;
+//};
 
 
 int main(int argc, char* argv[]){
 
+  // types to test:
+  //  function pointer
+  //  member function pointer
+  //  static function pointer
+  //  static member function pointer
+  //  functor
+  //  lambda function
+  //  std::function
+  //  std::bind output
+
+  // NOTE:
+  // & operator gets us the "address of".  e.g. address of function, == function pointer.
+  //   in void (*f)(int) = somefunction,  f is a pointer that is being dereferenced when somefunction is assigned to it.
+  //   so f == &somefunction
+  // std::is_function operates on a func object, not a func pointer.
+  // result_of uses declval internally (declval is compile time only), so need to be supplied with type info.
+  //    further, result_of is implemented with decltype((F instance)(args instance)), requires F to be type of the function pointer.
+  //    the object to pointer type conversion can be done in the constructor of the iterator and/or in the traits class.
+  // std::function acts like a functor instance, so don't deference it.
+  // lambda function also acts like a functor instance.  (it's own type)
+  // implicit conversion from lambda function to function pointer (function pointer is a pointer type)
+
+
+  // define some lambda functions
+  std::function<double(double)> lf0    = [](double x){return 1;};
+  auto                          lf1    = [](double x){return x;};
+  auto                          lf2    = [](double x){return x*x;};
+  double (* lf2_ptr)(double)           = lf2;
+
+
 
   // test result_of with: struct, class, struct with default constructor and defined constructor, class with constructors, member operator, member function, and standalone functions.
-  static_assert(std::is_same<std::result_of< testStruct<int, float>(int)>::type, float>::value, "1.1");                                           // operator
+  static_assert(std::is_same<std::result_of< testStruct<int, float>(int) >::type, float>::value, "1.1");                                           // operator
   static_assert(std::is_same<std::result_of< decltype(&testStruct<int, float>::foo)(testStruct<int, float>, int) >::type, float>::value, "1.2");  // member function - use function pointer syntax
                                                                                                                                                 // need decltype for the member function pointer
   static_assert(std::is_same<std::result_of< decltype(&testStruct<int, float>::operator())(testStruct<int, float>, int)>::type, float>::value, "1.3"); // member operator
@@ -178,6 +228,18 @@ int main(int argc, char* argv[]){
 
   // need decltype for the member function pointer
   static_assert(std::is_same<std::result_of< decltype(&testFunc<int, float>)(int)>::type, float>::value, "8.1");
+
+  // test static function
+  static_assert(std::is_same<std::result_of< decltype(&testFuncStatic<int, float>)(int)>::type, float>::value, "9.1");
+  static_assert(std::is_same<std::result_of< decltype(&testClass<int, float>::bar)(int) >::type, float>::value, "9.2");  // member function - use function pointer syntax
+
+  // test lambda function
+  static_assert(std::is_same<std::result_of< decltype(lf0)(double)>::type, double>::value, "8.2");
+  static_assert(std::is_same<std::result_of< decltype(lf1)(double)>::type, double>::value, "8.3");  // member function - use function pointer syntax
+  static_assert(std::is_same<std::result_of< decltype(lf2)(double)>::type, double>::value, "8.4");
+  static_assert(std::is_same<std::result_of< decltype(lf2_ptr)(double)>::type, double>::value, "8.5");  // member function - use function pointer syntax
+
+
 
   // summary:  when use result_of, can only use it on functions or function pointers, or callable type (e.g. operator() defined).  with operator() defined,
   //           result_of appears to be using the function pointer appropriately, but requires public constructor if a class.
@@ -276,6 +338,16 @@ int main(int argc, char* argv[]){
   printf("&testFunc is function: %s\n", std::is_function< decltype(&testFunc<int, float> ) >::value ? "yes" : "no");
   printf("&testFunc is member function: %s\n", std::is_member_function_pointer< decltype(&testFunc<int, float>) >::value ? "yes" : "no");
 
+  printf("testFuncStatic is class: %s\n", std::is_class< decltype(testFuncStatic<int, float> ) >::value ? "yes" : "no");
+  printf("testFuncStatic is constructible: %s\n", std::is_constructible< decltype(testFuncStatic<int, float>) >::value ? "yes" : "no");
+  printf("testFuncStatic is function: %s\n", std::is_function< decltype(testFuncStatic<int, float> ) >::value ? "yes" : "no");
+  printf("testFuncStatic is member function: %s\n", std::is_member_function_pointer< decltype(testFuncStatic<int, float>) >::value ? "yes" : "no");
+
+  printf("&testFuncStatic is class: %s\n", std::is_class< decltype(&testFuncStatic<int, float> ) >::value ? "yes" : "no");
+  printf("&testFuncStatic is constructible: %s\n", std::is_constructible< decltype(&testFuncStatic<int, float>) >::value ? "yes" : "no");
+  printf("&testFuncStatic is function: %s\n", std::is_function< decltype(&testFuncStatic<int, float> ) >::value ? "yes" : "no");
+  printf("&testFuncStatic is member function: %s\n", std::is_member_function_pointer< decltype(&testFuncStatic<int, float>) >::value ? "yes" : "no");
+
 
   printf("testStruct functor_trait class is (%s) %s\n",
          typeid(testStruct<int, double>).name(),
@@ -310,8 +382,10 @@ int main(int argc, char* argv[]){
   printf("type of testStruct.foo output is %s\n", typeid(std::result_of< decltype(&testClassWConstructor<int, float>::foo)(testClassWConstructor<int, float>,int)>::type).name());
   printf("type of testClass is %s\n", typeid(testClass<int, float>).name());
   printf("type of testFunc is %s\n", typeid(testFunc<int, float>).name());
-  printf("type of testFunc decltype is %s\n", typeid( decltype(&testFunc<int, float>)).name());
-  printf("type of testFunc output is %s\n", typeid( std::result_of< decltype(&testFunc<int, float>)(int)>::type ).name());
+  printf("type of testFunc* is %s\n", typeid(testFunc<int, float>).name());
+
+  std::cout << "type of &testFunc decltype is " << typeid( decltype(&testFunc<int, float>) ).name() << std::endl;
+  printf("type of &testFunc output is %s\n", typeid( std::result_of< decltype(&testFunc<int, float>)(int)>::type ).name());
 
   printf("\n");
 
