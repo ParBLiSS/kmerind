@@ -41,12 +41,16 @@ namespace iterator
   //   4. use variadic template parameter for function's parameter list.  this reduces the number of specializations significantly.
   // the deduction then allows us to get the class and return types, even the types of function arguments.
   //
+  // Resolved issues:
+  //   works with overloaded operator().
+  //   deal with static function.  yes.  static function works.  static member function has no class and works.
+  //   for overloaded function, trick is to get decltype to resolve the right one.  static_cast works well here.
+  //       else create a typedef for the function pointer type, assign the function to it (compiler resolve it) and then do decltype on that.
+  //       for member function that are overloaded, the static cast requires the class name.
+  //   works with lambda functions (except that class type may be main function.  don't know how this affects evaluation.
   //
   // Possible Issues:
-  //   deal with static function?
-  //   may not do well with const functions?
-  //   may not work with lambda functions?
-  //   does not work with overloaded operator().  return type is deduced incorrectly.  DO NOT DO OVERLOADED FUNCTION
+  //   does not work well with const, ref etc, for input and output.
   //
   // Use:  'dereference' function is implemented in the func_traits class as static functions.
   //
