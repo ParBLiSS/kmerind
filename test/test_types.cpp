@@ -51,7 +51,8 @@ class testClass {
 
 
 template<typename INPUT, typename OUTPUT>
-struct testClassWConstructor {
+class testClassWConstructor {
+  public:
     testClassWConstructor(INPUT v) {
     }
 
@@ -82,6 +83,7 @@ class testClassWPConstructor {
     testClassWPConstructor(INPUT v) {
     }
 
+  public:
     OUTPUT operator()(INPUT v) {
       return static_cast<OUTPUT>(v);
     }
@@ -313,8 +315,7 @@ T2 squareFunction(T1 v) {
 //};
 
 
-
-template<typename F, typename C, typename R, typename... Args>
+template<typename F, typename R, typename... Args>
 void testFunctionTraits(std::string name) {
 
   printf("NAME: %s\n", name.c_str());
@@ -325,17 +326,12 @@ void testFunctionTraits(std::string name) {
   printf("\tis function: %s\n", std::is_function< F >::value ? "yes" : "no");
   printf("\tis member function: %s\n", std::is_member_function_pointer< F >::value ? "yes" : "no");
 
-  printf("\tfunctor_trait class type is %s (== %s ? %s)\n",
-         typeid(typename bliss::iterator::func_traits<F, std::is_class<F>::value, Args... >::class_type).name(),
-         typeid(C).name(),
-         strcmp(typeid(typename bliss::iterator::func_traits<F, std::is_class<F>::value, Args... >::class_type).name(),
-                typeid(C).name()) == 0 ? "yes" : "no");
-
   printf("\tfunctor_trait result type is %s (== %s ? %s)\n",
-         typeid(typename bliss::iterator::func_traits<F, std::is_class<F>::value, Args... >::return_type).name(),
+         typeid(typename bliss::iterator::func_traits<F, Args... >::return_type).name(),
          typeid(R).name(),
-         strcmp(typeid(typename bliss::iterator::func_traits<F, std::is_class<F>::value, Args... >::return_type).name(),
+         strcmp(typeid(typename bliss::iterator::func_traits<F, Args... >::return_type).name(),
                 typeid(R).name()) == 0 ? "yes" : "no");
+
 
   // does not work for functor as this. type not defined.  don't know why. ....
 //  printf("\tresult_of result type is %s (== %s ?)\n",
@@ -346,18 +342,37 @@ void testFunctionTraits(std::string name) {
 
 }
 
+
+template<typename F, typename R, typename... Args>
+void testFunctionTraits2(std::string name) {
+
+  printf("NAME: %s\n", name.c_str());
+  printf("\ttypeid.name %s\n", typeid(F).name());
+
+  printf("\tis class: %s\n", std::is_class< F >::value ? "yes" : "no");
+  printf("\tis constructible: %s\n", std::is_constructible< F >::value ? "yes" : "no");
+  printf("\tis function: %s\n", std::is_function< F >::value ? "yes" : "no");
+  printf("\tis member function: %s\n", std::is_member_function_pointer< F >::value ? "yes" : "no");
+
+  printf("\tf_trait result type is %s (== %s ? %s)\n",
+         typeid(typename bliss::iterator::func_traits<F, Args...>::return_type).name(),
+         typeid(R).name(),
+         strcmp(typeid(typename bliss::iterator::func_traits<F, Args...>::return_type).name(),
+                typeid(R).name()) == 0 ? "yes" : "no");
+
+  printf("\n");
+
+}
+
+
 template<typename F, typename V>
 void testTransformIterator(F f,
-                           typename bliss::iterator::func_traits<F,
-                                                                 std::is_class<F>::value,
-                                                                 typename std::iterator_traits<typename V::iterator>::value_type
-                                                                 >::class_type c,
                            V& data, std::string name, std::string func_name)
 {
   // test with functor
   typedef bliss::iterator::transform_iterator<F, typename V::iterator> t_iter_type;
-  t_iter_type iter1(data.begin(), f, c);
-  t_iter_type end1(data.end(), f, c);
+  t_iter_type iter1(data.begin(), f);
+  t_iter_type end1(data.end(), f);
 
   std::chrono::high_resolution_clock::time_point time1, time2;
   std::chrono::duration<double> time_span;
@@ -374,7 +389,7 @@ void testTransformIterator(F f,
 
 
   sum = 0;
-  iter1 = t_iter_type(data.begin(), f, c);
+  iter1 = t_iter_type(data.begin(), f);
   time1 = std::chrono::high_resolution_clock::now();
   for (; iter1 != end1 ; ++iter1) {
     sum += *iter1;
@@ -384,6 +399,8 @@ void testTransformIterator(F f,
   std::cout << name << " " << func_name << ":  sum " << sum << "  elapsed time: " << time_span.count() << " s" << std::endl;
 
 }
+
+
 
 
 int main(int argc, char* argv[]){
@@ -485,27 +502,26 @@ int main(int argc, char* argv[]){
 
   // testing:
   // assess the properties of a struct, member function, and function pointer.
-  testFunctionTraits<testStruct<int, float>, testStruct<int, float>, float, int>("testStruct<int, float>");
-  testFunctionTraits<decltype(&testStruct<int, float>::operator()), testStruct<int, float>, float, int>("decltype(&testStruct<int, float>::operator())");
-  testFunctionTraits<decltype(&testStruct<int, float>::foo), testStruct<int, float>, float, int>("decltype(&testStruct<int, float>::foo)");
-  testFunctionTraits<decltype(&testFunc<int, float>), std::nullptr_t, float, int>("decltype(&testFunc<int, float>)");
-  testFunctionTraits<decltype(&testFuncStatic<int, float>), std::nullptr_t, float, int>("decltype(&testFuncStatic<int, float>) - static");
+  testFunctionTraits<testStruct<int, float>,                float, int>("testStruct<int, float>");
+  testFunctionTraits<decltype(&testFunc<int, float>),       float, int>("decltype(&testFunc<int, float>)");
+  testFunctionTraits<decltype(&testFuncStatic<int, float>), float, int>("decltype(&testFuncStatic<int, float>) - static");
   // static member function is same as static function.
-  testFunctionTraits<decltype(&testClass<int, float>::bar), std::nullptr_t, float, int>("decltype(&testClass<int, float>::bar) - static");
+  testFunctionTraits<decltype(&testClass<int, float>::bar), float, int>("decltype(&testClass<int, float>::bar) - static");
+
+  testFunctionTraits<testClass<int, float>,              float, int>("testClass<int, float>");
+  testFunctionTraits<testClassWConstructor<int, float>,  float, int>("testClassWConstructor<int, float>");
+  testFunctionTraits<testClassWDConstructor<int, float>, float, int>("testClassWDConstructor<int, float>");
+  testFunctionTraits<testClassWPConstructor<int, float>, float, int>("testClassWPConstructor<int, float>");
 
   // class with overloaded operators.  standard decltype will fail with operator name and functions.  functors are okay.
-  testFunctionTraits<testClassMultiOps<int, double>, testClassMultiOps<int, double>, int>("testClassMultiOps<int, double>())");
-  testFunctionTraits<testClassMultiOps<int, double>, testClassMultiOps<int, double>, double, int>("testClassMultiOps<int, double>(int)");
-  testFunctionTraits<testClassMultiOps<int, double>, testClassMultiOps<int, double>, int, int, int>("testClassMultiOps<int, double>(int, int))");
+  testFunctionTraits<testClassMultiOps<int, double>, int>("testClassMultiOps<int, double>())");
+  testFunctionTraits<testClassMultiOps<int, double>, double, int>("testClassMultiOps<int, double>(int)");
+  testFunctionTraits<testClassMultiOps<int, double>, int, int, int>("testClassMultiOps<int, double>(int, int))");
   // alternatively use typedef Ret ([class::]*blah)(args...); then use blah as the type, or use static cast.
-  testFunctionTraits<decltype(static_cast<float (*)()>(&testOverloadedFunc<int, float>)), std::nullptr_t, float>("&testOverloadedFunc<int, double>()) - static cast");
-  testFunctionTraits<decltype(static_cast<float (*)(int)>(&testOverloadedFunc<int, float>)), std::nullptr_t, float, int>("&testOverloadedFunc<int, double>(int)) - static cast");
-  testFunctionTraits<decltype(static_cast<float (*)(int, int)>(&testOverloadedFunc<int, float>)), std::nullptr_t, float, int, int>("&testOverloadedFunc<int, double>(int, int)) - static cast");
+  testFunctionTraits<decltype(static_cast<float (*)()>(&testOverloadedFunc<int, float>)),         float>("&testOverloadedFunc<int, double>()) - static cast");
+  testFunctionTraits<decltype(static_cast<float (*)(int)>(&testOverloadedFunc<int, float>)),      float, int>("&testOverloadedFunc<int, double>(int)) - static cast");
+  testFunctionTraits<decltype(static_cast<float (*)(int, int)>(&testOverloadedFunc<int, float>)), float, int, int>("&testOverloadedFunc<int, double>(int, int)) - static cast");
 
-  // overloaded member function pointer.
-  testFunctionTraits<decltype(static_cast<float (testClassMultiFuncs<int, float>::*)()>(&testClassMultiFuncs<int, float>::foo)), testClassMultiFuncs<int, float>, float>("&testClassMultiFuncs<int, float>::foo()) - static cast");
-  testFunctionTraits<decltype(static_cast<float (testClassMultiFuncs<int, float>::*)(int)>(&testClassMultiFuncs<int, float>::foo)), testClassMultiFuncs<int, float>, float, int>("&testClassMultiFuncs<int, float>::foo(int)) - static cast");
-  testFunctionTraits<decltype(static_cast<float (testClassMultiFuncs<int, float>::*)(int, int)>(&testClassMultiFuncs<int, float>::foo)), testClassMultiFuncs<int, float>, float, int, int>("&testClassMultiFuncs<int, float>::foo(int, int)) - static cast");
 
   // does not work when using decltype( std::declval<testStruct<int, float> >().operator() )  because whats' in decltype is not a pointer.
   //printf("decltype( std::declval<testStruct<int, float> >().operator() ) is class: %s\n", std::is_class< decltype( std::declval<testStruct<int, float> >().operator() ) >::value ? "yes" : "no");
@@ -514,36 +530,116 @@ int main(int argc, char* argv[]){
   // printf("testFunc.u functor_trait result is %s\n", typeid(bliss::iterator::func_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
 
   // lambda functions.
-  testFunctionTraits<decltype(lf0), std::function<double(double)>, double, double>("decltype(lf0)");
-  testFunctionTraits<decltype(lf1), std::nullptr_t, double, double>("decltype(lf1)");
-  testFunctionTraits<decltype(lf2), std::nullptr_t, double, double>("decltype(lf2)");
-  testFunctionTraits<decltype(lf2_ptr), std::nullptr_t, double, double>("decltype(lf2_ptr)");
-
-  // const and ref functions
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testFunc),                 testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testFunc)");
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstFunc),            testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstFunc)");
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFunc),              testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testRefFunc)");
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstRefFunc),         testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstRefFunc)");
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testFuncConst),            testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testFuncConst)");
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstFuncConst),       testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstFuncConst)");
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFuncConst),         testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testRefFuncConst)");
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstRefFuncConst),    testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstRefFuncConst)");
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFuncRef),           testClassConstRef<int, float>, int,   int>("decltype(&testClassConstRef<int, float>::testRefFuncRef)");
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFuncConstRef),      testClassConstRef<int, float>, int,   int>("decltype(&testClassConstRef<int, float>::testRefFuncConstRef)");
-  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstRefFuncConstRef), testClassConstRef<int, float>, int,   int>("decltype(&testClassConstRef<int, float>::testConstRefFuncConstRef)");
+  testFunctionTraits<decltype(lf0),     double, double>("decltype(lf0)");
+  testFunctionTraits<decltype(lf1),     double, double>("decltype(lf1)");
+  testFunctionTraits<decltype(lf2),     double, double>("decltype(lf2)");
+  testFunctionTraits<decltype(lf2_ptr), double, double>("decltype(lf2_ptr)");
 
   // const and ref functors
-  testFunctionTraits<testFunctorXXXX<int, float>, testFunctorXXXX<int, float>, float, int>("testFunctorXXXX<int, float>");
-  testFunctionTraits<testFunctorXXCX<int, float>, testFunctorXXCX<int, float>, float, int>("testFunctorXXCX<int, float>");
-  testFunctionTraits<testFunctorCXXX<int, float>, testFunctorCXXX<int, float>, float, int>("testFunctorCXXX<int, float>");
-  testFunctionTraits<testFunctorCXCX<int, float>, testFunctorCXCX<int, float>, float, int>("testFunctorCXCX<int, float>");
-  testFunctionTraits<testFunctorXRXX<int, float>, testFunctorXRXX<int, float>, float, int>("testFunctorXRXX<int, float>");
-  testFunctionTraits<testFunctorXRXR<int, float>, testFunctorXRXR<int, float>, float, int>("testFunctorXRXR<int, float>");
-  testFunctionTraits<testFunctorXRCX<int, float>, testFunctorXRCX<int, float>, float, int>("testFunctorXRCX<int, float>");
-  testFunctionTraits<testFunctorXRCR<int, float>, testFunctorXRCR<int, float>, float, int>("testFunctorXRCR<int, float>");
-  testFunctionTraits<testFunctorCRXX<int, float>, testFunctorCRXX<int, float>, float, int>("testFunctorCRXX<int, float>");
-  testFunctionTraits<testFunctorCRCX<int, float>, testFunctorCRCX<int, float>, float, int>("testFunctorCRCX<int, float>");
-  testFunctionTraits<testFunctorCRCR<int, float>, testFunctorCRCR<int, float>, float, int>("testFunctorCRCR<int, float>");
+  testFunctionTraits<testFunctorXXXX<int, float>, float, int>("testFunctorXXXX<int, float>");
+  testFunctionTraits<testFunctorXXCX<int, float>, float, int>("testFunctorXXCX<int, float>");
+  testFunctionTraits<testFunctorCXXX<int, float>, float, int>("testFunctorCXXX<int, float>");
+  testFunctionTraits<testFunctorCXCX<int, float>, float, int>("testFunctorCXCX<int, float>");
+  testFunctionTraits<testFunctorXRXX<int, float>, float, int>("testFunctorXRXX<int, float>");
+  testFunctionTraits<testFunctorXRXR<int, float>, float, int>("testFunctorXRXR<int, float>");
+  testFunctionTraits<testFunctorXRCX<int, float>, float, int>("testFunctorXRCX<int, float>");
+  testFunctionTraits<testFunctorXRCR<int, float>, float, int>("testFunctorXRCR<int, float>");
+  testFunctionTraits<testFunctorCRXX<int, float>, float, int>("testFunctorCRXX<int, float>");
+  testFunctionTraits<testFunctorCRCX<int, float>, float, int>("testFunctorCRCX<int, float>");
+  testFunctionTraits<testFunctorCRCR<int, float>, float, int>("testFunctorCRCR<int, float>");
+
+
+
+
+
+
+
+  // second version, should only work with functor and function ptrs.
+  // assess the properties of a struct, member function, and function pointer.
+  testFunctionTraits2<testStruct<int, float>, float, int>("2 testStruct<int, float>");
+//  testFunctionTraits2<decltype(&testStruct<int, float>::operator()), float, int>("2 decltype(&testStruct<int, float>::operator())");
+//  testFunctionTraits2<decltype(&testStruct<int, float>::foo), float, int>("2 decltype(&testStruct<int, float>::foo)");
+  testFunctionTraits2<decltype(&testFunc<int, float>), float, int>("2 decltype(&testFunc<int, float>)");
+  testFunctionTraits2<decltype(&testFuncStatic<int, float>), float, int>("2 decltype(&testFuncStatic<int, float>) - static");
+  // static member function is same as static function.
+  testFunctionTraits2<decltype(&testClass<int, float>::bar), float, int>("2 decltype(&testClass<int, float>::bar) - static");
+
+  // different constructors.
+  testFunctionTraits2<testClass<int, float>,              float, int>("2 testClass<int, float>");
+  testFunctionTraits2<testClassWConstructor<int, float>,  float, int>("2 testClassWConstructor<int, float>");
+  testFunctionTraits2<testClassWDConstructor<int, float>, float, int>("2 testClassWDConstructor<int, float>");
+  testFunctionTraits2<testClassWPConstructor<int, float>, float, int>("2 testClassWPConstructor<int, float>");
+
+
+  // class with overloaded operators.  standard decltype will fail with operator name and functions.  functors are okay.
+  testFunctionTraits2<testClassMultiOps<int, double>, double>("2 testClassMultiOps<int, double>())");
+  testFunctionTraits2<testClassMultiOps<int, double>, double, int>("2 testClassMultiOps<int, double>(int)");
+  testFunctionTraits2<testClassMultiOps<int, double>, double, int, int>("2 testClassMultiOps<int, double>(int, int))");
+  // alternatively use typedef Ret ([class::]*blah)(args...); then use blah as the type, or use static cast.
+  testFunctionTraits2<decltype(static_cast<float (*)()>(&testOverloadedFunc<int, float>)), float>("2 &testOverloadedFunc<int, double>()) - static cast");
+  testFunctionTraits2<decltype(static_cast<float (*)(int)>(&testOverloadedFunc<int, float>)), float, int>("2 &testOverloadedFunc<int, double>(int)) - static cast");
+  testFunctionTraits2<decltype(static_cast<float (*)(int, int)>(&testOverloadedFunc<int, float>)), float, int, int>("2 &testOverloadedFunc<int, double>(int, int)) - static cast");
+
+  // overloaded member function pointer.
+//  testFunctionTraits2<decltype(static_cast<float (testClassMultiFuncs<int, float>::*)()>(&testClassMultiFuncs<int, float>::foo)),         float>("2 &testClassMultiFuncs<int, float>::foo()) - static cast");
+//  testFunctionTraits2<decltype(static_cast<float (testClassMultiFuncs<int, float>::*)(int)>(&testClassMultiFuncs<int, float>::foo)),      float, int>("2 &testClassMultiFuncs<int, float>::foo(int)) - static cast");
+//  testFunctionTraits2<decltype(static_cast<float (testClassMultiFuncs<int, float>::*)(int, int)>(&testClassMultiFuncs<int, float>::foo)), float, int, int>("2 &testClassMultiFuncs<int, float>::foo(int, int)) - static cast");
+
+  // does not work when using decltype( std::declval<testStruct<int, float> >().operator() )  because whats' in decltype is not a pointer.
+  //printf("decltype( std::declval<testStruct<int, float> >().operator() ) is class: %s\n", std::is_class< decltype( std::declval<testStruct<int, float> >().operator() ) >::value ? "yes" : "no");
+
+  // can't use a bound member function address (i.e. an object's) to form a pointer to member function.
+  // printf("testFunc.u functor_trait result is %s\n", typeid(bliss::iterator::func_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
+
+  // lambda functions.
+  testFunctionTraits2<decltype(lf0),     double, double>("2 decltype(lf0)");
+  testFunctionTraits2<decltype(lf1),     double, double>("2 decltype(lf1)");
+  testFunctionTraits2<decltype(lf2),     double, double>("2 decltype(lf2)");
+  testFunctionTraits2<decltype(lf2_ptr), double, double>("2 decltype(lf2_ptr)");
+
+  // const and ref functions
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testFunc),                 float, int>("2 decltype(&testClassConstRef<int, float>::testFunc)");
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testConstFunc),            float, int>("2 decltype(&testClassConstRef<int, float>::testConstFunc)");
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testRefFunc),              float, int>("2 decltype(&testClassConstRef<int, float>::testRefFunc)");
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testConstRefFunc),         float, int>("2 decltype(&testClassConstRef<int, float>::testConstRefFunc)");
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testFuncConst),            float, int>("2 decltype(&testClassConstRef<int, float>::testFuncConst)");
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testConstFuncConst),       float, int>("2 decltype(&testClassConstRef<int, float>::testConstFuncConst)");
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testRefFuncConst),         float, int>("2 decltype(&testClassConstRef<int, float>::testRefFuncConst)");
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testConstRefFuncConst),    float, int>("2 decltype(&testClassConstRef<int, float>::testConstRefFuncConst)");
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testRefFuncRef),           int,   int>("2 decltype(&testClassConstRef<int, float>::testRefFuncRef)");
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testRefFuncConstRef),      int,   int>("2 decltype(&testClassConstRef<int, float>::testRefFuncConstRef)");
+//  testFunctionTraits2<decltype(&testClassConstRef<int, float>::testConstRefFuncConstRef), int,   int>("2 decltype(&testClassConstRef<int, float>::testConstRefFuncConstRef)");
+
+  // const and ref functors
+  testFunctionTraits2<testFunctorXXXX<int, float>, float, int>("2 testFunctorXXXX<int, float>");
+  testFunctionTraits2<testFunctorXXCX<int, float>, float, int>("2 testFunctorXXCX<int, float>");
+  testFunctionTraits2<testFunctorCXXX<int, float>, float, int>("2 testFunctorCXXX<int, float>");
+  testFunctionTraits2<testFunctorCXCX<int, float>, float, int>("2 testFunctorCXCX<int, float>");
+  testFunctionTraits2<testFunctorXRXX<int, float>, float, int>("2 testFunctorXRXX<int, float>");
+  testFunctionTraits2<testFunctorXRXR<int, float>, float, int>("2 testFunctorXRXR<int, float>");
+  testFunctionTraits2<testFunctorXRCX<int, float>, float, int>("2 testFunctorXRCX<int, float>");
+  testFunctionTraits2<testFunctorXRCR<int, float>, float, int>("2 testFunctorXRCR<int, float>");
+  testFunctionTraits2<testFunctorCRXX<int, float>, float, int>("2 testFunctorCRXX<int, float>");
+  testFunctionTraits2<testFunctorCRCX<int, float>, float, int>("2 testFunctorCRCX<int, float>");
+  testFunctionTraits2<testFunctorCRCR<int, float>, float, int>("2 testFunctorCRCR<int, float>");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
   std::chrono::high_resolution_clock::time_point time1, time2;
@@ -590,25 +686,25 @@ int main(int argc, char* argv[]){
 
   // test with functor
   addConstFunctor<int, double> a;
-  testTransformIterator(a, a, data, "functor", "addConstFunctor<int, double>");
+  testTransformIterator(a, data, "functor", "addConstFunctor<int, double>");
 
 
   squareFunctor<int, double> b;
-  testTransformIterator(b, b, data, "functor", "squareFunctor<int, double>");
+  testTransformIterator(b, data, "functor", "squareFunctor<int, double>");
 
 
 
   // function pointer
-  addConstMemberFunction<int, double> c;
-  testTransformIterator(&addConstMemberFunction<int, double>::foo, c, data, "mem func", "&addConstMemberFunction<int, double>::foo");
-
-  squareMemberFunction<int, double> d;
-  testTransformIterator(&squareMemberFunction<int, double>::foo, d, data, "mem func", "&squareMemberFunction<int, double>::foo");
-
+//  addConstMemberFunction<int, double> c;
+//  testTransformIterator(&addConstMemberFunction<int, double>::foo, data, "mem func", "&addConstMemberFunction<int, double>::foo");
+//
+//  squareMemberFunction<int, double> d;
+//  testTransformIterator(&squareMemberFunction<int, double>::foo, data, "mem func", "&squareMemberFunction<int, double>::foo");
+//
   // test function
-  testTransformIterator(&addConstFunction<int, double>, nullptr, data, "func", "&addConstFunction<int, double>");
+  testTransformIterator(&addConstFunction<int, double>, data, "func", "&addConstFunction<int, double>");
 
-  testTransformIterator(&squareFunction<int, double>, nullptr, data, "func", "&squareFunction<int, double>");
+  testTransformIterator(&squareFunction<int, double>, data, "func", "&squareFunction<int, double>");
 
 
   // member function pointer format.
