@@ -95,13 +95,13 @@ class testClassMultiOps {
   public:
     INPUT u;
 
-    INPUT operator()() {
+    OUTPUT operator()() {
       return 0;
     }
     OUTPUT operator()(INPUT v) {
       return static_cast<OUTPUT>(v);
     }
-    INPUT operator()(INPUT v, INPUT u) {
+    OUTPUT operator()(INPUT v, INPUT u) {
       return v + u;
     }
     OUTPUT foo(INPUT v) {
@@ -161,16 +161,85 @@ class testClassConstRef {
     OUTPUT testConstRefFuncConst(const INPUT & v) const {
       return static_cast<OUTPUT>(v);
     }
-    INPUT& testRefFuncRef(INPUT & v) {
-      return v;
+    OUTPUT& testRefFuncRef(INPUT & v) {
+      return reinterpret_cast<OUTPUT>(v);
     }
-    INPUT& testRefFuncConstRef(INPUT & v) const {
-      return v;
+    OUTPUT& testRefFuncConstRef(INPUT & v) const {
+      return reinterpret_cast<OUTPUT>(v);
     }
-    INPUT& testConstRefFuncConstRef(const INPUT & v) const {
-      return v;
+    OUTPUT& testConstRefFuncConstRef(const INPUT & v) const {
+      return reinterpret_cast<OUTPUT>(v);
     }
 };
+
+template<typename INPUT, typename OUTPUT>
+struct testFunctorXXXX {
+    OUTPUT operator()(INPUT v) {
+      return static_cast<OUTPUT>(v);
+    }
+};
+template<typename INPUT, typename OUTPUT>
+struct testFunctorXXCX {
+    OUTPUT operator()(INPUT v) const{
+      return static_cast<OUTPUT>(v);
+    }
+};
+template<typename INPUT, typename OUTPUT>
+struct testFunctorCXXX {
+    OUTPUT operator()(const INPUT v) {
+      return static_cast<OUTPUT>(v);
+    }
+};
+template<typename INPUT, typename OUTPUT>
+struct testFunctorCXCX {
+    OUTPUT operator()(const INPUT v) const{
+      return static_cast<OUTPUT>(v);
+    }
+};
+template<typename INPUT, typename OUTPUT>
+struct testFunctorXRXX {
+    OUTPUT operator()(INPUT & v) {
+      return static_cast<OUTPUT>(v);
+    }
+};
+template<typename INPUT, typename OUTPUT>
+struct testFunctorXRXR {
+    OUTPUT& operator()(INPUT & v) {
+      return reinterpret_cast<OUTPUT>(v);
+    }
+};
+template<typename INPUT, typename OUTPUT>
+struct testFunctorXRCX {
+    OUTPUT operator()(INPUT & v) const {
+      return static_cast<OUTPUT>(v);
+    }
+};
+template<typename INPUT, typename OUTPUT>
+struct testFunctorXRCR {
+    OUTPUT& operator()(INPUT & v) const {
+      return reinterpret_cast<OUTPUT>(v);
+    }
+};
+template<typename INPUT, typename OUTPUT>
+struct testFunctorCRXX {
+    OUTPUT operator()(const INPUT & v) {
+      return static_cast<OUTPUT>(v);
+    }
+};
+template<typename INPUT, typename OUTPUT>
+struct testFunctorCRCX {
+    OUTPUT operator()(const INPUT & v) const {
+      return static_cast<OUTPUT>(v);
+    }
+};
+template<typename INPUT, typename OUTPUT>
+struct testFunctorCRCR {
+    OUTPUT& operator()(const INPUT & v) const {
+      return reinterpret_cast<OUTPUT>(v);
+    }
+};
+
+
 
 template<typename INPUT, typename OUTPUT>
 OUTPUT testOverloadedFunc(INPUT v) {
@@ -273,24 +342,62 @@ void testFunctionTraits(std::string name) {
 //         typeid(typename std::result_of<F(Args...)>::type).name(),
 //         typeid(R).name());
 
-
   printf("\n");
 
 }
 
+template<typename F, typename V>
+void testTransformIterator(F f,
+                           typename bliss::iterator::func_traits<F,
+                                                                 std::is_class<F>::value,
+                                                                 typename std::iterator_traits<typename V::iterator>::value_type
+                                                                 >::class_type c,
+                           V& data, std::string name, std::string func_name)
+{
+  // test with functor
+  typedef bliss::iterator::transform_iterator<F, typename V::iterator> t_iter_type;
+  t_iter_type iter1(data.begin(), f, c);
+  t_iter_type end1(data.end(), f, c);
 
+  std::chrono::high_resolution_clock::time_point time1, time2;
+  std::chrono::duration<double> time_span;
+
+
+  double sum = 0;
+  time1 = std::chrono::high_resolution_clock::now();
+  for (size_t i = 0; i < data.size(); ++i) {
+    sum += iter1[i];
+  }
+  time2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
+  std::cout << name << " " << func_name << ":  sum " << sum << " and [] elapsed time: " << time_span.count() << " s" << std::endl;
+
+
+  sum = 0;
+  iter1 = t_iter_type(data.begin(), f, c);
+  time1 = std::chrono::high_resolution_clock::now();
+  for (; iter1 != end1 ; ++iter1) {
+    sum += *iter1;
+  }
+  time2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
+  std::cout << name << " " << func_name << ":  sum " << sum << "  elapsed time: " << time_span.count() << " s" << std::endl;
+
+}
 
 
 int main(int argc, char* argv[]){
 
   // types to test:
-  //  function pointer
-  //  member function pointer
-  //  static function pointer
-  //  static member function pointer
-  //  functor
-  //  lambda function
-  //  std::function
+  //  done function pointer
+  //  done member function pointer
+  //  done static function pointer
+  //  done static member function pointer
+  //  done functor
+  //  done lambda function
+  //  done std::function (as lambda function)
+  //  done constness and references for input, reference for output
+  //  done const member function
   //  std::bind output
 
   // NOTE:
@@ -298,7 +405,7 @@ int main(int argc, char* argv[]){
   //   in void (*f)(int) = somefunction,  f is a pointer that is being dereferenced when somefunction is assigned to it.
   //   so f == &somefunction
   // std::is_function operates on a func object, not a func pointer.
-  // result_of uses declval internally (declval is compile time only), so need to be supplied with type info.
+  // result_of uses declval internally (declval is compile time only), so need to be supplied with type info (decltype on function pointer).
   //    further, result_of is implemented with decltype((F instance)(args instance)), requires F to be type of the function pointer.
   //    the object to pointer type conversion can be done in the constructor of the iterator and/or in the traits class.
   // std::function acts like a functor instance, so don't deference it.
@@ -335,7 +442,7 @@ int main(int argc, char* argv[]){
 
 
   // summary:  when use result_of, can only use it on functions or function pointers, or callable type (e.g. operator() defined).  with operator() defined,
-  //           result_of appears to be using the function pointer appropriately, but requires public constructor if a class.
+  //           result_of appears to be using the function pointer, but requires public constructor if a class.
   //           struct is all public.  but best to be explicit and specify ::operator()
   // note that member function and regular functions require different parameters - member function also need type of the containing type.  so need to check.
 
@@ -346,6 +453,10 @@ int main(int argc, char* argv[]){
   static_assert(std::is_same< decltype( std::declval< testStruct<int, float> >().operator()(0)), float >::value, "11.1");
   static_assert(std::is_same< decltype( std::declval< testStruct<int, float> >()(0)), float>::value, "11.2");
   static_assert(std::is_same< decltype( std::declval< testStruct<int, float> >().foo(0)), float>::value, "11.3");
+
+  // doesn't work for member function this way.
+  //static_assert(std::is_same< decltype( std::declval< &testStruct<int, float>::foo >()(0)), float>::value, "11.4");
+
   // testFunc is already a pointer.
   static_assert(std::is_same< decltype( testFunc<int, float>(0)), float>::value, "17");
   // this method does not seem to work for overloaded operators.
@@ -409,17 +520,30 @@ int main(int argc, char* argv[]){
   testFunctionTraits<decltype(lf2_ptr), std::nullptr_t, double, double>("decltype(lf2_ptr)");
 
   // const and ref functions
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testFunc),                 testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testFunc)");
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstFunc),            testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstFunc)");
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFunc),              testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testRefFunc)");
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstRefFunc),         testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstRefFunc)");
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testFuncConst),            testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testFuncConst)");
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstFuncConst),       testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstFuncConst)");
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFuncConst),         testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testRefFuncConst)");
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstRefFuncConst),    testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstRefFuncConst)");
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFuncRef),           testClassConstRef<int, float>, int,   int>("decltype(&testClassConstRef<int, float>::testRefFuncRef)");
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFuncConstRef),      testClassConstRef<int, float>, int,   int>("decltype(&testClassConstRef<int, float>::testRefFuncConstRef)");
-//  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstRefFuncConstRef), testClassConstRef<int, float>, int,   int>("decltype(&testClassConstRef<int, float>::testConstRefFuncConstRef)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testFunc),                 testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testFunc)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstFunc),            testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstFunc)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFunc),              testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testRefFunc)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstRefFunc),         testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstRefFunc)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testFuncConst),            testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testFuncConst)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstFuncConst),       testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstFuncConst)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFuncConst),         testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testRefFuncConst)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstRefFuncConst),    testClassConstRef<int, float>, float, int>("decltype(&testClassConstRef<int, float>::testConstRefFuncConst)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFuncRef),           testClassConstRef<int, float>, int,   int>("decltype(&testClassConstRef<int, float>::testRefFuncRef)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testRefFuncConstRef),      testClassConstRef<int, float>, int,   int>("decltype(&testClassConstRef<int, float>::testRefFuncConstRef)");
+  testFunctionTraits<decltype(&testClassConstRef<int, float>::testConstRefFuncConstRef), testClassConstRef<int, float>, int,   int>("decltype(&testClassConstRef<int, float>::testConstRefFuncConstRef)");
+
+  // const and ref functors
+  testFunctionTraits<testFunctorXXXX<int, float>, testFunctorXXXX<int, float>, float, int>("testFunctorXXXX<int, float>");
+  testFunctionTraits<testFunctorXXCX<int, float>, testFunctorXXCX<int, float>, float, int>("testFunctorXXCX<int, float>");
+  testFunctionTraits<testFunctorCXXX<int, float>, testFunctorCXXX<int, float>, float, int>("testFunctorCXXX<int, float>");
+  testFunctionTraits<testFunctorCXCX<int, float>, testFunctorCXCX<int, float>, float, int>("testFunctorCXCX<int, float>");
+  testFunctionTraits<testFunctorXRXX<int, float>, testFunctorXRXX<int, float>, float, int>("testFunctorXRXX<int, float>");
+  testFunctionTraits<testFunctorXRXR<int, float>, testFunctorXRXR<int, float>, float, int>("testFunctorXRXR<int, float>");
+  testFunctionTraits<testFunctorXRCX<int, float>, testFunctorXRCX<int, float>, float, int>("testFunctorXRCX<int, float>");
+  testFunctionTraits<testFunctorXRCR<int, float>, testFunctorXRCR<int, float>, float, int>("testFunctorXRCR<int, float>");
+  testFunctionTraits<testFunctorCRXX<int, float>, testFunctorCRXX<int, float>, float, int>("testFunctorCRXX<int, float>");
+  testFunctionTraits<testFunctorCRCX<int, float>, testFunctorCRCX<int, float>, float, int>("testFunctorCRCX<int, float>");
+  testFunctionTraits<testFunctorCRCR<int, float>, testFunctorCRCR<int, float>, float, int>("testFunctorCRCR<int, float>");
 
 
   std::chrono::high_resolution_clock::time_point time1, time2;
@@ -466,100 +590,25 @@ int main(int argc, char* argv[]){
 
   // test with functor
   addConstFunctor<int, double> a;
-  bliss::iterator::transform_iterator<addConstFunctor<int, double>, std::vector<int>::iterator > iter1(data.begin(), a, a);
-  bliss::iterator::transform_iterator<addConstFunctor<int, double>, std::vector<int>::iterator > end1(data.end(), a, a);
-
-  sum = 0;
-  time1 = std::chrono::high_resolution_clock::now();
-  for (size_t i = 0; i < data.size(); ++i) {
-    sum += iter1[i];
-  }
-  time2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
-  printf("functor:  sum %f with addConst and [] elapsed time: %f s\n", sum, time_span.count());
-
-
-  sum = 0;
-  iter1 = bliss::iterator::transform_iterator<addConstFunctor<int, double>, std::vector<int>::iterator >(data.begin(), a, a);
-  time1 = std::chrono::high_resolution_clock::now();
-  for (; iter1 != end1 ; ++iter1) {
-    sum += *iter1;
-  }
-  time2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
-  printf("functor: sum %f with addConst elapsed time: %f s\n", sum, time_span.count());
+  testTransformIterator(a, a, data, "functor", "addConstFunctor<int, double>");
 
 
   squareFunctor<int, double> b;
-  bliss::iterator::transform_iterator<squareFunctor<int, double>, std::vector<int>::iterator > iter2(data.begin(), b, b);
-  bliss::iterator::transform_iterator<squareFunctor<int, double>, std::vector<int>::iterator > end2(data.end(), b, b);
-
-  sum_squares = 0;
-  time1 = std::chrono::high_resolution_clock::now();
-  for (; iter2 != end2 ; ++iter2) {
-    sum_squares += *iter2;
-  }
-  time2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
-  printf("functor:  sum_squares %f with square elapsed time: %f s\n", sum_squares, time_span.count());
+  testTransformIterator(b, b, data, "functor", "squareFunctor<int, double>");
 
 
 
   // function pointer
   addConstMemberFunction<int, double> c;
-  bliss::iterator::transform_iterator<decltype(&addConstMemberFunction<int, double>::foo), std::vector<int>::iterator > iter3(data.begin(), &addConstMemberFunction<int, double>::foo, c);
-  bliss::iterator::transform_iterator<decltype(&addConstMemberFunction<int, double>::foo), std::vector<int>::iterator > end3(data.end(), &addConstMemberFunction<int, double>::foo, c);
-
-  sum = 0;
-  time1 = std::chrono::high_resolution_clock::now();
-  for (; iter3 != end3 ; ++iter3) {
-    sum += *iter3;
-  }
-  time2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
-  printf("member func:  SLOW sum %f with addConst elapsed time: %f s\n", sum, time_span.count());
-
+  testTransformIterator(&addConstMemberFunction<int, double>::foo, c, data, "mem func", "&addConstMemberFunction<int, double>::foo");
 
   squareMemberFunction<int, double> d;
-  bliss::iterator::transform_iterator<decltype(&squareMemberFunction<int, double>::foo), std::vector<int>::iterator > iter4(data.begin(),&squareMemberFunction<int, double>::foo, d);
-  bliss::iterator::transform_iterator<decltype(&squareMemberFunction<int, double>::foo), std::vector<int>::iterator > end4(data.end(),&squareMemberFunction<int, double>::foo, d);
-
-  sum_squares = 0;
-  time1 = std::chrono::high_resolution_clock::now();
-  for (; iter4 != end4 ; ++iter4) {
-    sum_squares += *iter4;
-  }
-  time2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
-  printf("mem func:  SLOW sum_squares %f with square elapsed time: %f s\n", sum_squares, time_span.count());
-
+  testTransformIterator(&squareMemberFunction<int, double>::foo, d, data, "mem func", "&squareMemberFunction<int, double>::foo");
 
   // test function
-  bliss::iterator::transform_iterator<decltype(&addConstFunction<int, double>), std::vector<int>::iterator > iter5(data.begin(), &addConstFunction<int, double>, 0);
-  bliss::iterator::transform_iterator<decltype(&addConstFunction<int, double>), std::vector<int>::iterator > end5(data.end(), &addConstFunction<int, double>, 0);
+  testTransformIterator(&addConstFunction<int, double>, nullptr, data, "func", "&addConstFunction<int, double>");
 
-  sum = 0;
-  time1 = std::chrono::high_resolution_clock::now();
-  for (; iter5 != end5 ; ++iter5) {
-    sum += *iter5;
-  }
-  time2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
-  printf("func:  sum %f with addConst elapsed time: %f s\n", sum, time_span.count());
-
-
-  bliss::iterator::transform_iterator<decltype(&squareFunction<int, double>), std::vector<int>::iterator > iter6(data.begin(), &squareFunction<int, double>, 0);
-  bliss::iterator::transform_iterator<decltype(&squareFunction<int, double>), std::vector<int>::iterator > end6(data.end(), &squareFunction<int, double>, 0);
-
-  sum_squares = 0;
-  time1 = std::chrono::high_resolution_clock::now();
-  for (; iter6 != end6 ; ++iter6) {
-    sum_squares += *iter6;
-  }
-  time2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
-  printf("func:  sum_squares %f with square elapsed time: %f s\n", sum_squares, time_span.count());
-
+  testTransformIterator(&squareFunction<int, double>, nullptr, data, "func", "&squareFunction<int, double>");
 
 
   // member function pointer format.

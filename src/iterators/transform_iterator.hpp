@@ -48,9 +48,14 @@ namespace iterator
   //       else create a typedef for the function pointer type, assign the function to it (compiler resolve it) and then do decltype on that.
   //       for member function that are overloaded, the static cast requires the class name.
   //   works with lambda functions (except that class type may be main function.  don't know how this affects evaluation.
+  //   functor input const/ref problem:  user/iterator specified arg types, which may not match correctly.  when calling, need to supply
+  //       references instead, then let the function call cast to const, ref, const ref, or just make copy.  result_of appears to be smart enough to deal with const/ref during decltype step.
+  //  function returning const type:  this is considered not useful and obselete with c++11.  not tested here.
+  //  works with member function defined as const - via a second specialized func_traits class.
   //
   // Possible Issues:
-  //   does not work well with const, ref etc, for input and output.
+  //   if operator() overloading is based on input parameter const/ref, then decltype inside result_of will not be able to resolve.  does not happen with func ptrs.
+  //
   //
   // Use:  'dereference' function is implemented in the func_traits class as static functions.
   //
@@ -73,23 +78,25 @@ namespace iterator
   // use of std::function may simplify implementation but may also make it slower.
   // overall, need to support static function, static member function, function, member function, functor, lambda function, std::bind, and std::function
 
-  // functor object's specialization
+  // functor object's specialization.  no problem with functor's operator() being const.
   template<typename Functor, typename... Args>
   struct func_traits<Functor, true, Args...> {
       typedef std::true_type has_class;
       typedef Functor class_type;
-      typedef typename std::result_of<Functor(Args...)>::type return_type;
+      typedef typename std::result_of<Functor(typename std::add_lvalue_reference<Args>::type...)>::type return_type;
 
       //   have class, even though not used.
-      static inline return_type eval(Functor& f, class_type& c, Args... inputs) {
+      // pass in lvalue reference always - if f need to modify input, it can do so.  if it needs to copy, it can do so as well.
+      static inline return_type eval(Functor& f, class_type& c, typename std::add_lvalue_reference<Args>::type... inputs) {
         return f(inputs...);
       }
   };
 
-  // member function pointer's specialization.  DArgs are deduced.
+  // member function pointer's specialization.  Args are deduced.  Args2 are supplied.
+  //  Args have the necessary const, ref, etc.  Args2 does not (from iterator).
   // std::bind may be useful here to find f and c together.
-  template<typename Ret, typename Class, typename... Args>
-  struct func_traits<Ret (Class::*)(Args...), false, Args...>
+  template<typename Ret, typename Class, typename... Args, typename... Args2>
+  struct func_traits<Ret (Class::*)(Args...), false, Args2...>
   {
       typedef std::true_type has_class;
       typedef Class class_type;
@@ -103,9 +110,28 @@ namespace iterator
       }
   };
 
+  // member function pointer's specialization.  Args are deduced.  Args2 are supplied.
+  //  Args have the necessary const, ref, etc.  Args2 does not (from iterator).
+  // std::bind may be useful here to find f and c together.
+  // version for const member function.
+  template<typename Ret, typename Class, typename... Args, typename... Args2>
+  struct func_traits<Ret (Class::*)(Args...) const, false, Args2...>
+  {
+      typedef std::true_type has_class;
+      typedef Class class_type;
+      typedef Ret return_type;
+
+      // get back the functor type
+      typedef Ret (Class::*Functor)(Args...) const;
+      static inline return_type eval(Functor& f, class_type& c, Args... inputs) {
+        return (c.*f)(inputs...);
+        // return (*f)(c, inputs...);   // this form does not work for pointer to member, even though for result_of this sequence is required and fine.
+      }
+  };
+
   // function pointer's specialization.
-  template<typename Ret, typename... Args>
-  struct func_traits<Ret (*)(Args...), false, Args...>
+  template<typename Ret, typename... Args, typename... Args2>
+  struct func_traits<Ret (*)(Args...), false, Args2...>
   {
       typedef std::false_type has_class;
       typedef std::nullptr_t class_type;
