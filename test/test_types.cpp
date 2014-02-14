@@ -297,7 +297,24 @@ struct squareMemberFunction {
 template<typename T1, typename T2>
 T2 squareFunction(T1 v) {
   return static_cast<T2>(v) * static_cast<T2>(v);
-}
+};
+
+template<typename T>
+struct datatype {
+    T a;
+    T b;
+};
+
+template<typename T, typename TE>
+struct swap {
+    T& operator()(T& input) {
+      TE v = input.a;
+      input.a = input.b;
+      input.b = v;
+      return input;
+    }
+};
+
 
 
 // this approaches is very similar to http://en.cppreference.com/w/cpp/types/result_of impl.
@@ -705,6 +722,67 @@ int main(int argc, char* argv[]){
   testTransformIterator(&addConstFunction<int, double>, data, "func", "&addConstFunction<int, double>");
 
   testTransformIterator(&squareFunction<int, double>, data, "func", "&squareFunction<int, double>");
+
+
+
+
+  std::vector<datatype<int> > data2;
+  for (int i = 0; i < 1000000; ++i) {
+    datatype<int> d;
+    d.a = i;
+    d.b = -i;
+    data2.push_back(d);
+  }
+
+  std::vector<datatype<int> >::iterator baseIter2 = data2.begin();
+  std::vector<datatype<int> >::iterator baseEnd2 = data2.end();
+
+  sum = 0;
+  time1 = std::chrono::high_resolution_clock::now();
+  for (; baseIter2 != baseEnd2 ; ++baseIter2) {
+    sum += static_cast<double>((*baseIter2).a);
+  }
+  time2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
+  printf("no functor:  sum %f with struct elapsed time: %f s\n", sum, time_span.count());
+
+  baseIter2 = data2.begin();
+
+  sum = 0;
+  time1 = std::chrono::high_resolution_clock::now();
+  for (; baseIter2 != baseEnd2 ; ++baseIter2) {
+    sum += static_cast<double>(baseIter2->a);
+  }
+  time2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
+  printf("no functor:  sum %f with struct elapsed time: %f s\n", sum, time_span.count());
+
+
+  swap<datatype<int>, int> sw;
+  typedef bliss::iterator::transform_iterator<swap<datatype<int>, int>, typename std::vector<datatype<int> >::iterator> t_iter_type2;
+  t_iter_type2 iter3(data2.begin(), sw);
+  t_iter_type2 end3(data2.end(), sw);
+
+  sum = 0;
+  time1 = std::chrono::high_resolution_clock::now();
+  for (; iter3 != end3 ; ++iter3) {
+    sum += (*iter3).a;
+  }
+  time2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
+  std::cout << "operator*" << " " << "swap" << ":  sum " << sum << " and [] elapsed time: " << time_span.count() << " s" << std::endl;
+
+  t_iter_type2 iter4(data2.begin(), sw);
+  t_iter_type2 end4(data2.end(), sw);
+
+//  sum = 0;
+//  time1 = std::chrono::high_resolution_clock::now();
+//  for (; iter4 != end4 ; ++iter4) {
+//    sum += iter4->a;
+//  }
+//  time2 = std::chrono::high_resolution_clock::now();
+//  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
+//  std::cout << "operator->" << " " << "swap" << ":  sum " << sum << " and [] elapsed time: " << time_span.count() << " s" << std::endl;
 
 
   // member function pointer format.

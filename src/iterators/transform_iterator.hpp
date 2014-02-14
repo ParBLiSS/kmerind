@@ -102,13 +102,13 @@ namespace iterator
         typedef typename base_traits::value_type                                                            base_value_type;
 
 
+        // class specific constructor
         explicit
         transform_iterator(const Base_Iterator& base_iter, const Functor & f)
           : _base(base_iter), _f(f) {};
 
-        explicit
-        transform_iterator() : _f(), _base() {};
 
+        // for all classes
         // no EXPLICIT so can copy assign.
         transform_iterator(const type& Other) : _base(Other._base), _f(Other._f) {};
 
@@ -118,99 +118,156 @@ namespace iterator
           return *this;
         }
 
-       Functor& getFunctor() {
-         return _f;
-       }
-       const Functor& getFunctor() const {
-         return _f;
-       }
-       Base_Iterator& getBaseIterator() {
-         return _base;
-       }
-       const Base_Iterator& getBaseIterator() const {
-         return _base;
-       }
+        type& operator++() {
+          ++_base;
+          return *this;
+        }
 
-       // forward iterator:
+        type operator++(int) {
+          return type(_base++, _f);
+        }
 
-       // no -> operator
 
-       inline value_type operator*() {
-         return _f(*_base);
-       }
+        // accessor functions for internal state.
+        Functor& getFunctor() {
+          return _f;
+        }
+        const Functor& getFunctor() const {
+          return _f;
+        }
+        Base_Iterator& getBaseIterator() {
+          return _base;
+        }
+        const Base_Iterator& getBaseIterator() const {
+          return _base;
+        }
 
-       type& operator++() {
-         ++_base;
-         return *this;
-       }
+        // input iterator specific
+        inline bool operator==(const type& rhs)
+        { return _base == rhs._base; }
 
-       type operator++(int) {
-         return type(_base++, _f);
-       }
+        inline bool operator!=(const type& rhs)
+        { return _base != rhs._base; }
+
+        inline value_type operator*() {
+          return _f(*_base);
+        }
+
+        // no -> operator.  -> returns a pointer to the value held in iterator.
+        // however, in transform iterator, we are not holding data, so pointer does not make sense.
+
+        // NO support for output iterator
+
+
+        // forward iterator
+        template<typename = std::enable_if<std::is_same<iterator_category, std::forward_iterator_tag>::value ||
+                                           std::is_same<iterator_category, std::bidirectional_iterator_tag>::value ||
+                                           std::is_same<iterator_category, std::random_access_iterator_tag>::value > >
+        explicit
+        transform_iterator() : _f(), _base() {};
+
+
+
+
 
        // bidirectional iterator
-       type& operator--() {
+        typename std::enable_if<std::is_same<iterator_category, std::bidirectional_iterator_tag>::value ||
+                                std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                type
+                               >::type&
+       operator--() {
          --_base;
          return *this;
        }
 
-       type operator--(int) {
+       typename std::enable_if<std::is_same<iterator_category, std::bidirectional_iterator_tag>::value ||
+                               std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                               type
+                              >::type
+       operator--(int) {
          return type(_base--, _f);
        }
 
+
        // random access iterator requirements.
-       inline value_type operator[](difference_type n) {
-         return _f(_base[n]);
-       }
-
-
-       type& operator+=(difference_type n) {
-         std::advance(_base, n);
-         return *this;
-       }
-
-       type operator+(difference_type n)
+       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                        type>::type
+       operator+(difference_type n)
        {
          type other(*this);
          std::advance(other._base, n);
          return other;
        }
 
-       friend type operator+(difference_type n, const type& right)
+       friend
+       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                        type>::type
+       operator+(difference_type n, const type& right)
        {  return right + n; }
 
-       type& operator-=(difference_type n)
-       {
-          std::advance(_base, -n);
-          return *this;
-       }
-
-       type operator-(difference_type n)
+       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                        type>::type
+       operator-(difference_type n)
        {
          type other(*this);
          std::advance(other._base, -n);
          return other;
        }
 
-       // Forward iterator requirements
-       inline bool operator==(const type& rhs)
-       { return _base == rhs._base; }
+       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                        difference_type>::type
+       operator-(const type& other)
+       {
+         return _base - other._base;
+       }
 
-       inline bool operator!=(const type& rhs)
-       { return _base != rhs._base; }
-
-       // Random access iterator requirements
-       inline bool operator<(const type& rhs)
+       inline
+       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                        bool>::type
+       operator<(const type& rhs)
        { return _base < rhs._base; }
 
-       inline bool operator>(const type& rhs)
+       inline
+              typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                               bool>::type
+              operator>(const type& rhs)
        { return _base > rhs._base; }
 
-       inline bool operator<=(const type& rhs)
+       inline
+              typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                               bool>::type
+              operator<=(const type& rhs)
        { return _base <= rhs._base; }
 
-       inline bool operator>=(const type& rhs)
+       inline
+              typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                               bool>::type
+              operator>=(const type& rhs)
        { return _base >= rhs._base; }
+
+
+       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                        type>::type&
+       operator+=(difference_type n) {
+         std::advance(_base, n);
+         return *this;
+       }
+
+       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                        type>::type&
+       operator-=(difference_type n)
+       {
+          std::advance(_base, -n);
+          return *this;
+       }
+
+       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+                                        value_type>::type
+       operator[](difference_type n) {
+         return _f(_base[n]);
+       }
+
+
 
     };
 
