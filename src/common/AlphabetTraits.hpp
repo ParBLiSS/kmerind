@@ -24,6 +24,11 @@
 #include <common/alphabets.hpp>
 #include <common/PackedString.hpp>
 
+
+namespace bliss
+{
+
+
 /**
  * @brief Templated class of static functions returning properties of the
  *        alphabet.
@@ -59,7 +64,7 @@ private:
   static constexpr AlphabetSizeType SIZE = T::SIZE;
   /// Holds the bit size of the alphabet, this is the number of bits that is
   /// needed to represent each symbol of the alphabet
-  static constexpr BitSizeType BITS_PER_CHAR = bits_per_char_needed(T::SIZE);
+  static constexpr BitSizeType BITS_PER_CHAR = ceilLog2(T::SIZE);
 
   // private contructor: don't allow initialization
   AlphabetTraits() {};
@@ -207,5 +212,6 @@ public:
   }
 };
 
+} // namespace bliss
 
 #endif // BLISS_COMMON_ALPHABETTRAITS_H

@@ -22,6 +22,9 @@
 #include <common/base_types.hpp>
 #include <common/bit_ops.hpp>
 
+namespace bliss
+{
+
 /**
  * @brief A class implementing a PackedString.
  *
@@ -282,6 +285,8 @@ private:
  */
 // TODO consider using alphabet traits, instead of bits_per_char_needed
 template <typename T>
-using PackedString = PackedStringImpl<bits_per_char_needed(T::SIZE)>;
+using PackedString = PackedStringImpl<ceilLog2(T::SIZE)>;
+
+} // namespace bliss
 
 #endif // BLISS_COMMON_PACKEDSTRING_H
