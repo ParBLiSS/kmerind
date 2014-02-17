@@ -14,9 +14,24 @@ public:
     "TTTTTT", "GG", "CACACACA", "ACTGGGCCATAATCTCTCATGGATGCTACGAGCTGATCGTAGCTGACTAGTCGA",
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACTCTGCTCGTGATCGATCGATCGATCGATCGATCGACTAGCTAGCTACGTACGTACGTACGATCGATCGTACGATCGATCGATCGATCGATCGTACGTACGTACGTCAGCTAGCTCGATCGATATGCTAGATACACACACTACATACTCACATACACATCAACTCATACTTCATCAGACGATCGATCGATCTCGCTGATCGACTGTCGATCGTCGATCGTAGCTCGTAGCTCGTAGCTCG"
   };
+
+  std::vector<std::string> huge_dna_seqs;
+
+  virtual void SetUp()
+  {
+    // fill huge array with random sequences
+    /*
+    std::stringstream ss;
+    unsigned int dna_huge_length = 10000000;
+    for (unsigned int i = 0; i < dna_huge_length; ++i)
+    {
+      // TODO randomize?
+      ss << 'C';
+    }
+    dna_seqs.push_back(ss.str());
+    */
+  }
 };
-
-
 
 
 TEST_F(PackingTest, TestPackedString1) {
@@ -98,21 +113,22 @@ TEST_F(PackingTest, TestPackingIterator) {
       EXPECT_LT(static_cast<unsigned int>(c), bliss::AlphabetTraits<DNA>::getSize()) << "The value of the translated chars must be smaller than the size of the alphabet";
     }
 
-    bliss::PackingIterator<std::string::iterator, bliss::AlphabetTraits<DNA>::getBitsPerChar()> packIt(dna.begin(), dna.end());
-    bliss::PackingIterator<std::string::iterator, bliss::AlphabetTraits<DNA>::getBitsPerChar()> packItEnd(dna.end(), dna.end());
+    // define a packing iterator to wrap around the string's iterators
+    typedef bliss::PackingIterator<std::string::iterator, bliss::AlphabetTraits<DNA>::getBitsPerChar()> packit_t;
+    packit_t packIt(dna.begin(), dna.end());
+    packit_t packItEnd(dna.end());
+    // define an unpacking iterator to wrap around the packing iterator
+    typedef bliss::UnpackingIterator<packit_t, bliss::AlphabetTraits<DNA>::getBitsPerChar()> unpackit_t;
+    unpackit_t unpackIt(packIt);
+    // pass the total unpacked size, so that the end is properly defined
+    unpackit_t unpackEnd(packIt, dna.size());
 
+    // simply pass the iterators to the constructor of a vector:
+    //std::vector<char> unpacked_dna(unpackIt, unpackEnd);
+    // pre allocate to total size
+    std::vector<char> unpacked_dna(dna.size());
+    std::copy(unpackIt, unpackEnd, unpacked_dna.begin());
 
-    std::vector<WordType> packedStr2(packIt, packItEnd);
-    // TODO continue testing the iterators
-
-    // then pack it
-    bliss::PackedString<DNA> packedStr(dna);
-
-    ASSERT_EQ(packedStr.size(), dna.size()) << "The packed sequence should be of same length as the original string.";
-
-    // unpack it
-    std::vector<DNA> unpacked_dna(packedStr.size());
-    packedStr.unpackSequence(unpacked_dna.begin());
 
     // compare the vector and the given string
     for (unsigned int i = 0; i < dna.size(); ++i)
