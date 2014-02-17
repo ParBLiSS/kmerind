@@ -276,7 +276,7 @@ struct addConstMemberFunction {
 };
 
 template<typename T1, typename T2>
-T2 addConstFunction(T1 v) {
+inline T2 addConstFunction(T1 v) {
   return static_cast<T2>(v) + static_cast<T2>(1);
 }
 
@@ -295,7 +295,7 @@ struct squareMemberFunction {
 };
 
 template<typename T1, typename T2>
-T2 squareFunction(T1 v) {
+inline T2 squareFunction(T1 v) {
   return static_cast<T2>(v) * static_cast<T2>(v);
 };
 
@@ -397,7 +397,8 @@ void testTransformIterator(F f,
 
   double sum = 0;
   time1 = std::chrono::high_resolution_clock::now();
-  for (size_t i = 0; i < data.size(); ++i) {
+  size_t data_size = data.size();
+  for (size_t i = 0; i < data_size; ++i) {
     sum += iter1[i];
   }
   time2 = std::chrono::high_resolution_clock::now();

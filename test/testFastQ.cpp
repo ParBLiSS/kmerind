@@ -45,49 +45,54 @@ struct RangeType {
  * takes into account the block size (e.g. page size) to force alignment
  *
  * uses overlap.  kernel handles bringing whole page in for the last (not full) page.
+ *
+ * result is the returned ranges are block aligned, ranges are mutually exclusive.
  */
-template<typename T1, typename T2>
-RangeType<T1> computeRangeBlockAligned(const T1& total, const T1& overlap, const T1& blocksize, const T2& np, const T2& pid)
-{
-  assert(total > 0);
-  assert(blocksize > 0);
-  assert(overlap >= 0);
-  assert(np > 0);
-  assert(pid >= 0 && pid < np);
+// deprecated
+//template<typename T1, typename T2>
+//RangeType<T1> computeRangeBlockAligned(const T1& total, const T1& overlap, const T1& blocksize, const T2& np, const T2& pid)
+//{
+//  assert(total > 0);
+//  assert(blocksize > 0);
+//  assert(overlap >= 0);
+//  assert(np > 0);
+//  assert(pid >= 0 && pid < np);
+//
+//  RangeType<T1> output;
+//  output.overlap = overlap;
+//
+//  if (np == 1)
+//  {
+//    output.offset = 0;
+//    output.length = total;
+//    return output;
+//  }
+//
+//  // spread the number of blocks first.
+//  T1 nblock = total / blocksize;
+//
+//  T1 div = nblock / static_cast<T1>(np);
+//  T1 rem = nblock % static_cast<T1>(np);
+//  if (static_cast<T1>(pid) < rem)
+//  {
+//    output.offset = static_cast<T1>(pid) * (div + 1) * blocksize;
+//    output.length = (div + 1) * blocksize + overlap;
+//  }
+//  else
+//  {
+//    output.offset = (static_cast<T1>(pid) * div + rem) * blocksize;
+//    output.length = div * blocksize + overlap;
+//  }
+//
+//  assert(output.offset < total);
+//  if ((output.offset + output.length) >= total)
+//    output.length = total - output.offset;
+//
+//  return output;
+//}
 
-  RangeType<T1> output;
-  output.overlap = overlap;
 
-  if (np == 1)
-  {
-    output.offset = 0;
-    output.length = total;
-    return output;
-  }
-
-  // spread the number of blocks first.
-  T1 nblock = total / blocksize;
-
-  T1 div = nblock / static_cast<T1>(np);
-  T1 rem = nblock % static_cast<T1>(np);
-  if (static_cast<T1>(pid) < rem)
-  {
-    output.offset = static_cast<T1>(pid) * (div + 1) * blocksize;
-    output.length = (div + 1) * blocksize + overlap;
-  }
-  else
-  {
-    output.offset = (static_cast<T1>(pid) * div + rem) * blocksize;
-    output.length = div * blocksize + overlap;
-  }
-
-  assert(output.offset < total);
-  if ((output.offset + output.length) >= total)
-    output.length = total - output.offset;
-
-  return output;
-}
-
+// partitioning
 template<typename T1, typename T2>
 RangeType<T1> computeRange(const T1& total, const T1& overlap, const T2& np, const T2& pid)
 {
@@ -317,7 +322,6 @@ RangeType<T1>& adjustRange(char const* raw, RangeType<T1> const & input_range, T
   output_range.length = input_range.length;
   output_range.overlap = input_range.overlap;
 
-#if defined(USE_MPI)
   if (nprocs == 1)
   {
     return output_range;
@@ -408,48 +412,20 @@ RangeType<T1>& adjustRange(char const* raw, RangeType<T1> const & input_range, T
   // and add some lengths to the previous node.
   uint64_t lengthToPrevNode = output_range.offset - input_range.offset;
   output_range.length = input_range.length - lengthToPrevNode;
-  uint64_t lengthFromNextNode = 0;
-  int error;
 
-  MPI_Request irreq;
+
+  /// get the next block's coords
+
   if (rank < nprocs - 1)
   {
-    // receive async (post this first)
-    error = MPI_Irecv(&lengthFromNextNode, 1, MPI_UINT64_T, rank + 1, 0, MPI_COMM_WORLD, &irreq);
-
-    if (error != MPI_SUCCESS)
-      printf("ERROR: MPI IRecv.  code %d\n", error);
-  }
-
-  if (rank > 0)
-  {
-    //  send.
-    error = MPI_Send(&lengthToPrevNode, 1, MPI_UINT64_T, rank - 1, 0, MPI_COMM_WORLD);
-
-    printf("rank %d sent %ld\n", rank, lengthToPrevNode);
-    if (error != MPI_SUCCESS)
-      printf("ERROR: MPI Send.  code %d\n", error);
-  }
-
-  // make sure receive is completed.
-  if (rank < nprocs - 1)
-  {
-    error = MPI_Wait(&irreq, MPI_STATUS_IGNORE);
-    if (error != MPI_SUCCESS)
-      printf("ERROR: MPI IRecv status wait.  code %d\n", error);
-
-    printf("rank %d received %ld\n", rank, lengthFromNextNode);
     // update the range
     output_range.length += lengthFromNextNode;
   }
-
 
   assert(output_range.offset < total);
   if ((output_range.offset + output_range.length) >= total)
     output_range.length = total - output_range.offset;
 
-
-#endif  // defined(USE_MPI)
 
   return output_range;
 
