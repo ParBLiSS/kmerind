@@ -33,12 +33,8 @@
 #include "utils/logging.h"
 #include "config.hpp"
 
-template<typename T1>
-struct RangeType {
-    T1 offset;
-    T1 length;
-    T1 overlap;
-};
+#include "iterators/range.hpp"
+
 
 /**
  * compute the offset and length of the range for rank pid.
@@ -92,67 +88,7 @@ struct RangeType {
 //}
 
 
-// partitioning
-template<typename T1, typename T2>
-RangeType<T1> computeRange(const T1& total, const T1& overlap, const T2& np, const T2& pid)
-{
-  assert(total > 0);
-  assert(overlap >= 0);
-  assert(np > 0);
-  assert(pid >= 0 && pid < np);
 
-  RangeType<T1> output;
-  output.overlap = overlap;
-
-  if (np == 1)
-  {
-    output.offset = 0;
-    output.length = total;
-    return output;
-  }
-
-  T1 div = total / static_cast<T1>(np);
-  T1 rem = total % static_cast<T1>(np);
-  if (static_cast<T1>(pid) < rem)
-  {
-    output.offset = static_cast<T1>(pid) * (div + 1);
-    output.length = div + 1 + overlap;
-  }
-  else
-  {
-    output.offset = static_cast<T1>(pid) * div + rem;
-    output.length = div + overlap;
-  }
-
-  assert(output.offset < total);
-  if ((output.offset + output.length) >= total)
-    output.length = total - output.offset;
-
-  return output;
-}
-
-template<typename T1, typename T2>
-RangeType<T1>& alignRange(RangeType<T1> const & input, RangeType<T1>& output, T1 const & total, T2 const & np)
-{
-  // change offset to align by page size.
-  uint64_t page_size = sysconf(_SC_PAGE_SIZE);
-  output.overlap = input.overlap;
-
-  if (np == 1) {
-    output.offset = input.offset;
-    output.length = input.length;
-    return output;
-  }
-
-  output.offset = (input.offset / page_size) * page_size;
-  output.length = ((input.offset + input.length + page_size - 1) / page_size) * page_size - output.offset;
-
-  assert(output.offset < total);
-  if ((output.offset + output.length) >= total)
-    output.length = total - output.offset;
-
-  return output;
-}
 
 
 void readFileStream(std::string const& filename, const uint64_t& offset, const uint64_t& length, char* result)
@@ -185,34 +121,34 @@ void readFileC(std::string const& filename, const uint64_t& offset, const uint64
 /**
  * TODO: test on remotely mounted file system.
  */
-int readFileMMap(std::string const& filename, const uint64_t& offset, const uint64_t& length, char*& region)
-{
-
-  int fp = open(filename.c_str(), O_RDONLY);
-
-  // allow read only. any modifications are not written back to file.  read ahead.  do not swap
-//  char* temp = (char*)mmap(nullptr, p_length, PROT_READ, MAP_PRIVATE | MAP_POPULATE | MAP_LOCKED, fp, p_offset );
-  region = (char*)mmap(nullptr, length, PROT_READ, MAP_PRIVATE, fp, offset );
-
-  if (region == MAP_FAILED)
-  {
-    int myerr = errno;
-    fprintf(stderr, "ERROR in mmap: %d: %s\n", myerr, strerror(myerr));
-    close(fp);
-    return -1;
-  }
-
-  return fp;
-}
-
-void closeFileMMap(int fp, char* region, uint64_t length)
-{
-
-  munmap(region, length);
-
-  close(fp);
-
-}
+//int readFileMMap(std::string const& filename, const uint64_t& offset, const uint64_t& length, char*& region)
+//{
+//
+//  int fp = open(filename.c_str(), O_RDONLY);
+//
+//  // allow read only. any modifications are not written back to file.  read ahead.  do not swap
+////  char* temp = (char*)mmap(nullptr, p_length, PROT_READ, MAP_PRIVATE | MAP_POPULATE | MAP_LOCKED, fp, p_offset );
+//  region = (char*)mmap(nullptr, length, PROT_READ, MAP_PRIVATE, fp, offset );
+//
+//  if (region == MAP_FAILED)
+//  {
+//    int myerr = errno;
+//    fprintf(stderr, "ERROR in mmap: %d: %s\n", myerr, strerror(myerr));
+//    close(fp);
+//    return -1;
+//  }
+//
+//  return fp;
+//}
+//
+//void closeFileMMap(int fp, char* region, uint64_t length)
+//{
+//
+//  munmap(region, length);
+//
+//  close(fp);
+//
+//}
 
 /**
  *  for coordinated distributed quality score reads to map back to original.

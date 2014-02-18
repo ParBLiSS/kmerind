@@ -344,9 +344,9 @@ void testFunctionTraits(std::string name) {
   printf("\tis member function: %s\n", std::is_member_function_pointer< F >::value ? "yes" : "no");
 
   printf("\tfunctor_trait result type is %s (== %s ? %s)\n",
-         typeid(typename bliss::iterator::func_traits<F, Args... >::return_type).name(),
+         typeid(typename bliss::functional::function_traits<F, Args... >::return_type).name(),
          typeid(R).name(),
-         strcmp(typeid(typename bliss::iterator::func_traits<F, Args... >::return_type).name(),
+         strcmp(typeid(typename bliss::functional::function_traits<F, Args... >::return_type).name(),
                 typeid(R).name()) == 0 ? "yes" : "no");
 
 
@@ -372,9 +372,9 @@ void testFunctionTraits2(std::string name) {
   printf("\tis member function: %s\n", std::is_member_function_pointer< F >::value ? "yes" : "no");
 
   printf("\tf_trait result type is %s (== %s ? %s)\n",
-         typeid(typename bliss::iterator::func_traits<F, Args...>::return_type).name(),
+         typeid(typename bliss::functional::function_traits<F, Args...>::return_type).name(),
          typeid(R).name(),
-         strcmp(typeid(typename bliss::iterator::func_traits<F, Args...>::return_type).name(),
+         strcmp(typeid(typename bliss::functional::function_traits<F, Args...>::return_type).name(),
                 typeid(R).name()) == 0 ? "yes" : "no");
 
   printf("\n");
@@ -545,7 +545,7 @@ int main(int argc, char* argv[]){
   //printf("decltype( std::declval<testStruct<int, float> >().operator() ) is class: %s\n", std::is_class< decltype( std::declval<testStruct<int, float> >().operator() ) >::value ? "yes" : "no");
 
   // can't use a bound member function address (i.e. an object's) to form a pointer to member function.
-  // printf("testFunc.u functor_trait result is %s\n", typeid(bliss::iterator::func_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
+  // printf("testFunc.u functor_trait result is %s\n", typeid(bliss::functional::function_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
 
   // lambda functions.
   testFunctionTraits<decltype(lf0),     double, double>("decltype(lf0)");
@@ -607,7 +607,7 @@ int main(int argc, char* argv[]){
   //printf("decltype( std::declval<testStruct<int, float> >().operator() ) is class: %s\n", std::is_class< decltype( std::declval<testStruct<int, float> >().operator() ) >::value ? "yes" : "no");
 
   // can't use a bound member function address (i.e. an object's) to form a pointer to member function.
-  // printf("testFunc.u functor_trait result is %s\n", typeid(bliss::iterator::func_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
+  // printf("testFunc.u functor_trait result is %s\n", typeid(bliss::functional::function_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
 
   // lambda functions.
   testFunctionTraits2<decltype(lf0),     double, double>("2 decltype(lf0)");
