@@ -51,13 +51,13 @@ namespace bliss
     {
       public:
 
-        typedef bliss::iterator::RangeType<size_t> range_type;
+        typedef bliss::iterator::range<size_t> range_type;
 
         /**
          * opens the file and save in file handle
          */
         file_loader(std::string const & filename)
-          : range(), data(0)
+          : range(), data(std::nullptr)
         {
           file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);
@@ -71,12 +71,12 @@ namespace bliss
           close(file_handle);
         };
 
-        virtual void map() throw(io_exception) = 0;
-        virtual void unmap() throw(io_exception) = 0;
-
+        /**
+         * return data pointed to by range.start.  not same as range.block_start.
+         */
         char* getData()
         {
-          return data;
+          return data + (range.start - range.block_start);
         };
 
         void setRange(bliss::iterator::range<size_t> const &_range) {
@@ -94,9 +94,43 @@ namespace bliss
 
         range_type range;  // offset in file from where to read
 
-        char* data;     // memmapped data.
+        char* data;
+        char* aligned_data;  // memmapped data, page aligned.
 
         size_t page_size;
+
+        /**
+         * TODO: test on remotely mounted file system.
+         */
+
+        /**
+         * TODO: change this so file_loader calls this.
+         */
+        char* map(file_loader::range_type & r) throw(io_exception) {
+          assert(r.is_page_aligned(page_size), "ERROR: range is not page aligned.");
+
+          char* output = (char*)mmap(nullptr, r.end - r.block_start, PROT_READ, MAP_PRIVATE, file_handle, r.block_start );
+
+          if (output == MAP_FAILED)
+          {
+            std::stringstream ss;
+            int myerr = errno;
+            ss << "ERROR in mmap: "  << myerr << ": " << strerror(myerr);
+            throw io_exception(ss.str());
+          }
+        }
+
+        void unmap(char * input, file_loader::range_type & r) throw(io_exception) {
+          assert(r.is_page_aligned(page_size), "ERROR: range is not page aligned.");
+
+          munmap(input, r.end - r.block_start);
+        }
+
+
+
+
+
+
     };
 
   } /* namespace functional */
