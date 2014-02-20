@@ -34,6 +34,8 @@
 #include "config.hpp"
 
 #include "iterators/range.hpp"
+#include "io/file_loader.hpp"
+#include "io/fastq_loader.hpp"
 
 
 
@@ -115,10 +117,13 @@ int main(int argc, char* argv[]) {
   if (rank == nprocs - 1)
     fprintf(stderr, "file size is %ld\n", file_size);
 
+  /////////////// now try to open the file
+
+
   // first generate an approximate partition.
-  bliss::iterator::range r = bliss::iterator::range::block_partition(file_size, nprocs, rank);
-
-
+  bliss::io::file_loader::range_type r = bliss::io::file_loader::range_type::block_partition(file_size, nprocs, rank);
+  std::cout << rank << " equipart: " << r << std::endl;
+  std::cout << rank << " test block aligned: " << r.align_to_page(sysconf(_SC_PAGE_SIZE)) << std::endl;
 
   // now open the file and begin reading
   std::chrono::high_resolution_clock::time_point t1, t2;
@@ -145,15 +150,6 @@ int main(int argc, char* argv[]) {
   time_span2 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   INFO("read from C file " << "elapsed time: " << time_span2.count() << "s.");
 
-//  char* buffer3 = new char[length];
-//  memset(buffer3, 0, length * sizeof(char));
-  t1 = std::chrono::high_resolution_clock::now();
-  // now open the file
-  bliss::io::fastq_loader loader(filename, r, file_size);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  INFO("read from MMap " << "elapsed time: " << time_span3.count() << "s.");
-
   // check to see if these are identical between the 3 methods - SAME.
   t1 = std::chrono::high_resolution_clock::now();
   int areSame = memcmp(buffer1, buffer2, len * sizeof(char));
@@ -163,16 +159,6 @@ int main(int argc, char* argv[]) {
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span2;
   INFO("compared 1 2 " << "elapsed time: " << time_span.count() << "s.");
 
-  uint64_t internaloffset = (r.start - rangeAligned.offset);
-  t1 = std::chrono::high_resolution_clock::now();
-  areSame = memcmp(buffer1, buffer3 + internaloffset, len * sizeof(char));
-  if (areSame != 0)
-    fprintf(stderr, "buffer 1 and buffer 3 are different\n");
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
-  INFO("compared 1 3 " << "elapsed time: " << time_span.count() << "s.");
-
-
   // write them out, concat on file system, compare to original - SAME.
   std::stringstream ss;
   std::ofstream ofs;
@@ -180,7 +166,7 @@ int main(int argc, char* argv[]) {
   ofs.open(ss.str().c_str());
   ss.str(std::string());
   if (rank < (nprocs - 1))
-    ofs.write(buffer1, len - overlap);
+    ofs.write(buffer1, len - r.overlap);
   else
     ofs.write(buffer1, len);
   ofs.close();
@@ -189,67 +175,54 @@ int main(int argc, char* argv[]) {
   ofs.open(ss.str().c_str());
   ss.str(std::string());
   if (rank < (nprocs - 1))
-    ofs.write(buffer2, len - overlap);
+    ofs.write(buffer2, len - r.overlap);
   else
     ofs.write(buffer2, len);
-  ofs.close();
-
-  ss << "result.3." << rank << ".txt";
-  ofs.open(ss.str().c_str());
-  ss.str(std::string());
-  if (rank < (nprocs - 1))
-    ofs.write(buffer3 + internaloffset, len - overlap);
-  else
-    ofs.write(buffer3 + internaloffset, len);
   ofs.close();
 
   delete [] buffer1;
   delete [] buffer2;
 
-  RangeType<uint64_t> readAlignedRange;
-  readAlignedRange = adjustRange(buffer3+internaloffset, range, file_size, rank, nprocs, readAlignedRange);
-  printf("rank %d range read aligned: %ld %ld\n", rank, readAlignedRange.offset, readAlignedRange.length);
-  closeFileMMap(fp, buffer3, rangeAligned.length);
+  {
+    t1 = std::chrono::high_resolution_clock::now();
+    // now open the file
+    bliss::io::fastq_loader loader(filename, r, file_size);
+    t2 = std::chrono::high_resolution_clock::now();
+    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    INFO("read from MMap " << "elapsed time: " << time_span3.count() << "s.");
 
-  buffer1 = new char[readAlignedRange.length];
-  memset(buffer1, 0, readAlignedRange.length * sizeof(char));
-  t1 = std::chrono::high_resolution_clock::now();
-  readFileStream(filename, readAlignedRange.offset, readAlignedRange.length, buffer1);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span1 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  INFO("read from file stream read aligned " << "elapsed time: " << time_span1.count() << "s.");
+    std::cout << rank << " record adjusted " << loader.getRange() << std::endl;
 
-  rangeAligned = alignRange(readAlignedRange, rangeAligned, file_size, nprocs);
-  printf("rank %d range read aligned block aligned: %ld %ld\n", rank, rangeAligned.offset, rangeAligned.length);
-
-  t1 = std::chrono::high_resolution_clock::now();
-  fp = readFileMMap(filename, rangeAligned.offset, rangeAligned.length, buffer3);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  INFO("read from MMap read aligned " << "elapsed time: " << time_span3.count() << "s.");
-
-  internaloffset = (readAlignedRange.offset - rangeAligned.offset);
-  t1 = std::chrono::high_resolution_clock::now();
-  areSame = memcmp(buffer1, buffer3 + internaloffset, readAlignedRange.length * sizeof(char));
-  if (areSame != 0)
-    fprintf(stderr, "buffer 1 and buffer 3 are different\n");
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
-  INFO("compared 1 3 read aligned" << "elapsed time: " << time_span.count() << "s.");
-
-  ss << "result.5." << rank << ".txt";
-  ofs.open(ss.str().c_str());
-  ss.str(std::string());
-  if (rank < (nprocs - 1))
-    ofs.write(buffer3 + internaloffset, readAlignedRange.length - overlap);
-  else
-    ofs.write(buffer3 + internaloffset, readAlignedRange.length);
-  ofs.close();
+    len = loader.getRange().end - loader.getRange().start;
+    buffer1 = new char[len];
+    memset(buffer1, 0, len * sizeof(char));
+    t1 = std::chrono::high_resolution_clock::now();
+    readFileStream(filename, loader.getRange().start, len, buffer1);
+    t2 = std::chrono::high_resolution_clock::now();
+    time_span1 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    INFO("read from file stream " << "elapsed time: " << time_span1.count() << "s.");
 
 
-  delete [] buffer1;
-  //delete [] buffer3;
-  closeFileMMap(fp, buffer3, readAlignedRange.length);
+    t1 = std::chrono::high_resolution_clock::now();
+    areSame = memcmp(buffer1, loader.getData(), len * sizeof(char));
+    if (areSame != 0)
+      fprintf(stderr, "buffer 1 and buffer 3 are different\n");
+    t2 = std::chrono::high_resolution_clock::now();
+    time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
+    INFO("compared 1 3 " << "elapsed time: " << time_span.count() << "s.");
+
+    ss << "result.3." << rank << ".txt";
+    ofs.open(ss.str().c_str());
+    ss.str(std::string());
+    if (rank < (nprocs - 1))
+      ofs.write(loader.getData(), len - r.overlap);
+    else
+      ofs.write(loader.getData(), len);
+    ofs.close();
+
+    delete [] buffer1;
+  }
+
 
 
 #ifdef USE_MPI

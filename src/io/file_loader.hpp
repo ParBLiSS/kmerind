@@ -17,6 +17,9 @@
 #include <sys/stat.h>
 #include <fcntl.h> // for open
 
+#include "iterators/range.hpp"
+
+
 namespace bliss
 {
   namespace io
@@ -33,10 +36,11 @@ namespace bliss
           message = _msg;
         }
 
-        io_exception(std::string& _msg)
+        io_exception(std::string const & _msg)
         {
           message = _msg;
         }
+
 
         virtual const char* what() const throw()
         {
@@ -56,11 +60,27 @@ namespace bliss
         /**
          * opens the file and save in file handle
          */
-        file_loader(std::string const & filename)
-          : range(), data(std::nullptr)
+        file_loader()
+        {
+          page_size = sysconf(_SC_PAGE_SIZE);
+        };
+
+        file_loader(std::string const & _filename)
+          : filename(_filename)
         {
           file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);
+        };
+
+
+        file_loader(std::string const & _filename, range_type const & _range)
+          : filename(_filename), range(_range)
+        {
+          file_handle = open(filename.c_str(), O_RDONLY);
+          page_size = sysconf(_SC_PAGE_SIZE);
+
+          // now mmap the file
+          map();
         };
 
         /**
@@ -68,6 +88,7 @@ namespace bliss
          */
         virtual ~file_loader()
         {
+          unmap();
           close(file_handle);
         };
 
@@ -76,54 +97,64 @@ namespace bliss
          */
         char* getData()
         {
-          return data + (range.start - range.block_start);
+          return data;
         };
 
-        void setRange(bliss::iterator::range<size_t> const &_range) {
-          range = _range;
-        }
-
-        bliss::iterator::range<size_t>& getRange() const
+        range_type getRange() const
         {
           return range;
         };
 
 
       protected:
-        int file_handle;// file handle
-
+        std::string filename;
         range_type range;  // offset in file from where to read
 
-        char* data;
-        char* aligned_data;  // memmapped data, page aligned.
-
         size_t page_size;
+        int file_handle;// file handle
+
+        char* data;
+        char* aligned_data;  // memmapped data, page aligned.  strictly internal
+
 
         /**
          * TODO: test on remotely mounted file system.
          */
 
         /**
-         * TODO: change this so file_loader calls this.
+         *
          */
-        char* map(file_loader::range_type & r) throw(io_exception) {
-          assert(r.is_page_aligned(page_size), "ERROR: range is not page aligned.");
+        void map(std::string const & _filename, range_type const & _range) {
+          filename = _filename;
+          range = _range;
+          map();
+        }
+        void map(range_type const & _range) {
+          range = _range;
+          map();
+        }
+        void map() throw(io_exception) {
+          range = range.align_to_page(page_size);
 
-          char* output = (char*)mmap(nullptr, r.end - r.block_start, PROT_READ, MAP_PRIVATE, file_handle, r.block_start );
+          aligned_data = (char*)mmap(nullptr,
+                                     range.end - range.block_start,
+                                     PROT_READ, MAP_PRIVATE,
+                                     file_handle, range.block_start );
 
-          if (output == MAP_FAILED)
+          if (aligned_data == MAP_FAILED)
           {
             std::stringstream ss;
             int myerr = errno;
             ss << "ERROR in mmap: "  << myerr << ": " << strerror(myerr);
             throw io_exception(ss.str());
           }
+
+          data = aligned_data + (range.start - range.block_start);
         }
 
-        void unmap(char * input, file_loader::range_type & r) throw(io_exception) {
-          assert(r.is_page_aligned(page_size), "ERROR: range is not page aligned.");
-
-          munmap(input, r.end - r.block_start);
+        void unmap() throw(io_exception) {
+          if (aligned_data != nullptr || aligned_data != MAP_FAILED)
+            munmap(aligned_data, range.end - range.block_start);
         }
 
 

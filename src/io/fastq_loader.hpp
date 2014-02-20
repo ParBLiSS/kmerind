@@ -9,7 +9,6 @@
 #define FASTQLOADER_HPP_
 
 #include "io/file_loader.hpp"
-#include "iterator/range.hpp"
 
 namespace bliss
 {
@@ -23,14 +22,15 @@ namespace bliss
     {
       public:
         virtual ~fastq_loader();
-        fastq_loader(std::string const & filename, file_loader::range_type const & range,
+        fastq_loader(std::string const & _filename, file_loader::range_type const & range,
                      size_t const &total);
 
       protected:
-        file_loader::range_type adjust_to_record_boundaries(file_loader::range_type const & input,
-                                                                   size_t const & total) throw(io_exception);
+        file_loader::range_type adjust_to_record_boundaries(std::string const & _filename,
+                                                            file_loader::range_type const & input,
+                                                            size_t const & total) throw(io_exception);
 
-        size_t search_for_record_boundary(char const* data, file_loader::range_type const& range) throw(io_exception);
+        size_t search_for_record_boundary(char const* _data, file_loader::range_type const& range) throw(io_exception);
     };
 
   } /* namespace io */

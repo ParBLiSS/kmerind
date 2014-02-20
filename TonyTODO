@@ -1,0 +1,33 @@
+buffered iterator?
+
+read struct: for fastQ, for fastA.
+
+count number of reads - every 4 lines
+	indexing iterator (return positions in underlying iterator)
+	and get the counts
+
+iterator with element type of iterator (for fasta?)
+
+iterator with element type of reads.
+	internal to reads are 2 ptrs/iterators
+	
+
+(
+iterator of iterator? with delimiter
+	internal iterator has a delimiter for termination
+		== search in outer iterator during the ++ phase.
+	outer iterator uses a different delimiter
+	internal pointers of both are incremented together
+)
+	
+
+assign read ids. (prefix scan)
+
+create kmers and reverse complement - abyss idea is not bad
+
+create quality score and reverse complement quality score
+
+mpi redistribution code.
+
+spaced seeds?
+

@@ -11,7 +11,7 @@ target_link_libraries(test ${EXTRA_LIBS})
 ## EXECUTABLES
 add_executable(testFastQ testFastQ.cpp)
 target_link_libraries(testFastQ ${EXTRA_LIBS})
-#target_link_libraries(test testlib)
+target_link_libraries(testFastQ bliss_io)
 
 ## EXECUTABLES
 add_executable(testTypes test_types.cpp)

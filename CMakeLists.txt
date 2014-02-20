@@ -259,10 +259,11 @@ include_directories("${PROJECT_SOURCE_DIR}/src")
 #add_library("${libname}" SHARED ${libsrcs})
 # Link opencv stuff to the execution engine
 
-add_subdirectory(test)
-add_subdirectory(src/index)
-add_subdirectory(src/common)
 add_subdirectory(utils)
+add_subdirectory(src/common)
+add_subdirectory(src/io)
+add_subdirectory(src/index)
+add_subdirectory(test)
 
 
 # Install Settings

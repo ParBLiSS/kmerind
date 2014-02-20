@@ -9,12 +9,12 @@
 #define RANGE_HPP_
 
 #include <cassert>
+#include <iostream>
 
 namespace bliss
 {
   namespace iterator
   {
-
     /**
      * Range specified with offset, length, and overlap.  specific for 1D.
      */
@@ -24,8 +24,8 @@ namespace bliss
         T block_start;   // starting position of range aligned to block
         T start;   // offset from the beginning of block, if range is block aligned.
         T end;   // length of range, starting from offset_in_block.
-        T overlap;  // amount of overlap at each end
         T step;   // stride is the distance between each successive elements
+        T overlap;  // amount of overlap at each end
 
         range(T const& _start,
               T const& _end,
@@ -53,8 +53,6 @@ namespace bliss
           step(1),
           overlap(0)
         {}
-
-
 
 
         // TODO: when needed: comparators
@@ -88,17 +86,17 @@ namespace bliss
           if (static_cast<T>(pid) < rem)
           {
             output.start = static_cast<T>(pid) * (div + 1);
-            output.end = div + 1 + _overlap;
+            output.end = output.start + (div + 1) + _overlap;
           }
           else
           {
             output.start = static_cast<T>(pid) * div + rem;
-            output.end = div + _overlap;
+            output.end = output.start + div + _overlap;
           }
 
           assert(output.start < total);
-          if ((output.start + output.end) >= total)
-            output.end = total - output.start;
+          if (output.end > total)
+            output.end = total;
 
           output.block_start = output.start;
           return output;
@@ -176,6 +174,13 @@ namespace bliss
 
 
     };
+
+    template<typename T>
+    std::ostream& operator<<(std::ostream& ost, const range<T>& r) {
+      ost << "range: block@" << r.block_start << " [" << r.start << ":" << r.step << ":" << r.end << ") overlap " << r.overlap;
+      return ost;
+    }
+
 
   } /* namespace functional */
 } /* namespace bliss */
