@@ -8,6 +8,8 @@
  *  support functor (possibly multiple operator() ), function pointer.
  *
  *  Does NOT support member function pointer.  for those, recommend wrap in a functor.
+ *  NOTE: function pointer performs far worse then functor.  probably due to compiler optimization
+ *
  *
  *  Relies on compiler to cast the input parameter to the specific types needed by the functor, including constness and references.
  *
@@ -15,8 +17,6 @@
  *
  *  TODO:
  *  commenting.
- *  specialization for windowed iterator and block partitioned iterator.
- *    no need for cyclic partitioned iterator right now, and no need for skipping iterator (random access handles that)
  */
 
 #ifndef TRANSFORM_ITERATOR_HPP_
@@ -34,34 +34,34 @@ namespace iterator
   /**
    * transform iterator class
    *
-   * transforms each element in the list. otherwise it's a standard random access iterator.
+   * transforms each element in the list. otherwise it's the same kind of iterator as the base.
    *
    * inheriting from std::iterator ONLY to get iterator_traits support.
    *
-   * tried to use enable_if.  problem is that false causes the "type" typedef inside not to be defined, creating an error.
+   * careful with the use of enable_if.  false causes the "type" typedef inside not to be defined, creating an error.
    *   this may be a SFINAE usage or implementation issue.
    */
-  template<typename Functor,
+  template<typename Transformer,
            typename Base_Iterator
            >
   class transform_iterator
     : public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
-                           typename std::remove_reference<typename bliss::functional::function_traits<Functor, typename Base_Iterator::value_type>::return_type>::type,
+                           typename std::remove_reference<typename bliss::functional::function_traits<Transformer, typename Base_Iterator::value_type>::return_type>::type,
                            typename std::iterator_traits<Base_Iterator>::difference_type,
-                           typename std::add_pointer<typename std::remove_reference<typename bliss::functional::function_traits<Functor, typename Base_Iterator::value_type>::return_type>::type>::type,
-                           typename std::add_rvalue_reference<typename std::remove_reference<typename bliss::functional::function_traits<Functor, typename Base_Iterator::value_type>::return_type>::type>::type
+                           typename std::add_pointer<typename std::remove_reference<typename bliss::functional::function_traits<Transformer, typename Base_Iterator::value_type>::return_type>::type>::type,
+                           typename std::add_rvalue_reference<typename std::remove_reference<typename bliss::functional::function_traits<Transformer, typename Base_Iterator::value_type>::return_type>::type>::type
                            >
     {
       protected:
-        // define first, to avoid -Wreorder error (where the variables are initialized before transform_iterator::Functor, etc are defined.
+        // define first, to avoid -Wreorder error (where the variables are initialized before transform_iterator::Transformer, etc are defined.
         typedef std::iterator_traits<Base_Iterator>                                                         base_traits;
-        typedef bliss::functional::function_traits<Functor, typename Base_Iterator::value_type>                                    functor_traits;
+        typedef bliss::functional::function_traits<Transformer, typename Base_Iterator::value_type>                                    functor_traits;
 
         Base_Iterator                                                                                       _base;
-        Functor                                                                                             _f;
+        Transformer                                                                                             _f;
 
       public:
-        typedef transform_iterator< Functor, Base_Iterator >                                                type;
+        typedef transform_iterator< Transformer, Base_Iterator >                                                type;
         typedef std::iterator_traits<type>                                                                  traits;
 
         typedef typename base_traits::iterator_category                                                     iterator_category;
@@ -75,7 +75,7 @@ namespace iterator
 
         // class specific constructor
         explicit
-        transform_iterator(const Base_Iterator& base_iter, const Functor & f)
+        transform_iterator(const Base_Iterator& base_iter, const Transformer & f)
           : _base(base_iter), _f(f) {};
 
 
@@ -100,10 +100,10 @@ namespace iterator
 
 
         // accessor functions for internal state.
-        Functor& getFunctor() {
+        Transformer& getTransformer() {
           return _f;
         }
-        const Functor& getFunctor() const {
+        const Transformer& getTransformer() const {
           return _f;
         }
         Base_Iterator& getBaseIterator() {

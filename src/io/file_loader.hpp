@@ -65,13 +65,6 @@ namespace bliss
           page_size = sysconf(_SC_PAGE_SIZE);
         };
 
-        file_loader(std::string const & _filename)
-          : filename(_filename)
-        {
-          file_handle = open(filename.c_str(), O_RDONLY);
-          page_size = sysconf(_SC_PAGE_SIZE);
-        };
-
 
         file_loader(std::string const & _filename, range_type const & _range)
           : filename(_filename), range(_range)
@@ -124,15 +117,6 @@ namespace bliss
         /**
          *
          */
-        void map(std::string const & _filename, range_type const & _range) {
-          filename = _filename;
-          range = _range;
-          map();
-        }
-        void map(range_type const & _range) {
-          range = _range;
-          map();
-        }
         void map() throw(io_exception) {
           range = range.align_to_page(page_size);
 

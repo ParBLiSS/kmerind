@@ -54,6 +54,15 @@ namespace bliss
           overlap(0)
         {}
 
+        range<T>& operator=(range<T> const & other)
+        {
+          block_start = other.block_start;
+          start = other.start;
+          end = other.end;
+          step = other.step;
+          overlap = other.overlap;
+          return *this;
+        }
 
         // TODO: when needed: comparators
         // TODO: when needed: +/-

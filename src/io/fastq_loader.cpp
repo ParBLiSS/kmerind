@@ -22,15 +22,19 @@ namespace bliss
     fastq_loader::fastq_loader(std::string const & _filename,
                                file_loader::range_type const & _range,
                                size_t const &total)
-      : file_loader(_filename)
+      : file_loader()
     {
+      filename = _filename;
+
       // adjust the range
-      // internally opens the file twice with _range and shifted _range, search for record start/end
+      // internally opens the file twice with _range and shifted_range, search for record start/end
       // and construct new range and then open the file again.
-      file_loader::range_type r = adjust_to_record_boundaries(_filename, _range, total);
+      range = align_to_sequence(_filename, _range, total);
 
       // use the superclass constructor to map, with adjusted range.
-      map(r);
+      map();
+
+      seqPositions.reserve((range.end - range.start) / 8);  // at minimal, have @\nA\n+\n9\n for a record
     }
 
 
@@ -38,23 +42,14 @@ namespace bliss
     /**
      *  for coordinated distributed quality score reads to map back to original.
      *    short sequence - partition and parse at read boundaries.  in FASTQ format
-     *    long sequence - 2 mmapped regions?  should be FASTA or BED formats.   (1 sequence at 150B bases).
+     *    long sequence - partition in block aligned form and read.  in FASTA.   (up to 150B bases).
      *    older sequencers may have longer reads in FASTA.
      *
      * 1 read dataset contains 1 or more fastq files.
      *  number of files few.
-     *  treat as virtual file?  with virtual file size offset to filename mapping?  assumption is that distributed file system
-     *  can service a small number of files to disjoint sets of clients better than 1 file to all clients.  but this may introduce
-     *  issues where different nodes may reach the same file at different times.
      *
      *  === assume files are relatively large.  simplify things by processing 1 file at a time.
-     *
-     *
-     * 1 fastq/fasta file contains 1 or more sequences.
-     *  6B sequences at 50 bases, or smaller
-     *
-     *  === assume files are relatively large.  simplify things by processing 1 file at a time.
-     *
+     *     *
      * ids:
      *  file id.          (fid to filename map)
      *  read id in file   (read id to seq/qual offset map)
@@ -117,12 +112,6 @@ namespace bliss
      *
      *  ===  for reads, expected lengths are maybe up to 1K in length, and files contain >> 1 seq
      *
-     *
-     *  hybrid.  if any node has ambiguity and has a small total read count, then use the gather method  (large sequences assumption), and have close to 2p reads.
-     *      else (all have more than 2 line breaks) if any ambiguous, then enter into communication phase
-     *  alternatively, do log(p) ordering - comm with neighbor, see if ambiguity resolved.  if not, comm with neighbor 2^i hops away.  repeat.
-     *
-     *
      *  issue:  can we fit the raw string into memory?  can we fit the result into memory?
      *    result has to be  able to fit.  N/P uint64_t.
      *    if result fits, the raw string has to fit.
@@ -132,14 +121,12 @@ namespace bliss
      *
      *  2 pass algorithm: since we need read ids.
      *
-     *  input_range:  offset is the global offset in file.  length is the length of the raw array.
-     *  read through raw for first 4 lines, and adjust the input range.
      */
 
     /**
      * search for first occurence of @ from an arbitrary starting point.
      */
-    size_t fastq_loader::search_for_record_boundary(char const* _data, file_loader::range_type const& range) throw(io_exception) {
+    size_t fastq_loader::find_sequence_start(char const* _data, file_loader::range_type const& range) throw(io_exception) {
        // need to look at 2 or 3 chars.  read 4 lines because of the line 2-3 combo below needs offset to next line 1.
        char first[4];
        size_t offsets[4] = {0, 0, 0, 0};   // units:  offset from beginning of file.
@@ -234,7 +221,7 @@ namespace bliss
     /**
      * adjust the range's start and end
      */
-    file_loader::range_type fastq_loader::adjust_to_record_boundaries(std::string const & _filename,
+    file_loader::range_type fastq_loader::align_to_sequence(std::string const & _filename,
                                                                       file_loader::range_type const & input,
                                                                       size_t const & total) throw(io_exception) {
 
@@ -246,7 +233,7 @@ namespace bliss
         file_loader f(_filename, input);
 
         // search for the new start
-        newStart = search_for_record_boundary(f.getData(), f.getRange());
+        newStart = find_sequence_start(f.getData(), f.getRange());
 
         // clean up when exiting the block, including close the file handle.
       }
@@ -266,7 +253,7 @@ namespace bliss
         file_loader f(_filename, next);
 
         // search for the new end
-        newEnd = search_for_record_boundary(f.getData(), f.getRange());
+        newEnd = find_sequence_start(f.getData(), f.getRange());
 
         // clean up when if statement exits
       }
@@ -277,6 +264,15 @@ namespace bliss
 
     }
 
+
+    void fastq_loader::get_sequence_positions() throw(io_exception) {
+      // naive
+      int linecount = 0;
+      for (size_t i = range.start; i < range.end; ++i) {
+
+      }
+
+    }
 
 
   } /* namespace io */

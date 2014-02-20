@@ -15,6 +15,19 @@ namespace bliss
   namespace io
   {
 
+    struct fastq_sequence {
+        size_t start;
+        size_t end;
+        char* seq_name;
+        char* seq;
+        char* qual_name;
+        char* qual;
+    };
+
+    struct parseSequence {
+        fastq_sequence operator()()
+    };
+
     /**
      *
      */
@@ -26,11 +39,17 @@ namespace bliss
                      size_t const &total);
 
       protected:
-        file_loader::range_type adjust_to_record_boundaries(std::string const & _filename,
+        std::vector<fastq_sequence> seqPositions;
+        uint64_t seqIdStart;
+
+        file_loader::range_type align_to_sequence(std::string const & _filename,
                                                             file_loader::range_type const & input,
                                                             size_t const & total) throw(io_exception);
 
-        size_t search_for_record_boundary(char const* _data, file_loader::range_type const& range) throw(io_exception);
+        size_t find_sequence_start(char const* _data, file_loader::range_type const& range) throw(io_exception);
+
+        void get_sequence_positions() throw(io_exception);
+
     };
 
   } /* namespace io */
