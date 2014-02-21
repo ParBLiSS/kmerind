@@ -60,8 +60,10 @@ namespace bliss
         /**
          * opens the file and save in file handle
          */
-        file_loader()
+        file_loader(std::string const & _filename)
+          : filename(_filename)
         {
+          file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);
         };
 
@@ -136,7 +138,7 @@ namespace bliss
           data = aligned_data + (range.start - range.block_start);
         }
 
-        void unmap() throw(io_exception) {
+        void unmap() {
           if (aligned_data != nullptr || aligned_data != MAP_FAILED)
             munmap(aligned_data, range.end - range.block_start);
         }

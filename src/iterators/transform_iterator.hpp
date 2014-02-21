@@ -42,26 +42,26 @@ namespace iterator
    *   this may be a SFINAE usage or implementation issue.
    */
   template<typename Transformer,
-           typename Base_Iterator
+           typename Iterator
            >
   class transform_iterator
-    : public std::iterator<typename std::iterator_traits<Base_Iterator>::iterator_category,
-                           typename std::remove_reference<typename bliss::functional::function_traits<Transformer, typename Base_Iterator::value_type>::return_type>::type,
-                           typename std::iterator_traits<Base_Iterator>::difference_type,
-                           typename std::add_pointer<typename std::remove_reference<typename bliss::functional::function_traits<Transformer, typename Base_Iterator::value_type>::return_type>::type>::type,
-                           typename std::add_rvalue_reference<typename std::remove_reference<typename bliss::functional::function_traits<Transformer, typename Base_Iterator::value_type>::return_type>::type>::type
+    : public std::iterator<typename std::iterator_traits<Iterator>::iterator_category,
+                           typename std::remove_reference<typename bliss::functional::function_traits<Transformer, typename std::iterator_traits<Iterator>::value_type>::return_type>::type,
+                           typename std::iterator_traits<Iterator>::difference_type,
+                           typename std::add_pointer<typename std::remove_reference<typename bliss::functional::function_traits<Transformer, typename std::iterator_traits<Iterator>::value_type>::return_type>::type>::type,
+                           typename std::add_rvalue_reference<typename std::remove_reference<typename bliss::functional::function_traits<Transformer, typename std::iterator_traits<Iterator>::value_type>::return_type>::type>::type
                            >
     {
       protected:
         // define first, to avoid -Wreorder error (where the variables are initialized before transform_iterator::Transformer, etc are defined.
-        typedef std::iterator_traits<Base_Iterator>                                                         base_traits;
-        typedef bliss::functional::function_traits<Transformer, typename Base_Iterator::value_type>                                    functor_traits;
+        typedef std::iterator_traits<Iterator>                                                         base_traits;
+        typedef bliss::functional::function_traits<Transformer, typename std::iterator_traits<Iterator>::value_type>                                    functor_traits;
 
-        Base_Iterator                                                                                       _base;
+        Iterator                                                                                       _base;
         Transformer                                                                                             _f;
 
       public:
-        typedef transform_iterator< Transformer, Base_Iterator >                                                type;
+        typedef transform_iterator< Transformer, Iterator >                                                type;
         typedef std::iterator_traits<type>                                                                  traits;
 
         typedef typename base_traits::iterator_category                                                     iterator_category;
@@ -75,7 +75,7 @@ namespace iterator
 
         // class specific constructor
         explicit
-        transform_iterator(const Base_Iterator& base_iter, const Transformer & f)
+        transform_iterator(const Iterator& base_iter, const Transformer & f)
           : _base(base_iter), _f(f) {};
 
 
@@ -106,10 +106,10 @@ namespace iterator
         const Transformer& getTransformer() const {
           return _f;
         }
-        Base_Iterator& getBaseIterator() {
+        Iterator& getBaseIterator() {
           return _base;
         }
-        const Base_Iterator& getBaseIterator() const {
+        const Iterator& getBaseIterator() const {
           return _base;
         }
 
@@ -165,9 +165,9 @@ namespace iterator
                                         type>::type
        operator+(difference_type n)
        {
-         type other(*this);
-         std::advance(other._base, n);
-         return other;
+         type output(*this);
+         std::advance(output._base, n);
+         return output;
        }
 
        friend
@@ -180,9 +180,9 @@ namespace iterator
                                         type>::type
        operator-(difference_type n)
        {
-         type other(*this);
-         std::advance(other._base, -n);
-         return other;
+         type output(*this);
+         std::advance(output._base, -n);
+         return output;
        }
 
        typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,

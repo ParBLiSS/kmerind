@@ -18,6 +18,7 @@
 #include <functional>
 
 #include <iterators/transform_iterator.hpp>
+#include <iterators/filter_iterator.hpp>
 
 
 template<typename INPUT, typename OUTPUT>
@@ -315,7 +316,23 @@ struct swap {
     }
 };
 
+template<typename T>
+struct even {
+    bool operator()(T const & input) {
+      if (input % 2 == 0) return true;
+      else return false;
+    }
 
+};
+
+template<typename T>
+struct equals {
+    bool operator()(T const & input) {
+      if (input == 7) return true;
+      else return false;
+    }
+
+};
 
 // this approaches is very similar to http://en.cppreference.com/w/cpp/types/result_of impl.
 // all these are the same problems as with the traits classes, and is essentially the result_of implementation sans declval.
@@ -418,6 +435,31 @@ void testTransformIterator(F f,
 
 }
 
+template<typename F, typename V>
+void testFilterIterator(F f,
+                           V& data, std::string name, std::string func_name)
+{
+
+  // test with functor
+  typedef bliss::iterator::filter_iterator<F, typename V::iterator> f_iter_type;
+  f_iter_type iter1(f, data.begin(), data.end());
+  f_iter_type end1(f, data.end());
+
+  std::chrono::high_resolution_clock::time_point time1, time2;
+  std::chrono::duration<double> time_span;
+
+
+  double sum = 0;
+  iter1 = f_iter_type(f, data.begin(), data.end());
+  time1 = std::chrono::high_resolution_clock::now();
+  for (; iter1 != end1 ; ++iter1) {
+    sum += *iter1;
+  }
+  time2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
+  std::cout << name << " filter with " << func_name << ":  sum " << sum << "  elapsed time: " << time_span.count() << " s" << std::endl;
+
+}
 
 
 
@@ -796,6 +838,14 @@ int main(int argc, char* argv[]){
 //  f_type fptr = &addC;
 //  float f = (*fptr)(4);
 
+
+  // test with functor
+  even<int> e;
+  testFilterIterator(e, data, "functor", "even<int>");
+
+
+  equals<int> q;
+  testFilterIterator(q, data, "functor", "equals<int>");
 
 
 }

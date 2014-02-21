@@ -211,6 +211,11 @@ int main(int argc, char* argv[]) {
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
     INFO("compared 1 3 " << "elapsed time: " << time_span.count() << "s.");
 
+
+//    // test getting all the eols
+    loader.get_sequence_positions();
+
+
     ss << "result.3." << rank << ".txt";
     ofs.open(ss.str().c_str());
     ss.str(std::string());
@@ -221,6 +226,7 @@ int main(int argc, char* argv[]) {
     ofs.close();
 
     delete [] buffer1;
+
   }
 
 

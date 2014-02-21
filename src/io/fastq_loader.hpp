@@ -9,24 +9,16 @@
 #define FASTQLOADER_HPP_
 
 #include "io/file_loader.hpp"
+#include <vector>
 
 namespace bliss
 {
   namespace io
   {
 
-    struct fastq_sequence {
-        size_t start;
-        size_t end;
-        char* seq_name;
-        char* seq;
-        char* qual_name;
-        char* qual;
-    };
-
-    struct parseSequence {
-        fastq_sequence operator()()
-    };
+//    struct parseSequence {
+//        fastq_sequence operator()()
+//    };
 
     /**
      *
@@ -48,6 +40,8 @@ namespace bliss
 
         size_t find_sequence_start(char const* _data, file_loader::range_type const& range) throw(io_exception);
 
+
+      public:
         void get_sequence_positions() throw(io_exception);
 
     };

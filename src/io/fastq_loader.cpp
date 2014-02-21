@@ -10,7 +10,7 @@
 #include <cerrno>
 
 #include "io/fastq_loader.hpp"
-
+#include "iterators/filter_iterator.hpp"
 
 namespace bliss
 {
@@ -22,7 +22,7 @@ namespace bliss
     fastq_loader::fastq_loader(std::string const & _filename,
                                file_loader::range_type const & _range,
                                size_t const &total)
-      : file_loader()
+      : file_loader(_filename)
     {
       filename = _filename;
 
@@ -267,10 +267,26 @@ namespace bliss
 
     void fastq_loader::get_sequence_positions() throw(io_exception) {
       // naive
-      int linecount = 0;
-      for (size_t i = range.start; i < range.end; ++i) {
+      // int linecount = 0;
 
-      }
+//      struct eol {
+//          bool operator()(char v) {
+//            return (v == '\n');
+//          }
+//      };
+//
+//
+//      eol f;
+//      typedef bliss::iterator::filter_iterator<eol, char*>  eol_iter;
+//      eol_iter iter(f, data, data + (range.end - range.start));
+//      eol_iter end(f, data + (range.end - range.start));
+//
+//      for (; iter != end; ++iter) {
+//        printf("eol offset = %ld\n", iter.getBase() - data );
+//      }
+
+
+      // walk through the iterator and
 
     }
 

@@ -33,7 +33,12 @@ namespace iterator
   /**
    * filter iterator class
    *
-   * filters the element in the list to return only specific ones that match the criteria. otherwise it behaves the same as the underlying iterator.
+   *
+   * filters the element in the list to return only specific ones that match the criteria.
+   * it supports all iterator categories for base, but only implement bidirectional iterator operations.
+   *
+   * can't be a random access iterator itself (because it is unknown how many elements there are, so +/-/+=/-=/[] n operators all are non-sensical)
+   *
    *
    * inheriting from std::iterator ONLY to get iterator_traits support.
    *
@@ -44,49 +49,69 @@ namespace iterator
            typename Iterator
            >
   class filter_iterator
-    : public std::iterator<typename std::iterator_traits<Iterator>::iterator_category,
+    : public std::iterator<typename std::conditional<std::is_same<typename std::iterator_traits<Iterator>::iterator_category,
+                                                                  std::random_access_iterator_tag>::value,
+                                                     std::bidirectional_iterator_tag,
+                                                     typename std::iterator_traits<Iterator>::iterator_category>::type,
                            typename std::iterator_traits<Iterator>::value_type,
                            size_t,
-                           typename std::iterator_traits<Iterator>::pointer_type,
-                           typename std::iterator_traits<Iterator>::reference_type
+                           typename std::iterator_traits<Iterator>::pointer,
+                           typename std::iterator_traits<Iterator>::reference
                            >
     {
       protected:
         // define first, to avoid -Wreorder error (where the variables are initialized before filter_iterator::Filter, etc are defined.
         typedef std::iterator_traits<Iterator>                                                         base_traits;
-        typedef bliss::functional::function_traits<Filter, typename Iterator::value_type>              functor_traits;
+        typedef bliss::functional::function_traits<Filter, typename std::iterator_traits<Iterator>::value_type>              functor_traits;
 
         Iterator                                                                                       _curr;
+        Iterator                                                                                       _start;
         Iterator                                                                                       _end;
         Filter                                                                                         _f;
+        bool                                                                                           before_start;
 
       public:
         typedef filter_iterator< Filter, Iterator >                                                    type;
         typedef std::iterator_traits<type>                                                             traits;
 
-        typedef typename base_traits::iterator_category                                                iterator_category;
+        typedef typename std::conditional<std::is_same<typename std::iterator_traits<Iterator>::iterator_category,
+            std::random_access_iterator_tag>::value,
+            std::bidirectional_iterator_tag,
+            typename std::iterator_traits<Iterator>::iterator_category>::type                          iterator_category;
         typedef typename base_traits::value_type                                                       value_type;
         typedef size_t                                                                                 difference_type;
-        typedef typename base_traits::referece_type                                                    reference_type;
-        typedef typename base_traits::pointer_type                                                     pointer_type;
+        typedef typename base_traits::reference                                                        reference;
+        typedef typename base_traits::pointer                                                          pointer;
 
         typedef value_type                                                                             base_value_type;
+
+        // accessors
+        Iterator& getBase()
+        {
+          return _curr;
+        }
 
 
         // class specific constructor
         explicit
-        filter_iterator(const Filter & f, const Iterator& start, cosnt Iterator& end = Iterator())
-          : _curr(start), _end(end), _f(f) {};
+        filter_iterator(const Filter & f, const Iterator& curr, const Iterator& end)
+          : _curr(curr), _start(curr), _end(end), _f(f), before_start(false) {};
+
+        explicit
+        filter_iterator(const Filter & f, const Iterator& curr)   // for end iterator.
+          : _curr(curr), _start(curr), _end(curr), _f(f), before_start(false) {};
 
 
         // for all classes
         // no EXPLICIT so can copy assign.
-        filter_iterator(const type& Other) : _curr(Other._curr), _end(Other._end), _f(Other._f) {};
+        filter_iterator(const type& Other) : _curr(Other._curr), _start(Other._start), _end(Other._end), _f(Other._f), before_start(Other.before_start) {};
 
         type& operator=(const type& Other) {
           _curr = Other._curr;
+          _start = Other._start;
           _end = Other._end;
           _f = Other._f;
+          before_start = Other.before_start;
           return *this;
         }
 
@@ -97,7 +122,9 @@ namespace iterator
 
           ++_curr;            // else move forward 1, and check
           while (_curr != _end && !_f(*_curr))   // need to check to make sure we are not pass the end of the base iterator.
+          {
             ++_curr;
+          }
           return *this;
         }
 
@@ -121,6 +148,9 @@ namespace iterator
         inline value_type operator*() {
           return *_curr;
         }
+        inline Iterator& operator()() {
+          return _curr;
+        }
 
         // no -> operator.  -> returns a pointer to the value held in iterator.
         // however, in filter iterator, we are not holding data, so pointer does not make sense.
@@ -133,7 +163,7 @@ namespace iterator
                                            std::is_same<iterator_category, std::bidirectional_iterator_tag>::value ||
                                            std::is_same<iterator_category, std::random_access_iterator_tag>::value > >
         explicit
-        filter_iterator() : _curr(), _end(), _f()   {};
+        filter_iterator() : _curr(), _start(), _end(), _f(), before_start(false) {};
 
 
 
@@ -148,10 +178,18 @@ namespace iterator
                                 type
                                >::type&
        operator--() {
-          --_curr;             // move back 1, and check
-          while (!_f(*_curr))
+          if (_curr == _start)  // at beginning.  don't move it.
+          {
+            before_start = true;
+            return *this;
+          }
+
+          --_curr;            // else move back 1, and check
+          while (_curr != _start && !_f(*_curr))   // need to check to make sure we are not pass the end of the base iterator.
+          {
             --_curr;
-         return *this;
+          }
+          return *this;
        }
 
         /**
@@ -169,107 +207,113 @@ namespace iterator
 
 
        // random access iterator requirements.
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        type>::type
-       operator+(difference_type n)
-       {
-         type other(*this);
-         std::advance(other, n);
-         return other;
-       }
-
-       friend
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        type>::type
-       operator+(difference_type n, const type& right)
-       {  return right + n; }
-
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        type>::type
-       operator-(difference_type n)
-       {
-         type other(*this);
-         std::advance(other, -n);
-         return other;
-       }
-
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        difference_type>::type
-       operator-(const type& other)
-       {
-         // count the number of entries between these two.
-         type lhs(*this);
-         type rhs(other);
-
-         difference_type dist = static_cast<difference_type>(0);
-         if (lhs > rhs)
-         {
-           while (lhs > rhs)
-           {
-             ++rhs;
-             ++dist;
-           }
-         }
-         else if (lhs < rhs)
-         {
-           while (lhs < rhs)
-           {
-             ++lhs;
-             --dist;
-           }
-         }
-         // else distance is 0.
-         return dist;
-       }
-
-       inline
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        bool>::type
-       operator<(const type& rhs)
-       { return _curr < rhs._curr; }
-
-       inline
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        bool>::type
-       operator>(const type& rhs)
-       { return _curr > rhs._curr; }
-
-       inline
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        bool>::type
-       operator<=(const type& rhs)
-       { return _curr <= rhs._curr; }
-
-       inline
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        bool>::type
-       operator>=(const type& rhs)
-       { return _curr >= rhs._curr; }
-
-
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        type>::type&
-       operator+=(difference_type n) {
-         std::advance(*this, n);
-         return *this;
-       }
-
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        type>::type&
-       operator-=(difference_type n)
-       {
-         std::advance(*this, -n);
-         return *this;
-       }
-
-       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
-                                        value_type>::type
-       operator[](difference_type n) {
-         type output(*this);
-         std::advance(output, n);
-         return *output;
-       }
-
+       // DO NOT ALLOW RANDOM ACCESS ITERATOR operators for now.
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        type>::type
+//       operator+(difference_type n)
+//       {
+//         type output(*this);
+//         output += n;
+//         return output;
+//       }
+//
+//       friend
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        type>::type
+//       operator+(difference_type n, const type& right)
+//       {  return right + n; }
+//
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        type>::type
+//       operator-(difference_type n)
+//       {
+//         type output(*this);
+//         output += -n;
+//         return output;
+//       }
+//
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        difference_type>::type
+//       operator-(const type& other)
+//       {
+//         // count the number of entries between these two.
+//         type lhs(*this);
+//         type rhs(other);
+//
+//         difference_type dist = 0;
+//         if (lhs > rhs)
+//         {
+//           while (lhs > rhs)
+//           {
+//             ++rhs;
+//             ++dist;
+//           }
+//         }
+//         else if (lhs < rhs)
+//         {
+//           while (lhs < rhs)
+//           {
+//             ++lhs;
+//             --dist;
+//           }
+//         }
+//         // else distance is 0.
+//         return dist;
+//       }
+//
+//       inline
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        bool>::type
+//       operator<(const type& rhs)
+//       { return _curr < rhs._curr; }
+//
+//       inline
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        bool>::type
+//       operator>(const type& rhs)
+//       { return _curr > rhs._curr; }
+//
+//       inline
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        bool>::type
+//       operator<=(const type& rhs)
+//       { return _curr <= rhs._curr; }
+//
+//       inline
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        bool>::type
+//       operator>=(const type& rhs)
+//       { return _curr >= rhs._curr; }
+//
+//
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        type>::type&
+//       operator+=(difference_type n) {
+//         if (n > 0)
+//           for (difference_type i = 0; i < n; ++i)
+//             ++(*this);
+//         else if (n < 0)
+//           for (difference_type i = 0; i < n; ++i)
+//             if (_curr >= _start)
+//               --(*this);
+//         return *this;
+//       }
+//
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        type>::type&
+//       operator-=(difference_type n)
+//       {
+//         *this += -n;
+//         return *this;
+//       }
+//
+//       typename std::enable_if<std::is_same<iterator_category, std::random_access_iterator_tag>::value,
+//                                        value_type>::type
+//       operator[](difference_type n) {
+//         type output(*this);
+//         output += n;
+//         return *output;
+//       }
 
 
     };
