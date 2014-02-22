@@ -13,7 +13,7 @@ TEST(PaddingTest, RemovePaddingSameType)
   uint32_t paddedseq[4] = {0x0000dead, 0x0000beef,0x00001234,0x0000abba};
   uint32_t unpadded[2];
 
-  bliss::copyRemPadding(paddedseq, unpadded, 4*16, 16);
+  bliss::removePadding(paddedseq, unpadded, 4*16, 16);
 
   EXPECT_EQ(unpadded[0], 0xbeefdead) << std::hex << "wrong result is: 0x"  << unpadded[0];
   EXPECT_EQ(unpadded[1], 0xabba1234) << std::hex << "wrong result is: 0x"  << unpadded[1];
@@ -24,7 +24,7 @@ TEST(PaddingTest, RemovePaddingSameType2)
   uint32_t paddedseq[6] = {0x0012dead, 0x0034beef,0xffff1234,0x0056abba, 0x00c0ffee, 0x00decaff};
   uint32_t unpadded[(6*6)/8 + 1];
 
-  bliss::copyRemPadding(paddedseq, unpadded, 6*6*4, 8);
+  bliss::removePadding(paddedseq, unpadded, 6*6*4, 8);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xef12dead) << std::hex << "wrong result is: 0x"  << unpadded[0];
@@ -41,7 +41,7 @@ TEST(PaddingTest, RemovePaddingSameType3)
   uint32_t paddedseq[4] = {0x0000dead, 0x000beef,0xffff1234,0x0056abba};
   uint32_t unpadded[(13*4)/32 + 1];
 
-  bliss::copyRemPadding(paddedseq, unpadded, 4*13, 32-13);
+  bliss::removePadding(paddedseq, unpadded, 4*13, 32-13);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xd3ddfead) << std::hex << "wrong result is: 0x"  << unpadded[0];
@@ -53,7 +53,7 @@ TEST(PaddingTest, RemovePadding32to16by8)
   uint32_t paddedseq[6] = {0x0012dead, 0x0034beef,0xffff1234,0x0056abba, 0x00c0ffee, 0x00decaff};
   uint16_t unpadded[(6*6*4)/16 + 1];
 
-  bliss::copyRemPadding(paddedseq, unpadded, 6*6*4, 8);
+  bliss::removePadding(paddedseq, unpadded, 6*6*4, 8);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xdead) << std::hex << "wrong result is: 0x"  << unpadded[0];
@@ -72,7 +72,7 @@ TEST(PaddingTest, RemovePadding32to8by28)
   uint32_t paddedseq[6] = {0x0012dead, 0x0034beef,0xffff1234,0x0056abba, 0x00c0ffee, 0x00decaff};
   uint8_t unpadded[(4*6)/8 + 1];
 
-  bliss::copyRemPadding(paddedseq, unpadded, 4*6, 28);
+  bliss::removePadding(paddedseq, unpadded, 4*6, 28);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xfd) << std::hex << "wrong result is: 0x"  << unpadded[0];
@@ -85,7 +85,7 @@ TEST(PaddingTest, RemovePadding32to16by13)
   uint32_t paddedseq[4] = {0x0000dead, 0x000beef,0xffff1234,0x0056abba};
   uint16_t unpadded[(13*4)/16 + 1];
 
-  bliss::copyRemPadding(paddedseq, unpadded, 4*13, 32-13);
+  bliss::removePadding(paddedseq, unpadded, 4*13, 32-13);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xfead) << std::hex << "wrong result is: 0x"  << unpadded[0];
@@ -99,7 +99,7 @@ TEST(PaddingTest, RemovePadding32to8by13)
   uint32_t paddedseq[4] = {0x0000dead, 0x000beef,0xffff1234,0x0056abba};
   uint8_t unpadded[(13*4)/8 + 1];
 
-  bliss::copyRemPadding(paddedseq, unpadded, 4*13, 32-13);
+  bliss::removePadding(paddedseq, unpadded, 4*13, 32-13);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xad) << std::hex << "wrong result is: 0x"  << unpadded[0];
