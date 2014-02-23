@@ -11,6 +11,8 @@
 #include "io/file_loader.hpp"
 #include <vector>
 
+#include "iterators/fastq_iterator.hpp"
+
 namespace bliss
 {
   namespace io
@@ -31,7 +33,7 @@ namespace bliss
                      size_t const &total);
 
       protected:
-        std::vector<fastq_sequence> seqPositions;
+        std::vector<bliss::iterator::fastq_sequence<char*>> seqPositions;
         uint64_t seqIdStart;
 
         file_loader::range_type align_to_sequence(std::string const & _filename,
@@ -43,6 +45,7 @@ namespace bliss
 
       public:
         void get_sequence_positions() throw(io_exception);
+        void test();
 
     };
 

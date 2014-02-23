@@ -82,6 +82,8 @@ void readFileC(std::string const& filename, const uint64_t& offset, const uint64
 
 
 
+
+
 int main(int argc, char* argv[]) {
   LOG_INIT();
 
@@ -189,7 +191,7 @@ int main(int argc, char* argv[]) {
     bliss::io::fastq_loader loader(filename, r, file_size);
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-    INFO("read from MMap " << "elapsed time: " << time_span3.count() << "s.");
+    INFO("MMap " << "elapsed time: " << time_span3.count() << "s.");
 
     std::cout << rank << " record adjusted " << loader.getRange() << std::endl;
 
@@ -211,9 +213,21 @@ int main(int argc, char* argv[]) {
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
     INFO("compared 1 3 " << "elapsed time: " << time_span.count() << "s.");
 
+// get eols
+    t1 = std::chrono::high_resolution_clock::now();
+    loader.test();
+    t2 = std::chrono::high_resolution_clock::now();
+    time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
+    INFO("get reads " << "elapsed time: " << time_span.count() << "s.");
 
-//    // test getting all the eols
+
+
+//    // test parsing the sequences.
+    t1 = std::chrono::high_resolution_clock::now();
     loader.get_sequence_positions();
+    t2 = std::chrono::high_resolution_clock::now();
+    time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
+    INFO("get reads " << "elapsed time: " << time_span.count() << "s.");
 
 
     ss << "result.3." << rank << ".txt";

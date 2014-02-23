@@ -287,9 +287,45 @@ namespace bliss
 
 
       // walk through the iterator and
+      bliss::iterator::fastq_parser<char*> parser;
+      typedef bliss::iterator::fastq_iterator<bliss::iterator::fastq_parser<char*>,
+                                      char*> iter_type;
+      iter_type fqiter(parser, data, data + (range.end - range.start));
+      iter_type fqend(parser, data + (range.end - range.start));
+
+      for (; fqiter != fqend; ++fqiter) {
+        seqPositions.push_back(*fqiter);
+      }
+
+//
+//      int max = seqPositions.size();
+//      for (int i = max; i > 0; --i) {
+//        bliss::iterator::fastq_sequence<char*> result = seqPositions[max - i];
+//
+//        std::cout << "seq " << (max - i) << ": name=[" << std::string(result.name, result.name_end) << "], ";
+//        std::cout << "seq=[" << std::string(result.seq, result.seq_end) << "], ";
+//        std::cout << "qual=[" << std::string(result.qual, result.qual_end) << "]" << std::endl;
+//
+//      }
 
     }
 
+
+    void fastq_loader::test() {
+      char * curr = data;
+
+      char** positions = new char*[(range.end - range.start) / 8];
+      //std::vector<char*> positions;
+//      positions.reserve((range.end - range.start) / 8);
+      int i = 0;
+      for (; curr < data + (range.end - range.start); ++curr, ++i)
+      {
+        if (*curr == '@')
+          positions[i] = (curr);
+      }
+
+      delete [] positions;
+    }
 
   } /* namespace io */
 } /* namespace bliss */

@@ -54,7 +54,7 @@ namespace iterator
                                                      std::bidirectional_iterator_tag,
                                                      typename std::iterator_traits<Iterator>::iterator_category>::type,
                            typename std::iterator_traits<Iterator>::value_type,
-                           size_t,
+                           std::ptrdiff_t,
                            typename std::iterator_traits<Iterator>::pointer,
                            typename std::iterator_traits<Iterator>::reference
                            >
@@ -79,7 +79,7 @@ namespace iterator
             std::bidirectional_iterator_tag,
             typename std::iterator_traits<Iterator>::iterator_category>::type                          iterator_category;
         typedef typename base_traits::value_type                                                       value_type;
-        typedef size_t                                                                                 difference_type;
+        typedef std::ptrdiff_t                                                                                 difference_type;
         typedef typename base_traits::reference                                                        reference;
         typedef typename base_traits::pointer                                                          pointer;
 
