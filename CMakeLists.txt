@@ -19,15 +19,15 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
 
 # Compiler-specific C++11 activation.
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
-    execute_process(
-        COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
-    if (NOT (GCC_VERSION VERSION_GREATER 4.7 OR GCC_VERSION VERSION_EQUAL 4.7))
-        message(FATAL_ERROR "${PROJECT_NAME} requires g++ 4.7 or greater.")
-    endif ()
+  execute_process(
+    COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
+  if (NOT (GCC_VERSION VERSION_GREATER 4.7 OR GCC_VERSION VERSION_EQUAL 4.7))
+    message(FATAL_ERROR "${PROJECT_NAME} requires g++ 4.7 or greater.")
+  endif ()
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 else ()
-    message(FATAL_ERROR "Your C++ compiler does not support C++11.")
+  message(FATAL_ERROR "Your C++ compiler does not support C++11.")
 endif ()
 ### from http://stackoverflow.com/questions/10984442/how-to-detect-c11-support-of-a-compiler-with-cmake
 
@@ -41,7 +41,7 @@ ENDIF(NOT CMAKE_BUILD_TYPE)
 # Add these standard paths to the search paths for FIND_LIBRARY
 # to find libraries from these locations first
 if(UNIX)
-    set(CMAKE_LIBRARY_PATH "${CMAKE_LIBRARY_PATH} /lib /usr/lib")
+  set(CMAKE_LIBRARY_PATH "${CMAKE_LIBRARY_PATH} /lib /usr/lib")
 endif()
 
 # --------------------------------------------------------------
@@ -50,7 +50,7 @@ endif()
 # Run "cmake --help-policy CMP0003" for more information.
 # --------------------------------------------------------------
 if(COMMAND cmake_policy)
-    cmake_policy(SET CMP0003 NEW)
+  cmake_policy(SET CMP0003 NEW)
 endif()
 
 # ----------------------------------------------------------------------------
@@ -67,19 +67,19 @@ set(ENABLE_PROFILING OFF CACHE BOOL "Enable profiling in the GCC compiler (Add f
 
 # Profiling?
 if(ENABLE_PROFILING)
-    set(EXTRA_C_FLAGS_RELEASE "${EXTRA_C_FLAGS_RELEASE} -pg -g")
+  set(EXTRA_C_FLAGS_RELEASE "${EXTRA_C_FLAGS_RELEASE} -pg -g")
 else()
-    # Remove unreferenced functions: function level linking
-    if(NOT APPLE)
-        set(EXTRA_C_FLAGS "${EXTRA_C_FLAGS} -ffunction-sections")
-    endif()
+  # Remove unreferenced functions: function level linking
+  if(NOT APPLE)
+    set(EXTRA_C_FLAGS "${EXTRA_C_FLAGS} -ffunction-sections")
+  endif()
 endif()
 
 # LOGGING config
 if(NOT LOG_ENGINE)
-    set(LOG_ENGINE "BOOST_CUSTOM" CACHE STRING
-        "choose a logging engine.  options are NO_LOG CERR BOOST_TRIVIAL BOOST_CUSTOM."
-        FORCE)
+  set(LOG_ENGINE "BOOST_CUSTOM" CACHE STRING
+      "choose a logging engine.  options are NO_LOG CERR BOOST_TRIVIAL BOOST_CUSTOM."
+      FORCE)
 endif(NOT LOG_ENGINE)
 set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
 
@@ -92,14 +92,13 @@ set(Boost_USE_MULTITHREADED ON)
 set(Boost_ADDITIONAL_VERSIONS "1.54" "1.54.0" "1.52" "1.52.0")
 set(Boost_DETAILED_FAILURE_MSG ON)
 find_path(BOOST_ROOT NAMES include/boost/circular_buffer.hpp
-	HINTS /usr /usr/local /usr/local/share /opt/local ENV BOOST_HOME
-	DOC "path to Boost root directory")
+  HINTS /usr /usr/local /usr/local/share /opt/local ENV BOOST_HOME
+  DOC "path to Boost root directory")
 # must specify the components otherwise it's a header only usage
 find_package( Boost REQUIRED COMPONENTS log thread system program_options)
 if (Boost_FOUND)
-    include_directories( ${Boost_INCLUDE_DIRS} )
-    link_directories( ${Boost_LIBRARY_DIRS} )
-    message(STATUS "Boost libs: " ${Boost_LIBRARIES})
+  include_directories( ${Boost_INCLUDE_DIRS} )
+  link_directories( ${Boost_LIBRARY_DIRS} )
 endif(Boost_FOUND)
 set(EXTRA_LIBS ${EXTRA_LIBS} ${Boost_LIBRARIES})
 
@@ -109,38 +108,41 @@ add_definitions(-DBOOST_LOG_DYN_LINK)
 #### MPI
 set(USE_MPI ON CACHE BOOL "Build with MPI support")
 if (USE_MPI)
-	find_package(MPI REQUIRED)
-	include_directories(${MPI_INCLUDE_PATH})
-
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MPI_COMPILE_FLAGS}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_COMPILE_FLAGS}")
-    set(CMAKE_LINK_FLAGS "${CMAKE_LINK_FLAGS} ${MPI_LINK_FLAGS}")
+  find_package(MPI REQUIRED)
+  include_directories(${MPI_INCLUDE_PATH})
+  message(STATUS "Found MPI:")
+  message(STATUS "    headers: ${MPI_INCLUDE_PATH}")
+  message(STATUS "    libs:    ${MPI_LIBRARIES}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MPI_COMPILE_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_COMPILE_FLAGS}")
+  set(CMAKE_LINK_FLAGS "${CMAKE_LINK_FLAGS} ${MPI_LINK_FLAGS}")
 else(USE_MPI)
-	#set(MPI_FOUND 0)
+  #set(MPI_FOUND 0)
 endif(USE_MPI)
 if (MPI_FOUND)
-    set(MPI_DEFINE "#define USE_MPI")
-    set(EXTRA_LIBS ${EXTRA_LIBS} ${MPI_LIBRARIES})
-
-    message(STATUS "EXTRA libs: " ${EXTRA_LIBS})
+  set(MPI_DEFINE "#define USE_MPI")
+  set(EXTRA_LIBS ${EXTRA_LIBS} ${MPI_LIBRARIES})
 else (MPI_FOUND)
-    set(MPI_DEFINE "")
+  set(MPI_DEFINE "")
+  message(WARNING "Not using MPI")
 endif (MPI_FOUND)
 
 #### OpenMP
 set(USE_OPENMP ON CACHE BOOL "Build with OpenMP support")
 if (USE_OPENMP)
-    include(FindOpenMP)
-
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+  include(FindOpenMP)
+  # add OpenMP flags to compiler flags
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 else(USE_OPENMP)
-    #set(OPENMP_FOUND 0)
+  #set(OPENMP_FOUND 0)
 endif(USE_OPENMP)
 if (OPENMP_FOUND)
-    set(OPENMP_DEFINE "#define USE_OPENMP")
+  message(STATUS "Found OpenMP")
+  set(OPENMP_DEFINE "#define USE_OPENMP")
 else (OPENMP_FOUND)
-    set(OPENMP_DEFINE "")
+  set(OPENMP_DEFINE "")
+  message(WARNING "Unable to find OpenMP: not using OpenMP")
 endif (OPENMP_FOUND)
 
 
@@ -150,12 +152,14 @@ endif (OPENMP_FOUND)
 find_package(Doxygen)
 
 if(DOXYGEN_FOUND)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/docs/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile @ONLY)
-    add_custom_target(doc
-        ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/docs
-        COMMENT "Generating API documentation with Doxygen" VERBATIM
-    )
+  message(STATUS "Found Doxygen")
+  message(STATUS "    use `make doc` to build documentation")
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/docs/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile @ONLY)
+  add_custom_target(doc
+    ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/docs
+    COMMENT "Generating API documentation with Doxygen" VERBATIM
+  )
 endif(DOXYGEN_FOUND)
 
 
@@ -165,61 +169,63 @@ endif(DOXYGEN_FOUND)
 # Testing can be turned off: (for now the default is: ON)
 set(ENABLE_TESTING ON CACHE BOOL "Enable Unit testing via googletest")
 if (ENABLE_TESTING)
-    set(ENABLE_COVERAGE ON CACHE BOOL "Enable Code Coverage reporting")
+  set(ENABLE_COVERAGE ON CACHE BOOL "Enable Code Coverage reporting")
 endif()
 
 if (ENABLE_COVERAGE)
-    # set flags for coverage test
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage -g")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage -g")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-arcs")
+  # set flags for coverage test
+  message(STATUS "Code coverage reporting enabled")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage -g")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage -g")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-arcs")
 endif()
 
 if (ENABLE_TESTING)
-    # include/load the Google Test framework
-    set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
-    add_subdirectory(${EXT_PROJECTS_DIR}/gtest)
-    include_directories(${EXT_PROJECTS_DIR}/gtest/include)
+  message(STATUS "Unit testing enabled")
+  # include/load the Google Test framework
+  set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
+  add_subdirectory(${EXT_PROJECTS_DIR}/gtest)
+  include_directories(${EXT_PROJECTS_DIR}/gtest/include)
 
-    # enable the CMAKE testing framework
-    enable_testing()
+  # enable the CMAKE testing framework
+  enable_testing()
 
-    # Set paths outside of the function so the function can
-    # be called from anywhere in the source tree
-    #   set path for output of testing binaries
-    set(TEST_BINARY_OUTPUT_DIR ${PROJECT_BINARY_DIR}/test)
-    #   set path for output of test reports (XML format)
-    set(TEST_XML_OUTPUT_DIR ${PROJECT_BINARY_DIR}/Testing)
+  # Set paths outside of the function so the function can
+  # be called from anywhere in the source tree
+  #   set path for output of testing binaries
+  set(TEST_BINARY_OUTPUT_DIR ${PROJECT_BINARY_DIR}/test)
+  #   set path for output of test reports (XML format)
+  set(TEST_XML_OUTPUT_DIR ${PROJECT_BINARY_DIR}/Testing)
 
 
-    function(bliss_add_test module_name)
-        # set the name for the test target and executable
-        set(test_target_name test-${module_name})
-        # add all give files
-        add_executable(${test_target_name} ${ARGN})
-        # add the googletest dependency
-        add_dependencies(${test_target_name} googletest)
-        # set binary output path for tests
-        set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
-        # link test with gtest_main
-        target_link_libraries(${test_target_name} gtest_main)
+  function(bliss_add_test module_name)
+    # set the name for the test target and executable
+    set(test_target_name test-${module_name})
+    # add all give files
+    add_executable(${test_target_name} ${ARGN})
+    # add the googletest dependency
+    add_dependencies(${test_target_name} googletest)
+    # set binary output path for tests
+    set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
+    # link test with gtest_main
+    target_link_libraries(${test_target_name} gtest_main)
 
-        # link to the tested module (but only if that module produces a linkable
-        # library)
-        if (TARGET ${module-name})
-            target_link_libraries(${test_target_name} ${module_name})
-        endif(TARGET ${module-name})
+    # link to the tested module (but only if that module produces a linkable
+    # library)
+    if (TARGET ${module-name})
+      target_link_libraries(${test_target_name} ${module_name})
+    endif(TARGET ${module-name})
 
-        # if code coverage is to be determined: link with gcov
-        if (ENABLE_COVERAGE)
-            target_link_libraries(${test_target_name} gcov)
-        endif(ENABLE_COVERAGE)
+    # if code coverage is to be determined: link with gcov
+    if (ENABLE_COVERAGE)
+      target_link_libraries(${test_target_name} gcov)
+    endif(ENABLE_COVERAGE)
 
-        # generate google test XML results, to be parsed by Jenkins
-        # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
-        add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
-    endfunction(bliss_add_test)
+    # generate google test XML results, to be parsed by Jenkins
+    # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
+    add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
+  endfunction(bliss_add_test)
 endif (ENABLE_TESTING)
 
 
