@@ -33,21 +33,33 @@ assign read ids. (prefix scan)
 	done.
 	use global offset in file -> no need for communication therefore no need to read 2x.
 		set in functor constructor
+		done.  this means nothing needs to be kept in memory.
 	use simpler iterator to search for number of records - fast but bad estimate.
-
+		
 
 create kmers and reverse complement - abyss idea is not bad
 	buffer in transformer.
-	have increment and retrieve op
+		need to update buffer during operator++()
+		functor has increment and retrieve op
+			done.
 	reverse complement.
+			done.
 	
 	abyss idea extended:  kmer, first half xor with reverse complement of second half.  leave second half as is.
 		first part now has the symmetry.  second half allows reconstruct
 		may be usable as keys for storing quality scores.
-
-
-create quality score and reverse complement quality score
-
+	  change in distribution?
+	  	yes.  00 occurs from AA, CC, GG, TT; 01 from AC, CA, GT, TG;
+	  		10 from AG, GA, CT, TC; 11 from AT, CG, GC, TA.
+	  		if p(A) = p(T) = x, p(C) = p(G) = 0.5-x,
+	  		
+	  		then p(00) = p(11) = 4x^2 - 2x + 0.5; p(01) = p(10) = 2x - 4x^2, quadratic functions.
+	  		
+	  		could this create an imbalance for a region of the kmer space?
+	  		 
+	
+create quality score quality score
+	reverse complement has same score.
 
 
 mpi redistribution code.

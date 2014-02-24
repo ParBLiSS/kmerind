@@ -18,7 +18,8 @@
 #include "iterators/function_traits.hpp"
 
 #include <cassert>
-
+#include <cstdint>
+#include <type_traits>
 
 namespace bliss
 {
@@ -28,21 +29,24 @@ namespace iterator
 
   template<typename Iterator>
   struct fastq_sequence {
-      // assume seq_name is the start, end is the beginning of next.  each line has a EOL at the end.
-      union id_type {
-          uint64_t id;
-          struct {
-            uint16_t pos;
-            char file;
-            char seq[5];
-          } ids;
-      };
+      typedef typename std::remove_pointer<typename std::remove_reference<Iterator>::type>::type  value_type;
+
       Iterator name;
       Iterator name_end;
       Iterator seq;
       Iterator seq_end;
       Iterator qual;
       Iterator qual_end;
+
+      union {
+          uint64_t id;
+          struct {
+              uint32_t seq_id;
+              uint8_t seq_msb;   // 40 bits allow for 1 trillion entries.
+              uint8_t file_id;     // file id
+            uint16_t pos;     // position value
+          } ids;
+      };
   };
 
   /**
@@ -59,7 +63,7 @@ namespace iterator
       size_t   _global_offset;
 
       fastq_parser(Iterator const & start, size_t const & global_offset)
-        : _start(start), _global_offset()
+        : _start(start), _global_offset(global_offset)
       {}
 
       /**

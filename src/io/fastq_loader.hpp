@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "iterators/fastq_iterator.hpp"
+#include <cstdint>
 
 namespace bliss
 {
@@ -30,11 +31,9 @@ namespace bliss
       public:
         virtual ~fastq_loader();
         fastq_loader(std::string const & _filename, file_loader::range_type const & range,
-                     size_t const &total);
+                     size_t const &total, bool preload = false);
 
       protected:
-        std::vector<bliss::iterator::fastq_sequence<char*>> seqPositions;
-        uint64_t seqIdStart;
 
         file_loader::range_type align_to_sequence(std::string const & _filename,
                                                             file_loader::range_type const & input,
@@ -43,12 +42,23 @@ namespace bliss
         size_t find_sequence_start(char const* _data, file_loader::range_type const& range) throw(io_exception);
 
 
+        // for parallel scan way of assigning ids.
+        std::vector<bliss::iterator::fastq_sequence<char*>> seqPositions;
+        uint64_t seqIdStart;
+
       public:
+
+        // testing.
+        void test();
+        void test2();
         void get_sequence_positions() throw(io_exception);
         void assign_sequence_ids() throw(io_exception);
 
-        void test();
-        void test2();
+        typedef bliss::iterator::fastq_iterator<bliss::iterator::fastq_parser<char*>,
+                                                char*> iterator;
+
+        iterator begin();
+        iterator end();
 
     };
 

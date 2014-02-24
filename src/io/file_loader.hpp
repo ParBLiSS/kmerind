@@ -15,7 +15,14 @@
 #include <unistd.h>  // sysconf
 
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <fcntl.h> // for open
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <cstring>
+
+#include <type_traits>
 
 #include "iterators/range.hpp"
 
@@ -48,6 +55,7 @@ namespace bliss
         }
     };
 
+
     /**
      *
      */
@@ -60,22 +68,22 @@ namespace bliss
         /**
          * opens the file and save in file handle
          */
-        file_loader(std::string const & _filename)
-          : filename(_filename)
+        file_loader(std::string const & _filename, bool preload=false)
+          : filename(_filename), preloaded(preload)
         {
           file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);
         };
 
 
-        file_loader(std::string const & _filename, range_type const & _range)
-          : filename(_filename), range(_range)
+        file_loader(std::string const & _filename, range_type const & _range, bool preload = false)
+          : filename(_filename), range(_range), preloaded(preload)
         {
           file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);
 
           // now mmap the file
-          map();
+          load();
         };
 
         /**
@@ -83,7 +91,7 @@ namespace bliss
          */
         virtual ~file_loader()
         {
-          unmap();
+          unload();
           close(file_handle);
         };
 
@@ -111,6 +119,7 @@ namespace bliss
         char* data;
         char* aligned_data;  // memmapped data, page aligned.  strictly internal
 
+        bool preloaded;
 
         /**
          * TODO: test on remotely mounted file system.
@@ -119,7 +128,7 @@ namespace bliss
         /**
          *
          */
-        void map() throw(io_exception) {
+        void load() throw(io_exception) {
           range = range.align_to_page(page_size);
 
           aligned_data = (char*)mmap(nullptr,
@@ -135,16 +144,37 @@ namespace bliss
             throw io_exception(ss.str());
           }
 
-          data = aligned_data + (range.start - range.block_start);
-        }
+          if (preloaded) {
+            // allocate space
+            data = new char[range.end - range.start + 1];
+            //copy data over
+            memcpy(data, aligned_data + (range.start - range.block_start), sizeof(char) * (range.end - range.start));
 
-        void unmap() {
-          if (aligned_data != nullptr || aligned_data != MAP_FAILED)
+            data[range.end - range.start] = 0;
+
+            // close the input
             munmap(aligned_data, range.end - range.block_start);
+
+            aligned_data = data;
+
+          } else {
+
+            data = aligned_data + (range.start - range.block_start);
+
+          }
         }
 
-
-
+        void unload() {
+          if (preloaded) {
+            if (data != nullptr)
+              delete [] data;
+          } else {
+            if (aligned_data != nullptr || aligned_data != MAP_FAILED)
+              munmap(aligned_data, range.end - range.block_start);
+          }
+          aligned_data = nullptr;
+          data = nullptr;
+        }
 
 
 

@@ -26,8 +26,9 @@ namespace bliss
 
     fastq_loader::fastq_loader(std::string const & _filename,
                                file_loader::range_type const & _range,
-                               size_t const &total)
-      : file_loader(_filename)
+                               size_t const &total,
+                               bool preload)
+      : file_loader(_filename, preload)
     {
       filename = _filename;
 
@@ -37,12 +38,24 @@ namespace bliss
       range = align_to_sequence(_filename, _range, total);
 
       // use the superclass constructor to map, with adjusted range.
-      map();
+      load();
 
-      seqPositions.reserve((range.end - range.start) / 8);  // at minimal, have @\nA\n+\n9\n for a record
     }
 
 
+    fastq_loader::iterator fastq_loader::begin() {
+      bliss::iterator::fastq_parser<char*> parser(data, range.start);
+
+      return iterator(parser, data, data + (range.end - range.start));
+
+    }
+
+    fastq_loader::iterator fastq_loader::end() {
+      bliss::iterator::fastq_parser<char*> parser(data, range.start);
+
+      return iterator(parser, data + (range.end - range.start));
+
+    }
 
     /**
      *  for coordinated distributed quality score reads to map back to original.
@@ -271,47 +284,33 @@ namespace bliss
 
 
     void fastq_loader::get_sequence_positions() throw(io_exception) {
-      // naive
-      // int linecount = 0;
 
-//      struct eol {
-//          bool operator()(char v) {
-//            return (v == '\n');
-//          }
-//      };
-//
-//
-//      eol f;
-//      typedef bliss::iterator::filter_iterator<eol, char*>  eol_iter;
-//      eol_iter iter(f, data, data + (range.end - range.start));
-//      eol_iter end(f, data + (range.end - range.start));
-//
-//      for (; iter != end; ++iter) {
-//        printf("eol offset = %ld\n", iter.getBase() - data );
-//      }
+      seqPositions.reserve((range.end - range.start) / 8);  // at minimal, have @\nA\n+\n9\n for a record
 
+      iterator fqiter = this->begin();
+      iterator fqend = this->end();
 
       // walk through the iterator and
-      bliss::iterator::fastq_parser<char*> parser(data, range.start);
-      typedef bliss::iterator::fastq_iterator<bliss::iterator::fastq_parser<char*>,
-                                      char*> iter_type;
-      iter_type fqiter(parser, data, data + (range.end - range.start));
-      iter_type fqend(parser, data + (range.end - range.start));
-
       for (; fqiter != fqend; ++fqiter) {
         seqPositions.push_back(*fqiter);
       }
 
-//
-//      int max = seqPositions.size();
-//      for (int i = max; i > 0; --i) {
-//        bliss::iterator::fastq_sequence<char*> result = seqPositions[max - i];
-//
+
+      int max = seqPositions.size();
+      uint32_t maxSeqID = 0;
+
+      for (int i = max; i > 0; --i) {
+        bliss::iterator::fastq_sequence<char*> result = seqPositions[max - i];
+
 //        std::cout << "seq " << (max - i) << ": name=[" << std::string(result.name, result.name_end) << "], ";
-//        std::cout << "seq=[" << std::string(result.seq, result.seq_end) << "], ";
+//        std::cout << "id=[" << std::hex << result.id << std::endl;
+        //        std::cout << "seq=[" << std::string(result.seq, result.seq_end) << "], ";
 //        std::cout << "qual=[" << std::string(result.qual, result.qual_end) << "]" << std::endl;
-//
-//      }
+        //printf("seq %d id = %lx, pos %d, file %d, seq msb %d, seq %d\n", (max-i), result.id, result.ids.pos, result.ids.file_id, result.ids.seq_msb, result.ids.seq_id);
+
+        maxSeqID = (maxSeqID > result.ids.seq_id ? maxSeqID : result.ids.seq_id);
+      }
+      printf("maxId: %d\n", maxSeqID);
 
     }
 
@@ -329,14 +328,14 @@ namespace bliss
 
 #endif
 
-      printf("rank %d of %d has %ld sequences\n", rank, nprocs, local_seq_count);
+//      printf("rank %d of %d has %d sequences\n", rank, nprocs, local_seq_count);
 
 #if defined(USE_MPI)
       MPI_Exscan(&local_seq_count, &seqIdStart, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD );
 
 #endif
 
-      printf("rank %d of %d has prefix %ld\n", rank, nprocs, seqIdStart);
+//      printf("rank %d of %d has prefix %ld\n", rank, nprocs, seqIdStart);
 
 
       for (int i = 0; i < local_seq_count; ++i) {
@@ -387,6 +386,7 @@ namespace bliss
 
       free(positions);
     }
+
 
 
   } /* namespace io */

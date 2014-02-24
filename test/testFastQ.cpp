@@ -21,6 +21,7 @@
 #include <sys/stat.h>  // for stat
 #include <cassert>
 #include <iostream>
+#include <fstream>
 #include <chrono>
 #include <unistd.h>
 
