@@ -19,12 +19,8 @@
 
 #include <string>     // for std::string
 #include <sys/stat.h>  // for stat
-#include <sys/mman.h>  // for mmap
 #include <cassert>
-#include <cstdio>   // for fopen
-#include <fcntl.h>  // for open
 #include <iostream>
-#include <fstream>
 #include <chrono>
 #include <unistd.h>
 
@@ -213,13 +209,19 @@ int main(int argc, char* argv[]) {
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
     INFO("compared 1 3 " << "elapsed time: " << time_span.count() << "s.");
 
-// get eols
-    t1 = std::chrono::high_resolution_clock::now();
-    loader.test();
-    t2 = std::chrono::high_resolution_clock::now();
-    time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
-    INFO("get reads " << "elapsed time: " << time_span.count() << "s.");
-
+//// get eols
+//    t1 = std::chrono::high_resolution_clock::now();
+//    loader.test();
+//    t2 = std::chrono::high_resolution_clock::now();
+//    time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
+//    INFO("test " << "elapsed time: " << time_span.count() << "s.");
+//
+//    // get eols
+//        t1 = std::chrono::high_resolution_clock::now();
+//        loader.test2();
+//        t2 = std::chrono::high_resolution_clock::now();
+//        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
+//        INFO("test2 " << "elapsed time: " << time_span.count() << "s.");
 
 
 //    // test parsing the sequences.
@@ -228,6 +230,15 @@ int main(int argc, char* argv[]) {
     t2 = std::chrono::high_resolution_clock::now();
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
     INFO("get reads " << "elapsed time: " << time_span.count() << "s.");
+
+
+    //    // test parsing the sequences.
+        t1 = std::chrono::high_resolution_clock::now();
+        loader.assign_sequence_ids();
+        t2 = std::chrono::high_resolution_clock::now();
+        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
+        INFO("assign Ids " << "elapsed time: " << time_span.count() << "s.");
+
 
 
     ss << "result.3." << rank << ".txt";

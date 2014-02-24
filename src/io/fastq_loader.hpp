@@ -45,7 +45,10 @@ namespace bliss
 
       public:
         void get_sequence_positions() throw(io_exception);
+        void assign_sequence_ids() throw(io_exception);
+
         void test();
+        void test2();
 
     };
 

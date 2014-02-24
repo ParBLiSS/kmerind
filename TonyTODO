@@ -1,16 +1,22 @@
 buffered iterator?
 
 read struct: for fastQ, for fastA.
+	fastQ - okay.
+	fastA - ??
 
 count number of reads - every 4 lines
 	indexing iterator (return positions in underlying iterator)
 	and get the counts
 
+	or create data that indexes and get the counts:  okay.
+
 iterator with element type of iterator (for fasta?)
+	essentially done via read struct.
 
 iterator with element type of reads.
 	internal to reads are 2 ptrs/iterators
 	
+	done.
 
 (
 iterator of iterator? with delimiter
@@ -18,16 +24,47 @@ iterator of iterator? with delimiter
 		== search in outer iterator during the ++ phase.
 	outer iterator uses a different delimiter
 	internal pointers of both are incremented together
+	
+	essentially done.
 )
 	
 
 assign read ids. (prefix scan)
+	done.
+	use global offset in file -> no need for communication therefore no need to read 2x.
+		set in functor constructor
+	use simpler iterator to search for number of records - fast but bad estimate.
+
 
 create kmers and reverse complement - abyss idea is not bad
+	buffer in transformer.
+	have increment and retrieve op
+	reverse complement.
+	
+	abyss idea extended:  kmer, first half xor with reverse complement of second half.  leave second half as is.
+		first part now has the symmetry.  second half allows reconstruct
+		may be usable as keys for storing quality scores.
+
 
 create quality score and reverse complement quality score
 
+
+
 mpi redistribution code.
 
+
+
+query...
+
+
+random sequence generator
+
+// support queries for read id, read positions, and count
+
+
 spaced seeds?
+
+OpenMP version
+test remote file open.
+FASTA
 

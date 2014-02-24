@@ -29,7 +29,14 @@ namespace iterator
   template<typename Iterator>
   struct fastq_sequence {
       // assume seq_name is the start, end is the beginning of next.  each line has a EOL at the end.
-      size_t id;
+      union id_type {
+          uint64_t id;
+          struct {
+            uint16_t pos;
+            char file;
+            char seq[5];
+          } ids;
+      };
       Iterator name;
       Iterator name_end;
       Iterator seq;
@@ -48,21 +55,29 @@ namespace iterator
       typedef fastq_sequence<Iterator> seq_type;
 
       seq_type output;
+      Iterator _start;
+      size_t   _global_offset;
+
+      fastq_parser(Iterator const & start, size_t const & global_offset)
+        : _start(start), _global_offset()
+      {}
 
       /**
        * parses with an iterator, so as to have complete control over the increment.
        */
 
-      Iterator& operator()(Iterator &iter, Iterator const& end) {
+      size_t operator()(Iterator &iter, Iterator const& end) {
         // first initialize  (on windowed version, will need to have a separate way of initializing., perhaps with an overloaded operator.
         output = seq_type();
+
+        size_t offset = _global_offset + (iter - _start);
 
         size_t dist = 0;
 
         if (iter == end)  // at end, terminate.
         {
           printf("not walked. %ld\n", dist);
-          return iter;
+          return dist;
         }
         // do some computation.
 
@@ -75,7 +90,7 @@ namespace iterator
         {
           printf("walked (trimmed) %ld\n", dist);
 
-          return iter;
+          return dist;
         }
 
         // store the "pointers"
@@ -131,11 +146,11 @@ namespace iterator
 
 
         if ((iter == end) && (line_num < 4))
-          return iter;
+          return dist;
 
 
         // now populate the output
-        output.id = 0;
+        output.id = offset;
         output.name = starts[0];
         output.name_end = ends[0];
         output.seq = starts[1];
@@ -143,7 +158,7 @@ namespace iterator
         output.qual = starts[3];
         output.qual_end = ends[3];
 
-        return iter;
+        return dist;
       }
 
       seq_type& operator()()

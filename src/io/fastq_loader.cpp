@@ -9,8 +9,13 @@
 #include <sstream>
 #include <cerrno>
 
+
+#include "mpi.h"
+
 #include "io/fastq_loader.hpp"
 #include "iterators/filter_iterator.hpp"
+#include "config.hpp"
+
 
 namespace bliss
 {
@@ -287,7 +292,7 @@ namespace bliss
 
 
       // walk through the iterator and
-      bliss::iterator::fastq_parser<char*> parser;
+      bliss::iterator::fastq_parser<char*> parser(data, range.start);
       typedef bliss::iterator::fastq_iterator<bliss::iterator::fastq_parser<char*>,
                                       char*> iter_type;
       iter_type fqiter(parser, data, data + (range.end - range.start));
@@ -310,6 +315,35 @@ namespace bliss
 
     }
 
+    void fastq_loader::assign_sequence_ids() throw(io_exception) {
+      // mpi based.
+
+      int local_seq_count = seqPositions.size();
+      seqIdStart = 0;
+      int rank = 0, nprocs = 1;
+
+#if defined(USE_MPI)
+
+      MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+#endif
+
+      printf("rank %d of %d has %ld sequences\n", rank, nprocs, local_seq_count);
+
+#if defined(USE_MPI)
+      MPI_Exscan(&local_seq_count, &seqIdStart, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD );
+
+#endif
+
+      printf("rank %d of %d has prefix %ld\n", rank, nprocs, seqIdStart);
+
+
+      for (int i = 0; i < local_seq_count; ++i) {
+        seqPositions[i].id = i + seqIdStart;
+      }
+
+    }
 
     void fastq_loader::test() {
       char * curr = data;
@@ -321,11 +355,39 @@ namespace bliss
       for (; curr < data + (range.end - range.start); ++curr, ++i)
       {
         if (*curr == '@')
-          positions[i] = (curr);
+          positions[i] = curr;
+      }
+
+      bool info = true;
+      for (int j = 0; j < i; ++j) {
+        info |= (positions[j] != 0);
       }
 
       delete [] positions;
     }
+
+    void fastq_loader::test2() {
+      char * curr = data;
+
+      char** positions = (char**)malloc((range.end - range.start) / 8 * sizeof(char*));
+      //std::vector<char*> positions;
+//      positions.reserve((range.end - range.start) / 8);
+      int i = 0;
+      for (; curr < data + (range.end - range.start); ++curr, ++i)
+      {
+        if (*curr == '@')
+          positions[i] = (curr);
+      }
+
+
+      bool info = true;
+      for (int j = 0; j < i; ++j) {
+        info |= (positions[j] != 0);
+      }
+
+      free(positions);
+    }
+
 
   } /* namespace io */
 } /* namespace bliss */
