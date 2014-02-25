@@ -21,7 +21,7 @@
 // DNA5
 // RNA5
 // AA (IUPAC)
-// DNA_IUPAC
+// DNA_IUPAC (15 characters)
 // CUSTOM (no definition right now)
 
 // need mapping from packed to unpacked.
