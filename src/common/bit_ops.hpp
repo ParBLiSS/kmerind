@@ -12,6 +12,8 @@
 #ifndef BLISS_COMMON_BIT_OPS_H
 #define BLISS_COMMON_BIT_OPS_H
 
+#include <limits>
+
 #include <common/base_types.hpp>
 
 constexpr WordType getWordBitMask(const BitSizeType nBits)
@@ -37,7 +39,8 @@ constexpr WordType getCharBitMask(const BitSizeType nBits, const BitSizeType off
 template <typename T>
 constexpr T getBitMask(const BitSizeType nBits)
 {
-  return static_cast<T>((static_cast<T>(0x1) << nBits) - static_cast<T>(1));
+  return static_cast<T>(std::numeric_limits<T>::max() >> (std::numeric_limits<T>::digits - nBits));
+  //return static_cast<T>((static_cast<T>(0x1) << nBits) - static_cast<T>(1));
 }
 
 template <typename T>
