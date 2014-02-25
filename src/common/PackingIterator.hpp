@@ -16,10 +16,13 @@
 
 // C++ STL includes:
 #include <iterator>
+#include <type_traits>
 
 // own includes
 #include <common/base_types.hpp>
 #include <common/bit_ops.hpp>
+
+#include <common/padding.hpp>
 
 
 namespace bliss
@@ -140,6 +143,7 @@ class UnpackingIterator
 public:
   UnpackingIterator(BaseIterator baseBegin)
     : baseCur(baseBegin), curCharOffset(0) {}
+
   UnpackingIterator(BaseIterator baseBegin, unsigned int offset)
   {
     unsigned int nWords = offset / charsPerWord;
@@ -208,6 +212,93 @@ private:
   BitSizeType curCharOffset = 0;
 };
 
+
+// TODO add template specialization for padding (TRUE or FALSE)
+template <typename BaseIterator, BitSizeType bits_per_char, typename Kmer>
+class KmerGenerationIterator
+  : public std::iterator<std::forward_iterator_tag,//typename std::iterator_traits<BaseIterator>::iterator_category,
+                  Kmer,
+                  typename std::iterator_traits<BaseIterator>::difference_type>
+{
+public:
+  void initFirstKmer()
+  {
+    // create Kmer with either bigger or smaller storage word size
+    // TODO
+  }
+
+  KmerGenerationIterator(BaseIterator baseBegin)
+    : baseCur(baseBegin), curCharOffset(0) {}
+
+  KmerGenerationIterator(BaseIterator baseBegin, unsigned int offset)
+  {
+    unsigned int nWords = offset / charsPerWord;
+    curCharOffset = offset % charsPerWord;
+    baseCur = baseBegin;
+    std::advance(baseCur, nWords);
+  }
+
+  typedef Kmer value_type;
+  typedef BaseIterator base_iterator;
+  typedef typename std::iterator_traits<BaseIterator>::value_type base_value_type;
+  typedef KmerGenerationIterator<BaseIterator, bits_per_char, Kmer> this_type;
+
+
+  value_type operator*()
+  {
+    base_value_type x = getBitMask<base_value_type>(bitsPerChar) & (*baseCur >> (curCharOffset*bitsPerChar));
+    return static_cast<value_type>(x);
+  }
+
+  this_type& operator++() // prefix ++
+  {
+    // increment
+    ++curCharOffset;
+    if (curCharOffset == charsPerWord)
+    {
+      ++baseCur;
+      curCharOffset = 0;
+    }
+    return (*this);
+  }
+
+  // TODO: implement operator--(), operator-(diff), operator+(diff)
+
+  bool operator==(const this_type& rhs)
+  {
+    return (this->baseCur == rhs.baseCur) && (this->curCharOffset == rhs.curCharOffset);
+  }
+
+  bool operator!=(const this_type& rhs)
+  {
+    return !this->operator==(rhs);
+  }
+
+  this_type& operator++(int) // postfix ++
+  {
+    // create a copy prior to increasing
+    this_type tmp(*this);
+    this->operator++();
+    return tmp;
+  }
+
+private:
+  // TODO maybe unify these into one shared super class
+  // bits per character in the packed representation
+  static constexpr BitSizeType bitsPerChar = bits_per_char;
+  // chars that fit in each word (with padding)
+  static constexpr BitSizeType charsPerWord = (sizeof(base_value_type) * 8) / bitsPerChar;
+   // how much padding is added to each word
+  static constexpr BitSizeType paddingPerWord = sizeof(base_value_type) * 8 - bitsPerChar*charsPerWord;
+
+  // the base iterator
+  BaseIterator baseCur;
+
+  // the current offset in chars within one storage word
+  BitSizeType curCharOffset = 0;
+
+  Kmer kmer_buffer;
+};
 } // namespace bliss
 
 #endif // BLISS_COMMON_PACKINGITERATOR_H
