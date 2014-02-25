@@ -128,12 +128,30 @@ TEST_F(PackingTest, TestPackingIterator) {
     // pre allocate to total size
     std::vector<char> unpacked_dna(dna.size());
     std::copy(unpackIt, unpackEnd, unpacked_dna.begin());
-
-
     // compare the vector and the given string
     for (unsigned int i = 0; i < dna.size(); ++i)
     {
       EXPECT_EQ(dna[i], unpacked_dna[i]) << "The unpacked char was not the same as the original char.";
     }
+  }
+}
+
+TEST_F(PackingTest, TestKmerGeneration1) {
+  for (std::string dna : dna_seqs)
+  {
+    // first step: translate (in place)
+    bliss::AlphabetTraits<DNA>::translateFromAscii(dna.begin(), dna.end(), dna.begin());
+    // check that every letter's value is smaller than the total alphabet size
+    for (char c : dna)
+    {
+      EXPECT_LT(static_cast<unsigned int>(c), bliss::AlphabetTraits<DNA>::getSize()) << "The value of the translated chars must be smaller than the size of the alphabet";
+    }
+
+    // define a packing iterator to wrap around the string's iterators
+    typedef bliss::PackingIterator<std::string::iterator, bliss::AlphabetTraits<DNA>::getBitsPerChar()> packit_t;
+    packit_t packIt(dna.begin(), dna.end());
+    packit_t packItEnd(dna.end());
+
+    // TODO generate Kmers
   }
 }
