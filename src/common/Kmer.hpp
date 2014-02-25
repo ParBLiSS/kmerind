@@ -180,10 +180,10 @@ public:
     {
       data[nWords - 1 - lastCharIsSplit] |= static_cast<word_type>(curWord << -shift_by);
     }
-    // NOTE: this branch is removed by the compiler
+    // NOTE: this branch is removed by the compiler (result known at compile time)
     if (lastCharIsSplit)
     {
-      data[nWords - 1] = static_cast<word_type>(curWord >> (offset + (bitsPerChar - leftSplitSize)));
+      data[nWords - 1] = static_cast<word_type>(curWord >> (offset + leftSplitSize));
     }
     // set unused bits to 0
     do_sanitize();
