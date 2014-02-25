@@ -24,6 +24,16 @@
 namespace bliss
 {
 
+
+template <typename T, unsigned int BITS_PER_CHAR>
+struct PaddingTraits
+{
+  static constexpr unsigned int bits_per_word = sizeof(T) * 8;
+  static constexpr unsigned int bits_per_char = BITS_PER_CHAR;
+  static constexpr unsigned int padding_bits = bits_per_word - roundDownToMultiple<unsigned int>(bits_per_word, bits_per_char);
+  static constexpr unsigned int data_bits = bits_per_word - padding_bits;
+};
+
 /**
  * @brief Takes a sequence of integers (any size), removes padding in each word
  *        and concatenates the result into an output sequence of the same type.
