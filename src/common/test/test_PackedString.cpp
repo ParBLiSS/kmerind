@@ -6,6 +6,7 @@
 #include <common/alphabets.hpp>
 #include <common/AlphabetTraits.hpp>
 #include <common/PackingIterator.hpp>
+#include <common/Kmer.hpp>
 
 class PackingTest : public ::testing::Test
 {
@@ -136,6 +137,17 @@ TEST_F(PackingTest, TestPackingIterator) {
   }
 }
 
+// TODO: put this somewhere else
+template<typename T>
+std::string getTypeName()
+{
+  // NOTE: this is compiler dependent (works with gcc and clang though)
+  std::string function_type(__PRETTY_FUNCTION__);
+  std::size_t eq = function_type.find('=');
+  std::size_t sem = function_type.find(';', eq);
+  return function_type.substr(eq + 2, (sem - eq - 2));
+}
+
 TEST_F(PackingTest, TestKmerGeneration1) {
   for (std::string dna : dna_seqs)
   {
@@ -153,5 +165,20 @@ TEST_F(PackingTest, TestKmerGeneration1) {
     packit_t packItEnd(dna.end());
 
     // TODO generate Kmers
+    typedef bliss::Kmer<21, 2, uint8_t> Kmer;
+    typedef bliss::KmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
+    if (dna.size() >= 21)
+    {
+      kmer_gen_it_t kmerGenIt(packIt);
+      kmer_gen_it_t kmerGenEnd(packIt, dna.length());
+
+
+      std::vector<Kmer> kmers(kmerGenIt, kmerGenEnd);
+
+      EXPECT_EQ(dna.size() - 21 + 1, kmers.size()) << "the number of generated kmers is incorrect";
+    }
+
+
+
   }
 }
