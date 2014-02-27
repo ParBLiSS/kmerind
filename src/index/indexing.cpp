@@ -59,7 +59,7 @@ constexpr uint8_t N_PADDING_BITS = WORD_BITS % N_BITS;
 constexpr WordType PADDING_MASK = std::numeric_limits<WordType>::max() >> N_PADDING_BITS;
 constexpr KeyType KEY_MASK = std::numeric_limits<KeyType>::max() >> ((K_BITS == WORD_BITS) ? 0 : (N_K * N_BITS));
 constexpr uint8_t N_C = 4;            // core count
-constexpr ReadCountType N_R = 5000000;
+constexpr ReadCountType N_R = 125000;
 
 constexpr double L_MEAN = 100.0f;
 constexpr double L_STDEV = 7.0f;

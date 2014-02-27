@@ -210,20 +210,6 @@ int main(int argc, char* argv[]) {
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
     INFO("compared 1 3 " << "elapsed time: " << time_span.count() << "s.");
 
-//// get eols
-//    t1 = std::chrono::high_resolution_clock::now();
-//    loader.test();
-//    t2 = std::chrono::high_resolution_clock::now();
-//    time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
-//    INFO("test " << "elapsed time: " << time_span.count() << "s.");
-//
-//    // get eols
-//        t1 = std::chrono::high_resolution_clock::now();
-//        loader.test2();
-//        t2 = std::chrono::high_resolution_clock::now();
-//        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1) + time_span3;
-//        INFO("test2 " << "elapsed time: " << time_span.count() << "s.");
-
 
 //    // test parsing the sequences.
     t1 = std::chrono::high_resolution_clock::now();

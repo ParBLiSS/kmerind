@@ -290,13 +290,62 @@ int main(int argc, char* argv[]) {
 
 
     t1 = std::chrono::high_resolution_clock::now();
-
     bliss::io::fastq_loader::iterator fastq_start = loader.begin();
     bliss::io::fastq_loader::iterator fastq_end = loader.end();
+
+    uint64_t id = 0;
+    for (; fastq_start != fastq_end; ++fastq_start) {
+        id ^= (*fastq_start).id ;
+
+    }
+    t2 = std::chrono::high_resolution_clock::now();
+    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    INFO("iterate over file region " << rank << " elapsed time: " << time_span3.count() << "s.");
+
+    printf("make sure no no-op:  %lx\n", id);
+
+
+    t1 = std::chrono::high_resolution_clock::now();
+    fastq_start = loader.begin();
+    fastq_end = loader.end();
 
     typedef generate_kmers<DNA, char*, uint64_t, 21>  op_type;
     op_type kmer_op;
     typedef bliss::iterator::buffered_transform_iterator<op_type, char*> read_iter_type;
+
+//    uint64_t j = 0;
+    uint64_t kmer = 0;
+    for (; fastq_start != fastq_end; ++fastq_start) {
+      read_iter_type start((*fastq_start).seq, kmer_op);
+      read_iter_type end((*fastq_start).seq_end, kmer_op);
+
+      int i = -1;
+      // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
+      for (; (start != end) ; ++start) {
+        ++i;
+
+        if (i < 20) continue;
+//        kmers.push_back(*start);
+        kmer ^= *start;
+        ////      std::cout << i << " qual: " << qual << " kmer " << std::bitset<64>(kmer) << std::endl;
+      }
+
+//      ++j;
+//      if ((j & 0xFFFF) == 0)
+//        printf("%d ", rank);
+//
+    }
+    t2 = std::chrono::high_resolution_clock::now();
+    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    INFO("kmer generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
+
+    printf("make sure no no-op:  %lx\n", kmer);
+
+
+
+    t1 = std::chrono::high_resolution_clock::now();
+    fastq_start = loader.begin();
+    fastq_end = loader.end();
 
     struct SANGER {};
     typedef generate_qual< SANGER, char*, double, 21>  qual_op_type;
@@ -304,10 +353,9 @@ int main(int argc, char* argv[]) {
     typedef bliss::iterator::buffered_transform_iterator<qual_op_type, char*> qual_iter_type;
 
 
-    // transform and generate kmers
-//    std::vector<uint64_t> kmers;
-//    std::vector<double> quals;
-    uint64_t j = 0;
+    kmer = 0;
+    double q = 0;
+    uint64_t qual = 0;
     for (; fastq_start != fastq_end; ++fastq_start) {
       read_iter_type start((*fastq_start).seq, kmer_op);
       read_iter_type end((*fastq_start).seq_end, kmer_op);
@@ -317,32 +365,26 @@ int main(int argc, char* argv[]) {
 
       int i = -1;
       // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-      uint64_t kmer;
-      double qual;
-      std::stringstream ss;
       for (; (start != end) && (qstart != qend); ++start, ++qstart) {
         ++i;
 
-        ss.str(std::string());
-
         if (i < 20) continue;
 //        kmers.push_back(*start);
-        kmer = *start;
-        qual = *qstart;
+        kmer ^= *start;
+        q = *qstart;
+        qual ^= *(reinterpret_cast<uint64_t*>(&q));
 
-        ss << kmer << ": " << qual;
         ////      std::cout << i << " qual: " << qual << " kmer " << std::bitset<64>(kmer) << std::endl;
 
       }
 
-      ++j;
-      if ((j & 0xFFFF) == 0)
-        printf("%d ", rank);
 
     }
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
     INFO("kmer + qual generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
+
+    printf("make sure no no-op:  %lx, %lx\n", kmer, qual);
 
   }
 
