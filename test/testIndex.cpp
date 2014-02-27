@@ -31,6 +31,7 @@
 #include <vector>
 #include <bitset>
 #include <cmath>
+#include <sstream>
 
 #include "common/alphabets.hpp"
 #include "common/AlphabetTraits.hpp"
@@ -160,7 +161,7 @@ struct generate_qual {
 
       // update the zero count
       if (newval == 0.0) {
-        printf("ZERO!\n");
+//        printf("ZERO!\n");
         ++zeroCount;
       }
       if (oldval == 0.0) {
@@ -177,7 +178,7 @@ struct generate_qual {
         // else there is no zero,
 
         if (oldZeroCount == 1) {
-          printf("HAD ZEROS!\n");
+          //printf("HAD ZEROS!\n");
           // removed a zero.  so recalculate.
           internal = 0.0;
           for (int i = 0; i < K; ++i) {
@@ -215,8 +216,14 @@ struct generate_qual {
 int main(int argc, char* argv[]) {
   LOG_INIT();
 
-
   std::string filename("/home/tpan/src/bliss/test/test.fastq");
+//  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
+
+  if (argc > 1) {
+    filename.assign(argv[1]);
+  }
+
+
 
   int rank = 0, nprocs = 1;
 #ifdef USE_MPI
@@ -237,6 +244,8 @@ int main(int argc, char* argv[]) {
     struct stat filestat;
     stat(filename.c_str(), &filestat);
     file_size = static_cast<uint64_t>(filestat.st_size);
+    fprintf(stderr, "block size is %ld\n", filestat.st_blksize);
+    fprintf(stderr, "sysconf block size is %ld\n", sysconf(_SC_PAGE_SIZE));
   }
 
 #ifdef USE_MPI
@@ -244,10 +253,16 @@ int main(int argc, char* argv[]) {
   MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
 #endif
 
-  if (rank == nprocs - 1)
+  if (rank == nprocs - 1) {
     fprintf(stderr, "file size is %ld\n", file_size);
-
+  }
   /////////////// now try to open the file
+
+  // real data:  mmap is better for large files and limited memory.
+  //             preloading is better for smaller files and/or large amount of memory.
+  // stream processing means data does not need to be buffered in memory - more efficient.
+
+  // file access:  better to work with a few pages at a time, or to work with large block?
 
 
   // first generate an approximate partition.
@@ -269,7 +284,7 @@ int main(int argc, char* argv[]) {
     bliss::io::fastq_loader loader(filename, r, file_size);
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-    INFO("MMap " << "elapsed time: " << time_span3.count() << "s.");
+    INFO("MMap rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
     std::cout << rank << " record adjusted " << loader.getRange() << std::endl;
 
@@ -290,92 +305,99 @@ int main(int argc, char* argv[]) {
 
 
     // transform and generate kmers
-    std::vector<uint64_t> kmers;
-    std::vector<double> quals;
+//    std::vector<uint64_t> kmers;
+//    std::vector<double> quals;
+    uint64_t j = 0;
     for (; fastq_start != fastq_end; ++fastq_start) {
       read_iter_type start((*fastq_start).seq, kmer_op);
       read_iter_type end((*fastq_start).seq_end, kmer_op);
-
-
-      int i = -1;
-      // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-      for (; start != end; ++start) {
-        ++i;
-        if (i < 20) continue;
-        kmers.push_back(*start);
-      }
 
       qual_iter_type qstart((*fastq_start).qual, qual_op);
       qual_iter_type qend((*fastq_start).qual_end, qual_op);
 
-
-      i = -1;
-      // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-      for (; qstart != qend; ++qstart) {
-        ++i;
-        if (i < 20) continue;
-        quals.push_back(*qstart);
-      }
-
-    }
-    t2 = std::chrono::high_resolution_clock::now();
-    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-    INFO("kmer generation " << "elapsed time: " << time_span3.count() << "s.");
-
-    for (size_t i = 0; i < kmers.size(); ++i) {
-      uint64_t kmer = kmers[i];
-      double qual = quals[i];
-
-
-      std::cout << i << " qual: " << qual << " kmer " << std::bitset<64>(kmer) << std::endl;
-
-    }
-
-
-
-  }
-
-
-  {
-    t1 = std::chrono::high_resolution_clock::now();
-    // now open the file
-    bliss::io::fastq_loader loader(filename, r, file_size, true);
-    t2 = std::chrono::high_resolution_clock::now();
-    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-    INFO("MMap preload " << "elapsed time: " << time_span3.count() << "s.");
-
-    std::cout << rank << " record adjusted preload " << loader.getRange() << std::endl;
-
-
-    t1 = std::chrono::high_resolution_clock::now();
-
-    bliss::io::fastq_loader::iterator fastq_start = loader.begin();
-    bliss::io::fastq_loader::iterator fastq_end = loader.end();
-
-    typedef generate_kmers<DNA, char*, uint64_t, 21>  op_type;
-    op_type kmer_op;
-    typedef bliss::iterator::buffered_transform_iterator<op_type, char*> read_iter_type;
-
-    // transform and generate kmers
-    std::vector<uint64_t> kmers;
-    for (; fastq_start != fastq_end; ++fastq_start) {
-      read_iter_type start((*fastq_start).seq, kmer_op);
-      read_iter_type end((*fastq_start).seq_end, kmer_op);
-
       int i = -1;
-      for (; start != end; ++start) {
+      // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
+      uint64_t kmer;
+      double qual;
+      std::stringstream ss;
+      for (; (start != end) && (qstart != qend); ++start, ++qstart) {
         ++i;
+
+        ss.str(std::string());
+
         if (i < 20) continue;
-        kmers.push_back(*start);
+//        kmers.push_back(*start);
+        kmer = *start;
+        qual = *qstart;
+
+        ss << kmer << ": " << qual;
+        ////      std::cout << i << " qual: " << qual << " kmer " << std::bitset<64>(kmer) << std::endl;
+
       }
+
+      ++j;
+      if ((j & 0xFFFF) == 0)
+        printf("%d ", rank);
 
     }
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-    INFO("kmer generation preload " << "elapsed time: " << time_span3.count() << "s.");
-
+    INFO("kmer + qual generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
   }
+
+
+// MEMORY INTENSIVE BELOW
+
+//  {
+//    t1 = std::chrono::high_resolution_clock::now();
+//    // now open the file
+//    bliss::io::fastq_loader loader(filename, r, file_size, true);
+//    t2 = std::chrono::high_resolution_clock::now();
+//    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+//    INFO("MMap preload " << "elapsed time: " << time_span3.count() << "s.");
+//
+//    std::cout << rank << " record adjusted preload " << loader.getRange() << std::endl;
+//
+//
+//    t1 = std::chrono::high_resolution_clock::now();
+//
+//    bliss::io::fastq_loader::iterator fastq_start = loader.begin();
+//    bliss::io::fastq_loader::iterator fastq_end = loader.end();
+//
+//    typedef generate_kmers<DNA, char*, uint64_t, 21>  op_type;
+//    op_type kmer_op;
+//    typedef bliss::iterator::buffered_transform_iterator<op_type, char*> read_iter_type;
+//
+//    // transform and generate kmers
+////    std::vector<uint64_t> kmers;
+//    uint64_t kmer;
+//    for (; fastq_start != fastq_end; ++fastq_start) {
+//      read_iter_type start((*fastq_start).seq, kmer_op);
+//      read_iter_type end((*fastq_start).seq_end, kmer_op);
+//
+//      int i = -1;
+//      std::stringstream ss;
+//      for (; start != end; ++start) {
+//        ++i;
+//        ss.str(std::string());
+//        if (i < 20) continue;
+//  //      kmers.push_back(*start);
+//
+//        kmer = *start;
+//
+//        ss << kmer;
+//      }
+//
+//    }
+//    t2 = std::chrono::high_resolution_clock::now();
+//    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+//    INFO("kmer generation preload " << "elapsed time: " << time_span3.count() << "s.");
+//
+//
+//  }
+
+
 #ifdef USE_MPI
   MPI_Finalize();
 
