@@ -46,7 +46,8 @@ private:
   /// The number of stored words inside the Kmer
   static constexpr unsigned int nWords = bitstream::nWords;
 
-  /* last character offsets (and whether or not it is split accord storage
+  /*
+   * last character offsets (and whether or not it is split accord storage
    * words)
    */
   /// Offset to the very last character in the k-mer
