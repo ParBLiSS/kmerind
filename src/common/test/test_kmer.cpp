@@ -16,22 +16,15 @@ void test_kmer_with_word_type(input_word_type* kmer_data, uint64_t* kmer_ex, uns
 
   input_word_type* kmer_pointer = kmer_data;
   // fill first kmer
-  kmer.fillFromPaddedStream(kmer_pointer);
+  unsigned int offset = kmer.fillFromPaddedStream(kmer_pointer);
   kmer_type kmer_ex_0(reinterpret_cast<kmer_word_type*>(kmer_ex));
   EXPECT_EQ(kmer, kmer_ex_0) << "Kmer from stream should be equal to kmer from non-stream";
-
-  // get offset
-  const unsigned int kmer_bits = kmer_size * bits_per_char;
-  const unsigned int data_bits = bliss::PaddingTraits<input_word_type, bits_per_char>::data_bits;
-  unsigned int offset = kmer_bits % data_bits;
-  kmer_pointer += kmer_bits / data_bits;
-
 
 
   // generate more kmers
   for (unsigned int i = step; i < nkmers; i += step)
   {
-    kmer.nextKmerFromPaddedStream(kmer_pointer, offset);
+    kmer.nextFromPaddedStream(kmer_pointer, offset);
     kmer_type kmer_ex_i(reinterpret_cast<kmer_word_type*>(kmer_ex+i));
     EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(input_word_type) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bits_per_char << " i = " << i;
   }
@@ -89,6 +82,10 @@ void test_kmers_5(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nk
   test_kmers_with_input_type<input_word_type, 3, 5>(kmer_data, kmer_ex, nkmers);
   test_kmers_with_input_type<input_word_type, 1, 5>(kmer_data, kmer_ex, nkmers);
 }
+
+/**
+ * Test k-mer generation with 2 bits for each character
+ */
 TEST(KmerGeneration, TestKmerGenerationUnpadded)
 {
   // test sequence: 0xabba56781234deadbeef01c0ffee

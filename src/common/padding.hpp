@@ -17,6 +17,7 @@
 
 // C++ STL includes:
 #include <iterator>
+#include <limits>
 
 // own includes
 #include <common/bit_ops.hpp>
@@ -28,11 +29,45 @@ namespace bliss
 template <typename T, unsigned int BITS_PER_CHAR>
 struct PaddingTraits
 {
-  static constexpr unsigned int bits_per_word = sizeof(T) * 8;
+  static constexpr unsigned int bits_per_word = std::numeric_limits<T>::digits;
   static constexpr unsigned int bits_per_char = BITS_PER_CHAR;
   static constexpr unsigned int padding_bits = bits_per_word - roundDownToMultiple<unsigned int>(bits_per_word, bits_per_char);
   static constexpr unsigned int data_bits = bits_per_word - padding_bits;
+  static constexpr unsigned int chars_per_word =  bits_per_word / bits_per_char;
 };
+
+/**
+ * For stream of bits that is only padded at the very end of the stream
+ * in case the number of total bits is not perfectly divisable by the
+ * bits per word (of type T).
+ */
+template <typename T, unsigned int NUM_TOTAL_BITS>
+struct UnpaddedStreamTraits
+{
+public:
+  /// The number of total bits in the stream
+  static constexpr unsigned int nBits = NUM_TOTAL_BITS;
+  /// The number of bytes needed to hold `nBits` bits
+  static constexpr unsigned int nBytes = intCeil<unsigned int>(nBits, 8);
+  /// The number of bits for each word of type `T`
+  static constexpr unsigned int bitsPerWord = std::numeric_limits<T>::digits;
+  /// The number of bytes in each word of type `T`
+  static constexpr unsigned int bytesPerWord = sizeof(T);
+  /// The number of words of type `T` needed to hold `nBits` bits
+  static constexpr unsigned int nWords = intCeil<unsigned int>(nBytes, bytesPerWord);
+  /// The number of padding bits at the end of the stream
+  static constexpr unsigned int padBits = nWords*bitsPerWord - nBits;
+  /// The number of data bits in the last word of the stream
+  static constexpr unsigned int invPadBits = bitsPerWord - padBits;
+  /// The number of bytes in the padding. This is the number of bytes that
+  /// contain no data at all.
+  static constexpr unsigned int padBytes = nWords*bytesPerWord - nBytes;
+};
+
+/*
+template <typename T, unsigned int NUM_TOTAL_BITS>
+constexpr unsigned int UnpaddedStreamTraits<T, NUM_TOTAL_BITS>::nBits;
+*/
 
 /**
  * @brief Takes a sequence of integers (any size), removes padding in each word
@@ -191,7 +226,7 @@ void removePadding(InputIterator begin, T* out, const unsigned int nBits, const 
     to += skip;
 
     // iterate through all remaining words until all bits are read
-    while (remBits > 0)
+    while (true)
     {
       // get next word
       base_type cur_base = *begin;
@@ -205,9 +240,17 @@ void removePadding(InputIterator begin, T* out, const unsigned int nBits, const 
       //       over until nextNBits is met, which is the bits in the bigger word
       //       minus padding)
       cur_offset = removePaddingSameType(from, to, nextNBits, 0, cur_offset);
-      remBits -= nextNBits;
-      ++begin;
+      if (remBits == nextNBits)
+      {
+        break;
+      }
+      else
+      {
+        remBits -= nextNBits;
+        ++begin;
+      }
     }
+    //return remBits;
   }
 }
 
