@@ -17,6 +17,8 @@
 // C++ STL includes:
 #include <iterator>
 #include <type_traits>
+#include <string>
+#include <sstream>
 
 // own includes
 #include <common/base_types.hpp>
@@ -186,8 +188,17 @@ public:
   // TODO: support different alphabets
   std::string toString()
   {
+    // TODO:
     // 1.) unpacking
     // 2.) back-translating
+    std::stringstream ss;
+    ss << "[";
+    for (unsigned int i = 0; i < nWords; ++i)
+    {
+      ss << "0x" << std::hex << data[i] << " ";
+    }
+    ss << "]";
+    return ss.str();
   }
 
 protected:
