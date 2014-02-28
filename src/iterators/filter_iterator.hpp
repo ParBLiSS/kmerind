@@ -179,10 +179,10 @@ namespace iterator
                                >::type&
        operator--() {
           if (_curr == _start)  // at beginning.  don't move it.
-          {
             before_start = true;
+
+          if (before_start)
             return *this;
-          }
 
           --_curr;            // else move back 1, and check
           while (_curr != _start && !_f(*_curr))   // need to check to make sure we are not pass the end of the base iterator.
