@@ -2,7 +2,7 @@
  * @file    Kmer.hpp
  * @ingroup common
  * @author  Patrick Flick
- * @brief   Implements the Kmer class.
+ * @brief   Implements the Kmer data type.
  *
  * Copyright (c) TODO
  *
@@ -29,7 +29,24 @@
 namespace bliss
 {
 
-
+/**
+ * @brief   Implements a general templated k-mer class.
+ *
+ * The k-mer size (number of characters) is a template parameter, thus
+ * the k-mer size for this k-mer needs to be fixed at compile time. The given
+ * k-mer size and the `BITS_PER_CHAR` determine the size of the underlying
+ * data array at compile time.
+ *
+ * @todo: implement and refer to the dynamic k-mer (which will be more
+ *        inefficient)
+ *
+ * @tparam  KMER_SIZE   The size (number of characters) of the k-mer.
+ * @tparam  BITS_PER_CHAR   The number of bits per character in the k-mer.
+ *                          E.g. for DNA this would be 2.
+ * @tparam  word_type       The unsigned integer type to be used as the
+ *                          storage type. This can be of any size from
+ *                          uint8_t up to uint64_t. (default is uint64_t)
+ */
 template <unsigned int KMER_SIZE, unsigned int BITS_PER_CHAR, typename word_type=WordType>
 class Kmer
 {
@@ -67,15 +84,40 @@ private:
 
 public:
 
+  /**
+   * @brief   The default constructor, creates an uninitialized k-mer.
+   *
+   * The k-mer's data is not initalized, but still represents a valid k-mer,
+   * as the unused bits are set to 0.
+   */
   Kmer()
   {
     // make this a valid Kmer, other bits are left uninitialized
     do_sanitize();
   }
 
+  /**
+   * @brief   Create a new k-mer from the given sequence.
+   *
+   * The iterators base type has to be the same as the k-mers base type.
+   * This function merely initializes the internal data with the values
+   * from the iterator. There is no processing done on these values, which
+   * especially means that there is no padding removed.
+   *
+   * The use of this function is mostly for testing purposes (creating the
+   * expected reference (true) k-mers).
+   *
+   * @tparam InputIterator  An input iterator which is at least a forward
+   *                        iterator.
+   * @param begin           An interator pointing to the beginning of the
+   *                        sequence to be used for initializing the k-mer
+   *                        data structure.
+   */
   template<typename InputIterator>
   Kmer(InputIterator begin)
   {
+    // assert that the iterator's value type is the same as this k-mers base
+    // type
     static_assert(std::is_same<
         typename std::iterator_traits<InputIterator>::value_type,
         word_type>::value,
@@ -101,6 +143,26 @@ public:
    *  - hash function (!?)
    */
 
+  /**
+   * @brief   Fills this k-mer from a packed and padded input sequence.
+   *
+   * The k-mer's data is filled from the given input sequence using
+   * `KMER_SIZE * BITS_PER_CHAR` bits.
+   *
+   * @tparam InputIterator  An input iterator type that is at least a forward
+   *                        iterator.
+   * @param begin[in|out]   An interator reference pointing to the beginning of
+   *                        the packed and padded sequence used to fill the
+   *                        k-mer's data structure. When this function returns,
+   *                        this iterator will point to the next element of the
+   *                        sequence to be read. Together with the bit offset
+   *                        returned by this function, this defines where to
+   *                        continue to generate k-mers from the input sequence
+   *                        via the `nextFromPaddedStream()` function.
+   * @returns               The bit offset of the current iterator position
+   *                        to the bits that have to be read in the next
+   *                        iteration.
+   */
   template <typename InputIterator>
   // TODO: add option for bit offset in input sequence?
   unsigned int fillFromPaddedStream(InputIterator& begin)
@@ -122,6 +184,28 @@ public:
     return offset;
   }
 
+  /**
+   * @brief   Generates the next k-mer from the given sequence using a sliding
+   *          window approach.
+   *
+   * Given the packed and padded input sequence via the `begin` iterator
+   * and the current bit offset, this function will read the next
+   * `BITS_PER_CHAR` bits, right shift the current k-mer value but that number
+   * of bits and puts the newly read bits into the `BITS_PER_CHAR` most
+   * significant bits of the k-mer value. Both parameters are passed by
+   * reference and internally updated to the next position to read from.
+   * Therefore, the user of this function just needs to keep calling this
+   * function without updating the parameters to generate all k-mers for a
+   * given packed and padded input sequence.
+   *
+   * @tparam InputIterator  An input iterator type that is at least a forward
+   *                        iterator.
+   * @param begin           An iterator pointing to the next position of the
+   *                        input sequence to be read.
+   * @param offset          The bit offset of where to start reading inside
+   *                        the currently pointed to value of the input
+   *                        sequence.
+   */
   template <typename InputIterator>
   void nextFromPaddedStream(InputIterator& begin, unsigned int& offset)
   {
@@ -174,23 +258,48 @@ public:
     offset += bitsPerChar;
   }
 
+  /**
+   * @brief Compares this k-mer with the given k-mer for equality.
+   *
+   * Returns wheather the data of the k-mers is identical.
+   *
+   * @returns   `true` if the data of both k-mers is identical, `false`
+   *            otherwise.
+   */
   bool operator==(const Kmer& rhs) const
   {
     return std::equal(data, data+nWords, rhs.data);
   }
 
+  /**
+   * @brief Compares this k-mer with the given k-mer for in-equality.
+   *
+   * Returns wheather the data of the k-mers is different.
+   *
+   * @returns   `false` if the data of both k-mers is identical, `true`
+   *            otherwise.
+   */
   bool operator!=(const Kmer& rhs) const
   {
     return !(this->operator==(rhs));
   }
 
   // for debug purposes
-  // TODO: support different alphabets
+  /**
+   * @brief Returns a string representation of this k-mer.
+   *
+   * Usage: for debugging and testing.
+   *
+   * @returns   A std::string representing this k-mer.
+   */
   std::string toString()
   {
     // TODO:
     // 1.) unpacking
-    // 2.) back-translating
+    // 2.) back-translating?
+    //      -> needs to support all alphabets (-> dependency)
+
+    /* return the hex representation of the data array values */
     std::stringstream ss;
     ss << "[";
     for (unsigned int i = 0; i < nWords; ++i)
@@ -203,13 +312,20 @@ public:
 
 protected:
 
+  /**
+   * @brief Sets all unused bits of the underlying k-mer data to 0.
+   */
   inline void do_sanitize()
   {
     // TODO use templated helper struct for <0> template specialization
     data[nWords-1] &= getBitMask<word_type>(bitstream::invPadBits);
   }
 
-
+  /**
+   * @brief Performs a left shift by `shift` bits on the k-mer data.
+   *
+   * @param shift   The number of bits to shift by.
+   */
   // TODO template specialization for nWords = 1 (just use base type shift)
   // TODO implement more efficient version doing fixed left shift by BITS_PER_CHAR
   inline void do_left_shift(size_t shift)
@@ -240,6 +356,11 @@ protected:
     std::fill(data, data+word_shift, static_cast<word_type>(0));
   }
 
+  /**
+   * @brief Performs a right shift by `shift` bits on the k-mer data.
+   *
+   * @param shift   The number of bits to shift by.
+   */
   // TODO template specialization for nWords = 1 (just use base type shift)
   // TODO implement more efficient version doing fixed left shift by BITS_PER_CHAR
   inline void do_right_shift(size_t shift)
