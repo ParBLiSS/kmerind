@@ -211,7 +211,7 @@ struct generate_qual {
 
 };
 
-
+#define K 11
 
 int main(int argc, char* argv[]) {
   LOG_INIT();
@@ -222,6 +222,7 @@ int main(int argc, char* argv[]) {
   if (argc > 1) {
     filename.assign(argv[1]);
   }
+
 
 
 
@@ -294,68 +295,68 @@ int main(int argc, char* argv[]) {
     bliss::io::fastq_loader::iterator fastq_end = loader.end();
 
     uint64_t id = 0;
-    for (; fastq_start != fastq_end; ++fastq_start) {
-        id ^= (*fastq_start).id ;
 
+    uint64_t readCount = 0;
+    for (; fastq_start != fastq_end; ++fastq_start) {
+
+      id ^= (*fastq_start).id;
+      ++readCount;
     }
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-    INFO("iterate over file region " << rank << " elapsed time: " << time_span3.count() << "s.");
+    INFO("reads " << readCount << " rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
-    printf("make sure no no-op:  %lx\n", id);
-
+    printf("avoid compiler optimizing out the ops %ld\n", id);
 
     t1 = std::chrono::high_resolution_clock::now();
+
     fastq_start = loader.begin();
     fastq_end = loader.end();
 
-    typedef generate_kmers<DNA, char*, uint64_t, 21>  op_type;
+    typedef generate_kmers<DNA, char*, uint64_t, K>  op_type;
     op_type kmer_op;
     typedef bliss::iterator::buffered_transform_iterator<op_type, char*> read_iter_type;
 
-//    uint64_t j = 0;
     uint64_t kmer = 0;
+    uint64_t baseCount = 0;
+
     for (; fastq_start != fastq_end; ++fastq_start) {
       read_iter_type start((*fastq_start).seq, kmer_op);
       read_iter_type end((*fastq_start).seq_end, kmer_op);
 
       int i = -1;
       // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-      for (; (start != end) ; ++start) {
+      for (; (start != end); ++start) {
         ++i;
-
-        if (i < 20) continue;
-//        kmers.push_back(*start);
+        ++baseCount;
+        if (i < (K-1)) continue;
         kmer ^= *start;
-        ////      std::cout << i << " qual: " << qual << " kmer " << std::bitset<64>(kmer) << std::endl;
-      }
 
-//      ++j;
-//      if ((j & 0xFFFF) == 0)
-//        printf("%d ", rank);
-//
+      }
     }
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-    INFO("kmer generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
+    INFO("bases " << baseCount << " kmer generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
-    printf("make sure no no-op:  %lx\n", kmer);
 
+    printf("avoid compiler optimizing out the ops %ld\n", kmer);
 
 
     t1 = std::chrono::high_resolution_clock::now();
+
     fastq_start = loader.begin();
     fastq_end = loader.end();
 
     struct SANGER {};
-    typedef generate_qual< SANGER, char*, double, 21>  qual_op_type;
+    typedef generate_qual< SANGER, char*, double, K>  qual_op_type;
     qual_op_type qual_op;
     typedef bliss::iterator::buffered_transform_iterator<qual_op_type, char*> qual_iter_type;
 
 
     kmer = 0;
-    double q = 0;
-    uint64_t qual = 0;
+    double qual = 0;
+    uint64_t kmerCount = 0;
+
     for (; fastq_start != fastq_end; ++fastq_start) {
       read_iter_type start((*fastq_start).seq, kmer_op);
       read_iter_type end((*fastq_start).seq_end, kmer_op);
@@ -368,23 +369,20 @@ int main(int argc, char* argv[]) {
       for (; (start != end) && (qstart != qend); ++start, ++qstart) {
         ++i;
 
-        if (i < 20) continue;
+        if (i < (K-1)) continue;
 //        kmers.push_back(*start);
         kmer ^= *start;
-        q = *qstart;
-        qual ^= *(reinterpret_cast<uint64_t*>(&q));
-
-        ////      std::cout << i << " qual: " << qual << " kmer " << std::bitset<64>(kmer) << std::endl;
-
+        qual = *qstart - qual;
+        ++kmerCount;
       }
-
 
     }
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-    INFO("kmer + qual generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
+    INFO("kmer + qual " << kmerCount << " generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
-    printf("make sure no no-op:  %lx, %lx\n", kmer, qual);
+    printf("avoid compiler optimizing out the ops %lx %lf\n", kmer, qual);
+
 
   }
 

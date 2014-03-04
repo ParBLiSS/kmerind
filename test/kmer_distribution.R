@@ -113,7 +113,7 @@ plotempty()
 plotempty()
 
 plotloads(0.25, 1)
-plotloads(0.32, 1)
+plotloads(0.18, 1)
 
 # i = 2
 r <- c(0, 0.25)
@@ -129,7 +129,7 @@ plotempty()
 plotempty()
 
 plotloads(0.25, 2)
-plotloads(0.32, 2)
+plotloads(0.18, 2)
 
 
 # i = 3
@@ -146,7 +146,7 @@ plotempty()
 plotempty()
 
 plotloads(0.25, 3)
-plotloads(0.32, 3)
+plotloads(0.18, 3)
 
 
 # i = 4
@@ -166,7 +166,7 @@ plotfunc(p, y, z, r)
 plotempty()
 
 plotloads(0.25, 4)
-plotloads(0.32, 4)
+plotloads(0.18, 4)
 
 # i = 5
 r <- c(0, 0.0625)
@@ -185,7 +185,7 @@ plotfunc(p, y, z, r)
 plotempty()
 
 plotloads(0.25, 5)
-plotloads(0.32, 5)
+plotloads(0.18, 5)
 
 # i = 6
 r <- c(0, 0.03125)
@@ -206,4 +206,4 @@ z <- q * q * q * qq * qq * qq
 plotfunc(p, y, z, r)
 
 plotloads(0.25, 6)
-plotloads(0.32, 6)
+plotloads(0.18, 6)
