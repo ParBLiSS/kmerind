@@ -234,6 +234,8 @@ endif (ENABLE_TESTING)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib CACHE PATH "Output directory for libraries" )
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
 
+#link_directories( ${LIBRARY_OUTPUT_PATH} )
+
 
 #SET(LOGGER_DEFINE  CACHE STRING
 #      "Choose logging engine, options are: N."
@@ -269,6 +271,7 @@ add_subdirectory(utils)
 add_subdirectory(src/common)
 add_subdirectory(src/io)
 add_subdirectory(src/index)
+add_subdirectory(src/iterators)
 add_subdirectory(test)
 
 

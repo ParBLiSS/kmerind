@@ -5,7 +5,7 @@
  *      Author: tpan
  */
 
-#include "/home/tpan/src/bliss/src/io/fastqloader.hpp"
+#include "io/fastq_loader.hpp"
 
 namespace bliss
 {
