@@ -1,6 +1,9 @@
-# NSF BigData project Parallel Bioinformatics Library
+# BLISS
 
-New name: **Bliss** ??
+Name can stand for:
+
+- **B**asic **Li**fe **S**ciences **S**ubroutines
+- **B**ioinformatics **Li**brary for **S**hort **S**equences
 
 Please take a look at our [Wiki](https://bitbucket.org/AluruLab/bliss/wiki/Home).
 
