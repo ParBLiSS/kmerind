@@ -86,7 +86,7 @@ void test_kmers_5(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nk
 /**
  * Test k-mer generation with 2 bits for each character
  */
-TEST(KmerGeneration, TestKmerGenerationUnpadded)
+TEST(KmerGeneration, TestKmerGenerationUnpadded2)
 {
   // test sequence: 0xabba56781234deadbeef01c0ffee
 
@@ -124,7 +124,7 @@ TEST(KmerGeneration, TestKmerGenerationUnpadded)
 
   // unpadded stream (bits_per_char is 2 => no padding)
   /* python:
-   * ", ".join("0x" + hex((val >> i*16) & 0xffff) for i in range(0, 8))
+   * ", ".join(hex((val >> i*16) & 0xffff) for i in range(0, 8))
    */
   uint16_t kmer_data[8] = {0xffee, 0x01c0, 0xbeef, 0xdead, 0x1234, 0x5678, 0xabba, 0x0000};
 
@@ -259,4 +259,61 @@ TEST(KmerGeneration, TestKmerGenerationPadded5)
   // 64 bits (4 bits padding)
   uint64_t kmer_data_64[3] = {0xeadbeef01c0ffee, 0xabba56781234d, 0x0};
   test_kmers_5<uint64_t>(kmer_data_64, kmer_ex, 11);
+}
+
+
+/**
+ * Testing kmer reverse
+ */
+TEST(KmerReverse, TestKmerReverse112)
+{
+  /*
+   * python code to generate the reverse (by n bits each) for a given value:
+   *
+   * n = 2 # or n = 3
+   * b = bin(val)
+   * hex(int("".join(reversed([b[i+2+((len(b)-2) % n):][:n] for i in range(0, len(b)-2, n)])),2))
+   */
+
+  // testing with 112 bit sequence
+  // test sequence: val = 0xabba56781234deadbeef01c0ffee
+  // n = 2:
+  // reverse seq:   val = 0xbbff0340fbbe7ab71c842d95aeea
+  // n = 3
+  // reverse seq:   val = 0x6bff23113ebedabd34a427952faa
+  // n = 4
+  // reverse seq:   val = 0xeeff0c10feebdaed43218765abba
+
+  /* python:
+   * ", ".join(hex((val >> i*16) & 0xffff) for i in range(0, 8))
+   */
+  uint16_t kmer_val[] = {0xffee, 0x1c0, 0xbeef, 0xdead, 0x1234, 0x5678, 0xabba};
+  uint16_t kmer_ex[] = {0xaeea, 0x2d95, 0x1c84, 0x7ab7, 0xfbbe, 0x340, 0xbbff};
+  uint16_t kmer_ex_3[] = {0x2faa, 0x2795, 0x34a4, 0xdabd, 0x3ebe, 0x2311, 0x6bff};
+  uint16_t kmer_ex_4[] = {0xabba, 0x8765, 0x4321, 0xdaed, 0xfeeb, 0xc10, 0xeeff};
+
+
+
+  /* test for bits_per_char = 2 */
+  bliss::Kmer<7*8, 2, uint16_t> kmer_in(kmer_val);
+  bliss::Kmer<7*8, 2, uint16_t> kmer_ex_rev(kmer_ex);
+  // get the reverse
+  bliss::Kmer<7*8, 2, uint16_t> kmer_rev = kmer_in.reversed_kmer();
+  EXPECT_EQ(kmer_ex_rev, kmer_rev);
+
+  /* test for bits_per_char = 3 */
+  bliss::Kmer<37, 3, uint16_t> kmer3_in(kmer_val);
+  bliss::Kmer<37, 3, uint16_t> kmer3_ex_rev(kmer_ex_3);
+  // get the reverse
+  bliss::Kmer<37, 3, uint16_t> kmer3_rev = kmer3_in.reversed_kmer();
+  EXPECT_EQ(kmer3_ex_rev, kmer3_rev);
+
+  /* test for bits_per_char = 4 */
+  bliss::Kmer<28, 4, uint16_t> kmer4_in(kmer_val);
+  bliss::Kmer<28, 4, uint16_t> kmer4_ex_rev(kmer_ex_4);
+  // get the reverse
+  bliss::Kmer<28, 4, uint16_t> kmer4_rev = kmer4_in.reversed_kmer();
+  EXPECT_EQ(kmer4_ex_rev, kmer4_rev);
+  // TODO: tests for smaller sizes and bigger bits_per_char
+
 }

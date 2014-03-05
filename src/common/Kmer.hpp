@@ -310,6 +310,37 @@ public:
     return ss.str();
   }
 
+  /**
+   * @brief Returns a reversed k-mer.
+   *
+   * Note that this does NOT reverse the bit pattern, but reverses
+   * the sequence of `BITS_PER_CHAR` each.
+   *
+   * @returns   The reversed k-mer.
+   */
+  Kmer reversed_kmer()
+  {
+    // TODO implement logarithmic version (logarithmic in number of bits)
+
+    /* Linear (unefficient) reverse: */
+
+    // init result and temporary copy of this
+    Kmer rev;
+    Kmer tmp_copy = *this;
+
+    // get lower most bits from this and push them into the lower bits
+    // of the reverse
+    for (unsigned int i = 0; i < size; ++i)
+    {
+      rev.do_left_shift(BITS_PER_CHAR);
+      copyBitsFixed<word_type, BITS_PER_CHAR>(rev.data[0], tmp_copy.data[0]);
+      tmp_copy.do_right_shift(BITS_PER_CHAR);
+    }
+
+    // return the result
+    return rev;
+  }
+
 protected:
 
   /**
@@ -320,6 +351,8 @@ protected:
     // TODO use templated helper struct for <0> template specialization
     data[nWords-1] &= getBitMask<word_type>(bitstream::invPadBits);
   }
+
+
 
   /**
    * @brief Performs a left shift by `shift` bits on the k-mer data.
