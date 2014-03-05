@@ -337,6 +337,8 @@ public:
       tmp_copy.do_right_shift(BITS_PER_CHAR);
     }
 
+    // set ununsed bits to 0
+    rev.do_sanitize();
     // return the result
     return rev;
   }
