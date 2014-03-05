@@ -44,6 +44,20 @@ constexpr T getBitMask(const BitSizeType nBits)
 }
 
 template <typename T>
+void copyBits(T& to, const T& from, const BitSizeType bits)
+{
+  const T mask = getBitMask<T>(bits);
+  to = ((~mask) & to) | (mask & from);
+}
+
+template <typename T, unsigned int bits>
+void copyBitsFixed(T& to, const T& from)
+{
+  constexpr T mask = getBitMask<T>(bits);
+  to = ((~mask) & to) | (mask & from);
+}
+
+template <typename T>
 constexpr T roundDownToMultiple(const T& value, const T& base)
 {
   return value - (value % base);
