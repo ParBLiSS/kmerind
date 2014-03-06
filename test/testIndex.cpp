@@ -291,11 +291,11 @@ int main(int argc, char* argv[]) {
 
 
     t1 = std::chrono::high_resolution_clock::now();
-
     bliss::io::fastq_loader::iterator fastq_start = loader.begin();
     bliss::io::fastq_loader::iterator fastq_end = loader.end();
 
     uint64_t id = 0;
+
     uint64_t readCount = 0;
     for (; fastq_start != fastq_end; ++fastq_start) {
 
@@ -319,6 +319,7 @@ int main(int argc, char* argv[]) {
 
     uint64_t kmer = 0;
     uint64_t baseCount = 0;
+
     for (; fastq_start != fastq_end; ++fastq_start) {
       read_iter_type start((*fastq_start).seq, kmer_op);
       read_iter_type end((*fastq_start).seq_end, kmer_op);
@@ -353,8 +354,7 @@ int main(int argc, char* argv[]) {
 
 
     kmer = 0;
-    double q = 0;
-    uint64_t qual = 0;
+    double qual = 0;
     uint64_t kmerCount = 0;
 
     for (; fastq_start != fastq_end; ++fastq_start) {
@@ -372,8 +372,7 @@ int main(int argc, char* argv[]) {
         if (i < (K-1)) continue;
 //        kmers.push_back(*start);
         kmer ^= *start;
-        q = *qstart;
-        qual ^= *(reinterpret_cast<uint64_t*>(&q));
+        qual = *qstart - qual;
         ++kmerCount;
       }
 
@@ -382,7 +381,8 @@ int main(int argc, char* argv[]) {
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
     INFO("kmer + qual " << kmerCount << " generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
-    printf("avoid compiler optimizing out the ops %ld %ld\n", kmer, qual);
+    printf("avoid compiler optimizing out the ops %lx %lf\n", kmer, qual);
+
 
   }
 

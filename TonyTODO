@@ -56,14 +56,18 @@ create kmers and reverse complement - abyss idea is not bad
 	  		then p(00) = p(11) = 4x^2 - 2x + 0.5; p(01) = p(10) = 2x - 4x^2, quadratic functions.
 	  		
 	  		could this create an imbalance for a region of the kmer space?
-	  		 
+	  		 	no.  actually more even.
 	
 create quality score quality score
 	reverse complement has same score.
+	
+	a simple iteration is done that computes the "Phred Score" for a kmer accurately.
+
+
 
 
 mpi redistribution code.
-
+	threading and support for streaming.	
 
 
 query...

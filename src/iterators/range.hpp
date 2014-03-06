@@ -64,10 +64,16 @@ namespace bliss
           return *this;
         }
 
+        bool operator==(range<T> const & other) {
+          // same if the data range is identical and step is same.
+          // not comparing overlap or block start.
+
+          return (start == other.start) && (end == other.end) && (step == other.step);
+        }
+
         // TODO: when needed: comparators
         // TODO: when needed: +/-
         // TODO: when needed: set operations
-        // TODO: stream printing operator.
 
         /**
          *  block partitioning
@@ -78,10 +84,10 @@ namespace bliss
                                         T   const& _overlap = 0,
                                         T   const& _step = 1)
         {
-          assert(total > 0);
-          assert(_overlap >= 0);
-          assert(_step > 0);
           assert(np > 0);
+          assert(total >= np);
+          assert(_overlap >= 0);
+          assert(_step != 0);
           assert(pid >= 0 && pid < np);
 
           range<T> output(0, total, _overlap, _step);
@@ -116,10 +122,14 @@ namespace bliss
          */
         range<T> align_to_page(T const &page_size) const
         {
+          assert(page_size > 0);
+
           range<T> output(*this);
 
           // change start to align by page size.  extend range end
-          output.block_start = (this->start / page_size) * page_size;
+          output.block_start = (output.start / page_size) * page_size;
+          // deal with negative start position.
+          output.block_start = (output.block_start > output.start) ? (output.block_start - page_size) : output.block_start;
           // leave end as is.
 
           return output;
@@ -127,6 +137,8 @@ namespace bliss
 
         bool is_page_aligned(T const &page_size) const
         {
+          assert(page_size > 0);
+
           return this->block_start % page_size == 0;
         }
 

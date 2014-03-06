@@ -69,7 +69,7 @@ namespace bliss
          * opens the file and save in file handle
          */
         file_loader(std::string const & _filename, bool preload=false)
-          : filename(_filename), preloaded(preload)
+          : filename(_filename), data(nullptr), aligned_data(nullptr), preloaded(preload)
         {
           file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);
@@ -77,7 +77,7 @@ namespace bliss
 
 
         file_loader(std::string const & _filename, range_type const & _range, bool preload = false)
-          : filename(_filename), range(_range), preloaded(preload)
+          : filename(_filename), range(_range), data(nullptr), aligned_data(nullptr), preloaded(preload)
         {
           file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);

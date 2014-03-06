@@ -18,4 +18,10 @@ file comment
 // logger
 @LOGGER_DEFINE@
 
+// source location
+#define PROJ_SRC_DIR "@PROJECT_SOURCE_DIR@"
+
+// binary location
+#define PROJ_BIN_DIR "@PROJECT_BINARY_DIR@"
+
 #endif /* CONFIG_H */
