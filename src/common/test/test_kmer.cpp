@@ -261,6 +261,36 @@ TEST(KmerGeneration, TestKmerGenerationPadded5)
   test_kmers_5<uint64_t>(kmer_data_64, kmer_ex, 11);
 }
 
+/**
+ * Testing k-mer comparison operators.
+ */
+TEST(KmerComparison, TestKmerComparison1)
+{
+  // the main kmer value
+  uint16_t kmer_val[] = {0xffee, 0x1c0, 0xbeef, 0xdead, 0x1234, 0x5678, 0xabba};
+  // smaller value in 4th block::
+  uint16_t kmer_val_s4[] = {0xffee, 0x1c0, 0xbeef, 0x1111, 0x1234, 0x5678, 0xabba};
+  // greater value in 3rd block:
+  uint16_t kmer_val_g3[] = {0xffee, 0x1c0, 0xfeef, 0xdead, 0x1234, 0x5678, 0xabba};
+
+  bliss::Kmer<41, 2, uint16_t> kmer(kmer_val);
+  bliss::Kmer<41, 2, uint16_t> kmer_s(kmer_val_s4);
+  bliss::Kmer<41, 2, uint16_t> kmer_g(kmer_val_g3);
+
+  EXPECT_TRUE(kmer > kmer_s);
+  EXPECT_TRUE(kmer == kmer);
+  EXPECT_TRUE(kmer_g > kmer);
+  EXPECT_FALSE(kmer_g <= kmer);
+  EXPECT_TRUE(kmer <= kmer);
+  EXPECT_TRUE(kmer >= kmer);
+  EXPECT_FALSE(kmer < kmer);
+  EXPECT_FALSE(kmer > kmer);
+  EXPECT_TRUE(kmer != kmer_g);
+  EXPECT_TRUE(kmer != kmer_s);
+
+}
+
+
 
 /**
  * Testing kmer reverse
