@@ -361,6 +361,89 @@ public:
     return ! (this->operator<=(rhs));
   }
 
+  /* bit operators */
+
+  /**
+   * @brief XOR
+   */
+  inline Kmer& operator^=(const Kmer& rhs) const
+  {
+    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_xor<word_type>());
+    return *this;
+  }
+  /**
+   * @brief XOR
+   */
+  inline Kmer operator^(const Kmer& rhs) const
+  {
+    Kmer result = *this;
+    result ^= rhs;
+    return result;
+  }
+
+  /**
+   * @brief AND
+   */
+  inline Kmer& operator&=(const Kmer& rhs) const
+  {
+    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_and<word_type>());
+    return *this;
+  }
+  /**
+   * @brief AND
+   */
+  inline Kmer operator&(const Kmer& rhs) const
+  {
+    Kmer result = *this;
+    result &= rhs;
+    return result;
+  }
+
+  /**
+   * @brief OR
+   */
+  inline Kmer& operator|=(const Kmer& rhs) const
+  {
+    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_or<word_type>());
+    return *this;
+  }
+  /**
+   * @brief OR
+   */
+  inline Kmer operator|(const Kmer& rhs) const
+  {
+    Kmer result = *this;
+    result |= rhs;
+    return result;
+  }
+
+  /**
+   * @brief Shifts the k-mer left by the given number of CHARACTERS.
+   *
+   * @note  This shifts by the number of characters (which is a larger shift
+   *        then bitwise).
+   */
+  inline Kmer& operator<<=(const std::size_t shift_by)
+  {
+    // shift the given number of _characters_!
+    this->do_left_shift(shift_by * bitsPerChar);
+    return *this;
+  }
+
+  /**
+   * @brief Shifts the k-mer right by the given number of CHARACTERS.
+   *
+   * @note  This shifts by the number of characters (which is a larger shift
+   *        then bitwise).
+   */
+  inline Kmer& operator>>=(const std::size_t shift_by)
+  {
+    // shift the given number of **characters** !
+    this->do_right_shift(shift_by * bitsPerChar);
+    return *this;
+  }
+
+
   /**
    * @brief Returns a reversed k-mer.
    *
