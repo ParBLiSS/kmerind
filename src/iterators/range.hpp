@@ -85,9 +85,9 @@ namespace bliss
                                         T   const& _step = 1)
         {
           assert(np > 0);
-          assert(total > np);
+          assert(total >= np);
           assert(_overlap >= 0);
-          assert(_step > 0);
+          assert(_step != 0);
           assert(pid >= 0 && pid < np);
 
           range<T> output(0, total, _overlap, _step);
