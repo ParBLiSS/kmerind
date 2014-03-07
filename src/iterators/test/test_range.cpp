@@ -61,19 +61,23 @@ TYPED_TEST_P(RangeTest, partition) {
       if (len < i)
         continue;
 
+      //printf("%ld, %d\n", static_cast<size_t>(len), i);
       r = range<TypeParam>::block_partition(len, i, 0);
       EXPECT_EQ(0, r.start);
-      e = (len % i == 0 ? len / i : len / i + 1);
+      e = ((len % i) == 0 ? (len / i) : (len / i + 1));
       EXPECT_EQ(e, r.end);
 
       r = range<TypeParam>::block_partition(len, i, (i-1) / 2);
-      e = (len % i == 0 ? (i-1) / 2 * len / i : ( i > (len % i) ? (i -1) / 2 * len / i + len % i : (i - 1) / 2 * (len / i + 1)));
+      e = ((len % i) == 0 ? (i-1) / 2 * len / i :
+              ( (i-1)/2 > (len % i) ? (i -1) / 2 * len / i + len % i : (i - 1) / 2 * (len / i + 1)));
       EXPECT_EQ(e, r.start);
-      e = (len % i == 0 ? (i+1) / 2 * len / i : ( i > (len % i) ? (i + 1) / 2 * len / i + len % i : (i + 1) / 2 * (len / i + 1)));
+      e = ((len % i) == 0 ? (i+1) / 2 * len / i :
+              ( (i-1)/2 > (len % i) ? (i + 1) / 2 * len / i + len % i : (i + 1) / 2 * (len / i + 1)));
       EXPECT_EQ(e, r.end);
 
       r = range<TypeParam>::block_partition(len, i, i-1);
-      e = (len % i == 0 ? (i-1) * len / i : ( i > (len % i) ? (i - 1) * len / i + len % i : (i - 1) * (len / i + 1)));
+      e = (len % i == 0 ? (i-1) * len / i :
+          ( i-1 > (len % i) ? (i - 1) * len / i + len % i : (i - 1) * (len / i + 1)));
       EXPECT_EQ(e, r.start);
       EXPECT_EQ(len, r.end);
     }
@@ -85,10 +89,12 @@ TYPED_TEST_P(RangeTest, align) {
 
   std::vector<TypeParam> starts = {0, 1, std::numeric_limits<TypeParam>::lowest(), std::numeric_limits<TypeParam>::min(),
                                    std::numeric_limits<TypeParam>::max()/3, std::numeric_limits<TypeParam>::max()/2, std::numeric_limits<TypeParam>::max()-1};
-  std::vector<size_t> pageSizes = {1, 256, 1024, 4096, std::numeric_limits<size_t>::max()};
+  std::vector<size_t> pageSizes = {1, 64, std::numeric_limits<size_t>::max()};
 
   for (auto s : starts) {
     for (auto p : pageSizes) {
+      //printf("%ld %ld\n", static_cast<size_t>(s), p);
+
       r = range<TypeParam>(s, s+1);
       r = r.align_to_page(p);
       EXPECT_TRUE(r.is_page_aligned(p));

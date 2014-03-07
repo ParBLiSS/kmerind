@@ -126,10 +126,13 @@ namespace bliss
 
           range<T> output(*this);
 
+          //printf("page size: %ld\n", static_cast<T>(page_size));
+
           // change start to align by page size.  extend range end
           output.block_start = (output.start / page_size) * page_size;
           // deal with negative start position.
-          output.block_start = (output.block_start > output.start) ? (output.block_start - page_size) : output.block_start;
+          output.block_start = (output.block_start > output.start) ?
+              (output.block_start - page_size) : output.block_start;
           // leave end as is.
 
           return output;
@@ -139,7 +142,7 @@ namespace bliss
         {
           assert(page_size > 0);
 
-          return this->block_start % page_size == 0;
+          return (this->block_start % page_size) == 0;
         }
 
         /**
