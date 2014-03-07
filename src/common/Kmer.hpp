@@ -19,6 +19,8 @@
 #include <type_traits>
 #include <string>
 #include <sstream>
+#include <algorithm>
+#include <utility>
 
 // own includes
 #include <common/base_types.hpp>
@@ -93,7 +95,10 @@ public:
   Kmer()
   {
     // make this a valid Kmer, other bits are left uninitialized
-    do_sanitize();
+    // do_sanitize();
+
+    // set all bits to zero (no more 'may be used uninitialized warning)
+    do_clear();
   }
 
   /**
@@ -258,15 +263,17 @@ public:
     offset += bitsPerChar;
   }
 
+  /* equality comparison operators */
+
   /**
    * @brief Compares this k-mer with the given k-mer for equality.
    *
-   * Returns wheather the data of the k-mers is identical.
+   * Returns whether the data of the k-mers is identical.
    *
    * @returns   `true` if the data of both k-mers is identical, `false`
    *            otherwise.
    */
-  bool operator==(const Kmer& rhs) const
+  inline bool operator==(const Kmer& rhs) const
   {
     return std::equal(data, data+nWords, rhs.data);
   }
@@ -274,41 +281,168 @@ public:
   /**
    * @brief Compares this k-mer with the given k-mer for in-equality.
    *
-   * Returns wheather the data of the k-mers is different.
+   * Returns whether the data of the k-mers is different.
    *
    * @returns   `false` if the data of both k-mers is identical, `true`
    *            otherwise.
    */
-  bool operator!=(const Kmer& rhs) const
+  inline bool operator!=(const Kmer& rhs) const
   {
     return !(this->operator==(rhs));
   }
 
-  // for debug purposes
-  /**
-   * @brief Returns a string representation of this k-mer.
-   *
-   * Usage: for debugging and testing.
-   *
-   * @returns   A std::string representing this k-mer.
-   */
-  std::string toString()
-  {
-    // TODO:
-    // 1.) unpacking
-    // 2.) back-translating?
-    //      -> needs to support all alphabets (-> dependency)
+  /* ordered comparison operators */
 
-    /* return the hex representation of the data array values */
-    std::stringstream ss;
-    ss << "[";
-    for (unsigned int i = 0; i < nWords; ++i)
+  /**
+   * @brief Returns whether this k-mer compares smaller than the given k-mer.
+   *
+   * @returns `True` if this k-mer compares smaller than the given k-mer,
+   *          `False` otherwise.
+   */
+  inline bool operator<(const Kmer& rhs) const
+  {
+    std::pair<const word_type*, const word_type*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
+    if (unequal.first == this->data + nWords)
     {
-      ss << "0x" << std::hex << data[i] << " ";
+      // all elements are equal
+      return false;
     }
-    ss << "]";
-    return ss.str();
+    else
+    {
+      // the comparison of the first unequal element will determine the result
+      return *(unequal.first) < *(unequal.second);
+    }
   }
+
+  /**
+   * @brief Returns whether this k-mer compares smaller or equal than the given
+   *        k-mer.
+   *
+   * @returns `True` if this k-mer compares smaller than or equal to the given
+   *          k-mer, `False` otherwise.
+   */
+  inline bool operator<=(const Kmer& rhs) const
+  {
+    std::pair<const word_type*, const word_type*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
+    if (unequal.first == this->data + nWords)
+    {
+      // all elements are equal
+      return true;
+    }
+    else
+    {
+      // the comparison of the first unequal element will determine the result
+      return *(unequal.first) < *(unequal.second);
+    }
+  }
+
+  /* symmetric comparison operators */
+
+  /**
+   * @brief Returns whether this k-mer compares greater or equal than the given
+   *        k-mer.
+   *
+   * @returns `True` if this k-mer compares greater than or equal to the given
+   *          k-mer, `False` otherwise.
+   */
+  inline bool operator>=(const Kmer& rhs) const
+  {
+    return ! (this->operator<(rhs));
+  }
+
+  /**
+   * @brief Returns whether this k-mer compares greater than the given k-mer.
+   *
+   * @returns `True` if this k-mer compares greater than the given k-mer,
+   *          `False` otherwise.
+   */
+  inline bool operator>(const Kmer& rhs) const
+  {
+    return ! (this->operator<=(rhs));
+  }
+
+  /* bit operators */
+
+  /**
+   * @brief XOR
+   */
+  inline Kmer& operator^=(const Kmer& rhs) const
+  {
+    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_xor<word_type>());
+    return *this;
+  }
+  /**
+   * @brief XOR
+   */
+  inline Kmer operator^(const Kmer& rhs) const
+  {
+    Kmer result = *this;
+    result ^= rhs;
+    return result;
+  }
+
+  /**
+   * @brief AND
+   */
+  inline Kmer& operator&=(const Kmer& rhs) const
+  {
+    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_and<word_type>());
+    return *this;
+  }
+  /**
+   * @brief AND
+   */
+  inline Kmer operator&(const Kmer& rhs) const
+  {
+    Kmer result = *this;
+    result &= rhs;
+    return result;
+  }
+
+  /**
+   * @brief OR
+   */
+  inline Kmer& operator|=(const Kmer& rhs) const
+  {
+    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_or<word_type>());
+    return *this;
+  }
+  /**
+   * @brief OR
+   */
+  inline Kmer operator|(const Kmer& rhs) const
+  {
+    Kmer result = *this;
+    result |= rhs;
+    return result;
+  }
+
+  /**
+   * @brief Shifts the k-mer left by the given number of CHARACTERS.
+   *
+   * @note  This shifts by the number of characters (which is a larger shift
+   *        then bitwise).
+   */
+  inline Kmer& operator<<=(const std::size_t shift_by)
+  {
+    // shift the given number of _characters_!
+    this->do_left_shift(shift_by * bitsPerChar);
+    return *this;
+  }
+
+  /**
+   * @brief Shifts the k-mer right by the given number of CHARACTERS.
+   *
+   * @note  This shifts by the number of characters (which is a larger shift
+   *        then bitwise).
+   */
+  inline Kmer& operator>>=(const std::size_t shift_by)
+  {
+    // shift the given number of **characters** !
+    this->do_right_shift(shift_by * bitsPerChar);
+    return *this;
+  }
+
 
   /**
    * @brief Returns a reversed k-mer.
@@ -318,7 +452,7 @@ public:
    *
    * @returns   The reversed k-mer.
    */
-  Kmer reversed_kmer()
+  Kmer reversed_kmer() const
   {
     // TODO implement logarithmic version (logarithmic in number of bits)
 
@@ -343,6 +477,34 @@ public:
     return rev;
   }
 
+
+  // for debug purposes
+  /**
+   * @brief Returns a string representation of this k-mer.
+   *
+   * Usage: for debugging and testing.
+   *
+   * @returns   A std::string representing this k-mer.
+   */
+  std::string toString() const
+  {
+    // TODO:
+    // 1.) unpacking
+    // 2.) back-translating?
+    //      -> needs to support all alphabets (-> dependency)
+
+    /* return the hex representation of the data array values */
+    std::stringstream ss;
+    ss << "[";
+    for (unsigned int i = 0; i < nWords; ++i)
+    {
+      ss << "0x" << std::hex << data[i] << " ";
+    }
+    ss << "]";
+    return ss.str();
+  }
+
+
 protected:
 
   /**
@@ -354,7 +516,13 @@ protected:
     data[nWords-1] &= getBitMask<word_type>(bitstream::invPadBits);
   }
 
-
+  /**
+   * @brief Sets all bits to zero.
+   */
+  inline void do_clear()
+  {
+    std::fill(data, data + nWords, static_cast<word_type>(0));
+  }
 
   /**
    * @brief Performs a left shift by `shift` bits on the k-mer data.
