@@ -10,6 +10,7 @@
 
 #include <cassert>
 #include <iostream>
+#include <limits>
 
 namespace bliss
 {
@@ -36,7 +37,9 @@ namespace bliss
             end(_end),
             step(_step),
             overlap(_overlap)
-        {}
+        {
+          assert((end >= start && step > 0 )  || (end <= start && step < 0));
+        }
 
         range(range<T> const &other)
           : block_start(other.block_start),
@@ -128,11 +131,21 @@ namespace bliss
 
           //printf("page size: %ld\n", static_cast<T>(page_size));
 
-          // change start to align by page size.  extend range end
+          // change start to align by page size.  extend range start.
+          // note that if output.start is negative, it will put block_start at a bigger address than the start.
           output.block_start = (output.start / page_size) * page_size;
-          // deal with negative start position.
-          output.block_start = (output.block_start > output.start) ?
-              (output.block_start - page_size) : output.block_start;
+
+          if (output.block_start > output.start) {
+
+//            printf("block start: %ld\n", static_cast<size_t>(output.block_start));
+
+            // if near lowest possible value, then we can't align further..  assert this situation.
+            assert((output.block_start - std::numeric_limits<T>::lowest()) > page_size);
+
+            // deal with negative start position.
+            output.block_start = output.block_start - page_size;
+
+          }
           // leave end as is.
 
           return output;
@@ -141,7 +154,6 @@ namespace bliss
         bool is_page_aligned(T const &page_size) const
         {
           assert(page_size > 0);
-
           return (this->block_start % page_size) == 0;
         }
 
