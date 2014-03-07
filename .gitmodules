@@ -1,0 +1,3 @@
+[submodule "ext/gtest"]
+	path = ext/gtest
+	url = https://tcpan@bitbucket.org/AluruLab/googletest-patched.git
