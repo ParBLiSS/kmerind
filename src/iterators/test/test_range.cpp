@@ -89,11 +89,10 @@ TYPED_TEST_P(RangeTest, align) {
 
   std::vector<TypeParam> starts = {0, 1, std::numeric_limits<TypeParam>::lowest(), std::numeric_limits<TypeParam>::min(),
                                    std::numeric_limits<TypeParam>::max()/3, std::numeric_limits<TypeParam>::max()/2, std::numeric_limits<TypeParam>::max()-1};
-  std::vector<size_t> pageSizes = {1, 64, std::numeric_limits<size_t>::max()};
+  std::vector<TypeParam> pageSizes = {1, std::numeric_limits<TypeParam>::max() / 2, std::numeric_limits<TypeParam>::max()};
 
   for (auto s : starts) {
     for (auto p : pageSizes) {
-      //printf("%ld %ld\n", static_cast<size_t>(s), p);
 
       r = range<TypeParam>(s, s+1);
       r = r.align_to_page(p);
@@ -144,32 +143,35 @@ TYPED_TEST_P(RangeTest, alignFails) {
 
   std::vector<TypeParam> starts = {0, 1, std::numeric_limits<TypeParam>::lowest(), std::numeric_limits<TypeParam>::min(),
                                    std::numeric_limits<TypeParam>::max()/3, std::numeric_limits<TypeParam>::max()/2, std::numeric_limits<TypeParam>::max()-1};
-  std::vector<size_t> pageSizes = {0, std::numeric_limits<size_t>::lowest(), std::numeric_limits<size_t>::min()};
+  std::vector<TypeParam> pageSizes = {0, std::numeric_limits<TypeParam>::lowest(), std::numeric_limits<TypeParam>::min()};
 
   for (auto s : starts) {
     for (auto p : pageSizes) {
       r = range<TypeParam>(s, s+1);
-      EXPECT_EXIT(r.align_to_page(p), ::testing::KilledBySignal(SIGABRT), "error on line .* of align_to_page()");
+      EXPECT_EXIT(r.align_to_page(p), ::testing::KilledBySignal(SIGABRT), ".*test-bliss-iterators: /home/tpan/src/bliss/src/iterators/range.hpp:125: bliss::iterator::range<T> bliss::iterator::range<T>::align_to_page(const T&) const [with T = char]: Assertion `page_size > 0' failed.*");
+//      EXPECT_DEATH(r.align_to_page(p), "test-bliss-iterators: /home/tpan/src/bliss/src/iterators/range.hpp:125: bliss::iterator::range<T> bliss::iterator::range<T>::align_to_page(const T&) const [with T = char]: Assertion `page_size > 0' failed.\n");
     }
   }
 
   starts = {std::numeric_limits<TypeParam>::max()};
-  pageSizes = {1, 256, 1024, 4096, std::numeric_limits<size_t>::max()};
+  pageSizes = {1, std::numeric_limits<TypeParam>::max() / 2, std::numeric_limits<TypeParam>::max()};
 
   for (auto s : starts) {
     for (auto p : pageSizes) {
       r = range<TypeParam>(s, s+1);
-      EXPECT_EXIT(r.align_to_page(p), ::testing::KilledBySignal(SIGABRT), "error on line .* of align_to_page()");
+//      EXPECT_EXIT(r.align_to_page(p), ::testing::KilledBySignal(SIGABRT), "error on line .* of align_to_page()");
+      EXPECT_DEATH(r.align_to_page(p), "error on line .* of align_to_page()");
     }
   }
 
   starts = {std::numeric_limits<TypeParam>::max()};
-  pageSizes = {0, std::numeric_limits<size_t>::lowest(), std::numeric_limits<size_t>::min()};
+  pageSizes = {0, std::numeric_limits<TypeParam>::lowest(), std::numeric_limits<TypeParam>::min()};
 
   for (auto s : starts) {
     for (auto p : pageSizes) {
       r = range<TypeParam>(s, s+1);
-      EXPECT_EXIT(r.align_to_page(p), ::testing::KilledBySignal(SIGABRT), "error on line .* of align_to_page()");
+//      EXPECT_EXIT(r.align_to_page(p), ::testing::KilledBySignal(SIGABRT), "error on line .* of align_to_page()");
+      EXPECT_DEATH(r.align_to_page(p), "error on line .* of align_to_page()");
     }
   }
 }
@@ -177,5 +179,6 @@ TYPED_TEST_P(RangeTest, alignFails) {
 
 REGISTER_TYPED_TEST_CASE_P(RangeTest, equal, assignment, copyConstruct, partition, align, partitionFails, alignFails);
 
-typedef ::testing::Types<char, uint8_t, int16_t, uint16_t, int, uint32_t, int64_t, uint64_t, size_t> RangeTestTypes;
+//typedef ::testing::Types<char, uint8_t, int16_t, uint16_t, int, uint32_t, int64_t, uint64_t, size_t> RangeTestTypes;
+typedef ::testing::Types<char> RangeTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, RangeTest, RangeTestTypes);
