@@ -130,7 +130,7 @@ TYPED_TEST_P(RangeTest, partition) {
 TYPED_TEST_P(RangeTest, align) {
   range<TypeParam> r;
 
-  std::vector<TypeParam> starts = {0, 1, (std::numeric_limits<TypeParam>::max() + 1)/3, (std::numeric_limits<TypeParam>::max() + 1)/2, std::numeric_limits<TypeParam>::max()};
+  std::vector<TypeParam> starts = {0, 1, (std::numeric_limits<TypeParam>::max() + 1)/3, (std::numeric_limits<TypeParam>::max() + 1)/2, std::numeric_limits<TypeParam>::max()-1};
 
   if (std::is_signed<TypeParam>::value)
   {
@@ -144,6 +144,7 @@ TYPED_TEST_P(RangeTest, align) {
 
       if (s - std::numeric_limits<TypeParam>::lowest() < p)
           continue;
+      //printf("1 %ld %ld\n", static_cast<int64_t>(s), static_cast<int64_t>(p));
 
       r = range<TypeParam>(s, s+1);
       r = r.align_to_page(p);
@@ -181,10 +182,12 @@ TYPED_TEST_P(RangeDeathTest, constructFails) {
 
   std::string err_regex = ".*range.hpp.* Assertion .* failed.*";
 
-  EXPECT_EXIT(range<TypeParam>(0, -100, 0, 1), ::testing::KilledBySignal(SIGABRT), err_regex);
-  EXPECT_EXIT(range<TypeParam>(0, 100, 0, -1), ::testing::KilledBySignal(SIGABRT), err_regex);
-  EXPECT_EXIT(range<TypeParam>(0, std::numeric_limits<TypeParam>::max() + 1, 0, 1), ::testing::KilledBySignal(SIGABRT), err_regex);
-  EXPECT_EXIT(range<TypeParam>(0, std::numeric_limits<TypeParam>::lowest() - 1, 0, -1), ::testing::KilledBySignal(SIGABRT), err_regex);
+  if (std::is_signed<TypeParam>::value) {
+    EXPECT_EXIT(range<TypeParam>(0, -100, 0, 1), ::testing::KilledBySignal(SIGABRT), err_regex);
+    EXPECT_EXIT(range<TypeParam>(0, 100, 0, -1), ::testing::KilledBySignal(SIGABRT), err_regex);
+    EXPECT_EXIT(range<TypeParam>(0, std::numeric_limits<TypeParam>::max() + 1, 0, 1), ::testing::KilledBySignal(SIGABRT), err_regex);
+    EXPECT_EXIT(range<TypeParam>(0, std::numeric_limits<TypeParam>::lowest() - 1, 0, -1), ::testing::KilledBySignal(SIGABRT), err_regex);
+  }
 }
 
 TYPED_TEST_P(RangeDeathTest, partitionFails) {
@@ -245,23 +248,13 @@ TYPED_TEST_P(RangeDeathTest, alignFails) {
 
   for (auto s : starts) {
     for (auto p : pageSizes) {
-      printf("1 %ld %ld\n", static_cast<int64_t>(s), static_cast<int64_t>(p));
+      //printf("2 %ld %ld\n", static_cast<int64_t>(s), static_cast<int64_t>(p));
 
       r = range<TypeParam>(s, s+1);
       EXPECT_EXIT(r.align_to_page(p), ::testing::KilledBySignal(SIGABRT), err_regex);
     }
   }
 
-  starts = {std::numeric_limits<TypeParam>::max()};
-  pageSizes = {0, std::numeric_limits<TypeParam>::lowest(), std::numeric_limits<TypeParam>::min()};
-
-  for (auto s : starts) {
-    for (auto p : pageSizes) {
-      printf("1 %ld %ld\n", static_cast<int64_t>(s), static_cast<int64_t>(p));
-      r = range<TypeParam>(s, s+1);
-      EXPECT_EXIT(r.align_to_page(p), ::testing::KilledBySignal(SIGABRT), err_regex);
-    }
-  }
 }
 
 
@@ -273,6 +266,6 @@ REGISTER_TYPED_TEST_CASE_P(RangeDeathTest, constructFails, partitionFails, align
 
 
 //typedef ::testing::Types<char, uint8_t, int16_t, uint16_t, int, uint32_t, int64_t, uint64_t, size_t> RangeTestTypes;
-typedef ::testing::Types<char> RangeTestTypes;
+typedef ::testing::Types<char, uint8_t, int16_t, uint16_t, int, uint32_t, int64_t, uint64_t, size_t> RangeTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, RangeTest, RangeTestTypes);
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, RangeDeathTest, RangeTestTypes);
