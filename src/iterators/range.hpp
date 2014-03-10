@@ -20,42 +20,33 @@ namespace bliss
      * Range specified with offset, length, and overlap.  specific for 1D.
      */
     template<typename T>
-    struct range {
+    struct range
+    {
 
         T block_start;   // starting position of range aligned to block
-        T start;   // offset from the beginning of block, if range is block aligned.
+        T start; // offset from the beginning of block, if range is block aligned.
         T end;   // length of range, starting from offset_in_block.
         T step;   // stride is the distance between each successive elements
         T overlap;  // amount of overlap at each end
 
-        range(T const& _start,
-              T const& _end,
-              T const& _overlap = 0,
-              T const& _step = 1)
-          : block_start(_start),
-            start(_start),
-            end(_end),
-            step(_step),
-            overlap(_overlap)
+        range(const T &_start, const T &_end, const T &_overlap = 0,
+              const T &_step = 1)
+            : block_start(_start), start(_start), end(_end), step(_step),
+              overlap(_overlap)
         {
-          assert((end >= start && step > 0 )  || (end <= start && step < 0));
+          assert((end >= start && step > 0) || (end <= start && step < 0));
         }
 
         range(range<T> const &other)
-          : block_start(other.block_start),
-            start(other.start),
-            end(other.end),
-            step(other.step),
-            overlap(other.overlap)
-        {}
+            : block_start(other.block_start), start(other.start),
+              end(other.end), step(other.step), overlap(other.overlap)
+        {
+        }
 
         range()
-        : block_start(0),
-          start(0),
-          end(0),
-          step(1),
-          overlap(0)
-        {}
+            : block_start(0), start(0), end(0), step(1), overlap(0)
+        {
+        }
 
         range<T>& operator=(range<T> const & other)
         {
@@ -67,11 +58,13 @@ namespace bliss
           return *this;
         }
 
-        bool operator==(range<T> const & other) {
+        bool operator==(range<T> const & other)
+        {
           // same if the data range is identical and step is same.
           // not comparing overlap or block start.
 
-          return (start == other.start) && (end == other.end) && (step == other.step);
+          return (start == other.start) && (end == other.end)
+                 && (step == other.step);
         }
 
         // TODO: when needed: comparators
@@ -81,11 +74,9 @@ namespace bliss
         /**
          *  block partitioning
          */
-        static range<T> block_partition(T   const& total,
-                                        int const& np,
-                                        int const& pid,
-                                        T   const& _overlap = 0,
-                                        T   const& _step = 1)
+        static range<T> block_partition(T const& total, const int &np,
+                                        const int &pid, T const& _overlap = 0,
+                                        T const& _step = 1)
         {
           assert(np > 0);
           assert(total >= np);
@@ -97,7 +88,6 @@ namespace bliss
 
           if (np == 1)
             return output;
-
 
           T div = total / static_cast<T>(np);
           T rem = total % static_cast<T>(np);
@@ -123,7 +113,7 @@ namespace bliss
         /**
          * align the range to page boundaries.
          */
-        range<T> align_to_page(T const &page_size) const
+        range<T> align_to_page(const T &page_size) const
         {
           assert(page_size > 0);
 
@@ -135,12 +125,14 @@ namespace bliss
           // note that if output.start is negative, it will put block_start at a bigger address than the start.
           output.block_start = (output.start / page_size) * page_size;
 
-          if (output.block_start > output.start) {
+          if (output.block_start > output.start)
+          {
 
 //            printf("block start: %ld\n", static_cast<size_t>(output.block_start));
 
             // if near lowest possible value, then we can't align further..  assert this situation.
-            assert((output.block_start - std::numeric_limits<T>::lowest()) > page_size);
+            assert(
+                (output.block_start - std::numeric_limits<T>::lowest()) > page_size);
 
             // deal with negative start position.
             output.block_start = output.block_start - page_size;
@@ -151,7 +143,7 @@ namespace bliss
           return output;
         }
 
-        bool is_page_aligned(T const &page_size) const
+        bool is_page_aligned(const T &page_size) const
         {
           assert(page_size > 0);
           return (this->block_start % page_size) == 0;
@@ -208,15 +200,15 @@ namespace bliss
         //  return output;
         //}
 
-
     };
 
     template<typename T>
-    std::ostream& operator<<(std::ostream& ost, const range<T>& r) {
-      ost << "range: block@" << r.block_start << " [" << r.start << ":" << r.step << ":" << r.end << ") overlap " << r.overlap;
+    std::ostream& operator<<(std::ostream& ost, const range<T>& r)
+    {
+      ost << "range: block@" << r.block_start << " [" << r.start << ":"
+      << r.step << ":" << r.end << ") overlap " << r.overlap;
       return ost;
     }
-
 
   } /* namespace functional */
 } /* namespace bliss */

@@ -36,13 +36,11 @@ namespace bliss
     //
     //
 
-
-    template<typename F, typename... Args>
+    template<typename F, typename ... Args>
     struct function_traits
     {
         typedef decltype(std::declval<F>()(std::declval<typename std::add_lvalue_reference<Args>::type>()...)) return_type;
     };
-
 
   } /* namespace functional */
 } /* namespace bliss */

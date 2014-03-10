@@ -15,9 +15,11 @@
 #include "io/file_loader.hpp"
 #include "iterators/range.hpp"
 
-class FileLoaderTest : public ::testing::Test {
+class FileLoaderTest : public ::testing::Test
+{
   protected:
-    virtual void SetUp() {
+    virtual void SetUp()
+    {
       fileName.assign(PROJ_SRC_DIR);
       fileName.append("/test/data/test.fastq");
 
@@ -29,9 +31,10 @@ class FileLoaderTest : public ::testing::Test {
       ASSERT_EQ(34111308, fileSize);
     }
 
-    static void readFileC(std::string const & fileName, const uint64_t& offset, const uint64_t& length, char* result)
+    static void readFileC(const std::string &fileName, const uint64_t& offset,
+                          const uint64_t& length, char* result)
     {
-      FILE *fp = fopen(fileName.c_str(),"r");
+      FILE *fp = fopen(fileName.c_str(), "r");
       fseek(fp, offset, SEEK_SET);
       size_t read = fread_unlocked(result, sizeof(char), length, fp);
       fclose(fp);
@@ -44,9 +47,6 @@ class FileLoaderTest : public ::testing::Test {
 
 };
 
-
-
-
 // normal test cases
 TEST_F(FileLoaderTest, OpenWithFullRange)
 {
@@ -54,7 +54,9 @@ TEST_F(FileLoaderTest, OpenWithFullRange)
   int rank = 0;
   int nprocs = 1;
 
-  bliss::io::file_loader::range_type r = bliss::io::file_loader::range_type::block_partition(fileSize, nprocs, rank);
+  bliss::io::file_loader::range_type r =
+      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
+                                                          rank);
 
   bliss::io::file_loader loader(fileName, r);
 
@@ -64,7 +66,7 @@ TEST_F(FileLoaderTest, OpenWithFullRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete [] gold;
+  delete[] gold;
 }
 TEST_F(FileLoaderTest, PreloadWithFullRange)
 {
@@ -72,7 +74,9 @@ TEST_F(FileLoaderTest, PreloadWithFullRange)
   int rank = 0;
   int nprocs = 1;
 
-  bliss::io::file_loader::range_type r = bliss::io::file_loader::range_type::block_partition(fileSize, nprocs, rank);
+  bliss::io::file_loader::range_type r =
+      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
+                                                          rank);
 
   bliss::io::file_loader loader(fileName, r, true);
 
@@ -82,14 +86,16 @@ TEST_F(FileLoaderTest, PreloadWithFullRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete [] gold;
+  delete[] gold;
 }
 TEST_F(FileLoaderTest, OpenWithRange)
 {
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::file_loader::range_type r = bliss::io::file_loader::range_type::block_partition(fileSize, nprocs, rank);
+  bliss::io::file_loader::range_type r =
+      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
+                                                          rank);
 
   bliss::io::file_loader loader(fileName, r);
 
@@ -100,15 +106,18 @@ TEST_F(FileLoaderTest, OpenWithRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete [] gold;
+  delete[] gold;
 }
 TEST_F(FileLoaderTest, OpenWithAlignedRange)
 {
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::file_loader::range_type r = bliss::io::file_loader::range_type::block_partition(fileSize, nprocs, rank);
-  bliss::io::file_loader::range_type ra = r.align_to_page(sysconf(_SC_PAGE_SIZE));
+  bliss::io::file_loader::range_type r =
+      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
+                                                          rank);
+  bliss::io::file_loader::range_type ra = r.align_to_page(
+      sysconf(_SC_PAGE_SIZE));
   bliss::io::file_loader loader(fileName, ra);
 
   bliss::io::file_loader::range_type r2 = loader.getRange();
@@ -118,7 +127,7 @@ TEST_F(FileLoaderTest, OpenWithAlignedRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete [] gold;
+  delete[] gold;
 }
 TEST_F(FileLoaderTest, PreloadWithRange)
 {
@@ -126,7 +135,9 @@ TEST_F(FileLoaderTest, PreloadWithRange)
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::file_loader::range_type r = bliss::io::file_loader::range_type::block_partition(fileSize, nprocs, rank);
+  bliss::io::file_loader::range_type r =
+      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
+                                                          rank);
 
   bliss::io::file_loader loader(fileName, r, true);
 
@@ -137,7 +148,7 @@ TEST_F(FileLoaderTest, PreloadWithRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete [] gold;
+  delete[] gold;
 }
 TEST_F(FileLoaderTest, PreloadWithAlignedRange)
 {
@@ -145,8 +156,11 @@ TEST_F(FileLoaderTest, PreloadWithAlignedRange)
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::file_loader::range_type r = bliss::io::file_loader::range_type::block_partition(fileSize, nprocs, rank);
-  bliss::io::file_loader::range_type ra = r.align_to_page(sysconf(_SC_PAGE_SIZE));
+  bliss::io::file_loader::range_type r =
+      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
+                                                          rank);
+  bliss::io::file_loader::range_type ra = r.align_to_page(
+      sysconf(_SC_PAGE_SIZE));
   bliss::io::file_loader loader(fileName, ra, true);
 
   bliss::io::file_loader::range_type r2 = loader.getRange();
@@ -156,9 +170,8 @@ TEST_F(FileLoaderTest, PreloadWithAlignedRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete [] gold;
+  delete[] gold;
 }
-
 
 // TODO negative test cases
 TEST_F(FileLoaderTest, NoFilename)
@@ -179,8 +192,4 @@ TEST_F(FileLoaderTest, EmptyRange)
 TEST_F(FileLoaderTest, BadRange)
 {
 }
-
-
-
-
 

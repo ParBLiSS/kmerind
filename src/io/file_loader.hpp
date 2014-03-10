@@ -13,7 +13,6 @@
 #include <exception>
 
 #include <unistd.h>  // sysconf
-
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <fcntl.h> // for open
@@ -25,7 +24,6 @@
 #include <type_traits>
 
 #include "iterators/range.hpp"
-
 
 namespace bliss
 {
@@ -43,18 +41,16 @@ namespace bliss
           message = _msg;
         }
 
-        io_exception(std::string const & _msg)
+        io_exception(const std::string &_msg)
         {
           message = _msg;
         }
 
-
-        virtual const char* what() const throw()
+        virtual const char* what() const throw ()
         {
           return message.c_str();
         }
     };
-
 
     /**
      *
@@ -68,23 +64,27 @@ namespace bliss
         /**
          * opens the file and save in file handle
          */
-        file_loader(std::string const & _filename, bool preload=false)
-          : filename(_filename), data(nullptr), aligned_data(nullptr), preloaded(preload)
+        file_loader(const std::string &_filename, bool preload = false)
+            : filename(_filename), data(nullptr), aligned_data(nullptr),
+              preloaded(preload)
         {
           file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);
-        };
+        }
+        ;
 
-
-        file_loader(std::string const & _filename, range_type const & _range, bool preload = false)
-          : filename(_filename), range(_range), data(nullptr), aligned_data(nullptr), preloaded(preload)
+        file_loader(const std::string &_filename, const range_type &_range,
+                    bool preload = false)
+            : filename(_filename), range(_range), data(nullptr),
+              aligned_data(nullptr), preloaded(preload)
         {
           file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);
 
           // now mmap the file
           load();
-        };
+        }
+        ;
 
         /**
          * closes the file.
@@ -93,7 +93,8 @@ namespace bliss
         {
           unload();
           close(file_handle);
-        };
+        }
+        ;
 
         /**
          * return data pointed to by range.start.  not same as range.block_start.
@@ -101,20 +102,21 @@ namespace bliss
         char* getData()
         {
           return data;
-        };
+        }
+        ;
 
         range_type getRange() const
         {
           return range;
-        };
-
+        }
+        ;
 
       protected:
         std::string filename;
         range_type range;  // offset in file from where to read
 
         size_t page_size;
-        int file_handle;// file handle
+        int file_handle;  // file handle
 
         char* data;
         char* aligned_data;  // memmapped data, page aligned.  strictly internal
@@ -128,27 +130,30 @@ namespace bliss
         /**
          *
          */
-        void load() throw(io_exception) {
+        void load() throw (io_exception)
+        {
           range = range.align_to_page(page_size);
 
-          aligned_data = (char*)mmap(nullptr,
-                                     range.end - range.block_start,
-                                     PROT_READ, MAP_PRIVATE,
-                                     file_handle, range.block_start );
+          aligned_data = (char*)mmap(nullptr, range.end - range.block_start,
+          PROT_READ,
+                                     MAP_PRIVATE, file_handle,
+                                     range.block_start);
 
           if (aligned_data == MAP_FAILED)
           {
             std::stringstream ss;
             int myerr = errno;
-            ss << "ERROR in mmap: "  << myerr << ": " << strerror(myerr);
+            ss << "ERROR in mmap: " << myerr << ": " << strerror(myerr);
             throw io_exception(ss.str());
           }
 
-          if (preloaded) {
+          if (preloaded)
+          {
             // allocate space
             data = new char[range.end - range.start + 1];
             //copy data over
-            memcpy(data, aligned_data + (range.start - range.block_start), sizeof(char) * (range.end - range.start));
+            memcpy(data, aligned_data + (range.start - range.block_start),
+                   sizeof(char) * (range.end - range.start));
 
             data[range.end - range.start] = 0;
 
@@ -157,26 +162,30 @@ namespace bliss
 
             aligned_data = data;
 
-          } else {
+          }
+          else
+          {
 
             data = aligned_data + (range.start - range.block_start);
 
           }
         }
 
-        void unload() {
-          if (preloaded) {
+        void unload()
+        {
+          if (preloaded)
+          {
             if (data != nullptr)
-              delete [] data;
-          } else {
+              delete[] data;
+          }
+          else
+          {
             if (aligned_data != nullptr || aligned_data != MAP_FAILED)
               munmap(aligned_data, range.end - range.block_start);
           }
           aligned_data = nullptr;
           data = nullptr;
         }
-
-
 
     };
 
