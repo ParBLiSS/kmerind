@@ -228,7 +228,7 @@ void init()
 
 
 
-// macro to add file and line 
+// macro to add file and line
 //#define _LOG_MSG(MSG) MSG << "\t(" << __FILE__ << ":" << __LINE__ << ")"
 #define _LOG_MSG(MSG) __FILE__ << ":" << __LINE__ << ":\t" << MSG
 
