@@ -3,6 +3,8 @@ buffered iterator?
 read struct: for fastQ, for fastA.
 	fastQ - okay.
 	fastA - ??
+	
+	use MPI-IO
 
 count number of reads - every 4 lines
 	indexing iterator (return positions in underlying iterator)
@@ -68,6 +70,19 @@ create quality score quality score
 
 mpi redistribution code.
 	threading and support for streaming.	
+	at least 1 thread per process for managing file input
+	at least 1 thread per process for managing MPI input
+	compute threads independently compute and do MPI-isend?
+	
+	global array - no global algorithms to go with it
+	non-collective communication is good - reduce network congestion
+	async communication is good - overalp compute and io
+	
+	semantic is still to send a block, and receive a block and do something
+	send - into a sink.  iterator or buffer?
+	receive - read from a src as a whole block then do someting about it - iterator or buffer?
+	
+	local sorting as merge operation after communication to hide sorting?
 
 
 query...
