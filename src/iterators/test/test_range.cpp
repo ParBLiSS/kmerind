@@ -269,7 +269,6 @@ REGISTER_TYPED_TEST_CASE_P(RangeDeathTest, constructFails, partitionFails,
 
 //////////////////// RUN the tests with different types.
 
-//typedef ::testing::Types<char, uint8_t, int16_t, uint16_t, int, uint32_t, int64_t, uint64_t, size_t> RangeTestTypes;
 typedef ::testing::Types<char, uint8_t, int16_t, uint16_t, int, uint32_t,
     int64_t, uint64_t, size_t> RangeTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, RangeTest, RangeTestTypes);
