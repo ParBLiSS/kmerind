@@ -93,11 +93,9 @@ namespace iterator
 
 
         // class specific constructor
-        explicit
         filter_iterator(const Filter & f, const Iterator& curr, const Iterator& end)
           : _curr(curr), _start(curr), _end(end), _f(f), before_start(false) {};
 
-        explicit
         filter_iterator(const Filter & f, const Iterator& curr)   // for end iterator.
           : _curr(curr), _start(curr), _end(curr), _f(f), before_start(false) {};
 

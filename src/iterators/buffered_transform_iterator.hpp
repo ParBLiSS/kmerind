@@ -85,7 +85,6 @@ namespace iterator
 
 
         // class specific constructor
-        explicit
         buffered_transform_iterator(const Iterator& base_iter, const Transformer & f)
           : _curr(base_iter), _next(base_iter), _f(f) {};
 

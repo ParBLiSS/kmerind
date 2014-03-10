@@ -19,19 +19,6 @@
 
 using namespace bliss::iterator;
 
-
-size_t GetThreadCount() {
-  size_t thread_count = 0;
-  if (DIR *dir = opendir("/proc/self/task")) {
-    while (dirent *entry = readdir(dir)) {
-      if (entry->d_name[0] != '.')
-        ++thread_count;
-    }
-    closedir(dir);
-  }
-  return thread_count;
-}
-
 template<typename T>
 class RangeTest : public ::testing::Test {
   protected:

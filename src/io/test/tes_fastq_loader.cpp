@@ -7,10 +7,4 @@
 
 #include "io/fastq_loader.hpp"
 
-namespace bliss
-{
-  namespace io
-  {
-
-  } /* namespace io */
-} /* namespace bliss */
+// TODO.

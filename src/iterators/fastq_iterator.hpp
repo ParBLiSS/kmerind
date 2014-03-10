@@ -230,10 +230,8 @@ namespace iterator
 
 
         // class specific constructor
-        explicit
         fastq_iterator(const Parser & f, const Iterator& curr, const Iterator& end)
           : _curr(curr), _next(curr), _end(end), _f(f), empty_output() {};
-        explicit
         fastq_iterator(const Parser & f, const Iterator& end)
           : _curr(end), _next(end), _end(end), _f(f), empty_output() {};
 
