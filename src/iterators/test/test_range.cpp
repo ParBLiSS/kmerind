@@ -34,26 +34,35 @@ class RangeTest : public ::testing::Test
 TYPED_TEST_CASE_P(RangeTest);
 
 TYPED_TEST_P(RangeTest, equal){
-range<TypeParam> r(0, 100, 3, 1);
-range<TypeParam> r2(0, 100, 0, 1);
+range<TypeParam> r(0, 100, 3);
+range<TypeParam> r2(0, 100, 0);
 EXPECT_TRUE(r == r2);
+
+range<TypeParam> r(10, 100, 3);
+range<TypeParam> r2(10, 100, 0);
+EXPECT_TRUE(r == r2);
+
 if (std::is_signed<TypeParam>::value)
 {
-  range<TypeParam> r(0, -100, 3, -1);
-  range<TypeParam> r2(0, -100, 0, -1);
+  range<TypeParam> r(-10, 100, 3);
+  range<TypeParam> r2(-10, 100, 0);
+  EXPECT_TRUE(r == r2);
+
+  range<TypeParam> r(-101, -100, 3);
+  range<TypeParam> r2(-101, -100, 0);
   EXPECT_TRUE(r == r2);
 }
 }
 
 TYPED_TEST_P(RangeTest, assignment){
 range<TypeParam> r;
-range<TypeParam> r2(0, 100, 0, 1);
+range<TypeParam> r2(10, 100, 0);
 r = r2;
 EXPECT_TRUE(r == r2);
 
 if (std::is_signed<TypeParam>::value)
 {
-  range<TypeParam> r3(0, -100, 3, -1);
+  range<TypeParam> r3(-10, 100, 3);
   r = r3;
   EXPECT_TRUE(r == r3);
 }
@@ -61,14 +70,14 @@ if (std::is_signed<TypeParam>::value)
 }
 
 TYPED_TEST_P(RangeTest, copyConstruct){
-range<TypeParam> r2(0, 100, 0, 1);
+range<TypeParam> r2(0, 100, 0);
 range<TypeParam> r(r2);
 EXPECT_TRUE(r == r2);
 
 if (std::is_signed<TypeParam>::value)
 {
-  range<TypeParam> r3(0, -100, 3, -1);
-  range<TypeParam> r4(0, -100, 0, -1);
+  range<TypeParam> r3(0, -100, 3);
+  range<TypeParam> r4(0, -100, 0);
   EXPECT_TRUE(r3 == r4);
 }
 
@@ -80,8 +89,8 @@ TypeParam e;
 
 std::vector<TypeParam> lens =
 { 1, 2, std::numeric_limits<TypeParam>::max(), (std::numeric_limits<TypeParam>::max() >> 1) + 1};
-std::vector<int> partitionCount =
-{ 1, 2, 3, 4, 5, 6, 7, 8, std::numeric_limits<int>::max()};
+std::vector<size_t> partitionCount =
+{ 1, 2, 3, 4, 5, 6, 7, 8, std::numeric_limits<size_t>::max()};
 for (auto len : lens)
 {
   for (int i : partitionCount)
@@ -122,7 +131,7 @@ TYPED_TEST_P(RangeTest, align){
 range<TypeParam> r;
 
 std::vector<TypeParam> starts =
-{ 0, 1, (std::numeric_limits<TypeParam>::max() + 1)/3, (std::numeric_limits<TypeParam>::max() + 1)/2, std::numeric_limits<TypeParam>::max()-1};
+{ 0, 1, (std::numeric_limits<TypeParam>::max() - 1) / 3 + 1, (std::numeric_limits<TypeParam>::max() >> 1) + 1, std::numeric_limits<TypeParam>::max()-1};
 
 if (std::is_signed<TypeParam>::value)
 {
@@ -130,7 +139,7 @@ if (std::is_signed<TypeParam>::value)
 }
 
 std::vector<TypeParam> pageSizes =
-{ 1, 64, (std::numeric_limits<TypeParam>::max() + 1) / 2, std::numeric_limits<TypeParam>::max()};
+{ 1, 64, (std::numeric_limits<TypeParam>::max() >> 1) + 1, std::numeric_limits<TypeParam>::max()};
 
 for (auto s : starts)
 {
@@ -175,10 +184,10 @@ std::string err_regex = ".*range.hpp.* Assertion .* failed.*";
 
 if (std::is_signed<TypeParam>::value)
 {
-  EXPECT_EXIT(range<TypeParam>(0, -100, 0, 1), ::testing::KilledBySignal(SIGABRT), err_regex);
-  EXPECT_EXIT(range<TypeParam>(0, 100, 0, -1), ::testing::KilledBySignal(SIGABRT), err_regex);
-  EXPECT_EXIT(range<TypeParam>(0, std::numeric_limits<TypeParam>::max() + 1, 0, 1), ::testing::KilledBySignal(SIGABRT), err_regex);
-  EXPECT_EXIT(range<TypeParam>(0, std::numeric_limits<TypeParam>::lowest() - 1, 0, -1), ::testing::KilledBySignal(SIGABRT), err_regex);
+  EXPECT_EXIT(range<TypeParam>(0, -100, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
+  EXPECT_EXIT(range<TypeParam>(0, 100, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
+  EXPECT_EXIT(range<TypeParam>(0, std::numeric_limits<TypeParam>::max() + 1, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
+  EXPECT_EXIT(range<TypeParam>(0, std::numeric_limits<TypeParam>::lowest() - 1, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
 }
 }
 
@@ -187,47 +196,71 @@ range<TypeParam> r;
 
 std::string err_regex = ".*range.hpp.*block_partition.* Assertion .* failed.*";
 
+// lengths are not right.
 std::vector<TypeParam> lens =
 { std::numeric_limits<TypeParam>::lowest(), std::numeric_limits<TypeParam>::min(), 0};
-std::vector<int> partitionCount =
-{ 1, 2, 3, 4, 5, 6, 7, 8, std::numeric_limits<int>::max()};
+std::vector<size_t> partitionCount =
+{ 1, 2, 3, 4, 5, 6, 7, 8, std::numeric_limits<size_t>::max()};
 for (auto len : lens)
 {
-  for (int i : partitionCount)
+  for (size_t i : partitionCount)
   {
+    printf("%ld, %ld\n", static_cast<int64_t>(len), i);
     EXPECT_EXIT(range<TypeParam>::block_partition(len, i, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
     EXPECT_EXIT(range<TypeParam>::block_partition(len, i, (i-1) / 2), ::testing::KilledBySignal(SIGABRT), err_regex);
     EXPECT_EXIT(range<TypeParam>::block_partition(len, i, i-1), ::testing::KilledBySignal(SIGABRT), err_regex);
   }
 }
 
+// partition counts are not right
 lens =
 { 1, 2, (std::numeric_limits<TypeParam>::max() >> 1) + 1, std::numeric_limits<TypeParam>::max()};
 partitionCount =
-{ 0, std::numeric_limits<int>::lowest(), std::numeric_limits<int>::max(), std::numeric_limits<int>::min()};
+{ 0, std::numeric_limits<size_t>::lowest(), std::numeric_limits<size_t>::min()};
 for (auto len : lens)
 {
-  for (int i : partitionCount)
+  for (size_t i : partitionCount)
   {
+    printf("%ld, %ld\n", static_cast<int64_t>(len), i);
+
     EXPECT_EXIT(range<TypeParam>::block_partition(len, i, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
     EXPECT_EXIT(range<TypeParam>::block_partition(len, i, (i-1) / 2), ::testing::KilledBySignal(SIGABRT), err_regex);
     EXPECT_EXIT(range<TypeParam>::block_partition(len, i, i-1), ::testing::KilledBySignal(SIGABRT), err_regex);
   }
 }
 
+// neither lengths nor partition sizes are right
 lens =
 { std::numeric_limits<TypeParam>::lowest(), std::numeric_limits<TypeParam>::min(), 0};
 partitionCount =
-{ 0, std::numeric_limits<int>::lowest(), std::numeric_limits<int>::max(), std::numeric_limits<int>::min()};
+{ 0, std::numeric_limits<size_t>::lowest(), std::numeric_limits<size_t>::min()};
 for (auto len : lens)
 {
-  for (int i : partitionCount)
+  for (size_t i : partitionCount)
   {
+    printf("%ld, %ld\n", static_cast<int64_t>(len), i);
     EXPECT_EXIT(range<TypeParam>::block_partition(len, i, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
     EXPECT_EXIT(range<TypeParam>::block_partition(len, i, (i-1) / 2), ::testing::KilledBySignal(SIGABRT), err_regex);
     EXPECT_EXIT(range<TypeParam>::block_partition(len, i, i-1), ::testing::KilledBySignal(SIGABRT), err_regex);
   }
 }
+
+// too many partitions.
+lens =
+{ 1, 2, (std::numeric_limits<TypeParam>::max() >> 1) + 1, std::numeric_limits<TypeParam>::max() - 1};
+partitionCount =
+{ std::numeric_limits<size_t>::max() };
+for (auto len : lens)
+{
+  for (size_t i : partitionCount)
+  {
+    printf("%ld, %ld\n", static_cast<int64_t>(len), i);
+    EXPECT_EXIT(range<TypeParam>::block_partition(len, i, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
+    EXPECT_EXIT(range<TypeParam>::block_partition(len, i, (i-1) / 2), ::testing::KilledBySignal(SIGABRT), err_regex);
+    EXPECT_EXIT(range<TypeParam>::block_partition(len, i, i-1), ::testing::KilledBySignal(SIGABRT), err_regex);
+  }
+}
+
 
 }
 
