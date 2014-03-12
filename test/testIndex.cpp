@@ -274,8 +274,10 @@ int main(int argc, char* argv[])
   }
 
 #ifdef USE_MPI
-  // broadcast to all
-  MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
+  if (nprocs > 1) {
+    // broadcast to all
+    MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
+  }
 #endif
 
   if (rank == nprocs - 1)
@@ -292,8 +294,8 @@ int main(int argc, char* argv[])
 
   // first generate an approximate partition.
   bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(file_size, nprocs,
-                                                          rank);
+      bliss::io::file_loader::range_type::block_partition(nprocs,
+                                                          rank, 0, file_size);
   std::cout << rank << " equipart: " << r << std::endl;
   std::cout << rank << " test block aligned: "
             << r.align_to_page(sysconf(_SC_PAGE_SIZE)) << std::endl;
@@ -312,8 +314,7 @@ int main(int argc, char* argv[])
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(
         t2 - t1);
-    INFO(
-        "MMap rank " << rank << " elapsed time: " << time_span3.count() << "s.");
+    INFO("MMap rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
     std::cout << rank << " record adjusted " << loader.getRange() << std::endl;
 
@@ -333,8 +334,7 @@ int main(int argc, char* argv[])
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(
         t2 - t1);
-    INFO(
-        "reads " << readCount << " rank " << rank << " elapsed time: " << time_span3.count() << "s.");
+    INFO("reads " << readCount << " rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
     printf("avoid compiler optimizing out the ops %ld\n", id);
 
@@ -370,8 +370,7 @@ int main(int argc, char* argv[])
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(
         t2 - t1);
-    INFO(
-        "bases " << baseCount << " kmer generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
+    INFO("bases " << baseCount << " kmer generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
     printf("avoid compiler optimizing out the ops %ld\n", kmer);
 
@@ -417,8 +416,7 @@ int main(int argc, char* argv[])
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(
         t2 - t1);
-    INFO(
-        "kmer + qual " << kmerCount << " generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
+    INFO("kmer + qual " << kmerCount << " generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
     printf("avoid compiler optimizing out the ops %lx %lf\n", kmer, qual);
 
@@ -475,8 +473,7 @@ int main(int argc, char* argv[])
 //  }
 
 #ifdef USE_MPI
-  MPI_Finalize();
-
+    MPI_Finalize();
 #endif
 
   return 0;

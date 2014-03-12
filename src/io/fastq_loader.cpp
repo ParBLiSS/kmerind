@@ -282,8 +282,7 @@ namespace bliss
       }
 
       // construct the new output range to use.
-      file_loader::range_type output(newStart, newEnd, input.overlap,
-                                     input.step);
+      file_loader::range_type output(newStart, newEnd, input.overlap);
       return output;
 
     }

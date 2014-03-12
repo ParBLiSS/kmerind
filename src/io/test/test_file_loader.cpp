@@ -26,13 +26,13 @@ class FileLoaderTest : public ::testing::Test
       // get file size
       struct stat filestat;
       stat(fileName.c_str(), &filestat);
-      fileSize = static_cast<uint64_t>(filestat.st_size);
+      fileSize = static_cast<size_t>(filestat.st_size);
 
       ASSERT_EQ(34111308, fileSize);
     }
 
-    static void readFileC(const std::string &fileName, const uint64_t& offset,
-                          const uint64_t& length, char* result)
+    static void readFileC(const std::string &fileName, const size_t& offset,
+                          const size_t& length, char* result)
     {
       FILE *fp = fopen(fileName.c_str(), "r");
       fseek(fp, offset, SEEK_SET);
@@ -43,7 +43,7 @@ class FileLoaderTest : public ::testing::Test
     }
 
     std::string fileName;
-    uint64_t fileSize;
+    size_t fileSize;
 
 };
 
@@ -55,8 +55,8 @@ TEST_F(FileLoaderTest, OpenWithFullRange)
   int nprocs = 1;
 
   bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
-                                                          rank);
+      bliss::io::file_loader::range_type::block_partition(nprocs,
+                                                          rank, 0, fileSize);
 
   bliss::io::file_loader loader(fileName, r);
 
@@ -75,8 +75,8 @@ TEST_F(FileLoaderTest, PreloadWithFullRange)
   int nprocs = 1;
 
   bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
-                                                          rank);
+      bliss::io::file_loader::range_type::block_partition(nprocs,
+                                                          rank, 0, fileSize);
 
   bliss::io::file_loader loader(fileName, r, true);
 
@@ -94,8 +94,8 @@ TEST_F(FileLoaderTest, OpenWithRange)
   int nprocs = 7;
 
   bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
-                                                          rank);
+      bliss::io::file_loader::range_type::block_partition(nprocs,
+                                                          rank, 0, fileSize);
 
   bliss::io::file_loader loader(fileName, r);
 
@@ -114,8 +114,8 @@ TEST_F(FileLoaderTest, OpenWithAlignedRange)
   int nprocs = 7;
 
   bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
-                                                          rank);
+      bliss::io::file_loader::range_type::block_partition(nprocs,
+                                                          rank, 0, fileSize);
   bliss::io::file_loader::range_type ra = r.align_to_page(
       sysconf(_SC_PAGE_SIZE));
   bliss::io::file_loader loader(fileName, ra);
@@ -136,8 +136,8 @@ TEST_F(FileLoaderTest, PreloadWithRange)
   int nprocs = 7;
 
   bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
-                                                          rank);
+      bliss::io::file_loader::range_type::block_partition(nprocs,
+                                                          rank, 0, fileSize);
 
   bliss::io::file_loader loader(fileName, r, true);
 
@@ -157,8 +157,8 @@ TEST_F(FileLoaderTest, PreloadWithAlignedRange)
   int nprocs = 7;
 
   bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(fileSize, nprocs,
-                                                          rank);
+      bliss::io::file_loader::range_type::block_partition(nprocs,
+                                                          rank, 0, fileSize);
   bliss::io::file_loader::range_type ra = r.align_to_page(
       sysconf(_SC_PAGE_SIZE));
   bliss::io::file_loader loader(fileName, ra, true);

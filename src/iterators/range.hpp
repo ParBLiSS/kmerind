@@ -33,6 +33,7 @@ namespace bliss
             : block_start(_start), start(_start), end(_end),
               overlap(_overlap)
         {
+          assert(_start <= _end);
         }
 
         range(range<T> const &other)
@@ -75,7 +76,7 @@ namespace bliss
                                         const T &start, const T &end,
                                         const T &_overlap = 0)
         {
-          assert( start < end);
+          assert( start <= end);
           assert(_overlap >= 0);
           assert(pid < np);  // both non-negative.
 
@@ -105,17 +106,22 @@ namespace bliss
           return output;
         }
 
-        range<T> block_partition(const size_t &np, const size_t &pid,
-                                 const range<T> &other = *this)
+        static range<T> block_partition(const size_t &np, const size_t &pid,
+                                 const range<T> &other)
         {
           return block_partition(np, pid, other.start, other.end, other.overlap);
+        }
+
+        range<T> block_partition(const size_t &np, const size_t &pid)
+        {
+          return block_partition(np, pid, this->start, this->end, this->overlap);
         }
 
 
         /**
          * align the range to page boundaries.
          */
-        range<T> align_to_page(const T &page_size) const
+        range<T> align_to_page(const size_t &page_size) const
         {
           assert(page_size > 0);
 
@@ -127,7 +133,7 @@ namespace bliss
           // note that if output.start is negative, it will put block_start at a bigger address than the start.
           output.block_start = (output.start / page_size) * page_size;
 
-          if (output.block_start > output.start)
+          if (output.block_start > output.start)  // only enters if start is negative.
           {
 
 //            printf("block start: %ld\n", static_cast<size_t>(output.block_start));
@@ -145,7 +151,7 @@ namespace bliss
           return output;
         }
 
-        bool is_page_aligned(const T &page_size) const
+        bool is_page_aligned(const size_t &page_size) const
         {
           assert(page_size > 0);
           return (this->block_start % page_size) == 0;
