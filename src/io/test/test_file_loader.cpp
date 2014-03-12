@@ -66,7 +66,7 @@ TEST_F(FileLoaderTest, OpenWithFullRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete[] gold;
+  delete [] gold;
 }
 TEST_F(FileLoaderTest, PreloadWithFullRange)
 {
@@ -86,7 +86,7 @@ TEST_F(FileLoaderTest, PreloadWithFullRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete[] gold;
+  delete [] gold;
 }
 TEST_F(FileLoaderTest, OpenWithRange)
 {
@@ -106,7 +106,7 @@ TEST_F(FileLoaderTest, OpenWithRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete[] gold;
+  delete [] gold;
 }
 TEST_F(FileLoaderTest, OpenWithAlignedRange)
 {
@@ -127,7 +127,7 @@ TEST_F(FileLoaderTest, OpenWithAlignedRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete[] gold;
+  delete [] gold;
 }
 TEST_F(FileLoaderTest, PreloadWithRange)
 {
@@ -148,7 +148,7 @@ TEST_F(FileLoaderTest, PreloadWithRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete[] gold;
+  delete [] gold;
 }
 TEST_F(FileLoaderTest, PreloadWithAlignedRange)
 {
@@ -170,7 +170,7 @@ TEST_F(FileLoaderTest, PreloadWithAlignedRange)
 
   int comp = memcmp(gold, loader.getData(), len * sizeof(char));
   ASSERT_EQ(0, comp);
-  delete[] gold;
+  delete [] gold;
 }
 
 // TODO negative test cases

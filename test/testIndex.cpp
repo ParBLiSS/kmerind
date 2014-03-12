@@ -21,10 +21,9 @@
 #include "mpi.h"
 
 #include "utils/logging.h"
-#include "config.hpp"
+//#include "config.hpp"
 
 #include "iterators/range.hpp"
-#include "io/file_loader.hpp"
 #include "io/fastq_loader.hpp"
 
 #include <string.h>
@@ -35,7 +34,6 @@
 
 #include "common/alphabets.hpp"
 #include "common/AlphabetTraits.hpp"
-//#include "iterators/transform_iterator.hpp"
 #include "iterators/buffered_transform_iterator.hpp"
 
 template<typename ALPHABET, typename Iterator, typename TO, int K>
@@ -311,6 +309,7 @@ int main(int argc, char* argv[])
     t1 = std::chrono::high_resolution_clock::now();
     // now open the file
     bliss::io::fastq_loader loader(filename, r, file_size);
+//    bliss::io::file_loader loader(filename, file_size);
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(
         t2 - t1);
@@ -376,9 +375,6 @@ int main(int argc, char* argv[])
 
     t1 = std::chrono::high_resolution_clock::now();
 
-    fastq_start = loader.begin();
-    fastq_end = loader.end();
-
     struct SANGER
     {
     };
@@ -389,6 +385,10 @@ int main(int argc, char* argv[])
     kmer = 0;
     double qual = 0;
     uint64_t kmerCount = 0;
+
+    fastq_start = loader.begin();
+    fastq_end = loader.end();
+
 
     for (; fastq_start != fastq_end; ++fastq_start)
     {

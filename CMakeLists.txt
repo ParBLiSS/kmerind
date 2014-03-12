@@ -83,7 +83,6 @@ if(NOT LOG_ENGINE)
 endif(NOT LOG_ENGINE)
 set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
 
-
 ###### External Library Settings
 #### Boost Library
 #set(EXTRA_LIBS pthread)
@@ -253,6 +252,11 @@ configure_file(
     "${PROJECT_BINARY_DIR}/config.hpp"
     @ONLY
     )
+configure_file(
+    "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+    "${PROJECT_BINARY_DIR}/logger_config.hpp"
+    @ONLY
+    )
 
 # add the binary tree to the search path for include files
 # so that we will find TutorialConfig.h
@@ -267,12 +271,17 @@ include_directories("${PROJECT_SOURCE_DIR}/src")
 #add_library("${libname}" SHARED ${libsrcs})
 # Link opencv stuff to the execution engine
 
-add_subdirectory(utils)
+add_subdirectory(src/utils)
+
+set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)
+
+
 add_subdirectory(src/common)
 add_subdirectory(src/io)
 add_subdirectory(src/index)
 add_subdirectory(src/iterators)
 add_subdirectory(test)
+add_subdirectory(utils)
 
 
 # Install Settings

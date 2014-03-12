@@ -8,11 +8,14 @@
 #ifndef FASTQLOADER_HPP_
 #define FASTQLOADER_HPP_
 
-#include "io/file_loader.hpp"
+#include <cstdint>
+
+
 #include <vector>
 
+
+#include "io/file_loader.hpp"
 #include "iterators/fastq_iterator.hpp"
-#include <cstdint>
 
 namespace bliss
 {
@@ -51,10 +54,10 @@ namespace bliss
       public:
 
         // testing.
-        void test();
-        void test2();
-        void get_sequence_positions() throw (io_exception);
-        void assign_sequence_ids() throw (io_exception);
+//        void test();
+//        void test2();
+//        void get_sequence_positions() throw (io_exception);
+//        void assign_sequence_ids() throw (io_exception);
 
         typedef bliss::iterator::fastq_iterator<
             bliss::iterator::fastq_parser<char*>, char*> iterator;

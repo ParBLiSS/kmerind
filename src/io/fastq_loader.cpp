@@ -22,6 +22,8 @@ namespace bliss
 
     fastq_loader::~fastq_loader()
     {
+      printf("~FASTQ_LOADER called.\n");
+
     }  //  superclass destructor handles everything.
 
     fastq_loader::fastq_loader(const std::string &_filename,
@@ -35,6 +37,8 @@ namespace bliss
       // internally opens the file twice with _range and shifted_range, search for record start/end
       // and construct new range and then open the file again.
       range = align_to_sequence(_filename, _range, total);
+
+      printf("FASTQ_LOADER called.\n");
 
       // use the superclass constructor to map, with adjusted range.
       load();
@@ -287,118 +291,118 @@ namespace bliss
 
     }
 
-    void fastq_loader::get_sequence_positions() throw (io_exception)
-    {
+//    void fastq_loader::get_sequence_positions() throw (io_exception)
+//    {
+//
+//      seqPositions.reserve((range.end - range.start) / 8); // at minimal, have @\nA\n+\n9\n for a record
+//
+//      iterator fqiter = this->begin();
+//      iterator fqend = this->end();
+//
+//      // walk through the iterator and
+//      for (; fqiter != fqend; ++fqiter)
+//      {
+//        seqPositions.push_back(*fqiter);
+//      }
+//
+//      int max = seqPositions.size();
+//      uint32_t maxSeqID = 0;
+//
+//      for (int i = max; i > 0; --i)
+//      {
+//        bliss::iterator::fastq_sequence<char*> result = seqPositions[max - i];
+//
+////        std::cout << "seq " << (max - i) << ": name=[" << std::string(result.name, result.name_end) << "], ";
+////        std::cout << "id=[" << std::hex << result.id << std::endl;
+//        //        std::cout << "seq=[" << std::string(result.seq, result.seq_end) << "], ";
+////        std::cout << "qual=[" << std::string(result.qual, result.qual_end) << "]" << std::endl;
+//        //printf("seq %d id = %lx, pos %d, file %d, seq msb %d, seq %d\n", (max-i), result.id, result.ids.pos, result.ids.file_id, result.ids.seq_msb, result.ids.seq_id);
+//
+//        maxSeqID =
+//            (maxSeqID > result.ids.seq_id ? maxSeqID : result.ids.seq_id);
+//      }
+//      printf("maxId: %d\n", maxSeqID);
+//
+//    }
 
-      seqPositions.reserve((range.end - range.start) / 8); // at minimal, have @\nA\n+\n9\n for a record
+//    void fastq_loader::assign_sequence_ids() throw (io_exception)
+//    {
+//      // mpi based.
+//
+//      int local_seq_count = seqPositions.size();
+//      seqIdStart = 0;
+//      int rank = 0, nprocs = 1;
+//
+//#if defined(USE_MPI)
+//
+//      MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+//      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+//
+//#endif
+//
+////      printf("rank %d of %d has %d sequences\n", rank, nprocs, local_seq_count);
+//
+//#if defined(USE_MPI)
+//      MPI_Exscan(&local_seq_count, &seqIdStart, 1, MPI_INT, MPI_SUM,
+//                 MPI_COMM_WORLD);
+//
+//#endif
+//
+////      printf("rank %d of %d has prefix %ld\n", rank, nprocs, seqIdStart);
+//
+//      for (int i = 0; i < local_seq_count; ++i)
+//      {
+//        seqPositions[i].id = i + seqIdStart;
+//      }
+//
+//    }
 
-      iterator fqiter = this->begin();
-      iterator fqend = this->end();
-
-      // walk through the iterator and
-      for (; fqiter != fqend; ++fqiter)
-      {
-        seqPositions.push_back(*fqiter);
-      }
-
-      int max = seqPositions.size();
-      uint32_t maxSeqID = 0;
-
-      for (int i = max; i > 0; --i)
-      {
-        bliss::iterator::fastq_sequence<char*> result = seqPositions[max - i];
-
-//        std::cout << "seq " << (max - i) << ": name=[" << std::string(result.name, result.name_end) << "], ";
-//        std::cout << "id=[" << std::hex << result.id << std::endl;
-        //        std::cout << "seq=[" << std::string(result.seq, result.seq_end) << "], ";
-//        std::cout << "qual=[" << std::string(result.qual, result.qual_end) << "]" << std::endl;
-        //printf("seq %d id = %lx, pos %d, file %d, seq msb %d, seq %d\n", (max-i), result.id, result.ids.pos, result.ids.file_id, result.ids.seq_msb, result.ids.seq_id);
-
-        maxSeqID =
-            (maxSeqID > result.ids.seq_id ? maxSeqID : result.ids.seq_id);
-      }
-      printf("maxId: %d\n", maxSeqID);
-
-    }
-
-    void fastq_loader::assign_sequence_ids() throw (io_exception)
-    {
-      // mpi based.
-
-      int local_seq_count = seqPositions.size();
-      seqIdStart = 0;
-      int rank = 0, nprocs = 1;
-
-#if defined(USE_MPI)
-
-      MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
-      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-#endif
-
-//      printf("rank %d of %d has %d sequences\n", rank, nprocs, local_seq_count);
-
-#if defined(USE_MPI)
-      MPI_Exscan(&local_seq_count, &seqIdStart, 1, MPI_INT, MPI_SUM,
-                 MPI_COMM_WORLD);
-
-#endif
-
-//      printf("rank %d of %d has prefix %ld\n", rank, nprocs, seqIdStart);
-
-      for (int i = 0; i < local_seq_count; ++i)
-      {
-        seqPositions[i].id = i + seqIdStart;
-      }
-
-    }
-
-    void fastq_loader::test()
-    {
-      char * curr = data;
-
-      char** positions = new char*[(range.end - range.start) / 8];
-      //std::vector<char*> positions;
-//      positions.reserve((range.end - range.start) / 8);
-      int i = 0;
-      for (; curr < data + (range.end - range.start); ++curr, ++i)
-      {
-        if (*curr == '@')
-          positions[i] = curr;
-      }
-
-      bool info = true;
-      for (int j = 0; j < i; ++j)
-      {
-        info |= (positions[j] != 0);
-      }
-
-      delete[] positions;
-    }
-
-    void fastq_loader::test2()
-    {
-      char * curr = data;
-
-      char** positions = (char**)malloc(
-          (range.end - range.start) / 8 * sizeof(char*));
-      //std::vector<char*> positions;
-//      positions.reserve((range.end - range.start) / 8);
-      int i = 0;
-      for (; curr < data + (range.end - range.start); ++curr, ++i)
-      {
-        if (*curr == '@')
-          positions[i] = (curr);
-      }
-
-      bool info = true;
-      for (int j = 0; j < i; ++j)
-      {
-        info |= (positions[j] != 0);
-      }
-
-      free(positions);
-    }
+//    void fastq_loader::test()
+//    {
+//      char * curr = data;
+//
+//      char** positions = new char*[(range.end - range.start) / 8];
+//      //std::vector<char*> positions;
+////      positions.reserve((range.end - range.start) / 8);
+//      int i = 0;
+//      for (; curr < data + (range.end - range.start); ++curr, ++i)
+//      {
+//        if (*curr == '@')
+//          positions[i] = curr;
+//      }
+//
+//      bool info = true;
+//      for (int j = 0; j < i; ++j)
+//      {
+//        info |= (positions[j] != 0);
+//      }
+//
+//      delete [] positions;
+//    }
+//
+//    void fastq_loader::test2()
+//    {
+//      char * curr = data;
+//
+//      char** positions = (char**)malloc(
+//          (range.end - range.start) / 8 * sizeof(char*));
+//      //std::vector<char*> positions;
+////      positions.reserve((range.end - range.start) / 8);
+//      int i = 0;
+//      for (; curr < data + (range.end - range.start); ++curr, ++i)
+//      {
+//        if (*curr == '@')
+//          positions[i] = (curr);
+//      }
+//
+//      bool info = true;
+//      for (int j = 0; j < i; ++j)
+//      {
+//        info |= (positions[j] != 0);
+//      }
+//
+//      free(positions);
+//    }
 
   } /* namespace io */
 } /* namespace bliss */

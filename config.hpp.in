@@ -15,9 +15,6 @@ file comment
 // CMakeLists.txt conditionally sets OPENMP_DEFINE
 @OPENMP_DEFINE@
 
-// logger
-@LOGGER_DEFINE@
-
 // source location
 #define PROJ_SRC_DIR "@PROJECT_SOURCE_DIR@"
 
