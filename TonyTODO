@@ -65,8 +65,24 @@ create quality score quality score
 	
 	a simple iteration is done that computes the "Phred Score" for a kmer accurately.
 
-
-
+generalization of iterator patterns
+	1. transform iterator (1 to 1.  memory of output)
+	2. filter iterator (searching.  ? to 1)
+	3. buffered transform iterator (searching. ? to 1)
+		ascii -> read struct
+			can we get more operation inside here?
+	4. buffered transform iterator (1 to 1 with memory of m previous inputs.  )
+		ascii -> kmer
+		quality scoring
+	5. m to 1 transform iterator.  (buffered transform iterator?.  mem of output)
+		packing
+	6. m to n transform iterator
+		unpacking (1 to n)
+		packed->kmer (m to n)
+		
+	2..6 need to know end of iterator
+	which supports what type of base iterator?
+	
 
 mpi redistribution code.
 	threading and support for streaming.	
@@ -83,6 +99,8 @@ mpi redistribution code.
 	receive - read from a src as a whole block then do someting about it - iterator or buffer?
 	
 	local sorting as merge operation after communication to hide sorting?
+
+manage and buffering of reads/mpi for multicore.
 
 
 query...
