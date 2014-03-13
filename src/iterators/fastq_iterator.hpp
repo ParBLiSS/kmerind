@@ -254,12 +254,11 @@ namespace bliss
             : _curr(curr), _next(curr), _end(end), _f(f), empty_output()
         {
         }
-        ;
+
         fastq_iterator(const Parser & f, const Iterator& end)
             : _curr(end), _next(end), _end(end), _f(f), empty_output()
         {
         }
-        ;
 
         // for all classes
         fastq_iterator(const type& Other)
@@ -267,7 +266,6 @@ namespace bliss
               _f(Other._f), empty_output()
         {
         }
-        ;
 
         type& operator=(const type& Other)
         {
