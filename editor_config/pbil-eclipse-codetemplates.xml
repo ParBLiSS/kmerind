@@ -1,26 +1,39 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?><templates><template autoinsert="false" context="org.eclipse.cdt.ui.text.codetemplates.constructorcomment_context" deleted="false" description="Comment for created constructors" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.constructorcomment" name="constructorcomment">/**
- * @param one
- * @description
+ * @brief
+ * @details
+ *
+ * @param[in]
+ * 
  */</template><template autoinsert="false" context="org.eclipse.cdt.ui.text.codetemplates.destructorcomment_context" deleted="false" description="Comment for created destructors" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.destructorcomment" name="destructorcomment">/**
- * @description
+ * @brief
+ * @details
  */</template><template autoinsert="false" context="org.eclipse.cdt.ui.text.codetemplates.filecomment_context" deleted="false" description="Comment for created C/C++ files" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.filecomment" name="filecomment">/**
- * ${project_name} copyright ${year} Georgia Institute of Technology
+ * @file		${file_name}
+ * @ingroup
+ * @author	${user}
+ * @brief
+ * @details
  *
- * @file:  ${file_name}
+ * Copyright (c) ${year} Georgia Institute of Technology.  All Rights Reserved.
  *
- * @date:  ${date}
- * @uthor: ${user}
- * @description
+ * TODO add License
  */</template><template autoinsert="false" context="org.eclipse.cdt.ui.text.codetemplates.typecomment_context" deleted="false" description="Comment for created classes" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.typecomment" name="typecomment">/**
- * type: ${type_name}
- * @description
+ * @class			${type_name}
+ * @brief
+ * @details
+ *
  */</template><template autoinsert="false" context="org.eclipse.cdt.ui.text.codetemplates.fieldcomment_context" deleted="false" description="Comment for fields" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.fieldcomment" name="fieldcomment">/**
- * @type ${field_type}: @field ${field}
- * @description
+ * type		${field_type}
  */</template><template autoinsert="false" context="org.eclipse.cdt.ui.text.codetemplates.methodcomment_context" deleted="false" description="Comment for methods" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.methodcomment" name="methodcomment">/**
- * @param one
- * @return ${return_type}
- * @description
+ * in ${enclosing_type}
+ *
+ * @brief
+ *
+ * @param[in]
+ * @param[out] 
+ * @return			${return_type}
+ *
+ * @details 
  */</template><template autoinsert="true" context="org.eclipse.cdt.core.cxxSource.contenttype_context" deleted="false" description="Default template for newly created C++ source files" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.cppsourcefile" name="Default C++ source template">${filecomment}
 
 ${includes}

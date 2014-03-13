@@ -81,12 +81,11 @@ namespace bliss
         typedef typename base_traits::value_type base_value_type;
 
         // class specific constructor
-        explicit transform_iterator(const Iterator& base_iter,
+        transform_iterator(const Iterator& base_iter,
                                     const Transformer & f)
             : _base(base_iter), _f(f)
         {
         }
-        ;
 
         // for all classes
         // no EXPLICIT so can copy assign.
@@ -94,7 +93,6 @@ namespace bliss
             : _base(Other._base), _f(Other._f)
         {
         }
-        ;
 
         type& operator=(const type& Other)
         {

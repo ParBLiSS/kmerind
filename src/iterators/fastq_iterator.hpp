@@ -1,3 +1,4 @@
+
 /**
  * fastq_iterator.hpp
  *
