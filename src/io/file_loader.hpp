@@ -68,7 +68,7 @@ namespace bliss
             : filename(_filename), data(nullptr), aligned_data(nullptr),
               preloaded(preload)
         {
-          printf("FILE_LOADER called.  not loading.\n");
+          //printf("FILE_LOADER called.  not loading.\n");
 
           file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);
@@ -80,7 +80,7 @@ namespace bliss
             : filename(_filename), range(_range), data(nullptr),
               aligned_data(nullptr), preloaded(preload)
         {
-          printf("FILE_LOADER called with range.  loading..\n");
+          //printf("FILE_LOADER called with range.  loading..\n");
 
           file_handle = open(filename.c_str(), O_RDONLY);
           page_size = sysconf(_SC_PAGE_SIZE);
@@ -95,11 +95,11 @@ namespace bliss
          */
         virtual ~file_loader()
         {
-          printf("~FILE_LOADER called.\n");
+          //printf("~FILE_LOADER called.\n");
 
           unload();
 
-          printf("~FILE_LOADER unloaded.\n");
+          //printf("~FILE_LOADER unloaded.\n");
 
           close(file_handle);
         }

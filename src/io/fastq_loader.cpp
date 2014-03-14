@@ -12,7 +12,6 @@
 #include "mpi.h"
 
 #include "io/fastq_loader.hpp"
-#include "iterators/filter_iterator.hpp"
 #include "config.hpp"
 
 namespace bliss
@@ -22,7 +21,7 @@ namespace bliss
 
     fastq_loader::~fastq_loader()
     {
-      printf("~FASTQ_LOADER called.\n");
+      //printf("~FASTQ_LOADER called.\n");
 
     }  //  superclass destructor handles everything.
 
@@ -38,7 +37,7 @@ namespace bliss
       // and construct new range and then open the file again.
       range = align_to_sequence(_filename, _range, total);
 
-      printf("FASTQ_LOADER called.\n");
+      //printf("FASTQ_LOADER called.\n");
 
       // use the superclass constructor to map, with adjusted range.
       load();

@@ -15,7 +15,7 @@
 
 
 #include "io/file_loader.hpp"
-#include "iterators/fastq_iterator.hpp"
+#include "io/fastq_iterator.hpp"
 
 namespace bliss
 {
