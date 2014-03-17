@@ -18,19 +18,19 @@
 #include <iostream>
 #include <chrono>
 
-#include "mpi.h"
-
-#include "utils/logging.h"
-//#include "config.hpp"
-
-#include "iterators/range.hpp"
-#include "io/fastq_loader.hpp"
-
 #include <string.h>
 #include <vector>
 #include <bitset>
 #include <cmath>
 #include <sstream>
+
+#include "mpi.h"
+
+#include "utils/logging.h"
+#include "config.hpp"
+
+#include "iterators/range.hpp"
+#include "io/fastq_loader.hpp"
 
 #include "common/alphabets.hpp"
 #include "common/AlphabetTraits.hpp"
