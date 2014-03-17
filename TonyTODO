@@ -78,7 +78,7 @@ generalization of iterator patterns
 		packing
 	6. m to n transform iterator
 		unpacking (1 to n)
-		packed->kmer (m to n)
+		packed->kmer (1 to n)
 		
 	2..6 need to know end of iterator
 	which supports what type of base iterator?

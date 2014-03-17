@@ -12,6 +12,7 @@
 
 #include <iostream>
 #include <thread>
+#include <cstdio>
 
 #include "mpi.h"
 #include "omp.h"
@@ -39,10 +40,19 @@ void fileio() {
 
 }
 
-void compute(int i, bliss::iterator::fastq_sequence<char*> &read) {
-   // do something.
+void compute(int rank, int pid, bliss::iterator::fastq_sequence<char*> &read, int j) {
 
-  printf("compute %d, %ld\n", i, read.id);
+
+
+
+
+
+  char* out = new char[128];
+  sprintf(out, "compute %d, %ld, %d\n", pid, read.id, j);
+  delete [] out;
+
+  if (j % 10000 == 0)
+    printf("%d.%d ", rank, pid);
 
 }
 
@@ -145,7 +155,7 @@ int main(int argc, char** argv) {
   {
     t1 = std::chrono::high_resolution_clock::now();
     // now open the file
-    bliss::io::fastq_loader loader(filename, r, file_size, true);
+    bliss::io::fastq_loader loader(filename, r, file_size);
 //    bliss::io::file_loader loader(filename, file_size);
     t2 = std::chrono::high_resolution_clock::now();
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
@@ -174,31 +184,35 @@ int main(int argc, char** argv) {
     int threadcount = 3;
 
     bliss::iterator::fastq_sequence<char*> read;
-  #pragma omp parallel shared(fastq_start, fastq_end) private(read) num_threads(threadcount)
+    int i = 0;
+#pragma omp parallel shared(fastq_start, fastq_end, i, read) num_threads(threadcount)
+#pragma omp single nowait
     {
-      while (fastq_start != fastq_end) {
+      for (; fastq_start != fastq_end; ++fastq_start, ++i) {
         // get data, and move to next for the other threads
 
-  #pragma omp task
-        {
-
-          // first get read (assume copy already made)
-  #pragma omp critical
-          {
+//          // first get read
             read = *fastq_start;
-
-            ++fastq_start;
-          }
+//
+//            ++fastq_start;
+//            ++i;
+#pragma omp task firstprivate(read, i)
+        {
+          // copy
 
           // then compute
-          compute(omp_get_thread_num(), read);
+          compute(rank, omp_get_thread_num(), read, i);
+
+          // release
+
         }
 
         // next iteration will check to see if the iterator is at end,
         // and if not, get and compute.
       }
+#pragma omp taskwait
     }
-    std::cout << "computation done" << std::endl;
+    std::cout << "computation done" << ". " << i << std::endl;
 
 
     //fileio_t.join();
@@ -206,6 +220,10 @@ int main(int argc, char** argv) {
     networkread_t.join();
   }
   std::cout << "threads done" << std::endl;
+
+#ifdef USE_MPI
+    MPI_Finalize();
+#endif
 
   return 0;
 }

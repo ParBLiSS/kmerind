@@ -161,6 +161,7 @@ namespace bliss
 
           // check to make sure we finished okay  - if not, don't update the
           // fastq_sequence object.
+
           assert(*(starts[0]) == '@');
           assert(*(starts[2]) == '+');
 
@@ -207,13 +208,7 @@ namespace bliss
                 typename std::iterator_traits<Iterator>::iterator_category>::type,
             typename std::remove_reference<
                 typename bliss::functional::function_traits<Parser>::return_type>::type,
-            typename std::iterator_traits<Iterator>::difference_type,
-            typename std::add_pointer<
-                typename std::remove_reference<
-                    typename bliss::functional::function_traits<Parser>::return_type>::type>::type,
-            typename std::add_rvalue_reference<
-                typename std::remove_reference<
-                    typename bliss::functional::function_traits<Parser>::return_type>::type>::type>
+            typename std::iterator_traits<Iterator>::difference_type>
     {
       protected:
         // define first, to avoid -Wreorder error (where the variables are initialized before fastq_iterator::Parser, etc are defined.
