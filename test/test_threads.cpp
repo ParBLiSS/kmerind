@@ -29,14 +29,19 @@
 #include "common/AlphabetTraits.hpp"
 #include "iterators/buffered_transform_iterator.hpp"
 
+template<typename TO>
+struct kmer_struct {
+    TO kmer;
+    TO revcomp;
+    bliss::iterator::read_id id;
+};
+
+
 
 template<typename ALPHABET, typename Iterator, typename TO, int K>
-struct generate_kmers
+struct generate_kmer
 {
-    TO forward;
-    TO reverse;
-    TO xored;
-    TO xoredRecoverable;
+    kmer_struct<TO, TO> kmer;
 
     static constexpr BitSizeType nBits =
         bliss::AlphabetTraits<ALPHABET>::getBitsPerChar();
@@ -48,42 +53,65 @@ struct generate_kmers
     static constexpr int word_size = sizeof(TO) * 8;
     static constexpr TO mask_reverse = ~(static_cast<TO>(0))
         >> (word_size - shift - nBits);
-    static constexpr TO mask_lower_half = ~(static_cast<TO>(0))
-        >> (word_size - nBits * (K + 1) / 2);
 
-    generate_kmers()
-        : forward()
-    {
+    generate_kmer() : kmer() {
+      kmer.first = 0;
+      kmer.second = 0;
     }
 
     size_t operator()(Iterator &iter)
     {
       char val = ALPHABET::FROM_ASCII[static_cast<size_t>(*iter)];
-      forward >>= nBits;
-      forward |= (static_cast<TO>(val) << shift);
+      kmer.first >>= nBits;
+      kmer.first |= (static_cast<TO>(val) << shift);
 
       char complement = max - val;
-      reverse <<= nBits;
-      reverse |= static_cast<TO>(complement);
-      reverse &= mask_reverse;
-
-      xored = forward ^ reverse;
-//      std::cout << "kmer:\t" << std::bitset<word_size>(forward) << std::endl << "\t" << std::bitset<word_size>(reverse) << std::endl;
-//      std::cout << "\t" << std::bitset<word_size>(xored) << std::endl;
-
-      xoredRecoverable = (xored & ~mask_lower_half)
-          | (forward & mask_lower_half);
+      kmer.second <<= nBits;
+      kmer.second |= static_cast<TO>(complement);
+      kmer.second &= mask_reverse;
 
       ++iter;
       return 1;
     }
 
-    TO operator()()
+    std::pair<TO, TO> operator()()
     {
-      return xoredRecoverable;
+      return kmer;
     }
 
 };
+
+
+
+template<typename TO, int K>
+struct xor_kmer
+{
+    TO operator()(const std::pair<TO, TO> &kmer_rev) {
+      return kmer_rev.first ^ kmer_rev.second;
+    }
+};
+
+template<typename ALPHABET, typename TO, int K>
+struct xor_kmer_recoverable
+{
+    static constexpr BitSizeType nBits =
+        bliss::AlphabetTraits<ALPHABET>::getBitsPerChar();
+    static constexpr BitSizeType shift =
+        bliss::AlphabetTraits<ALPHABET>::getBitsPerChar() * (K - 1);
+    static constexpr int word_size = sizeof(TO) * 8;
+
+    static constexpr TO mask_reverse = ~(static_cast<TO>(0))
+        >> (word_size - shift - nBits);
+    static constexpr TO mask_lower_half = ~(static_cast<TO>(0))
+        >> (word_size - nBits * (K + 1) / 2);
+
+    TO operator()(const std::pair<TO, TO> &kmer_rev) {
+      TO xored = kmer_rev.first ^ kmer_rev.second;
+
+      return (xored & ~mask_lower_half) | (kmer_rev.first & mask_lower_half);
+    }
+};
+
 
 /**
  * compute kmer quality based on phred quality score.
@@ -231,7 +259,7 @@ struct generate_qual
 #define K 11
 
 
-typedef generate_kmers<DNA, char*, uint64_t, K> op_type;
+typedef generate_kmer<DNA, char*, uint64_t, K> op_type;
 op_type kmer_op;
 typedef bliss::iterator::buffered_transform_iterator<op_type, char*> read_iter_type;
 
@@ -259,6 +287,14 @@ void fileio() {
 
 }
 
+template<typename TO>
+struct mpi_kmer_struct {
+    TO kmer;
+    bliss::iterator::read_id id;
+};
+
+
+// this can become a 1 to n transformer???
 void compute(int rank, int pid, bliss::iterator::fastq_sequence<char*> &read, int j) {
 
 
@@ -286,17 +322,50 @@ void compute(int rank, int pid, bliss::iterator::fastq_sequence<char*> &read, in
     ++kmerCount;
   }
 
-
-//
-//
-//  char* out = new char[128];
-//  sprintf(out, "compute %d, %ld, %d\n", pid, read.id, j);
-//  delete [] out;
-
-//  if (j % 10000 == 0)
-//    printf("%d.%d ", rank, pid);
-
 }
+
+
+// use a vector of MPIBuffers to manage
+template<typename T>
+class MPIBuffer {
+    // need some default MPI buffer size, then pack in sizeof(T) blocks as many times as possible.
+
+  public:
+    MPIBuffer() {
+      // initialize internal buffers (double buffering)
+    }
+
+
+    bool buffer(const uint32_t id, const T & val) {
+      // synchronized
+
+      // store value
+
+      // if full, call send (block if other buffer is sending)
+    }
+
+    bool flush() {
+      // no more coming in.  call by master thread only.
+    }
+
+  protected:
+    // 2 buffers per target
+    // active buffer content count
+    // inactive buffer send status
+
+    bool send(const uint32_t id) {
+      // synchronized.
+
+      // check inactive buffer status.
+      // if being sent, wait for that to complete
+
+      // swap active and inactive buffer
+
+
+      // async send full inactive buffer.
+
+    }
+};
 
 void networkwrite() {
   // instantiate bins (m per proc)

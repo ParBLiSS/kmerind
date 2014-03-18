@@ -33,6 +33,19 @@ namespace bliss
   namespace iterator
   {
 
+    union
+    {
+        uint64_t composite;
+        struct
+        {
+            uint32_t seq_id;
+            uint8_t seq_msb;   // seq_id and seq_msb: 40 bits allow for 1 trillion entries.
+            uint8_t file_id;   // file id
+            uint16_t pos;      // position value
+        } components;
+    } read_id;
+
+
     template<typename Iterator>
     struct fastq_sequence
     {
@@ -46,17 +59,7 @@ namespace bliss
         Iterator qual;
         Iterator qual_end;
 
-        union
-        {
-            uint64_t id;
-            struct
-            {
-                uint32_t seq_id;
-                uint8_t seq_msb;   // 40 bits allow for 1 trillion entries.
-                uint8_t file_id;     // file id
-                uint16_t pos;     // position value
-            } ids;
-        };
+        read_id id;
     };
 
     /**
@@ -169,7 +172,7 @@ namespace bliss
             return dist;
 
           // now populate the output
-          output.id = offset;
+          output.id.composite = offset;
           output.name = starts[0];
           output.name_end = ends[0];
           output.seq = starts[1];
