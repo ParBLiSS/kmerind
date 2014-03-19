@@ -33,7 +33,7 @@ namespace bliss
   namespace iterator
   {
 
-    union
+    union read_id
     {
         uint64_t composite;
         struct
@@ -43,7 +43,7 @@ namespace bliss
             uint8_t file_id;   // file id
             uint16_t pos;      // position value
         } components;
-    } read_id;
+    };
 
 
     template<typename Iterator>

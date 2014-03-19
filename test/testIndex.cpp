@@ -327,7 +327,7 @@ int main(int argc, char* argv[])
     for (; fastq_start != fastq_end; ++fastq_start)
     {
 
-      id ^= (*fastq_start).id;
+      id ^= (*fastq_start).id.composite;
       ++readCount;
     }
     t2 = std::chrono::high_resolution_clock::now();

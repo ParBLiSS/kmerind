@@ -29,19 +29,27 @@
 #include "common/AlphabetTraits.hpp"
 #include "iterators/buffered_transform_iterator.hpp"
 
-template<typename TO>
+
+template<typename T1, typename T2=double>
 struct kmer_struct {
-    TO kmer;
-    TO revcomp;
+    typedef T1 kmer_type;
+    typedef T2 qual_type;
+
     bliss::iterator::read_id id;
+    T1 kmer;
+    T2 qual;
 };
 
 
 
-template<typename ALPHABET, typename Iterator, typename TO, int K>
+template<typename ALPHABET, typename Iterator, typename KMER, int K>
 struct generate_kmer
 {
-    kmer_struct<TO, TO> kmer;
+    KMER kmer;
+    typedef typename KMER::kmer_type TO;
+
+    TO revcomp;
+    uint16_t pos;
 
     static constexpr BitSizeType nBits =
         bliss::AlphabetTraits<ALPHABET>::getBitsPerChar();
@@ -53,64 +61,50 @@ struct generate_kmer
     static constexpr int word_size = sizeof(TO) * 8;
     static constexpr TO mask_reverse = ~(static_cast<TO>(0))
         >> (word_size - shift - nBits);
+//    static constexpr TO mask_lower_half = ~(static_cast<TO>(0))
+//        >> (word_size - nBits * (K + 1) / 2);
 
-    generate_kmer() : kmer() {
-      kmer.first = 0;
-      kmer.second = 0;
+
+    generate_kmer(const bliss::iterator::read_id &_rid) : kmer(), revcomp(0), pos(0) {
+      kmer.kmer = 0;
+      kmer.qual = 0;
+      kmer.id = _rid;
     }
 
     size_t operator()(Iterator &iter)
     {
+      // store the kmer information.
       char val = ALPHABET::FROM_ASCII[static_cast<size_t>(*iter)];
-      kmer.first >>= nBits;
-      kmer.first |= (static_cast<TO>(val) << shift);
+      kmer.kmer >>= nBits;
+      kmer.kmer |= (static_cast<TO>(val) << shift);
+      kmer.id.components.pos = pos;
 
+      // generate the rev complement
       char complement = max - val;
-      kmer.second <<= nBits;
-      kmer.second |= static_cast<TO>(complement);
-      kmer.second &= mask_reverse;
+      revcomp <<= nBits;
+      revcomp |= static_cast<TO>(complement);
+      revcomp &= mask_reverse;
 
       ++iter;
+      ++pos;
       return 1;
     }
 
-    std::pair<TO, TO> operator()()
+    std::pair<TO, KMER> operator()()
     {
-      return kmer;
+      // compute the reverse complement
+      TO xored = kmer.kmer ^ revcomp;
+
+//      TO xored_recoverable = (xored & ~mask_lower_half) | (_kmer.forward & mask_lower_half);
+
+
+      return std::pair<TO, KMER>(xored, kmer);
     }
 
 };
 
 
 
-template<typename TO, int K>
-struct xor_kmer
-{
-    TO operator()(const std::pair<TO, TO> &kmer_rev) {
-      return kmer_rev.first ^ kmer_rev.second;
-    }
-};
-
-template<typename ALPHABET, typename TO, int K>
-struct xor_kmer_recoverable
-{
-    static constexpr BitSizeType nBits =
-        bliss::AlphabetTraits<ALPHABET>::getBitsPerChar();
-    static constexpr BitSizeType shift =
-        bliss::AlphabetTraits<ALPHABET>::getBitsPerChar() * (K - 1);
-    static constexpr int word_size = sizeof(TO) * 8;
-
-    static constexpr TO mask_reverse = ~(static_cast<TO>(0))
-        >> (word_size - shift - nBits);
-    static constexpr TO mask_lower_half = ~(static_cast<TO>(0))
-        >> (word_size - nBits * (K + 1) / 2);
-
-    TO operator()(const std::pair<TO, TO> &kmer_rev) {
-      TO xored = kmer_rev.first ^ kmer_rev.second;
-
-      return (xored & ~mask_lower_half) | (kmer_rev.first & mask_lower_half);
-    }
-};
 
 
 /**
@@ -256,12 +250,12 @@ struct generate_qual
 
 };
 
-#define K 11
+#define K 21
 
+typedef kmer_struct<uint64_t, double> kmer_type;
 
-typedef generate_kmer<DNA, char*, uint64_t, K> op_type;
-op_type kmer_op;
-typedef bliss::iterator::buffered_transform_iterator<op_type, char*> read_iter_type;
+typedef generate_kmer<DNA, char*, kmer_type, K> kmer_op_type;
+typedef bliss::iterator::buffered_transform_iterator<kmer_op_type, char*> read_iter_type;
 
 struct SANGER
 {
@@ -287,25 +281,21 @@ void fileio() {
 
 }
 
-template<typename TO>
-struct mpi_kmer_struct {
-    TO kmer;
-    bliss::iterator::read_id id;
-};
 
 
 // this can become a 1 to n transformer???
 void compute(int rank, int pid, bliss::iterator::fastq_sequence<char*> &read, int j) {
 
-
+  kmer_op_type kmer_op(read.id);
   read_iter_type start(read.seq, kmer_op);
   read_iter_type end(read.seq_end, kmer_op);
 
   qual_iter_type qstart(read.qual, qual_op);
   qual_iter_type qend(read.qual_end, qual_op);
 
-  uint64_t kmer = 0;
-  double qual = 0;
+
+  std::pair<kmer_type::kmer_type, kmer_type> index_kmer;
+
   uint64_t kmerCount = 0;
 
   int i = -1;
@@ -317,24 +307,38 @@ void compute(int rank, int pid, bliss::iterator::fastq_sequence<char*> &read, in
     if (i < (K - 1))
       continue;
 //        kmers.push_back(*start);
-    kmer ^= *start;
-    qual = *qstart - qual;
+//    kmer ^= *start;
+//    qual = *qstart - qual;
+    index_kmer = *start;
+    index_kmer.second.qual = *qstart;
+
+    // some debugging output
+    printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
+
     ++kmerCount;
   }
 
 }
 
+//TODO:  working on the MPI buffer right now.
 
-// use a vector of MPIBuffers to manage
+// use a vector of MPIBuffers to manage process'
 template<typename T>
 class MPIBuffer {
     // need some default MPI buffer size, then pack in sizeof(T) blocks as many times as possible.
 
   public:
-    MPIBuffer() {
+    MPIBuffer(const int &_capacity) : capacity(_capacity){
       // initialize internal buffers (double buffering)
+      active_buf = new unsigned char[_capacity * sizeof(T)];
+
+
     }
 
+    ~MPIBuffer() {
+      delete [] active_buf;
+      delete [] inactive_buf;
+    }
 
     bool buffer(const uint32_t id, const T & val) {
       // synchronized
@@ -342,16 +346,27 @@ class MPIBuffer {
       // store value
 
       // if full, call send (block if other buffer is sending)
+      return false;
     }
 
     bool flush() {
       // no more coming in.  call by master thread only.
+      return false;
     }
 
   protected:
     // 2 buffers per target
     // active buffer content count
     // inactive buffer send status
+
+
+    unsigned char *active_buf;
+    unsigned char *inactive_buf;
+    int send_status;
+    bool sending;
+    int size;
+    const int capacity;
+
 
     bool send(const uint32_t id) {
       // synchronized.
@@ -363,7 +378,7 @@ class MPIBuffer {
 
 
       // async send full inactive buffer.
-
+      return false;
     }
 };
 
@@ -503,8 +518,8 @@ int main(int argc, char** argv) {
       for (; fastq_start != fastq_end; ++fastq_start, ++i) {
         // get data, and move to next for the other threads
 
-//          // first get read
-            read = *fastq_start;
+        // first get read
+        read = *fastq_start;
 //
 //            ++fastq_start;
 //            ++i;
