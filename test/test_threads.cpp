@@ -294,15 +294,14 @@ class MPISendBuffer {
     // need some default MPI buffer size, then pack in sizeof(T) blocks as many times as possible.
 
   public:
-    static const int SIZE_TAG = 1;
-    static const int DATA_TAG = 2;
     static const int END_TAG = 0;
 
 
     MPISendBuffer(MPI_Comm _comm, const int _targetRank, const size_t nbytes)
-       : sending(false), accepting(true), targetRank(_targetRank), comm(_comm), send_request(), total(0)  {
+       : accepting(true), targetRank(_targetRank), comm(_comm), send_request(MPI_REQUEST_NULL), total(0)  {
       // initialize internal buffers (double buffering)
       capacity = nbytes / sizeof(T);
+      printf("created buffer for send, capacity = %ld\n", capacity);
 
       active_buf.reserve(capacity);
       inactive_buf.reserve(capacity);
@@ -350,8 +349,8 @@ class MPISendBuffer {
       int pid = 0;
 #ifdef USE_OPENMP
       pid = omp_get_thread_num();
-
- //     assert(pid == 0);   // called by master thread only.
+//
+//     assert(pid == 0);   // called by master thread only.
 #endif
       accepting = false;
 
@@ -362,9 +361,9 @@ class MPISendBuffer {
       send();
 
       // send termination signal (send empty message).
-      printf("%d done sending to %d\n", rank, targetRank);
+      printf("%d done sending to %d\n", rank, targetRank); fflush(stdout);
       MPI_Send(nullptr, 0, MPI_INT, targetRank, END_TAG, comm);
-      printf("flushed\n"); fflush(stdout);
+      printf("%d.%d flushed\n", rank, pid); fflush(stdout); fflush(stdout);
     }
 
   protected:
@@ -373,7 +372,6 @@ class MPISendBuffer {
     // 2 buffers per target
     std::vector<T> active_buf;
     std::vector<T> inactive_buf;
-    bool sending;
 
     // if buffer is still accepting stuff
     bool accepting;
@@ -401,13 +399,21 @@ class MPISendBuffer {
       pid = omp_get_thread_num();
 #endif
       // only called from within locked code block
+      std::chrono::high_resolution_clock::time_point time1, time2;
+      std::chrono::duration<double> time_span;
 
       // check inactive buffer is sending?
-      if (sending) {
+      if (send_request != MPI_REQUEST_NULL) {
         // if being sent, wait for that to complete
-        printf("%d waiting for prev send to %d to finish\n", rank, targetRank);
+        printf("Waiting for prev send %d -> %d to finish\n", rank, targetRank); fflush(stdout);
+        time1 = std::chrono::high_resolution_clock::now();
+
         MPI_Wait(&send_request, MPI_STATUS_IGNORE);
-        sending = false;
+        time2 = std::chrono::high_resolution_clock::now();
+        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+            time2 - time1);
+
+        printf("Waiting for prev send %d -> %d finished in %f\n", rank, targetRank, time_span.count()); fflush(stdout);
       }
       // clear the inactive buf
       inactive_buf.clear();
@@ -423,10 +429,9 @@ class MPISendBuffer {
       // TODO: send the data as bytes.  This assumes the receive end knows how to parse the elements
       if (inactive_buf.size() > 0) {
         total += inactive_buf.size();
-        printf("%d sending to %d\n", rank, targetRank);
-        MPI_Isend(inactive_buf.data(), inactive_buf.size() * sizeof(T), MPI_UNSIGNED_CHAR, targetRank, DATA_TAG, comm, &send_request);
-        printf("*** %d %d send to %d, number of entries %ld, total %ld\n", rank, pid, targetRank, inactive_buf.size(), total);
-        sending = true;
+        //printf("%d sending to %d\n", rank, targetRank);
+        MPI_Isend(inactive_buf.data(), inactive_buf.size() * sizeof(T), MPI_UNSIGNED_CHAR, targetRank, pid + 1, comm, &send_request);
+        printf("SEND %d.%d send to %d, number of entries %ld, total %ld\n", rank, pid, targetRank, inactive_buf.size(), total); fflush(stdout);
 
       }
 
@@ -485,52 +490,56 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
 
   size_t capacity = buf_size / sizeof(kmer_struct_type);
   kmer_struct_type *array = new kmer_struct_type[capacity];
-  memset((void*)array, 0, capacity * sizeof(kmer_struct_type));
+  printf("created temp storage for read, capacity = %ld\n", capacity); fflush(stdout);
+  memset(array, 0, capacity * sizeof(kmer_struct_type));
   int received = 0;
   int count = 0;
+  int src;
+  int tag;
 
   while (n_senders > 0) {
     // probe for a message.  if empty message, then don't need to listen on that node anymore
-    printf("probing...\n");
+    //printf("probing...\n");
     MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &status);
 
-    if (status.MPI_TAG == MPISendBuffer<kmer_struct_type>::END_TAG) {
+    src = status.MPI_SOURCE;
+    tag = status.MPI_TAG;
+    MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &received);   // length is always > 0?
+
+    if (tag == MPISendBuffer<kmer_struct_type>::END_TAG) {
       // end of messaging.
-      printf("RECV %d receiving end signal from %d\n", rank, status.MPI_SOURCE);
-      MPI_Recv((void*)array, 0, MPI_UNSIGNED_CHAR, status.MPI_SOURCE, status.MPI_TAG, comm, MPI_STATUS_IGNORE);
+      printf("RECV %d receiving END signal %d from %d\n", rank, received, src); fflush(stdout);
+      MPI_Recv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
       --n_senders;
       continue;
     }
 
-    MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &received);   // length is always > 0?
-    if (status.MPI_TAG == MPISendBuffer<kmer_struct_type>::DATA_TAG) {
-      printf("RECV %d receiving %d data from %d\n", rank, received, status.MPI_SOURCE);
+    printf("RECV %d receiving %d bytes from %d.%d\n", rank, received, src, tag - 1); fflush(stdout);
 
-      // TODO: FIX segfault here at iter 2.
-      MPI_Recv((void*)array, received, MPI_UNSIGNED_CHAR, status.MPI_SOURCE, status.MPI_TAG, comm, MPI_STATUS_IGNORE);
+    // TODO: FIX segfault here at iter 2.
+    MPI_Recv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
 
-      // if message size is 0, then no work to do.
-      if (received == 0)
-        continue;
-
-      assert(received % sizeof(kmer_struct_type) == 0);  // no partial messages.
-      count = received / sizeof(kmer_struct_type);
-
-      // now process the array
-      for (int i = 0; i < count; ++i) {
-        kmers.insert(kmer_map_type::value_type(array[i].kmer, array[i]));
-      }
-
-      memset(array, 0, capacity * sizeof(kmer_struct_type));
+    // if message size is 0, then no work to do.
+    if (received == 0)
       continue;
-    } else {
-      printf("should not be here.");
+
+    assert(received % sizeof(kmer_struct_type) == 0);  // no partial messages.
+    count = received / sizeof(kmer_struct_type);
+    assert(count > 0);
+    printf("RECV+ %d receiving %d bytes or %d records from %d.%d\n", rank, received, count, src, tag - 1); fflush(stdout);
+
+
+    // now process the array
+    for (int i = 0; i < count; ++i) {
+      kmers.insert(kmer_map_type::value_type(array[i].kmer, array[i]));
     }
+
+//    memset(array, 0, capacity * sizeof(kmer_struct_type));
   }
 
   delete [] array;
 
-  printf("network read done\n");
+  printf("network read done\n"); fflush(stdout);
 }
 
 
@@ -549,7 +558,18 @@ int main(int argc, char** argv) {
   int rank = 0, nprocs = 1;
 #ifdef USE_MPI
   // initialize MPI
+  int provided;
+
+#ifdef USE_OPENMP
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+
+  if (provided < MPI_THREAD_MULTIPLE) {
+    printf("ERROR: The MPI Library Does not have full thread support.\n");
+    MPI_Abort(MPI_COMM_WORLD, 1);
+  }
+#else
   MPI_Init(&argc, &argv);
+#endif
 
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -624,13 +644,11 @@ int main(int argc, char** argv) {
 
     std::unordered_multimap<kmer_struct_type::kmer_type, kmer_struct_type> index;
 
-    std::cout << "starting threads" << std::endl;
 
   //  std::thread fileio_t(fileio);
 //    std::thread networkwrite_t(networkwrite);
     //std::thread networkread_t(networkread);
 
-    std::cout << "threads started" << std::endl;
 
 
     // do some work using openmp
@@ -653,7 +671,7 @@ int main(int argc, char** argv) {
     bliss::iterator::fastq_sequence<char*> read;
     int i = 0;
 #pragma omp parallel sections num_threads(2)
-    {    printf("probing...\n");
+    {
 
 
 #pragma omp section
@@ -722,7 +740,6 @@ int main(int argc, char** argv) {
 
 
 
-  std::cout << "threads done" << std::endl;
 
 #ifdef USE_MPI
     MPI_Finalize();
