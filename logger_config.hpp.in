@@ -8,4 +8,6 @@ file comment
 // logger
 @LOGGER_DEFINE@
 
+@BOOST_LOG_DEFINE@
+
 #endif /* CONFIG_H */

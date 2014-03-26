@@ -42,7 +42,7 @@
  *             use a customized boost::log based logger              *
  *********************************************************************/
 
-#if USE_LOGGER == BLISS_LOGGING_BOOST_CUSTOM
+#if (USE_LOGGER == BLISS_LOGGING_BOOST_CUSTOM) && defined(USE_BOOST_LOG)
 
 namespace bliss
 {

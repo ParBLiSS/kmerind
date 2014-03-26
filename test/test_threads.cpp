@@ -301,7 +301,7 @@ class MPISendBuffer {
        : accepting(true), targetRank(_targetRank), comm(_comm), send_request(MPI_REQUEST_NULL), total(0)  {
       // initialize internal buffers (double buffering)
       capacity = nbytes / sizeof(T);
-      printf("created buffer for send, capacity = %ld\n", capacity);
+      //printf("created buffer for send, capacity = %ld\n", capacity);
 
       active_buf.reserve(capacity);
       inactive_buf.reserve(capacity);
@@ -361,9 +361,9 @@ class MPISendBuffer {
       send();
 
       // send termination signal (send empty message).
-      printf("%d done sending to %d\n", rank, targetRank); fflush(stdout);
+      //printf("%d done sending to %d\n", rank, targetRank); fflush(stdout);
       MPI_Send(nullptr, 0, MPI_INT, targetRank, END_TAG, comm);
-      printf("%d.%d flushed\n", rank, pid); fflush(stdout); fflush(stdout);
+      printf("%d.%d  %ld flushed.\n", rank, pid, total); fflush(stdout);
     }
 
   protected:
@@ -405,15 +405,15 @@ class MPISendBuffer {
       // check inactive buffer is sending?
       if (send_request != MPI_REQUEST_NULL) {
         // if being sent, wait for that to complete
-        printf("Waiting for prev send %d -> %d to finish\n", rank, targetRank); fflush(stdout);
-        time1 = std::chrono::high_resolution_clock::now();
+        //printf("Waiting for prev send %d -> %d to finish\n", rank, targetRank); fflush(stdout);
+        //time1 = std::chrono::high_resolution_clock::now();
 
         MPI_Wait(&send_request, MPI_STATUS_IGNORE);
-        time2 = std::chrono::high_resolution_clock::now();
-        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
-            time2 - time1);
+        //time2 = std::chrono::high_resolution_clock::now();
+        //time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+        //    time2 - time1);
 
-        printf("Waiting for prev send %d -> %d finished in %f\n", rank, targetRank, time_span.count()); fflush(stdout);
+        //printf("Waiting for prev send %d -> %d finished in %f\n", rank, targetRank, time_span.count()); fflush(stdout);
       }
       // clear the inactive buf
       inactive_buf.clear();
@@ -431,7 +431,7 @@ class MPISendBuffer {
         total += inactive_buf.size();
         //printf("%d sending to %d\n", rank, targetRank);
         MPI_Isend(inactive_buf.data(), inactive_buf.size() * sizeof(T), MPI_UNSIGNED_CHAR, targetRank, pid + 1, comm, &send_request);
-        printf("SEND %d.%d send to %d, number of entries %ld, total %ld\n", rank, pid, targetRank, inactive_buf.size(), total); fflush(stdout);
+        //printf("SEND %d.%d send to %d, number of entries %ld, total %ld\n", rank, pid, targetRank, inactive_buf.size(), total); fflush(stdout);
 
       }
 
@@ -490,7 +490,7 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
 
   size_t capacity = buf_size / sizeof(kmer_struct_type);
   kmer_struct_type *array = new kmer_struct_type[capacity];
-  printf("created temp storage for read, capacity = %ld\n", capacity); fflush(stdout);
+  //printf("created temp storage for read, capacity = %ld\n", capacity); fflush(stdout);
   memset(array, 0, capacity * sizeof(kmer_struct_type));
   int received = 0;
   int count = 0;
@@ -514,7 +514,7 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
       continue;
     }
 
-    printf("RECV %d receiving %d bytes from %d.%d\n", rank, received, src, tag - 1); fflush(stdout);
+    //printf("RECV %d receiving %d bytes from %d.%d\n", rank, received, src, tag - 1); fflush(stdout);
 
     // TODO: FIX segfault here at iter 2.
     MPI_Recv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
@@ -526,7 +526,7 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
     assert(received % sizeof(kmer_struct_type) == 0);  // no partial messages.
     count = received / sizeof(kmer_struct_type);
     assert(count > 0);
-    printf("RECV+ %d receiving %d bytes or %d records from %d.%d\n", rank, received, count, src, tag - 1); fflush(stdout);
+    //printf("RECV+ %d receiving %d bytes or %d records from %d.%d\n", rank, received, count, src, tag - 1); fflush(stdout);
 
 
     // now process the array
@@ -677,7 +677,9 @@ int main(int argc, char** argv) {
 #pragma omp section
     {
       networkread(MPI_COMM_WORLD, nprocs, rank, 8192*1024, senders, index);
-      printf("read completed\n");
+      printf("kmer recording completed.  records: %ld\n", index.size());
+
+
     } // network read thread
 
 #pragma omp section

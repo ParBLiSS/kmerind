@@ -96,7 +96,7 @@
  *                      use boost::log::trivial                      *
  *********************************************************************/
 
-#elif USE_LOGGER == BLISS_LOGGING_BOOST_TRIVIAL
+#elif (USE_LOGGER == BLISS_LOGGING_BOOST_TRIVIAL) && defined(USE_BOOST_LOG)
 
 // using boost trival logging
 #include <boost/log/trivial.hpp>
@@ -113,7 +113,7 @@
  *             use a customized boost::log based logger              *
  *********************************************************************/
 
-#elif USE_LOGGER == BLISS_LOGGING_BOOST_CUSTOM
+#elif (USE_LOGGER == BLISS_LOGGING_BOOST_CUSTOM) && defined(USE_BOOST_LOG)
 
 #include <iostream>
 
