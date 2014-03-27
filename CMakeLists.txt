@@ -13,12 +13,19 @@ set (bliss_VERSION_MINOR 1)
 # Initialize CXXFLAGS.
 set(CMAKE_CXX_FLAGS                "-Wall -std=c++11")
 set(CMAKE_CXX_FLAGS_DEBUG          "-O0 -g")
-set(CMAKE_CXX_FLAGS_MINSIZEREL     "-Os -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE        "-O3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_MINSIZEREL     "-Os")
+set(CMAKE_CXX_FLAGS_RELEASE        "-O3")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
 
 # Compiler-specific C++11 activation.
-if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
+#  execute_process(
+#    COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE ICPC_VERSION)
+#  if (NOT (ICPC_VERSION VERSION_GREATER 13.0 OR ICPC_VERSION VERSION_EQUAL 13.0))
+#    message(FATAL_ERROR "${PROJECT_NAME} requires icpc 13.0 or greater.")
+#  endif ()
+    message(FATAL_ERROR "${PROJECT_NAME} currently does not support Intel compiler due to constexpr not allowing math function calls")
+elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   execute_process(
     COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
   if (NOT (GCC_VERSION VERSION_GREATER 4.7 OR GCC_VERSION VERSION_EQUAL 4.7))
@@ -75,35 +82,49 @@ else()
   endif()
 endif()
 
+
+
+set(ENABLE_BOOST_LOGGING OFF CACHE BOOL "Enable logging using Boost Log (requires Boost ver 1.54+)")
+
 # LOGGING config
 if(NOT LOG_ENGINE)
-  set(LOG_ENGINE "BOOST_CUSTOM" CACHE STRING
-      "choose a logging engine.  options are NO_LOG CERR BOOST_TRIVIAL BOOST_CUSTOM."
-      FORCE)
+    if (ENABLE_BOOST_LOGGING)
+      set(LOG_ENGINE "CERR" CACHE STRING
+          "choose a logging engine.  options are NO_LOG CERR BOOST_TRIVIAL BOOST_CUSTOM."
+          FORCE)
+    else()
+      set(LOG_ENGINE "CERR" CACHE STRING
+          "choose a logging engine.  options are NO_LOG CERR."
+          FORCE)    
+    endif()          
+          
 endif(NOT LOG_ENGINE)
 set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
-
 
 ###### External Library Settings
 #### Boost Library
 #set(EXTRA_LIBS pthread)
+if (ENABLE_BOOST_LOGGING)
+    set(BOOST_LOG_DEFINE "#define USE_BOOST_LOG")
+    set(Boost_USE_MULTITHREADED ON)
+    set(Boost_ADDITIONAL_VERSIONS "1.54" "1.54.0")
+    set(Boost_DETAILED_FAILURE_MSG ON)
+    find_path(BOOST_ROOT NAMES include/boost/circular_buffer.hpp
+      HINTS /usr /usr/local /usr/local/share /opt/local ENV BOOST_HOME
+      DOC "path to Boost root directory")
+    # must specify the components otherwise it's a header only usage
+    find_package( Boost REQUIRED COMPONENTS log system program_options)
+    if (Boost_FOUND)
+      include_directories( ${Boost_INCLUDE_DIRS} )
+      link_directories( ${Boost_LIBRARY_DIRS} )
+    endif(Boost_FOUND)
+    set(EXTRA_LIBS ${EXTRA_LIBS} ${Boost_LIBRARIES})
+    
+    # need this flag for boost log
+    add_definitions(-DBOOST_LOG_DYN_LINK)
+    
+endif()
 
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_ADDITIONAL_VERSIONS "1.54" "1.54.0" "1.52" "1.52.0")
-set(Boost_DETAILED_FAILURE_MSG ON)
-find_path(BOOST_ROOT NAMES include/boost/circular_buffer.hpp
-  HINTS /usr /usr/local /usr/local/share /opt/local ENV BOOST_HOME
-  DOC "path to Boost root directory")
-# must specify the components otherwise it's a header only usage
-find_package( Boost REQUIRED COMPONENTS log thread system program_options)
-if (Boost_FOUND)
-  include_directories( ${Boost_INCLUDE_DIRS} )
-  link_directories( ${Boost_LIBRARY_DIRS} )
-endif(Boost_FOUND)
-set(EXTRA_LIBS ${EXTRA_LIBS} ${Boost_LIBRARIES})
-
-# need this flag for boost log
-add_definitions(-DBOOST_LOG_DYN_LINK)
 
 #### MPI
 set(USE_MPI ON CACHE BOOL "Build with MPI support")
@@ -128,23 +149,21 @@ else (MPI_FOUND)
 endif (MPI_FOUND)
 
 #### OpenMP
-set(USE_OPENMP ON CACHE BOOL "Build with OpenMP support")
-if (USE_OPENMP)
-  include(FindOpenMP)
-  # add OpenMP flags to compiler flags
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-else(USE_OPENMP)
-  #set(OPENMP_FOUND 0)
-endif(USE_OPENMP)
+include(FindOpenMP)
+# add OpenMP flags to compiler flags
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+
 if (OPENMP_FOUND)
+
+    set(USE_OPENMP ON CACHE BOOL "Build with OpenMP support")
+if (USE_OPENMP)
   message(STATUS "Found OpenMP")
   set(OPENMP_DEFINE "#define USE_OPENMP")
 else (OPENMP_FOUND)
   set(OPENMP_DEFINE "")
   message(WARNING "Unable to find OpenMP: not using OpenMP")
 endif (OPENMP_FOUND)
-
 
 
 ###### Doxygen documentation
@@ -169,7 +188,11 @@ endif(DOXYGEN_FOUND)
 # Testing can be turned off: (for now the default is: ON)
 set(ENABLE_TESTING ON CACHE BOOL "Enable Unit testing via googletest")
 if (ENABLE_TESTING)
-  set(ENABLE_COVERAGE ON CACHE BOOL "Enable Code Coverage reporting")
+    if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
+      set(ENABLE_COVERAGE OFF CACHE INTERNAL "DISABLE Code Coverage Reporting because we are using Intel Compiler - don't know profiling options") 
+    else()
+      set(ENABLE_COVERAGE ON CACHE BOOL "Enable Code Coverage reporting")
+    endif()
 endif()
 
 if (ENABLE_COVERAGE)
@@ -253,6 +276,11 @@ configure_file(
     "${PROJECT_BINARY_DIR}/config.hpp"
     @ONLY
     )
+configure_file(
+    "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+    "${PROJECT_BINARY_DIR}/logger_config.hpp"
+    @ONLY
+    )
 
 # add the binary tree to the search path for include files
 # so that we will find TutorialConfig.h
@@ -267,12 +295,17 @@ include_directories("${PROJECT_SOURCE_DIR}/src")
 #add_library("${libname}" SHARED ${libsrcs})
 # Link opencv stuff to the execution engine
 
-add_subdirectory(utils)
+add_subdirectory(src/utils)
+
+set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)
+
+
 add_subdirectory(src/common)
 add_subdirectory(src/io)
 add_subdirectory(src/index)
 add_subdirectory(src/iterators)
 add_subdirectory(test)
+add_subdirectory(utils)
 
 
 # Install Settings

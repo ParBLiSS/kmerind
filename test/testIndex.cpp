@@ -18,45 +18,52 @@
 #include <iostream>
 #include <chrono>
 
-#include "mpi.h"
-
-#include "utils/logging.h"
-#include "config.hpp"
-
-#include "iterators/range.hpp"
-#include "io/file_loader.hpp"
-#include "io/fastq_loader.hpp"
-
 #include <string.h>
 #include <vector>
 #include <bitset>
 #include <cmath>
 #include <sstream>
 
+#include "mpi.h"
+
+#include "utils/logging.h"
+#include "config.hpp"
+
+#include "iterators/range.hpp"
+#include "io/fastq_loader.hpp"
+
 #include "common/alphabets.hpp"
 #include "common/AlphabetTraits.hpp"
-//#include "iterators/transform_iterator.hpp"
 #include "iterators/buffered_transform_iterator.hpp"
 
-template<typename ALPHABET, typename Iterator, typename TO, int K >
-struct generate_kmers {
+template<typename ALPHABET, typename Iterator, typename TO, int K>
+struct generate_kmers
+{
     TO forward;
     TO reverse;
     TO xored;
     TO xoredRecoverable;
 
-    static constexpr BitSizeType nBits = bliss::AlphabetTraits<ALPHABET>::getBitsPerChar();
-    static constexpr BitSizeType shift = bliss::AlphabetTraits<ALPHABET>::getBitsPerChar() * (K - 1);
-    static constexpr AlphabetSizeType max = bliss::AlphabetTraits<ALPHABET>::getSize() - 1;
+    static constexpr BitSizeType nBits =
+        bliss::AlphabetTraits<ALPHABET>::getBitsPerChar();
+    static constexpr BitSizeType shift =
+        bliss::AlphabetTraits<ALPHABET>::getBitsPerChar() * (K - 1);
+    static constexpr AlphabetSizeType max =
+        bliss::AlphabetTraits<ALPHABET>::getSize() - 1;
 
     static constexpr int word_size = sizeof(TO) * 8;
-    static constexpr TO mask_reverse =  ~(static_cast<TO>(0))  >> (word_size - shift - nBits);
-    static constexpr TO mask_lower_half =  ~(static_cast<TO>(0))  >> (word_size - nBits * (K + 1) / 2);
+    static constexpr TO mask_reverse = ~(static_cast<TO>(0))
+        >> (word_size - shift - nBits);
+    static constexpr TO mask_lower_half = ~(static_cast<TO>(0))
+        >> (word_size - nBits * (K + 1) / 2);
 
-    generate_kmers() : forward()
-    { }
+    generate_kmers()
+        : forward()
+    {
+    }
 
-    size_t operator()(Iterator &iter) {
+    size_t operator()(Iterator &iter)
+    {
       char val = ALPHABET::FROM_ASCII[static_cast<size_t>(*iter)];
       forward >>= nBits;
       forward |= (static_cast<TO>(val) << shift);
@@ -70,13 +77,15 @@ struct generate_kmers {
 //      std::cout << "kmer:\t" << std::bitset<word_size>(forward) << std::endl << "\t" << std::bitset<word_size>(reverse) << std::endl;
 //      std::cout << "\t" << std::bitset<word_size>(xored) << std::endl;
 
-      xoredRecoverable = (xored & ~mask_lower_half) | (forward & mask_lower_half);
+      xoredRecoverable = (xored & ~mask_lower_half)
+          | (forward & mask_lower_half);
 
       ++iter;
       return 1;
     }
 
-    TO operator()() {
+    TO operator()()
+    {
       return xoredRecoverable;
     }
 
@@ -116,8 +125,9 @@ struct generate_kmers {
  *  accumulate using sum(log(term))., expand using e^(sum(log(term))), calculate -10 log_10(1-cumulative).
  *
  */
-template<typename ENCODING, typename Iterator, typename TO, int K >
-struct generate_qual {
+template<typename ENCODING, typename Iterator, typename TO, int K>
+struct generate_qual
+{
     typedef typename std::iterator_traits<Iterator>::value_type TI;
 
     TO value;
@@ -129,7 +139,8 @@ struct generate_qual {
     static constexpr TO logE_10 = std::log(10);
     static_assert(std::is_floating_point<TO>::value, "generate_qual output needs to be floating point type");
 
-    generate_qual() : value(1), pos(0)
+    generate_qual()
+        : value(1), pos(0)
     {
       for (int i = 0; i < K; ++i)
       {
@@ -138,16 +149,18 @@ struct generate_qual {
       zeroCount = K;
     }
 
-    TO compute(TI v) {
+    TO compute(TI v)
+    {
       if (v == 0)
         return 0.0;   // probability of being correct
       else
-        return 1.0 - std::exp(static_cast<TO>(v) / -10.0f * logE_10);  // prob of being correct.
+        return 1.0 - std::exp(static_cast<TO>(v) / -10.0f * logE_10); // prob of being correct.
     }
 
-    size_t operator()(Iterator &iter) {
+    size_t operator()(Iterator &iter)
+    {
 
-        // drop the old value
+      // drop the old value
       TO oldval = terms[pos];
 
       // add the new value,       // update the position  - circular queue
@@ -158,18 +171,20 @@ struct generate_qual {
       // save the old zero count.
       int oldZeroCount = zeroCount;
 
-
       // update the zero count
-      if (newval == 0.0) {
+      if (newval == 0.0)
+      {
 //        printf("ZERO!\n");
         ++zeroCount;
       }
-      if (oldval == 0.0) {
+      if (oldval == 0.0)
+      {
         --zeroCount;
       }
 
       // if any is zero, then return 0.
-      if (zeroCount > 0) {
+      if (zeroCount > 0)
+      {
         internal = 0.0;
         value = 0.0;
       }
@@ -177,23 +192,30 @@ struct generate_qual {
       {
         // else there is no zero,
 
-        if (oldZeroCount == 1) {
+        if (oldZeroCount == 1)
+        {
           //printf("HAD ZEROS!\n");
           // removed a zero.  so recalculate.
           internal = 0.0;
-          for (int i = 0; i < K; ++i) {
+          for (int i = 0; i < K; ++i)
+          {
             internal += std::log(terms[i]);
           }
-        } else {
+        }
+        else
+        {
           // there was not a zero.  so update.
           internal = internal + std::log(newval) - std::log(oldval);
         }
 
         TO v = std::exp(internal);  // prob of being correct.
-        if (v == 1.0) {
+        if (v == 1.0)
+        {
           value = 1000;
           printf("confident kmer!\n");
-        } else {
+        }
+        else
+        {
           value = -10.0 * std::log10(1.0 - std::exp(internal));
         }
       }
@@ -205,7 +227,8 @@ struct generate_qual {
       return value;
     }
 
-    TO operator()() {
+    TO operator()()
+    {
       return value;
     }
 
@@ -213,18 +236,17 @@ struct generate_qual {
 
 #define K 11
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
   LOG_INIT();
 
-  std::string filename("/home/tpan/src/bliss/test/test.fastq");
+  std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
 //  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
 
-  if (argc > 1) {
+  if (argc > 1)
+  {
     filename.assign(argv[1]);
   }
-
-
-
 
   int rank = 0, nprocs = 1;
 #ifdef USE_MPI
@@ -250,11 +272,14 @@ int main(int argc, char* argv[]) {
   }
 
 #ifdef USE_MPI
-  // broadcast to all
-  MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
+  if (nprocs > 1) {
+    // broadcast to all
+    MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
+  }
 #endif
 
-  if (rank == nprocs - 1) {
+  if (rank == nprocs - 1)
+  {
     fprintf(stderr, "file size is %ld\n", file_size);
   }
   /////////////// now try to open the file
@@ -265,11 +290,13 @@ int main(int argc, char* argv[]) {
 
   // file access:  better to work with a few pages at a time, or to work with large block?
 
-
   // first generate an approximate partition.
-  bliss::io::file_loader::range_type r = bliss::io::file_loader::range_type::block_partition(file_size, nprocs, rank);
+  bliss::io::file_loader::range_type r =
+      bliss::io::file_loader::range_type::block_partition(nprocs,
+                                                          rank, 0, file_size);
   std::cout << rank << " equipart: " << r << std::endl;
-  std::cout << rank << " test block aligned: " << r.align_to_page(sysconf(_SC_PAGE_SIZE)) << std::endl;
+  std::cout << rank << " test block aligned: "
+            << r.align_to_page(sysconf(_SC_PAGE_SIZE)) << std::endl;
 
   // now open the file and begin reading
   std::chrono::high_resolution_clock::time_point t1, t2;
@@ -278,17 +305,17 @@ int main(int argc, char* argv[]) {
   std::chrono::duration<double> time_span3;
   std::chrono::duration<double> time_span;
 
-
   {
     t1 = std::chrono::high_resolution_clock::now();
     // now open the file
     bliss::io::fastq_loader loader(filename, r, file_size);
+//    bliss::io::file_loader loader(filename, file_size);
     t2 = std::chrono::high_resolution_clock::now();
-    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(
+        t2 - t1);
     INFO("MMap rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
     std::cout << rank << " record adjusted " << loader.getRange() << std::endl;
-
 
     t1 = std::chrono::high_resolution_clock::now();
     bliss::io::fastq_loader::iterator fastq_start = loader.begin();
@@ -297,13 +324,15 @@ int main(int argc, char* argv[]) {
     uint64_t id = 0;
 
     uint64_t readCount = 0;
-    for (; fastq_start != fastq_end; ++fastq_start) {
+    for (; fastq_start != fastq_end; ++fastq_start)
+    {
 
-      id ^= (*fastq_start).id;
+      id ^= (*fastq_start).id.composite;
       ++readCount;
     }
     t2 = std::chrono::high_resolution_clock::now();
-    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(
+        t2 - t1);
     INFO("reads " << readCount << " rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
     printf("avoid compiler optimizing out the ops %ld\n", id);
@@ -313,51 +342,56 @@ int main(int argc, char* argv[]) {
     fastq_start = loader.begin();
     fastq_end = loader.end();
 
-    typedef generate_kmers<DNA, char*, uint64_t, K>  op_type;
+    typedef generate_kmers<DNA, char*, uint64_t, K> op_type;
     op_type kmer_op;
     typedef bliss::iterator::buffered_transform_iterator<op_type, char*> read_iter_type;
 
     uint64_t kmer = 0;
     uint64_t baseCount = 0;
 
-    for (; fastq_start != fastq_end; ++fastq_start) {
+    for (; fastq_start != fastq_end; ++fastq_start)
+    {
       read_iter_type start((*fastq_start).seq, kmer_op);
       read_iter_type end((*fastq_start).seq_end, kmer_op);
 
       int i = -1;
       // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-      for (; (start != end); ++start) {
+      for (; (start != end); ++start)
+      {
         ++i;
         ++baseCount;
-        if (i < (K-1)) continue;
+        if (i < (K - 1))
+          continue;
         kmer ^= *start;
 
       }
     }
     t2 = std::chrono::high_resolution_clock::now();
-    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(
+        t2 - t1);
     INFO("bases " << baseCount << " kmer generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
-
 
     printf("avoid compiler optimizing out the ops %ld\n", kmer);
 
-
     t1 = std::chrono::high_resolution_clock::now();
 
-    fastq_start = loader.begin();
-    fastq_end = loader.end();
-
-    struct SANGER {};
-    typedef generate_qual< SANGER, char*, double, K>  qual_op_type;
+    struct SANGER
+    {
+    };
+    typedef generate_qual<SANGER, char*, double, K> qual_op_type;
     qual_op_type qual_op;
     typedef bliss::iterator::buffered_transform_iterator<qual_op_type, char*> qual_iter_type;
-
 
     kmer = 0;
     double qual = 0;
     uint64_t kmerCount = 0;
 
-    for (; fastq_start != fastq_end; ++fastq_start) {
+    fastq_start = loader.begin();
+    fastq_end = loader.end();
+
+
+    for (; fastq_start != fastq_end; ++fastq_start)
+    {
       read_iter_type start((*fastq_start).seq, kmer_op);
       read_iter_type end((*fastq_start).seq_end, kmer_op);
 
@@ -366,10 +400,12 @@ int main(int argc, char* argv[]) {
 
       int i = -1;
       // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-      for (; (start != end) && (qstart != qend); ++start, ++qstart) {
+      for (; (start != end) && (qstart != qend); ++start, ++qstart)
+      {
         ++i;
 
-        if (i < (K-1)) continue;
+        if (i < (K - 1))
+          continue;
 //        kmers.push_back(*start);
         kmer ^= *start;
         qual = *qstart - qual;
@@ -378,14 +414,13 @@ int main(int argc, char* argv[]) {
 
     }
     t2 = std::chrono::high_resolution_clock::now();
-    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(
+        t2 - t1);
     INFO("kmer + qual " << kmerCount << " generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
     printf("avoid compiler optimizing out the ops %lx %lf\n", kmer, qual);
 
-
   }
-
 
 // MEMORY INTENSIVE BELOW
 
@@ -437,14 +472,10 @@ int main(int argc, char* argv[]) {
 //
 //  }
 
-
 #ifdef USE_MPI
-  MPI_Finalize();
-
+    MPI_Finalize();
 #endif
 
-
   return 0;
-
 
 }

@@ -3,6 +3,8 @@ buffered iterator?
 read struct: for fastQ, for fastA.
 	fastQ - okay.
 	fastA - ??
+	
+	use MPI-IO
 
 count number of reads - every 4 lines
 	indexing iterator (return positions in underlying iterator)
@@ -63,11 +65,42 @@ create quality score quality score
 	
 	a simple iteration is done that computes the "Phred Score" for a kmer accurately.
 
-
-
+generalization of iterator patterns
+	1. transform iterator (1 to 1.  memory of output)
+	2. filter iterator (searching.  ? to 1)
+	3. buffered transform iterator (searching. ? to 1)
+		ascii -> read struct
+			can we get more operation inside here?
+	4. buffered transform iterator (1 to 1 with memory of m previous inputs.  )
+		ascii -> kmer
+		quality scoring
+	5. m to 1 transform iterator.  (buffered transform iterator?.  mem of output)
+		packing
+	6. m to n transform iterator
+		unpacking (1 to n)
+		packed->kmer (1 to n)
+		
+	2..6 need to know end of iterator
+	which supports what type of base iterator?
+	
 
 mpi redistribution code.
 	threading and support for streaming.	
+	at least 1 thread per process for managing file input
+	at least 1 thread per process for managing MPI input
+	compute threads independently compute and do MPI-isend?
+	
+	global array - no global algorithms to go with it
+	non-collective communication is good - reduce network congestion
+	async communication is good - overalp compute and io
+	
+	semantic is still to send a block, and receive a block and do something
+	send - into a sink.  iterator or buffer?
+	receive - read from a src as a whole block then do someting about it - iterator or buffer?
+	
+	local sorting as merge operation after communication to hide sorting?
+
+manage and buffering of reads/mpi for multicore.
 
 
 query...

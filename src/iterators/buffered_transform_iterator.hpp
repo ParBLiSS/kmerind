@@ -32,82 +32,95 @@
 namespace bliss
 {
 
-namespace iterator
-{
+  namespace iterator
+  {
 
-  /**
-   * transform iterator class
-   *
-   * transforms each element in the list. otherwise it's the same kind of iterator as the base.
-   *
-   * inheriting from std::iterator ONLY to get iterator_traits support.
-   *
-   * careful with the use of enable_if.  false causes the "type" typedef inside not to be defined, creating an error.
-   *   this may be a SFINAE usage or implementation issue.
-   */
-  template<typename Transformer,
-           typename Iterator
-           >
-  class buffered_transform_iterator
-    : public std::iterator<typename std::conditional<std::is_same<typename std::iterator_traits<Iterator>::iterator_category,
-                                                                  std::random_access_iterator_tag>::value ||
-                                                     std::is_same<typename std::iterator_traits<Iterator>::iterator_category,
-                                                                  std::bidirectional_iterator_tag>::value,
-                                                     std::forward_iterator_tag,
-                                                     typename std::iterator_traits<Iterator>::iterator_category
-                                                    >::type,
-                           typename std::remove_reference<typename bliss::functional::function_traits<Transformer>::return_type>::type,
-                           typename std::iterator_traits<Iterator>::difference_type,
-                           typename std::add_pointer<typename std::remove_reference<typename bliss::functional::function_traits<Transformer>::return_type>::type>::type,
-                           typename std::add_rvalue_reference<typename std::remove_reference<typename bliss::functional::function_traits<Transformer>::return_type>::type>::type
-                           >
+    /**
+     * transform iterator class
+     *
+     * transforms each element in the list. otherwise it's the same kind of iterator as the base.
+     *
+     * inheriting from std::iterator ONLY to get iterator_traits support.
+     *
+     * careful with the use of enable_if.  false causes the "type" typedef inside not to be defined, creating an error.
+     *   this may be a SFINAE usage or implementation issue.
+     */
+    template<typename Transformer, typename Iterator>
+    class buffered_transform_iterator :
+        public std::iterator<
+            typename std::conditional<
+                std::is_same<
+                    typename std::iterator_traits<Iterator>::iterator_category,
+                    std::random_access_iterator_tag>::value
+                || std::is_same<
+                    typename std::iterator_traits<Iterator>::iterator_category,
+                    std::bidirectional_iterator_tag>::value,
+                std::forward_iterator_tag,
+                typename std::iterator_traits<Iterator>::iterator_category>::type,
+            typename std::remove_reference<
+                typename bliss::functional::function_traits<Transformer>::return_type>::type,
+            typename std::iterator_traits<Iterator>::difference_type,
+            typename std::add_pointer<
+                typename std::remove_reference<
+                    typename bliss::functional::function_traits<Transformer>::return_type>::type>::type,
+            typename std::add_rvalue_reference<
+                typename std::remove_reference<
+                    typename bliss::functional::function_traits<Transformer>::return_type>::type>::type>
     {
       protected:
         // define first, to avoid -Wreorder error (where the variables are initialized before buffered_transform_iterator::Transformer, etc are defined.
-        typedef std::iterator_traits<Iterator>                                                         base_traits;
-        typedef bliss::functional::function_traits<Transformer>                                    functor_traits;
+        typedef std::iterator_traits<Iterator> base_traits;
+        typedef bliss::functional::function_traits<Transformer> functor_traits;
 
-        Iterator                                                                                       _curr;
-        Iterator                                                                                       _next;
-        Transformer                                                                                             _f;
+        Iterator _curr;
+        Iterator _next;
+        Transformer _f;
 
       public:
-        typedef buffered_transform_iterator< Transformer, Iterator >                                                type;
-        typedef std::iterator_traits<type>                                                                  traits;
+        typedef buffered_transform_iterator<Transformer, Iterator> type;
+        typedef std::iterator_traits<type> traits;
 
-        typedef typename base_traits::iterator_category                                                     iterator_category;
-        typedef typename std::remove_reference<typename functor_traits::return_type>::type                  value_type;
-        typedef typename base_traits::difference_type                                                       difference_type;
-        typedef typename std::add_rvalue_reference<value_type>::type                                        reference_type;
-        typedef typename std::add_pointer<value_type>::type                                                 pointer_type;
+        typedef typename base_traits::iterator_category iterator_category;
+        typedef typename std::remove_reference<
+            typename functor_traits::return_type>::type value_type;
+        typedef typename base_traits::difference_type difference_type;
+        typedef typename std::add_rvalue_reference<value_type>::type reference_type;
+        typedef typename std::add_pointer<value_type>::type pointer_type;
 
-        typedef typename base_traits::value_type                                                            base_value_type;
-
+        typedef typename base_traits::value_type base_value_type;
 
         // class specific constructor
-        explicit
-        buffered_transform_iterator(const Iterator& base_iter, const Transformer & f)
-          : _curr(base_iter), _next(base_iter), _f(f) {};
-
+        buffered_transform_iterator(const Iterator& base_iter,
+                                    const Transformer & f)
+            : _curr(base_iter), _next(base_iter), _f(f)
+        {
+        }
+        ;
 
         // for all classes
         // no EXPLICIT so can copy assign.
-        buffered_transform_iterator(const type& Other) : _curr(Other._curr), _next(Other._next), _f(Other._f) {};
+        buffered_transform_iterator(const type& Other)
+            : _curr(Other._curr), _next(Other._next), _f(Other._f)
+        {
+        }
+        ;
 
-        type& operator=(const type& Other) {
+        type& operator=(const type& Other)
+        {
           _f = Other._f;
           _next = Other._next;
           _curr = Other._curr;
           return *this;
         }
 
-        type& operator++() {
+        type& operator++()
+        {
 
           // property:  to set _next to the appropriate position, need to parse.
 
           // ++ parses so that _curr moves.  _next is pushed forward.  if _next has already been moved (via *), then just move curr there.
 
-          if (_curr == _next)  // at beginning.  so need to parse, and right away
+          if (_curr == _next) // at beginning.  so need to parse, and right away
           {
             // walk the base iterator until function is done with construction or at end.
             // doing the construction here because we have to walk anyways.
@@ -120,34 +133,43 @@ namespace iterator
           return *this;
         }
 
-        type operator++(int) {
+        type operator++(int)
+        {
           type output(*this);
           return ++output;
         }
 
-
         // accessor functions for internal state.
-        Transformer& getTransformer() {
+        Transformer& getTransformer()
+        {
           return _f;
         }
-        const Transformer& getTransformer() const {
+        const Transformer& getTransformer() const
+        {
           return _f;
         }
-        Iterator& getBaseIterator() {
+        Iterator& getBaseIterator()
+        {
           return _curr;
         }
-        const Iterator& getBaseIterator() const {
+        const Iterator& getBaseIterator() const
+        {
           return _curr;
         }
 
         // input iterator specific
         inline bool operator==(const type& rhs)
-        { return _curr == rhs._curr; }
+        {
+          return _curr == rhs._curr;
+        }
 
         inline bool operator!=(const type& rhs)
-        { return _curr != rhs._curr; }
+        {
+          return _curr != rhs._curr;
+        }
 
-        inline value_type operator*() {
+        inline value_type operator*()
+        {
 
           // special case, have not yet parsed the content
           if (_curr == _next)
@@ -165,24 +187,21 @@ namespace iterator
 
         // NO support for output iterator
 
-
         // forward iterator
-        template<typename = std::enable_if<std::is_same<iterator_category, std::forward_iterator_tag>::value ||
-                                           std::is_same<iterator_category, std::bidirectional_iterator_tag>::value ||
-                                           std::is_same<iterator_category, std::random_access_iterator_tag>::value > >
-        explicit
-        buffered_transform_iterator() : _f(), _next() {};
-
-
-
-
-
-
-
+        template<
+            typename = std::enable_if<
+                std::is_same<iterator_category, std::forward_iterator_tag>::value || std::is_same<
+                    iterator_category, std::bidirectional_iterator_tag>::value
+                || std::is_same<iterator_category,
+                    std::random_access_iterator_tag>::value> >
+        explicit buffered_transform_iterator()
+            : _f(), _next()
+        {
+        }
+        ;
 
     };
 
-
-} // iterator
+  } // iterator
 } // bliss
 #endif /* BUFFERED_BUFFERED_TRANSFORM_ITERATOR_HPP_ */
