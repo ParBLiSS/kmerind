@@ -43,29 +43,29 @@ namespace bliss
      * inheriting from std::iterator ONLY to get iterator_traits support.
      *
      * careful with the use of enable_if.  false causes the "type" typedef inside not to be defined, creating an error.
-     *   this may be a SFINAE usage or implementation issue.
+     *   this may be a SFINAE usage  or implementation issue.
      */
     template<typename Transformer, typename Iterator>
     class buffered_transform_iterator :
         public std::iterator<
+            /* 1.) iterator type (tag) */
             typename std::conditional<
+                // if the base iterator a RandomAccess OR Bidirectional?
                 std::is_same<
                     typename std::iterator_traits<Iterator>::iterator_category,
                     std::random_access_iterator_tag>::value
                 || std::is_same<
                     typename std::iterator_traits<Iterator>::iterator_category,
                     std::bidirectional_iterator_tag>::value,
+                // then: become a forward iterator
                 std::forward_iterator_tag,
+                // else: `steal` the underlying iterator type
                 typename std::iterator_traits<Iterator>::iterator_category>::type,
+            // the value type ( = functor return type)
             typename std::remove_reference<
                 typename bliss::functional::function_traits<Transformer>::return_type>::type,
-            typename std::iterator_traits<Iterator>::difference_type,
-            typename std::add_pointer<
-                typename std::remove_reference<
-                    typename bliss::functional::function_traits<Transformer>::return_type>::type>::type,
-            typename std::add_rvalue_reference<
-                typename std::remove_reference<
-                    typename bliss::functional::function_traits<Transformer>::return_type>::type>::type>
+            // difference type = underlying diff type
+            typename std::iterator_traits<Iterator>::difference_type>
     {
       protected:
         // define first, to avoid -Wreorder error (where the variables are initialized before buffered_transform_iterator::Transformer, etc are defined.
@@ -82,7 +82,7 @@ namespace bliss
 
         typedef typename base_traits::iterator_category iterator_category;
         typedef typename std::remove_reference<
-            typename functor_traits::return_type>::type value_type;
+        typename functor_traits::return_type>::type value_type;
         typedef typename base_traits::difference_type difference_type;
         typedef typename std::add_rvalue_reference<value_type>::type reference_type;
         typedef typename std::add_pointer<value_type>::type pointer_type;
@@ -103,7 +103,6 @@ namespace bliss
             : _curr(Other._curr), _next(Other._next), _f(Other._f)
         {
         }
-        ;
 
         type& operator=(const type& Other)
         {
