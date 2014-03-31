@@ -10,6 +10,8 @@
  * TODO add License
  */
 
+#include "mpi.h"
+
 #include <iostream>
 //#include <thread>
 #include <vector>
@@ -20,7 +22,6 @@
 #include <cstdio>
 #include <cmath>
 
-#include "mpi.h"
 #include "omp.h"
 
 #include "utils/logging.h"
@@ -658,9 +659,8 @@ int main(int argc, char** argv) {
 
     int num_threads = 1;
 #ifdef USE_OPENMP
-    num_threads = omp_get_max_threads() / nprocs; // TODO: TEST code.  actual should not divide by nproc.
-    if (num_threads < 3)
-      num_threads = 3;
+    num_threads = omp_get_max_threads();
+    assert(num_threads >= 3);
     omp_set_nested(1);
     omp_set_dynamic(0);
 #endif
@@ -678,8 +678,6 @@ int main(int argc, char** argv) {
     {
       networkread(MPI_COMM_WORLD, nprocs, rank, 8192*1024, senders, index);
       printf("kmer recording completed.  records: %ld\n", index.size());
-
-
     } // network read thread
 
 #pragma omp section

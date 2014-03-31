@@ -5,11 +5,12 @@
  *      Author: tpan
  */
 
+#include "mpi.h"
+
 #include <sys/mman.h>
 #include <sstream>
 #include <cerrno>
 
-#include "mpi.h"
 
 #include "io/fastq_loader.hpp"
 #include "config.hpp"
