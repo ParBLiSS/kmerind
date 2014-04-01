@@ -160,6 +160,7 @@ struct generate_qual
     static constexpr TO logE_10 = std::log(10);
     static_assert(std::is_floating_point<TO>::value, "generate_qual output needs to be floating point type");
 
+
     generate_qual()
         : value(1), pos(0)
     {
@@ -173,9 +174,9 @@ struct generate_qual
     TO compute(TI v)
     {
       if (v == 0)
-        return 0.0;   // probability of being correct
+        return std::numeric_limits<TO>::max();   // probability of being correct
       else
-        return 1.0 - std::exp(static_cast<TO>(v) / -10.0f * logE_10); // prob of being correct.
+        return std::log(static_cast<TO>(1.0) - std::exp(static_cast<TO>(v) / static_cast<TO>(-10.0) * logE_10)); // prob of being correct.
     }
 
     size_t operator()(Iterator &iter)
@@ -193,12 +194,12 @@ struct generate_qual
       int oldZeroCount = zeroCount;
 
       // update the zero count
-      if (newval == 0.0)
+      if (newval == std::numeric_limits<TO>::max())
       {
 //        printf("ZERO!\n");
         ++zeroCount;
       }
-      if (oldval == 0.0)
+      if (oldval == std::numeric_limits<TO>::max())
       {
         --zeroCount;
       }
@@ -211,7 +212,7 @@ struct generate_qual
       }
       else
       {
-        // else there is no zero,
+        // else there is no zero, so valid values.
 
         if (oldZeroCount == 1)
         {
@@ -220,19 +221,19 @@ struct generate_qual
           internal = 0.0;
           for (int i = 0; i < K; ++i)
           {
-            internal += std::log(terms[i]);
+            internal += terms[i];
           }
         }
         else
         {
           // there was not a zero.  so update.
-          internal = internal + std::log(newval) - std::log(oldval);
+          internal = internal + newval - oldval;
         }
 
-        TO v = std::exp(internal);  // prob of being correct.
-        if (v == 1.0)
+        // compute prob of kmer being incorrect.
+        if (fabs(internal) < std::numeric_limits<TO>::epsilon())
         {
-          value = 1000;
+          value = 1000.0;
           printf("confident kmer!\n");
         }
         else
@@ -407,7 +408,7 @@ class MPISendBuffer {
       if (send_request != MPI_REQUEST_NULL) {
         // if being sent, wait for that to complete
         //printf("Waiting for prev send %d -> %d to finish\n", rank, targetRank); fflush(stdout);
-        //time1 = std::chrono::high_resolution_clock::now();
+        //time1 = std::chrono::high_resolution_clock::now();Traffic
 
         MPI_Wait(&send_request, MPI_STATUS_IGNORE);
         //time2 = std::chrono::high_resolution_clock::now();
@@ -661,6 +662,7 @@ int main(int argc, char** argv) {
 #ifdef USE_OPENMP
     num_threads = omp_get_max_threads();
     assert(num_threads >= 3);
+    fprintf(stderr, "rank %d MAX THRADS = %d\n", rank, num_threads);
     omp_set_nested(1);
     omp_set_dynamic(0);
 #endif
