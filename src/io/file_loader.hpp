@@ -145,7 +145,7 @@ namespace bliss
 
           aligned_data = (char*)mmap(nullptr, range.end - range.block_start,
                                      PROT_READ,
-                                     MAP_PRIVATE, file_handle,
+                                     MAP_PRIVATE | MAP_POPULATE, file_handle,
                                      range.block_start);
 
           if (aligned_data == MAP_FAILED)

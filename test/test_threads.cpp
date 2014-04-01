@@ -700,6 +700,8 @@ int main(int argc, char** argv) {
           // then compute
           compute(read, nprocs, rank, omp_get_thread_num(), i, buffers);
 
+          if (i % 100000 == 0)
+            printf("%d\n", i);
           // release resource
         }
 
