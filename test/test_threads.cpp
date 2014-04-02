@@ -25,6 +25,7 @@
 #include "omp.h"
 
 #include "utils/logging.h"
+#include "utils/constexpr_array.hpp"
 #include "config.hpp"
 
 #include "iterators/range.hpp"
@@ -112,43 +113,32 @@ struct generate_kmer
 /**
  * Phred Scores.  see http://en.wikipedia.org/wiki/FASTQ_format.
  *
- * do it smartly - use metaprogramming to initialize this stuff.
+ * creating a look up table instead of computing (by calling std::log, exp, etc.).
+ * saves about 3 seconds on a 35MB read file.
  */
 template<typename T>
-struct SANGER
+struct SangerToLogProbCorrect
 {
-    typedef T value_type;
-    static constexpr T logE_10 = std::log(10.0);
     static_assert(std::is_floating_point<T>::value, "generate_qual output needs to be floating point type");
+    static constexpr size_t size = 94;
+
+    typedef T value_type;
 
     static constexpr T offset = 33;
 
-    constexpr T computeLogPCorrect(const int v)
-    {
-      return std::log(static_cast<T>(1.0) - std::exp(static_cast<T>(v) / static_cast<T>(-10.0) * logE_10));
-    }
+    static constexpr size_t min = 0;
+    static constexpr size_t max = 93;
 
-    static constexpr T logPCorr[94] =
+    static constexpr T log2_10DivNeg10 = std::log2(10.0) / -10.0;
+    constexpr T operator()(const size_t v)
     {
-     std::numeric_limits<T>::max(),
-     computeLogPCorrect(1),
-     computeLogPCorrect(2),
-     computeLogPCorrect(3),
-     computeLogPCorrect(4),
-     computeLogPCorrect(5),
-     computeLogPCorrect(6),
-     computeLogPCorrect(7),
-     computeLogPCorrect(8),
-     computeLogPCorrect(9),
-     computeLogPCorrect(10),
-     computeLogPCorrect(11),
-     computeLogPCorrect(12),
-     computeLogPCorrect(13),
-     computeLogPCorrect(14),
-     computeLogPCorrect(15),
-     computeLogPCorrect(16),
-     computeLogPCorrect(17),
-    };
+      // some limits: v / -10 has to be negative as this becomes probability, so v > 0
+      //
+      return v < min ? std::numeric_limits<T>::lowest() :
+          v > max ? std::numeric_limits<T>::lowest() :
+          v == min ? std::numeric_limits<T>::lowest() :
+              std::log2(1.0 - std::exp2(static_cast<T>(v) * log2_10DivNeg10));
+    }
 };
 
 
@@ -187,50 +177,47 @@ struct SANGER
  *  each term in (1-p_i) is (1- 10^(q/-10)) = (1 - e ^ ((log 10)(q/-10)))
  *  accumulate using sum(log(term))., expand using e^(sum(log(term))), calculate -10 log_10(1-cumulative).
  *
- *  TODO: this is currently the bottleneck?  switch to using a look up table instead of computing log all the time.
+ *  This was a bottleneck.  switched to using a look up table instead of computing log all the time.
  *
  */
 template<typename ENCODING, typename Iterator, typename TO, int K>
 struct generate_qual
 {
     typedef typename std::iterator_traits<Iterator>::value_type TI;
-
-    TO value;
+    int kmer_pos;
     TO internal;
     TO terms[K];
     int pos;
     int zeroCount;
-
-    static constexpr TO logE_10 = std::log(10);
-    static_assert(std::is_floating_point<TO>::value, "generate_qual output needs to be floating point type");
-
+    // can't use auto keyword.  declare and initialize in class declaration
+    // then "define" but not initialize outside class declaration, again.
+    static constexpr std::array<typename ENCODING::value_type, ENCODING::size> lut =
+        make_array<ENCODING::size>(ENCODING());
 
     generate_qual()
-        : value(1), pos(0)
+        : kmer_pos(0), pos(0)
     {
       for (int i = 0; i < K; ++i)
       {
-        terms[i] = 0.0;
+        terms[i] = std::numeric_limits<TO>::lowest();
       }
       zeroCount = K;
-    }
 
-    TO compute(TI v)
-    {
-      if (v == 0)
-        return std::numeric_limits<TO>::max();   // probability of being correct
-      else
-        return std::log(static_cast<TO>(1.0) - std::exp(static_cast<TO>(v) / static_cast<TO>(-10.0) * logE_10)); // prob of being correct.
+      for (int i = 0; i < ENCODING::size; ++i) {
+        printf("lut: %d=%lf\n", i, lut[i]);
+      }
+
     }
 
     size_t operator()(Iterator &iter)
     {
+      int oldpos = kmer_pos;
 
       // drop the old value
       TO oldval = terms[pos];
 
       // add the new value,       // update the position  - circular queue
-      TO newval = compute(*iter - 33);  // this is for Sanger encoding.
+      TO newval = lut[*iter - ENCODING::offset];  // this is for Sanger encoding.
       terms[pos] = newval;
       pos = (pos + 1) % K;
 
@@ -238,12 +225,12 @@ struct generate_qual
       int oldZeroCount = zeroCount;
 
       // update the zero count
-      if (newval == std::numeric_limits<TO>::max())
+      if (newval == std::numeric_limits<TO>::lowest())
       {
 //        printf("ZERO!\n");
         ++zeroCount;
       }
-      if (oldval == std::numeric_limits<TO>::max())
+      if (oldval == std::numeric_limits<TO>::lowest())
       {
         --zeroCount;
       }
@@ -252,7 +239,6 @@ struct generate_qual
       if (zeroCount > 0)
       {
         internal = 0.0;
-        value = 0.0;
       }
       else
       {
@@ -274,31 +260,38 @@ struct generate_qual
           internal = internal + newval - oldval;
         }
 
-        // compute prob of kmer being incorrect.
-        if (fabs(internal) < std::numeric_limits<TO>::epsilon())
-        {
-          value = 1000.0;
-          printf("confident kmer!\n");
-        }
-        else
-        {
-          value = -10.0 * std::log10(1.0 - std::exp(internal));
-        }
       }
 
-//      printf("qual %d oldval = %f, newval = %f, internal = %f, output val = %f\n", *iter, oldval, newval, internal, value);
+//      printf("%d qual %d oldval = %f, newval = %f, internal = %f, output val = %f\n", kmer_pos, *iter, oldval, newval, internal, value);
+//      std::fflush(stdout);
 
       // move the iterator.
       ++iter;
-      return value;
+      ++kmer_pos;
+
+      return kmer_pos - oldpos;
     }
 
     TO operator()()
     {
-      return value;
+      // compute prob of kmer being incorrect.
+      if (fabs(internal) < std::numeric_limits<TO>::epsilon())
+      {
+        //printf("confident kmer!\n");
+        return ENCODING::max;
+      }
+      else
+      {
+        return -10.0 * std::log10(1.0 - std::exp2(internal));
+      }
     }
 
 };
+// can't use auto keyword.  declare and initialize in class declaration
+// then "define" but not initialize outside class declaration, again.
+template<typename ENCODING, typename Iterator, typename TO, int K>
+constexpr std::array<typename ENCODING::value_type, ENCODING::size> generate_qual<ENCODING, Iterator, TO, K>::lut;
+
 
 #define K 21
 
@@ -308,7 +301,7 @@ typedef generate_kmer<DNA, char*, kmer_struct_type, K> kmer_op_type;
 typedef bliss::iterator::buffered_transform_iterator<kmer_op_type, char*> read_iter_type;
 
 
-typedef generate_qual<SANGER, char*, double, K> qual_op_type;
+typedef generate_qual<SangerToLogProbCorrect<double>, char*, double, K> qual_op_type;
 qual_op_type qual_op;
 typedef bliss::iterator::buffered_transform_iterator<qual_op_type, char*> qual_iter_type;
 
@@ -333,6 +326,10 @@ typedef bliss::iterator::buffered_transform_iterator<qual_op_type, char*> qual_i
 
 
 // use a vector of MPIBuffers to manage process'
+//
+/**
+ * MPIBuffers is used to send/receive.  buffer is shared between all threads, so locking is an issue.
+ */
 template<typename T>
 class MPISendBuffer {
     // need some default MPI buffer size, then pack in sizeof(T) blocks as many times as possible.
@@ -513,13 +510,18 @@ void compute(bliss::iterator::fastq_sequence<char*> &read, int nprocs, int rank,
     index_kmer = *start;
     index_kmer.second.qual = *qstart;
 
+
     // some debugging output
-    //printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
+   // printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
 
-    // sending the kmer.
-    buffers[index_kmer.first % nprocs].buffer(index_kmer.second);
-
-    ++kmerCount;
+    if (fabs(index_kmer.second.qual) > std::numeric_limits<typename kmer_struct_type::qual_type>::epsilon() ) {
+      // sending the kmer.
+      buffers[index_kmer.first % nprocs].buffer(index_kmer.second);
+//      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
+      ++kmerCount;
+    } else {
+//      printf("BAD kmer quality.  key %lx, pos %d, qual %f\n", index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
+    }
   }
 
 }
@@ -726,7 +728,7 @@ int main(int argc, char** argv) {
 
 #pragma omp section
     {  // compute threads
-#pragma omp parallel num_threads(num_threads - 1)
+#pragma omp parallel num_threads(num_threads)
 #pragma omp single nowait
     {
       for (; fastq_start != fastq_end; ++fastq_start, ++i) {
