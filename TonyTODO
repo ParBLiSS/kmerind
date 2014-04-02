@@ -101,6 +101,15 @@ mpi redistribution code.
 	local sorting as merge operation after communication to hide sorting?
 
 manage and buffering of reads/mpi for multicore.
+	initial test complete
+	compute bound due to quality score computation
+		optimize - 1. use LUT
+					2. fixed point exact/approximate/directly manipulate floating point data structure.
+need to change to using single MPI thread.
+use MPI IO?
+	
+save out the index structure and reload
+refactor the MPI functionality to support single node/write out to disk/external memory algos.
 
 
 query...
@@ -117,3 +126,5 @@ OpenMP version
 test remote file open.
 FASTA
 
+
+simple kmer counting. 

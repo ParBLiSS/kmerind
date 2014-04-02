@@ -109,6 +109,48 @@ struct generate_kmer
 };
 
 
+/**
+ * Phred Scores.  see http://en.wikipedia.org/wiki/FASTQ_format.
+ *
+ * do it smartly - use metaprogramming to initialize this stuff.
+ */
+template<typename T>
+struct SANGER
+{
+    typedef T value_type;
+    static constexpr T logE_10 = std::log(10.0);
+    static_assert(std::is_floating_point<T>::value, "generate_qual output needs to be floating point type");
+
+    static constexpr T offset = 33;
+
+    constexpr T computeLogPCorrect(const int v)
+    {
+      return std::log(static_cast<T>(1.0) - std::exp(static_cast<T>(v) / static_cast<T>(-10.0) * logE_10));
+    }
+
+    static constexpr T logPCorr[94] =
+    {
+     std::numeric_limits<T>::max(),
+     computeLogPCorrect(1),
+     computeLogPCorrect(2),
+     computeLogPCorrect(3),
+     computeLogPCorrect(4),
+     computeLogPCorrect(5),
+     computeLogPCorrect(6),
+     computeLogPCorrect(7),
+     computeLogPCorrect(8),
+     computeLogPCorrect(9),
+     computeLogPCorrect(10),
+     computeLogPCorrect(11),
+     computeLogPCorrect(12),
+     computeLogPCorrect(13),
+     computeLogPCorrect(14),
+     computeLogPCorrect(15),
+     computeLogPCorrect(16),
+     computeLogPCorrect(17),
+    };
+};
+
 
 
 
@@ -144,6 +186,8 @@ struct generate_kmer
  *
  *  each term in (1-p_i) is (1- 10^(q/-10)) = (1 - e ^ ((log 10)(q/-10)))
  *  accumulate using sum(log(term))., expand using e^(sum(log(term))), calculate -10 log_10(1-cumulative).
+ *
+ *  TODO: this is currently the bottleneck?  switch to using a look up table instead of computing log all the time.
  *
  */
 template<typename ENCODING, typename Iterator, typename TO, int K>
@@ -263,9 +307,7 @@ typedef kmer_struct<uint64_t, double> kmer_struct_type;
 typedef generate_kmer<DNA, char*, kmer_struct_type, K> kmer_op_type;
 typedef bliss::iterator::buffered_transform_iterator<kmer_op_type, char*> read_iter_type;
 
-struct SANGER
-{
-};
+
 typedef generate_qual<SANGER, char*, double, K> qual_op_type;
 qual_op_type qual_op;
 typedef bliss::iterator::buffered_transform_iterator<qual_op_type, char*> qual_iter_type;
