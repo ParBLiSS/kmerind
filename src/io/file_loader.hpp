@@ -143,9 +143,10 @@ namespace bliss
         {
           range = range.align_to_page(page_size);
 
+          // NOT using MAP_POPULATE.  it slows things done when testing on single node.
           aligned_data = (char*)mmap(nullptr, range.end - range.block_start,
                                      PROT_READ,
-                                     MAP_PRIVATE | MAP_POPULATE, file_handle,
+                                     MAP_PRIVATE, file_handle,
                                      range.block_start);
 
           if (aligned_data == MAP_FAILED)

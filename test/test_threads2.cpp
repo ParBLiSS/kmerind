@@ -483,7 +483,7 @@ class MPISendBuffer {
 
 
 // this can become a 1 to n transformer???
-void compute(bliss::iterator::fastq_sequence<char*> &read, int nprocs, int rank, int pid, int j, std::vector<MPISendBuffer<kmer_struct_type> > &buffers ) {
+void compute(bliss::iterator::fastq_sequence<char*> &read, int nprocs, int rank, int nthreads, int pid, int j, std::vector<MPISendBuffer<kmer_struct_type> > &buffers ) {
 
   kmer_op_type kmer_op(read.id);
   read_iter_type start(read.seq, kmer_op);
@@ -517,7 +517,7 @@ void compute(bliss::iterator::fastq_sequence<char*> &read, int nprocs, int rank,
 
     if (fabs(index_kmer.second.qual) > std::numeric_limits<typename kmer_struct_type::qual_type>::epsilon() ) {
       // sending the kmer.
-      buffers[index_kmer.first % nprocs].buffer(index_kmer.second);
+      buffers[index_kmer.first % (nprocs * nthreads)].buffer(index_kmer.second);
 //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
       ++kmerCount;
     } else {
@@ -532,7 +532,7 @@ typedef std::unordered_multimap<kmer_struct_type::kmer_type, kmer_struct_type> k
 void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t buf_size, const int senders, kmer_map_type &kmers) {
 
   // track how many active senders remain.
-  int n_senders = nprocs;  // hack.  each proc has multiple threads.
+  int n_senders = senders;  // hack.  each proc has multiple threads.
   MPI_Status status;
 
   size_t capacity = buf_size / sizeof(kmer_struct_type);
@@ -545,9 +545,12 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
   int tag;
 
   int hasMessage = 0;
-  int usleep_duration = (1000 + nprocs - 1) / nprocs;  // more procs, more frequent receive.
+  int usleep_duration = (1000 + nprocs - 1) / nprocs;
 
   while (n_senders > 0) {
+    // TODO:  have this thread handle all network IO.
+
+
     // probe for a message.  if empty message, then don't need to listen on that node anymore
     //printf("probing...\n");
     // NOTE: MPI_Probe does busy-wait (polling) - high CPU utilization.  reduce with --mca mpi_yield_when_idle 1
@@ -574,7 +577,6 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
 
     //printf("RECV %d receiving %d bytes from %d.%d\n", rank, received, src, tag - 1); fflush(stdout);
 
-    // TODO: FIX segfault here at iter 2.
     MPI_Recv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
 
     // if message size is 0, then no work to do.
@@ -586,12 +588,16 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
     assert(count > 0);
     //printf("RECV+ %d receiving %d bytes or %d records from %d.%d\n", rank, received, count, src, tag - 1); fflush(stdout);
 
+    // TODO:  if we change to this one thread handles all MPI comm,
+    //  then need to have another thread handle the insert.
 
     // now process the array
-    //DEBUG: temp comment out.
+    //TODO:  DEBUG: temp comment out.
 //    for (int i = 0; i < count; ++i) {
 //      kmers.insert(kmer_map_type::value_type(array[i].kmer, array[i]));
 //    }
+
+
 
 //    memset(array, 0, capacity * sizeof(kmer_struct_type));
   }
@@ -679,7 +685,10 @@ int main(int argc, char** argv) {
   std::chrono::high_resolution_clock::time_point t1, t2;
   std::chrono::duration<double> time_span;
 
-
+  int nthreads = 1;
+#if defined(USE_OPENMP)
+  nthreads = omp_get_max_threads();
+#endif
 
   {
     t1 = std::chrono::high_resolution_clock::now();
@@ -697,7 +706,10 @@ int main(int argc, char** argv) {
 
     std::vector<MPISendBuffer<kmer_struct_type> > buffers;
     for (int i = 0; i < nprocs; ++i) {
-      buffers.push_back(std::move(MPISendBuffer<kmer_struct_type>(MPI_COMM_WORLD, i, 8192*1024)));
+      // over provision by the number of threads as well.  (this is okay for smaller number of procs)
+      for (int j = 0; j < nthreads; ++j) {
+        buffers.push_back(std::move(MPISendBuffer<kmer_struct_type>(MPI_COMM_WORLD, i, 8192*1024)));
+      }
     }
 
 
@@ -715,20 +727,16 @@ int main(int argc, char** argv) {
     bliss::io::fastq_loader::iterator fastq_start = loader.begin();
     bliss::io::fastq_loader::iterator fastq_end = loader.end();
 
-    int num_threads = 1;
 #ifdef USE_OPENMP
-    num_threads = omp_get_max_threads();
-    assert(num_threads >= 3);
-    fprintf(stderr, "rank %d MAX THRADS = %d\n", rank, num_threads);
+    assert(nthreads >= 3);
+    fprintf(stderr, "rank %d MAX THRADS = %d\n", rank, nthreads);
     omp_set_nested(1);
     omp_set_dynamic(0);
 #endif
 
     int senders = 0;
-    MPI_Allreduce(&num_threads, &senders, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&nthreads, &senders, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
-    bliss::iterator::fastq_sequence<char*> read;
-    int i = 0;
 #pragma omp parallel sections num_threads(2)
     {
 
@@ -737,37 +745,50 @@ int main(int argc, char** argv) {
     {
       networkread(MPI_COMM_WORLD, nprocs, rank, 8192*1024, senders, index);
       printf("kmer recording completed.  records: %ld\n", index.size());
-    } // network read thread
+    } // omp network read section
 
 #pragma omp section
     {  // compute threads
-#pragma omp parallel num_threads(num_threads)
-#pragma omp single nowait
-    {
-      for (; fastq_start != fastq_end; ++fastq_start, ++i) {
-        // get data, and move to next for the other threads
 
-        // first get read
-        read = *fastq_start;
-//
-//            ++fastq_start;
-//            ++i;
-#pragma omp task firstprivate(read, i)
-        {
-          // copy read.  not doing that right now.
-          int tid =  omp_get_thread_num();
-          // then compute
-          compute(read, nprocs, rank, tid, i, buffers);
+      // if atEnd, done.
+      bool atEnd = false;
+      int i = 0;
 
-          if (i % 100000 == 0)
-            printf("%d tid %d\n", tid, i);
-          // release resource
-        }
+      // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
+      //   at this point, no strong difference.
+#pragma omp parallel num_threads(nthreads)
+      {
+        bliss::iterator::fastq_sequence<char*> read;
+        bool hasData = false;
+        int li = 0;
+        int tid = omp_get_thread_num();
 
-        // next iteration will check to see if the iterator is at end,
-        // and if not, get and compute.
+        do {
+
+          // single thread at a time getting data.
+#pragma omp critical
+          {
+            // get data, and move to next for the other threads
+            if (!(atEnd = (fastq_start == fastq_end)))
+            {
+              read = *fastq_start;
+              hasData = true;
+              li = i;
+              ++fastq_start;
+              ++i;
+            }
+          }
+
+          // now do computation.
+          if (hasData) {
+            compute(read, nprocs, rank, nthreads, tid, li, buffers);
+
+            if (li % 100000 == 0)
+              printf("%d tid %d\n", tid, li);
+          }
+        } while (!atEnd);
+
       }
-#pragma omp taskwait
 
 
       t2 = std::chrono::high_resolution_clock::now();
@@ -777,18 +798,15 @@ int main(int argc, char** argv) {
 
 
       // send the last part out.
-      for (int i = 0; i < nprocs; ++i) {
-        buffers[(i+ rank) % nprocs].flush();
+      for (int i = 0; i < nprocs * nthreads; ++i) {
+        buffers[(i+ rank) % (nprocs * nthreads)].flush();
       }
+      printf("compute completed\n");
 
-    }
-    printf("compute completed\n");
+    } // omp compute section
 
 
-
-    }  // compute threads
-
-    } // outer parallel sections
+    }  // outer parallel sections
 
 
 
@@ -796,10 +814,8 @@ int main(int argc, char** argv) {
     //fileio_t.join();
 //    networkwrite_t.join();
     //networkread_t.join();
-  }
 
-
-
+  }  // scope to ensure file loader is destroyed.
 
 
 #ifdef USE_MPI

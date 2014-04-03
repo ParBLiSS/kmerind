@@ -25,3 +25,9 @@ target_link_libraries(testThreads ${EXTRA_LIBS})
 target_link_libraries(testThreads bliss-io)
 target_link_libraries(testThreads bliss-common)
 
+## EXECUTABLES
+add_executable(testThreads2 test_threads2.cpp)
+target_link_libraries(testThreads2 ${EXTRA_LIBS})
+target_link_libraries(testThreads2 bliss-io)
+target_link_libraries(testThreads2 bliss-common)
+

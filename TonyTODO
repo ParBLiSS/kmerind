@@ -103,7 +103,7 @@ mpi redistribution code.
 manage and buffering of reads/mpi for multicore.
 	initial test complete
 	compute bound due to quality score computation
-		optimize - 1. use LUT
+		optimize - 1. use LUT .  DONE
 					2. fixed point exact/approximate/directly manipulate floating point data structure.
 need to change to using single MPI thread.
 use MPI IO?
@@ -111,7 +111,18 @@ use MPI IO?
 save out the index structure and reload
 refactor the MPI functionality to support single node/write out to disk/external memory algos.
 
+REDUCE CONTENTION
+if few nodes, number of buffers are few and there would be high contenion between threads.
+	set up with number of buffers = multiple of threads and number of procs.  
+	and map multiple buffers to a single proc. DONE
+		some improvements but not huge.  need to figure out how to lock smaller regions.  compute threads are spending a lot of time waiting.
+		
 
+try using the "file" as the queue, avoid master slave paradigm in OMP
+	DONE.  no visible changes on a single node.
+	
+major improvement when removing MAP_POPULATE.  else file mmap time in tens of seconds.
+	
 query...
 
 
