@@ -593,9 +593,9 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
 
     // now process the array
     //TODO:  DEBUG: temp comment out.
-//    for (int i = 0; i < count; ++i) {
-//      kmers.insert(kmer_map_type::value_type(array[i].kmer, array[i]));
-//    }
+    for (int i = 0; i < count; ++i) {
+      kmers.insert(kmer_map_type::value_type(array[i].kmer, array[i]));
+    }
 
 
 
