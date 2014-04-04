@@ -118,26 +118,26 @@ TYPED_TEST_P(RangeTest, partition){
   {
     for (auto len : lens)
     {
-      for (size_t i : partitionCount)
+      for (size_t p : partitionCount)
       {
 //        if (len < i)
 //          continue;
 
-        auto rem = len % i;
-        auto div = len / i;
+        auto rem = len % p;
+        auto div = len / p;
 
         //      printf("%ld, %d\n", static_cast<size_t>(len), i);
-        int block = 0;
+        size_t block = 0;
 
         // first block
-        r = range<TypeParam>::block_partition(i, block, start, start+len);
+        r = range<TypeParam>::block_partition(p, block, start, start+len);
         EXPECT_EQ(start, r.start);
         e = (rem == 0 ? (div) : (div + 1)) + start;
         EXPECT_EQ(e, r.end);
 
         // middle block
-        block = (i-1)/2;
-        r = range<TypeParam>::block_partition(i, block, start, start+len);
+        block = (p-1)/2;
+        r = range<TypeParam>::block_partition(p, block, start, start+len);
         e = (rem == 0 ? block * div :
             ( block >= rem ? block * div + rem : block * (div + 1))) + start;
         EXPECT_EQ(e, r.start);
@@ -146,8 +146,8 @@ TYPED_TEST_P(RangeTest, partition){
         EXPECT_EQ(e, r.end);
 
         // last block
-        block = i-1;
-        r = range<TypeParam>::block_partition(i, block, start, start+len);
+        block = p-1;
+        r = range<TypeParam>::block_partition(p, block, start, start+len);
         e = (rem == 0 ? block * div :
             ( block >= rem ? block * div + rem : block * (div + 1))) + start;
         EXPECT_EQ(e, r.start);
@@ -318,7 +318,7 @@ REGISTER_TYPED_TEST_CASE_P(RangeDeathTest, constructFails, partitionFails,
 
 //////////////////// RUN the tests with different types.
 
-typedef ::testing::Types<char, uint8_t, int16_t, uint16_t, int, uint32_t,
+typedef ::testing::Types<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
     int64_t, uint64_t, size_t> RangeTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, RangeTest, RangeTestTypes);
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, RangeDeathTest, RangeTestTypes);

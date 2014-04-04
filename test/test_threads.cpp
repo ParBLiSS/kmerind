@@ -36,9 +36,11 @@
 #include "common/AlphabetTraits.hpp"
 #include "iterators/buffered_transform_iterator.hpp"
 
+#include "io/MPISendBuffer.hpp"
 
-template<typename T1, typename T2=double>
-struct kmer_struct {
+template<typename T1, typename T2 = double>
+struct kmer_struct
+{
     typedef T1 kmer_type;
     typedef T2 qual_type;
 
@@ -47,7 +49,8 @@ struct kmer_struct {
     T2 qual;
 };
 
-
+typedef kmer_struct<uint64_t, double> kmer_struct_type;
+typedef bliss::io::MPISendBuffer<kmer_struct_type, true> buffer_type;
 
 template<typename ALPHABET, typename Iterator, typename KMER, int K>
 struct generate_kmer
@@ -68,11 +71,12 @@ struct generate_kmer
     static constexpr int word_size = sizeof(TO) * 8;
     static constexpr TO mask_reverse = ~(static_cast<TO>(0))
         >> (word_size - shift - nBits);
-//    static constexpr TO mask_lower_half = ~(static_cast<TO>(0))
-//        >> (word_size - nBits * (K + 1) / 2);
+    //    static constexpr TO mask_lower_half = ~(static_cast<TO>(0))
+    //        >> (word_size - nBits * (K + 1) / 2);
 
-
-    generate_kmer(const bliss::iterator::read_id &_rid) : kmer(), revcomp(0), pos(0) {
+    generate_kmer(const bliss::iterator::read_id &_rid)
+        : kmer(), revcomp(0), pos(0)
+    {
       kmer.kmer = 0;
       kmer.qual = 0;
       kmer.id = _rid;
@@ -102,14 +106,12 @@ struct generate_kmer
       // compute the reverse complement
       TO xored = kmer.kmer ^ revcomp;
 
-//      TO xored_recoverable = (xored & ~mask_lower_half) | (_kmer.forward & mask_lower_half);
-
+      //      TO xored_recoverable = (xored & ~mask_lower_half) | (_kmer.forward & mask_lower_half);
 
       return std::pair<TO, KMER>(xored, kmer);
     }
 
 };
-
 
 /**
  * Phred Scores.  see http://en.wikipedia.org/wiki/FASTQ_format.
@@ -135,15 +137,14 @@ struct SangerToLogProbCorrect
     {
       // some limits: v / -10 has to be negative as this becomes probability, so v > 0
       //
-      return v < min ? std::numeric_limits<T>::lowest() :
+      return
+          v < min ? std::numeric_limits<T>::lowest() :
           v > max ? std::numeric_limits<T>::lowest() :
-          v == min ? std::numeric_limits<T>::lowest() :
+          v == min ?
+              std::numeric_limits<T>::lowest() :
               std::log2(1.0 - std::exp2(static_cast<T>(v) * log2_10DivNeg10));
     }
 };
-
-
-
 
 /**
  * compute kmer quality based on phred quality score.
@@ -204,7 +205,8 @@ struct generate_qual
       }
       zeroCount = K;
 
-      for (int i = 0; i < ENCODING::size; ++i) {
+      for (int i = 0; i < ENCODING::size; ++i)
+      {
         printf("lut: %d=%lf\n", i, lut[i]);
       }
 
@@ -218,7 +220,7 @@ struct generate_qual
       TO oldval = terms[pos];
 
       // add the new value,       // update the position  - circular queue
-      TO newval = lut[*iter - ENCODING::offset];  // this is for Sanger encoding.
+      TO newval = lut[*iter - ENCODING::offset]; // this is for Sanger encoding.
       terms[pos] = newval;
       pos = (pos + 1) % K;
 
@@ -228,7 +230,7 @@ struct generate_qual
       // update the zero count
       if (newval == std::numeric_limits<TO>::lowest())
       {
-//        printf("ZERO!\n");
+        //        printf("ZERO!\n");
         ++zeroCount;
       }
       if (oldval == std::numeric_limits<TO>::lowest())
@@ -263,8 +265,8 @@ struct generate_qual
 
       }
 
-//      printf("%d qual %d oldval = %f, newval = %f, internal = %f, output val = %f\n", kmer_pos, *iter, oldval, newval, internal, value);
-//      std::fflush(stdout);
+      //      printf("%d qual %d oldval = %f, newval = %f, internal = %f, output val = %f\n", kmer_pos, *iter, oldval, newval, internal, value);
+      //      std::fflush(stdout);
 
       // move the iterator.
       ++iter;
@@ -288,25 +290,21 @@ struct generate_qual
     }
 
 };
+
 // can't use auto keyword.  declare and initialize in class declaration
 // then "define" but not initialize outside class declaration, again.
 template<typename ENCODING, typename Iterator, typename TO, int K>
-constexpr std::array<typename ENCODING::value_type, ENCODING::size> generate_qual<ENCODING, Iterator, TO, K>::lut;
-
+constexpr std::array<typename ENCODING::value_type, ENCODING::size> generate_qual<
+    ENCODING, Iterator, TO, K>::lut;
 
 #define K 21
-
-typedef kmer_struct<uint64_t, double> kmer_struct_type;
 
 typedef generate_kmer<DNA, char*, kmer_struct_type, K> kmer_op_type;
 typedef bliss::iterator::buffered_transform_iterator<kmer_op_type, char*> read_iter_type;
 
-
 typedef generate_qual<SangerToLogProbCorrect<double>, char*, double, K> qual_op_type;
 qual_op_type qual_op;
 typedef bliss::iterator::buffered_transform_iterator<qual_op_type, char*> qual_iter_type;
-
-
 
 //void fileio() {
 //  // open the file and create a fastq iterator
@@ -325,165 +323,13 @@ typedef bliss::iterator::buffered_transform_iterator<qual_op_type, char*> qual_i
 //
 //
 
-
 // use a vector of MPIBuffers to manage process'
 //
-/**
- * MPIBuffers is used to send/receive.  buffer is shared between all threads, so locking is an issue.
- */
-template<typename T>
-class MPISendBuffer {
-    // need some default MPI buffer size, then pack in sizeof(T) blocks as many times as possible.
-
-  public:
-    static const int END_TAG = 0;
-
-
-    MPISendBuffer(MPI_Comm _comm, const int _targetRank, const size_t nbytes)
-       : accepting(true), targetRank(_targetRank), comm(_comm), send_request(MPI_REQUEST_NULL), total(0)  {
-      // initialize internal buffers (double buffering)
-      capacity = nbytes / sizeof(T);
-      //printf("created buffer for send, capacity = %ld\n", capacity);
-
-      active_buf.reserve(capacity);
-      inactive_buf.reserve(capacity);
-
-#ifdef USE_OPENMP
-      omp_init_lock(&lock);
-#endif
-    }
-
-    virtual ~MPISendBuffer() {
-      // buffer should be empty at this point.
-      assert(active_buf.size() == 0);
-      assert(inactive_buf.size() == 0);
-
-      // all previous messages should be done.
-
-#ifdef USE_OPENMP
-      omp_destroy_lock(&lock);
-#endif
-
-    }
-
-    void buffer(const T & val) {
-      assert(accepting);   // if this assert fails, the calling thread's logic is faulty.
-
-      // locking.
-#ifdef USE_OPENMP
-      omp_set_lock(&lock);
-#endif
-      // store value
-      active_buf.push_back(val);
-      // if full, call send (block if other buffer is sending)
-      if (active_buf.size() == capacity) {
-        send();
-      }
-
-#ifdef USE_OPENMP
-      omp_unset_lock(&lock);
-#endif
-    }
-
-    void flush() {
-      int rank = 0;
-      MPI_Comm_rank(comm, &rank);
-      int pid = 0;
-#ifdef USE_OPENMP
-      pid = omp_get_thread_num();
-//
-//     assert(pid == 0);   // called by master thread only.
-#endif
-      accepting = false;
-
-      // no more entries to buffer. send all remaining.
-      send();
-
-      // one more time to wait for prev send to finish.
-      send();
-
-      // send termination signal (send empty message).
-      //printf("%d done sending to %d\n", rank, targetRank); fflush(stdout);
-      MPI_Send(nullptr, 0, MPI_INT, targetRank, END_TAG, comm);
-      printf("%d.%d  %ld flushed.\n", rank, pid, total); fflush(stdout);
-    }
-
-  protected:
-
-
-    // 2 buffers per target
-    std::vector<T> active_buf;
-    std::vector<T> inactive_buf;
-
-    // if buffer is still accepting stuff
-    bool accepting;
-
-    // rank of target entry.
-    const int targetRank;
-    size_t capacity;
-
-    MPI_Comm comm;
-    // inactive buffer send status
-    MPI_Request send_request;
-
-    size_t total;
-
-#ifdef USE_OPENMP
-      omp_lock_t lock;
-#endif
-
-
-    void send() {
-      int rank = 0;
-      MPI_Comm_rank(comm, &rank);
-      int pid = 0;
-#ifdef USE_OPENMP
-      pid = omp_get_thread_num();
-#endif
-      // only called from within locked code block
-      std::chrono::high_resolution_clock::time_point time1, time2;
-      std::chrono::duration<double> time_span;
-
-      // check inactive buffer is sending?
-      if (send_request != MPI_REQUEST_NULL) {
-        // if being sent, wait for that to complete
-        //printf("Waiting for prev send %d -> %d to finish\n", rank, targetRank); fflush(stdout);
-        //time1 = std::chrono::high_resolution_clock::now();Traffic
-
-        MPI_Wait(&send_request, MPI_STATUS_IGNORE);
-        //time2 = std::chrono::high_resolution_clock::now();
-        //time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
-        //    time2 - time1);
-
-        //printf("Waiting for prev send %d -> %d finished in %f\n", rank, targetRank, time_span.count()); fflush(stdout);
-      }
-      // clear the inactive buf
-      inactive_buf.clear();
-      assert(inactive_buf.size() == 0);
-      int s = active_buf.size();
-      // swap active and inactive buffer  (this swaps the contents)
-      inactive_buf.swap(active_buf);
-      assert(active_buf.size() == 0);
-      assert(inactive_buf.size() == s);
-
-      // async send inactive buffer if it's not empty.  Requires that remote side uses probe to get the size of data first.
-
-      // TODO: send the data as bytes.  This assumes the receive end knows how to parse the elements
-      if (inactive_buf.size() > 0) {
-        total += inactive_buf.size();
-        //printf("%d sending to %d\n", rank, targetRank);
-        MPI_Isend(inactive_buf.data(), inactive_buf.size() * sizeof(T), MPI_UNSIGNED_CHAR, targetRank, pid + 1, comm, &send_request);
-        //printf("SEND %d.%d send to %d, number of entries %ld, total %ld\n", rank, pid, targetRank, inactive_buf.size(), total); fflush(stdout);
-
-      }
-
-    }
-};
-
-
 
 // this can become a 1 to n transformer???
-void compute(bliss::iterator::fastq_sequence<char*> &read, int nprocs, int rank, int pid, int j, std::vector<MPISendBuffer<kmer_struct_type> > &buffers ) {
+void compute(bliss::iterator::fastq_sequence<char*> &read, int nprocs, int rank,
+             int pid, int j, std::vector<buffer_type> &buffers)
+{
 
   kmer_op_type kmer_op(read.id);
   read_iter_type start(read.seq, kmer_op);
@@ -492,8 +338,7 @@ void compute(bliss::iterator::fastq_sequence<char*> &read, int nprocs, int rank,
   qual_iter_type qstart(read.qual, qual_op);
   qual_iter_type qend(read.qual_end, qual_op);
 
-
-  std::pair<kmer_struct_type::kmer_type, kmer_struct_type> index_kmer;
+  std::pair<typename kmer_struct_type::kmer_type, kmer_struct_type> index_kmer;
 
   uint64_t kmerCount = 0;
 
@@ -505,34 +350,38 @@ void compute(bliss::iterator::fastq_sequence<char*> &read, int nprocs, int rank,
 
     if (i < (K - 1))
       continue;
-//        kmers.push_back(*start);
-//    kmer ^= *start;
-//    qual = *qstart - qual;
+    //  kmers.push_back(*start);
+    //  kmer ^= *start;
+    //  qual = *qstart - qual;
     index_kmer = *start;
     index_kmer.second.qual = *qstart;
 
-
     // some debugging output
-   // printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
+    // printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
 
-    if (fabs(index_kmer.second.qual) > std::numeric_limits<typename kmer_struct_type::qual_type>::epsilon() ) {
+    if (fabs(index_kmer.second.qual) > std::numeric_limits<
+            typename kmer_struct_type::qual_type>::epsilon())
+    {
       // sending the kmer.
       buffers[index_kmer.first % nprocs].buffer(index_kmer.second);
-//      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
+      //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
       ++kmerCount;
-    } else {
-//      printf("BAD kmer quality.  key %lx, pos %d, qual %f\n", index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
+    }
+    else
+    {
+      //      printf("BAD kmer quality.  key %lx, pos %d, qual %f\n", index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
     }
   }
 
 }
 
-
 typedef std::unordered_multimap<kmer_struct_type::kmer_type, kmer_struct_type> kmer_map_type;
-void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t buf_size, const int senders, kmer_map_type &kmers) {
+void networkread(MPI_Comm comm, const int nprocs, const int rank,
+                 const size_t buf_size, const int senders, kmer_map_type &kmers)
+{
 
   // track how many active senders remain.
-  int n_senders = nprocs;  // hack.  each proc has multiple threads.
+  int n_senders = senders;  // hack.  each proc has multiple threads.
   MPI_Status status;
 
   size_t capacity = buf_size / sizeof(kmer_struct_type);
@@ -545,16 +394,18 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
   int tag;
 
   int hasMessage = 0;
-  int usleep_duration = (1000 + nprocs - 1) / nprocs;  // more procs, more frequent receive.
+  int usleep_duration = (1000 + nprocs - 1) / nprocs; // more procs, more frequent receive.
 
-  while (n_senders > 0) {
+  while (n_senders > 0)
+  {
     // probe for a message.  if empty message, then don't need to listen on that node anymore
     //printf("probing...\n");
     // NOTE: MPI_Probe does busy-wait (polling) - high CPU utilization.  reduce with --mca mpi_yield_when_idle 1
     // NOTE: that was still kind of slow.
     // NOTE: using Iprobe with usleep is even less CPU utilization.
     //        length between probing needs to be tuned.
-    while (!hasMessage) {
+    while (!hasMessage)
+    {
       MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
       usleep(usleep_duration);
     }
@@ -562,12 +413,15 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
 
     src = status.MPI_SOURCE;
     tag = status.MPI_TAG;
-    MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &received);   // length is always > 0?
+    MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &received); // length is always > 0?
 
-    if (tag == MPISendBuffer<kmer_struct_type>::END_TAG) {
+    if (tag == buffer_type::END_TAG)
+    {
       // end of messaging.
-      printf("RECV %d receiving END signal %d from %d\n", rank, received, src); fflush(stdout);
-      MPI_Recv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
+      printf("RECV %d receiving END signal %d from %d\n", rank, received, src);
+      fflush(stdout);
+      MPI_Recv(reinterpret_cast<unsigned char*>(array), received,
+               MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
       --n_senders;
       continue;
     }
@@ -575,7 +429,8 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
     //printf("RECV %d receiving %d bytes from %d.%d\n", rank, received, src, tag - 1); fflush(stdout);
 
     // TODO: FIX segfault here at iter 2.
-    MPI_Recv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
+    MPI_Recv(reinterpret_cast<unsigned char*>(array), received,
+             MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
 
     // if message size is 0, then no work to do.
     if (received == 0)
@@ -586,28 +441,30 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
     assert(count > 0);
     //printf("RECV+ %d receiving %d bytes or %d records from %d.%d\n", rank, received, count, src, tag - 1); fflush(stdout);
 
-
     // now process the array
     //DEBUG: temp comment out.
-//    for (int i = 0; i < count; ++i) {
-//      kmers.insert(kmer_map_type::value_type(array[i].kmer, array[i]));
-//    }
+    //    for (int i = 0; i < count; ++i) {
+    //      kmers.insert(kmer_map_type::value_type(array[i].kmer, array[i]));
+    //    }
 
-//    memset(array, 0, capacity * sizeof(kmer_struct_type));
+    //    memset(array, 0, capacity * sizeof(kmer_struct_type));
   }
 
-  delete [] array;
+  delete[] array;
 
-  printf("network read done\n"); fflush(stdout);
+  printf("network read done\n");
+  fflush(stdout);
 }
 
-
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
 
   LOG_INIT();
 
+  // TODO: need to fail if there is no OpenMP support or thread count is less than 2.
+
   std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
-//  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
+  //  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
 
   if (argc > 1)
   {
@@ -622,7 +479,8 @@ int main(int argc, char** argv) {
 #ifdef USE_OPENMP
   MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
-  if (provided < MPI_THREAD_MULTIPLE) {
+  if (provided < MPI_THREAD_MULTIPLE)
+  {
     printf("ERROR: The MPI Library Does not have full thread support.\n");
     MPI_Abort(MPI_COMM_WORLD, 1);
   }
@@ -649,7 +507,8 @@ int main(int argc, char** argv) {
   }
 
 #ifdef USE_MPI
-  if (nprocs > 1) {
+  if (nprocs > 1)
+  {
     // broadcast to all
     MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
   }
@@ -669,8 +528,8 @@ int main(int argc, char** argv) {
 
   // first generate an approximate partition.
   bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(nprocs,
-                                                          rank, 0, file_size);
+      bliss::io::file_loader::range_type::block_partition(nprocs, rank, 0,
+                                                          file_size);
   std::cout << rank << " equipart: " << r << std::endl;
   std::cout << rank << " test block aligned: "
             << r.align_to_page(sysconf(_SC_PAGE_SIZE)) << std::endl;
@@ -679,13 +538,11 @@ int main(int argc, char** argv) {
   std::chrono::high_resolution_clock::time_point t1, t2;
   std::chrono::duration<double> time_span;
 
-
-
   {
     t1 = std::chrono::high_resolution_clock::now();
     // now open the file
     bliss::io::fastq_loader loader(filename, r, file_size);
-//    bliss::io::file_loader loader(filename, file_size);
+    //    bliss::io::file_loader loader(filename, file_size);
     t2 = std::chrono::high_resolution_clock::now();
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
         t2 - t1);
@@ -693,22 +550,11 @@ int main(int argc, char** argv) {
 
     std::cout << rank << " record adjusted " << loader.getRange() << std::endl;
 
-
-
-    std::vector<MPISendBuffer<kmer_struct_type> > buffers;
-    for (int i = 0; i < nprocs; ++i) {
-      buffers.push_back(std::move(MPISendBuffer<kmer_struct_type>(MPI_COMM_WORLD, i, 8192*1024)));
-    }
-
-
     std::unordered_multimap<kmer_struct_type::kmer_type, kmer_struct_type> index;
 
-
-  //  std::thread fileio_t(fileio);
-//    std::thread networkwrite_t(networkwrite);
+    //  std::thread fileio_t(fileio);
+    //    std::thread networkwrite_t(networkwrite);
     //std::thread networkread_t(networkread);
-
-
 
     // do some work using openmp
     t1 = std::chrono::high_resolution_clock::now();
@@ -732,78 +578,85 @@ int main(int argc, char** argv) {
 #pragma omp parallel sections num_threads(2)
     {
 
+#pragma omp section
+      {
+        networkread(MPI_COMM_WORLD, nprocs, rank, 8192 * 1024, senders, index);
+        printf("kmer recording completed.  records: %ld\n", index.size());
+      } // network read thread
 
 #pragma omp section
-    {
-      networkread(MPI_COMM_WORLD, nprocs, rank, 8192*1024, senders, index);
-      printf("kmer recording completed.  records: %ld\n", index.size());
-    } // network read thread
+      {  // compute threads
 
-#pragma omp section
-    {  // compute threads
-#pragma omp parallel num_threads(num_threads)
-#pragma omp single nowait
-    {
-      for (; fastq_start != fastq_end; ++fastq_start, ++i) {
-        // get data, and move to next for the other threads
-
-        // first get read
-        read = *fastq_start;
-//
-//            ++fastq_start;
-//            ++i;
-#pragma omp task firstprivate(read, i)
+        std::vector<buffer_type> buffers;
+        for (int j = 0; j < nprocs; ++j)
         {
-          // copy read.  not doing that right now.
-          int tid =  omp_get_thread_num();
-          // then compute
-          compute(read, nprocs, rank, tid, i, buffers);
-
-          if (i % 100000 == 0)
-            printf("%d tid %d\n", tid, i);
-          // release resource
+          buffers.push_back(
+              std::move(buffer_type(MPI_COMM_WORLD, j, 8192 * 1024)));
         }
 
-        // next iteration will check to see if the iterator is at end,
-        // and if not, get and compute.
-      }
+
+#pragma omp parallel num_threads(num_threads)
+        {
+
+
+#pragma omp single nowait
+          {
+            for (; fastq_start != fastq_end; ++fastq_start, ++i)
+            {
+              // get data, and move to next for the other threads
+
+              // first get read
+              read = *fastq_start;
+              //
+              //            ++fastq_start;
+              //            ++i;
+#pragma omp task firstprivate(read, i)
+              {
+                // copy read.  not doing that right now.
+                int tid = omp_get_thread_num();
+                // then compute
+                compute(read, nprocs, rank, tid, i, buffers);
+
+                if (i % 100000 == 0)
+                  printf("%d tid %d\n", tid, i);
+                // release resource
+              }
+
+              // next iteration will check to see if the iterator is at end,
+              // and if not, get and compute.
+            }
 #pragma omp taskwait
 
+            t2 = std::chrono::high_resolution_clock::now();
+            time_span =
+                std::chrono::duration_cast<std::chrono::duration<double>>(
+                    t2 - t1);
+            INFO(
+                "computation rank " << rank << " elapsed time: " << time_span.count() << "s.");
 
-      t2 = std::chrono::high_resolution_clock::now();
-      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
-          t2 - t1);
-      INFO("computation rank " << rank << " elapsed time: " << time_span.count() << "s.");
-
-
-      // send the last part out.
-      for (int i = 0; i < nprocs; ++i) {
-        buffers[(i+ rank) % nprocs].flush();
-      }
-
-    }
-    printf("compute completed\n");
+          }
 
 
+          printf("compute completed\n");
 
-    }  // compute threads
+        } // compute threads parallel
+
+        // send the last part out.
+        for (int j = 0; j < nprocs; ++j)
+        {
+          buffers[(j + rank) % nprocs].flush();
+        }
+      }  // compute threads
 
     } // outer parallel sections
 
-
-
-
     //fileio_t.join();
-//    networkwrite_t.join();
+    //    networkwrite_t.join();
     //networkread_t.join();
   }
 
-
-
-
-
 #ifdef USE_MPI
-    MPI_Finalize();
+  MPI_Finalize();
 #endif
 
   return 0;

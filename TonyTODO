@@ -121,6 +121,20 @@ if few nodes, number of buffers are few and there would be high contenion betwee
 try using the "file" as the queue, avoid master slave paradigm in OMP
 	DONE.  no visible changes on a single node.
 	
+	
+scaling is good from 2 to 16 nodes on CyEnce.  32 node not as good. 
+	compute times still scale linearly.
+	perhaps it's the flushing part (sequential, no async send)
+	
+	
+	
+Factor out MPI Buffer and set it up to
+	1. as multi buffer that works with MPI_AllToAll
+	2. genericize to support other backends (e.g. file system, MPI-IO, etc.). 
+	
+ERROR: try with each thread hold separate buffers:  some buffers are not cleared.  need to fix.
+ERROR: threads sharing buffers: deadlock now at exit - termination of MPI processes
+	
 major improvement when removing MAP_POPULATE.  else file mmap time in tens of seconds.
 	
 query...

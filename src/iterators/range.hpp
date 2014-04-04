@@ -128,7 +128,7 @@ namespace bliss
         /**
          * @brief   static function.  block partitioning of a range
          * @details Given the number of partition, the partition element desired, and a start and end range, deterministically compute the subrange.
-         *    start end end are allowed to be negative, but end >= start is required.
+         *    start and end are allowed to be negative, but end >= start is required.
          *
          * @param[in] np        number of partitions
          * @param[in] pid       id of specific partition desired
@@ -150,22 +150,24 @@ namespace bliss
           if (np == 1)
             return output;
 
-          T div = (end - start) / static_cast<T>(np);
-          T rem = (end - start) % static_cast<T>(np);
-          if (static_cast<T>(pid) < rem)
+          size_t length = end - start;
+
+          size_t div = length / np;
+          size_t rem = length % np;
+          if (pid < rem)
           {
-            output.start += static_cast<T>(pid) * (div + 1);
-            output.end = output.start + (div + 1) + _overlap;
+            output.start += static_cast<T>(pid * (div + 1));
+            output.end = output.start + static_cast<T>(div + 1) + _overlap;
           }
           else
           {
-            output.start += static_cast<T>(pid) * div + rem;
-            output.end = output.start + div + _overlap;
+            output.start += static_cast<T>(pid * div + rem);
+            output.end = output.start + static_cast<T>(div) + _overlap;
           }
 
           if (output.end > end)
             output.end = end;
-          assert(output.start < output.end);
+          assert(output.start <= output.end);
 
           output.block_start = output.start;
           return output;
