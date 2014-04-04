@@ -8,6 +8,9 @@ config.hpp
 #
 build/
 
+.ycm_extra_conf.py
+.ycm_extra_conf.pyc
+
 # General ignores:
 # Created by http://www.gitignore.io
 
