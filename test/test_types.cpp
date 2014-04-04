@@ -389,12 +389,13 @@ struct datatype
 template<typename T, typename TE>
 struct swap
 {
-    T& operator()(T& input)
+    T operator()(const T& input)
     {
-      TE v = input.a;
-      input.a = input.b;
-      input.b = v;
-      return input;
+      //TE v = input.a;
+      T output;
+      output.a = input.b;
+      output.b = input.a;
+      return output;
     }
 };
 
@@ -506,7 +507,7 @@ void testTransformIterator(F f, V& data, std::string name,
                            std::string func_name)
 {
   // test with functor
-  typedef bliss::iterator::transform_iterator<F, typename V::iterator> t_iter_type;
+  typedef bliss::iterator::transform_iterator<typename V::iterator, F> t_iter_type;
   t_iter_type iter1(data.begin(), f);
   t_iter_type end1(data.end(), f);
 
@@ -948,8 +949,7 @@ int main(int argc, char* argv[])
          time_span.count());
 
   swap<datatype<int>, int> sw;
-  typedef bliss::iterator::transform_iterator<swap<datatype<int>, int>,
-      typename std::vector<datatype<int> >::iterator> t_iter_type2;
+  typedef bliss::iterator::transform_iterator<typename std::vector<datatype<int> >::iterator, swap<datatype<int>, int>> t_iter_type2;
   t_iter_type2 iter3(data2.begin(), sw);
   t_iter_type2 end3(data2.end(), sw);
 

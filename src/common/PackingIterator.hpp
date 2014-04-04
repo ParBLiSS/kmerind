@@ -24,10 +24,13 @@
 #include <common/padding.hpp>
 #include <common/Kmer.hpp>
 
+#include <iterators/compression_iterator.hpp>
+
 
 namespace bliss
 {
 
+/*
 
 // TODO add template specialization for padding (TRUE or FALSE)
 template <typename BaseIterator, BitSizeType bits_per_char, typename PackedStorageType=WordType>
@@ -67,23 +70,6 @@ public:
     // return packed word
     if (baseCur == baseNext)
     {
-      // advance the next iterator and buffer result
-      BitSizeType chars = charsPerWord;
-      BitSizeType numChars = static_cast<BitSizeType>(std::min(static_cast<size_t>(chars), static_cast<size_t>(std::distance(baseNext, baseEnd))));
-      std::array<base_value_type, charsPerWord> word_cache;
-      for (BitSizeType i = 0; i < numChars; ++i)
-      {
-        word_cache[i] = *baseNext;
-        ++baseNext;
-      }
-      // read them in reverse
-      buffer = 0;
-      for (BitSizeType i = numChars; i > 0; --i)
-      //for (BitSizeType i = 1; i <= numChars; ++i)
-      {
-        buffer <<= bitsPerChar;
-        buffer |= getBitMask<PackedStorageType>(bitsPerChar) & word_cache[i-1];
-      }
     }
     return buffer;
   }
@@ -129,6 +115,61 @@ private:
   BaseIterator baseEnd;
 
   value_type buffer;
+};
+*/
+
+
+template <BitSizeType BITS_PER_CHAR, typename PackedStorageType=WordType>
+struct PackingItFunctor
+{
+
+  typedef PaddingTraits<PackedStorageType, BITS_PER_CHAR> padtraits;
+  static constexpr unsigned int m = padtraits::chars_per_word;
+
+  template<typename Iterator>
+    PackedStorageType operator()(Iterator& cur, const Iterator& end)
+    {
+      // get underlying type of iterator
+      typedef typename std::iterator_traits<Iterator>::value_type base_value_type;
+      // advance the next iterator and buffer result
+      BitSizeType numChars = static_cast<BitSizeType>(std::min<std::size_t>(m, std::distance(cur, end)));
+      std::array<base_value_type, m> word_cache;
+      for (BitSizeType i = 0; i < numChars; ++i)
+      {
+        word_cache[i] = *cur;
+        ++cur;
+      }
+      // read them in reverse
+      PackedStorageType buffer = 0;
+      for (BitSizeType i = numChars; i > 0; --i)
+        //for (BitSizeType i = 1; i <= numChars; ++i)
+      {
+        buffer <<= padtraits::bits_per_char;
+        buffer |= getBitMask<PackedStorageType>(padtraits::bits_per_char) & word_cache[i-1];
+      }
+
+      return buffer;
+    }
+};
+
+/**
+ * @brief
+ */
+template <typename BaseIterator, BitSizeType bits_per_char, typename PackedStorageType=WordType>
+class PackingIterator : public iterator::compressing_iterator<BaseIterator, PackingItFunctor<bits_per_char, PackedStorageType> >
+{
+  typedef iterator::compressing_iterator<BaseIterator, PackingItFunctor<bits_per_char, PackedStorageType> > base_class_t;
+  typedef PackingItFunctor<bits_per_char, PackedStorageType> functor_t;
+  typedef PaddingTraits<PackedStorageType, bits_per_char> padtraits;
+
+public:
+  PackingIterator() {}
+
+  PackingIterator(BaseIterator baseBegin)
+    : base_class_t(baseBegin, baseBegin, functor_t(), padtraits::chars_per_word)  {}
+
+  PackingIterator(BaseIterator baseBegin, BaseIterator baseEnd)
+    : base_class_t(baseBegin, baseEnd, functor_t(), padtraits::chars_per_word)  {}
 };
 
 
