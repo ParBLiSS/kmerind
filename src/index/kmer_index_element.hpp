@@ -24,7 +24,7 @@ namespace bliss
      *
      */
 
-    template<typename T1, typename T2 = double>
+    template<typename T1, typename T2 = float>
     struct kmer_index_element
     {
         typedef T1 kmer_type;

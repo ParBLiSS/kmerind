@@ -132,8 +132,15 @@ Factor out MPI Buffer and set it up to
 	1. as multi buffer that works with MPI_AllToAll
 	2. genericize to support other backends (e.g. file system, MPI-IO, etc.). 
 	
-ERROR: try with each thread hold separate buffers:  some buffers are not cleared.  need to fix.
-ERROR: threads sharing buffers: deadlock now at exit - termination of MPI processes
+ERROR: try with each thread hold separate buffers:  some buffers are not cleared.  need to fix.  DONE
+ERROR: threads sharing buffers: deadlock now at exit - termination of MPI processes.  DONE
+
+each thread holding separate buffer is now working.  not yet profiled.  the task based approach appears fast but need to validate to be correct.
+the omp version is not as performant.  not sure why.
+
+for now, refactor to make code more maintainable.
+
+Need to use MPI persistent communication. 
 	
 major improvement when removing MAP_POPULATE.  else file mmap time in tens of seconds.
 	
