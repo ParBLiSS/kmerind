@@ -51,6 +51,8 @@ namespace bliss
           active_buf.reserve(capacity);
           inactive_buf.reserve(capacity);
 
+         // printf("targetrank is %d \n", targetRank);
+
           MPI_Comm_rank(comm, &rank);
 
     #ifdef USE_OPENMP
@@ -111,7 +113,7 @@ namespace bliss
           // send termination signal (send empty message).
           //printf("%d done sending to %d\n", rank, targetRank); fflush(stdout);
           MPI_Send(nullptr, 0, MPI_INT, targetRank, END_TAG, comm);
-          printf("%d.%d  %ld flushed.\n", rank, tid, total); fflush(stdout);
+          //printf("%d.%d  %ld flushed to %d.\n", rank, tid, total, targetRank); fflush(stdout);
         }
 
       protected:

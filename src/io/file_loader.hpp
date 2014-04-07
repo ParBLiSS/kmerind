@@ -196,7 +196,7 @@ namespace bliss
           aligned_data = nullptr;
           data = nullptr;
 
-          printf("unloading complete.\n");
+          //printf("unloading complete.\n");
         }
 
     };
