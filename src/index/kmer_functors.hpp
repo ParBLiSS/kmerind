@@ -45,7 +45,7 @@ namespace bliss
         //    static constexpr TO mask_lower_half = ~(static_cast<TO>(0))
         //        >> (word_size - nBits * (K + 1) / 2);
 
-        generate_kmer(const bliss::iterator::read_id &_rid)
+        generate_kmer(const bliss::io::read_id &_rid)
             : kmer(), revcomp(0), pos(0)
         {
           kmer.kmer = 0;

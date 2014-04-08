@@ -30,7 +30,7 @@
 namespace bliss
 {
 
-  namespace iterator
+  namespace io
   {
 
     union read_id

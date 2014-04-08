@@ -18,21 +18,65 @@ namespace bliss
   {
 
     /**
-     * @class			bliss::io::KMerIndexElement
-     * @brief
+     * @class     bliss::io::kmer_size
+     * @brief     represents the size of the kmer.
      * @details
-     *
      */
+    template<int K>
+    struct kmer_size
+    {
+        constexpr int size = K;
+    };
 
-    template<typename T1, typename T2 = float>
+    /**
+     * @class			bliss::io::kmer_index_element
+     * @brief     basic struct for storing position and quality of a kmer.
+     * @details
+     *  K is a typename so that we do not use memory.
+     */
+    template<typename K, typename KmerT, typename IdT, typename QualT>
     struct kmer_index_element
     {
-        typedef T1 kmer_type;
-        typedef T2 qual_type;
+        typedef K size;
+        typedef KmerT kmer_type;
+        typedef IdT position_type;
+        typedef QualT qual_type;
 
-        bliss::iterator::read_id id;
-        T1 kmer;
-        T2 qual;
+        KmerT kmer;
+        IdT id;
+        QualT qual;
+    };
+
+    /**
+     * @class     bliss::io::kmer_index_element
+     * @brief     basic struct for storing position and quality of a kmer.
+     * @details
+     *  K is a typename so that we do not use memory.
+     */
+    template<typename K, typename KmerT, typename IdT>
+    struct kmer_index_element<K, KmerT, IdT, void>
+    {
+        typedef K size;
+        typedef KmerT kmer_type;
+        typedef IdT position_type;
+
+        KmerT kmer;
+        IdT id;
+    };
+
+    /**
+     * @class     bliss::io::kmer_index_element
+     * @brief     basic struct for storing position and quality of a kmer.
+     * @details
+     *  K is a typename so that we do not use memory.
+     */
+    template<typename K, typename KmerT>
+    struct kmer_index_element<K, KmerT, void, void>
+    {
+        typedef K size;
+        typedef KmerT kmer_type;
+
+        KmerT kmer;
     };
 
   } /* namespace io */
