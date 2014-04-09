@@ -20,14 +20,14 @@ namespace bliss
   namespace index
   {
     // TODO:  need to change the templates.
-    // FASTQ_SEQUENCE should be parameterized with base iterator and alphabet
-    // given those + k, should be able to get kmer index element type
-    // given kmer index element type, and fastq sequence type, should be able to specialize kmer generator type.
+    // FASTQ_SEQUENCE should be parameterized with base iterator and alphabet - DONE
+    // given those + k, should be able to get kmer index element type  - DONE
+    // given kmer index element type, and fastq sequence type, should be able to specialize kmer generator type.  DONE
     // given the kmer index element type, should be able to define sendbuffer type.
 
     // this can become a 1 to n transformer???
     template<typename SendBuffer, typename KmerGenOp, typename QualGenOp>
-    void compute_kmer_index_from_read(bliss::iterator::fastq_sequence<char*> &read, int nprocs, int rank,
+    void compute_kmer_index_from_read(bliss::io::fastq_sequence<ALPHABET, char*> &read, int nprocs, int rank,
                  int tid, int j, std::vector<SendBuffer> &buffers, std::vector<size_t> &counts)
     {
 

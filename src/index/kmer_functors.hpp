@@ -16,36 +16,41 @@
 
 #include "common/AlphabetTraits.hpp"
 #include "io/fastq_iterator.hpp"
+#include "index/kmer_index_element.hpp"
 
 namespace bliss
 {
   namespace index
   {
-    template<typename ALPHABET, typename Iterator, typename KMER, int K>
+    template<typename Sequence, typename KmerIndex>
     struct generate_kmer
     {
-        typedef Iterator BaseIterType;
-        typedef KMER KmerType;
-        typedef typename KMER::kmer_type TO;
-        KMER kmer;
+        typedef typename Sequence::IteratorType BaseIterType;
+        typedef typename Sequence::AlphabetType AlphabetType;
+        typedef KmerIndex KmerIndexType;
+        typedef typename KmerIndex::KmerType KmerValueType;
 
-        TO revcomp;
+        const int K = KmerIndex::KmerSize::size;
+
+        KmerIndex kmer;
+
+        KmerValueType revcomp;
         uint16_t pos;
 
         static constexpr BitSizeType nBits =
-            bliss::AlphabetTraits<ALPHABET>::getBitsPerChar();
+            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
         static constexpr BitSizeType shift =
-            bliss::AlphabetTraits<ALPHABET>::getBitsPerChar() * (K - 1);
+            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (K - 1);
         static constexpr AlphabetSizeType max =
-            bliss::AlphabetTraits<ALPHABET>::getSize() - 1;
+            bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
 
-        static constexpr int word_size = sizeof(TO) * 8;
-        static constexpr TO mask_reverse = ~(static_cast<TO>(0))
+        static constexpr int word_size = sizeof(KmerValueType) * 8;
+        static constexpr KmerValueType mask_reverse = ~(static_cast<KmerValueType>(0))
             >> (word_size - shift - nBits);
-        //    static constexpr TO mask_lower_half = ~(static_cast<TO>(0))
+        //    static constexpr KmerValueType mask_lower_half = ~(static_cast<KmerValueType>(0))
         //        >> (word_size - nBits * (K + 1) / 2);
 
-        generate_kmer(const bliss::io::read_id &_rid)
+        generate_kmer(const bliss::io::fastq_sequence_id &_rid)
             : kmer(), revcomp(0), pos(0)
         {
           kmer.kmer = 0;
@@ -53,18 +58,18 @@ namespace bliss
           kmer.id = _rid;
         }
 
-        size_t operator()(Iterator &iter)
+        size_t operator()(BaseIterType &iter)
         {
           // store the kmer information.
-          char val = ALPHABET::FROM_ASCII[static_cast<size_t>(*iter)];
+          char val = AlphabetType::FROM_ASCII[static_cast<size_t>(*iter)];
           kmer.kmer >>= nBits;
-          kmer.kmer |= (static_cast<TO>(val) << shift);
+          kmer.kmer |= (static_cast<KmerValueType>(val) << shift);
           kmer.id.components.pos = pos;
 
           // generate the rev complement
           char complement = max - val;
           revcomp <<= nBits;
-          revcomp |= static_cast<TO>(complement);
+          revcomp |= static_cast<KmerValueType>(complement);
           revcomp &= mask_reverse;
 
           ++iter;
@@ -72,14 +77,14 @@ namespace bliss
           return 1;
         }
 
-        std::pair<TO, KMER> operator()()
+        std::pair<KmerValueType, KmerIndex> operator()()
         {
           // compute the reverse complement
-          TO xored = kmer.kmer ^ revcomp;
+          KmerValueType xored = kmer.kmer ^ revcomp;
 
-          //      TO xored_recoverable = (xored & ~mask_lower_half) | (_kmer.forward & mask_lower_half);
+          //      KmerValueType xored_recoverable = (xored & ~mask_lower_half) | (_kmer.forward & mask_lower_half);
 
-          return std::pair<TO, KMER>(xored, kmer);
+          return std::pair<KmerValueType, KmerIndex>(xored, kmer);
         }
 
     };
@@ -97,7 +102,7 @@ namespace bliss
         static_assert(std::is_floating_point<T>::value, "generate_qual output needs to be floating point type");
         static constexpr size_t size = 94;
 
-        typedef T value_type;
+        typedef T ValueType;
 
         static constexpr T offset = 33;
 
@@ -105,16 +110,16 @@ namespace bliss
         static constexpr size_t max = 93;
 
         static constexpr T log2_10DivNeg10 = std::log2(10.0) / -10.0;
-        constexpr T operator()(const size_t v)
+        constexpr ValueType operator()(const size_t v)
         {
           // some limits: v / -10 has to be negative as this becomes probability, so v > 0
           //
           return
-              v < min ? std::numeric_limits<T>::lowest() :
-              v > max ? std::numeric_limits<T>::lowest() :
+              v < min ? std::numeric_limits<ValueType>::lowest() :
+              v > max ? std::numeric_limits<ValueType>::lowest() :
               v == min ?
-                  std::numeric_limits<T>::lowest() :
-                  std::log2(1.0 - std::exp2(static_cast<T>(v) * log2_10DivNeg10));
+                  std::numeric_limits<ValueType>::lowest() :
+                  std::log2(1.0 - std::exp2(static_cast<ValueType>(v) * log2_10DivNeg10));
         }
     };
 
@@ -153,46 +158,58 @@ namespace bliss
      *
      *  This was a bottleneck.  switched to using a look up table instead of computing log all the time.
      *
+     *
+     *  This functor is only available if KmerIndex has Quality Score.
      */
-    template<typename ENCODING, typename Iterator, typename TO, int K>
+    template<typename Sequence, typename KmerIndex, typename Encoding,
+      typename HasQual = typename std::enable_if<std::is_same<KmerIndex, KmerIndexElementWithIdAndQuality>::value>::type >
     struct generate_qual
     {
-        typedef typename std::iterator_traits<Iterator>::value_type TI;
+        typedef typename Sequence::IteratorType BaseIterType;
+
+        typedef KmerIndex KmerType;
+        typedef typename KmerIndex::QualityType QualityType;
+
+        constexpr int K = KmerIndex::KmerSize::size;
+
         int kmer_pos;
-        TO internal;
-        TO terms[K];
+        QualityType internal;
+        QualityType terms[K];
+
+
         int pos;
         int zeroCount;
+
         // can't use auto keyword.  declare and initialize in class declaration
         // then "define" but not initialize outside class declaration, again.
-        static constexpr std::array<typename ENCODING::value_type, ENCODING::size> lut =
-            make_array<ENCODING::size>(ENCODING());
+        static constexpr std::array<typename Encoding::value_type, Encoding::size> lut =
+            make_array<Encoding::size>(Encoding());
 
         generate_qual()
             : kmer_pos(0), pos(0)
         {
           for (int i = 0; i < K; ++i)
           {
-            terms[i] = std::numeric_limits<TO>::lowest();
+            terms[i] = std::numeric_limits<QualityType>::lowest();
           }
           zeroCount = K;
 
-    //      for (int i = 0; i < ENCODING::size; ++i)
+    //      for (int i = 0; i < Encoding::size; ++i)
     //      {
     //        printf("lut: %d=%lf\n", i, lut[i]);
     //      }
 
         }
 
-        size_t operator()(Iterator &iter)
+        size_t operator()(BaseIterType &iter)
         {
           int oldpos = kmer_pos;
 
           // drop the old value
-          TO oldval = terms[pos];
+          QualityType oldval = terms[pos];
 
           // add the new value,       // update the position  - circular queue
-          TO newval = lut[*iter - ENCODING::offset]; // this is for Sanger encoding.
+          QualityType newval = lut[*iter - Encoding::offset]; // this is for Sanger encoding.
           terms[pos] = newval;
           pos = (pos + 1) % K;
 
@@ -200,12 +217,12 @@ namespace bliss
           int oldZeroCount = zeroCount;
 
           // update the zero count
-          if (newval == std::numeric_limits<TO>::lowest())
+          if (newval == std::numeric_limits<QualityType>::lowest())
           {
             //        printf("ZERO!\n");
             ++zeroCount;
           }
-          if (oldval == std::numeric_limits<TO>::lowest())
+          if (oldval == std::numeric_limits<QualityType>::lowest())
           {
             --zeroCount;
           }
@@ -247,13 +264,13 @@ namespace bliss
           return kmer_pos - oldpos;
         }
 
-        TO operator()()
+        QualityType operator()()
         {
           // compute prob of kmer being incorrect.
-          if (fabs(internal) < std::numeric_limits<TO>::epsilon())
+          if (fabs(internal) < std::numeric_limits<QualityType>::epsilon())
           {
             //printf("confident kmer!\n");
-            return ENCODING::max;
+            return Encoding::max;
           }
           else
           {

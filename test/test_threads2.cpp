@@ -41,7 +41,7 @@
 #include "index/kmer_functors.hpp"
 
 
-typedef bliss::index::kmer_index_element<uint64_t, float> kmer_struct_type;
+typedef bliss::index::KmerIndexElement<uint64_t, float> kmer_struct_type;
 typedef  bliss::io::MPISendBuffer<kmer_struct_type, false> buffer_type;
 
 
