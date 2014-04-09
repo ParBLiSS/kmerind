@@ -18,9 +18,10 @@ namespace bliss
   {
     // can't use auto keyword.  declare and initialize in class declaration
     // then "define" but not initialize outside class declaration, again.
-    template<typename ENCODING, typename Iterator, typename TO, int K>
-    constexpr std::array<typename ENCODING::value_type, ENCODING::size> bliss::index::generate_qual<
-        ENCODING, Iterator, TO, K>::lut;
+    template<typename Sequence, typename KmerIndex, typename Encoding,
+    typename HasQual = typename std::enable_if<std::is_same<KmerIndex, KmerIndexElementWithIdAndQuality>::value>::type >
+    constexpr std::array<typename Encoding::value_type, Encoding::size>
+      bliss::index::generate_qual<Sequence, KmerIndex, Encoding, HasQual >::lut;
   }
 }
 
