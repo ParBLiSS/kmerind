@@ -41,18 +41,14 @@ namespace bliss
     template<typename SendBuffer, typename KmerGenOp>
     class KmerIndexGeneratorNoQuality : public KmerIndexGenerator<KmerIndexGeneratorNoQuality> {
       public:
-        typedef typename KmerGenOp::SequenceType SequenceType;
-        typedef std::vector<SendBuffer>  BufferType;
+        typedef typename KmerGenOp::SequenceType		SequenceType;
+        typedef std::vector<SendBuffer>  				BufferType;
         typedef bliss::iterator::buffered_transform_iterator<KmerGenOp, typename KmerGenOp::BaseIterType> KmerIter;
-        typedef typename KmerGenOp::KmerType kmer_struct_type;
+        typedef typename KmerGenOp::KmerType 			KmerType;
 
-        KmerIndexGeneratorNoQuality(SequenceType &read, int nprocs, int rank,
-            int tid, int j, BufferType &buffers, std::vector<size_t> &counts) :
+        KmerIndexGeneratorNoQuality(int nprocs, int rank, int tid) :
             kmer_op(read.id), start(read.seq, kmer_op), end(read.seq_end, kmer_op) {
           static_assert(std::is_same<SequenceType, typename SendBuffer::ValueType>::value, "Kmer Generation and Send Buffer should use the same type");
-
-
-
 
         }
 
@@ -60,21 +56,48 @@ namespace bliss
         KmerGenOp kmer_op;
         KmerIter start;
         KmerIter end;
-
+		
+		int _nprocs;
+		int _rank;
+		int _tid;
+		int _j;
+		
         std::pair<typename kmer_struct_type::kmer_type, kmer_struct_type> index_kmer;
         uint64_t kmerCount;
 
     };
 
+    template<typename SendBuffer, typename KmerGenOp, typename QualGenOp>
+    class KmerIndexGeneratorQuality : public KmerIndexGenerator<KmerIndexGeneratorQuality>,
+		KmerIndexGeneratorNoQuality<SendBuffer, KmerGenOp> {
+	  public:
+		typedef KmerIndexGeneratorNoQuality<SendBuffer, KmerGenOp> BaseType;
+        typedef typename BaseType::SequenceType		SequenceType;
+        typedef typename BaseType::BufferType		BufferType;
+        typedef typename BaseType::KmerIter			KmerIter;
+        typedef typename BaseType::KmerType  		KmerType;
+        typedef bliss::iterator::buffered_transform_iterator<QualGenOp, typename QualGenOp::BaseIterType> QualIter;
+
+        KmerIndexGeneratorQuality(SequenceType &read, int nprocs, int rank,
+            int tid, int j, BufferType &buffers, std::vector<size_t> &counts) :
+            KmerIndexGeneratorNoQuality(read, nprocs, rank, tid, j, buffers, counts),
+			qual_op(), qstart(read.qual, qual_op), qend(read.qual_end, qual_op)
+		{
+			static_assert(std::is_same<SequenceType, typename QualGenOp::SequenceType>::value, "Kmer Generation and Quality Generation should use the same type");
+
+        }
+
+      protected:
+        QualGenOp qual_op;
+        QualIter qstart;
+        QualIter qend;
+
+    };
+
+
     void compute_kmer_index_from_read()
     {
-      static_assert(!std::is_same<QualGenOp, void>::value && std::is_same<typename KmerGenOp::SequenceType, typename QualGenOp::SequenceType>::value, "Kmer Generation and Quality Generation should use the same type");
 
-
-      QualGenOp qual_op;
-      typedef bliss::iterator::buffered_transform_iterator<QualGenOp, typename QualGenOp::BaseIterType> QualIter;
-      QualIter qstart(read.qual, qual_op);
-      QualIter qend(read.qual_end, qual_op);
 
 
 
