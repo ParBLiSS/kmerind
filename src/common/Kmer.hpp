@@ -27,7 +27,6 @@
 #include <common/bit_ops.hpp>
 #include <common/padding.hpp>
 
-
 namespace bliss
 {
 

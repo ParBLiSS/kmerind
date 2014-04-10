@@ -143,6 +143,7 @@ namespace bliss
         {
           range = range.align_to_page(page_size);
 
+          // NOT using MAP_POPULATE.  it slows things done when testing on single node.
           aligned_data = (char*)mmap(nullptr, range.end - range.block_start,
                                      PROT_READ,
                                      MAP_PRIVATE, file_handle,
@@ -195,7 +196,7 @@ namespace bliss
           aligned_data = nullptr;
           data = nullptr;
 
-          printf("unloading complete.\n");
+          //printf("unloading complete.\n");
         }
 
     };

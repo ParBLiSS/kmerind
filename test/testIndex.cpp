@@ -12,6 +12,9 @@
  *
  */
 
+#include "mpi.h"
+
+
 #include <string>     // for std::string
 #include <sys/stat.h>  // for stat
 #include <cassert>
@@ -24,7 +27,6 @@
 #include <cmath>
 #include <sstream>
 
-#include "mpi.h"
 
 #include "utils/logging.h"
 #include "config.hpp"

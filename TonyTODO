@@ -101,8 +101,49 @@ mpi redistribution code.
 	local sorting as merge operation after communication to hide sorting?
 
 manage and buffering of reads/mpi for multicore.
+	initial test complete
+	compute bound due to quality score computation
+		optimize - 1. use LUT .  DONE
+					2. fixed point exact/approximate/directly manipulate floating point data structure.
+need to change to using single MPI thread.
+use MPI IO?
+	
+save out the index structure and reload
+refactor the MPI functionality to support single node/write out to disk/external memory algos.
 
+REDUCE CONTENTION
+if few nodes, number of buffers are few and there would be high contenion between threads.
+	set up with number of buffers = multiple of threads and number of procs.  
+	and map multiple buffers to a single proc. DONE
+		some improvements but not huge.  need to figure out how to lock smaller regions.  compute threads are spending a lot of time waiting.
+		
 
+try using the "file" as the queue, avoid master slave paradigm in OMP
+	DONE.  no visible changes on a single node.
+	
+	
+scaling is good from 2 to 16 nodes on CyEnce.  32 node not as good. 
+	compute times still scale linearly.
+	perhaps it's the flushing part (sequential, no async send)
+	
+	
+	
+Factor out MPI Buffer and set it up to
+	1. as multi buffer that works with MPI_AllToAll
+	2. genericize to support other backends (e.g. file system, MPI-IO, etc.). 
+	
+ERROR: try with each thread hold separate buffers:  some buffers are not cleared.  need to fix.  DONE
+ERROR: threads sharing buffers: deadlock now at exit - termination of MPI processes.  DONE
+
+each thread holding separate buffer is now working.  not yet profiled.  the task based approach appears fast but need to validate to be correct.
+the omp version is not as performant.  not sure why.
+
+for now, refactor to make code more maintainable.
+
+Need to use MPI persistent communication. 
+	
+major improvement when removing MAP_POPULATE.  else file mmap time in tens of seconds.
+	
 query...
 
 
@@ -117,3 +158,5 @@ OpenMP version
 test remote file open.
 FASTA
 
+
+simple kmer counting. 

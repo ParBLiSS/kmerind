@@ -1,4 +1,3 @@
-cmake_minimum_required(VERSION 2.8)
 project(bliss-utils)
 
 
@@ -8,10 +7,10 @@ target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS})
 
 
 
-## load the testing:
-#if (IS_DIRECTORY ./test)
-#    # get all files from ./test
-#    FILE(GLOB TEST_FILES test/*.cpp)
-#    bliss_add_test(${PROJECT_NAME} TRUE ${TEST_FILES})
-#endif()
-#
+# load the testing:
+if (IS_DIRECTORY ./test)
+    # get all files from ./test
+    FILE(GLOB TEST_FILES test/*.cpp)
+    bliss_add_test(${PROJECT_NAME} TRUE ${TEST_FILES})
+endif()
+

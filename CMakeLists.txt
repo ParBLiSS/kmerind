@@ -1,6 +1,6 @@
 # CMakeLists.txt for the BLISS
 
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.6)
 
 # project settings
 project(bliss)
@@ -19,12 +19,12 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
 
 # Compiler-specific C++11 activation.
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
-#  execute_process(
-#    COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE ICPC_VERSION)
-#  if (NOT (ICPC_VERSION VERSION_GREATER 13.0 OR ICPC_VERSION VERSION_EQUAL 13.0))
-#    message(FATAL_ERROR "${PROJECT_NAME} requires icpc 13.0 or greater.")
-#  endif ()
-    message(FATAL_ERROR "${PROJECT_NAME} currently does not support Intel compiler due to constexpr not allowing math function calls")
+#    message(FATAL_ERROR "${PROJECT_NAME} currently does not support Intel compiler due to constexpr not allowing math function calls")
+  execute_process(
+    COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE ICPC_VERSION)
+  if (NOT (ICPC_VERSION VERSION_GREATER 13.0 OR ICPC_VERSION VERSION_EQUAL 13.0))
+    message(FATAL_ERROR "${PROJECT_NAME} requires icpc 13.0 or greater.")
+  endif ()
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   execute_process(
     COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
@@ -32,7 +32,10 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
     message(FATAL_ERROR "${PROJECT_NAME} requires g++ 4.7 or greater.")
   endif ()
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+    message(FATAL_ERROR "${PROJECT_NAME} currently does not support clang due to include path issues")
+#  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+#  set(_CMAKE_TOOLCHAIN_PREFIX "llvm-")
+#  include_directories("/usr/local/lib/clang/3.4/include")
 else ()
   message(FATAL_ERROR "Your C++ compiler does not support C++11.")
 endif ()
@@ -150,21 +153,37 @@ endif (MPI_FOUND)
 
 #### OpenMP
 include(FindOpenMP)
-# add OpenMP flags to compiler flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 
 if (OPENMP_FOUND)
-
+    # add OpenMP flags to compiler flags
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    
     set(USE_OPENMP ON CACHE BOOL "Build with OpenMP support")
-if (USE_OPENMP)
-  message(STATUS "Found OpenMP")
-  set(OPENMP_DEFINE "#define USE_OPENMP")
+    if (USE_OPENMP)
+      message(STATUS "Found OpenMP")
+      set(OPENMP_DEFINE "#define USE_OPENMP")
+    else (USE_OPENMP)
+      set(OPENMP_DEFINE "")
+    endif (USE_OPENMP)
 else (OPENMP_FOUND)
-  set(OPENMP_DEFINE "")
-  message(WARNING "Unable to find OpenMP: not using OpenMP")
-endif (OPENMP_FOUND)
+    if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
 
+        set(USE_OPENMP ON CACHE BOOL "Build with OpenMP support")
+        if (USE_OPENMP)
+          message(STATUS "Found OpenMP")
+          set(OPENMP_DEFINE "#define USE_OPENMP")
+        else (USE_OPENMP)
+          set(OPENMP_DEFINE "")
+        endif (USE_OPENMP)
+        
+    else ()
+        set(OPENMP_DEFINE "")
+        message(WARNING "Unable to find OpenMP: not using OpenMP")
+    endif ()  
+endif(OPENMP_FOUND)
 
 ###### Doxygen documentation
 

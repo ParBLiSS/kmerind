@@ -30,10 +30,18 @@
 namespace bliss
 {
 
-  namespace iterator
+  namespace io
   {
-
-    union read_id
+    /**
+     * @class     bliss::io::fastq_sequence_id
+     * @brief     data structure to represent a fastq sequence id.
+     * @detail    this is set up as a union to allow easy serialization
+     *            and parsing of the content.
+     *            this keeps a 40 bit sequence ID, a file id, and a position within the file.
+     *
+     *            A separate FASTA version will have a different partitioning.
+     */
+    union fastq_sequence_id
     {
         uint64_t composite;
         struct
@@ -46,50 +54,103 @@ namespace bliss
     };
 
 
-    template<typename Iterator>
+
+    /**
+     * @class     bliss::io::fastq_sequence
+     * @brief     represents a fastq read.
+     * @details   Iterator allows walking through the fastq data.
+     *            Alphabet allows interpretation of the sequence
+     *            Quality allows interpretation of the quality score.
+     *
+     *            a separate one would be used for FASTA sequence,
+     *            where there is no quality score.
+     */
+    template<typename Iterator, typename Alphabet>
     struct fastq_sequence
     {
         typedef typename std::remove_pointer<
-            typename std::remove_reference<Iterator>::type>::type value_type;
+            typename std::remove_reference<Iterator>::type>::type ValueType;
+        typedef Alphabet AlphabetType;
+        typedef Iterator IteratorType;
 
         Iterator name;
         Iterator name_end;
         Iterator seq;
         Iterator seq_end;
-        Iterator qual;
-        Iterator qual_end;
 
-        read_id id;
+        fastq_sequence_id id;
     };
 
     /**
-     * Iterator: base iterator from which to get the data for transform.
+     * @class     bliss::io::fastq_sequence
+     * @brief     represents a fastq read.
+     * @details   Iterator allows walking through the fastq data.
+     *            Alphabet allows interpretation of the sequence
+     *            Quality allows interpretation of the quality score.
+     *
+     *            a separate one would be used for FASTA sequence,
+     *            where there is no quality score.
      */
-    template<typename Iterator>
+    template<typename Iterator, typename Alphabet, typename Quality>
+    struct fastq_sequence_quality : public fastq_sequence<Iterator, Alphabet>
+    {
+        typedef fastq_sequence<Iterator, Alphabet> base_class_t;
+        typedef base_class_t::ValueType ValueType;
+        typedef Alphabet AlphabetType;
+        typedef Iterator IteratorType;
+        typedef Quality ScoreType;
+
+        Iterator qual;
+        Iterator qual_end;
+    };
+
+
+
+    // TODO: need to modify this.
+
+    /**
+     *
+     */
+    template<typename Iterator, typename Alphabet, typename Quality>
     struct fastq_parser
     {
         // internal state
 
-        typedef fastq_sequence<Iterator> seq_type;
+        typedef std::conditional<std::is_same<Quality, void>::value,
+              fastq_sequence<Iterator, Alphabet>,
+              fastq_sequence_quality<Iterator, Alphabet, Quality> >::type   SeqType;
+        typedef Alphabet                                                    AlphabetType;
+        typedef std::enable_if<!std::is_same<Quality, void>::value, Quality>
+                                                                            QualityType;
 
-        seq_type output;
+        SeqType output;
         Iterator _start;
         size_t _global_offset;
 
         fastq_parser(const Iterator & start, const size_t & global_offset)
-            : _start(start), _global_offset(global_offset)
+            : output(), _start(start), _global_offset(global_offset)
         {
+        }
+
+        template <typename Q = Quality>
+        typename std::enable_if<!std::is_same<Q, void>::value>::type
+        populateQuality(const Iterator & start, const Iterator & end) {
+          output.qual = start;
+          output.qual_end = end;
+        }
+        template <typename Q = Quality>
+        typename std::enable_if<std::is_same<Q, void>::value>::type
+        populateQuality(const Iterator & start, const Iterator & end) {
         }
 
         /**
          * parses with an iterator, so as to have complete control over the increment.
          */
-
         size_t operator()(Iterator &iter, const Iterator & end)
         {
           // first initialize  (on windowed version, will need to have a separate
           // way of initializing., perhaps with an overloaded operator.
-          output = seq_type();
+          output = SeqType();
 
           size_t offset = _global_offset + (iter - _start);
 
@@ -177,17 +238,19 @@ namespace bliss
           output.name_end = ends[0];
           output.seq = starts[1];
           output.seq_end = ends[1];
-          output.qual = starts[3];
-          output.qual_end = ends[3];
 
+          populateQuality(starts[3], ends[3]);
           return dist;
         }
 
-        seq_type& operator()()
+        SeqType& operator()()
         {
           return output;
         }
     };
+
+
+
 
     /**
      * has the following characteristics:
@@ -239,12 +302,12 @@ namespace bliss
             std::forward_iterator_tag,
             typename std::iterator_traits<Iterator>::iterator_category>::type iterator_category;
         typedef typename std::remove_reference<
-            typename functor_traits::return_type>::type value_type;
+            typename functor_traits::return_type>::type ValueType;
         typedef typename base_traits::difference_type difference_type;
-        typedef typename std::add_rvalue_reference<value_type>::type reference_type;
-        typedef typename std::add_pointer<value_type>::type pointer_type;
+        typedef typename std::add_rvalue_reference<ValueType>::type reference_type;
+        typedef typename std::add_pointer<ValueType>::type pointer_type;
 
-        typedef typename base_traits::value_type base_value_type;
+        typedef typename base_traits::value_type BaseValueType;
 
         // class specific constructor
         fastq_iterator(const Parser & f, const Iterator& curr,
@@ -338,7 +401,7 @@ namespace bliss
           return _curr != rhs._curr;
         }
 
-        inline value_type operator*()
+        inline ValueType operator*()
         {
           // boundary case: at end of iterators
           if (_curr == _end)
