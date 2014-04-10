@@ -40,7 +40,7 @@ namespace bliss
 
       public:
         static const int END_TAG = 0;
-
+        typedef T ValueType;
 
         MPISendBuffer(MPI_Comm _comm, const int _targetRank, const size_t nbytes)
            : accepting(true), targetRank(_targetRank), comm(_comm), send_request(MPI_REQUEST_NULL), total(0)  {
