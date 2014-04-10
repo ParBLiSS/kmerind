@@ -29,7 +29,7 @@ namespace bliss
     {
 		T p;
 		T offset;
-		XorModulus(T _p, T _offest) : p(_p), offset(_offset) {};
+		XorModulus(T _p, T _offset) : p(_p), offset(_offset) {};
 		
 		T operator()(const T &v1, const T &v2) {
 			return (v1 ^ v2) % p + offset;
@@ -66,7 +66,7 @@ namespace bliss
 		HashFunc h;
         constexpr int K = KmerType::KmerSize::K;
 
-        void operator()(SeqType &read, int j, BufType &buffers, std::vector<size_t> &counts) {
+        void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<size_t> &counts) {
           KmerGenOp kmer_op(read.id);
           KmerIter start(read.seq, kmer_op);
           KmerIter end(read.seq_end, kmer_op);
@@ -94,7 +94,7 @@ namespace bliss
             buffers[h(index_kmer.first.kmer, index_kmer.second)].buffer(index_kmer.first);
             //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
             //++kmerCount;
-            counts[tid] += 1;
+            counts[_tid] += 1;
           }
         }
     };
@@ -121,7 +121,7 @@ namespace bliss
 
       protected:
 
-        void operator()(SeqType &read, int j, BufType &buffers, std::vector<size_t> &counts) {
+        void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<size_t> &counts) {
 
           KmerGenOp kmer_op(read.id);
           KmerIter start(read.seq, kmer_op);
@@ -160,7 +160,7 @@ namespace bliss
               buffers[h(index_kmer.first.kmer, index_kmer.second)].buffer(index_kmer.first);
               //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
               // ++kmerCount;
-              counts[tid] += 1;
+              counts[_tid] += 1;
             }
             else
             {

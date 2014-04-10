@@ -39,7 +39,6 @@ namespace bliss
 
         KmerValueType revcomp;
         uint16_t pos;
-        HashFunction h;
 
         static constexpr BitSizeType nBits =
             bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();

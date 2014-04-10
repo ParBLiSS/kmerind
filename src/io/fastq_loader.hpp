@@ -29,16 +29,23 @@ namespace bliss
     /**
      *
      */
+    template <typename Alphabet, typename Quality = void>
     class fastq_loader : public file_loader
     {
       public:
+        typedef bliss::io::fastq_parser<char*, Alphabet, Quality> ParserType;
+        typedef typename ParserType::SeqType                      SequenceType;
+        typedef bliss::io::fastq_iterator<char*, ParserType>      IteratorType;
+
+
         virtual ~fastq_loader();
         fastq_loader(const std::string &_filename,
                      const file_loader::range_type &range, const size_t &total,
                      bool preload = false);
 
+        IteratorType begin();
+        IteratorType end();
       protected:
-
         file_loader::range_type align_to_sequence(
             const std::string &_filename, const file_loader::range_type &input,
             const size_t &total) throw (io_exception);
@@ -48,22 +55,9 @@ namespace bliss
                                        throw (io_exception);
 
         // for parallel scan way of assigning ids.
-        std::vector<bliss::iterator::fastq_sequence<char*>> seqPositions;
+//        std::vector< SequenceType > seqPositions;
         uint64_t seqIdStart;
 
-      public:
-
-        // testing.
-//        void test();
-//        void test2();
-//        void get_sequence_positions() throw (io_exception);
-//        void assign_sequence_ids() throw (io_exception);
-
-        typedef bliss::iterator::fastq_iterator<
-            bliss::iterator::fastq_parser<char*>, char*> iterator;
-
-        iterator begin();
-        iterator end();
 
     };
 

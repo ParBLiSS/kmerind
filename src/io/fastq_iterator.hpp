@@ -262,7 +262,7 @@ namespace bliss
      *
      *
      */
-    template<typename Parser, typename Iterator>
+    template<typename Iterator, typename Parser>
     class fastq_iterator :
         public std::iterator<
             typename std::conditional<
