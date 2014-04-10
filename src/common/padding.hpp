@@ -29,10 +29,16 @@ namespace bliss
 template <typename T, unsigned int BITS_PER_CHAR>
 struct PaddingTraits
 {
+  /// The number of bits per data word
   static constexpr unsigned int bits_per_word = std::numeric_limits<T>::digits;
+  /// The number of bits per alphabet character (this is equal to the template
+  /// parameter)
   static constexpr unsigned int bits_per_char = BITS_PER_CHAR;
+  /// The number of bits used as padding at the end of each data word.
   static constexpr unsigned int padding_bits = bits_per_word - roundDownToMultiple<unsigned int>(bits_per_word, bits_per_char);
+  /// The number of data bits (bits per word minus padding bits) per storage word
   static constexpr unsigned int data_bits = bits_per_word - padding_bits;
+  /// The number of characters inside of each storage/data word
   static constexpr unsigned int chars_per_word =  bits_per_word / bits_per_char;
 };
 

@@ -18,45 +18,29 @@
 #include <common/bit_ops.hpp>
 #include <iterators/iterator_tools.hpp>
 #include <iterators/function_traits.hpp>
+#include <iterators/transform_iterator.hpp>
 
 namespace bliss
 {
 namespace iterator
 {
 
-
-template<typename Functor, typename Iterator>
-class _shared_compressing_iterator : public std::iterator<
-    /* inherit interator traits from std::iterator: */
-    // 1) iterator type tag (same as base)
-    typename std::iterator_traits<Iterator>::iterator_category,
-    // 2) value type = return type of compression function
-    typename std::remove_reference<
-      typename bliss::functional::function_traits<Functor,
-        Iterator,  Iterator>::return_type>::type,
-    // 3) difference_type = same as base iterator
-    typename std::iterator_traits<Iterator>::difference_type>
+template<typename Iterator, typename Functor>
+class _shared_compressing_iterator
+  : public _shared_transforming_iterator<Iterator, Functor, Iterator, Iterator>
 {
+
 protected:
+
   /// The std::iterator_traits of this iterator
   typedef std::iterator_traits<_shared_compressing_iterator> traits;
 
-public:
-
-  /**********************************
-   *  Typedefs for iterator traits  *
-   **********************************/
-
-  /// The iterator category of this iterator
-  typedef typename traits::iterator_category iterator_category;
-  /// The value type of this iterator
-  typedef typename traits::value_type value_type;
-  /// The difference type of this iterator
+  /// The difference type for the step size
   typedef typename traits::difference_type difference_type;
-  /// The reference type of a value of this iterator
-  typedef typename traits::reference reference_type;
-  /// The pointer type of a value of this iterator
-  typedef typename traits::pointer pointer_type;
+
+  /// The type of the derived class
+  typedef _shared_transforming_iterator<Iterator, Functor, Iterator, Iterator> derived_type;
+
 
 public:
   /*******************************
@@ -64,64 +48,13 @@ public:
    *******************************/
 
   /**
-   * @brief     Returns the compression functor.
+   * @brief  Returns the `m` in `m -> 1`, i.e. the step size of this iterator.
    *
-   * @return    The compression functor.
+   * @return The step size m.
    */
-  Functor& getCompressor()
+  const difference_type& getStepSize() const
   {
-    return _f;
-  }
-
-  /**
-   * @brief     Returns the compression functor.
-   *
-   * @return    The compression functor.
-   */
-  const Functor& getCompressor() const
-  {
-    return _f;
-  }
-
-  /**
-   * @brief     Returns the current base iterator.
-   *
-   * @return    The current base iterator.
-   */
-  Iterator& getBaseIterator()
-  {
-    return _base;
-  }
-
-  /**
-   * @brief     Returns the current base iterator.
-   *
-   * @return    The current base iterator.
-   */
-  const Iterator& getBaseIterator() const
-  {
-    return _base;
-  }
-
-  /**
-   * @brief     Returns whether this and the given iterator point to the same
-   *            positon.
-   *
-   * @return    Whether this and the given iterator point to the same position.
-   */
-  inline bool operator==(const _shared_compressing_iterator& rhs) const
-  {
-    return _base == rhs._base;
-  }
-
-  /**
-   * @brief     Returns whether this and the given iterator are different.
-   *
-   * @return    Whether this and the given iterator are different.
-   */
-  inline bool operator!=(const _shared_compressing_iterator& rhs) const
-  {
-    return _base != rhs._base;
+    return this->_m;
   }
 
 protected:
@@ -129,17 +62,11 @@ protected:
    *  Member variables  *
    **********************/
 
-  /// The current base iterator position
-  Iterator _base;
-
-  // The end of the input sequence
+  /// The end of the input sequence
   Iterator _end;
 
-  /// The compressor function
-  const Functor _f;
-
   /// the number of base elements per compressed element (i.e the `m` in m->1)
-  const difference_type _m;
+  difference_type _m;
 
   /**************************************************
    *  Private constructor (no direct construction)  *
@@ -163,23 +90,186 @@ protected:
    */
   _shared_compressing_iterator(const Iterator& base_iter, const Iterator& end_iter,
                            const Functor& f, const difference_type m)
-      : _base(base_iter), _end(end_iter), _f(f), _m(m)
+      : derived_type(base_iter, f), _end(end_iter), _m(m)
   {
   }
 };
 
 
+template<typename BaseIterator, typename Compressor, typename DerivedIterator>
+class _compressing_iterator_dir : public _shared_compressing_iterator<BaseIterator, Compressor>
+{
+protected:
+  // the base iterator traits
+  typedef std::iterator_traits<BaseIterator> base_traits;
 
-template<typename Compressor, typename BaseIterator, typename DerivedIterator>
-// TODO: template specialization for RA vs FWD
-class _compressing_iterator_ra : _shared_compressing_iterator<Compressor, BaseIterator>
+  // the type of the derived iterator, so that operator functions do not have
+  // to be overloaded via polymorphism
+  typedef DerivedIterator type;
+
+  // assert that the base iterator is NOT a random access iterator
+  static_assert(!std::is_same<typename base_traits::iterator_category,
+                             std::random_access_iterator_tag>::value,
+                "The (Bi)DirectedIterator implementation must be"
+                "based on a (Bi)DirectedIterator (i.e. Input, FWD or Bidir)");
+
+
+protected:
+  /**********************
+   *  Member variables  *
+   **********************/
+
+  // The next iterator (read ahead), only used for bidirectional, forward and
+  // input iterators
+  BaseIterator _next;
+
+  /// The std::iterator_traits of this iterator
+  typedef std::iterator_traits<type> traits;
+
+  // base class type
+  typedef _shared_compressing_iterator<BaseIterator, Compressor> base_class_type;
+
+public:
+
+  /**********************************
+   *  Typedefs for iterator traits  *
+   **********************************/
+
+  /// The iterator category of this iterator
+  typedef typename traits::iterator_category iterator_category;
+  /// The value type of this iterator
+  typedef typename traits::value_type value_type;
+  /// The difference type of this iterator
+  typedef typename traits::difference_type difference_type;
+  /// The reference type of a value of this iterator
+  typedef typename traits::reference reference_type;
+  /// The pointer type of a value of this iterator
+  typedef typename traits::pointer pointer_type;
+
+public:
+  /******************
+   *  Constructors  *
+   ******************/
+
+  /**
+   * @brief Constructor, taking the base iterator and the compressing
+   *        functor.
+   *
+   * @param base_iter   The base iterator that is wrapped via this iterator.
+   * @param end_iter    The end of the input sequence. This is needed in case
+   *                    the length of the input sequence is not perfectly
+   *                    dividable by m.
+   * @param f           The compressing functor.
+   * @param m           The number of elements combined into one.
+   */
+  _compressing_iterator_dir(const BaseIterator& base_iter, const BaseIterator& end_iter,
+                            const Compressor& f, const difference_type m)
+      : base_class_type(base_iter, end_iter, f, m), _next(base_iter)
+  {
+  }
+
+  /**
+   * @brief     Returns the value at the current iterator position.
+   *
+   * This returns the compressed value (m -> 1 combination) from the
+   * next `m` elements of the base iterator.
+   *
+   * @return    The value at the current position.
+   */
+  value_type operator*()
+  {
+    if (this->_base != this->_next)
+    {
+      this->_next = this->_base;
+    }
+    // the functor iteraters _next forward by at most _m steps
+    return this->_f(this->_next, this->_end);
+  }
+
+  /**
+   * @brief     Pre-increment operator.
+   *
+   * Advances this iterator by one position.
+   *
+   * @return    A reference to this.
+   */
+  type& operator++()
+  {
+    //  advance the value by m
+    if (this->_next == this->_base)
+    {
+      // advance the min of m and the end of the input sequence
+      iter_tools<BaseIterator>::advance_at_most(this->_next, this->_end, this->_m);
+    }
+    this->_base = this->_next;
+    return dynamic_cast<type*>(*this);
+  }
+
+  /****************************
+   *  Bidirectional Iterator  *
+   ****************************/
+
+  static constexpr bool is_bidir = std::is_same<iterator_category,
+                                std::bidirectional_iterator_tag>::value;
+  // bidirectional iterator
+  /**
+   * @brief     Pre-decrement operator.
+   *
+   * Reduces this iterator by one position.
+   *
+   * @return    A reference to this.
+   */
+  template<typename T = type>
+  typename std::enable_if<is_bidir, T>::type&
+  operator--()
+  {
+    // go back `m`, cast to signed int before negating
+    // TODO: what happens if we are at an uneven end?
+    std::advance(this->_base, - static_cast<int>(this->_m));
+    return *dynamic_cast<type*>(this);
+  }
+
+  /**
+   * @brief     Post-decrement operator.
+   *
+   * Reduces this iterator by one position, but returns the old iterator state.
+   *
+   * @return    A copy to the non-decremented iterator.
+   */
+  typename std::enable_if<is_bidir, type>::type
+  operator--(int)
+  {
+    // create a copy
+    type tmp(*dynamic_cast<type*>(this));
+    this->operator--();
+    return tmp;
+  }
+
+  /**
+   * @brief     Post-increment operator.
+   *
+   * Advances this iterator by one position, but returns the old iterator state.
+   *
+   * @return    A copy to the non-incremented iterator.
+   */
+  type operator++(int)
+  {
+    // create a copy
+    type tmp(*dynamic_cast<type*>(this));
+    this->operator++();
+    return tmp;
+  }
+};
+
+template<typename BaseIterator, typename Compressor, typename DerivedIterator>
+class _compressing_iterator_ra : public _shared_compressing_iterator<BaseIterator, Compressor>
 {
 protected:
   // the base iterator traits
   typedef typename std::iterator_traits<BaseIterator> base_traits;
 
   // the base class
-  typedef _shared_compressing_iterator<Compressor, BaseIterator> base_class_type;
+  typedef _shared_compressing_iterator<BaseIterator, Compressor> base_class_type;
 
   // the type of the derived iterator, so that operator functions do not have
   // to be overloaded via polymorphism
@@ -266,7 +356,22 @@ public:
   type& operator++()
   {
     iter_tools<BaseIterator>::advance_at_most(this->_base, this->_end, this->_m);
-    return *this;
+    return *dynamic_cast<type*>(this);
+  }
+
+  /**
+   * @brief     Pre-decrement operator.
+   *
+   * Reduces this iterator by one position.
+   *
+   * @return    A reference to this.
+   */
+  type& operator--()
+  {
+    // go back `m`, cast to signed int before negating
+    // TODO: what happens if we are at an uneven end?
+    std::advance(this->_base, - static_cast<int>(this->_m));
+    return *dynamic_cast<type*>(this);
   }
 
   /* advancing iterator:  operator+ */
@@ -283,8 +388,8 @@ public:
     if (n < 0)
       *this -= (-n);
     else
-      iter_tools<BaseIterator>::advance_at_most(this->_base, n * this->_m, this->_end);
-    return *this;
+      iter_tools<BaseIterator>::advance_at_most(this->_base, this->_end, n * this->_m);
+    return *dynamic_cast<type*>(this);
   }
 
   /* decrementing iterator:  operator- */
@@ -302,7 +407,7 @@ public:
       *this += (-n);
     else
       std::advance(this->_base, -n * static_cast<int>(this->_m));
-    return *this;
+    return *dynamic_cast<type*>(this);
   }
 
   /**
@@ -337,8 +442,23 @@ public:
   type operator++(int)
   {
     // create a copy
-    type tmp(*this);
+    type tmp(*dynamic_cast<type*>(this));
     this->operator++();
+    return tmp;
+  }
+
+  /**
+   * @brief     Post-decrement operator.
+   *
+   * Reduces this iterator by one position, but returns the old iterator state.
+   *
+   * @return    A copy to the non-decremented iterator.
+   */
+  type operator--(int)
+  {
+    // create a copy
+    type tmp(*dynamic_cast<type*>(this));
+    this->operator--();
     return tmp;
   }
 
@@ -354,7 +474,7 @@ public:
   {
     // reduce to: *(*this + n)
     // create tmp copy
-    type tmp(*this);
+    type tmp(*dynamic_cast<type*>(this));
     // reduce to already implemented operators
     tmp += n;
     return *tmp;
@@ -368,7 +488,7 @@ public:
    */
   type operator+(difference_type n)
   {
-    type output(*this);
+    type output(*dynamic_cast<type*>(this));
     // reduced to += operator
     output += n;
     return output;
@@ -394,7 +514,7 @@ public:
    */
   type operator-(difference_type n)
   {
-    type output(*this);
+    type output(*dynamic_cast<type*>(this));
     // reduced to -= operator
     output -= n;
     return output;
@@ -435,169 +555,6 @@ public:
   }
 };
 
-template<typename Compressor, typename BaseIterator, typename DerivedIterator>
-// TODO: template specialization for RA vs FWD
-class _compressing_iterator_dir : _shared_compressing_iterator<Compressor, BaseIterator>
-{
-protected:
-  // the base iterator traits
-  typedef std::iterator_traits<BaseIterator> base_traits;
-
-  // the type of the derived iterator, so that operator functions do not have
-  // to be overloaded via polymorphism
-  typedef DerivedIterator type;
-
-  // assert that the base iterator is NOT a random access iterator
-  static_assert(!std::is_same<typename base_traits::iterator_category,
-                             std::random_access_iterator_tag>::value,
-                "The (Bi)DirectedIterator implementation must be"
-                "based on a (Bi)DirectedIterator (i.e. Input, FWD or Bidir)");
-
-
-protected:
-  /**********************
-   *  Member variables  *
-   **********************/
-
-  // The next iterator (read ahead), only used for bidirectional, forward and
-  // input iterators
-  BaseIterator _next;
-
-  /// The std::iterator_traits of this iterator
-  typedef std::iterator_traits<type> traits;
-
-  // base class type
-  typedef _shared_compressing_iterator<Compressor, BaseIterator> base_class_type;
-
-public:
-
-  /**********************************
-   *  Typedefs for iterator traits  *
-   **********************************/
-
-  /// The iterator category of this iterator
-  typedef typename traits::iterator_category iterator_category;
-  /// The value type of this iterator
-  typedef typename traits::value_type value_type;
-  /// The difference type of this iterator
-  typedef typename traits::difference_type difference_type;
-  /// The reference type of a value of this iterator
-  typedef typename traits::reference reference_type;
-  /// The pointer type of a value of this iterator
-  typedef typename traits::pointer pointer_type;
-
-public:
-  /******************
-   *  Constructors  *
-   ******************/
-
-  /**
-   * @brief Constructor, taking the base iterator and the compressing
-   *        functor.
-   *
-   * @param base_iter   The base iterator that is wrapped via this iterator.
-   * @param end_iter    The end of the input sequence. This is needed in case
-   *                    the length of the input sequence is not perfectly
-   *                    dividable by m.
-   * @param f           The compressing functor.
-   * @param m           The number of elements combined into one.
-   */
-  _compressing_iterator_dir(const BaseIterator& base_iter, const BaseIterator& end_iter,
-                            const Compressor& f, const difference_type m)
-      : base_class_type(base_iter, end_iter, f, m), _next(base_iter)
-  {
-  }
-
-  /**
-   * @brief     Returns the value at the current iterator position.
-   *
-   * This returns the compressed value (m -> 1 combination) from the
-   * next `m` elements of the base iterator.
-   *
-   * @return    The value at the current position.
-   */
-  value_type operator*()
-  {
-    if (this->_base != this->_next)
-    {
-      this->_next = this->_base;
-    }
-    // the functor iteraters _next forward by at most _m steps
-    return this->_f(this->_next, this->_end);
-  }
-
-  /**
-   * @brief     Pre-increment operator.
-   *
-   * Advances this iterator by one position.
-   *
-   * @return    A reference to this.
-   */
-  type& operator++()
-  {
-    //  advance the value by m
-    if (this->_next == this->_base)
-    {
-      // advance the min of m and the end of the input sequence
-      iter_tools<BaseIterator>::advance_at_most(this->_next, this->_end, this->_m);
-    }
-    this->_base = this->_next;
-    return *this;
-  }
-
-  /****************************
-   *  Bidirectional Iterator  *
-   ****************************/
-
-  static constexpr bool is_bidir = std::is_same<iterator_category,
-                                std::bidirectional_iterator_tag>::value;
-  // bidirectional iterator
-  /**
-   * @brief     Pre-decrement operator.
-   *
-   * Reduces this iterator by one position.
-   *
-   * @return    A reference to this.
-   */
-  typename std::enable_if<is_bidir, type>::type&
-  operator--()
-  {
-    // go back `m`, cast to signed int before negating
-    // TODO: what happens if we are at an uneven end?
-    std::advance(this->_base, - static_cast<int>(this->_m));
-    return *this;
-  }
-
-  /**
-   * @brief     Post-decrement operator.
-   *
-   * Reduces this iterator by one position, but returns the old iterator state.
-   *
-   * @return    A copy to the non-decremented iterator.
-   */
-  typename std::enable_if<is_bidir, type>::type
-  operator--(int)
-  {
-    // create a copy
-    type tmp(*this);
-    this->operator--();
-    return tmp;
-  }
-  /**
-   * @brief     Post-increment operator.
-   *
-   * Advances this iterator by one position, but returns the old iterator state.
-   *
-   * @return    A copy to the non-incremented iterator.
-   */
-  type operator++(int)
-  {
-    // create a copy
-    type tmp(*this);
-    this->operator++();
-    return tmp;
-  }
-};
 
 
 /**
@@ -633,11 +590,11 @@ public:
  * @tparam Compressor   The type of the compressing functor.
  * @tparam Iterator     The type of the base iterator.
  */
-template<typename Compressor, typename Iterator>
-class compressing_iterator : std::conditional<std::is_same<typename std::iterator_traits<Iterator>::iterator_category,
+template<typename Iterator, typename Compressor>
+class compressing_iterator : public std::conditional<std::is_same<typename std::iterator_traits<Iterator>::iterator_category,
                                 std::random_access_iterator_tag>::value,
-                                _compressing_iterator_ra<Compressor, Iterator, compressing_iterator<Compressor, Iterator> >,
-                                _compressing_iterator_dir<Compressor, Iterator, compressing_iterator<Compressor, Iterator> > >::type
+                                _compressing_iterator_ra<Iterator, Compressor, compressing_iterator<Iterator, Compressor> >,
+                                _compressing_iterator_dir<Iterator, Compressor, compressing_iterator<Iterator, Compressor> > >::type
 {
 protected:
 
@@ -645,51 +602,33 @@ protected:
    *  Private type defs  *
    ***********************/
 
-  // the base iterator traits
+  /// The iterator traits of the wrapped base iterator.
   typedef std::iterator_traits<Iterator> base_traits;
 
-  typedef typename base_traits::difference_type difference_type;
+
 
   // the traits (e.g. return type) of the compression function
   typedef bliss::functional::function_traits<Compressor,
       Iterator, Iterator> functor_traits;
   /// The type of this class
   typedef compressing_iterator type;
-  /// The type of the base class
-  typedef typename std::conditional<std::is_same<typename base_traits::iterator_category,
-            std::random_access_iterator_tag>::value,
-            _compressing_iterator_ra<Compressor, Iterator, compressing_iterator>,
-            _compressing_iterator_dir<Compressor, Iterator, compressing_iterator> >::type base_class_type;
 
-
-
-protected:
-  /**************************************************
-   *  Helper expressions for the iterator category  *
-   **************************************************/
-
-  /*
-  /// Whether the iterator is an InputIterator
-  static constexpr bool is_input = std::is_same<iterator_category,
-                                std::input_iterator_tag>::value;
-  /// Whether the iterator is a ForwardIterator
-  static constexpr bool is_fwd = std::is_same<iterator_category,
-                              std::forward_iterator_tag>::value;
-  /// Whether the iterator is a BidirectionalIterator
-  static constexpr bool is_bidir = std::is_same<iterator_category,
-                                std::bidirectional_iterator_tag>::value;
   /// Whether the iterator is a RandomAccessIterator
-  static constexpr bool is_ra = std::is_same<iterator_category,
-                                std::random_access_iterator_tag>::value;
+  static constexpr bool _is_ra = std::is_same<typename base_traits::iterator_category,
+                                 std::random_access_iterator_tag>::value;
 
-  /// Whether the iterator is at least a ForwardIterator
-  static constexpr bool is_min_fwd = is_fwd || is_bidir || is_ra;
-  /// Whether the iterator is at least a BidirectionalIterator
-  static constexpr bool is_min_bidir = is_bidir || is_ra;
-  */
+  /// Iterator base class type in case the wrapped iterator is RandomAccess
+  typedef _compressing_iterator_ra<Iterator, Compressor, compressing_iterator> _ra_base_t;
+  /// Iterator base class type in case the wrapped iterator is a directed iterator
+  typedef _compressing_iterator_dir<Iterator, Compressor, compressing_iterator> _dir_base_t;
+  /// The type of the base class
+  typedef typename std::conditional<_is_ra, _ra_base_t, _dir_base_t>::type base_class_type;
 
 
 public:
+
+  /// The difference type of the iterator
+  typedef typename base_traits::difference_type difference_type;
 
   /******************
    *  Constructors  *
@@ -711,6 +650,27 @@ public:
                        const Compressor& f, const difference_type m)
     : base_class_type(base_iter, end_iter, f, m)
   {
+  }
+
+  compressing_iterator()
+    : base_class_type(Iterator(), Iterator(), Compressor(), 0) {}
+
+  compressing_iterator(const compressing_iterator& other)
+    : base_class_type(other._base, other._end, other._f, other._m)
+  {
+  }
+
+  compressing_iterator& operator=(const compressing_iterator& other)
+  {
+    // check for self assignment
+    if (this != &other)
+    {
+      this->_base = other._base;
+      this->_end = other._end;
+      this->_f = other._f;
+      this->_m = other._m;
+    }
+    return *this;
   }
 
   /*
