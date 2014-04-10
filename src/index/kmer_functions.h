@@ -26,25 +26,57 @@ namespace bliss
     // given the kmer index element type, should be able to define sendbuffer type.
 
     // this can become a 1 to n transformer???
-    template<typename SendBuffer, typename KmerGenOp, typename QualGenOp>
-    void compute_kmer_index_from_read(bliss::io::fastq_sequence<ALPHABET, char*> &read, int nprocs, int rank,
-                 int tid, int j, std::vector<SendBuffer> &buffers, std::vector<size_t> &counts)
-    {
+    template<typename Derived>
+    struct KmerIndexGenerator {
+        typedef typename Derived::SequenceType SeqType;
+        typedef typename Derived::BufferType BufType;
 
-      KmerGenOp kmer_op(read.id);
-      typedef bliss::iterator::buffered_transform_iterator<KmerGenOp, typename KmerGenOp::BaseIterType> KmerIter;
-      KmerIter start(read.seq, kmer_op);
-      KmerIter end(read.seq_end, kmer_op);
+        void operator()(SeqType &read, int nprocs, int rank,
+                        int tid, int j, BufType &buffers, std::vector<size_t> &counts) {
+          static_cast<Derived*>(this)->impl(read, nprocs, rank, tid, j, buffers, counts);
+        }
+    };
+
+
+    template<typename SendBuffer, typename KmerGenOp>
+    class KmerIndexGeneratorNoQuality : public KmerIndexGenerator<KmerIndexGeneratorNoQuality> {
+      public:
+        typedef typename KmerGenOp::SequenceType SequenceType;
+        typedef std::vector<SendBuffer>  BufferType;
+        typedef bliss::iterator::buffered_transform_iterator<KmerGenOp, typename KmerGenOp::BaseIterType> KmerIter;
+        typedef typename KmerGenOp::KmerType kmer_struct_type;
+
+        KmerIndexGeneratorNoQuality(SequenceType &read, int nprocs, int rank,
+            int tid, int j, BufferType &buffers, std::vector<size_t> &counts) :
+            kmer_op(read.id), start(read.seq, kmer_op), end(read.seq_end, kmer_op) {
+          static_assert(std::is_same<SequenceType, typename SendBuffer::ValueType>::value, "Kmer Generation and Send Buffer should use the same type");
+
+
+
+
+        }
+
+      protected:
+        KmerGenOp kmer_op;
+        KmerIter start;
+        KmerIter end;
+
+        std::pair<typename kmer_struct_type::kmer_type, kmer_struct_type> index_kmer;
+        uint64_t kmerCount;
+
+    };
+
+    void compute_kmer_index_from_read()
+    {
+      static_assert(!std::is_same<QualGenOp, void>::value && std::is_same<typename KmerGenOp::SequenceType, typename QualGenOp::SequenceType>::value, "Kmer Generation and Quality Generation should use the same type");
+
 
       QualGenOp qual_op;
       typedef bliss::iterator::buffered_transform_iterator<QualGenOp, typename QualGenOp::BaseIterType> QualIter;
       QualIter qstart(read.qual, qual_op);
       QualIter qend(read.qual_end, qual_op);
 
-      typedef typename KmerGenOp::KmerType kmer_struct_type;
-      std::pair<typename kmer_struct_type::kmer_type, kmer_struct_type> index_kmer;
 
-      uint64_t kmerCount = 0;
 
       int i = -1;
       // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.

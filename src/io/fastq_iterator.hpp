@@ -60,7 +60,7 @@ namespace bliss
      * @brief     represents a fastq read.
      * @details   Iterator allows walking through the fastq data.
      *            Alphabet allows interpretation of the sequence
-     *            Quality allows interpretation of the quality score.
+     *
      *
      *            a separate one would be used for FASTA sequence,
      *            where there is no quality score.
@@ -83,10 +83,12 @@ namespace bliss
 
     /**
      * @class     bliss::io::fastq_sequence
-     * @brief     represents a fastq read.
+     * @brief     represents a fastq read without quality score.
      * @details   Iterator allows walking through the fastq data.
      *            Alphabet allows interpretation of the sequence
      *            Quality allows interpretation of the quality score.
+     *
+     *            has to be derived class because can't conditionally define member variables.
      *
      *            a separate one would be used for FASTA sequence,
      *            where there is no quality score.
@@ -106,17 +108,15 @@ namespace bliss
 
 
 
-    // TODO: need to modify this.
-
     /**
-     *
+     * Automatically
      */
-    template<typename Iterator, typename Alphabet, typename Quality>
+    template<typename Iterator, typename Alphabet, typename Quality = void>
     struct fastq_parser
     {
         // internal state
 
-        typedef std::conditional<std::is_same<Quality, void>::value,
+        typedef typename std::conditional<std::is_same<Quality, void>::value,
               fastq_sequence<Iterator, Alphabet>,
               fastq_sequence_quality<Iterator, Alphabet, Quality> >::type   SeqType;
         typedef Alphabet                                                    AlphabetType;
@@ -259,6 +259,8 @@ namespace bliss
      * finite  (needs to know base iterator's end.)
      *
      * implement forward only for now.  searching backwards is not easy.
+     *
+     *
      */
     template<typename Parser, typename Iterator>
     class fastq_iterator :
