@@ -25,6 +25,7 @@ namespace bliss
     template<typename Sequence, typename KmerIndex>
     struct generate_kmer
     {
+        typedef Sequence SequenceType;
         typedef typename Sequence::IteratorType BaseIterType;
         typedef typename Sequence::AlphabetType AlphabetType;
         typedef KmerIndex KmerIndexType;
