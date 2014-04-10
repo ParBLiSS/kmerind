@@ -22,7 +22,19 @@ namespace bliss
 {
   namespace index
   {
-    template<typename Sequence, typename KmerIndex>
+    /**
+     * template Param:  T is type of data
+     *                  P is number of bins to hash to.
+     */
+    template<typename T, int P>
+    struct XorModulus
+    {
+
+
+    };
+
+
+    template<typename Sequence, typename KmerIndex, typename HashFunction = bliss::index::XorModulus>
     struct generate_kmer
     {
         typedef Sequence SequenceType;
@@ -37,6 +49,7 @@ namespace bliss
 
         KmerValueType revcomp;
         uint16_t pos;
+        HashFunction h;
 
         static constexpr BitSizeType nBits =
             bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
@@ -54,8 +67,6 @@ namespace bliss
         generate_kmer(const bliss::io::fastq_sequence_id &_rid)
             : kmer(), revcomp(0), pos(0)
         {
-          kmer.kmer = 0;
-          kmer.qual = 0;
           kmer.id = _rid;
         }
 
@@ -78,6 +89,10 @@ namespace bliss
           return 1;
         }
 
+        /**
+         *
+         * @return  pair, with Index Value type and Index structure.  indexValue may be an xor or some other computed value.
+         */
         std::pair<KmerValueType, KmerIndex> operator()()
         {
           // compute the reverse complement
