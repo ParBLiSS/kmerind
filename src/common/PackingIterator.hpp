@@ -24,7 +24,7 @@
 #include <common/padding.hpp>
 #include <common/Kmer.hpp>
 
-#include <iterators/compression_iterator.hpp>
+#include <iterators/many2one_iterator.hpp>
 
 
 namespace bliss
@@ -156,9 +156,9 @@ struct PackingItFunctor
  * @brief
  */
 template <typename BaseIterator, BitSizeType bits_per_char, typename PackedStorageType=WordType>
-class PackingIterator : public iterator::compressing_iterator<BaseIterator, PackingItFunctor<bits_per_char, PackedStorageType> >
+class PackingIterator : public iterator::many2one_iterator<BaseIterator, PackingItFunctor<bits_per_char, PackedStorageType> >
 {
-  typedef iterator::compressing_iterator<BaseIterator, PackingItFunctor<bits_per_char, PackedStorageType> > base_class_t;
+  typedef iterator::many2one_iterator<BaseIterator, PackingItFunctor<bits_per_char, PackedStorageType> > base_class_t;
   typedef PackingItFunctor<bits_per_char, PackedStorageType> functor_t;
   typedef PaddingTraits<PackedStorageType, bits_per_char> padtraits;
 

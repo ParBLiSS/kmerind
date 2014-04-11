@@ -5,7 +5,7 @@
 #include <string>
 
 // include files to test
-#include <iterators/compression_iterator.hpp>
+#include <iterators/many2one_iterator.hpp>
 
 
 TEST(IteratorTests, TestCompressingIterator)
@@ -27,7 +27,7 @@ TEST(IteratorTests, TestCompressingIterator)
       return sum;
     }
   } f;
-  typedef bliss::iterator::compressing_iterator<it_t, MyFunctor> comp_it_t;
+  typedef bliss::iterator::many2one_iterator<it_t, MyFunctor> comp_it_t;
   comp_it_t comp_it(input.begin(), input.end(), f, 4);
   comp_it_t comp_it_end(input.end(), input.end(), f, 4);
 

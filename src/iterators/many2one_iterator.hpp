@@ -1,8 +1,8 @@
 /**
- * @file    compression_iterator.hpp
+ * @file    many2one_iterator.hpp
  * @ingroup interators
  * @author  Patrick Flick <patrick.flick@gmail.com>
- * @brief   Implements the compressing iterator.
+ * @brief   Implements the many2one iterator.
  *
  * Copyright (c) TODO
  *
@@ -10,8 +10,8 @@
  */
 
 
-#ifndef BLISS_ITERATORS_COMPRESSING_ITERATOR_HPP
-#define BLISS_ITERATORS_COMPRESSING_ITERATOR_HPP
+#ifndef BLISS_ITERATORS_MANY2ONE_ITERATOR_HPP
+#define BLISS_ITERATORS_MANY2ONE_ITERATOR_HPP
 
 #include <iterator>
 
@@ -26,14 +26,14 @@ namespace iterator
 {
 
 template<typename Iterator, typename Functor>
-class _shared_compressing_iterator
+class _shared_many2one_iterator
   : public _shared_transforming_iterator<Iterator, Functor, Iterator, Iterator>
 {
 
 protected:
 
   /// The std::iterator_traits of this iterator
-  typedef std::iterator_traits<_shared_compressing_iterator> traits;
+  typedef std::iterator_traits<_shared_many2one_iterator> traits;
 
   /// The difference type for the step size
   typedef typename traits::difference_type difference_type;
@@ -71,24 +71,24 @@ protected:
   /**************************************************
    *  Private constructor (no direct construction)  *
    **************************************************/
-  _shared_compressing_iterator() {}
+  _shared_many2one_iterator() {}
 
   /******************
    *  Constructors  *
    ******************/
 
   /**
-   * @brief Constructor, taking the base iterator and the compressing
+   * @brief Constructor, taking the base iterator and the many2one
    *        functor.
    *
    * @param base_iter   The base iterator that is wrapped via this iterator.
    * @param end_iter    The end of the input sequence. This is needed in case
    *                    the length of the input sequence is not perfectly
    *                    dividable by m.
-   * @param f           The compressing functor.
+   * @param f           The many2one functor.
    * @param m           The number of elements combined into one.
    */
-  _shared_compressing_iterator(const Iterator& base_iter, const Iterator& end_iter,
+  _shared_many2one_iterator(const Iterator& base_iter, const Iterator& end_iter,
                            const Functor& f, const difference_type m)
       : derived_type(base_iter, f), _end(end_iter), _m(m)
   {
@@ -97,7 +97,7 @@ protected:
 
 
 template<typename BaseIterator, typename Compressor, typename DerivedIterator>
-class _compressing_iterator_dir : public _shared_compressing_iterator<BaseIterator, Compressor>
+class _many2one_iterator_dir : public _shared_many2one_iterator<BaseIterator, Compressor>
 {
 protected:
   // the base iterator traits
@@ -127,7 +127,7 @@ protected:
   typedef std::iterator_traits<type> traits;
 
   // base class type
-  typedef _shared_compressing_iterator<BaseIterator, Compressor> base_class_type;
+  typedef _shared_many2one_iterator<BaseIterator, Compressor> base_class_type;
 
 public:
 
@@ -152,17 +152,17 @@ public:
    ******************/
 
   /**
-   * @brief Constructor, taking the base iterator and the compressing
+   * @brief Constructor, taking the base iterator and the many2one
    *        functor.
    *
    * @param base_iter   The base iterator that is wrapped via this iterator.
    * @param end_iter    The end of the input sequence. This is needed in case
    *                    the length of the input sequence is not perfectly
    *                    dividable by m.
-   * @param f           The compressing functor.
+   * @param f           The many2one functor.
    * @param m           The number of elements combined into one.
    */
-  _compressing_iterator_dir(const BaseIterator& base_iter, const BaseIterator& end_iter,
+  _many2one_iterator_dir(const BaseIterator& base_iter, const BaseIterator& end_iter,
                             const Compressor& f, const difference_type m)
       : base_class_type(base_iter, end_iter, f, m), _next(base_iter)
   {
@@ -262,14 +262,14 @@ public:
 };
 
 template<typename BaseIterator, typename Compressor, typename DerivedIterator>
-class _compressing_iterator_ra : public _shared_compressing_iterator<BaseIterator, Compressor>
+class _many2one_iterator_ra : public _shared_many2one_iterator<BaseIterator, Compressor>
 {
 protected:
   // the base iterator traits
   typedef typename std::iterator_traits<BaseIterator> base_traits;
 
   // the base class
-  typedef _shared_compressing_iterator<BaseIterator, Compressor> base_class_type;
+  typedef _shared_many2one_iterator<BaseIterator, Compressor> base_class_type;
 
   // the type of the derived iterator, so that operator functions do not have
   // to be overloaded via polymorphism
@@ -307,17 +307,17 @@ public:
    ******************/
 
   /**
-   * @brief Constructor, taking the base iterator and the compressing
+   * @brief Constructor, taking the base iterator and the many2one
    *        functor.
    *
    * @param base_iter   The base iterator that is wrapped via this iterator.
    * @param end_iter    The end of the input sequence. This is needed in case
    *                    the length of the input sequence is not perfectly
    *                    dividable by m.
-   * @param f           The compressing functor.
+   * @param f           The many2one functor.
    * @param m           The number of elements combined into one.
    */
-  _compressing_iterator_ra(const BaseIterator& base_iter, const BaseIterator& end_iter,
+  _many2one_iterator_ra(const BaseIterator& base_iter, const BaseIterator& end_iter,
                            const Compressor& f, const difference_type m)
       : base_class_type(base_iter, end_iter, f, m)
   {
@@ -558,7 +558,7 @@ public:
 
 
 /**
- * @brief Compressing Iterator class (m -> 1 mapping)
+ * @brief many2one Iterator class (m -> 1 mapping)
  *
  * This iterator wraps around a base iterator and combines a fixed number of
  * elements (e.g. `m`) from the base iterator into a single element of a
@@ -587,14 +587,14 @@ public:
  *
  * Note: this is loosely patterned after boost's transform iterator.
  *
- * @tparam Compressor   The type of the compressing functor.
+ * @tparam Compressor   The type of the many2one functor.
  * @tparam Iterator     The type of the base iterator.
  */
 template<typename Iterator, typename Compressor>
-class compressing_iterator : public std::conditional<std::is_same<typename std::iterator_traits<Iterator>::iterator_category,
+class many2one_iterator : public std::conditional<std::is_same<typename std::iterator_traits<Iterator>::iterator_category,
                                 std::random_access_iterator_tag>::value,
-                                _compressing_iterator_ra<Iterator, Compressor, compressing_iterator<Iterator, Compressor> >,
-                                _compressing_iterator_dir<Iterator, Compressor, compressing_iterator<Iterator, Compressor> > >::type
+                                _many2one_iterator_ra<Iterator, Compressor, many2one_iterator<Iterator, Compressor> >,
+                                _many2one_iterator_dir<Iterator, Compressor, many2one_iterator<Iterator, Compressor> > >::type
 {
 protected:
 
@@ -611,16 +611,16 @@ protected:
   typedef bliss::functional::function_traits<Compressor,
       Iterator, Iterator> functor_traits;
   /// The type of this class
-  typedef compressing_iterator type;
+  typedef many2one_iterator type;
 
   /// Whether the iterator is a RandomAccessIterator
   static constexpr bool _is_ra = std::is_same<typename base_traits::iterator_category,
                                  std::random_access_iterator_tag>::value;
 
   /// Iterator base class type in case the wrapped iterator is RandomAccess
-  typedef _compressing_iterator_ra<Iterator, Compressor, compressing_iterator> _ra_base_t;
+  typedef _many2one_iterator_ra<Iterator, Compressor, many2one_iterator> _ra_base_t;
   /// Iterator base class type in case the wrapped iterator is a directed iterator
-  typedef _compressing_iterator_dir<Iterator, Compressor, compressing_iterator> _dir_base_t;
+  typedef _many2one_iterator_dir<Iterator, Compressor, many2one_iterator> _dir_base_t;
   /// The type of the base class
   typedef typename std::conditional<_is_ra, _ra_base_t, _dir_base_t>::type base_class_type;
 
@@ -636,31 +636,31 @@ public:
 
   // class specific constructor
   /**
-   * @brief Constructor, taking the base iterator and the compressing
+   * @brief Constructor, taking the base iterator and the many2one
    *        functor.
    *
    * @param base_iter   The base iterator that is wrapped via this iterator.
    * @param end_iter    The end of the input sequence. This is needed in case
    *                    the length of the input sequence is not perfectly
    *                    dividable by m.
-   * @param f           The compressing functor.
+   * @param f           The many2one functor.
    * @param m           The number of elements combined into one.
    */
-  compressing_iterator(const Iterator& base_iter, const Iterator& end_iter,
+  many2one_iterator(const Iterator& base_iter, const Iterator& end_iter,
                        const Compressor& f, const difference_type m)
     : base_class_type(base_iter, end_iter, f, m)
   {
   }
 
-  compressing_iterator()
+  many2one_iterator()
     : base_class_type(Iterator(), Iterator(), Compressor(), 0) {}
 
-  compressing_iterator(const compressing_iterator& other)
+  many2one_iterator(const many2one_iterator& other)
     : base_class_type(other._base, other._end, other._f, other._m)
   {
   }
 
-  compressing_iterator& operator=(const compressing_iterator& other)
+  many2one_iterator& operator=(const many2one_iterator& other)
   {
     // check for self assignment
     if (this != &other)
@@ -676,7 +676,7 @@ public:
   /*
   // specific to at least fwd iterators: default contructable
   template< typename = std::enable_if<is_min_fwd && !is_ra> >
-  compressing_iterator()
+  many2one_iterator()
       :  _base(), _next(), _end(), _f(), _m(0)
   {
   }
@@ -685,7 +685,7 @@ public:
   /*
   // specific to RandomAccessIterators
   template< typename = std::enable_if<is_ra> >
-  compressing_iterator()
+  many2one_iterator()
       :  _base(), _end(), _f(), _m(0)
   {
   }
@@ -695,4 +695,4 @@ public:
 
 } // iterator
 } // bliss
-#endif /* BLISS_ITERATORS_COMPRESSING_ITERATOR_HPP */
+#endif /* BLISS_ITERATORS_MANY2ONE_ITERATOR_HPP */
