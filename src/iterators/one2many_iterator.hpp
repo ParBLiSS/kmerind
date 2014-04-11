@@ -1,8 +1,8 @@
 /**
- * @file    many2one_iterator.hpp
+ * @file    one2many_iterator.hpp
  * @ingroup interators
  * @author  Patrick Flick <patrick.flick@gmail.com>
- * @brief   Implements the many2one iterator.
+ * @brief   Implements the one2many iterator.
  *
  * Copyright (c) TODO
  *
@@ -10,8 +10,8 @@
  */
 
 
-#ifndef BLISS_ITERATORS_MANY2ONE_ITERATOR_HPP
-#define BLISS_ITERATORS_MANY2ONE_ITERATOR_HPP
+#ifndef BLISS_ITERATORS_ONE2MANY_ITERATOR_HPP
+#define BLISS_ITERATORS_ONE2MANY_ITERATOR_HPP
 
 #include <iterator>
 
@@ -26,14 +26,14 @@ namespace iterator
 {
 
 template<typename Iterator, typename Functor>
-class _shared_many2one_iterator
+class _shared_one2many_iterator
   : public _shared_transforming_iterator<Iterator, Functor, Iterator, Iterator>
 {
 
 protected:
 
   /// The std::iterator_traits of this iterator
-  typedef std::iterator_traits<_shared_many2one_iterator> traits;
+  typedef std::iterator_traits<_shared_one2many_iterator> traits;
 
   /// The difference type for the step size
   typedef typename traits::difference_type difference_type;
@@ -48,7 +48,7 @@ public:
    *******************************/
 
   /**
-   * @brief  Returns the `m` in `m -> 1`, i.e. the step size of this iterator.
+   * @brief  Returns the `m` in `1 -> m`, i.e. the step size of this iterator.
    *
    * @return The step size m.
    */
@@ -57,47 +57,104 @@ public:
     return this->_m;
   }
 
+
+  /**
+   * @brief Returns the current offset within the current element.
+   *
+   * @return The current offset.
+   */
+  const difference_type& getOffset() const
+  {
+    return this->_offset;
+  }
+
+  /**
+   * @brief Returns the current offset within the current element.
+   *
+   * @return The current offset.
+   */
+  difference_type& getOffset()
+  {
+    return this->_offset;
+  }
+
+  /**
+   * @brief     Returns whether this and the given iterator point to the same
+   *            positon.
+   *
+   * @return    Whether this and the given iterator point to the same position.
+   */
+  inline bool operator==(const _shared_one2many_iterator& rhs) const
+  {
+    return this->_base == rhs._base && this->_offset == rhs._offset;
+  }
+
+  /**
+   * @brief     Returns whether this and the given iterator are different.
+   *
+   * @return    Whether this and the given iterator are different.
+   */
+  inline bool operator!=(const _shared_one2many_iterator& rhs) const
+  {
+    return this->_base != rhs._base || this->_offset != rhs._offset;
+  }
+
 protected:
   /**********************
    *  Member variables  *
    **********************/
 
-  /// The end of the input sequence
-  Iterator _end;
-
-  /// the number of base elements per compressed element (i.e the `m` in m->1)
+  /// the number of base elements per input element (i.e the `m` in 1->m)
   difference_type _m;
+
+  /// The current offset inside the current word
+  difference_type _offset;
 
   /**************************************************
    *  Private constructor (no direct construction)  *
    **************************************************/
-  _shared_many2one_iterator() {}
+  _shared_one2many_iterator() {}
 
   /******************
    *  Constructors  *
    ******************/
 
   /**
-   * @brief Constructor, taking the base iterator and the many2one
+   * @brief Constructor, taking the base iterator and the one2many
    *        functor.
    *
    * @param base_iter   The base iterator that is wrapped via this iterator.
-   * @param end_iter    The end of the input sequence. This is needed in case
-   *                    the length of the input sequence is not perfectly
-   *                    dividable by m.
-   * @param f           The many2one functor.
-   * @param m           The number of elements combined into one.
+   * @param f           The one2many functor.
+   * @param m           The number of elements extracted from one.
    */
-  _shared_many2one_iterator(const Iterator& base_iter, const Iterator& end_iter,
+  _shared_one2many_iterator(const Iterator& base_iter,
                            const Functor& f, const difference_type m)
-      : derived_type(base_iter, f), _end(end_iter), _m(m)
+      : derived_type(base_iter, f), _m(m), _offset(0)
+  {
+  }
+
+  /**
+   * @brief Constructor, taking the base iterator and the one2many
+   *        functor.
+   *
+   * @param base_iter   The base iterator that is wrapped via this iterator.
+   * @param f           The one2many functor.
+   * @param m           The number of elements extracted from one.
+   * @param offset      The initial offset in the current base iterator. The
+   *                    state of the iterator will be equivalent to initalizing
+   *                    to `base_iter` and iterating `offset` times.
+   */
+  _shared_one2many_iterator(const Iterator& base_iter,
+                           const Functor& f, const difference_type m,
+                           const difference_type offset)
+      : derived_type(base_iter, f), _m(m), _offset(offset)
   {
   }
 };
 
 
-template<typename BaseIterator, typename Compressor, typename DerivedIterator>
-class _many2one_iterator_dir : public _shared_many2one_iterator<BaseIterator, Compressor>
+template<typename BaseIterator, typename Functor, typename DerivedIterator>
+class _one2many_iterator_dir : public _shared_one2many_iterator<BaseIterator, Functor>
 {
 protected:
   // the base iterator traits
@@ -107,27 +164,17 @@ protected:
   // to be overloaded via polymorphism
   typedef DerivedIterator type;
 
-  // assert that the base iterator is NOT a random access iterator
-  static_assert(!std::is_same<typename base_traits::iterator_category,
-                             std::random_access_iterator_tag>::value,
-                "The (Bi)DirectedIterator implementation must be"
-                "based on a (Bi)DirectedIterator (i.e. Input, FWD or Bidir)");
-
 
 protected:
   /**********************
    *  Member variables  *
    **********************/
 
-  // The next iterator (read ahead), only used for bidirectional, forward and
-  // input iterators
-  BaseIterator _next;
-
   /// The std::iterator_traits of this iterator
   typedef std::iterator_traits<type> traits;
 
   // base class type
-  typedef _shared_many2one_iterator<BaseIterator, Compressor> base_class_type;
+  typedef _shared_one2many_iterator<BaseIterator, Functor> base_class_type;
 
 public:
 
@@ -146,44 +193,62 @@ public:
   /// The pointer type of a value of this iterator
   typedef typename traits::pointer pointer_type;
 
+protected:
+
+  // iterator tags
+  static constexpr bool _is_ra = std::is_same<typename base_traits::iterator_category,
+                                 std::random_access_iterator_tag>::value;
+  static constexpr bool _is_bidir = std::is_same<typename base_traits::iterator_category,
+                                std::bidirectional_iterator_tag>::value;
+  static constexpr bool _is_min_bidir = _is_ra || _is_bidir;
+
 public:
   /******************
    *  Constructors  *
    ******************/
 
   /**
-   * @brief Constructor, taking the base iterator and the many2one
-   *        functor.
+   * @brief Constructor, taking the base iterator and the one2many functor.
    *
    * @param base_iter   The base iterator that is wrapped via this iterator.
-   * @param end_iter    The end of the input sequence. This is needed in case
-   *                    the length of the input sequence is not perfectly
-   *                    dividable by m.
-   * @param f           The many2one functor.
+   * @param f           The one2many functor.
    * @param m           The number of elements combined into one.
    */
-  _many2one_iterator_dir(const BaseIterator& base_iter, const BaseIterator& end_iter,
-                            const Compressor& f, const difference_type m)
-      : base_class_type(base_iter, end_iter, f, m), _next(base_iter)
+  _one2many_iterator_dir(const BaseIterator& base_iter,
+                         const Functor& f, const difference_type m)
+      : base_class_type(base_iter, f, m)
+  {
+  }
+
+  /**
+   * @brief Constructor, taking the base iterator and the one2many functor.
+   *
+   * @param base_iter   The base iterator that is wrapped via this iterator.
+   * @param f           The one2many functor.
+   * @param m           The number of elements combined into one.
+   * @param offset      The initial offset in the current base iterator. The
+   *                    state of the iterator will be equivalent to initalizing
+   *                    to `base_iter` and iterating `offset` times.
+   */
+  _one2many_iterator_dir(const BaseIterator& base_iter,
+                         const Functor& f, const difference_type m,
+                         const difference_type offset)
+      : base_class_type(base_iter, f, m, offset)
   {
   }
 
   /**
    * @brief     Returns the value at the current iterator position.
    *
-   * This returns the compressed value (m -> 1 combination) from the
-   * next `m` elements of the base iterator.
+   * This returns the extracted value (1->m) at offset `_offset` from the
+   * current base iterator position.
    *
    * @return    The value at the current position.
    */
   value_type operator*()
   {
-    if (this->_base != this->_next)
-    {
-      this->_next = this->_base;
-    }
-    // the functor iteraters _next forward by at most _m steps
-    return this->_f(this->_next, this->_end);
+    // the functor extracts the relevant part and returns the type
+    return this->_f(*this->_cur, this->_offset);
   }
 
   /**
@@ -195,13 +260,13 @@ public:
    */
   type& operator++()
   {
-    //  advance the value by m
-    if (this->_next == this->_base)
+    //  advance the offset by one
+    ++this->_offset;
+    if (this->_offset == this->_m)
     {
-      // advance the min of m and the end of the input sequence
-      iter_tools<BaseIterator>::advance_at_most(this->_next, this->_end, this->_m);
+      ++this->_base;
+      ++this->offset = 0;
     }
-    this->_base = this->_next;
     return dynamic_cast<type*>(*this);
   }
 
@@ -223,10 +288,38 @@ public:
   typename std::enable_if<is_bidir, T>::type&
   operator--()
   {
-    // go back `m`, cast to signed int before negating
-    // TODO: what happens if we are at an uneven end?
-    std::advance(this->_base, - static_cast<int>(this->_m));
+    // at beginning of current element go back in base iterator
+    if (this->_offset == 0)
+    {
+      --this->_base;
+      this->_offset = this->m - 1;
+    }
+    // otherwise just decrease the offset
+    else
+    {
+      --this->_offset;
+    }
     return *dynamic_cast<type*>(this);
+  }
+
+
+  /********************************
+   *  derived operator functions  *
+   ********************************/
+
+  /**
+   * @brief     Post-increment operator.
+   *
+   * Advances this iterator by one position, but returns the old iterator state.
+   *
+   * @return    A copy to the non-incremented iterator.
+   */
+  type operator++(int)
+  {
+    // create a copy
+    type tmp(*dynamic_cast<type*>(this));
+    this->operator++();
+    return tmp;
   }
 
   /**
@@ -245,32 +338,17 @@ public:
     this->operator--();
     return tmp;
   }
-
-  /**
-   * @brief     Post-increment operator.
-   *
-   * Advances this iterator by one position, but returns the old iterator state.
-   *
-   * @return    A copy to the non-incremented iterator.
-   */
-  type operator++(int)
-  {
-    // create a copy
-    type tmp(*dynamic_cast<type*>(this));
-    this->operator++();
-    return tmp;
-  }
 };
 
-template<typename BaseIterator, typename Compressor, typename DerivedIterator>
-class _many2one_iterator_ra : public _shared_many2one_iterator<BaseIterator, Compressor>
+template<typename BaseIterator, typename Functor, typename DerivedIterator>
+class _one2many_iterator_ra : public _one2many_iterator_dir<BaseIterator, Functor, DerivedIterator>
 {
 protected:
   // the base iterator traits
   typedef typename std::iterator_traits<BaseIterator> base_traits;
 
   // the base class
-  typedef _shared_many2one_iterator<BaseIterator, Compressor> base_class_type;
+  typedef _shared_one2many_iterator<BaseIterator, Functor> base_class_type;
 
   // the type of the derived iterator, so that operator functions do not have
   // to be overloaded via polymorphism
@@ -308,19 +386,34 @@ public:
    ******************/
 
   /**
-   * @brief Constructor, taking the base iterator and the many2one
+   * @brief Constructor, taking the base iterator and the one2many
    *        functor.
    *
    * @param base_iter   The base iterator that is wrapped via this iterator.
-   * @param end_iter    The end of the input sequence. This is needed in case
-   *                    the length of the input sequence is not perfectly
-   *                    dividable by m.
-   * @param f           The many2one functor.
-   * @param m           The number of elements combined into one.
+   * @param f           The one2many functor.
+   * @param m           The number of elements per base element.
    */
-  _many2one_iterator_ra(const BaseIterator& base_iter, const BaseIterator& end_iter,
-                           const Compressor& f, const difference_type m)
-      : base_class_type(base_iter, end_iter, f, m)
+  _one2many_iterator_ra(const BaseIterator& base_iter,
+                        const Functor& f, const difference_type m)
+      : base_class_type(base_iter, f, m)
+  {
+  }
+
+  /**
+   * @brief Constructor, taking the base iterator and the one2many
+   *        functor.
+   *
+   * @param base_iter   The base iterator that is wrapped via this iterator.
+   * @param f           The one2many functor.
+   * @param m           The number of elements per base element.
+   * @param offset      The initial offset in the current base iterator. The
+   *                    state of the iterator will be equivalent to initalizing
+   *                    to `base_iter` and iterating `offset` times.
+   */
+  _one2many_iterator_ra(const BaseIterator& base_iter,
+                        const Functor& f, const difference_type m,
+                        const difference_type offset)
+      : base_class_type(base_iter, f, m, offset)
   {
   }
 
@@ -332,49 +425,6 @@ public:
    *  specific functions  *
    ************************/
 
-  /**
-   * @brief     Returns the value at the current iterator position.
-   *
-   * This returns the compressed value (m -> 1 combination) from the
-   * next `m` elements of the base iterator.
-   *
-   * @return    The value at the current position.
-   */
-  // same function, but for RandomAccessIterators
-  value_type operator*()
-  {
-    BaseIterator _next = this->_base;
-    return this->_f(_next, this->_end);
-  }
-
-  /**
-   * @brief     Pre-increment operator.
-   *
-   * Advances this iterator by one position.
-   *
-   * @return    A reference to this.
-   */
-  type& operator++()
-  {
-    iter_tools<BaseIterator>::advance_at_most(this->_base, this->_end, this->_m);
-    return *dynamic_cast<type*>(this);
-  }
-
-  /**
-   * @brief     Pre-decrement operator.
-   *
-   * Reduces this iterator by one position.
-   *
-   * @return    A reference to this.
-   */
-  type& operator--()
-  {
-    // go back `m`, cast to signed int before negating
-    // TODO: what happens if we are at an uneven end?
-    std::advance(this->_base, - static_cast<int>(this->_m));
-    return *dynamic_cast<type*>(this);
-  }
-
   /* advancing iterator:  operator+ */
 
   /**
@@ -385,11 +435,18 @@ public:
    */
   type& operator+=(difference_type n)
   {
-    // advance in steps of _m
     if (n < 0)
       *this -= (-n);
     else
-      iter_tools<BaseIterator>::advance_at_most(this->_base, this->_end, n * this->_m);
+    {
+      // get base iterator steps and new offset
+      difference_type steps = (n + this->_offset) / this->_m;
+      difference_type offset = (n + this->_offset) % this->m;
+      // advance base and set new offset
+      std::advance(this->_base, steps);
+      this->_offset = offset;
+    }
+
     return *dynamic_cast<type*>(this);
   }
 
@@ -403,13 +460,32 @@ public:
    */
   type& operator-=(difference_type n)
   {
-    // go back in steps of size `m`
     if (n < 0)
       *this += (-n);
     else
-      std::advance(this->_base, -n * static_cast<int>(this->_m));
+    {
+      // get base iterator steps and new offset
+      if (n <= this->_offset)
+      {
+        this->_offset -= n;
+      }
+      else
+      {
+        // remove offset
+        n -= this->_offset;
+        this->_offset = 0;
+        // then get number of further steps to go back
+        difference_type steps = (n - 1) / this->_m + 1;
+        difference_type offset = steps*this->_m - n;
+        // advance base and set new offset
+        std::advance(this->_base, -steps);
+        this->_offset = offset;
+      }
+    }
     return *dynamic_cast<type*>(this);
   }
+
+  // TODO: continue here
 
   /**
    * @brief     Returns the difference between this and the given iterator.
@@ -423,8 +499,10 @@ public:
    */
   difference_type operator-(const type& other)
   {
-    // divide base difference by `m`
-    return intCeil<difference_type>(this->_base - other._base, this->_m);
+    assert(this->_m == other.m);
+    // get base difference
+    difference_type base_diff = this->_base - other._base;
+    return base_diff * this->_m + (this->_offset - other._base);
   }
 
   /***********************
@@ -528,7 +606,8 @@ public:
    */
   bool operator<(const type& rhs)
   {
-    return this->_base < rhs._base;
+    return this->_base < rhs._base
+      || (this->_base == rhs._base && this->_offset < rhs._offset);
   }
 
   /**
@@ -536,7 +615,8 @@ public:
    */
   bool operator>(const type& rhs)
   {
-    return this->_base > rhs._base;
+    return this->_base > rhs._base
+      || (this->_base == rhs._base && this->_offset > rhs._offset);
   }
 
   /**
@@ -544,7 +624,8 @@ public:
    */
   bool operator<=(const type& rhs)
   {
-    return this->_base <= rhs._base;
+    return this->_base < rhs._base
+      || (this->_base == rhs._base && this->_offset <= rhs._offset);
   }
 
   /**
@@ -552,28 +633,25 @@ public:
    */
   bool operator>=(const type& rhs)
   {
-    return this->_base >= rhs._base;
+    return this->_base > rhs._base
+      || (this->_base == rhs._base && this->_offset >= rhs._offset);
   }
 };
 
 
 
 /**
- * @brief many2one Iterator class (m -> 1 mapping)
+ * @brief one2many Iterator class (1 -> m extraction)
  *
- * This iterator wraps around a base iterator and combines a fixed number of
- * elements (e.g. `m`) from the base iterator into a single element of a
- * different type.
+ * This iterator wraps around a base iterator and returns `m` elements per base
+ * element.
  *
  * Advancing this iterator by a single position advances the base iterator
- * by `m` positions.
+ * only every `m` iterations.
  *
- * The given compression functor takes two parameters as input: a `begin`
- * and an `end` iterator of the iterator base class. The functor must `pack`
- * at most `m` or `end - begin` elements (which ever is smaller) from the
- * underlying iterator sequence into a single value and return this value.
- * The value_type of this iterator is determined from the given functors
- * return type.
+ * The given functor takes two parameters as input: The current base iterator
+ * position and the current offset for retrieving the `offset`th element within
+ * the one base element.
  *
  * This iterator "inherits" the iterator properties from the base iterator.
  * I.e. if the base iterator is a forward_iterator, this iterator will also be
@@ -588,14 +666,14 @@ public:
  *
  * Note: this is loosely patterned after boost's transform iterator.
  *
- * @tparam Compressor   The type of the many2one functor.
+ * @tparam Functor   The type of the one2many functor.
  * @tparam Iterator     The type of the base iterator.
  */
-template<typename Iterator, typename Compressor>
-class many2one_iterator : public std::conditional<std::is_same<typename std::iterator_traits<Iterator>::iterator_category,
+template<typename Iterator, typename Functor>
+class one2many_iterator : public std::conditional<std::is_same<typename std::iterator_traits<Iterator>::iterator_category,
                                 std::random_access_iterator_tag>::value,
-                                _many2one_iterator_ra<Iterator, Compressor, many2one_iterator<Iterator, Compressor> >,
-                                _many2one_iterator_dir<Iterator, Compressor, many2one_iterator<Iterator, Compressor> > >::type
+                                _one2many_iterator_ra<Iterator, Functor, one2many_iterator<Iterator, Functor> >,
+                                _one2many_iterator_dir<Iterator, Functor, one2many_iterator<Iterator, Functor> > >::type
 {
 protected:
 
@@ -609,19 +687,19 @@ protected:
 
 
   // the traits (e.g. return type) of the compression function
-  typedef bliss::functional::function_traits<Compressor,
+  typedef bliss::functional::function_traits<Functor,
       Iterator, Iterator> functor_traits;
   /// The type of this class
-  typedef many2one_iterator type;
+  typedef one2many_iterator type;
 
   /// Whether the iterator is a RandomAccessIterator
   static constexpr bool _is_ra = std::is_same<typename base_traits::iterator_category,
                                  std::random_access_iterator_tag>::value;
 
   /// Iterator base class type in case the wrapped iterator is RandomAccess
-  typedef _many2one_iterator_ra<Iterator, Compressor, many2one_iterator> _ra_base_t;
+  typedef _one2many_iterator_ra<Iterator, Functor, one2many_iterator> _ra_base_t;
   /// Iterator base class type in case the wrapped iterator is a directed iterator
-  typedef _many2one_iterator_dir<Iterator, Compressor, many2one_iterator> _dir_base_t;
+  typedef _one2many_iterator_dir<Iterator, Functor, one2many_iterator> _dir_base_t;
   /// The type of the base class
   typedef typename std::conditional<_is_ra, _ra_base_t, _dir_base_t>::type base_class_type;
 
@@ -637,39 +715,51 @@ public:
 
   // class specific constructor
   /**
-   * @brief Constructor, taking the base iterator and the many2one
+   * @brief Constructor, taking the base iterator and the one2many
    *        functor.
    *
    * @param base_iter   The base iterator that is wrapped via this iterator.
-   * @param end_iter    The end of the input sequence. This is needed in case
-   *                    the length of the input sequence is not perfectly
-   *                    dividable by m.
-   * @param f           The many2one functor.
-   * @param m           The number of elements combined into one.
+   * @param f           The one2many functor.
+   * @param m           The number of elements extracted from one.
    */
-  many2one_iterator(const Iterator& base_iter, const Iterator& end_iter,
-                       const Compressor& f, const difference_type m)
-    : base_class_type(base_iter, end_iter, f, m)
+  one2many_iterator(const Iterator& base_iter,
+                       const Functor& f, const difference_type m)
+    : base_class_type(base_iter, f, m)
   {
   }
 
-  many2one_iterator()
-    : base_class_type(Iterator(), Iterator(), Compressor(), 0) {}
-
-  many2one_iterator(const many2one_iterator& other)
-    : base_class_type(other._base, other._end, other._f, other._m)
+  /**
+   * @brief Constructor, taking the base iterator and the one2many
+   *        functor.
+   *
+   * @param base_iter   The base iterator that is wrapped via this iterator.
+   * @param f           The one2many functor.
+   * @param m           The number of elements extracted from one.
+   */
+  one2many_iterator(const Iterator& base_iter,
+                       const Functor& f, const difference_type m,
+                       const difference_type offset)
+    : base_class_type(base_iter, f, m, offset)
   {
   }
 
-  many2one_iterator& operator=(const many2one_iterator& other)
+  one2many_iterator()
+    : base_class_type(Iterator(), Functor(), 0, 0) {}
+
+  one2many_iterator(const one2many_iterator& other)
+    : base_class_type(other._base, other._f, other._m, other._offset)
+  {
+  }
+
+  one2many_iterator& operator=(const one2many_iterator& other)
   {
     // check for self assignment
     if (this != &other)
     {
       this->_base = other._base;
-      this->_end = other._end;
       this->_f = other._f;
       this->_m = other._m;
+      this->_offset = other._offset;
     }
     return *this;
   }
@@ -677,7 +767,7 @@ public:
   /*
   // specific to at least fwd iterators: default contructable
   template< typename = std::enable_if<is_min_fwd && !is_ra> >
-  many2one_iterator()
+  one2many_iterator()
       :  _base(), _next(), _end(), _f(), _m(0)
   {
   }
@@ -686,7 +776,7 @@ public:
   /*
   // specific to RandomAccessIterators
   template< typename = std::enable_if<is_ra> >
-  many2one_iterator()
+  one2many_iterator()
       :  _base(), _end(), _f(), _m(0)
   {
   }
@@ -696,4 +786,4 @@ public:
 
 } // iterator
 } // bliss
-#endif /* BLISS_ITERATORS_MANY2ONE_ITERATOR_HPP */
+#endif /* BLISS_ITERATORS_ONE2MANY_ITERATOR_HPP */
