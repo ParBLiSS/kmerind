@@ -149,6 +149,13 @@ protected:
                            const difference_type offset)
       : derived_type(base_iter, f), _m(m), _offset(offset)
   {
+    if (this->_offset >= this->_m)
+    {
+      difference_type steps = this->_offset / this->_m;
+      difference_type rem = this->_offset % this->_m;
+      std::advance(this->_base, steps);
+      this->_offset = rem;
+    }
   }
 };
 
@@ -485,8 +492,6 @@ public:
     }
     return *dynamic_cast<type*>(this);
   }
-
-  // TODO: continue here
 
   /**
    * @brief     Returns the difference between this and the given iterator.
