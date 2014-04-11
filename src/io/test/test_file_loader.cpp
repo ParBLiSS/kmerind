@@ -15,6 +15,10 @@
 #include "io/file_loader.hpp"
 #include "iterators/range.hpp"
 
+
+typedef bliss::io::file_loader<unsigned char> FileLoaderType;
+typedef FileLoaderType::RangeType RangeType;
+
 class FileLoaderTest : public ::testing::Test
 {
   protected:
@@ -54,11 +58,11 @@ TEST_F(FileLoaderTest, OpenWithFullRange)
   int rank = 0;
   int nprocs = 1;
 
-  bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(nprocs,
+  RangeType r =
+      RangeType::block_partition(nprocs,
                                                           rank, 0, fileSize);
 
-  bliss::io::file_loader loader(fileName, r);
+  FileLoaderType loader(fileName, r);
 
   size_t len = r.end - r.start;
   char* gold = new char[len];
@@ -74,11 +78,11 @@ TEST_F(FileLoaderTest, PreloadWithFullRange)
   int rank = 0;
   int nprocs = 1;
 
-  bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(nprocs,
+  RangeType r =
+      RangeType::block_partition(nprocs,
                                                           rank, 0, fileSize);
 
-  bliss::io::file_loader loader(fileName, r, true);
+  FileLoaderType loader(fileName, r, true);
 
   size_t len = r.end - r.start;
   char* gold = new char[len];
@@ -93,13 +97,13 @@ TEST_F(FileLoaderTest, OpenWithRange)
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(nprocs,
+  RangeType r =
+      RangeType::block_partition(nprocs,
                                                           rank, 0, fileSize);
 
-  bliss::io::file_loader loader(fileName, r);
+  FileLoaderType loader(fileName, r);
 
-  bliss::io::file_loader::range_type r2 = loader.getRange();
+  RangeType r2 = loader.getRange();
   size_t len = r2.end - r2.start;
   char* gold = new char[len];
   FileLoaderTest::readFileC(fileName, r2.start, len, gold);
@@ -113,14 +117,14 @@ TEST_F(FileLoaderTest, OpenWithAlignedRange)
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(nprocs,
+  RangeType r =
+      RangeType::block_partition(nprocs,
                                                           rank, 0, fileSize);
-  bliss::io::file_loader::range_type ra = r.align_to_page(
+  RangeType ra = r.align_to_page(
       sysconf(_SC_PAGE_SIZE));
-  bliss::io::file_loader loader(fileName, ra);
+  FileLoaderType loader(fileName, ra);
 
-  bliss::io::file_loader::range_type r2 = loader.getRange();
+  RangeType r2 = loader.getRange();
   size_t len = r2.end - r2.start;
   char* gold = new char[len];
   FileLoaderTest::readFileC(fileName, r2.start, len, gold);
@@ -135,13 +139,13 @@ TEST_F(FileLoaderTest, PreloadWithRange)
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(nprocs,
+  RangeType r =
+      RangeType::block_partition(nprocs,
                                                           rank, 0, fileSize);
 
-  bliss::io::file_loader loader(fileName, r, true);
+  FileLoaderType loader(fileName, r, true);
 
-  bliss::io::file_loader::range_type r2 = loader.getRange();
+  RangeType r2 = loader.getRange();
   size_t len = r2.end - r2.start;
   char* gold = new char[len];
   FileLoaderTest::readFileC(fileName, r2.start, len, gold);
@@ -156,14 +160,14 @@ TEST_F(FileLoaderTest, PreloadWithAlignedRange)
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(nprocs,
+  RangeType r =
+      RangeType::block_partition(nprocs,
                                                           rank, 0, fileSize);
-  bliss::io::file_loader::range_type ra = r.align_to_page(
+  RangeType ra = r.align_to_page(
       sysconf(_SC_PAGE_SIZE));
-  bliss::io::file_loader loader(fileName, ra, true);
+  FileLoaderType loader(fileName, ra, true);
 
-  bliss::io::file_loader::range_type r2 = loader.getRange();
+  RangeType r2 = loader.getRange();
   size_t len = r2.end - r2.start;
   char* gold = new char[len];
   FileLoaderTest::readFileC(fileName, r2.start, len, gold);

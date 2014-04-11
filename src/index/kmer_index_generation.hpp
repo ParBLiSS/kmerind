@@ -1,5 +1,5 @@
 /**
- * @file		kmer_functions.h
+ * @file		kmer_index_generation.hpp
  * @ingroup
  * @author	tpan
  * @brief
@@ -9,8 +9,8 @@
  *
  * TODO add License
  */
-#ifndef KMER_FUNCTIONS_H_
-#define KMER_FUNCTIONS_H_
+#ifndef KMER_INDEX_GENERATION_H_
+#define KMER_INDEX_GENERATION_H_
 
 #include <vector>
 #include <tuple>
@@ -19,23 +19,23 @@ namespace bliss
 {
   namespace index
   {
-	  
-	/**
+
+    /**
      * template Param:  T is type of data
      *                  P is number of bins to hash to.
      */
     template<typename T>
     struct XorModulus
     {
-		T p;
-		T offset;
-		XorModulus(T _p, T _offset) : p(_p), offset(_offset) {};
-		
-		T operator()(const T &v1, const T &v2) {
-			return (v1 ^ v2) % p + offset;
-		}
+        T p;
+        T offset;
+        XorModulus(T _p, T _offset) : p(_p), offset(_offset) {};
+
+        T operator()(const T &v1, const T &v2) {
+          return (v1 ^ v2) % p + offset;
+        }
     };
-	
+
     // TODO:  need to change the templates.
     // FASTQ_SEQUENCE should be parameterized with base iterator and alphabet - DONE
     // given those + k, should be able to get kmer index element type  - DONE
@@ -50,7 +50,7 @@ namespace bliss
         typedef std::vector<SendBuffer>  				    BufferType;
         typedef bliss::iterator::buffered_transform_iterator<KmerGenOp, typename KmerGenOp::BaseIterType> KmerIter;
         typedef typename KmerGenOp::KmerType 			  KmerType;
-		typedef typename KmerGenOp::OutputType KmerIndexPairType;
+        typedef typename KmerGenOp::OutputType KmerIndexPairType;
 
         KmerIndexGenerator(int nprocs, int rank, int tid) :
           _nprocs(nprocs), _rank(rank), _tid(tid), h(nprocs, nprocs * tid)  {
@@ -63,8 +63,7 @@ namespace bliss
         int _nprocs;
         int _rank;
         int _tid;
-		HashFunc h;
-        constexpr int K = KmerType::KmerSize::K;
+        HashFunc h;
 
         void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<size_t> &counts) {
           KmerGenOp kmer_op(read.id);
@@ -79,7 +78,7 @@ namespace bliss
           for (int i = 0; start != end; ++start, ++i)
           {
 
-            if (i < (K - 1))
+            if (i < (KmerType::KmerSize::size - 1))
               continue;
 
             index_kmer = *start;
@@ -99,22 +98,22 @@ namespace bliss
         }
     };
 
-    template<typename SendBuffer, typename KmerGenOp, typename QualGenOp, typename HashFunc>
-    class KmerIndexGeneratorQuality : public KmerIndexGenerator<SendBuffer,
-                                          KmerGenOp, HashFunc>
+    template<typename KmerGenOp, typename SendBuffer, typename HashFunc, typename QualGenOp>
+    class KmerIndexGeneratorWithQuality : public KmerIndexGenerator<KmerGenOp, SendBuffer,
+      HashFunc>
     {
       public:
-        typedef KmerIndexGeneratorNoQuality<SendBuffer, KmerGenOp, HashFunc> BaseType;
+        typedef KmerIndexGenerator<KmerGenOp, SendBuffer, HashFunc> BaseType;
         typedef typename BaseType::SequenceType SequenceType;
         typedef typename BaseType::BufferType BufferType;
         typedef typename BaseType::KmerIter KmerIter;
         typedef typename BaseType::KmerType KmerType;
         typedef bliss::iterator::buffered_transform_iterator<QualGenOp,
             typename QualGenOp::BaseIterType> QualIter;
-		typedef typename KmerGenOp::OutputType KmerIndexPairType;
+        typedef typename KmerGenOp::OutputType KmerIndexPairType;
 
-        KmerIndexGeneratorQuality(int nprocs, int rank, int tid)
-            : BaseType(nprocs, rank, tid)
+        KmerIndexGeneratorWithQuality(int nprocs, int rank, int tid)
+        : BaseType(nprocs, rank, tid)
         {
           static_assert(std::is_same<SequenceType, typename QualGenOp::SequenceType>::value, "Kmer Generation and Quality Generation should use the same type");
         }
@@ -139,7 +138,7 @@ namespace bliss
           for (int i = 0; (start != end) && (qstart != qend); ++start, ++qstart, ++i)
           {
 
-            if (i < (K - 1))
+            if (i < (KmerType::KmerSize::size - 1))
               continue;
 
             index_kmer = *start;
@@ -151,7 +150,7 @@ namespace bliss
             // sending the kmer.
             //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, index_kmer.first % nprocs + (nprocs * tid) );
             if (fabs(index_kmer.first.qual) > std::numeric_limits<
-                    typename KmerType::QualityType>::epsilon())
+                typename KmerType::QualityType>::epsilon())
             {
               // sending the kmer.
               //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, index_kmer.first % nprocs + (nprocs * tid) );
@@ -179,4 +178,4 @@ namespace bliss
 
 
 
-#endif /* KMER_FUNCTIONS_H_ */
+#endif /* KMER_INDEX_GENERATION_H_ */

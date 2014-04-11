@@ -1,5 +1,5 @@
 /**
- * @file		kmer_functors.cpp
+ * @file		kmer_index_functors.cpp
  * @ingroup
  * @author	tpan
  * @brief
@@ -10,7 +10,7 @@
  * TODO add License
  */
 
-#include "index/kmer_functors.hpp"
+#include "index/kmer_index_functors.hpp"
 
 namespace bliss
 {
@@ -18,10 +18,9 @@ namespace bliss
   {
     // can't use auto keyword.  declare and initialize in class declaration
     // then "define" but not initialize outside class declaration, again.
-    template<typename Sequence, typename KmerIndex, typename Encoding,
-    typename HasQual = typename std::enable_if<std::is_same<KmerIndex, KmerIndexElementWithIdAndQuality>::value>::type >
+    template<typename Sequence, typename KmerSize, typename QualityType, typename Encoding>
     constexpr std::array<typename Encoding::value_type, Encoding::size>
-      bliss::index::generate_qual<Sequence, KmerIndex, Encoding, HasQual >::lut;
+      bliss::index::generate_qual<Sequence, KmerSize, QualityType, Encoding>::lut;
   }
 }
 

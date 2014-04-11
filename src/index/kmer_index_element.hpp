@@ -25,7 +25,7 @@ namespace bliss
     template<int K>
     struct KmerSize
     {
-        constexpr int size = K;
+        static constexpr int size = K;
     };
 
 

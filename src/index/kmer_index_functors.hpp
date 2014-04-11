@@ -1,5 +1,5 @@
 /**
- * @file		kmer_functors.hpp
+ * @file		kmer_index_functors.hpp
  * @ingroup
  * @author	tpan
  * @brief
@@ -9,11 +9,14 @@
  *
  * TODO add License
  */
-#ifndef KMER_FUNCTORS_HPP_
-#define KMER_FUNCTORS_HPP_
+#ifndef KMER_INDEX_FUNCTORS_HPP_
+#define KMER_INDEX_FUNCTORS_HPP_
 
 #include <cmath>
 
+#include <array>
+
+#include "utils/constexpr_array.hpp"
 #include "common/AlphabetTraits.hpp"
 #include "io/fastq_iterator.hpp"
 #include "index/kmer_index_element.hpp"
@@ -31,9 +34,7 @@ namespace bliss
         typedef typename Sequence::AlphabetType AlphabetType;
         typedef KmerIndex KmerIndexType;
         typedef typename KmerIndex::KmerType KmerValueType;
-		typedef std::pair<KmerIndex, KmerValueType> OutputType;
-
-        const int K = KmerIndex::KmerSize::size;
+        typedef std::pair<KmerIndex, KmerValueType> OutputType;
 
         KmerIndex kmer;
 
@@ -43,7 +44,7 @@ namespace bliss
         static constexpr BitSizeType nBits =
             bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
         static constexpr BitSizeType shift =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (K - 1);
+            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerIndex::KmerSize::size - 1);
         static constexpr AlphabetSizeType max =
             bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
 
@@ -163,20 +164,14 @@ namespace bliss
      *
      *  This functor is only available if KmerIndex has Quality Score.
      */
-    template<typename Sequence, typename KmerIndex, typename Encoding,
-      typename HasQual = typename std::enable_if<std::is_same<KmerIndex, KmerIndexElementWithIdAndQuality>::value>::type >
+    template<typename Sequence, typename KmerSize, typename QualityType, typename Encoding>
     struct generate_qual
     {
         typedef typename Sequence::IteratorType BaseIterType;
 
-        typedef KmerIndex KmerType;
-        typedef typename KmerIndex::QualityType QualityType;
-
-        constexpr int K = KmerIndex::KmerSize::size;
-
         int kmer_pos;
         QualityType internal;
-        QualityType terms[K];
+        QualityType terms[KmerSize::size];
 
 
         int pos;
@@ -190,11 +185,11 @@ namespace bliss
         generate_qual()
             : kmer_pos(0), pos(0)
         {
-          for (int i = 0; i < K; ++i)
+          for (int i = 0; i < KmerSize::size; ++i)
           {
             terms[i] = std::numeric_limits<QualityType>::lowest();
           }
-          zeroCount = K;
+          zeroCount = KmerSize::size;
 
     //      for (int i = 0; i < Encoding::size; ++i)
     //      {
@@ -213,7 +208,7 @@ namespace bliss
           // add the new value,       // update the position  - circular queue
           QualityType newval = lut[*iter - Encoding::offset]; // this is for Sanger encoding.
           terms[pos] = newval;
-          pos = (pos + 1) % K;
+          pos = (pos + 1) % KmerSize::size;
 
           // save the old zero count.
           int oldZeroCount = zeroCount;
@@ -243,7 +238,7 @@ namespace bliss
               //printf("HAD ZEROS!\n");
               // removed a zero.  so recalculate.
               internal = 0.0;
-              for (int i = 0; i < K; ++i)
+              for (int i = 0; i < KmerSize::size; ++i)
               {
                 internal += terms[i];
               }
@@ -287,4 +282,4 @@ namespace bliss
 
 
 
-#endif /* KMER_FUNCTORS_HPP_ */
+#endif /* KMER_INDEX_FUNCTORS_HPP_ */

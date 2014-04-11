@@ -237,6 +237,22 @@ struct generate_qual
 };
 
 #define K 11
+typedef bliss::io::fastq_loader<DNA, float> FileLoaderType;
+
+typedef bliss::index::KmerSize<21> KmerSize;
+typedef uint64_t KmerType;
+typedef float QualityType;
+typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss::io::fastq_sequence_id, QualityType> KmerIndexType;
+
+typedef CharType* BaseIterType;
+
+typedef DNA Alphabet;
+typedef bliss::io::fastq_sequence<BaseIterType, Alphabet>  SequenceType;
+
+typedef bliss::index::generate_kmer<SequenceType, KmerIndexType> kmer_op_type;
+typedef bliss::index::generate_qual<SequenceType, KmerSize, bliss::index::SangerToLogProbCorrect<double>, QualityType> qual_op_type;
+
+
 
 int main(int argc, char* argv[])
 {
@@ -293,8 +309,8 @@ int main(int argc, char* argv[])
   // file access:  better to work with a few pages at a time, or to work with large block?
 
   // first generate an approximate partition.
-  bliss::io::file_loader::range_type r =
-      bliss::io::file_loader::range_type::block_partition(nprocs,
+  FileLoaderType::RangeType r =
+      FileLoaderType::RangeType::block_partition(nprocs,
                                                           rank, 0, file_size);
   std::cout << rank << " equipart: " << r << std::endl;
   std::cout << rank << " test block aligned: "
@@ -310,8 +326,8 @@ int main(int argc, char* argv[])
   {
     t1 = std::chrono::high_resolution_clock::now();
     // now open the file
-    bliss::io::fastq_loader loader(filename, r, file_size);
-//    bliss::io::file_loader loader(filename, file_size);
+    FileLoaderType loader(filename, r, file_size);
+//    FileLoaderType loader(filename, file_size);
     t2 = std::chrono::high_resolution_clock::now();
     time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(
         t2 - t1);
@@ -320,8 +336,8 @@ int main(int argc, char* argv[])
     std::cout << rank << " record adjusted " << loader.getRange() << std::endl;
 
     t1 = std::chrono::high_resolution_clock::now();
-    bliss::io::fastq_loader::iterator fastq_start = loader.begin();
-    bliss::io::fastq_loader::iterator fastq_end = loader.end();
+    typename FileLoaderType::IteratorType fastq_start = loader.begin();
+    typename FileLoaderType::IteratorType fastq_end = loader.end();
 
     uint64_t id = 0;
 

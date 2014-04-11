@@ -8,10 +8,10 @@ target_link_libraries(test ${EXTRA_LIBS})
 
 
 ## EXECUTABLES
-add_executable(testIndex2 testIndex.cpp)
-target_link_libraries(testIndex2 ${EXTRA_LIBS})
-target_link_libraries(testIndex2 bliss-io)
-target_link_libraries(testIndex2 bliss-common)
+#add_executable(testIndex2 testIndex.cpp)
+#target_link_libraries(testIndex2 ${EXTRA_LIBS})
+#target_link_libraries(testIndex2 bliss-io)
+#target_link_libraries(testIndex2 bliss-common)
 
 
 ## EXECUTABLES
@@ -22,12 +22,6 @@ target_link_libraries(testTypes ${EXTRA_LIBS})
 ## EXECUTABLES
 add_executable(testThreads test_threads.cpp)
 target_link_libraries(testThreads ${EXTRA_LIBS})
-target_link_libraries(testThreads bliss-io)
+#target_link_libraries(testThreads bliss-io)
 target_link_libraries(testThreads bliss-common)
-
-## EXECUTABLES
-add_executable(testThreads2 test_threads2.cpp)
-target_link_libraries(testThreads2 ${EXTRA_LIBS})
-target_link_libraries(testThreads2 bliss-io)
-target_link_libraries(testThreads2 bliss-common)
-
+target_link_libraries(testThreads bliss-index)

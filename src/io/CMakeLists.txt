@@ -2,8 +2,8 @@ project(bliss-io)
 
 
 ## EXECUTABLES
-add_library(${PROJECT_NAME} fastq_loader.cpp)
-target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS})
+#add_library(${PROJECT_NAME} fastq_loader.cpp)
+#target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS})
 #target_link_libraries(test testlib)
 
 
@@ -12,6 +12,6 @@ target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS})
 if (IS_DIRECTORY ./test)
     # get all files from ./test
     FILE(GLOB TEST_FILES test/*.cpp)
-    bliss_add_test(${PROJECT_NAME} TRUE ${TEST_FILES})
+    bliss_add_test(${PROJECT_NAME} FALSE ${TEST_FILES})
 endif()
 

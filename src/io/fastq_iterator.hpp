@@ -97,7 +97,7 @@ namespace bliss
     struct fastq_sequence_quality : public fastq_sequence<Iterator, Alphabet>
     {
         typedef fastq_sequence<Iterator, Alphabet> base_class_t;
-        typedef base_class_t::ValueType ValueType;
+        typedef typename base_class_t::ValueType ValueType;
         typedef Alphabet AlphabetType;
         typedef Iterator IteratorType;
         typedef Quality ScoreType;
@@ -262,7 +262,7 @@ namespace bliss
      *
      *
      */
-    template<typename Iterator, typename Parser>
+    template<typename Parser, typename Iterator>
     class fastq_iterator :
         public std::iterator<
             typename std::conditional<

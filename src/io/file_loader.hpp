@@ -55,11 +55,12 @@ namespace bliss
     /**
      *
      */
+    template <typename T>
     class file_loader
     {
       public:
 
-        typedef bliss::iterator::range<size_t> range_type;
+        typedef bliss::iterator::range<size_t> RangeType;
 
         /**
          * opens the file and save in file handle
@@ -75,7 +76,7 @@ namespace bliss
         }
         ;
 
-        file_loader(const std::string &_filename, const range_type &_range,
+        file_loader(const std::string &_filename, const RangeType &_range,
                     bool preload = false)
             : filename(_filename), range(_range), data(nullptr),
               aligned_data(nullptr), preloaded(preload)
@@ -108,13 +109,13 @@ namespace bliss
         /**
          * return data pointed to by range.start.  not same as range.block_start.
          */
-        char* getData()
+        T* getData()
         {
           return data;
         }
         ;
 
-        range_type getRange() const
+        RangeType getRange() const
         {
           return range;
         }
@@ -122,13 +123,13 @@ namespace bliss
 
       protected:
         std::string filename;
-        range_type range;  // offset in file from where to read
+        RangeType range;  // offset in file from where to read
 
         size_t page_size;
         int file_handle;  // file handle
 
-        char* data;
-        char* aligned_data;  // memmapped data, page aligned.  strictly internal
+        T* data;
+        T* aligned_data;  // memmapped data, page aligned.  strictly internal
 
         bool preloaded;
 
@@ -144,7 +145,7 @@ namespace bliss
           range = range.align_to_page(page_size);
 
           // NOT using MAP_POPULATE.  it slows things done when testing on single node.
-          aligned_data = (char*)mmap(nullptr, range.end - range.block_start,
+          aligned_data = (T*)mmap(nullptr, range.end - range.block_start,
                                      PROT_READ,
                                      MAP_PRIVATE, file_handle,
                                      range.block_start);
@@ -160,10 +161,10 @@ namespace bliss
           if (preloaded)
           {
             // allocate space
-            data = new char[range.end - range.start + 1];
+            data = new T[range.end - range.start + 1];
             //copy data over
             memcpy(data, aligned_data + (range.start - range.block_start),
-                   sizeof(char) * (range.end - range.start));
+                   sizeof(T) * (range.end - range.start));
 
             data[range.end - range.start] = 0;
 
