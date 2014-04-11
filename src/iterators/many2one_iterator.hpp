@@ -202,7 +202,7 @@ public:
       iter_tools<BaseIterator>::advance_at_most(this->_next, this->_end, this->_m);
     }
     this->_base = this->_next;
-    return dynamic_cast<type*>(*this);
+    return *dynamic_cast<type*>(this);
   }
 
   /****************************

@@ -170,11 +170,12 @@ protected:
    *  Member variables  *
    **********************/
 
-  /// The std::iterator_traits of this iterator
-  typedef std::iterator_traits<type> traits;
 
   // base class type
   typedef _shared_one2many_iterator<BaseIterator, Functor> base_class_type;
+
+  /// The std::iterator_traits of this iterator
+  typedef typename std::iterator_traits<base_class_type> traits;
 
 public:
 
@@ -248,7 +249,7 @@ public:
   value_type operator*()
   {
     // the functor extracts the relevant part and returns the type
-    return this->_f(*this->_cur, this->_offset);
+    return this->_f(*this->_base, this->_offset);
   }
 
   /**
@@ -265,9 +266,9 @@ public:
     if (this->_offset == this->_m)
     {
       ++this->_base;
-      ++this->offset = 0;
+      ++this->_offset = 0;
     }
-    return dynamic_cast<type*>(*this);
+    return *dynamic_cast<type*>(this);
   }
 
   /****************************
@@ -330,7 +331,7 @@ public:
    * @return    A copy to the non-decremented iterator.
    */
   template<typename T = type>
-  typename std::enable_if<is_bidir, type>::type
+  typename std::enable_if<is_bidir, T>::type
   operator--(int)
   {
     // create a copy
@@ -348,7 +349,7 @@ protected:
   typedef typename std::iterator_traits<BaseIterator> base_traits;
 
   // the base class
-  typedef _shared_one2many_iterator<BaseIterator, Functor> base_class_type;
+  typedef _one2many_iterator_dir<BaseIterator, Functor, DerivedIterator> base_class_type;
 
   // the type of the derived iterator, so that operator functions do not have
   // to be overloaded via polymorphism
@@ -499,10 +500,10 @@ public:
    */
   difference_type operator-(const type& other)
   {
-    assert(this->_m == other.m);
+    assert(this->_m == other._m);
     // get base difference
     difference_type base_diff = this->_base - other._base;
-    return base_diff * this->_m + (this->_offset - other._base);
+    return base_diff * this->_m + (this->_offset - other._offset);
   }
 
   /***********************
@@ -510,36 +511,6 @@ public:
    ***********************/
   // i.e functions that are purely based on previosly declared functions
   //     where no specialization to the exact iterator is necessary
-
-  /**
-   * @brief     Post-increment operator.
-   *
-   * Advances this iterator by one position, but returns the old iterator state.
-   *
-   * @return    A copy to the non-incremented iterator.
-   */
-  type operator++(int)
-  {
-    // create a copy
-    type tmp(*dynamic_cast<type*>(this));
-    this->operator++();
-    return tmp;
-  }
-
-  /**
-   * @brief     Post-decrement operator.
-   *
-   * Reduces this iterator by one position, but returns the old iterator state.
-   *
-   * @return    A copy to the non-decremented iterator.
-   */
-  type operator--(int)
-  {
-    // create a copy
-    type tmp(*dynamic_cast<type*>(this));
-    this->operator--();
-    return tmp;
-  }
 
   /**
    * @brief     Returns the n'th element as seen from the current iterator

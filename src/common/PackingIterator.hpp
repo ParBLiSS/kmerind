@@ -197,6 +197,7 @@ class UnpackingIterator : public iterator::one2many_iterator<BaseIterator, Unpac
   typedef UnpackingFunctor<bits_per_char, UnpackedStorageType> functor_t;
   typedef PaddingTraits<base_value_type, bits_per_char> padtraits;
 
+public:
   UnpackingIterator() {}
 
   UnpackingIterator(BaseIterator baseBegin)
