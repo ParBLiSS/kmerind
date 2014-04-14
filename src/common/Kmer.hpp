@@ -96,7 +96,7 @@ public:
     // make this a valid Kmer, other bits are left uninitialized
     // do_sanitize();
 
-    // set all bits to zero (no more 'may be used uninitialized warning)
+    // set all bits to zero (no more 'may be used uninitialized' warning)
     do_clear();
   }
 
@@ -143,7 +143,6 @@ public:
    *  - fill and nextKmer each for unpadded streams
    *  - reverse + complement functions
    *    (complement is function of the alphabet)
-   *  - XOR operator (!?)
    *  - hash function (!?)
    */
 
@@ -171,7 +170,7 @@ public:
   // TODO: add option for bit offset in input sequence?
   unsigned int fillFromPaddedStream(InputIterator& begin)
   {
-    // remove padding copy to own data structure
+    // remove padding and copy to own data structure
     typedef typename std::iterator_traits<InputIterator>::value_type input_word_type;
     const unsigned int paddingBits = PaddingTraits<input_word_type, bitsPerChar>::padding_bits;
     removePadding(begin, data, size*bitsPerChar, paddingBits);
@@ -188,13 +187,47 @@ public:
     return offset;
   }
 
+
+  template <typename InputIterator>
+  void fillFromChars(InputIterator& begin)
+  {
+    typedef typename std::iterator_traits<InputIterator>::value_type char_type;
+    // assert that we are actually given an Iterator with `char` base type
+    // TODO fix to accept uint8_t as well (use sizeof())
+    static_assert(std::is_same<char_type, char>::value,
+                  "The given iterator has to have a value_type of `char`.");
+
+    // clear k-mer
+    do_clear();
+
+    // add to lsb iteratively and reverse at the end
+    for (unsigned int i = 0; i < size; ++i)
+    {
+      // get next character as word_type and mask out bits that are not needed
+      char_type c = *(begin++);
+      word_type w = static_cast<word_type>(c);
+      w &= getBitMask<word_type>(bitsPerChar);
+
+      // left shift k-mer
+      // TODO: replace by single shift operation
+      do_left_shift(bitsPerChar);
+
+      // add character to least significant end (requires least shifting)
+      *data |= w;
+    }
+
+    // reverse the k-mer (needed since we added the newest characters to the
+    // least significant end rather than the most significant end)
+    reversed_kmer();
+  }
+
   /**
    * @brief   Generates the next k-mer from the given sequence using a sliding
    *          window approach.
    *
    * Given the packed and padded input sequence via the `begin` iterator
    * and the current bit offset, this function will read the next
-   * `BITS_PER_CHAR` bits, right shift the current k-mer value but that number
+   * `BITS_PER_CHAR` bits, right shift the current k-mer value by that number
    * of bits and puts the newly read bits into the `BITS_PER_CHAR` most
    * significant bits of the k-mer value. Both parameters are passed by
    * reference and internally updated to the next position to read from.
@@ -215,6 +248,8 @@ public:
   {
     typedef typename std::iterator_traits<InputIterator>::value_type input_type;
     // shift the kmer by the size of one character
+    // TODO: replace this by a call that does exactly bitsPerChar right shift
+    // (better compiler optimization)
     do_right_shift(bitsPerChar);
 
     // iterate to next word if the current one is done
@@ -260,6 +295,43 @@ public:
 
     // increase offset
     offset += bitsPerChar;
+  }
+
+  /**
+   * @brief Creates the next k-mer by shifting and adding the given character.
+   *
+   * Creates the next k-mer by the sliding window. This first right shifts the
+   * current k-mer and then adds the given character to the most significant
+   * bits of this k-mer.
+   *
+   * Note: this is changing this k-mer in-place.
+   *
+   * @param c The character to be added to the k-mer.
+   */
+  void nextFromChar(char c)
+  {
+    // shift the kmer by the size of one character
+    // TODO: replace this by a call that does exactly bitsPerChar right shift
+    // (better compiler optimization)
+    do_right_shift(bitsPerChar);
+
+    // cast the char into our word size and then AND it with a bitmask
+    word_type new_char = static_cast<word_type>(c);
+    new_char &= getBitMask<word_type>(bitsPerChar);
+
+    // shift it to the right position and OR it into our data
+    int shift_by = lastCharWordOffset;
+    data[nWords - 1 - lastCharIsSplit] |= static_cast<word_type>(new_char << shift_by);
+
+    // the last character might be split between storage words
+    // NOTE: this branch is removed by the compiler (result known at compile time)
+    if (lastCharIsSplit)
+    {
+      data[nWords - 1] = static_cast<word_type>(new_char >> leftSplitSize);
+    }
+
+    // clean up
+    do_sanitize();
   }
 
   /* equality comparison operators */
@@ -442,36 +514,22 @@ public:
     return *this;
   }
 
+  // TODO left shift binary operator>>(shift_by)
 
   /**
    * @brief Returns a reversed k-mer.
    *
    * Note that this does NOT reverse the bit pattern, but reverses
-   * the sequence of `BITS_PER_CHAR` each.
+   * the sequence of `BITS_PER_CHAR` bits each.
    *
    * @returns   The reversed k-mer.
    */
   Kmer reversed_kmer() const
   {
-    // TODO implement logarithmic version (logarithmic in number of bits)
-
-    /* Linear (unefficient) reverse: */
-
-    // init result and temporary copy of this
-    Kmer rev;
-    Kmer tmp_copy = *this;
-
-    // get lower most bits from this and push them into the lower bits
-    // of the reverse
-    for (unsigned int i = 0; i < size; ++i)
-    {
-      rev.do_left_shift(BITS_PER_CHAR);
-      copyBitsFixed<word_type, BITS_PER_CHAR>(rev.data[0], tmp_copy.data[0]);
-      tmp_copy.do_right_shift(BITS_PER_CHAR);
-    }
-
-    // set ununsed bits to 0
-    rev.do_sanitize();
+    // create a copy of this
+    Kmer rev(*this);
+    // reverse it
+    rev.do_reverse();
     // return the result
     return rev;
   }
@@ -494,7 +552,7 @@ public:
 
     /* return the hex representation of the data array values */
     std::stringstream ss;
-    ss << "[";
+    ss << "k-mer of size " << size << ": [";
     for (unsigned int i = 0; i < nWords; ++i)
     {
       ss << "0x" << std::hex << data[i] << " ";
@@ -533,7 +591,6 @@ protected:
   inline void do_left_shift(size_t shift)
   {
     // inspired by STL bitset implementation
-    // TODO: replace by std::div
     const size_t word_shift = shift / (sizeof(word_type)*8);
     const size_t offset = shift % (sizeof(word_type)*8);
 
@@ -568,7 +625,6 @@ protected:
   inline void do_right_shift(size_t shift)
   {
     // inspired by STL bitset implementation
-    // TODO replace by std::div
     const size_t word_shift = shift / (sizeof(word_type)*8);
     const size_t offset = shift % (sizeof(word_type)*8);
 
@@ -591,6 +647,36 @@ protected:
     }
     // set all others to 0
     std::fill(data + (nWords - word_shift), data + nWords, static_cast<word_type>(0));
+  }
+
+  /**
+   * @brief Reverses this k-mer.
+   *
+   * Note that this does NOT reverse the bit pattern, but reverses
+   * the sequence of `BITS_PER_CHAR` bits each.
+   *
+   */
+  inline void do_reverse()
+  {
+    // TODO implement logarithmic version (logarithmic in number of bits)
+
+    /* Linear (unefficient) reverse: */
+
+    // get temporary copy of this
+    Kmer tmp_copy = *this;
+
+    // get lower most bits from the temp copy and push them into the lower bits
+    // of this
+    for (unsigned int i = 0; i < size; ++i)
+    {
+      this->do_left_shift(bitsPerChar);
+      // copy `bitsperChar` least significant bits
+      copyBitsFixed<word_type, bitsPerChar>(this->data[0], tmp_copy.data[0]);
+      tmp_copy.do_right_shift(bitsPerChar);
+    }
+
+    // set ununsed bits to 0
+    this->do_sanitize();
   }
 };
 
