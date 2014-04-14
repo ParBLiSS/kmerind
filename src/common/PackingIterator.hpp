@@ -24,7 +24,8 @@
 #include <common/padding.hpp>
 #include <common/Kmer.hpp>
 
-#include <iterators/compression_iterator.hpp>
+#include <iterators/many2one_iterator.hpp>
+#include <iterators/one2many_iterator.hpp>
 
 
 namespace bliss
@@ -156,9 +157,9 @@ struct PackingItFunctor
  * @brief
  */
 template <typename BaseIterator, BitSizeType bits_per_char, typename PackedStorageType=WordType>
-class PackingIterator : public iterator::compressing_iterator<BaseIterator, PackingItFunctor<bits_per_char, PackedStorageType> >
+class PackingIterator : public iterator::many2one_iterator<BaseIterator, PackingItFunctor<bits_per_char, PackedStorageType> >
 {
-  typedef iterator::compressing_iterator<BaseIterator, PackingItFunctor<bits_per_char, PackedStorageType> > base_class_t;
+  typedef iterator::many2one_iterator<BaseIterator, PackingItFunctor<bits_per_char, PackedStorageType> > base_class_t;
   typedef PackingItFunctor<bits_per_char, PackedStorageType> functor_t;
   typedef PaddingTraits<PackedStorageType, bits_per_char> padtraits;
 
@@ -172,8 +173,41 @@ public:
     : base_class_t(baseBegin, baseEnd, functor_t(), padtraits::chars_per_word)  {}
 };
 
+template <unsigned int bits_per_char, typename unpacked_type=CharType>
+struct UnpackingFunctor
+{
+  template <typename T, typename diff_type>
+  unpacked_type operator()(const T& value, const diff_type& offset)
+  {
+    // directly access the according position, no need to buffer
+    T mask = getBitMask<T>(bits_per_char);
+    // shift and mask to get the value
+    T x = mask & (value >> (offset*bits_per_char));
+    // cast to target type
+    return static_cast<unpacked_type>(x);
+  }
+};
 
+template <typename BaseIterator, BitSizeType bits_per_char, typename UnpackedStorageType=CharType>
+class UnpackingIterator : public iterator::one2many_iterator<BaseIterator, UnpackingFunctor<bits_per_char, UnpackedStorageType> >
+{
+  typedef iterator::one2many_iterator<BaseIterator, UnpackingFunctor<bits_per_char, UnpackedStorageType> > base_class_t;
+  typedef typename std::iterator_traits<BaseIterator>::value_type base_value_type;
+  typedef typename std::iterator_traits<base_class_t>::difference_type diff_type;
+  typedef UnpackingFunctor<bits_per_char, UnpackedStorageType> functor_t;
+  typedef PaddingTraits<base_value_type, bits_per_char> padtraits;
 
+public:
+  UnpackingIterator() {}
+
+  UnpackingIterator(BaseIterator baseBegin)
+    : base_class_t(baseBegin, functor_t(), padtraits::chars_per_word)  {}
+
+  UnpackingIterator(BaseIterator baseBegin, diff_type offset)
+    : base_class_t(baseBegin, functor_t(), padtraits::chars_per_word, offset)  {}
+};
+
+/*
 // TODO add template specialization for padding (TRUE or FALSE)
 template <typename BaseIterator, BitSizeType bits_per_char, typename UnpackedStorageType=CharType>
 class UnpackingIterator
@@ -255,7 +289,7 @@ private:
   // the current offset in chars within one storage word
   BitSizeType curCharOffset = 0;
 };
-
+*/
 
 template <class BaseIterator, class Kmer>
 class KmerGenerationIterator {};

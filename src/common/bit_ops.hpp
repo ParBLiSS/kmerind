@@ -72,7 +72,7 @@ constexpr T roundUpToMultiple(const T& value, const T& base)
 template <typename T>
 constexpr T intCeil(const T& divident, const T& divisor)
 {
-  return ((divident - 1) / divisor) + 1;
+  return (divident == 0) ? 0 : ((divident - 1) / divisor) + 1;
 }
 
 constexpr unsigned Log2(unsigned int n, unsigned p = 0) {

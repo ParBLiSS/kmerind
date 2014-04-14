@@ -128,7 +128,14 @@ TEST_F(PackingTest, TestPackingIterator) {
     //std::vector<char> unpacked_dna(unpackIt, unpackEnd);
     // pre allocate to total size
     std::vector<char> unpacked_dna(dna.size());
+
     std::copy(unpackIt, unpackEnd, unpacked_dna.begin());
+    //auto outit = unpacked_dna.begin();
+    //while(unpackIt != unpackEnd)
+    //{
+    //  *(outit++) = *(unpackIt++);
+    //}
+
     // compare the vector and the given string
     for (unsigned int i = 0; i < dna.size(); ++i)
     {
