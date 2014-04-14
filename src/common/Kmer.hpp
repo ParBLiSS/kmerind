@@ -191,11 +191,8 @@ public:
   template <typename InputIterator>
   void fillFromChars(InputIterator& begin)
   {
+    // value type of given iterator
     typedef typename std::iterator_traits<InputIterator>::value_type char_type;
-    // assert that we are actually given an Iterator with `char` base type
-    // TODO fix to accept uint8_t as well (use sizeof())
-    static_assert(std::is_same<char_type, char>::value,
-                  "The given iterator has to have a value_type of `char`.");
 
     // clear k-mer
     do_clear();
@@ -437,7 +434,7 @@ public:
   /**
    * @brief XOR
    */
-  inline Kmer& operator^=(const Kmer& rhs) const
+  inline Kmer& operator^=(const Kmer& rhs)
   {
     std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_xor<word_type>());
     return *this;
@@ -455,7 +452,7 @@ public:
   /**
    * @brief AND
    */
-  inline Kmer& operator&=(const Kmer& rhs) const
+  inline Kmer& operator&=(const Kmer& rhs)
   {
     std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_and<word_type>());
     return *this;
@@ -473,7 +470,7 @@ public:
   /**
    * @brief OR
    */
-  inline Kmer& operator|=(const Kmer& rhs) const
+  inline Kmer& operator|=(const Kmer& rhs)
   {
     std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_or<word_type>());
     return *this;
@@ -545,11 +542,6 @@ public:
    */
   std::string toString() const
   {
-    // TODO:
-    // 1.) unpacking
-    // 2.) back-translating?
-    //      -> needs to support all alphabets (-> dependency)
-
     /* return the hex representation of the data array values */
     std::stringstream ss;
     ss << "k-mer of size " << size << ": [";

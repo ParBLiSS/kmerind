@@ -45,12 +45,12 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
 
 
   // generate Kmers
-  typedef bliss::Kmer<16, 2, uint32_t> Kmer;
+  typedef bliss::Kmer<35, 2, uint32_t> Kmer;
   typedef bliss::KmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
 
   kmer_gen_it_t kmerGenIt(packIt);
   kmer_gen_it_t kmerGenEnd(packIt, dna.length());
-  std::size_t nKmers = dna.length() - 16 + 1;
+  std::size_t nKmers = dna.length() - 35 + 1;
 
   // allocate vector
   //std::vector<Kmer> kmers(nKmers);
