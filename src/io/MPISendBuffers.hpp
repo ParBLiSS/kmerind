@@ -1,5 +1,5 @@
 /**
- * @file		MPISendBuffer.hpp
+ * @file		MPISendBuffers.hpp
  * @ingroup
  * @author	tpan
  * @brief
@@ -9,8 +9,8 @@
  *
  * TODO add License
  */
-#ifndef MPISENDBUFFER_HPP_
-#define MPISENDBUFFER_HPP_
+#ifndef MPISENDBUFFERS_HPP_
+#define MPISENDBUFFERS_HPP_
 
 #include "mpi.h"
 
@@ -27,7 +27,7 @@ namespace bliss
 
 
     /**
-     * @class			bliss::io::MPISendBuffer
+     * @class			bliss::io::MPISendBuffers
      * @brief     a data structure to buffer and send MPI messages
      * @details   THREAD_SAFE enables omp_lock for OMP thread safety.  this likely introduces a good amount of contention.
      *
@@ -35,15 +35,15 @@ namespace bliss
      * TODO: 1. abstract the MPI requirement.  in fact, abstract the send/flush calls - make it a generic (thread-safe) buffer.
      */
     template<typename T, bool THREAD_SAFE=true>
-    class MPISendBuffer {
+    class MPISendBuffers {
         // need some default MPI buffer size, then pack in sizeof(T) blocks as many times as possible.
 
       public:
         static const int END_TAG = 0;
         typedef T ValueType;
 
-        MPISendBuffer(MPI_Comm _comm, const int _targetRank, const size_t nbytes)
-           : accepting(true), targetRank(_targetRank), comm(_comm), send_request(MPI_REQUEST_NULL), total(0)  {
+        MPISendBuffers(MPI_Comm _comm, const size_t nbytes)
+           : accepting(true), comm(_comm), send_request(MPI_REQUEST_NULL), total(0)  {
           // initialize internal buffers (double buffering)
           capacity = nbytes / sizeof(T);
 
@@ -78,7 +78,7 @@ namespace bliss
 
         }
 
-        void buffer(T val) {
+        void buffer(T && val) {
           assert(accepting == true);   // if this assert fails, the calling thread's logic is faulty.
 
           // locking.
@@ -92,7 +92,7 @@ namespace bliss
           // careful.  when growing, the content is automatically copied to new and destroyed in old.
           //   the destruction could cause double free error or segv.
 
-          active_buf.push_back(val);
+          active_buf.push_back(std::move(val));
           // if full, call send (block if other buffer is sending)
           if (active_buf.size() == capacity) {
             send();

@@ -29,11 +29,11 @@ namespace bliss
     template<typename Sequence, typename KmerIndex>
     struct generate_kmer
     {
-        typedef Sequence SequenceType;
-        typedef typename Sequence::IteratorType BaseIterType;
-        typedef typename Sequence::AlphabetType AlphabetType;
-        typedef KmerIndex KmerIndexType;
-        typedef typename KmerIndex::KmerType KmerValueType;
+        typedef Sequence                            SequenceType;
+        typedef typename Sequence::IteratorType     BaseIterType;
+        typedef typename Sequence::AlphabetType     AlphabetType;
+        typedef KmerIndex                           KmerIndexType;
+        typedef typename KmerIndex::KmerType        KmerValueType;
         typedef std::pair<KmerIndex, KmerValueType> OutputType;
 
         KmerIndex kmer;
@@ -44,7 +44,7 @@ namespace bliss
         static constexpr BitSizeType nBits =
             bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
         static constexpr BitSizeType shift =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerIndex::KmerSize::size - 1);
+            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerIndex::SizeType::size - 1);
         static constexpr AlphabetSizeType max =
             bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
 
@@ -105,12 +105,19 @@ namespace bliss
         static_assert(std::is_floating_point<T>::value, "generate_qual output needs to be floating point type");
         static constexpr size_t size = 94;
 
+
         typedef T ValueType;
+        typedef std::array<T, size> LUTType;
 
         static constexpr T offset = 33;
 
         static constexpr size_t min = 0;
-        static constexpr size_t max = 93;
+        static constexpr size_t max = size - 1;
+
+        // can't use auto keyword.  declare and initialize in class declaration
+        // then "define" but not initialize outside class declaration, again.
+        static constexpr LUTType lut = make_array<size>(SangerToLogProbCorrect<T>());
+
 
         static constexpr T log2_10DivNeg10 = std::log2(10.0) / -10.0;
         constexpr ValueType operator()(const size_t v)
@@ -125,6 +132,9 @@ namespace bliss
                   std::log2(1.0 - std::exp2(static_cast<ValueType>(v) * log2_10DivNeg10));
         }
     };
+    // "define" but not initialize outside class declaration, again.
+    // NOTE:  Do it here is fine.  do it in class file or even where it's used is NOT.  probably due to templating.
+    template<typename T> constexpr typename SangerToLogProbCorrect<T>::LUTType SangerToLogProbCorrect<T>::lut;
 
     /**
      * compute kmer quality based on phred quality score.
@@ -164,10 +174,12 @@ namespace bliss
      *
      *  This functor is only available if KmerIndex has Quality Score.
      */
-    template<typename Sequence, typename KmerSize, typename QualityType, typename Encoding>
+    template<typename Sequence, typename KmerSize, typename Quality, typename Encoding>
     struct generate_qual
     {
         typedef typename Sequence::IteratorType BaseIterType;
+        typedef Sequence                        SequenceType;
+        typedef Quality                         QualityType;
 
         int kmer_pos;
         QualityType internal;
@@ -176,11 +188,6 @@ namespace bliss
 
         int pos;
         int zeroCount;
-
-        // can't use auto keyword.  declare and initialize in class declaration
-        // then "define" but not initialize outside class declaration, again.
-        static constexpr std::array<typename Encoding::value_type, Encoding::size> lut =
-            make_array<Encoding::size>(Encoding());
 
         generate_qual()
             : kmer_pos(0), pos(0)
@@ -206,7 +213,7 @@ namespace bliss
           QualityType oldval = terms[pos];
 
           // add the new value,       // update the position  - circular queue
-          QualityType newval = lut[*iter - Encoding::offset]; // this is for Sanger encoding.
+          QualityType newval = Encoding::lut[*iter - Encoding::offset]; // this is for Sanger encoding.
           terms[pos] = newval;
           pos = (pos + 1) % KmerSize::size;
 

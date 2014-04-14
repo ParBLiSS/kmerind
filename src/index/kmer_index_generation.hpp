@@ -29,10 +29,14 @@ namespace bliss
     {
         T p;
         T offset;
-        XorModulus(T _p, T _offset) : p(_p), offset(_offset) {};
+        XorModulus(T _p, T _offset) : p(_p), offset(_offset) {
+          assert(_p > 0);
+          assert(_offset >= 0);
+          printf("XorModulus nprocs %lu, offset %lu\n", p, offset); fflush(stdout);
+        };
 
         T operator()(const T &v1, const T &v2) {
-          return (v1 ^ v2) % p + offset;
+          return (p == 1 ? offset : (v1 ^ v2) % p + offset);
         }
     };
 
@@ -49,21 +53,17 @@ namespace bliss
         typedef typename KmerGenOp::SequenceType		SequenceType;
         typedef std::vector<SendBuffer>  				    BufferType;
         typedef bliss::iterator::buffered_transform_iterator<KmerGenOp, typename KmerGenOp::BaseIterType> KmerIter;
-        typedef typename KmerGenOp::KmerType 			  KmerType;
-        typedef typename KmerGenOp::OutputType KmerIndexPairType;
+        typedef typename KmerGenOp::KmerValueType   KmerType;
+        typedef typename KmerGenOp::OutputType      KmerIndexPairType;
 
         KmerIndexGenerator(int nprocs, int rank, int tid) :
           _nprocs(nprocs), _rank(rank), _tid(tid), h(nprocs, nprocs * tid)  {
-          static_assert(std::is_same<SequenceType,
+          static_assert(std::is_same<typename KmerGenOp::KmerIndexType,
                         typename SendBuffer::ValueType>::value,
                         "Kmer Generation and Send Buffer should use the same type");
-        }
 
-      protected:
-        int _nprocs;
-        int _rank;
-        int _tid;
-        HashFunc h;
+          printf("KmerIndexGenerator nprocs: %d rank %d threadid %d\n", nprocs, rank, tid);  fflush(stdout);
+        }
 
         void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<size_t> &counts) {
           KmerGenOp kmer_op(read.id);
@@ -90,35 +90,50 @@ namespace bliss
             //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, index_kmer.first % nprocs + (nprocs * tid) );
 
             // TODO: abstract this to hide details.
-            buffers[h(index_kmer.first.kmer, index_kmer.second)].buffer(index_kmer.first);
+            uint64_t index = this->h(index_kmer.first.kmer, index_kmer.second);
+//            printf("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, this->_tid, index, buffers.size()); fflush(stdout);
+            printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, this->_tid, index, buffers[index].size());
+            buffers[index].buffer(index_kmer.first);
             //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
             //++kmerCount;
-            counts[_tid] += 1;
+            counts[this->_tid] += 1;
+
           }
-        }
-    };
-
-    template<typename KmerGenOp, typename SendBuffer, typename HashFunc, typename QualGenOp>
-    class KmerIndexGeneratorWithQuality : public KmerIndexGenerator<KmerGenOp, SendBuffer,
-      HashFunc>
-    {
-      public:
-        typedef KmerIndexGenerator<KmerGenOp, SendBuffer, HashFunc> BaseType;
-        typedef typename BaseType::SequenceType SequenceType;
-        typedef typename BaseType::BufferType BufferType;
-        typedef typename BaseType::KmerIter KmerIter;
-        typedef typename BaseType::KmerType KmerType;
-        typedef bliss::iterator::buffered_transform_iterator<QualGenOp,
-            typename QualGenOp::BaseIterType> QualIter;
-        typedef typename KmerGenOp::OutputType KmerIndexPairType;
-
-        KmerIndexGeneratorWithQuality(int nprocs, int rank, int tid)
-        : BaseType(nprocs, rank, tid)
-        {
-          static_assert(std::is_same<SequenceType, typename QualGenOp::SequenceType>::value, "Kmer Generation and Quality Generation should use the same type");
         }
 
       protected:
+        int _nprocs;
+        int _rank;
+        int _tid;
+        HashFunc h;
+
+    };
+
+    template<typename KmerGenOp, typename SendBuffer, typename HashFunc, typename QualGenOp>
+    class KmerIndexGeneratorWithQuality : public KmerIndexGenerator<KmerGenOp, SendBuffer, HashFunc>
+    {
+      public:
+        typedef KmerIndexGenerator<KmerGenOp, SendBuffer, HashFunc> BaseType;
+        typedef typename KmerGenOp::SequenceType                    SequenceType;
+        typedef std::vector<SendBuffer>                             BufferType;
+        typedef typename KmerGenOp::KmerIndexType                   KmerIndexType;
+        typedef typename KmerIndexType::KmerType                    KmerType;
+        typedef typename KmerIndexType::SizeType                    KmerSizeType;
+        typedef typename KmerGenOp::OutputType                      KmerIndexPairType;
+        typedef bliss::iterator::buffered_transform_iterator<KmerGenOp, typename KmerGenOp::BaseIterType> KmerIter;
+        typedef bliss::iterator::buffered_transform_iterator<QualGenOp,
+            typename QualGenOp::BaseIterType>                       QualIter;
+        typedef typename QualGenOp::QualityType                     QualityType;
+
+        static constexpr int K = KmerSizeType::size;
+
+        KmerIndexGeneratorWithQuality(int nprocs, int rank, int tid)
+          : BaseType(nprocs, rank, tid)
+        {
+          static_assert(std::is_same<SequenceType, typename QualGenOp::SequenceType>::value, "Kmer Generation and Quality Generation should use the same type");
+          printf("KmerIndexGeneratorWithQuality nprocs: %d rank %d threadid %d\n", nprocs, rank, tid); fflush(stdout);
+        }
+
 
         void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<size_t> &counts) {
 
@@ -138,7 +153,7 @@ namespace bliss
           for (int i = 0; (start != end) && (qstart != qend); ++start, ++qstart, ++i)
           {
 
-            if (i < (KmerType::KmerSize::size - 1))
+            if (i < (K - 1))
               continue;
 
             index_kmer = *start;
@@ -149,17 +164,19 @@ namespace bliss
 
             // sending the kmer.
             //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, index_kmer.first % nprocs + (nprocs * tid) );
-            if (fabs(index_kmer.first.qual) > std::numeric_limits<
-                typename KmerType::QualityType>::epsilon())
+            if (fabs(index_kmer.first.qual) > std::numeric_limits<QualityType>::epsilon())
             {
               // sending the kmer.
               //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, index_kmer.first % nprocs + (nprocs * tid) );
 
               // TODO: abstract this to hide details.
-              buffers[h(index_kmer.first.kmer, index_kmer.second)].buffer(index_kmer.first);
+              uint64_t index = this->h(index_kmer.first.kmer, index_kmer.second);
+//              printf("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, this->_tid, index, buffers.size()); fflush(stdout);
+              printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, this->_tid, index, buffers[index].size());
+              buffers[index].buffer(index_kmer.first);
               //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
               // ++kmerCount;
-              counts[_tid] += 1;
+              counts[this->_tid] += 1;
             }
             else
             {
