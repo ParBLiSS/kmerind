@@ -264,12 +264,12 @@ FileLoaderType openFile(const std::string &filename, MPI_Comm &comm, const int &
  */
 template <typename Compute>
 void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
-                                int &nthreads, IndexType &index,
+                                const int &nthreads, IndexType &index,
                                 MPI_Comm &comm, const int &nprocs, const int &rank) {
   std::chrono::high_resolution_clock::time_point t1, t2;
   std::chrono::duration<double> time_span;
 
-  printf("HAS MASTER branch\n");
+  INFO("HAS MASTER");
 
   // do some work using openmp
 
@@ -279,45 +279,43 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
 
 #ifdef USE_OPENMP
   assert(nthreads >= 2);
-  fprintf(stderr, "rank %d MAX THRADS = %d\n", rank, nthreads);
+  INFO("rank " << rank << " MAX THRADS = " << nthreads);
   omp_set_nested(1);
   omp_set_dynamic(0);
 #endif
 
   int senders = nthreads;
+  int nt = nthreads;
 #ifdef USE_MPI
   senders = 0;
-  MPI_Allreduce(&nthreads, &senders, 1, MPI_INT, MPI_SUM, comm);
+  MPI_Allreduce(&nt, &senders, 1, MPI_INT, MPI_SUM, comm);
 #endif
 //  printf("senders = %d\n", senders);
 
 
-
+int buffer_size = 8192*1024;
 
 #pragma omp parallel sections num_threads(2) private(t1, t2, time_span)
   {
 
-
-
 #pragma omp section
     {
-      printf("top level read section: thread id = %d\n", omp_get_thread_num());
-
+      INFO("Level 0: index storage tid = " << omp_get_thread_num());
 
       t1 = std::chrono::high_resolution_clock::now();
-      networkread(comm, nprocs, rank, 8192 * 1024, senders, index);
+      networkread(comm, nprocs, rank, buffer_size, senders, index);
       t2 = std::chrono::high_resolution_clock::now();
       time_span =
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
       INFO(
-          "read receive rank " << rank << " elapsed time: " << time_span.count() << "s, " << index.size() << "records.");
+          "Level 0: Index storage: rank " << rank << " elapsed time: " << time_span.count() << "s, " << index.size() << " records.");
 
     } // network read thread
 
 #pragma omp section
     {  // compute threads
-      printf("top level compute section: thread id = %d\n", omp_get_thread_num());
+      INFO("Level 0: compute tid = " << omp_get_thread_num());
 
       t1 = std::chrono::high_resolution_clock::now();
 
@@ -327,12 +325,11 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
       std::vector<BufferType> buffers;
       for (int j = 0; j < buf_size; ++j)
       {
-
         //printf("insert buffer %d for thread %d to rank %d\n", j, j / nprocs, j % nprocs);
         buffers.push_back(
-            std::move(BufferType(comm, j % nprocs, 8192 * 1024)));
+            std::move(BufferType(comm, j % nprocs, buffer_size)));
       }
-      printf("number of buffers = %lu\n", buffers.size());
+      INFO("Level 0: compute num buffers = " << buffers.size());
 
 
       std::vector<size_t> counts;
@@ -340,19 +337,20 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
         counts.push_back(0);
       }
 
+      Compute op(nprocs, rank, nthreads);
+
 #pragma omp parallel num_threads(nthreads)
       {
-        printf("low level parallel sections: thread id = %d\n", omp_get_thread_num());
-
-        Compute op(nprocs, rank, omp_get_thread_num());
-
-        SequenceType read;
-
-        int li = 0;
+        int tid = omp_get_thread_num();
+        INFO("Level 1: compute: thread id = " << tid);
 
 #pragma omp single nowait
         {
-          printf("master thread id = %d\n", omp_get_thread_num());
+          INFO("Level 1: MASTER thread id = " << tid);
+
+          // private vars, singly updated.
+          SequenceType read;
+          int li = 0;
 
           for (; fastq_start != fastq_end; ++fastq_start, ++i)
           {
@@ -364,15 +362,15 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
             //
             //            ++fastq_start;
             //            ++i;
-#pragma omp task firstprivate(read, li)
+#pragma omp task firstprivate(read, li) untied
             {
-              // copy read.  not doing that right now.
               int tid2 = omp_get_thread_num();
+              // copy read.  not doing that right now.
               // then compute
               op(read, li, buffers, counts);
 
               if (li % 100000 == 0)
-                printf("worker: rank %d thread %d: %d\n", rank, tid2, li);
+                INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li);
               // release resource
             }
 
@@ -384,12 +382,14 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
 
       } // compute threads parallel
 
+
+
       t2 = std::chrono::high_resolution_clock::now();
       time_span =
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
       INFO(
-          "computation rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
+          "Level 0: Computation: rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
 
 
 
@@ -407,7 +407,7 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
 
 
       for (size_t j = 0; j < counts.size(); ++j) {
-        printf("rank %d COUNTS by thread %lud: %lud\n", rank, j, counts[j]);
+        INFO("rank " << rank << " COUNTS by thread "<< j << ": "<< counts[j]);
       }
 
     }  // compute threads section
@@ -429,7 +429,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
   std::chrono::duration<double> time_span;
 
 
-  printf("NO MASTER branch\n");
+  INFO("NO MASTER");
 
   ///  get the start and end iterator position.
   FileLoaderType::IteratorType fastq_start = loader.begin();
@@ -439,7 +439,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 
 #ifdef USE_OPENMP
     assert(nthreads >= 2);
-    fprintf(stderr, "rank %d MAX THRADS = %d\n", rank, nthreads);
+    INFO("rank " << rank << " MAX THRADS = " << nthreads);
     omp_set_nested(1);
     omp_set_dynamic(0);
 #endif
@@ -449,7 +449,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
     senders = 0;
     MPI_Allreduce(&nthreads, &senders, 1, MPI_INT, MPI_SUM, comm);
 #endif
-    printf("senders = %d\n", senders);
+//    printf("senders = %d\n", senders);
 
 #pragma omp parallel sections num_threads(2) private(t1, t2, time_span)
     {
@@ -457,7 +457,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 
 #pragma omp section
     {
-      printf("INIT RECV Thread\n");
+      INFO("Level 0: index storage tid = " << omp_get_thread_num());
       t1 = std::chrono::high_resolution_clock::now();
       networkread(comm, nprocs, rank, 8192 * 1024, senders, index);
       t2 = std::chrono::high_resolution_clock::now();
@@ -465,12 +465,12 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
       INFO(
-          "read receive rank " << rank << " elapsed time: " << time_span.count() << "s, " << index.size() << "records.");
+          "Level 0: Index storage: rank " << rank << " elapsed time: " << time_span.count() << "s, " << index.size() << " records.");
     } // omp network read section
 
 #pragma omp section
     {  // compute threads
-      printf("INIT COMPUTE THREAD\n");
+      INFO("Level 0: compute tid = " << omp_get_thread_num());
 
       t1 = std::chrono::high_resolution_clock::now();
 
@@ -485,6 +485,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
           buffers.push_back(std::move( BufferType(comm, i, 8192*1024)));
         }
       }
+      INFO("Level 0: compute num buffers = " << buffers.size());
 
 
       std::vector<size_t> counts;
@@ -492,13 +493,13 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
         counts.push_back(0);
       }
 
+      Compute op(nprocs, rank, nthreads);
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
 #pragma omp parallel num_threads(nthreads)
       {
 
-        Compute op(nprocs, rank, omp_get_thread_num());
 
 //        std::vector<  BufferType > buffers;
 //        for (int j = 0; j < nprocs; ++j) {
@@ -511,6 +512,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
         bool hasData = false;
         int li = 0;
         int tid2 = omp_get_thread_num();
+        INFO("Level 1: compute: thread id = " << tid2);
 
         do {
 
@@ -533,7 +535,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
             op(read, li, buffers, counts);
 
             if (li % 100000 == 0)
-              printf("rank %d thread %d: %d\n", rank, tid2, li);
+              INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li);
           }
         } while (!atEnd);
 
@@ -549,17 +551,18 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
       t2 = std::chrono::high_resolution_clock::now();
       time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-      INFO("computation rank " << rank << " elapsed time: " << time_span.count() << "s.");
+      INFO(
+          "Level 0: Computation: rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
 
 
       // send the last part out.
       for (int i = 0; i < nprocs * nthreads; ++i) {
         buffers[(i+ rank) % (nprocs * nthreads)].flush();
       }
-      printf("compute completed\n");
+      INFO("flush rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
 
       for (size_t j = 0; j < counts.size(); ++j) {
-        printf("rank %d COUNTS by thread %lud: %lud\n", rank, j, counts[j]);
+        INFO("rank " << rank << " COUNTS by thread "<< j << ": "<< counts[j]);
       }
 
     } // omp compute section

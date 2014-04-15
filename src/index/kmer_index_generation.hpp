@@ -27,16 +27,25 @@ namespace bliss
     template<typename T>
     struct XorModulus
     {
-        T p;
-        T offset;
-        XorModulus(T _p, T _offset) : p(_p), offset(_offset) {
-          assert(_p > 0);
-          assert(_offset >= 0);
-          printf("XorModulus nprocs %lu, offset %lu\n", p, offset); fflush(stdout);
+        const T nprocs;
+        const T nthreads;
+        XorModulus(T _procs, T _threads) : nprocs(_procs), nthreads(_threads) {
+          assert(_procs > 0);
+          assert(_threads > 0);
+//          printf("XorModulus nprocs %lu, nthreads %lu\n", nprocs, nthreads); fflush(stdout);
         };
 
-        T operator()(const T &v1, const T &v2) {
-          return (p == 1 ? offset : (v1 ^ v2) % p + offset);
+        /**
+         *
+         * @param v1
+         * @param v2
+         * @param tid     set this at run time so the same object can be used by multiple threads.
+         * @return
+         */
+        T operator()(const T &v1, const T &v2, const T &tid) {
+          assert(tid >= 0);
+          T offset = nprocs * tid;
+          return (nprocs == 1 ? offset : (v1 ^ v2) % nprocs + offset);
         }
     };
 
@@ -56,13 +65,11 @@ namespace bliss
         typedef typename KmerGenOp::KmerValueType   KmerType;
         typedef typename KmerGenOp::OutputType      KmerIndexPairType;
 
-        KmerIndexGenerator(int nprocs, int rank, int tid) :
-          _nprocs(nprocs), _rank(rank), _tid(tid), h(nprocs, nprocs * tid)  {
+        KmerIndexGenerator(int nprocs, int rank, int nthreads) :
+          _nprocs(nprocs), _rank(rank), _hash(nprocs, nthreads)  {
           static_assert(std::is_same<typename KmerGenOp::KmerIndexType,
                         typename SendBuffer::ValueType>::value,
                         "Kmer Generation and Send Buffer should use the same type");
-
-          printf("KmerIndexGenerator nprocs: %d rank %d threadid %d\n", nprocs, rank, tid);  fflush(stdout);
         }
 
         void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<size_t> &counts) {
@@ -73,6 +80,7 @@ namespace bliss
           KmerIndexPairType index_kmer;
           //uint64_t kmerCount;
 
+          int tid = omp_get_thread_num();
 
           // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
           for (int i = 0; start != end; ++start, ++i)
@@ -90,13 +98,14 @@ namespace bliss
             //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, index_kmer.first % nprocs + (nprocs * tid) );
 
             // TODO: abstract this to hide details.
-            uint64_t index = this->h(index_kmer.first.kmer, index_kmer.second);
-//            printf("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, this->_tid, index, buffers.size()); fflush(stdout);
-            printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, this->_tid, index, buffers[index].size());
+            uint64_t index = this->_hash(index_kmer.first.kmer, index_kmer.second, tid);
+//            if (counts[this->_tid] % 100000 == 0)
+//              printf("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, this->_tid, index, buffers.size()); fflush(stdout);
+            //printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, this->_tid, index, buffers[index].size());
             buffers[index].buffer(index_kmer.first);
             //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
             //++kmerCount;
-            counts[this->_tid] += 1;
+            counts[tid] += 1;
 
           }
         }
@@ -104,8 +113,7 @@ namespace bliss
       protected:
         int _nprocs;
         int _rank;
-        int _tid;
-        HashFunc h;
+        HashFunc _hash;
 
     };
 
@@ -130,8 +138,9 @@ namespace bliss
         KmerIndexGeneratorWithQuality(int nprocs, int rank, int tid)
           : BaseType(nprocs, rank, tid)
         {
-          static_assert(std::is_same<SequenceType, typename QualGenOp::SequenceType>::value, "Kmer Generation and Quality Generation should use the same type");
-          printf("KmerIndexGeneratorWithQuality nprocs: %d rank %d threadid %d\n", nprocs, rank, tid); fflush(stdout);
+          static_assert(std::is_same<SequenceType,
+                        typename QualGenOp::SequenceType>::value,
+                        "Kmer Generation and Quality Generation should use the same type");
         }
 
 
@@ -148,6 +157,8 @@ namespace bliss
           KmerIndexPairType index_kmer;
           //uint64_t kmerCount;
 
+          // NOTE: need to get tid here. depending on how this is called, thread id may not be initialized correctly.
+          int tid = omp_get_thread_num();
 
           // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
           for (int i = 0; (start != end) && (qstart != qend); ++start, ++qstart, ++i)
@@ -170,13 +181,14 @@ namespace bliss
               //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, index_kmer.first % nprocs + (nprocs * tid) );
 
               // TODO: abstract this to hide details.
-              uint64_t index = this->h(index_kmer.first.kmer, index_kmer.second);
-//              printf("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, this->_tid, index, buffers.size()); fflush(stdout);
-              printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, this->_tid, index, buffers[index].size());
+              uint64_t index = this->_hash(index_kmer.first.kmer, index_kmer.second, tid);
+//              if (counts[tid] % 100000 == 0)
+//                printf("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, tid, index, buffers.size()); fflush(stdout);
+              //printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, this->_tid, index, buffers[index].size());
               buffers[index].buffer(index_kmer.first);
               //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
               // ++kmerCount;
-              counts[this->_tid] += 1;
+              counts[tid] += 1;
             }
             else
             {
