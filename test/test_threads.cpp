@@ -369,7 +369,7 @@ int buffer_size = 8192*1024;
               // then compute
               op(read, li, buffers, counts);
 
-              if (li % 100000 == 0)
+              if (li % 1000000 == 0)
                 INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li);
               // release resource
             }
@@ -381,6 +381,7 @@ int buffer_size = 8192*1024;
 #pragma omp taskwait
 
       } // compute threads parallel
+      INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed " << i);
 
 
 
@@ -534,12 +535,14 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
           if (hasData) {
             op(read, li, buffers, counts);
 
-            if (li % 100000 == 0)
+            if (li % 1000000 == 0)
               INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li);
           }
         } while (!atEnd);
 
 #pragma omp barrier
+
+        INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed " << i);
 
 //        // send the last part out.
 //        for (int j = 0; j < nprocs; ++j) {

@@ -145,6 +145,17 @@ ERROR: double free or buffer corruption, segV, abort, memory corruption, etc.  o
 	this is probably due to wrong thread id, and subsequently wrong bin computation, then multiple threads writing to the same buffer.
 	change signature of XorModulus (hashfunction to get threadid at call time.  make the KmerIndexGenerators produce the threadid.
 	this works better because we can't tell the assignment of tasks until they are scheduled onto the node.
+	
+	fixed.  performance improved compared to before refactoring.
+	
+
+NEXT TODO:
+	parallel flush?  or use Alltoall?
+	auto-tune locking vs replicated buffer threshold.
+	further refactoring (now in test_threads)
+	testing version WITHOUT quality scores.
+	Flexible K for kmer - important for testing?
+	
 
 Each thread owning its own set of buffers - if 1000 procs, 16 threads each, 8MB each buffer, -> 128G.  need smarter locking.
 
