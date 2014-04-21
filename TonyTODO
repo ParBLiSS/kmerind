@@ -152,10 +152,17 @@ ERROR: double free or buffer corruption, segV, abort, memory corruption, etc.  o
 NEXT TODO:
 	parallel flush?  or use Alltoall?
 	auto-tune locking vs replicated buffer threshold.
-	further refactoring (now in test_threads)
-	testing version WITHOUT quality scores.
+	further refactoring (now in test_threads)  
+	testing version WITHOUT quality scores.  DONE.  faster.  < 1 sec for test data.  ~ 150 sec for 1000genome data.  with quality score:  1.56s and 283 sec.
+	version that counts kmers.
 	Flexible K for kmer - important for testing?
-	
+	testing 1 mpi proc, 1 ... c cores/threads, etc
+		results: single node, 1 thread, 1 proc - fast.  superlinear slow down as more threads are used.
+		results: 		sublinear speed up as more procs are used.
+		WHY?  this is non threadsafe.
+		
+		code is not optimal - MPI off case is doing a lot more work then needed.
+			OMP off case (thread = 1) is still dispatching work.  MPI off case (p = 1) is still using send/receive.
 
 Each thread owning its own set of buffers - if 1000 procs, 16 threads each, 8MB each buffer, -> 128G.  need smarter locking.
 

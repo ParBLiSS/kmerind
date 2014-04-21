@@ -47,8 +47,7 @@
 // define kmer index type
 typedef bliss::index::KmerSize<21> KmerSize;
 typedef uint64_t KmerType;
-typedef float QualityType;
-typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss::io::fastq_sequence_id, QualityType> KmerIndexType;
+typedef bliss::index::KmerIndexElementWithId<KmerSize, KmerType, bliss::io::fastq_sequence_id> KmerIndexType;
 
 // define buffer where to put the kmers
 constexpr bool thread_safe = false;
@@ -59,20 +58,20 @@ typedef CharType* BaseIterType;
 
 // define read type
 typedef DNA Alphabet;
-typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
+typedef bliss::io::fastq_sequence<BaseIterType, Alphabet>  SequenceType;
 
 
 typedef bliss::index::generate_kmer<SequenceType, KmerIndexType> kmer_op_type;
 
-typedef bliss::index::SangerToLogProbCorrect<QualityType> EncodeType;
-
-typedef bliss::index::generate_qual<SequenceType, KmerSize, QualityType, EncodeType > qual_op_type;
-
 typedef std::unordered_multimap<KmerType, KmerIndexType> IndexType;
 
-typedef bliss::io::fastq_loader<Alphabet, QualityType> FileLoaderType;
+typedef bliss::io::fastq_loader<Alphabet> FileLoaderType;
 
-typedef bliss::index::KmerIndexGeneratorWithQuality<kmer_op_type, BufferType, bliss::index::XorModulus<KmerType>, qual_op_type> ComputeType;
+typedef bliss::index::KmerIndexGenerator<kmer_op_type, BufferType, bliss::index::XorModulus<KmerType>> ComputeType;
+
+
+
+
 
 
 /**
@@ -132,8 +131,6 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
     if (received == 0)
       continue;
 
-    //////// logic for storing index.
-
     assert(received % sizeof(KmerIndexType) == 0);  // no partial messages.
     count = received / sizeof(KmerIndexType);
     assert(count > 0);
@@ -169,7 +166,6 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
  * @param tid
  */
 void init(int &argc, char** &argv, MPI_Comm &comm, int &nprocs, int &rank) {
-
 
 #ifdef USE_MPI
   // initialize MPI
@@ -622,7 +618,6 @@ int main(int argc, char** argv) {
     nthreads = atoi(argv[2]);
     if (nthreads == -1)
       nthreads = omp_get_max_threads();
-
   }
 
 //  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");

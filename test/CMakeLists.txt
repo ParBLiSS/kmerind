@@ -26,6 +26,12 @@ target_link_libraries(testThreads ${EXTRA_LIBS})
 target_link_libraries(testThreads bliss-common)
 #target_link_libraries(testThreads bliss-index)
 
+## EXECUTABLES
+add_executable(testThreadsNoQual test_threads-no_qual.cpp)
+target_link_libraries(testThreadsNoQual ${EXTRA_LIBS})
+#target_link_libraries(testThreadsNoQual bliss-io)
+target_link_libraries(testThreadsNoQual bliss-common)
+#target_link_libraries(testThreadsNoQual bliss-index)
 
 
 ## EXECUTABLES

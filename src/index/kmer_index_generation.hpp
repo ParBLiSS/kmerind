@@ -61,9 +61,13 @@ namespace bliss
       public:
         typedef typename KmerGenOp::SequenceType		SequenceType;
         typedef std::vector<SendBuffer>  				    BufferType;
+        typedef typename KmerGenOp::KmerIndexType                   KmerIndexType;
+        typedef typename KmerIndexType::KmerType                    KmerType;
+        typedef typename KmerIndexType::SizeType                    KmerSizeType;
+        typedef typename KmerGenOp::OutputType                      KmerIndexPairType;
         typedef bliss::iterator::buffered_transform_iterator<KmerGenOp, typename KmerGenOp::BaseIterType> KmerIter;
-        typedef typename KmerGenOp::KmerValueType   KmerType;
-        typedef typename KmerGenOp::OutputType      KmerIndexPairType;
+
+        static constexpr int K = KmerSizeType::size;
 
         KmerIndexGenerator(int nprocs, int rank, int nthreads) :
           _nprocs(nprocs), _rank(rank), _hash(nprocs, nthreads)  {
@@ -86,7 +90,7 @@ namespace bliss
           for (int i = 0; start != end; ++start, ++i)
           {
 
-            if (i < (KmerType::KmerSize::size - 1))
+            if (i < (K - 1))
               continue;
 
             index_kmer = *start;
