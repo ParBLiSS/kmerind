@@ -253,7 +253,7 @@ namespace bliss
             else
             {
               // there was not a zero.  so update.
-              internal = internal + newval - oldval;
+              internal += newval - oldval;
             }
 
           }

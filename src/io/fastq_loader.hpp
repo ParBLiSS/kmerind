@@ -145,11 +145,11 @@ namespace bliss
 
         }
 
-        IteratorType begin() {
-          return IteratorType(ParserType(data, range.start), data, data + (range.end - range.start));
+        IteratorType begin(bool copying = false) {
+          return IteratorType(ParserType(data, range.start, copying), data, data + (range.end - range.start));
         }
-        IteratorType end() {
-          return IteratorType(ParserType(data, range.start), data + (range.end - range.start));
+        IteratorType end(bool copying = false) {
+          return IteratorType(ParserType(data, range.start, copying), data + (range.end - range.start));
 
         }
 

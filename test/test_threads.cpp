@@ -244,7 +244,7 @@ FileLoaderType openFile(const std::string &filename, MPI_Comm &comm, const int &
   FileLoaderType::RangeType r =
       FileLoaderType::RangeType::block_partition(nprocs, rank, 0, file_size);
 
-  FileLoaderType loader = FileLoaderType(filename, r, file_size);
+  FileLoaderType loader = FileLoaderType(filename, r, file_size, true);
 
   return loader;
 }
@@ -327,17 +327,20 @@ int buffer_size = 8192*1024;
       INFO("Level 0: compute num buffers = " << buffers.size());
 
 
-      std::vector<size_t> counts;
+      std::vector<bliss::index::countType> counts;
       for (int j = 0; j < nthreads; ++j) {
-        counts.push_back(0);
+        bliss::index::countType c;
+        c.c = 0;
+        counts.push_back(c);
       }
 
-      Compute op(nprocs, rank, nthreads);
 
 #pragma omp parallel num_threads(nthreads)
       {
         int tid = omp_get_thread_num();
         INFO("Level 1: compute: thread id = " << tid);
+
+        Compute op(nprocs, rank, nthreads);
 
 #pragma omp single nowait
         {
@@ -352,7 +355,9 @@ int buffer_size = 8192*1024;
             // get data, and move to next for the other threads
 
             // first get read
-            read = *fastq_start;
+//            read = *fastq_start;
+            SequenceType::allocCopy(*fastq_start, read);
+
             li = i;
             //
             //            ++fastq_start;
@@ -363,6 +368,8 @@ int buffer_size = 8192*1024;
               // copy read.  not doing that right now.
               // then compute
               op(read, li, buffers, counts);
+              SequenceType::deleteCopy(read);
+
 
               if (li % 1000000 == 0)
                 INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li);
@@ -403,7 +410,7 @@ int buffer_size = 8192*1024;
 
 
       for (size_t j = 0; j < counts.size(); ++j) {
-        INFO("rank " << rank << " COUNTS by thread "<< j << ": "<< counts[j]);
+        INFO("rank " << rank << " COUNTS by thread "<< j << ": "<< counts[j].c);
       }
 
     }  // compute threads section
@@ -483,17 +490,19 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
       INFO("Level 0: compute num buffers = " << buffers.size());
 
 
-      std::vector<size_t> counts;
+      std::vector<bliss::index::countType> counts;
       for (int j = 0; j < nthreads; ++j) {
-        counts.push_back(0);
+        bliss::index::countType c;
+        c.c = 0;
+        counts.push_back(c);
       }
 
-      Compute op(nprocs, rank, nthreads);
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads)
+#pragma omp parallel num_threads(nthreads) shared(atEnd)
       {
+        Compute op(nprocs, rank, nthreads);
 
 
 //        std::vector<  BufferType > buffers;
@@ -508,35 +517,43 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
         int li = 0;
         int tid2 = omp_get_thread_num();
         INFO("Level 1: compute: thread id = " << tid2);
-
+        int j = 0;
         do {
 
           // single thread at a time getting data.
 #pragma omp critical
           {
             // get data, and move to next for the other threads
-            if (!(atEnd = (fastq_start == fastq_end)))
+            atEnd = (fastq_start == fastq_end);
+            hasData = !atEnd;
+
+            if (hasData)
             {
-              read = *fastq_start;
-              hasData = true;
+              SequenceType::allocCopy(*fastq_start, read);
               li = i;
               ++fastq_start;
               ++i;
             }
+
           }
 
           // now do computation.
           if (hasData) {
             op(read, li, buffers, counts);
+            ++j;
+
+            SequenceType::deleteCopy(read);
 
             if (li % 1000000 == 0)
-              INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li);
+              INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li << " reads");
           }
+
+
         } while (!atEnd);
 
 #pragma omp barrier
 
-        INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed " << i);
+        INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed total of " << j << " reads");
 
 //        // send the last part out.
 //        for (int j = 0; j < nprocs; ++j) {
@@ -559,7 +576,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
       INFO("flush rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
 
       for (size_t j = 0; j < counts.size(); ++j) {
-        INFO("rank " << rank << " COUNTS by thread "<< j << ": "<< counts[j]);
+        INFO("rank " << rank << " COUNTS by thread "<< j << ": "<< counts[j].c);
       }
 
     } // omp compute section

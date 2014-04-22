@@ -30,8 +30,8 @@ namespace bliss
         const T nprocs;
         const T nthreads;
         XorModulus(T _procs, T _threads) : nprocs(_procs), nthreads(_threads) {
-          assert(_procs > 0);
-          assert(_threads > 0);
+//          assert(_procs > 0);
+//          assert(_threads > 0);
 //          printf("XorModulus nprocs %lu, nthreads %lu\n", nprocs, nthreads); fflush(stdout);
         };
 
@@ -55,6 +55,10 @@ namespace bliss
     // given kmer index element type, and fastq sequence type, should be able to specialize kmer generator type.  DONE
     // given the kmer index element type, should be able to define sendbuffer type.  But won't.  SendBuffer may be of different types.
 
+    struct alignas(64) countType {
+        uint64_t c;
+    };
+
     // this can become a 1 to n transformer???
     template<typename KmerGenOp, typename SendBuffer, typename HashFunc>
     class KmerIndexGenerator {
@@ -76,13 +80,13 @@ namespace bliss
                         "Kmer Generation and Send Buffer should use the same type");
         }
 
-        void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<size_t> &counts) {
+        void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<countType> &counts) {
           KmerGenOp kmer_op(read.id);
           KmerIter start(read.seq, kmer_op);
           KmerIter end(read.seq_end, kmer_op);
 
           KmerIndexPairType index_kmer;
-          //uint64_t kmerCount;
+//          int kmerCount = 0;
 
           int tid = omp_get_thread_num();
 
@@ -108,10 +112,11 @@ namespace bliss
             //printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, this->_tid, index, buffers[index].size());
             buffers[index].buffer(index_kmer.first);
             //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
-            //++kmerCount;
-            counts[tid] += 1;
+//            ++kmerCount;
+
 
           }
+//          counts[tid].c += kmerCount;
         }
 
       protected:
@@ -148,7 +153,7 @@ namespace bliss
         }
 
 
-        void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<size_t> &counts) {
+        void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<countType> &counts) {
 
           KmerGenOp kmer_op(read.id);
           KmerIter start(read.seq, kmer_op);
@@ -159,7 +164,7 @@ namespace bliss
           QualIter qend(read.qual_end, qual_op);
 
           KmerIndexPairType index_kmer;
-          //uint64_t kmerCount;
+//          int kmerCount = 0;
 
           // NOTE: need to get tid here. depending on how this is called, thread id may not be initialized correctly.
           int tid = omp_get_thread_num();
@@ -191,8 +196,7 @@ namespace bliss
               //printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, this->_tid, index, buffers[index].size());
               buffers[index].buffer(index_kmer.first);
               //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
-              // ++kmerCount;
-              counts[tid] += 1;
+//              ++kmerCount;
             }
             else
             {
@@ -200,6 +204,7 @@ namespace bliss
             }
 
           }
+//          counts[tid].c += kmerCount;
         }
 
     };

@@ -79,6 +79,25 @@ namespace bliss
         Iterator seq_end;
 
         fastq_sequence_id id;
+
+        static void allocCopy(const fastq_sequence<Iterator, Alphabet>& src, fastq_sequence<Iterator, Alphabet>& dest) {
+          dest.id.composite = src.id.composite;
+
+          size_t length = src.name_end - src.name;
+          dest.name = new ValueType[length];
+          memcpy(dest.name, src.name, length);
+          dest.name_end = dest.name + length;
+
+          length = src.seq_end - src.seq;
+          dest.seq = new ValueType[length];
+          memcpy(dest.seq, src.seq, length);
+          dest.seq_end = dest.seq + length;
+
+        }
+        static void deleteCopy(fastq_sequence<Iterator, Alphabet>& dest) {
+          delete [] dest.name;
+          delete [] dest.seq;
+        }
     };
 
     /**
@@ -104,6 +123,20 @@ namespace bliss
 
         Iterator qual;
         Iterator qual_end;
+
+        static void allocCopy(const fastq_sequence_quality<Iterator, Alphabet, Quality>& src, fastq_sequence_quality<Iterator, Alphabet, Quality>& dest) {
+          base_class_t::allocCopy(src, dest);
+
+          size_t length = src.qual_end - src.qual;
+          dest.qual = new ValueType[length];
+          memcpy(dest.qual, src.qual, length);
+          dest.qual_end = dest.qual + length;
+
+        }
+        static void deleteCopy(fastq_sequence_quality<Iterator, Alphabet, Quality>& dest) {
+          base_class_t::deleteCopy(dest);
+          delete [] dest.qual;
+        }
     };
 
 
@@ -126,9 +159,10 @@ namespace bliss
         SeqType output;
         Iterator _start;
         size_t _global_offset;
+        const bool _copying;
 
-        fastq_parser(const Iterator & start, const size_t & global_offset)
-            : output(), _start(start), _global_offset(global_offset)
+        fastq_parser(const Iterator & start, const size_t & global_offset, const bool &copying)
+            : output(), _start(start), _global_offset(global_offset), _copying(copying)
         {
         }
 
