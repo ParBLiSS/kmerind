@@ -46,6 +46,7 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
 
   // generate Kmers
   typedef bliss::Kmer<35, 2, uint32_t> Kmer;
+  std::cout << "size of kmer: " << sizeof(Kmer) << std::endl;
   typedef bliss::KmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
 
   kmer_gen_it_t kmerGenIt(packIt);
