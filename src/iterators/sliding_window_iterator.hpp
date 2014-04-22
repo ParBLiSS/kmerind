@@ -226,7 +226,7 @@ public:
 
 
 template<typename BaseIterator, typename Window>
-class many2one_sliding_window_iterator : public std::iterator<
+class one2many_sliding_window_iterator : public std::iterator<
     // 1) iterator type tag: at most forward, but if the base iterator is less,
     //    then inherit from it
     typename iterator_tags<BaseIterator>::inherit_forward,
@@ -240,7 +240,7 @@ protected:
   typedef std::iterator_traits<BaseIterator> base_traits;
 
   /// This type
-  typedef many2one_sliding_window_iterator type;
+  typedef one2many_sliding_window_iterator type;
 
   /// The std::iterator_traits of this iterator
   typedef std::iterator_traits<type> traits;
@@ -345,7 +345,7 @@ public:
    *
    * @return    Whether this and the given iterator point to the same position.
    */
-  inline bool operator==(const many2one_sliding_window_iterator& rhs) const
+  inline bool operator==(const one2many_sliding_window_iterator& rhs) const
   {
     return _base == rhs._base && _base_offset == rhs._base_offset;
   }
@@ -355,7 +355,7 @@ public:
    *
    * @return    Whether this and the given iterator are different.
    */
-  inline bool operator!=(const many2one_sliding_window_iterator& rhs) const
+  inline bool operator!=(const one2many_sliding_window_iterator& rhs) const
   {
     return !this->operator==(rhs);
   }
@@ -365,6 +365,8 @@ public:
    *  Constructors  *
    ******************/
 
+  // TODO: more constructors and integrate kmer generation into this
+
   /**
    * @brief Constructor, taking the base iterator and the many2one
    *        functor.
@@ -372,7 +374,7 @@ public:
    * @param base_iter   The base iterator that is wrapped via this iterator.
    * @param window      The sliding window structure
    */
-  many2one_sliding_window_iterator(const BaseIterator& base_iter, const Window& window)
+  one2many_sliding_window_iterator(const BaseIterator& base_iter, const Window& window)
       : _base(base_iter), _next(base_iter),
         _base_offset(0), _next_offset(0), _window(window)
   {
