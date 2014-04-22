@@ -159,10 +159,13 @@ NEXT TODO:
 	testing 1 mpi proc, 1 ... c cores/threads, etc
 		results: single node, 1 thread, 1 proc - fast.  superlinear slow down as more threads are used.
 		results: 		sublinear speed up as more procs are used.
-		WHY?  this is non threadsafe.
+		WHY?  this is non threadsafe.  This needs to be profiled.
 		
 		code is not optimal - MPI off case is doing a lot more work then needed.
 			OMP off case (thread = 1) is still dispatching work.  MPI off case (p = 1) is still using send/receive.
+
+	One "oops": was not actually copying the read.
+
 
 Each thread owning its own set of buffers - if 1000 procs, 16 threads each, 8MB each buffer, -> 128G.  need smarter locking.
 
