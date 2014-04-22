@@ -544,6 +544,8 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 
             SequenceType::deleteCopy(read);
 
+            SequenceType::deleteCopy(read);
+
             if (li % 1000000 == 0)
               INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li << " reads");
           }
