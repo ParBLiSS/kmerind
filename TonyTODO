@@ -165,7 +165,19 @@ NEXT TODO:
 			OMP off case (thread = 1) is still dispatching work.  MPI off case (p = 1) is still using send/receive.
 
 	One "oops": was not actually copying the read.
-
+		testing - not the bottleneck
+		
+	problem was with how the threads are scheduled and syncs
+		parallel for is fastest - get some speed up going towards 2x on 4 core desktop
+		demand driven on peered worker threads - slower as more threads are added.  5x slower
+		demand driven master slave - slowest - 5x slower than demand driven peered
+		ISSUE:  too many tasks.  make each task work more.  this is with simple test code.
+			master slave, demand driven scheduling, with chunk size of 32 to 64 is fine.
+			thread scalability is okay. to about 3x...
+		at least now scaling.  though not perfect.
+			comparisons:  sequential vs peers with demand driven, vs M/S with demand driven, vs par for with dynamic/guided partitioning.
+			
+		
 
 Each thread owning its own set of buffers - if 1000 procs, 16 threads each, 8MB each buffer, -> 128G.  need smarter locking.
 

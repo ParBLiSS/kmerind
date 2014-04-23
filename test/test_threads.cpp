@@ -262,8 +262,6 @@ template <typename Compute>
 void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
                                 const int &nthreads, IndexType &index,
                                 MPI_Comm &comm, const int &nprocs, const int &rank) {
-  std::chrono::high_resolution_clock::time_point t1, t2;
-  std::chrono::duration<double> time_span;
 
   INFO("HAS MASTER");
 
@@ -290,11 +288,14 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
 
 int buffer_size = 8192*1024;
 
-#pragma omp parallel sections num_threads(2) private(t1, t2, time_span)
+#pragma omp parallel sections num_threads(2) shared(fastq_start, fastq_end, index, comm, nprocs, rank, buffer_size, senders, nthreads, std::cerr) default(none)
   {
 
 #pragma omp section
     {
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
+
       INFO("Level 0: index storage tid = " << omp_get_thread_num());
 
       t1 = std::chrono::high_resolution_clock::now();
@@ -311,6 +312,8 @@ int buffer_size = 8192*1024;
 #pragma omp section
     {  // compute threads
       INFO("Level 0: compute tid = " << omp_get_thread_num());
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
 
       t1 = std::chrono::high_resolution_clock::now();
 
@@ -335,14 +338,14 @@ int buffer_size = 8192*1024;
       }
 
 
-#pragma omp parallel num_threads(nthreads)
+#pragma omp parallel num_threads(nthreads) firstprivate(t1, t2, time_span) shared(fastq_start, fastq_end, i, counts, buffers, nprocs, rank, nthreads, std::cerr) default(none)
       {
         int tid = omp_get_thread_num();
         INFO("Level 1: compute: thread id = " << tid);
 
         Compute op(nprocs, rank, nthreads);
 
-#pragma omp single nowait
+#pragma omp single
         {
           INFO("Level 1: MASTER thread id = " << tid);
 
@@ -350,6 +353,7 @@ int buffer_size = 8192*1024;
           SequenceType read;
           int li = 0;
 
+#pragma omp task untied
           for (; fastq_start != fastq_end; ++fastq_start, ++i)
           {
             // get data, and move to next for the other threads
@@ -362,7 +366,7 @@ int buffer_size = 8192*1024;
             //
             //            ++fastq_start;
             //            ++i;
-#pragma omp task firstprivate(read, li) untied
+#pragma omp task firstprivate(read, li)
             {
               int tid2 = omp_get_thread_num();
               // copy read.  not doing that right now.
@@ -428,8 +432,6 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
                               int &nthreads, IndexType &index,
                               MPI_Comm &comm, const int &nprocs, const int &rank)
 {
-  std::chrono::high_resolution_clock::time_point t1, t2;
-  std::chrono::duration<double> time_span;
 
 
   INFO("NO MASTER");
@@ -453,12 +455,15 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 #endif
 //    printf("senders = %d\n", senders);
 
-#pragma omp parallel sections num_threads(2) private(t1, t2, time_span)
+#pragma omp parallel sections num_threads(2) shared(fastq_start, fastq_end, comm, nprocs, rank, senders, index, nthreads, std::cerr) default(none)
     {
 
 
 #pragma omp section
     {
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
+
       INFO("Level 0: index storage tid = " << omp_get_thread_num());
       t1 = std::chrono::high_resolution_clock::now();
       networkread(comm, nprocs, rank, 8192 * 1024, senders, index);
@@ -472,6 +477,9 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 
 #pragma omp section
     {  // compute threads
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
+
       INFO("Level 0: compute tid = " << omp_get_thread_num());
 
       t1 = std::chrono::high_resolution_clock::now();
@@ -500,7 +508,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(atEnd)
+#pragma omp parallel num_threads(nthreads) shared(atEnd, i, fastq_start, fastq_end, buffers, counts, std::cerr, nprocs, nthreads, rank) default(none)
       {
         Compute op(nprocs, rank, nthreads);
 
@@ -525,6 +533,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
           {
             // get data, and move to next for the other threads
             atEnd = (fastq_start == fastq_end);
+#pragma omp flush(atEnd)
             hasData = !atEnd;
 
             if (hasData)
@@ -533,6 +542,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
               li = i;
               ++fastq_start;
               ++i;
+#pragma omp flush(i, fastq_start)
             }
 
           }
@@ -541,8 +551,6 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
           if (hasData) {
             op(read, li, buffers, counts);
             ++j;
-
-            SequenceType::deleteCopy(read);
 
             SequenceType::deleteCopy(read);
 

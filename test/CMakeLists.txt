@@ -3,8 +3,8 @@
 
 
 ## EXECUTABLES
-add_executable(test test.cpp)
-target_link_libraries(test ${EXTRA_LIBS})
+add_executable(test1 test.cpp)
+target_link_libraries(test1 ${EXTRA_LIBS})
 
 
 ## EXECUTABLES
@@ -32,6 +32,14 @@ target_link_libraries(testThreadsNoQual ${EXTRA_LIBS})
 #target_link_libraries(testThreadsNoQual bliss-io)
 target_link_libraries(testThreadsNoQual bliss-common)
 #target_link_libraries(testThreadsNoQual bliss-index)
+
+
+## EXECUTABLES
+add_executable(testThreadsNoMPI test_threads_no_mpi.cpp)
+target_link_libraries(testThreadsNoMPI ${EXTRA_LIBS})
+#target_link_libraries(testThreadsNoMPI bliss-io)
+target_link_libraries(testThreadsNoMPI bliss-common)
+#target_link_libraries(testThreadsNoMPI bliss-index)
 
 
 ## EXECUTABLES
