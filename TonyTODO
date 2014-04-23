@@ -176,9 +176,27 @@ NEXT TODO:
 			thread scalability is okay. to about 3x...
 		at least now scaling.  though not perfect.
 			comparisons:  sequential vs peers with demand driven, vs M/S with demand driven, vs par for with dynamic/guided partitioning.
+			with appropriate chunking (on desktop with i5 4 cores, chunk size of 32 to 128), all parallel strategies are about the same.
 			
-		
-
+	so how to apply this to a file?   chunked reads.
+		one idea:  read multiple items.  however, reading an item is relatively slow and this part would be in critical sec
+		another idea:  have an iterator that buffers some portion of underlying data.
+			issue:  what is appropriate container?
+			solution:  start treating file as a sequence of bytes, not as some multibyte data type
+		another idea:  have a CHUNKING ITERATOR, and do search (in critical section) for the appropriate
+			end point within some distance from starting point.  then copy that region, and create high level iterators over these chunks.
+			copy requires knowledge of how to copy - assume BYTE ARRAY.	
+			
+			
+4/22/2014
+		reorganize fastq_iterator and fastq_loader.
+			search for start of read should be move into fastq_iterator, alongside parser
+			align_to_sequence is what?
+			fastq_loader used to find PROC level start and end, and to provide chunking support via ChunkIterator
+			then chunks are extracted on demand from the underlying iterator to generate another iterator that is shorter
+				evaluate once pre critical section by each core.
+				this belongs to file_loader?
+			finally ChunkIterater is then used to initialize fastq_iterator for parsing into reads. (which are then transformed into kmers)
 Each thread owning its own set of buffers - if 1000 procs, 16 threads each, 8MB each buffer, -> 128G.  need smarter locking.
 
 
