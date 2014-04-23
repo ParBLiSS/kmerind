@@ -374,10 +374,14 @@ public:
    * @param base_iter   The base iterator that is wrapped via this iterator.
    * @param window      The sliding window structure
    */
-  one2many_sliding_window_iterator(const BaseIterator& base_iter, const Window& window)
+  one2many_sliding_window_iterator(const BaseIterator& base_iter, const Window& window, bool init_first = true)
       : _base(base_iter), _next(base_iter),
         _base_offset(0), _next_offset(0), _window(window)
   {
+    if (init_first)
+    {
+      do_init();
+    }
   }
 
   /**
@@ -440,6 +444,19 @@ public:
     type tmp(*this);
     this->operator++();
     return tmp;
+  }
+
+protected:
+  /**
+   * @brief Initializes the first window.
+   */
+  void do_init()
+  {
+    this->_window.init(this->_base, this->_base_offset);
+    // make a copy of the current window to get the next iterator and offset
+    Window wincpy = this->_window;
+    // iterate by one, simply to get the correct `_next` pointers
+    wincpy.next(this->_next, this->_next_offset);
   }
 };
 

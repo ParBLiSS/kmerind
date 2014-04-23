@@ -16,7 +16,7 @@
 #include <iterator>
 
 #include <common/bit_ops.hpp>
-#include <iterators/iterator_tools.hpp>
+#include <iterators/iterator_utils.hpp>
 #include <iterators/function_traits.hpp>
 #include <iterators/transform_iterator.hpp>
 
