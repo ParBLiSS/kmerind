@@ -244,7 +244,7 @@ FileLoaderType openFile(const std::string &filename, MPI_Comm &comm, const int &
   FileLoaderType::RangeType r =
       FileLoaderType::RangeType::block_partition(nprocs, rank, 0, file_size);
 
-  FileLoaderType loader = FileLoaderType(filename, r, file_size, true);
+  FileLoaderType loader = FileLoaderType(filename, r, file_size, 0.0f);
 
   return loader;
 }
