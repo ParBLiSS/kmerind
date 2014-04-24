@@ -197,8 +197,12 @@ NEXT TODO:
 				evaluate once pre critical section by each core.
 				this belongs to file_loader?
 			finally ChunkIterater is then used to initialize fastq_iterator for parsing into reads. (which are then transformed into kmers)
+			
+		update fileloader to be more self contained, and support parallel loading given an MPI comm.  DONE.
+			put interface on file_loader to allow loading in chunks. TODO.
+		
 Each thread owning its own set of buffers - if 1000 procs, 16 threads each, 8MB each buffer, -> 128G.  need smarter locking.
-
+	
 
 Need to use MPI persistent communication. 
 	

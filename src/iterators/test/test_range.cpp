@@ -7,15 +7,10 @@
 
 #include "iterators/range.hpp"
 
-#include <dirent.h>
-
 #include <gtest/gtest.h>
-#include <cstdint>
-#include <unistd.h>
+#include <cstdint>  // for uint64_t, etc.
 #include <vector>
 #include <limits>
-
-#include "config.hpp"
 
 using namespace bliss::iterator;
 

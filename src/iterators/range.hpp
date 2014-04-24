@@ -27,7 +27,7 @@ namespace bliss
   {
     /**
      * @class range
-     * @brief Range specified with offsets and overlap.  specific for 1D.
+     * @brief Range specified with offsets and overlap.  specific for 1D.  overlap is on END side only, and is included in the END.
      * @details
      *
      * @tparam T  data type used for the start and end offsets and overlap.
@@ -47,7 +47,7 @@ namespace bliss
         T start;
         /**
          * @var     end
-         * @brief   end position of a range in absolute coordinates.
+         * @brief   end position of a range in absolute coordinates.  DOES include overlap.
          * @details End points to 1 position past the last element in the range
          */
         T end;
@@ -70,6 +70,7 @@ namespace bliss
               overlap(_overlap)
         {
           assert(_start <= _end);
+          assert(_overlap >= 0);
         }
 
         /**
@@ -129,6 +130,7 @@ namespace bliss
          * @brief   static function.  block partitioning of a range
          * @details Given the number of partition, the partition element desired, and a start and end range, deterministically compute the subrange.
          *    start and end are allowed to be negative, but end >= start is required.
+         *    OVERLAP IS PART OF END.
          *
          * @param[in] np        number of partitions
          * @param[in] pid       id of specific partition desired
@@ -165,8 +167,11 @@ namespace bliss
             output.end = output.start + static_cast<T>(div) + _overlap;
           }
 
-          if (output.end > end)
+          // last entry.  no overlap.
+          if (output.end > end) {
             output.end = end;
+            output.overlap = 0;
+          }
           assert(output.start <= output.end);
 
           output.block_start = output.start;
@@ -184,7 +189,7 @@ namespace bliss
          * @return              computed subrange
          */
         static range<T> block_partition(const size_t &np, const size_t &pid,
-                                 const range<T> &other)
+                                        const range<T> &other)
         {
           return block_partition(np, pid, other.start, other.end, other.overlap);
         }

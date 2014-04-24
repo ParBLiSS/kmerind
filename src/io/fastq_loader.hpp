@@ -131,7 +131,7 @@ namespace bliss
         virtual ~fastq_loader() {};
         fastq_loader(const std::string &_filename,
                      const RangeType &_range, const size_t &total,
-                     bool preload = false) : FileLoaderType(_filename, preload) {
+                     const float _memUseFraction = 0.0f) : FileLoaderType(_filename, _memUseFraction) {
 
           // adjust the range
           // internally opens the file twice with _range and shifted_range, search for record start/end
@@ -156,55 +156,64 @@ namespace bliss
       protected:
 
         /**
-         * search for first occurence of @ from an arbitrary starting point.
+         *
          */
-        size_t find_sequence_start(const CharType* _data,
-                                   const RangeType &range)
+
+        /**
+         * search for first occurence of @ from an arbitrary starting point.
+         *
+         * @param _data     start of iterator.
+         * @param range
+         * @return
+         */
+        size_t find_sequence_start(const CharType* begin,
+                                   const RangeType &_range)
                                        throw (io_exception) {
           // need to look at 2 or 3 chars.  read 4 lines because of the line 2-3 combo below needs offset to next line 1.
           CharType first[4];
           size_t offsets[4] =
           { 0, 0, 0, 0 };   // units:  offset from beginning of file.
 
+          const CharType* start = begin;
           // scan through to get the first At or Plus
           bool newlineChar = false;
           int currLineId = -1;        // current line id in the buffer
-          size_t i = range.start;
+          size_t i = _range.start;
           if (i == 0) // beginning of file, treat specially, since there is no preceeding \n for the @
           {
             // no preceding \n.  populate directly
             ++currLineId;
-            first[currLineId] = *_data;
+            first[currLineId] = *start;
             offsets[currLineId] = i;
 
             ++i;
-            ++_data;
+            ++start;
           }
 
-          while (i < range.end && currLineId < 4)
+          while (i < _range.end && currLineId < 4)
           {
             // encountered a newline.  mark newline found, increment currLineId.
-            if (*_data == '\n' && !newlineChar)
+            if (*start == '\n' && !newlineChar)
             {
               newlineChar = true;  // toggle on
             }
-            else if (*_data != '\n' && newlineChar) // first char
+            else if (*start != '\n' && newlineChar) // first char
             {
               ++currLineId;
-              first[currLineId] = *_data;
+              first[currLineId] = *start;
               offsets[currLineId] = i;
               newlineChar = false;  // toggle off
             }
             //    else  // other characters in the line - don't care.
 
             ++i;
-            ++_data;
+            ++start;
           }
 
           ////// determine the position within a read record based on the first char of the first 3 lines.
           //     and adjust the starting positions and lengths
           // always shift the offset to the right (don't want to try to read to the end to get an end offset.
-          size_t new_pos = range.end;
+          size_t new_pos;
 
           if (first[0] == '@')
           {
@@ -246,8 +255,8 @@ namespace bliss
           else
           {
             std::stringstream ss;
-            ss << "WARNING in file processing: file segment " << range.start
-               << " - " << range.end << " does not contain valid FASTQ markers.";
+            ss << "WARNING in file processing: file segment " << _range.start
+               << " - " << _range.end << " does not contain valid FASTQ markers.";
             throw io_exception(ss.str());
           }
           return new_pos;
@@ -263,10 +272,10 @@ namespace bliss
           if (input.start > 0)
           {  // not first block
              // open the file for search of first record.
-            FileLoaderType f(_filename, input);
+            FileLoaderType f(_filename, input);  // don't preload
 
             // search for the new start
-            newStart = find_sequence_start(f.getData(), f.getRange());
+            newStart = find_sequence_start(f.begin(), this->getRange());
 
             // clean up when exiting the block, including close the file handle.
           }
@@ -286,7 +295,7 @@ namespace bliss
             FileLoaderType f(_filename, next);
 
             // search for the new end
-            newEnd = find_sequence_start(f.getData(), f.getRange());
+            newEnd = find_sequence_start(f.begin(), this->getRange());
 
             // clean up when if statement exits
           }
