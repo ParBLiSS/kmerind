@@ -200,6 +200,10 @@ NEXT TODO:
 			
 		update fileloader to be more self contained, and support parallel loading given an MPI comm.  DONE.
 			put interface on file_loader to allow loading in chunks. TODO.
+4/25/2014
+		refactoring is almost done.  file loader is less of a super class now.   fastq_loader is now a functor for partitioning boundary adjustment only.
+		TODO: chunks.
+		TODO: change: no qual and no mpi tests.
 		
 Each thread owning its own set of buffers - if 1000 procs, 16 threads each, 8MB each buffer, -> 128G.  need smarter locking.
 	

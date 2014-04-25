@@ -241,7 +241,7 @@ if (ENABLE_TESTING)
   set(TEST_XML_OUTPUT_DIR ${PROJECT_BINARY_DIR}/Testing)
 
 
-  function(bliss_add_test module_name link_to_module)
+  function(bliss_add_test module_name module_link)
     # set the name for the test target and executable
     set(test_target_name test-${module_name})
     # add all give files
@@ -253,12 +253,15 @@ if (ENABLE_TESTING)
     # link test with gtest_main
     target_link_libraries(${test_target_name} gtest_main)
 
+    # all the extra libs
+    target_link_libraries(${test_target_name} ${EXTRA_LIBS})
+
     # link to the tested module (but only if that module produces a linkable
     # library)
-    if (link_to_module)
-      target_link_libraries(${test_target_name} ${module_name})
-    endif()
-
+    if (module_link)
+        target_link_libraries(${test_target_name} ${module_name})
+    endif (module_link)
+    
     # if code coverage is to be determined: link with gcov
     if (ENABLE_COVERAGE)
       target_link_libraries(${test_target_name} gcov)

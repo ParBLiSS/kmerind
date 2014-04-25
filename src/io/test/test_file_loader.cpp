@@ -1,16 +1,23 @@
 /**
  * file_loader_test.cpp
+
  *
  *  Created on: Feb 18, 2014
  *      Author: tpan
  */
+
+
+#include "config.hpp"    // for location of data.
+
+#if defined(USE_MPI)
+#include "mpi.h"
+#endif
 
 // include google test
 #include <gtest/gtest.h>
 #include <cstdint> // for uint64_t, etc.
 #include <string>
 
-#include "config.hpp"    // for location of data.
 #include "io/file_loader.hpp"
 
 using namespace bliss::io;
@@ -30,7 +37,7 @@ class FileLoaderTest : public ::testing::Test
       fileSize = static_cast<size_t>(filestat.st_size);
 
       ASSERT_EQ(34111308, fileSize);
-      nElem = fileSize / sizeof(T);
+
     }
 
     static void readFilePOSIX(const std::string &fileName, const size_t& offset,
@@ -46,7 +53,6 @@ class FileLoaderTest : public ::testing::Test
 
     std::string fileName;
     size_t fileSize;      // in units of T.
-    size_t nElem;
 
 };
 
@@ -61,21 +67,19 @@ TYPED_TEST_P(FileLoaderTest, OpenWithFullRange)
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get fileName
-  int rank = 0;
-  int nprocs = 1;
 
-  RangeType r =
-      RangeType::block_partition(nprocs, rank, 0, this->nElem);
-
-  FileLoaderType loader(this->fileName, r);
+  FileLoaderType loader(this->fileName);
+  RangeType r = loader.getRange();
 
   size_t len = r.end - r.start;
   TypeParam* gold = new TypeParam[len + 1];
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
+  loader.load();
   int comp = memcmp(gold, loader.begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
   delete [] gold;
+  loader.unload();
 }
 
 // normal test cases
@@ -85,21 +89,20 @@ TYPED_TEST_P(FileLoaderTest, PreloadWithFullRange)
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get fileName
-  int rank = 0;
-  int nprocs = 1;
 
-  RangeType r =
-      RangeType::block_partition(nprocs, rank, 0, this->nElem);
-
-  FileLoaderType loader(this->fileName, r, 0.1f);
+  FileLoaderType loader(this->fileName);
+  RangeType r = loader.getRange();
 
   size_t len = r.end - r.start;
   TypeParam* gold = new TypeParam[len + 1];
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
+  loader.load(0.2f);
   int comp = memcmp(gold, loader.begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
   delete [] gold;
+  loader.unload();
+
 }
 
 // normal test cases
@@ -109,21 +112,18 @@ TYPED_TEST_P(FileLoaderTest, AttemptPreloadWithFullRange)
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get fileName
-  int rank = 0;
-  int nprocs = 1;
-
-  RangeType r =
-      RangeType::block_partition(nprocs, rank, 0, this->nElem);
-
-  FileLoaderType loader(this->fileName, r, 0.0001f);
+  FileLoaderType loader(this->fileName);
+  RangeType r = loader.getRange();
 
   size_t len = r.end - r.start;
   TypeParam* gold = new TypeParam[len + 1];
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
+  loader.load(0.001f);
   int comp = memcmp(gold, loader.begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
   delete [] gold;
+  loader.unload();
 }
 
 
@@ -136,18 +136,20 @@ TYPED_TEST_P(FileLoaderTest, OpenWithRange)
   int rank = 3;
   int nprocs = 7;
 
-  RangeType r =
-      RangeType::block_partition(nprocs, rank, 0, this->nElem);
+  FileLoaderType loader(this->fileName);
 
-  FileLoaderType loader(this->fileName, r);
+  RangeType r = loader.getFullRange().block_partition(nprocs, rank);
+  loader.setRange(r);
 
   size_t len = r.end - r.start;
   TypeParam* gold = new TypeParam[len + 1];
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
+  loader.load();
   int comp = memcmp(gold, loader.begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
   delete [] gold;
+  loader.unload();
 }
 
 TYPED_TEST_P(FileLoaderTest, OpenWithAlignedRange)
@@ -159,23 +161,29 @@ TYPED_TEST_P(FileLoaderTest, OpenWithAlignedRange)
   int rank = 3;
   int nprocs = 7;
 
-  RangeType r =
-      RangeType::block_partition(nprocs, rank, 0, this->nElem);
 
-  RangeType ra = r.align_to_page(
-      sysconf(_SC_PAGE_SIZE));
+  FileLoaderType loader(this->fileName);
 
-  FileLoaderType loader(this->fileName, ra);
+  RangeType r = loader.getFullRange().block_partition(nprocs, rank);
+  RangeType ra = r.align_to_page(sysconf(_SC_PAGE_SIZE));
 
-  RangeType r2 = loader.getRange();
-  size_t len = r2.end - r2.start;
+  loader.setRange(ra);
+  loader.load();
 
+  size_t len = ra.end - ra.start;
   TypeParam* gold = new TypeParam[len + 1];
-  FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
-
+  FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, ra.start, len, gold);
   int comp = memcmp(gold, loader.begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
+
+  len = r.end - r.start;
+  FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
+  comp = memcmp(gold, loader.begin(), len * sizeof(TypeParam));
+  ASSERT_EQ(0, comp);
+
+
   delete [] gold;
+  loader.unload();
 }
 
 
@@ -189,20 +197,20 @@ TYPED_TEST_P(FileLoaderTest, PreloadWithRange)
   int rank = 3;
   int nprocs = 7;
 
-  RangeType r =
-      RangeType::block_partition(nprocs, rank, 0, this->nElem);
+  FileLoaderType loader(this->fileName);
 
-  FileLoaderType loader(this->fileName, r, 0.1f);
+  RangeType r = loader.getFullRange().block_partition(nprocs, rank);
+  loader.setRange(r);
 
-  RangeType r2 = loader.getRange();
-  size_t len = r2.end - r2.start;
-
+  size_t len = r.end - r.start;
   TypeParam* gold = new TypeParam[len + 1];
-  FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
+  FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
+  loader.load(0.2f);
   int comp = memcmp(gold, loader.begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
   delete [] gold;
+  loader.unload();
 }
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, AttemptPreloadWithRange)
@@ -214,21 +222,21 @@ TYPED_TEST_P(FileLoaderTest, AttemptPreloadWithRange)
   int rank = 3;
   int nprocs = 7;
 
-  RangeType r =
-      RangeType::block_partition(nprocs, rank, 0, this->nElem);
+  FileLoaderType loader(this->fileName);
 
-  FileLoaderType loader(this->fileName, r, 0.0001f);
+  RangeType r = loader.getFullRange().block_partition(nprocs, rank);
+  loader.setRange(r);
 
-  RangeType r2 = loader.getRange();
-  size_t len = r2.end - r2.start;
 
+  size_t len = r.end - r.start;
   TypeParam* gold = new TypeParam[len + 1];
-  FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
+  FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
-
+  loader.load(0.001f);
   int comp = memcmp(gold, loader.begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
   delete [] gold;
+  loader.unload();
 }
 
 
@@ -237,72 +245,46 @@ REGISTER_TYPED_TEST_CASE_P(FileLoaderTest, OpenWithFullRange, PreloadWithFullRan
                            OpenWithRange, OpenWithAlignedRange, PreloadWithRange, AttemptPreloadWithRange);
 
 
-template <typename T>
-class FileLoaderDeathTest : public ::testing::Test
-{
-  protected:
-    virtual void SetUp()
-    {
-    }
-
-};
-
-// indicate this is a typed test
-TYPED_TEST_CASE_P(FileLoaderDeathTest);
-
-
-// TODO negative test cases
-TYPED_TEST_P(FileLoaderDeathTest, NoFilename)
-{
-  typedef file_loader<TypeParam> FileLoaderType;
-  typedef typename FileLoaderType::RangeType RangeType;
-
-  RangeType r;
-  r.start = 0;
-  r.end = 1;
-
-  std::string fn;
-
-  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  EXPECT_EXIT(FileLoaderType(fn, r), ::testing::KilledBySignal(SIGABRT), err_regex);
-
-}
-
-TYPED_TEST_P(FileLoaderDeathTest, BadFilename)
-{
-  typedef file_loader<TypeParam> FileLoaderType;
-  typedef typename FileLoaderType::RangeType RangeType;
-
-  RangeType r;
-  r.start = 0;
-  r.end = 1;
-  std::string fn;
-  fn.assign("bad");
-
-  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
-  EXPECT_THROW(FileLoaderType(fn, r), bliss::io::io_exception);
-}
-
-
-TYPED_TEST_P(FileLoaderDeathTest, EmptyRange)
-{
-  typedef file_loader<TypeParam> FileLoaderType;
-  typedef typename FileLoaderType::RangeType RangeType;
-
-  std::string fn;
-  fn.assign(PROJ_SRC_DIR);
-  fn.append("/test/data/empty.fastq");
-
-  RangeType r;
-  r.start = 0;
-  r.end = 0;
-
-  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  EXPECT_EXIT(FileLoaderType(fn, r), ::testing::KilledBySignal(SIGABRT), err_regex);
-}
-
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(FileLoaderDeathTest, NoFilename, BadFilename, EmptyRange);
+//template <typename T>
+//class FileLoaderDeathTest : public ::testing::Test
+//{
+//  protected:
+//    virtual void SetUp()
+//    {
+//    }
+//
+//};
+//
+//// indicate this is a typed test
+//TYPED_TEST_CASE_P(FileLoaderDeathTest);
+//
+//
+//// TODO negative test cases
+//TYPED_TEST_P(FileLoaderDeathTest, NoFilename)
+//{
+//  typedef file_loader<TypeParam> FileLoaderType;
+//
+//  std::string fileName;
+//
+//  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
+//  EXPECT_EXIT(FileLoaderType(fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
+//
+//}
+//
+//TYPED_TEST_P(FileLoaderDeathTest, BadFilename)
+//{
+//  typedef file_loader<TypeParam> FileLoaderType;
+//
+//  std::string fileName;
+//  fileName.assign("bad");
+//
+//  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
+//  EXPECT_THROW(FileLoaderType(fileName), bliss::io::io_exception);
+//}
+//
+//
+//// now register the test cases
+//REGISTER_TYPED_TEST_CASE_P(FileLoaderDeathTest, NoFilename, BadFilename);
 
 
 
@@ -310,4 +292,22 @@ REGISTER_TYPED_TEST_CASE_P(FileLoaderDeathTest, NoFilename, BadFilename, EmptyRa
 typedef ::testing::Types<unsigned char, char, int16_t, uint16_t, int32_t, uint32_t,
     int64_t, uint64_t> FileLoaderTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderTest, FileLoaderTestTypes);
-INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderDeathTest, FileLoaderTestTypes);
+//INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderDeathTest, FileLoaderTestTypes);
+
+
+int main(int argc, char* argv[]) {
+    int result = 0;
+
+    ::testing::InitGoogleTest(&argc, argv);
+
+
+#if defined(USE_MPI)
+    MPI_Init(&argc, &argv);
+#endif
+    result = RUN_ALL_TESTS();
+#if defined(USE_MPI)
+    MPI_Finalize();
+#endif
+    return result;
+}
+

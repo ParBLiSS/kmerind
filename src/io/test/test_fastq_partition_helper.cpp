@@ -5,6 +5,6 @@
  *      Author: tpan
  */
 
-#include "io/fastq_loader.hpp"
+#include "io/fastq_partition_helper.hpp"
 
 // TODO.
