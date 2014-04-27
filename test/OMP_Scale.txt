@@ -1,0 +1,19 @@
+home machine: raid 0 for /:  cached reads at 6577.94MB/s, buffered reads at 133.88MB/s
+              raid 1 for /mnt/data: cached reads at 6114.42MB/s, buffered reads at 65.35MB/s.
+
+expected peformance if diskbound:  for 34MB file on /home/tpan/src/bliss, 0.25s
+			           for 6GB file on /mnt/data/1000genome, 92s.
+
+
+no master, 45e7b600f5eb2bd8e7db7b4be5283804793d5e7a,,, b17d9dda0f611231726111910705f3313317ba6b (HEAD),,:wq
+
+numThreads, 1, 2, 3, 1, 2, 3
+1, 2.02227,,,2.02321,,
+2, 4.01112,,,2.13297,,
+3, 5.93805,,,4.48951,,
+4, 6.77488,,,6.48463,,
+5, 7.23071,,,6.25194,,
+6, 7.6358 ,,,7.10065,,
+7, 7.66349,,,7.35539,,
+8, 7.89757,,,7.53416,,
+

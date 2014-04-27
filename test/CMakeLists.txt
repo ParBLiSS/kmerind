@@ -26,20 +26,20 @@ target_link_libraries(testThreads ${EXTRA_LIBS})
 target_link_libraries(testThreads bliss-common)
 #target_link_libraries(testThreads bliss-index)
 
-## EXECUTABLES
-add_executable(testThreadsNoQual test_threads-no_qual.cpp)
-target_link_libraries(testThreadsNoQual ${EXTRA_LIBS})
-#target_link_libraries(testThreadsNoQual bliss-io)
-target_link_libraries(testThreadsNoQual bliss-common)
-#target_link_libraries(testThreadsNoQual bliss-index)
+### EXECUTABLES
+#add_executable(testThreadsNoQual test_threads-no_qual.cpp)
+#target_link_libraries(testThreadsNoQual ${EXTRA_LIBS})
+##target_link_libraries(testThreadsNoQual bliss-io)
+#target_link_libraries(testThreadsNoQual bliss-common)
+##target_link_libraries(testThreadsNoQual bliss-index)
 
 
-## EXECUTABLES
-add_executable(testThreadsNoMPI test_threads_no_mpi.cpp)
-target_link_libraries(testThreadsNoMPI ${EXTRA_LIBS})
-#target_link_libraries(testThreadsNoMPI bliss-io)
-target_link_libraries(testThreadsNoMPI bliss-common)
-#target_link_libraries(testThreadsNoMPI bliss-index)
+### EXECUTABLES
+#add_executable(testThreadsNoMPI test_threads_no_mpi.cpp)
+#target_link_libraries(testThreadsNoMPI ${EXTRA_LIBS})
+##target_link_libraries(testThreadsNoMPI bliss-io)
+#target_link_libraries(testThreadsNoMPI bliss-common)
+##target_link_libraries(testThreadsNoMPI bliss-index)
 
 
 ## EXECUTABLES
