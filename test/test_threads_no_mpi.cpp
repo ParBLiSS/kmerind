@@ -100,7 +100,7 @@ void compute_OMP_WithMaster(FileLoaderType &loader,
   // do some work using openmp
 
   ///  get the start and end iterator position.
-  ParserType parser(loader.begin(), loader.getRange().start, true);
+  ParserType parser(loader.begin(), loader.getRange().start);
   IteratorType fastq_start(parser, loader.begin(), loader.end());
   IteratorType fastq_end(parser ,loader.end());
 
@@ -216,7 +216,7 @@ void compute_OMP_NoMaster(FileLoaderType &loader,
   INFO("NO MASTER");
 
   ///  get the start and end iterator position.
-  ParserType parser(loader.begin(), loader.getRange().start, true);
+  ParserType parser(loader.begin(), loader.getRange().start);
   IteratorType fastq_start(parser, loader.begin(), loader.end());
   IteratorType fastq_end(parser ,loader.end());
 

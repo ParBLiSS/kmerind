@@ -130,6 +130,8 @@ namespace bliss
         SizeT operator()(const CharT* _data,
                             const SizeT &start, const SizeT &end)
                                        throw (bliss::io::io_exception) {
+          if (start == end) return end;
+
           // need to look at 2 or 3 chars.  read 4 lines because of the line 2-3 combo below needs offset to next line 1.
           CharT first[4];
           SizeT offsets[4] =

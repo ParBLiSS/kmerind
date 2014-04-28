@@ -25,6 +25,7 @@
 #include <cstring>      // memcpy
 #include <exception>    // ioexception
 #include <sstream>      // stringstream
+#include <memory>
 
 #include <unistd.h>     // sysconf
 #include <sys/stat.h>   // block size.
@@ -115,13 +116,16 @@ namespace bliss
         explicit file_loader(const std::string &_filename,
                     const MPI_Comm& _comm = MPI_COMM_SELF) throw (io_exception)
             : filename(_filename), range(), fullRange(), file_handle(-1),
-              data(nullptr), aligned_data(nullptr), loaded(false),
+              data(nullptr), aligned_data(nullptr), loaded(false), preloaded(false),
+              chunkPos(0),
               nprocs(1), rank(0), comm(_comm)
 #else
-        explicit file_loader(const std::string &_filename) throw (io_exception)
+        explicit file_loader(const std::string &_filename,
+                             const int _nParts = 1, const int _rank = 0) throw (io_exception)
             : filename(_filename), range(), fullRange(), file_handle(-1),
-              data(nullptr), aligned_data(nullptr), loaded(false),
-              nprocs(1), rank(0)
+              data(nullptr), aligned_data(nullptr), loaded(false),preloaded(false),
+              chunkPos(0),
+              nprocs(_nParts), rank(_rank)
 #endif
         {
 #if defined(USE_MPI)
@@ -203,6 +207,8 @@ namespace bliss
          */
         inline T* begin()
         {
+          assert(loaded);
+
           return data;
         }
         inline const T* begin() const
@@ -216,6 +222,8 @@ namespace bliss
          */
         inline T* end()
         {
+          assert(loaded);
+
           return data + this->size();
         }
         inline const T* end() const
@@ -307,6 +315,72 @@ namespace bliss
           range = output;
         }
 
+        /**
+         * search at the start and end of the block partition for some matching condition,
+         * and set as new partition positions.
+         *
+         * @param[in]  helper       to find the partition boundaries
+         * @param[out] start        output start pointer. at least "begin".  if copying, then caller needs to manage "start"
+         * @param[out] end          output end pointer.  at most "end"
+         * @param[in]  chunkSize    suggested partition size.  default to 0, which is translated to system page size.
+         * @param[in]  copying      if copying, then start and end point to a memory block that is a copy of the underlying file mmap.
+         * @return                  actual chunk size created
+         */
+        template <typename PartitionHelper>
+        SizeType getNextChunk(PartitionHelper &helper, T* &startPtr, T* &endPtr, const SizeType &chunkSize = 0, const bool copying = true) {
+
+          static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for getNextChunk() has a different SizeType than FileLoader\n");
+
+//          assert(loaded);
+
+          // traversed all.  so done.
+          SizeType len = range.end - range.start;
+          SizeType cs = (chunkSize == 0 ? page_size : chunkSize);
+          SizeType s, e;
+          SizeType readLen = 0;
+
+          /// part that needs to be sequential
+
+#pragma omp critical
+          {
+#pragma omp flush(chunkPos)
+            if (chunkPos >= len) {
+              endPtr = startPtr = data + len;
+            } else {
+              s = chunkPos;
+              RangeType next(s + cs, s + 2 * cs);
+              next &= range;
+
+              /// search end part only.  update chunkPos for next search.
+              e = helper(data + next.start, next.start, next.end);
+              chunkPos = e;
+#pragma omp flush(chunkPos)
+              readLen = e - s;
+            }
+          }
+          /// end part that needs to be serial
+
+          // now can set in parallel
+          // set the start.  guaranteed to be at the start of a record according to the partitionhelper.
+
+          if (readLen > 0) {
+             if (copying) {
+              //unique_ptr is not appropriate, as ownership is either by this object (no copy) or by calling thread. (copying)
+              startPtr = new T[len + 1];
+              endPtr = startPtr + len;
+              *endPtr = 0;
+              memcpy(startPtr, data + s, (len+1) * sizeof(T));
+            } else {
+              startPtr = data + s;
+              endPtr = data + e;
+            }
+         }
+         DEBUG("read " << readLen << " elements, start at [" << *startPtr << "] end at [" << *endPtr << "]");
+
+        return readLen;
+      }
+
+
 
         /**
          *  performs memmap, and optionally preload the data into memory.
@@ -331,7 +405,7 @@ namespace bliss
               (_memUseFraction < 0.0f) ? 0.0f : _memUseFraction;
 
 
-          loaded = false;
+          preloaded = false;
           if (memUseFraction > 0.0f) {
             /// check if we can preload.
             struct sysinfo memInfo;
@@ -339,7 +413,7 @@ namespace bliss
             long long limit = static_cast<long long>(static_cast<float>(memInfo.freeram * memInfo.mem_unit) * memUseFraction);
 
             if (limit < (this->size() * sizeof(T)) ) {
-              loaded = true;
+              preloaded = true;
             } else {
               //WARNING("Insufficient memory requested during file loading.  Not preloading file.");
             }
@@ -347,7 +421,7 @@ namespace bliss
 
           //DEBUG("mapped");
 
-          if (loaded)
+          if (preloaded)
           {
             // allocate space
             data = new T[this->size() + 1];
@@ -369,6 +443,7 @@ namespace bliss
 
           }
           //DEBUG("loaded");
+          loaded = true;
 
         }
 
@@ -376,11 +451,11 @@ namespace bliss
         {
           //DEBUG("Unloading");
 
-          if (loaded)
+          if (preloaded)
           {
             if (data != nullptr)
               delete [] data;
-            loaded = false;
+            preloaded = false;
           }
           else
           {
@@ -389,32 +464,35 @@ namespace bliss
           }
           aligned_data = nullptr;
           data = nullptr;
-
           //DEBUG("unloaded");
-
+          loaded = false;
         }
 
 
 
       protected:
         std::string filename;
-        RangeType range;  // offset in file from where to read
+        RangeType range;      // offset in file from where to read
         RangeType fullRange;  // offset in file from where to read
 
         SizeType page_size;
-        int file_handle;  // file handle
+        int file_handle;      // file handle
 
-        T* data;
-        T* aligned_data;  // memmapped data, page aligned.  strictly internal
+        T* data;              // actual start of data
+        T* aligned_data;      // mem-mapped data, page aligned.  strictly internal
 
         bool loaded;
+        bool preloaded;
 
-        int nprocs;
-        int rank;
+        SizeType chunkPos;    // for chunked iteration.  size since "data".
+
+        int nprocs;           // for partitioning.
+        int rank;             // for partitioning.
 
 #if defined(USE_MPI)
         MPI_Comm comm;
 #endif
+
 
         /**
          * map a region of the file to memory.

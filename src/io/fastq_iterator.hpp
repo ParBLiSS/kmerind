@@ -159,10 +159,9 @@ namespace bliss
         SeqType output;
         Iterator _start;
         size_t _global_offset;
-        const bool _copying;
 
-        fastq_parser(const Iterator & start, const size_t & global_offset, const bool &copying)
-            : output(), _start(start), _global_offset(global_offset), _copying(copying)
+        fastq_parser(const Iterator & start, const size_t & global_offset)
+            : output(), _start(start), _global_offset(global_offset)
         {
         }
 
