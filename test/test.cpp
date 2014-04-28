@@ -54,6 +54,8 @@ int main(int argc, char* argv[])
 
 #ifdef USE_OPENMP
   std::cout << "USE_OPENMP is set" << std::endl;
+  omp_set_nested(1);
+  omp_set_dynamic(0);
 
 #pragma omp parallel num_threads(nthreads) shared(max, done, i, step, v) default(none)
   {

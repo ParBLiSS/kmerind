@@ -9,8 +9,11 @@
  *
  * TODO add License
  */
+#include "config.hpp"
 
+#if defined(USE_MPI)
 #include "mpi.h"
+#endif
 
 #include <unistd.h>
 #include <string.h>
@@ -25,7 +28,6 @@
 
 #include "omp.h"
 
-#include "config.hpp"
 
 #include "utils/logging.h"
 #include "utils/constexpr_array.hpp"

@@ -9,8 +9,11 @@
  *
  * TODO add License
  */
+#include "config.hpp"
 
+#if defined(USE_MPI)
 #include "mpi.h"
+#endif
 
 #include <unistd.h>
 #include <string.h>
@@ -25,7 +28,6 @@
 
 #include "omp.h"
 
-#include "config.hpp"
 
 #include "utils/logging.h"
 #include "utils/constexpr_array.hpp"
@@ -34,7 +36,7 @@
 #include "common/AlphabetTraits.hpp"
 #include "iterators/range.hpp"
 #include "iterators/buffered_transform_iterator.hpp"
-#include "io/fastq_loader.hpp"
+#include "io/fastq_partition_helper.hpp"
 #include "io/MPISendBuffer.hpp"
 #include "index/kmer_index_element.hpp"
 #include "index/kmer_index_functors.hpp"
@@ -47,6 +49,7 @@
 // define kmer index type
 typedef bliss::index::KmerSize<21> KmerSize;
 typedef uint64_t KmerType;
+typedef DNA Alphabet;
 typedef bliss::index::KmerIndexElementWithId<KmerSize, KmerType, bliss::io::fastq_sequence_id> KmerIndexType;
 
 // define buffer where to put the kmers
@@ -54,10 +57,11 @@ constexpr bool thread_safe = false;
 typedef bliss::io::MPISendBuffer<KmerIndexType, thread_safe> BufferType;
 
 // define raw data type :  use CharType
-typedef CharType* BaseIterType;
+typedef bliss::io::file_loader<CharType>                       FileLoaderType;
+typedef bliss::io::FASTQPartitionHelper<CharType, size_t> PartitionHelperType;
+typedef typename FileLoaderType::IteratorType                  BaseIterType;
 
 // define read type
-typedef DNA Alphabet;
 typedef bliss::io::fastq_sequence<BaseIterType, Alphabet>  SequenceType;
 
 
@@ -65,8 +69,8 @@ typedef bliss::index::generate_kmer<SequenceType, KmerIndexType> kmer_op_type;
 
 typedef std::unordered_multimap<KmerType, KmerIndexType> IndexType;
 
-typedef bliss::io::fastq_loader<Alphabet> FileLoaderType;
-
+typedef bliss::io::fastq_parser<BaseIterType, Alphabet>               ParserType;
+typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
 typedef bliss::index::KmerIndexGenerator<kmer_op_type, BufferType, bliss::index::XorModulus<KmerType>> ComputeType;
 
 
@@ -206,45 +210,6 @@ void finalize(MPI_Comm &comm) {
   #endif
 }
 
-FileLoaderType openFile(const std::string &filename, MPI_Comm &comm, const int &nprocs, const int &rank) {
-  // first thread gets the file size.
-  uint64_t file_size = 0;
-  if (rank == 0)
-  {
-    struct stat filestat;
-    stat(filename.c_str(), &filestat);
-    file_size = static_cast<uint64_t>(filestat.st_size);
-    fprintf(stderr, "block size is %ld\n", filestat.st_blksize);
-    fprintf(stderr, "sysconf block size is %ld\n", sysconf(_SC_PAGE_SIZE));
-  }
-
-#ifdef USE_MPI
-  if (nprocs > 1) {
-    // broadcast to all
-    MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, comm);
-  }
-#endif
-
-  if (rank == nprocs - 1)
-  {
-    fprintf(stderr, "file size is %ld\n", file_size);
-  }
-
-  // real data:  mmap is better for large files and limited memory.
-  //             preloading is better for smaller files and/or large amount of memory.
-  // stream processing means data does not need to be buffered in memory - more efficient.
-
-  // file access:  better to work with a few pages at a time, or to work with large block?
-
-  // first generate an approximate partition.
-  FileLoaderType::RangeType r =
-      FileLoaderType::RangeType::block_partition(nprocs, rank, 0, file_size);
-
-  FileLoaderType loader = FileLoaderType(filename, r, file_size, true);
-
-  return loader;
-}
-
 // TODO: make these function with/without MPI, with/without OpenMP.
 // TODO: 1. make a communicator that encapsulates the nprocs, rank, nthread, tid, etc - this refactors KmerIndexGenerator so there is no dependency on nprocs, rank, and tid.
 // TODO: 2. refactor these "compute" methods so that the loop iterations are handled by a ThreadModel.
@@ -264,8 +229,10 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
   // do some work using openmp
 
   ///  get the start and end iterator position.
-  FileLoaderType::IteratorType fastq_start = loader.begin();
-  FileLoaderType::IteratorType fastq_end = loader.end();
+  ParserType parser(loader.begin(), loader.getRange().start, true);
+  IteratorType fastq_start(parser, loader.begin(), loader.end());
+  IteratorType fastq_end(parser ,loader.end());
+
 
 #ifdef USE_OPENMP
   INFO("rank " << rank << " MAX THRADS = " << nthreads);
@@ -430,8 +397,9 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
   INFO("NO MASTER");
 
   ///  get the start and end iterator position.
-  FileLoaderType::IteratorType fastq_start = loader.begin();
-  FileLoaderType::IteratorType fastq_end = loader.end();
+  ParserType parser(loader.begin(), loader.getRange().start, true);
+  IteratorType fastq_start(parser, loader.begin(), loader.end());
+  IteratorType fastq_end(parser ,loader.end());
 
 
 
@@ -524,6 +492,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
           {
             // get data, and move to next for the other threads
             atEnd = (fastq_start == fastq_end);
+#pragma omp flush(atEnd)
             hasData = !atEnd;
 
             if (hasData)
@@ -534,6 +503,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
               li = i;
               ++fastq_start;
               ++i;
+#pragma omp flush(i, fastq_start)
             }
           }
 
@@ -664,7 +634,12 @@ int main(int argc, char** argv) {
     //////////////// now partition and open the file.
     t1 = std::chrono::high_resolution_clock::now();
 
-    FileLoaderType loader = openFile(filename, comm, nprocs, rank);  // this handle is alive through the entire execution.
+    FileLoaderType loader(filename, comm);  // this handle is alive through the entire execution.
+    // adjust the partition of the file
+    PartitionHelperType ph;
+    loader.adjustRange(ph);
+    loader.load();
+
 
     t2 = std::chrono::high_resolution_clock::now();
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
@@ -683,9 +658,9 @@ int main(int argc, char** argv) {
       // do some work using openmp  // version without master
       compute_MPI_OMP_NoMaster<ComputeType>(loader, nthreads, index, comm, nprocs, rank);
     }
+    loader.unload();
 
   }  // scope to ensure file loader is destroyed.
-
 
   //////////////  clean up MPI.
   finalize(comm);

@@ -7,7 +7,7 @@ expected peformance if diskbound:  for 34MB file on /home/tpan/src/bliss, 0.25s
 
 no master, 45e7b600f5eb2bd8e7db7b4be5283804793d5e7a,,, b17d9dda0f611231726111910705f3313317ba6b (HEAD),,:wq
 
-numThreads, 1, 2, 3, 1, 2, 3
+testThreads numThreads, 1, 2, 3, 1, 2, 3
 1, 2.02227,,,2.02321,,
 2, 4.01112,,,2.13297,,
 3, 5.93805,,,4.48951,,
@@ -16,4 +16,39 @@ numThreads, 1, 2, 3, 1, 2, 3
 6, 7.6358 ,,,7.10065,,
 7, 7.66349,,,7.35539,,
 8, 7.89757,,,7.53416,,
+
+test1 (simple computation, OMP patterns) does not seem to scale at all.
+
+
+lab machine: raid 0 for /:  cached reads at 12.679.05MB/s, buffered reads at 188.35MB/s
+              raid 1 for /mnt/data: cached reads at 13200.90MB/s, buffered reads at 184.78MB/s.
+
+expected peformance if diskbound:  for 34MB file on /home/tpan/src/bliss, 0.18s
+			           for 6GB file on /mnt/data/1000genome, 32.47s.
+
+
+no master, 45e7b600f5eb2bd8e7db7b4be5283804793d5e7a,,, b17d9dda0f611231726111910705f3313317ba6b (HEAD),,:wq
+
+testThreads numThreads, 1, 2, 3, 1, 2, 3
+1, 0.915671,,,0.925643,0.928003,
+2, 1.42989 ,,,1.41417 ,1.39336 ,
+3, 1.35917 ,,,1.47253 ,1.4588  ,
+4, 1.28877 ,,,1.46118 ,1.4578  ,
+
+testThreadsNoMPI numThreads, 1, 2, 3, 1, 2, 3
+1, ,,, 0.406409,0.405374,
+2, ,,, 0.679487,0.643044,
+3, ,,, 0.813066,0.82492 ,
+4, ,,, 0.837739,0.836073,
+
+testThreadsNoQual numThreads, 1, 2, 3, 1, 2, 3
+1, 0.219984,,, 0.233086,,
+2, 0.577886,,, 0.4408  ,,
+3, 0.942257,,, 0.903234,,
+4, 0.99329 ,,, 0.967505,,
+
+test1 (simple computation, OMP patterns) scales to about 3x at 4 cores.
+
+
+
 

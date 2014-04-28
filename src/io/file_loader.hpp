@@ -109,11 +109,11 @@ namespace bliss
          * @param _filename       input file name
          * @param _comm           MPI Communicator (defined only if CMake is configured with MPI).
          *                        default is MPI_COMM_WORLD, which means all nodes participate.
-         *                        to get just the calling node, use MPI_COMM_SELF.
+         *                        to get just the calling node, use MPI_COMM_SELF (gives the right nprocs).
          */
 #if defined(USE_MPI)
         explicit file_loader(const std::string &_filename,
-                    const MPI_Comm& _comm = MPI_COMM_WORLD ) throw (io_exception)
+                    const MPI_Comm& _comm = MPI_COMM_SELF) throw (io_exception)
             : filename(_filename), range(), fullRange(), file_handle(-1),
               data(nullptr), aligned_data(nullptr), loaded(false),
               nprocs(1), rank(0), comm(_comm)
