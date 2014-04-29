@@ -132,8 +132,8 @@ namespace bliss
          * @return
          */
         range<T>& operator |=(const range<T>& other) {
-          block_start = std::min(block_start, other.block_start);
-          start =       std::min(start,       other.start);
+          block_start =
+                start = std::min(start,       other.start);
           end   =       std::max(end,         other.end);
           overlap =     std::max(overlap,     other.overlap);
 
@@ -158,14 +158,13 @@ namespace bliss
          */
         range<T>& operator &=(const range<T>& other)
         {
-          block_start = std::max(block_start, other.block_start);
           start =       std::max(start,       other.start);
           end   =       std::min(end,         other.end);
           overlap =     std::max(overlap,     other.overlap);
 
           // in case the ranges do not intersect
-          start = std::min(start, end);
-          block_start = std::min(start, block_start);
+          block_start =
+                start = std::min(start, end);
 
           return *this;
         }
@@ -190,8 +189,9 @@ namespace bliss
           // cases: other.start < start < end  : output should be other.start <-> other.start
           //        start < other.start < end  : output should be       start <-> other.start
           //        start < end < other.start  : output should be       start <-> end
-          start = std::min(start,       other.start);
-          end   = std::min(end,         other.start);
+          block_start =
+                start = std::min(start,       other.start);
+                end   = std::min(end,         other.start);
           return *this;
         }
         /**
@@ -215,6 +215,7 @@ namespace bliss
         {
           start += amount;
           end   += amount;
+          block_start = start;
           return *this;
         }
         /**
@@ -237,6 +238,7 @@ namespace bliss
         {
           start -= amount;
           end   -= amount;
+          block_start = start;
           return *this;
         }
         /**

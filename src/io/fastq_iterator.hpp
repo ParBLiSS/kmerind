@@ -179,7 +179,7 @@ namespace bliss
         /**
          * parses with an iterator, so as to have complete control over the increment.
          */
-        size_t operator()(Iterator &iter, const Iterator & end)
+        size_t operator()(Iterator &iter, const Iterator &end)
         {
           // first initialize  (on windowed version, will need to have a separate
           // way of initializing., perhaps with an overloaded operator.

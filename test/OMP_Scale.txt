@@ -49,6 +49,17 @@ testThreadsNoQual numThreads, 1, 2, 3, 1, 2, 3
 
 test1 (simple computation, OMP patterns) scales to about 3x at 4 cores.
 
+With Chunking at 4K
+testThreads numThreads, no master 1, 2, 3, master 1, 2, 3
+1, 0.879457, , , 0.881537,,
+2, 1.46507 , , , 1.42871 ,, 
+3, 1.35424 , , , 1.34971 ,,
+4, 1.29495 , , , 1.29015 ,,
 
-
-
+with chunking at 8K.
+testThreads numThreads, no master 1, 2, 3, MPI 1, 2, 3
+1, 170.158, 170.299, , 170.158
+2, 255.034, ,,         96.4753
+3, 239.591,,,		   76.3815
+4, 226.028,,,		   70.0483
+8, ,,,				   59.6931

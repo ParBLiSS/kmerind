@@ -170,6 +170,8 @@ namespace bliss
           range = fullRange.block_partition(nprocs, rank);
           range = range.align_to_page(page_size);
 
+          chunkPos = range.start;
+
           /// open the file and get a handle.
           file_handle = open(filename.c_str(), O_RDONLY);
           if (file_handle == -1)
@@ -266,6 +268,7 @@ namespace bliss
           //DEBUG("set range to: " << r);
           range = r;
           range.align_to_page(page_size);
+          chunkPos = range.start;
         }
 
         /**
@@ -286,13 +289,13 @@ namespace bliss
           RangeType searchRange = range | next;
           searchRange.align_to_page(page_size);
 
-          // for output
-          RangeType output(range);
 
           // map the content
           T* searchData = this->map(searchRange) + searchRange.start - searchRange.block_start;
 
-          if (range.start > 0)
+          // for output
+          RangeType output(range);
+          if (range.start > fullRange.start)
           {
             // not first block
 
@@ -312,7 +315,25 @@ namespace bliss
 
           // readjuste
           output.align_to_page(page_size);
+
           range = output;
+          chunkPos = range.start;
+        }
+
+        template <typename PartitionHelper>
+        RangeType adjustChunkRange(PartitionHelper &helper, const RangeType &chunkRange) {
+          // make sure the file is open
+          assert(data != nullptr);
+
+          // make sure the search range is within bounds
+          RangeType next = (chunkRange >> (chunkRange.end - chunkRange.start)) & range;
+
+          // adjust the end only - assume start is okay.
+          auto e = helper(data + (next.start - range.start), next.start, next.end);
+
+          RangeType result(chunkRange);
+          result.end = e;
+          return result;
         }
 
         /**
@@ -336,29 +357,36 @@ namespace bliss
           // traversed all.  so done.
           SizeType len = range.end - range.start;
           SizeType cs = (chunkSize == 0 ? page_size : chunkSize);
-          SizeType s, e;
+          SizeType s = range.start, e = range.end;
           SizeType readLen = 0;
 
           /// part that needs to be sequential
 
+          //DEBUG("range " << range << " chunk " << cs << " chunkPos " << chunkPos);
+
 #pragma omp critical
           {
-#pragma omp flush(chunkPos)
-            if (chunkPos >= len) {
+            if (chunkPos >= range.end) {
               endPtr = startPtr = data + len;
+              readLen = 0;
             } else {
-              s = chunkPos;
-              RangeType next(s + cs, s + 2 * cs);
-              next &= range;
 
+              s = chunkPos;
+              RangeType next(chunkPos + cs, chunkPos + 2 * cs);
+              next &= range;
               /// search end part only.  update chunkPos for next search.
-              e = helper(data + next.start, next.start, next.end);
+              e = helper(data + (next.start - range.start), next.start, next.end);
+
               chunkPos = e;
 #pragma omp flush(chunkPos)
               readLen = e - s;
+              //printf("s = %lu, e = %lu, chunkPos = %lu, readLen 1 = %lu\n", s, e, chunkPos, readLen);
+              //std::cout << "range: " << range << " next: " << next << std::endl;
             }
           }
           /// end part that needs to be serial
+
+          //DEBUG(" new chunkPos " << chunkPos << " start: " << s << " end: " << e);
 
           // now can set in parallel
           // set the start.  guaranteed to be at the start of a record according to the partitionhelper.
@@ -366,16 +394,16 @@ namespace bliss
           if (readLen > 0) {
              if (copying) {
               //unique_ptr is not appropriate, as ownership is either by this object (no copy) or by calling thread. (copying)
-              startPtr = new T[len + 1];
-              endPtr = startPtr + len;
+              startPtr = new T[readLen + 1];
+              endPtr = startPtr + readLen;
               *endPtr = 0;
-              memcpy(startPtr, data + s, (len+1) * sizeof(T));
+              memcpy(startPtr, data + (s - range.start), (readLen + 1) * sizeof(T));
             } else {
-              startPtr = data + s;
-              endPtr = data + e;
+              startPtr = data + (s - range.start);
+              endPtr = data + (e - range.start);
             }
          }
-         DEBUG("read " << readLen << " elements, start at [" << *startPtr << "] end at [" << *endPtr << "]");
+//         DEBUG("read " << readLen << " elements, start at " << s << " [" << *startPtr << "] end at "<< e << " [" << *endPtr << "]");
 
         return readLen;
       }

@@ -230,7 +230,7 @@ void finalize(MPI_Comm &comm) {
 template <typename Compute>
 void compute_MPI_OMP_WithMaster(FileLoaderType &loader, PartitionHelperType &ph,
                                 const int &nthreads, IndexType &index,
-                                MPI_Comm &comm, const int &nprocs, const int &rank) {
+                                MPI_Comm &comm, const int &nprocs, const int &rank, const int chunkSize) {
 
   INFO("HAS MASTER");
 
@@ -314,6 +314,7 @@ int buffer_size = 8192*1024;
         INFO("Level 1: compute: thread id = " << tid);
 
         Compute op(nprocs, rank, nthreads);
+        bool copying = true;
 
 #pragma omp single
         {
@@ -328,11 +329,11 @@ int buffer_size = 8192*1024;
             BaseIterType begin = nullptr, end = nullptr;
             size_t chunkRead;
 
-            while ((chunkRead = loader.getNextChunk(ph, begin, end, 4096, true)) > 0) {
+            while ((chunkRead = loader.getNextChunk(ph, begin, end, chunkSize, copying)) > 0) {
               li = i;
               ++i;
 
-  #pragma omp task firstprivate(read, li, begin, end, chunkRead) shared(op, rank, parser, buffers, counts, std::cerr) default(none)
+  #pragma omp task firstprivate(read, li, begin, end, chunkRead, copying) shared(op, rank, parser, buffers, counts, std::cerr) default(none)
               {
 
                 IteratorType fastq_start(parser, begin, end);
@@ -358,10 +359,10 @@ int buffer_size = 8192*1024;
                   // release resource
                 }
 
-                if (li % 10000 == 0)
+                if (li % 100000 == 0)
                   INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed chunk " << li);
 
-                delete [] begin;
+                if (copying) delete [] begin;
               }
               // next iteration will check to see if the iterator is at end,
               // and if not, get and compute.
@@ -415,7 +416,7 @@ int buffer_size = 8192*1024;
 template <typename Compute>
 void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
                               int &nthreads, IndexType &index,
-                              MPI_Comm &comm, const int &nprocs, const int &rank)
+                              MPI_Comm &comm, const int &nprocs, const int &rank, const int chunkSize)
 {
 
 
@@ -506,8 +507,9 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
         BaseIterType begin, end;
         size_t chunkRead = 0;
         int j = 0;
+        bool copying = true;
 
-        while ((chunkRead = loader.getNextChunk(ph, begin, end, 4096, true)) > 0) {
+        while ((chunkRead = loader.getNextChunk(ph, begin, end, chunkSize, copying)) > 0) {
           ++j;
 
 #pragma omp atomic
@@ -526,10 +528,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
             read = *fastq_start;
 //            SequenceType::allocCopy(*fastq_start, read);
 
-          //
-          //            ++fastq_start;
-          //            ++i;
-            // copy read.  not doing that right now.
+
             // then compute
             op(read, i, buffers, counts);
 //            SequenceType::deleteCopy(read);
@@ -537,11 +536,11 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
 
             // release resource
           }
-          if (i % 10000 == 0)
+          if (i % 100000 == 0)
             INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed chunk " << i);
 
 
-          delete [] begin;
+          if (copying) delete [] begin;
         }
 //        //private variables
 //        SequenceType read;
@@ -676,11 +675,20 @@ int main(int argc, char** argv) {
 
   }
 
-//  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
+  int chunkSize = 4000;
   if (argc > 3)
   {
-    filename.assign(argv[3]);
+    chunkSize = atoi(argv[3]);
   }
+
+
+//  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
+  if (argc > 4)
+  {
+    filename.assign(argv[4]);
+  }
+
+
 
 
 
@@ -721,11 +729,11 @@ int main(int argc, char** argv) {
     /////////////// now process the file using version with master.
     if (WithMaster) {
       // do some work using openmp  // version without master
-      compute_MPI_OMP_WithMaster<ComputeType>(loader, ph, nthreads, index, comm, nprocs, rank);
+      compute_MPI_OMP_WithMaster<ComputeType>(loader, ph, nthreads, index, comm, nprocs, rank, chunkSize);
     } else {
       /////////////// now process the file using version with master.
       // do some work using openmp  // version without master
-      compute_MPI_OMP_NoMaster<ComputeType>(loader, ph, nthreads, index, comm, nprocs, rank);
+      compute_MPI_OMP_NoMaster<ComputeType>(loader, ph, nthreads, index, comm, nprocs, rank, chunkSize);
     }
 
     loader.unload();

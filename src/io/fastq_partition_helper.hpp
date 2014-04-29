@@ -124,8 +124,9 @@ namespace bliss
          * search for first occurence of @ from an arbitrary starting point.
          *
          * @param _data     start of iterator.
-         * @param range     this indicates the position in the file.  NOTE that start position of 0 is treated differently.
-         * @return
+         * @param start     this indicates the position in the file.  NOTE that start position of 0 is treated differently.
+         * @param end     this indicates the position in the file.  NOTE that start position of 0 is treated differently.
+         * @return          position of the start of next read sequence (@).  if there is no complete sequence, return "end"
          */
         SizeT operator()(const CharT* _data,
                             const SizeT &start, const SizeT &end)
@@ -135,7 +136,7 @@ namespace bliss
           // need to look at 2 or 3 chars.  read 4 lines because of the line 2-3 combo below needs offset to next line 1.
           CharT first[4];
           SizeT offsets[4] =
-          { 0, 0, 0, 0 };   // units:  offset from beginning of file.
+          { end, end, end, end };   // units:  offset from beginning of file.
 
           const CharT* data = _data;
           // scan through to get the first At or Plus
