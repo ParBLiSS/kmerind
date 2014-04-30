@@ -91,11 +91,10 @@ namespace bliss
           int tid = omp_get_thread_num();
 
           // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-          for (int i = 0; start != end; ++start, ++i)
+          int i = 0;
+          for (; i < (K - 1) && start != end; ++start, ++i);
+          for (; start != end; ++start, ++i)
           {
-
-            if (i < (K - 1))
-              continue;
 
             index_kmer = *start;
 
@@ -170,11 +169,10 @@ namespace bliss
           int tid = omp_get_thread_num();
 
           // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-          for (int i = 0; (start != end) && (qstart != qend); ++start, ++qstart, ++i)
+          int i = 0;
+          for (; i < (K - 1) && (start != end) && (qstart != qend); ++start, ++qstart, ++i);
+          for (; (start != end) && (qstart != qend); ++start, ++qstart, ++i)
           {
-
-            if (i < (K - 1))
-              continue;
 
             index_kmer = *start;
             index_kmer.first.qual = *qstart;

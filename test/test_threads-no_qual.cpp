@@ -60,6 +60,8 @@ typedef bliss::io::MPISendBuffer<KmerIndexType, thread_safe> BufferType;
 typedef bliss::io::file_loader<CharType>                       FileLoaderType;
 typedef bliss::io::FASTQPartitionHelper<CharType, size_t> PartitionHelperType;
 typedef typename FileLoaderType::IteratorType                  BaseIterType;
+typedef typename std::iterator_traits<BaseIterType>::value_type BaseValueType;
+
 
 // define read type
 typedef bliss::io::fastq_sequence<BaseIterType, Alphabet>  SequenceType;
@@ -135,6 +137,8 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
     if (received == 0)
       continue;
 
+    //////// logic for storing index.
+
     assert(received % sizeof(KmerIndexType) == 0);  // no partial messages.
     count = received / sizeof(KmerIndexType);
     assert(count > 0);
@@ -170,6 +174,7 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
  * @param tid
  */
 void init(int &argc, char** &argv, MPI_Comm &comm, int &nprocs, int &rank) {
+
 
 #ifdef USE_MPI
   // initialize MPI
@@ -220,9 +225,9 @@ void finalize(MPI_Comm &comm) {
  * first pattern for threading - has a master thread
  */
 template <typename Compute>
-void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
+void compute_MPI_OMP_WithMaster(FileLoaderType &loader, PartitionHelperType &ph,
                                 const int &nthreads, IndexType &index,
-                                MPI_Comm &comm, const int &nprocs, const int &rank) {
+                                MPI_Comm &comm, const int &nprocs, const int &rank, const int chunkSize) {
 
   INFO("HAS MASTER");
 
@@ -230,8 +235,6 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
 
   ///  get the start and end iterator position.
   ParserType parser(loader.begin(), loader.getRange().start);
-  IteratorType fastq_start(parser, loader.begin(), loader.end());
-  IteratorType fastq_end(parser ,loader.end());
 
 
 #ifdef USE_OPENMP
@@ -251,13 +254,14 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader,
 
 int buffer_size = 8192*1024;
 
-#pragma omp parallel sections num_threads(2) shared(comm, index, senders, buffer_size, fastq_start, fastq_end, nprocs, nthreads, rank, std::cerr) default(none)
+#pragma omp parallel sections num_threads(2) shared(index, comm, nprocs, rank, buffer_size, senders, nthreads, loader, parser, ph) default(none)
   {
 
 #pragma omp section
     {
       std::chrono::high_resolution_clock::time_point t1, t2;
       std::chrono::duration<double> time_span;
+
       INFO("Level 0: index storage tid = " << omp_get_thread_num());
 
       t1 = std::chrono::high_resolution_clock::now();
@@ -273,9 +277,9 @@ int buffer_size = 8192*1024;
 
 #pragma omp section
     {  // compute threads
+      INFO("Level 0: compute tid = " << omp_get_thread_num());
       std::chrono::high_resolution_clock::time_point t1, t2;
       std::chrono::duration<double> time_span;
-      INFO("Level 0: compute tid = " << omp_get_thread_num());
 
       t1 = std::chrono::high_resolution_clock::now();
 
@@ -300,12 +304,13 @@ int buffer_size = 8192*1024;
       }
 
 
-#pragma omp parallel num_threads(nthreads) shared(fastq_start, fastq_end, buffers, counts, i, nprocs, rank, nthreads, std::cerr) default(none)
+#pragma omp parallel num_threads(nthreads) firstprivate(t1, t2, time_span) shared(parser, loader, ph, i, counts, buffers, nprocs, rank, nthreads) default(none)
       {
         int tid = omp_get_thread_num();
         INFO("Level 1: compute: thread id = " << tid);
 
         Compute op(nprocs, rank, nthreads);
+        bool copying = true;
 
 #pragma omp single
         {
@@ -314,35 +319,52 @@ int buffer_size = 8192*1024;
           // private vars, singly updated.
           SequenceType read;
           int li = 0;
+
 #pragma omp task untied
-          for (; fastq_start != fastq_end; ++fastq_start, ++i)
           {
-            // get data, and move to next for the other threads
+            BaseIterType begin = nullptr, end = nullptr;
+            size_t chunkRead;
 
-            // first get read
-            //read = *fastq_start;
-            SequenceType::allocCopy(*fastq_start, read);
+            while ((chunkRead = loader.getNextChunk2(ph, begin, end, chunkSize, copying)) > 0) {
+              li = i;
+              ++i;
 
-            li = i;
-            //
-            //            ++fastq_start;
-            //            ++i;
-#pragma omp task firstprivate(read, li) shared(buffers, counts)
-            {
-              int tid2 = omp_get_thread_num();
-              // copy read.  not doing that right now.
-              // then compute
-              op(read, li, buffers, counts);
-              SequenceType::deleteCopy(read);
+  #pragma omp task firstprivate(read, li, begin, end, chunkRead, copying) shared(op, rank, parser, buffers, counts) default(none)
+              {
 
-              if (li % 1000000 == 0)
-                INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li);
-              // release resource
+                IteratorType fastq_start(parser, begin, end);
+                IteratorType fastq_end(parser, end);
+
+                for (; fastq_start != fastq_end; ++fastq_start)
+                {
+                  // get data, and move to next for the other threads
+
+                  // first get read
+                  read = *fastq_start;
+      //            SequenceType::allocCopy(*fastq_start, read);
+
+                //
+                //            ++fastq_start;
+                //            ++i;
+                  // copy read.  not doing that right now.
+                  // then compute
+                  op(read, li, buffers, counts);
+    //            SequenceType::deleteCopy(read);
+
+
+                  // release resource
+                }
+
+                if (li % 100000 == 0)
+                  INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed chunk " << li);
+
+                if (copying) delete [] begin;
+              }
+              // next iteration will check to see if the iterator is at end,
+              // and if not, get and compute.
+
             }
-
-            // next iteration will check to see if the iterator is at end,
-            // and if not, get and compute.
-          }
+          }  // untied task
         } // omp single
 #pragma omp taskwait
 
@@ -362,6 +384,7 @@ int buffer_size = 8192*1024;
 
       auto t3 = std::chrono::high_resolution_clock::now();
       // send the last part out.
+#pragma omp parallel for default(none) shared(nprocs, nthreads, rank, buffers, buf_size)
       for (int j = 0; j < buf_size; ++j)
       {
         buffers[(j + rank) % buf_size].flush();
@@ -388,9 +411,9 @@ int buffer_size = 8192*1024;
  * second pattern for threading
  */
 template <typename Compute>
-void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
+void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
                               int &nthreads, IndexType &index,
-                              MPI_Comm &comm, const int &nprocs, const int &rank)
+                              MPI_Comm &comm, const int &nprocs, const int &rank, const int chunkSize)
 {
 
 
@@ -398,8 +421,6 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 
   ///  get the start and end iterator position.
   ParserType parser(loader.begin(), loader.getRange().start);
-  IteratorType fastq_start(parser, loader.begin(), loader.end());
-  IteratorType fastq_end(parser ,loader.end());
 
 
 
@@ -416,7 +437,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 #endif
 //    printf("senders = %d\n", senders);
 
-#pragma omp parallel sections num_threads(2) shared(fastq_start, fastq_end, comm, nprocs, rank, nthreads, senders, index, std::cerr) default(none)
+#pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, senders, index, nthreads, loader, parser, ph) default(none)
     {
 
 
@@ -424,6 +445,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
     {
       std::chrono::high_resolution_clock::time_point t1, t2;
       std::chrono::duration<double> time_span;
+
       INFO("Level 0: index storage tid = " << omp_get_thread_num());
       t1 = std::chrono::high_resolution_clock::now();
       networkread(comm, nprocs, rank, 8192 * 1024, senders, index);
@@ -439,12 +461,13 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
     {  // compute threads
       std::chrono::high_resolution_clock::time_point t1, t2;
       std::chrono::duration<double> time_span;
+
       INFO("Level 0: compute tid = " << omp_get_thread_num());
 
       t1 = std::chrono::high_resolution_clock::now();
 
       // if atEnd, done.
-      bool atEnd = false;
+//      bool atEnd = false;
       int i = 0;
 
       std::vector<  BufferType > buffers;
@@ -459,15 +482,15 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 
       std::vector<bliss::index::countType> counts;
       for (int j = 0; j < nthreads; ++j) {
-        bliss::index::countType C;
-        C.c = 0;
-        counts.push_back(C);
+        bliss::index::countType c;
+        c.c = 0;
+        counts.push_back(c);
       }
 
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(atEnd, counts, i, buffers, fastq_start, fastq_end, nprocs, rank, nthreads, std::cerr) default(none)
+#pragma omp parallel num_threads(nthreads) shared(loader, parser, ph, i, buffers, counts, nprocs, nthreads, rank) default(none)
       {
         Compute op(nprocs, rank, nthreads);
 
@@ -478,49 +501,88 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 //            buffers.push_back(std::move( BufferType(comm, j, 8192*1024)));
 //        }
 
-        //private variables
-        SequenceType read;
-        bool hasData = false;
-        int li = 0;
-        int tid2 = omp_get_thread_num();
-        INFO("Level 1: compute: thread id = " << tid2);
+        BaseIterType begin, end;
+        size_t chunkRead = 0;
+        int j = 0;
+        bool copying = true;
 
-        do {
+        while ((chunkRead = loader.getNextChunk2(ph, begin, end, chunkSize, copying)) > 0) {
+          ++j;
 
-          // single thread at a time getting data.
-#pragma omp critical
+#pragma omp atomic
+          ++i;
+
+          IteratorType fastq_start(parser, begin, end);
+          IteratorType fastq_end(parser, end);
+
+          SequenceType read;
+
+          for (; fastq_start != fastq_end; ++fastq_start)
           {
             // get data, and move to next for the other threads
-            atEnd = (fastq_start == fastq_end);
-#pragma omp flush(atEnd)
-            hasData = !atEnd;
 
-            if (hasData)
-            {
-              //read = *fastq_start;
-              SequenceType::allocCopy(*fastq_start, read);
+            // first get read
+            read = *fastq_start;
+//            SequenceType::allocCopy(*fastq_start, read);
 
-              li = i;
-              ++fastq_start;
-              ++i;
-#pragma omp flush(i, fastq_start)
-            }
+
+            // then compute
+            op(read, i, buffers, counts);
+//            SequenceType::deleteCopy(read);
+
+
+            // release resource
           }
+          if (i % 100000 == 0)
+            INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed chunk " << i);
 
-          // now do computation.
-          if (hasData) {
-            op(read, li, buffers, counts);
 
-            SequenceType::deleteCopy(read);
+          if (copying) delete [] begin;
+        }
+//        //private variables
+//        SequenceType read;
+//        bool hasData = false;
+//        int li = 0;
+//        int tid2 = omp_get_thread_num();
+//        INFO("Level 1: compute: thread id = " << tid2);
+//        int j = 0;
+//        do {
+//
+//          // single thread at a time getting data.
+//#pragma omp critical
+//          {
+//            // get data, and move to next for the other threads
+//            atEnd = (fastq_start == fastq_end);
+//#pragma omp flush(atEnd)
+//            hasData = !atEnd;
+//
+//            if (hasData)
+//            {
+//              SequenceType::allocCopy(*fastq_start, read);
+//              li = i;
+//              ++fastq_start;
+//              ++i;
+//#pragma omp flush(i, fastq_start)
+//            }
+//
+//          }
+//
+//          // now do computation.
+//          if (hasData) {
+//            op(read, li, buffers, counts);
+//            ++j;
+//
+//            SequenceType::deleteCopy(read);
+//
+//            if (li % 1000000 == 0)
+//              INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li << " reads");
+//          }
+//
+//
+//        } while (!atEnd);
 
-            if (li % 1000000 == 0)
-              INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li);
-          }
-        } while (!atEnd);
 
-#pragma omp barrier
-
-        INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed " << i);
+        INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed total of " << j << " chunks");
 
 //        // send the last part out.
 //        for (int j = 0; j < nprocs; ++j) {
@@ -537,6 +599,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
 
 
       // send the last part out.
+#pragma omp parallel for default(none) shared(nprocs, nthreads, rank, buffers)
       for (int i = 0; i < nprocs * nthreads; ++i) {
         buffers[(i+ rank) % (nprocs * nthreads)].flush();
       }
@@ -552,6 +615,221 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader,
     }  // outer parallel sections
 
 }
+
+
+/*
+ * second pattern for threading
+ */
+template <typename Compute>
+void compute_MPI_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
+                              int &nthreads, IndexType &index,
+                              MPI_Comm &comm, const int &nprocs, const int &rank, const int chunkSize)
+{
+
+
+  INFO("NO MASTER");
+
+  ///  get the start and end iterator position.
+  ParserType parser(loader.begin(), loader.getRange().start);
+
+
+
+#ifdef USE_OPENMP
+    INFO("rank " << rank << " MAX THRADS = " << nthreads);
+    omp_set_nested(1);
+    omp_set_dynamic(0);
+#endif
+
+    int senders = nthreads;
+#ifdef USE_MPI
+    senders = 0;
+    MPI_Allreduce(&nthreads, &senders, 1, MPI_INT, MPI_SUM, comm);
+#endif
+//    printf("senders = %d\n", senders);
+
+#pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, senders, index, nthreads, loader, parser, ph) default(none)
+    {
+
+
+#pragma omp section
+    {
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
+
+      INFO("Level 0: index storage tid = " << omp_get_thread_num());
+      t1 = std::chrono::high_resolution_clock::now();
+      networkread(comm, nprocs, rank, 8192 * 1024, senders, index);
+      t2 = std::chrono::high_resolution_clock::now();
+      time_span =
+          std::chrono::duration_cast<std::chrono::duration<double>>(
+              t2 - t1);
+      INFO(
+          "Level 0: Index storage: rank " << rank << " elapsed time: " << time_span.count() << "s, " << index.size() << " records.");
+    } // omp network read section
+
+#pragma omp section
+    {  // compute threads
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
+
+      INFO("Level 0: compute tid = " << omp_get_thread_num());
+
+      t1 = std::chrono::high_resolution_clock::now();
+
+      // if atEnd, done.
+//      bool atEnd = false;
+      int i = 0;
+
+      std::vector<  BufferType > buffers;
+      for (int i = 0; i < nprocs; ++i) {
+        // over provision by the number of threads as well.  (this is okay for smaller number of procs)
+        for (int j = 0; j < nthreads; ++j) {
+          buffers.push_back(std::move( BufferType(comm, i, 8192*1024)));
+        }
+      }
+      INFO("Level 0: compute num buffers = " << buffers.size());
+
+
+      std::vector<bliss::index::countType> counts;
+      for (int j = 0; j < nthreads; ++j) {
+        bliss::index::countType c;
+        c.c = 0;
+        counts.push_back(c);
+      }
+
+
+      // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
+      //   at this point, no strong difference.
+#pragma omp parallel num_threads(nthreads) shared(loader, parser, ph, i, buffers, counts, nprocs, nthreads, rank) default(none)
+      {
+        Compute op(nprocs, rank, nthreads);
+
+//        std::vector<  BufferType > buffers;
+//        for (int j = 0; j < nprocs; ++j) {
+//          // over provision by the number of threads as well.  (this is okay for smaller number of procs)
+//            buffers.push_back(std::move( BufferType(comm, j, 8192*1024)));
+//        }
+
+        BaseIterType begin, end;
+        size_t chunkRead = 0;
+        bool copying = true;
+        auto r = loader.getRange();
+        SequenceType read;
+
+        //shared(r, copying, chunkSize, ph, loader, parser, buffers, counts, rank, i)
+
+#pragma omp for schedule(dynamic, 10) private(chunkRead, begin, end, read)
+        for (int c = r.start; c < r.end; c += chunkSize) {
+          chunkRead = loader.getNextChunk2(ph, begin, end, chunkSize, copying);
+
+          if (chunkRead > 0) {
+
+            IteratorType fastq_start(parser, begin, end);
+            IteratorType fastq_end(parser, end);
+            ++i;
+
+            for (; fastq_start != fastq_end; ++fastq_start)
+            {
+              // get data, and move to next for the other threads
+
+              // first get read
+              read = *fastq_start;
+  //            SequenceType::allocCopy(*fastq_start, read);
+
+
+              // then compute
+              op(read, i, buffers, counts);
+  //            SequenceType::deleteCopy(read);
+
+
+              // release resource
+            }
+
+            if (copying) delete [] begin;
+          }
+        }
+        if (i % 100000 == 0)
+          INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed chunk " << i);
+
+//        //private variables
+//        SequenceType read;
+//        bool hasData = false;
+//        int li = 0;
+//        int tid2 = omp_get_thread_num();
+//        INFO("Level 1: compute: thread id = " << tid2);
+//        int j = 0;
+//        do {
+//
+//          // single thread at a time getting data.
+//#pragma omp critical
+//          {
+//            // get data, and move to next for the other threads
+//            atEnd = (fastq_start == fastq_end);
+//#pragma omp flush(atEnd)
+//            hasData = !atEnd;
+//
+//            if (hasData)
+//            {
+//              SequenceType::allocCopy(*fastq_start, read);
+//              li = i;
+//              ++fastq_start;
+//              ++i;
+//#pragma omp flush(i, fastq_start)
+//            }
+//
+//          }
+//
+//          // now do computation.
+//          if (hasData) {
+//            op(read, li, buffers, counts);
+//            ++j;
+//
+//            SequenceType::deleteCopy(read);
+//
+//            if (li % 1000000 == 0)
+//              INFO("Level 1: rank " << rank << " thread " << tid2 << " processed " << li << " reads");
+//          }
+//
+//
+//        } while (!atEnd);
+
+
+        INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed total of " << i << " chunks");
+
+//        // send the last part out.
+//        for (int j = 0; j < nprocs; ++j) {
+//          buffers[(j+ rank) % (nprocs)].flush();
+//        }
+      }  // compute threads parallel
+
+
+      t2 = std::chrono::high_resolution_clock::now();
+      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
+          t2 - t1);
+      INFO(
+          "Level 0: Computation: rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
+
+
+      // send the last part out.
+      int k;
+#pragma omp parallel for default(none) shared(nprocs, nthreads, buffers, rank)
+      for (k = 0; k < nprocs * nthreads; ++k) {
+        buffers[(k+ rank) % (nprocs * nthreads)].flush();
+      }
+      INFO("flush rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
+
+      for (size_t j = 0; j < counts.size(); ++j) {
+        INFO("rank " << rank << " COUNTS by thread : "<< counts[j].c);
+      }
+
+    } // omp compute section
+
+
+    }  // outer parallel sections
+
+}
+
+
 
 /**
  * source:              source data,  e.g. fastq_loader
@@ -592,12 +870,10 @@ int main(int argc, char** argv) {
   //////////////// parse parameters
   std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
 
-  bool WithMaster = true;
+  int WithMaster = 1;
   if (argc > 1)
   {
-    if (strcmp(argv[1], "0") == 0) {
-      WithMaster = false;
-    }
+    WithMaster = atoi(argv[1]);
   }
 
   int nthreads = omp_get_max_threads();
@@ -606,14 +882,21 @@ int main(int argc, char** argv) {
     nthreads = atoi(argv[2]);
     if (nthreads == -1)
       nthreads = omp_get_max_threads();
+
   }
 
-//  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
+  int chunkSize = 4000;
   if (argc > 3)
   {
-    filename.assign(argv[3]);
+    chunkSize = atoi(argv[3]);
   }
 
+
+//  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
+  if (argc > 4)
+  {
+    filename.assign(argv[4]);
+  }
 
 
   //////////////// initialize MPI and openMP
@@ -634,6 +917,7 @@ int main(int argc, char** argv) {
     //////////////// now partition and open the file.
     t1 = std::chrono::high_resolution_clock::now();
 
+    // get the file ready for read
     FileLoaderType loader(filename, comm);  // this handle is alive through the entire execution.
     // adjust the partition of the file
     PartitionHelperType ph;
@@ -650,14 +934,20 @@ int main(int argc, char** argv) {
 
 
     /////////////// now process the file using version with master.
-    if (WithMaster) {
+    if (WithMaster == 1) {
       // do some work using openmp  // version without master
-      compute_MPI_OMP_WithMaster<ComputeType>(loader, nthreads, index, comm, nprocs, rank);
+      compute_MPI_OMP_WithMaster<ComputeType>(loader, ph, nthreads, index, comm, nprocs, rank, chunkSize);
+    } else if (WithMaster == 2) {
+      /////////////// now process the file using version with master.
+      // do some work using openmp  // version without master
+      compute_MPI_OMP_ParFor<ComputeType>(loader, ph, nthreads, index, comm, nprocs, rank, chunkSize);
+
     } else {
       /////////////// now process the file using version with master.
       // do some work using openmp  // version without master
-      compute_MPI_OMP_NoMaster<ComputeType>(loader, nthreads, index, comm, nprocs, rank);
+      compute_MPI_OMP_NoMaster<ComputeType>(loader, ph, nthreads, index, comm, nprocs, rank, chunkSize);
     }
+
     loader.unload();
 
   }  // scope to ensure file loader is destroyed.

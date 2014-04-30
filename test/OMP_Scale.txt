@@ -63,3 +63,52 @@ testThreads numThreads, no master 1, 2, 3, MPI 1, 2, 3
 3, 239.591,,,		   76.3815
 4, 226.028,,,		   70.0483
 8, ,,,				   59.6931
+
+chunking at 800
+TestThreadsNoMPI numThreads, no master 1, 2, 3, master 1, 2, 3, parfor 1, 2, 3
+1, 0.389605,,, 0.389923,,, 0.39175 ,,
+2, 0.798632,,, 0.741567,,, 0.763568,,
+3, 0.863157,,, 0.856595,,, 0.864744,,
+4, 0.893246,,, 0.887866,,, 0.888095,,
+
+chunking at 800, parfor flushing.
+TestThreadsNoQual numThreads, no master 1, 2, 3, master 1, 2, 3, parfor 1, 2, 3
+1, 0.228352,,, 0.225831,,, 0.231862,,
+2, 0.679307,,, 0.669486,,, 0.678584,,
+3, 0.82312 ,,, 0.833834,,, 0.863313,,
+4, 0.794383,,, 0.823936,,, 0.852337,,
+
+chunking at 800, parfor flushing.
+TestThreads numThreads, no master 1, 2, 3, master 1, 2, 3, parfor 1, 2, 3
+1, 0.888397,,, 0.896556,,, 0.891037,,
+2, 1.33968 ,,, 1.3375  ,,, 1.36265 ,,
+3, 1.34608 ,,, 1.34597 ,,, 1.34179 ,,
+4, 1.28536 ,,, 1.29006 ,,, 1.28848 ,,
+
+chunking at 800, parfor flushing.
+TestThreadsNoQualNoMPI numThreads, no master 1, 2, 3, master 1, 2, 3, parfor 1, 2, 3
+1, 0.109098,,, 0.114513,,, 0.114172,,
+2, 0.401848,,, 0.30203 ,,, 0.416725,,
+3, 0.480617,,, 0.530177,,, 0.481208,,
+4, 0.564438,,, 0.588648,,, 0.56211 ,,
+
+chunking at 800, parfor flushing, no logging.  measured with "time"
+TestThreadsNoQualNoMPI numThreads, no master 1, 2, 3, master 1, 2, 3, parfor 1, 2, 3
+1, 0.113,,, 0.117,,, 0.112,,
+2, 0.082,,, 0.088,,, 0.082,,
+3, 0.074,,, 0.074,,, 0.070,,
+4, 0.071,,, 0.082,,, 0.072 ,,
+
+
+
+some thoughts:
+1. critical section is very expensive:  a SO forum post claims 200x vs serial, where as atomic is 25x.  atomic would require atomic capture.
+	another alternative is to use omp lock.  not sure the tradeoff
+2. critical sections NEED TO BE NAMED  - no effect here since we don't use that many critical sections.
+3. omp effectively has no thread sleep.
+4. should be able to assign chunks using just the chunk size, without having do the search for boundaries in the critical section
+5. may be good to limit the size of the chunk to page_size/num threads (theory, no multiple disk reads) - no effect. 
+6. if using just chunk size, we are getting close to the structure of a parallel for loop, with dynamic or guided schedule.
+7. tried it without quality score calculation:  0.23s, close to theoretical maximum with 1 thread. 
+8. simple test (test1 == test.cpp) of omp generated 3x speed up.  critical and atomic appear to produce same timing. parfor is still fastest.
+9. LOGGING was producing significant effect, at least for testThreadsNoQualNoMPI (scales a little bit to number of cores).  not observing this in other s. 

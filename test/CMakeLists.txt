@@ -43,6 +43,13 @@ target_link_libraries(testThreadsNoMPI bliss-common)
 
 
 ## EXECUTABLES
+add_executable(testThreadsNoQualNoMPI test_threads_no_mpi_no_qual.cpp)
+target_link_libraries(testThreadsNoQualNoMPI ${EXTRA_LIBS})
+#target_link_libraries(testThreadsNoQualNoMPI bliss-io)
+target_link_libraries(testThreadsNoQualNoMPI bliss-common)
+#target_link_libraries(testThreadsNoQualNoMPI bliss-index)
+
+## EXECUTABLES
 add_executable(testIndexEl quicktest.cpp)
 target_link_libraries(testIndexEl ${EXTRA_LIBS})
 #target_link_libraries(testThreads bliss-io)

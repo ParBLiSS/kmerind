@@ -205,6 +205,10 @@ NEXT TODO:
 		TODO: chunks.
 		TODO: change: no qual and no mpi tests.
 		
+4/30/2014
+		if chunk too short, can't find any, should throw an exception.  caller handles exception and decide what to do - use the range.start or range.end
+		
+		
 Q: shared mem map better or single?
 		
 Each thread owning its own set of buffers - if 1000 procs, 16 threads each, 8MB each buffer, -> 128G.  need smarter locking.

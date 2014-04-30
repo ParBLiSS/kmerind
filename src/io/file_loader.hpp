@@ -364,7 +364,7 @@ namespace bliss
 
           //DEBUG("range " << range << " chunk " << cs << " chunkPos " << chunkPos);
 
-#pragma omp critical
+#pragma omp critical (computeChunkBoundary)
           {
             if (chunkPos >= range.end) {
               endPtr = startPtr = data + len;
@@ -375,7 +375,16 @@ namespace bliss
               RangeType next(chunkPos + cs, chunkPos + 2 * cs);
               next &= range;
               /// search end part only.  update chunkPos for next search.
-              e = helper(data + (next.start - range.start), next.start, next.end);
+              try {
+                // search for end.
+                e = helper(data + (next.start - range.start), next.start, next.end);
+              } catch (io_exception& ex) {
+                // did not find the end, so set e to next.end.
+                // TODO: need to handle this scenario better - should keep search until end.
+                WARNING(ex.what());
+                e = next.end;
+              }
+
 
               chunkPos = e;
 #pragma omp flush(chunkPos)
@@ -409,6 +418,97 @@ namespace bliss
       }
 
 
+        /**
+         * search at the start and end of the block partition for some matching condition,
+         * and set as new partition positions.
+         *
+         * @param[in]  helper       to find the partition boundaries
+         * @param[out] start        output start pointer. at least "begin".  if copying, then caller needs to manage "start"
+         * @param[out] end          output end pointer.  at most "end"
+         * @param[in]  chunkSize    suggested partition size.  default to 0, which is translated to system page size.
+         * @param[in]  copying      if copying, then start and end point to a memory block that is a copy of the underlying file mmap.
+         * @return                  actual chunk size created
+         */
+        template <typename PartitionHelper>
+        SizeType getNextChunk2(PartitionHelper &helper, T* &startPtr, T* &endPtr, const SizeType &chunkSize = 0, const bool copying = true) {
+
+          static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for getNextChunk() has a different SizeType than FileLoader\n");
+
+//          assert(loaded);
+
+          // traversed all.  so done.
+          SizeType len = range.end - range.start;
+          SizeType cs = (chunkSize == 0 ? page_size : chunkSize);
+          SizeType s = range.start, e = range.end;
+          SizeType readLen = 0;
+
+          /// part that needs to be sequential
+
+          //DEBUG("range " << range << " chunk " << cs << " chunkPos " << chunkPos);
+
+
+#pragma omp atomic capture
+          { s = chunkPos; chunkPos += cs; }  // get the current value and then update
+
+          if (s >= range.end) {
+              e = s = range.end;
+              readLen = 0;
+          } else {
+            // since we are just partitioning, need to search for start and for end.
+            RangeType curr(s, s + cs);
+            curr &= range;
+            /// search start part.
+            try {
+              // search for end.
+              s = helper(data + (curr.start - range.start), curr.start, curr.end);
+            } catch (io_exception& ex) {
+              // did not find the end, so set e to next.end.
+              // TODO: need to handle this scenario better - should keep search until end.
+              WARNING(ex.what());
+              s = curr.start;
+            }
+
+            RangeType next = curr >> cs;
+            next &= range;
+            /// search end part only.  update localPos for next search.
+            try {
+              // search for end.
+              e = helper(data + (next.start - range.start), next.start, next.end);
+            } catch (io_exception& ex) {
+              // did not find the end, so set e to next.end.
+              // TODO: need to handle this scenario better - should keep search until end.
+              WARNING(ex.what());
+              e = next.end;
+            }
+
+            readLen = e - s;
+            //printf("s = %lu, e = %lu, chunkPos = %lu, readLen 1 = %lu\n", s, e, chunkPos, readLen);
+            //std::cout << "range: " << range << " next: " << next << std::endl;
+          }
+
+          /// end part that needs to be serial
+
+          //DEBUG(" new chunkPos " << chunkPos << " start: " << s << " end: " << e);
+
+          // now can set in parallel
+          // set the start.  guaranteed to be at the start of a record according to the partitionhelper.
+
+          if (readLen > 0) {
+             if (copying) {
+              //unique_ptr is not appropriate, as ownership is either by this object (no copy) or by calling thread. (copying)
+              startPtr = new T[readLen + 1];
+              endPtr = startPtr + readLen;
+              //*endPtr = 0;
+              memcpy(startPtr, data + (s - range.start), (readLen + 1) * sizeof(T));
+            } else {
+              startPtr = data + (s - range.start);
+              endPtr = data + (e - range.start);
+            }
+         }
+//         DEBUG("read " << readLen << " elements, start at " << s << " [" << *startPtr << "] end at "<< e << " [" << *endPtr << "]");
+
+        return readLen;
+      }
 
         /**
          *  performs memmap, and optionally preload the data into memory.

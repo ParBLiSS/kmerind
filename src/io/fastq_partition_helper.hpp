@@ -154,17 +154,22 @@ namespace bliss
             ++data;
           }
 
+          CharT c;
+          bool isEOL;
           while (i < end && currLineId < 4)
           {
+            c = *data;
+            isEOL = c == '\n';
+
             // encountered a newline.  mark newline found, increment currLineId.
-            if (*data == '\n' && !newlineChar)
+            if (isEOL && !newlineChar)
             {
               newlineChar = true;  // toggle on
             }
-            else if (*data != '\n' && newlineChar) // first char
+            else if (newlineChar && !isEOL) // first char
             {
               ++currLineId;
-              first[currLineId] = *data;
+              first[currLineId] = c;
               offsets[currLineId] = i;
               newlineChar = false;  // toggle off
             }
@@ -177,7 +182,7 @@ namespace bliss
           ////// determine the position within a read record based on the first char of the first 3 lines.
           //     and adjust the starting positions and lengths
           // always shift the offset to the right (don't want to try to read to the end to get an end offset.
-          SizeT new_pos;
+          SizeT new_pos = end;
 
           if (first[0] == '@')
           {
@@ -218,6 +223,7 @@ namespace bliss
           }
           else
           {
+            // is it an error not to find a fastq marker?
             std::stringstream ss;
             ss << "WARNING in file processing: file segment " << start
                << " - " << end << " does not contain valid FASTQ markers.";
