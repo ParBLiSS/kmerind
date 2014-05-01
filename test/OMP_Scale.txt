@@ -243,7 +243,16 @@ PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.428784s,	result = 198482711.486867
 SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.200096s,	result = 198482711.486866
 
 
-Next:  try with file loader, and access the data via getNextChunk
+Next:  try with file loader, and access the data via getNextChunkAtomic
+tpan@denali:~/builds/bliss$ bin/test2 4 2048
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.412417s,	result = 198494637.956922
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.403181s,	result = 198494637.956922
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.405266s,	result = 198494637.960374
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.403926s,	result = 198494637.960374
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.406280s,	result = 198494637.956922
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.134649s,	result = 198494637.956921
 
 
 OBSERVATIONS:
