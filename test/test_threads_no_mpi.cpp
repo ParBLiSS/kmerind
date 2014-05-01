@@ -154,7 +154,7 @@ int buffer_size = 8192*1024;
             BaseIterType begin = nullptr, end = nullptr;
             size_t chunkRead;
 
-            while ((chunkRead = loader.getNextChunk2(ph, begin, end, chunkSize, copying)) > 0) {
+            while ((chunkRead = loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying)) > 0) {
               li = i;
               ++i;
 
@@ -283,7 +283,7 @@ void compute_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
         int j = 0;
         bool copying = false;
 
-        while ((chunkRead = loader.getNextChunk2(ph, begin, end, chunkSize, copying)) > 0) {
+        while ((chunkRead = loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying)) > 0) {
           ++j;
 
 #pragma omp atomic
@@ -449,7 +449,7 @@ void compute_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
 
 #pragma omp for schedule(dynamic, 10) private(chunkRead, begin, end, read)
         for (int c = r.start; c < r.end; c += chunkSize) {
-          chunkRead = loader.getNextChunk2(ph, begin, end, chunkSize, copying);
+          chunkRead = loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying);
 
           if (chunkRead > 0) {
 

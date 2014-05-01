@@ -22,7 +22,7 @@
 #endif
 
 #include <string>
-#include <cstring>      // memcpy
+#include <cstring>      // memcpy, strerror
 #include <exception>    // ioexception
 #include <sstream>      // stringstream
 #include <memory>
@@ -173,7 +173,7 @@ namespace bliss
           chunkPos = range.start;
 
           /// open the file and get a handle.
-          file_handle = open(filename.c_str(), O_RDONLY);
+          file_handle = open64(filename.c_str(), O_RDONLY);
           if (file_handle == -1)
           {
             std::stringstream ss;
@@ -336,6 +336,10 @@ namespace bliss
           return result;
         }
 
+        void resetChunks() {
+          chunkPos = range.start;
+        }
+
         /**
          * search at the start and end of the block partition for some matching condition,
          * and set as new partition positions.
@@ -430,7 +434,7 @@ namespace bliss
          * @return                  actual chunk size created
          */
         template <typename PartitionHelper>
-        SizeType getNextChunk2(PartitionHelper &helper, T* &startPtr, T* &endPtr, const SizeType &chunkSize = 0, const bool copying = true) {
+        SizeType getNextChunkAtomic(PartitionHelper &helper, T* &startPtr, T* &endPtr, const SizeType &chunkSize = 0, const bool copying = true) {
 
           static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for getNextChunk() has a different SizeType than FileLoader\n");
 
@@ -632,7 +636,7 @@ namespace bliss
           r.align_to_page(page_size);
 
           // NOT using MAP_POPULATE.  it slows things done when testing on single node.
-          T* result = (T*)mmap(nullptr, (r.end - r.block_start ) * sizeof(T),
+          T* result = (T*)mmap64(nullptr, (r.end - r.block_start ) * sizeof(T),
                                      PROT_READ,
                                      MAP_PRIVATE, file_handle,
                                      r.block_start * sizeof(T));

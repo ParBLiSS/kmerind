@@ -101,6 +101,7 @@ TestThreadsNoQualNoMPI numThreads, no master 1, 2, 3, master 1, 2, 3, parfor 1, 
 
 
 
+
 some thoughts:
 1. critical section is very expensive:  a SO forum post claims 200x vs serial, where as atomic is 25x.  atomic would require atomic capture.
 	another alternative is to use omp lock.  not sure the tradeoff
@@ -112,3 +113,141 @@ some thoughts:
 7. tried it without quality score calculation:  0.23s, close to theoretical maximum with 1 thread. 
 8. simple test (test1 == test.cpp) of omp generated 3x speed up.  critical and atomic appear to produce same timing. parfor is still fastest.
 9. LOGGING was producing significant effect, at least for testThreadsNoQualNoMPI (scales a little bit to number of cores).  not observing this in other s. 
+
+
+
+
+
+
+
+
+
+New set of tests: simple test (test.cpp, and IO version testCIO.cpp) for each value, calls log2().
+some observations:
+at block size of 2048, both tests have similar wall times.  in addition, scalability is present for cores, up to close to 3x for 4 cores.  io and contention bound
+
+reading real data and compute sum of log of each character:
+tpan@denali:~/builds/bliss$ bin/test2 4 2048
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.386582s,	result = 198646229.917233
+	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.374216s,	result = 198646229.917233
+	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.378529s,	result = 198646229.917233
+	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.377862s,	result = 198646229.917233
+	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.374533s,	result = 198646229.917233
+	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.046236s,	result = 198646229.917175
+
+synthetic data, compute sum of log of each index value.
+tpan@denali:~/builds/bliss$ bin/test1 4 2048 34000000
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.380570s,	result = 801595450.404571
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.375369s,	result = 801595450.404572
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.373909s,	result = 801595450.404571
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.373185s,	result = 801595450.404571
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.372514s,	result = 801595450.404572
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.045588s,	result = 801595450.404573
+
+
+
+reducing block size to 4, at 4 cores, compute only speed is: Master/slave >> (5x) P2P critical > P2P atomic > parfor.
+
+tpan@denali:~/builds/bliss$ bin/test1 4 4 34000000  - synthetic.
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.852508s,	result = 801595450.404595
+	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.658496s,	result = 801595450.404598
+	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 4.469240s,	result = 801595450.404602
+	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 4.432487s,	result = 801595450.404604
+	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.460085s,	result = 801595450.404584
+	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.058105s,	result = 801595450.404607
+	
+tpan@denali:~/builds/bliss$ bin/test2 4 4  - real file.  result followsthe same pattern as the purely synthetic case.
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.919039s,	result = 211689779.217563
+	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.669387s,	result = 211689779.217563
+	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 4.590327s,	result = 211689779.221633
+	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 4.465848s,	result = 211689779.221606
+	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.406149s,	result = 211689779.217563
+	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.832452s,	result = 211689779.183273
+
+REAL file, large.  3x speed up over the sequential in all cases.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096 /mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq 3
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 68.746934s,	result = 37480880402.970078
+	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 69.056467s,	result = 37480880402.970085
+	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 69.051526s,	result = 37480880402.970078
+	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 69.010508s,	result = 37480880402.970078
+	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 69.010560s,	result = 37480880402.970085
+	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 192.841373s,	result = 37480880401.617538
+
+preloading (copying the data in) - made it slightly slower for 34MB file (10 to 30 ms) compared to no preloading.
+	
+buffering produces - no difference compared to not buffering. bigger chunk is faster (fewer allocations)
+
+
+more complicated test on real data.  search for max, search for min, bit shifting char into a uint64t, and compute log2.  actually faster than doing just log2 on the whole range.
+	COMPUTE BOUND - LOG2 is expensive.
+same type of speed for preloading vs not preloading, and buffering vs not buffering.
+tpan@denali:~/builds/bliss$ bin/test2 4 2048
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.204467s,	result = 99225985.311955
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.204357s,	result = 99225985.311955
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.205373s,	result = 99225985.311955
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.205547s,	result = 99225985.311955
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.204761s,	result = 99225985.311955
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.592619s,	result = 99225985.311992
+
+turn on MPI, testing with 2 processes and 2 threads each:
+tpan@denali:~/builds/bliss$ mpirun -np 2 bin/test2 2 2048
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/2	OMP 2 threads	took 0.203302s,	result = 49612994.434070
+P2P atomic:	MPI rank: 0/2	OMP 2 threads	took 0.201206s,	result = 49612994.434070
+MS Wait:	MPI rank: 0/2	OMP 2 threads	took 0.201515s,	result = 49612994.434070
+MS NoWait:	MPI rank: 0/2	OMP 2 threads	took 0.200757s,	result = 49612994.434070
+PARFOR:		MPI rank: 0/2	OMP 2 threads	took 0.202035s,	result = 49612994.434070
+SEQFOR:		MPI rank: 0/2	OMP 2 threads	took 0.298150s,	result = 49612994.434079
+
+
+MPI with 4 processes and 1 thread each
+tpan@denali:~/builds/bliss$ mpirun -np 4 bin/test2 1 2048
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/4	OMP 1 threads	took 0.163136s,	result = 24806481.029930
+P2P atomic:	MPI rank: 0/4	OMP 1 threads	took 0.162918s,	result = 24806481.029930
+MS Wait:	MPI rank: 0/4	OMP 1 threads	took 0.162662s,	result = 24806481.029930
+MS NoWait:	MPI rank: 0/4	OMP 1 threads	took 0.162943s,	result = 24806481.029930
+PARFOR:		MPI rank: 0/4	OMP 1 threads	took 0.163217s,	result = 24806481.029930
+SEQFOR:		MPI rank: 0/4	OMP 1 threads	took 0.161343s,	result = 24806481.029930
+
+
+WITH VS WITHOUT FILE LOADERS
+MPI with 1 process and 4 threads, 2048 chunk, each iteration reads into the next block as well
+tpan@denali:~/builds/bliss$ bin/test2 4 2048
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.425215s,	result = 198482711.486867
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.424514s,	result = 198482711.486867
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.426537s,	result = 198482711.486867
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.427362s,	result = 198482711.486867
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.427687s,	result = 198482711.486867
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.195450s,	result = 198482711.486866
+
+now try with file_loader and directly access the data - no big difference.
+tpan@denali:~/builds/bliss$ bin/test2 4 2048
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.425253s,	result = 198482711.486867
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.424005s,	result = 198482711.486867
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.427918s,	result = 198482711.486867
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.429403s,	result = 198482711.486867
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.428784s,	result = 198482711.486867
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.200096s,	result = 198482711.486866
+
+
+Next:  try with file loader, and access the data via getNextChunk
+
+
+OBSERVATIONS:
+1. 4 MPI and 1 OMP - fastest.  because no synchronization overhead.  nearly 4x speedup
+2. 2 MPI and 2 OMP is about same as 1 MPI and 4 OMP.  both scalable with 3x speedup over sequential.
+3. LOG2 is a bottleneck. 
+
