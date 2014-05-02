@@ -145,8 +145,9 @@ namespace bliss
             struct stat filestat;
             stat(filename.c_str(), &filestat);
             file_size = static_cast<SizeT>(filestat.st_size);
-//            INFO("block size is " << filestat.st_blksize);
-//            INFO("sysconf block size is " << page_size);
+//            std::cerr << "file size is " << file_size;
+//            std::cerr << " block size is " << filestat.st_blksize;
+//            std::cerr << " sysconf block size is " << page_size << std::endl;
           }
 
 #if defined(USE_MPI)
@@ -410,7 +411,7 @@ namespace bliss
               startPtr = new T[readLen + 1];
               endPtr = startPtr + readLen;
               *endPtr = 0;
-              memcpy(startPtr, data + (s - range.start), (readLen + 1) * sizeof(T));
+              memcpy(startPtr, data + (s - range.start), readLen * sizeof(T));
             } else {
               startPtr = data + (s - range.start);
               endPtr = data + (e - range.start);
@@ -418,6 +419,9 @@ namespace bliss
          }
 //         DEBUG("read " << readLen << " elements, start at " << s << " [" << *startPtr << "] end at "<< e << " [" << *endPtr << "]");
 
+          if (startPtr == nullptr || endPtr == nullptr) {
+            std::cerr << "ERROR: file loader get chunk returning null ptrs. readlen = " << readLen << " start and end are " << s << "-" << e << " range is " << range << std::endl;
+          }
         return readLen;
       }
 
@@ -454,8 +458,8 @@ namespace bliss
 #pragma omp atomic capture
           { s = chunkPos; chunkPos += cs; }  // get the current value and then update
 
-          if (s >= range.end) {
-              e = s = range.end;
+          if (s > range.end) {
+              s = range.end;
               readLen = 0;
           } else {
             // since we are just partitioning, need to search for start and for end.
@@ -502,8 +506,8 @@ namespace bliss
               //unique_ptr is not appropriate, as ownership is either by this object (no copy) or by calling thread. (copying)
               startPtr = new T[readLen + 1];
               endPtr = startPtr + readLen;
-              //*endPtr = 0;
-              memcpy(startPtr, data + (s - range.start), (readLen + 1) * sizeof(T));
+              *endPtr = 0;
+              memcpy(startPtr, data + (s - range.start), readLen * sizeof(T));
             } else {
               startPtr = data + (s - range.start);
               endPtr = data + (e - range.start);
@@ -511,6 +515,9 @@ namespace bliss
          }
 //         DEBUG("read " << readLen << " elements, start at " << s << " [" << *startPtr << "] end at "<< e << " [" << *endPtr << "]");
 
+//          if (startPtr == nullptr || endPtr == nullptr) {
+//            std::cerr << "ERROR: file loader get chunk returning null ptrs. readlen = " << readLen << " start and end are " << s << "-" << e << " range is " << range << std::endl;
+//          }
         return readLen;
       }
 

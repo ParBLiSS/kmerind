@@ -119,7 +119,7 @@ some thoughts:
 
 
 
-
+following experiments are all done in either triplicate or 10x.  average times are shown.
 
 
 New set of tests: simple test (test.cpp, and IO version testCIO.cpp) for each value, calls log2().
@@ -260,3 +260,117 @@ OBSERVATIONS:
 2. 2 MPI and 2 OMP is about same as 1 MPI and 4 OMP.  both scalable with 3x speedup over sequential.
 3. LOG2 is a bottleneck. 
 
+
+
+Next: try to use the actual FASTQ partitioner - no bad effect.
+tpan@denali:~/builds/bliss$ bin/test2 4 2048
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.406488s,	result = 198495133.644717
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.408885s,	result = 198495133.644717
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.412645s,	result = 198495133.644716
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.416235s,	result = 198495133.644717
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.415708s,	result = 198495133.644716
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.147867s,	result = 198495133.644713
+
+Next:  try to use fastq iterator - just use the iterator to get th reads, and simulate kmer processing for the entire read length..
+tpan@denali:~/builds/bliss$ bin/test2 4 2048
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.404538s,	result = 179553631.599283
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.403108s,	result = 179553631.599283
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.404602s,	result = 179553631.599283
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.403576s,	result = 179553631.599283
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.405965s,	result = 179553631.599283
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.096281s,	result = 179553631.599291
+
+NEXT: try to use fastq iterator, still similuated computation.  compute for half of the read lengths (seq half, qual half.)
+tpan@denali:~/builds/bliss$ bin/test2 4 2048
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.448494s,	result = 85218178.612224
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.449260s,	result = 85218178.612224
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.447058s,	result = 85218178.612224
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.445363s,	result = 85218178.612224
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.449256s,	result = 85218178.612224
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.549682s,	result = 85218178.612211
+
+NEXT: try to use fastq iterator, still simulated, compute only kmer, no quality scoring.  flat...
+tpan@denali:~/builds/bliss$ bin/test2 4 2048
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.081695s,	result = 66877.148914
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.079598s,	result = 66877.148914
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.079194s,	result = 66877.148914
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.079265s,	result = 66877.148914
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.079470s,	result = 66877.148914
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.078232s,	result = 66877.148914
+
+epeat last 2 tests with larger datasets.  - compute for half of the read lengths, no quality score
+t
+
+repeat last 2 tests with larger datasets.  - compute for half of the read lengths, with quality score
+tpan@denali:~/builds/bliss$ bin/test2 4 2048 /mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq 3
+USE_MPI is set
+USE_OPENMP is set
+file size is 6316935317 block size is 4096 sysconf block size is 4096
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 46.956940s,	result = 14519027769.609516
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 40.123759s,	result = 14519027769.609501
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 40.872391s,	result = 14519027769.609499
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 39.758661s,	result = 14519027188.753359
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 39.982143s,	result = 14519027769.609520
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 95.630211s,	result = 14519027769.609148
+
+repeat last 2 tests with larger datasets.  - compute for half of the read lengths, no quality score
+tpan@denali:~/builds/bliss$ bin/test2 4 2048 /mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq 3
+USE_MPI is set
+USE_OPENMP is set
+file size is 6316935317 block size is 4096 sysconf block size is 4096
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 103.334383s,	result = 6735850.398698
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 102.841186s,	result = 6735850.398698
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 104.087739s,	result = 6735850.398698
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 103.387971s,	result = 6735850.143703
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 103.212623s,	result = 6735850.143796
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 34.193393s,	result = 6735850.398792
+
+std io stream may be causing synchronization issues.
+http://stackoverflow.com/questions/6374264/is-cout-synchronized-thread-safe
+
+taking out the std::cerr may help
+
+
+quick test:  using nthread number of mmaps, each to a different region.  with just kmer- no signficant difference.
+tpan@denali:~/builds/bliss$ bin/test2 4 2048
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.075984s,	result = 66877.148914
+P2P atomic:	    MPI rank: 0/1	OMP 4 threads	took 0.075811s,	result = 66877.148914
+MS Wait:	    MPI rank: 0/1	OMP 4 threads	took 0.075024s,	result = 66877.148914
+MS NoWait:	    MPI rank: 0/1	OMP 4 threads	took 0.076205s,	result = 66877.148914
+PARFOR:		    MPI rank: 0/1	OMP 4 threads	took 0.075903s,	result = 66877.148914
+BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.074708s,	result = 66877.674343
+SEQFOR:		    MPI rank: 0/1	OMP 4 threads	took 0.067283s,	result = 66877.148914
+
+with large file.  note that Sequential over entire range is still faster, even if we were to compare to block decomposed Sequential.  why is that?  - might be at FS bandwidth limit.
+tpan@denali:~/builds/bliss$ bin/test2 4 2048 /mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq 3
+USE_MPI is set
+USE_OPENMP is set
+P2P critical:	MPI rank: 0/1	OMP 4 threads	took 36.109572s,	result = 6735850.398698
+P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 40.984764s,	result = 6735850.398698
+ERROR: parsing failed. lines 3,  18446603787576705792 to 18446603787576705961
+MS Wait:	MPI rank: 0/1	OMP 4 threads	took 39.607580s,	result = 6735850.398698
+MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 37.345031s,	result = 6735850.398698
+ERROR: parsing failed. lines 3,  18446744073460205760 to 18446744073460205998
+ERROR: parsing failed. lines 1,  18446744073325988032 to 18446744073325988096
+PARFOR:		MPI rank: 0/1	OMP 4 threads	took 36.725897s,	result = 6735850.398698
+BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 29.571902s,	result = 6765425.398442
+SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 27.166049s,	result = 6735850.398792
+
+
+with quality scores
+
+
+
+***QUESTION:  iterators over a block of memory, using a buffered transform iterator paradigm, does that require sync?
+	functor is called with an iterator by buffered transform iterator, the iterator is passed by reference and it is expected to change.
+	does that 

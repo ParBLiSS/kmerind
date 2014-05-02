@@ -157,12 +157,13 @@ namespace bliss
                                                                             QualityType;
 
         SeqType output;
-        Iterator _start;
-        size_t _global_offset;
+        const Iterator _start;
+        const size_t _global_offset;
 
         fastq_parser(const Iterator & start, const size_t & global_offset)
             : output(), _start(start), _global_offset(global_offset)
         {
+          //printf("start: %lx, global offset: %lu\n", start, global_offset);
         }
 
         template <typename Q = Quality>
@@ -179,24 +180,19 @@ namespace bliss
         /**
          * parses with an iterator, so as to have complete control over the increment.
          */
-        size_t operator()(Iterator &iter, const Iterator &end)
+        size_t operator()(Iterator &it, const Iterator &end)
         {
           // first initialize  (on windowed version, will need to have a separate
           // way of initializing., perhaps with an overloaded operator.
           output = SeqType();
+          Iterator iter = it;
 
           size_t offset = _global_offset + (iter - _start);
 
           size_t dist = 0;
 
-          if (iter == end)  // at end, terminate.
-          {
-            DEBUG("not walked " << dist);
-            return dist;
-          }
-
           // to simplify initial, get rid of leading \n
-          while ((iter != end) && (*iter == '\n'))
+          while ((*iter == '\n') && (iter != end))
           {
             ++dist;
             ++iter;
@@ -205,6 +201,9 @@ namespace bliss
           if (iter == end) // if the range consists of \n only. at end, terminate
           {
             DEBUG("walked (trimmed) " << dist);
+
+            printf("ERROR: nothing was parsed. %lu to %lu.  global offset: %lu, start %p.  iter %p, end %p\n", offset, _global_offset + (end - _start), _global_offset, _start, iter, end);
+            it = iter;
             return dist;
           }
 
@@ -258,12 +257,14 @@ namespace bliss
 
           // check to make sure we finished okay  - if not, don't update the
           // fastq_sequence object.
+          if ((iter == end) && (line_num < 4)) {
+            printf("ERROR: parsing failed. lines %d, %lu to %lu.  global offset: %lu, start %p.  iter %p, end %p\n", line_num, offset, _global_offset + (end - _start), _global_offset, _start, iter, end);
+            it = iter;
+            return dist;
+          }
 
           assert(*(starts[0]) == '@');
           assert(*(starts[2]) == '+');
-
-          if ((iter == end) && (line_num < 4))
-            return dist;
 
           // now populate the output
           output.id.composite = offset;
@@ -273,6 +274,7 @@ namespace bliss
           output.seq_end = ends[1];
 
           populateQuality(starts[3], ends[3]);
+          it = iter;
           return dist;
         }
 
