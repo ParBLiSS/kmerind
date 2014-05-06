@@ -301,20 +301,20 @@ namespace bliss
             // not first block
 
             // search for new start using finder
-            output.start = helper(searchData, range.start, range.end);
+            output.start = helper(searchData, range.start, range.start, range.end);
           }
 
           // get the new ending offset
           if (range.end < fullRange.end )
           {
             // not the last block
-            output.end = helper(searchData + (range.end - range.start), next.start, next.end);
+            output.end = helper(searchData + (range.end - range.start), range.start, next.start, next.end);
           }
 
           // clean up and unmap
           this->unmap(searchData, searchRange);
 
-          // readjuste
+          // readjust
           output.align_to_page(page_size);
 
           range = output;
@@ -330,7 +330,7 @@ namespace bliss
           RangeType next = (chunkRange >> (chunkRange.end - chunkRange.start)) & range;
 
           // adjust the end only - assume start is okay.
-          auto e = helper(data + (next.start - range.start), next.start, next.end);
+          auto e = helper(data + (next.start - range.start), range.start, next.start, next.end);
 
           RangeType result(chunkRange);
           result.end = e;
@@ -350,19 +350,21 @@ namespace bliss
          * @param[out] end          output end pointer.  at most "end"
          * @param[in]  chunkSize    suggested partition size.  default to 0, which is translated to system page size.
          * @param[in]  copying      if copying, then start and end point to a memory block that is a copy of the underlying file mmap.
-         * @return                  actual chunk size created
+         * @return                  absolute range of for the chunk returned.
          */
         template <typename PartitionHelper>
-        SizeType getNextChunk(PartitionHelper &helper, T* &startPtr, T* &endPtr, const SizeType &chunkSize = 0, const bool copying = true) {
+        RangeType getNextChunk(PartitionHelper &helper, T* &startPtr, T* &endPtr, const SizeType &chunkSize = 0, const bool copying = true) {
 
           static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for getNextChunk() has a different SizeType than FileLoader\n");
+          assert(chunkSize >= 0);
+          assert(loaded);
 
 //          assert(loaded);
 
           // traversed all.  so done.
           SizeType len = range.end - range.start;
           SizeType cs = (chunkSize == 0 ? page_size : chunkSize);
-          SizeType s = range.start, e = range.end;
+          SizeType s = range.end, e = range.end;
           SizeType readLen = 0;
 
           /// part that needs to be sequential
@@ -382,7 +384,7 @@ namespace bliss
               /// search end part only.  update chunkPos for next search.
               try {
                 // search for end.
-                e = helper(data + (next.start - range.start), next.start, next.end);
+                e = helper(data + (next.start - range.start), range.start, next.start, next.end);
               } catch (io_exception& ex) {
                 // did not find the end, so set e to next.end.
                 // TODO: need to handle this scenario better - should keep search until end.
@@ -422,7 +424,7 @@ namespace bliss
           if (startPtr == nullptr || endPtr == nullptr) {
             std::cerr << "ERROR: file loader get chunk returning null ptrs. readlen = " << readLen << " start and end are " << s << "-" << e << " range is " << range << std::endl;
           }
-        return readLen;
+        return RangeType(s, e);
       }
 
 
@@ -438,16 +440,16 @@ namespace bliss
          * @return                  actual chunk size created
          */
         template <typename PartitionHelper>
-        SizeType getNextChunkAtomic(PartitionHelper &helper, T* &startPtr, T* &endPtr, const SizeType &chunkSize = 0, const bool copying = true) {
+        RangeType getNextChunkAtomic(PartitionHelper &helper, T* &startPtr, T* &endPtr, const SizeType &chunkSize = 0, const bool copying = true) {
 
           static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for getNextChunk() has a different SizeType than FileLoader\n");
-
-//          assert(loaded);
+          assert(chunkSize >= 0);
+          assert(loaded);
 
           // traversed all.  so done.
           SizeType len = range.end - range.start;
           SizeType cs = (chunkSize == 0 ? page_size : chunkSize);
-          SizeType s = range.start, e = range.end;
+          SizeType s = range.end, e = range.end;
           SizeType readLen = 0;
 
           /// part that needs to be sequential
@@ -458,7 +460,7 @@ namespace bliss
 #pragma omp atomic capture
           { s = chunkPos; chunkPos += cs; }  // get the current value and then update
 
-          if (s > range.end) {
+          if (s >= range.end) {
               s = range.end;
               readLen = 0;
           } else {
@@ -468,12 +470,12 @@ namespace bliss
             /// search start part.
             try {
               // search for end.
-              s = helper(data + (curr.start - range.start), curr.start, curr.end);
+              s = helper(data + (curr.start - range.start), range.start, curr.start, curr.end);
             } catch (io_exception& ex) {
               // did not find the end, so set e to next.end.
               // TODO: need to handle this scenario better - should keep search until end.
               WARNING(ex.what());
-              s = curr.start;
+              s = curr.end;
             }
 
             RangeType next = curr >> cs;
@@ -481,7 +483,7 @@ namespace bliss
             /// search end part only.  update localPos for next search.
             try {
               // search for end.
-              e = helper(data + (next.start - range.start), next.start, next.end);
+              e = helper(data + (next.start - range.start), range.start, next.start, next.end);
             } catch (io_exception& ex) {
               // did not find the end, so set e to next.end.
               // TODO: need to handle this scenario better - should keep search until end.
@@ -518,7 +520,7 @@ namespace bliss
 //          if (startPtr == nullptr || endPtr == nullptr) {
 //            std::cerr << "ERROR: file loader get chunk returning null ptrs. readlen = " << readLen << " start and end are " << s << "-" << e << " range is " << range << std::endl;
 //          }
-        return readLen;
+        return RangeType(s, e);
       }
 
         /**

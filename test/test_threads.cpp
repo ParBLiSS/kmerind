@@ -79,6 +79,7 @@ typedef std::unordered_multimap<KmerType, KmerIndexType> IndexType;
 typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
 typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
 typedef bliss::index::KmerIndexGeneratorWithQuality<kmer_op_type, BufferType, bliss::index::XorModulus<KmerType>, qual_op_type> ComputeType;
+typedef bliss::iterator::range<size_t> RangeType;
 
 
 /**
@@ -222,6 +223,10 @@ void finalize(MPI_Comm &comm) {
 // TODO: 3. make the communicator short circuit when copying to local, and lock when multithreading.
 // TODO: 4. communicator should have send buffer and receive buffer (actual data structure)
 
+size_t length(RangeType r) {
+  return r.end - r.start;
+}
+
 /*
  * first pattern for threading - has a master thread
  */
@@ -326,7 +331,7 @@ int buffer_size = 8192*1024;
             BaseIterType begin = nullptr, end = nullptr;
             size_t chunkRead;
 
-            while ((chunkRead = loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying)) > 0) {
+            while ((chunkRead = length(loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying))) > 0) {
               li = i;
               ++i;
 
@@ -507,7 +512,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
         int j = 0;
         bool copying = true;
 
-        while ((chunkRead = loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying)) > 0) {
+        while ((chunkRead = length(loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying))) > 0) {
           ++j;
 
 #pragma omp atomic
@@ -718,7 +723,7 @@ void compute_MPI_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
 
 #pragma omp for schedule(dynamic, 10) private(chunkRead, begin, end, read)
         for (int c = r.start; c < r.end; c += chunkSize) {
-          chunkRead = loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying);
+          chunkRead = length(loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying));
 
           if (chunkRead > 0) {
             IteratorType fastq_start(parser, begin, end);

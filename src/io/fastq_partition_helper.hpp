@@ -128,7 +128,7 @@ namespace bliss
          * @param end     this indicates the position in the file.  NOTE that start position of 0 is treated differently.
          * @return          position of the start of next read sequence (@).  if there is no complete sequence, return "end"
          */
-        SizeT operator()(const CharT* _data,
+        SizeT operator()(const CharT* _data, const SizeT &rangeStart,
                             const SizeT &start, const SizeT &end)
                                        throw (bliss::io::io_exception) {
           if (start == end) return end;
@@ -143,7 +143,7 @@ namespace bliss
           bool newlineChar = false;
           int currLineId = -1;        // current line id in the buffer
           SizeT i = start;
-          if (i == 0) // beginning of file, treat specially, since there is no preceeding \n for the @
+          if (i == rangeStart) // beginning of RANGE, treat specially, since there is no preceeding \n for the @
           {
             // no preceding \n.  populate directly
             ++currLineId;

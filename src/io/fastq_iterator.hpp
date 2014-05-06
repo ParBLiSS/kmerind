@@ -180,49 +180,47 @@ namespace bliss
         /**
          * parses with an iterator, so as to have complete control over the increment.
          */
-        size_t operator()(Iterator &it, const Iterator &end)
+        Iterator operator()(const Iterator &it, const Iterator &end)
         {
           // first initialize  (on windowed version, will need to have a separate
           // way of initializing., perhaps with an overloaded operator.
-          output = SeqType();
           Iterator iter = it;
+          output = SeqType();
 
           size_t offset = _global_offset + (iter - _start);
 
-          size_t dist = 0;
-
-          // to simplify initial, get rid of leading \n
+          // trim leading \n
           while ((*iter == '\n') && (iter != end))
           {
-            ++dist;
             ++iter;
           }
 
           if (iter == end) // if the range consists of \n only. at end, terminate
           {
-            DEBUG("walked (trimmed) " << dist);
-
             printf("ERROR: nothing was parsed. %lu to %lu.  global offset: %lu, start %p.  iter %p, end %p\n", offset, _global_offset + (end - _start), _global_offset, _start, iter, end);
-            it = iter;
-            return dist;
+            return iter;
           }
 
           // store the "pointers"
           Iterator starts[4];
           Iterator ends[4];
 
-          // init current state to 1 (first char of line
-          bool parsing = true;
+          int line_num = 0;  // first line has num 0.
+          bool isEOL;
+
           // increment after the "end" of a line, so as to allow immediate termination
-          int line_num = 0;
-          bool isEOL = false;
-          // beginning of first line, so prev char must be newline
-          bool wasEOL = true;
+
+          // first char is already known (and not \n).  also, not at end.
+          starts[line_num] = iter;
+          ++iter;
+          bool parsing = (iter != end);
+          bool wasEOL = false;
+
 
           //TODO:  optimize further.  even grep is faster (below takes about 50ms.
           // grep is at 30ms to search @
           // walk through the data range
-          while (parsing && (iter != end))  // kind of slow
+          while (parsing)
           {
             isEOL = (*iter == '\n');  // slow
 
@@ -230,7 +228,7 @@ namespace bliss
             if (isEOL != wasEOL)  // kind of slow
             {
 
-              // otherwise we have \nX or X\n
+              // we have \nX or X\n
               if (isEOL)  // a new eol.  X\n case
               {
                 ends[line_num] = iter;
@@ -248,19 +246,27 @@ namespace bliss
               // iter == \n and newline Char.  keep going.
               // or iter != \n and !newline char.  in the middle.  keep going.
 
+              wasEOL = isEOL;  // only toggle if isEOL != wasEOL.
             }
 
-            wasEOL = isEOL;
-            ++dist;
             ++iter;   // kind of slow
+            if (iter == end) {
+              parsing = false;
+              ends[line_num] = iter;
+              ++line_num;
+            }
           }
 
           // check to make sure we finished okay  - if not, don't update the
           // fastq_sequence object.
           if ((iter == end) && (line_num < 4)) {
-            printf("ERROR: parsing failed. lines %d, %lu to %lu.  global offset: %lu, start %p.  iter %p, end %p\n", line_num, offset, _global_offset + (end - _start), _global_offset, _start, iter, end);
-            it = iter;
-            return dist;
+            printf("ERROR: parsing failed. lines %d, %lu to %lu.  global offset: %lu, range start %p.  start %p, curr %p, end %p\n", line_num, offset, _global_offset + (end - _start), _global_offset, _start, it, iter, end);
+            unsigned char* offending = new unsigned char[(end - it) + 1];
+            memcpy(offending, it, (end - it));
+            memset(offending + (end - it), 0, sizeof(unsigned char));
+            printf("  offending string is %s\n", offending);
+            delete [] offending;
+            return iter;
           }
 
           assert(*(starts[0]) == '@');
@@ -274,8 +280,7 @@ namespace bliss
           output.seq_end = ends[1];
 
           populateQuality(starts[3], ends[3]);
-          it = iter;
-          return dist;
+          return iter;
         }
 
         SeqType& operator()()
@@ -394,7 +399,7 @@ namespace bliss
             // walk the base iterator until function is done with construction or
             // at end.
             // doing the construction here because we have to walk anyways.
-            _f(_next, _end);    // _next is moved.
+            _next = _f(_next, _end);    // _next is moved.
           }
           // else next has already been moved (by * operator)
 
@@ -450,7 +455,7 @@ namespace bliss
           if (_curr == _next)
           {
             // after parse, _next has been moved but curr stays where it is.
-            _f(_next, _end);
+            _next = _f(_next, _end);
           }
           // else result was already computed and stored in the functor.
 
@@ -473,7 +478,7 @@ namespace bliss
             : _f(), _curr(), _next(), empty_output()
         {
         }
-        ;
+
 
     };
 

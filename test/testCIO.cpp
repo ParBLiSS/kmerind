@@ -89,7 +89,7 @@ struct readMMap {
     }
 
 
-    OT operator()(size_t start, size_t end) {
+    OT operator()(const size_t start, const size_t end) {
       size_t s = std::max(r.start, start);
       size_t e = std::min(r.end, end);
       size_t e2 = std::min(r.end, end + (end-start));
@@ -157,6 +157,8 @@ struct readFileLoader {
 
       // mmap
       r = loader.getRange();
+      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+
       data = loader.begin();
     }
 
@@ -170,7 +172,7 @@ struct readFileLoader {
       loader.resetChunks();
     }
 
-    OT operator()(size_t start, size_t end) {
+    OT operator()(const size_t start, const size_t end) {
       size_t s = std::max(r.start, start);
       size_t e = std::min(r.end, end);
       size_t e2 = std::min(r.end, end + (end-start));
@@ -251,6 +253,8 @@ struct readFileLoaderAtomic {
 
       // mmap
       r = loader.getRange();
+      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+
       data = loader.begin();
     }
 
@@ -264,7 +268,7 @@ struct readFileLoaderAtomic {
       loader.resetChunks();
     }
 
-    OT operator()(size_t start, size_t end) {
+    OT operator()(const size_t start, const size_t end) {
 
       // try copying the data.
 
@@ -335,6 +339,8 @@ struct readFASTQ {
 
       // mmap
       r = loader.getRange();
+      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+
       data = loader.begin();
     }
 
@@ -348,7 +354,7 @@ struct readFASTQ {
       loader.resetChunks();
     }
 
-    OT operator()(size_t start, size_t end) {
+    OT operator()(const size_t start, const size_t end) {
 
       // try copying the data.
 
@@ -425,6 +431,8 @@ struct FASTQIterator {
 
       // mmap
       r = loader.getRange();
+      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+
       data = loader.begin();
 
     }
@@ -439,12 +447,12 @@ struct FASTQIterator {
       loader.resetChunks();
     }
 
-    OT operator()(size_t start, size_t end) {
+    OT operator()(const size_t start, const size_t end) {
 
       // try copying the data.
 
       unsigned char *startPtr = nullptr, *endPtr = nullptr;
-      loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
+      RangeType rn = loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
 
 
 
@@ -452,7 +460,7 @@ struct FASTQIterator {
         return 0;
 
       // traverse using fastq iterator.
-      ParserType parser = ParserType(data, loader.getRange().start);
+      ParserType parser = ParserType(startPtr, rn.start);
       IteratorType fastq_start(parser, startPtr, endPtr);
       IteratorType fastq_end(parser, endPtr);
 
@@ -548,6 +556,8 @@ struct FASTQIterator2 {
 
       // mmap
       r = loader.getRange();
+      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+
       data = loader.begin();
 
     }
@@ -562,12 +572,12 @@ struct FASTQIterator2 {
       loader.resetChunks();
     }
 
-    OT operator()(size_t start, size_t end) {
+    OT operator()(const size_t start, const size_t end) {
 
       // try copying the data.
 
       unsigned char *startPtr = nullptr, *endPtr = nullptr;
-      loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
+      RangeType rn = loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
 
 
 
@@ -575,7 +585,7 @@ struct FASTQIterator2 {
         return 0;
 
       // traverse using fastq iterator.
-      ParserType parser = ParserType(data, loader.getRange().start);
+      ParserType parser = ParserType(startPtr, rn.start);
       IteratorType fastq_start(parser, startPtr, endPtr);
       IteratorType fastq_end(parser, endPtr);
 
@@ -648,6 +658,7 @@ struct FASTQIteratorNoQual {
 
       // mmap
       r = loader.getRange();
+      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
       data = loader.begin();
 
     }
@@ -662,13 +673,14 @@ struct FASTQIteratorNoQual {
       loader.resetChunks();
     }
 
-    OT operator()(size_t start, size_t end) {
+    OT operator()(const size_t start, const size_t end) {
 
       // try copying the data.
 
       unsigned char *startPtr = nullptr, *endPtr = nullptr;
-      loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
+      RangeType rn = loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
 
+      printf("thread %d getting block %lu-%lu, got block of length %ld\n", omp_get_thread_num(), start, end, (endPtr - startPtr));
 
 
       if (startPtr == nullptr || endPtr == nullptr) {
@@ -677,7 +689,7 @@ struct FASTQIteratorNoQual {
       }
 
       // traverse using fastq iterator.
-      ParserType parser = ParserType(data, loader.getRange().start);
+      ParserType parser = ParserType(startPtr, rn.start);
       IteratorType fastq_start(parser, startPtr, endPtr);
       IteratorType fastq_end(parser, endPtr);
 
@@ -749,6 +761,8 @@ struct FASTQIteratorNoQualIndie {
 
       // mmap
       r = loader.getRange();
+      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+
       data = loader.begin();
 
     }
@@ -763,12 +777,12 @@ struct FASTQIteratorNoQualIndie {
       loader.resetChunks();
     }
 
-    OT operator()(size_t start, size_t end) {
+    OT operator()(const size_t start, const size_t end) {
 
       // try copying the data.
 
       unsigned char *startPtr = nullptr, *endPtr = nullptr;
-      loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
+      RangeType rn = loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
 
 
 
@@ -778,7 +792,7 @@ struct FASTQIteratorNoQualIndie {
       }
 
       // traverse using fastq iterator.
-      ParserType parser = ParserType(data, loader.getRange().start);
+      ParserType parser = ParserType(startPtr, rn.start);
       IteratorType fastq_start(parser, startPtr, endPtr);
       IteratorType fastq_end(parser, endPtr);
 

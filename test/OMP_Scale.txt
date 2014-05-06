@@ -374,3 +374,10 @@ with quality scores
 ***QUESTION:  iterators over a block of memory, using a buffered transform iterator paradigm, does that require sync?
 	functor is called with an iterator by buffered transform iterator, the iterator is passed by reference and it is expected to change.
 	does that 
+	
+	there are some failure that occur at the same place - is it disk related or code?  need to debug more.
+5/6/2014
+	found a problem:  parser initialized with loader's start ptr, but if loader is copying at run time, then a new thing is allocated. 
+		to fix:  create new parser object each time.
+		to optimize:  preallocate within loader possible?  or alternatively, have thread hold a cache area.
+	

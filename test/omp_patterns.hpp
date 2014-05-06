@@ -30,6 +30,7 @@ OT P2P(OP &op, int &nthreads, RangeType &r, size_t &step) {
 #pragma omp parallel num_threads(nthreads) shared(r, step, i, op) default(none) reduction(+:v)
   {
 //      printf("MPI rank: %d/%d OMP thread: %d/%d\n", (rank+1), nprocs, (tid+1), nthreads);
+    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 
 //    OT tv = 0;
     size_t j = 0;
@@ -60,12 +61,14 @@ OT P2P(OP &op, int &nthreads, RangeType &r, size_t &step) {
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t)>::type>
 OT P2P_atomic(OP &op, int &nthreads, RangeType &r, size_t &step) {
 
+
   size_t i = r.start;
   OT v = 0;
 
 #pragma omp parallel num_threads(nthreads) shared(r, step, i, op) default(none) reduction(+:v)
   {
 //      printf("MPI rank: %d/%d OMP thread: %d/%d\n", (rank+1), nprocs, (tid+1), nthreads);
+    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 
     OT tv = 0;
     size_t j = 0;
@@ -104,6 +107,7 @@ OT MasterSlave(OP &op, int &nthreads, RangeType &r, size_t &step) {
 
 #pragma omp parallel num_threads(nthreads) shared(r, step, v, op) default(none)
   {
+    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 // wait or nowait?
 #pragma omp single
     {
@@ -145,6 +149,8 @@ OT MasterSlaveNoWait(OP &op, int &nthreads, RangeType &r, size_t &step) {
 
 #pragma omp parallel num_threads(nthreads) shared(r, step, v, op) default(none)
   {
+    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
+
 // wait or nowait?
 #pragma omp single nowait
     {
@@ -182,12 +188,16 @@ OT ParFor(OP &op, int &nthreads, RangeType &r, size_t &step) {
 
   OT v = 0;
 
-#pragma omp parallel for num_threads(nthreads) schedule(guided) default(none) shared(r, step, op) reduction(+ : v)
+#pragma omp parallel num_threads(nthreads) default(none) shared(r, step, op, v)
+  {
+    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
+
+#pragma omp for schedule(guided) reduction(+ : v)
   for (size_t i = r.start; i < r.end; i+=step)
   {
     v += op(i, std::min(i + step, r.end));
   }
-
+}
   return v;
 }
 
@@ -196,6 +206,7 @@ template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t)>:
 OT Sequential(OP &op, int &nthreads, RangeType &r, size_t &step) {
 
   OT v = 0;
+  printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 
   for (size_t i = r.start; i < r.end; i+=step)
   {
