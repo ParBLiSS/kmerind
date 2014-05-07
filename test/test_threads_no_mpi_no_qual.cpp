@@ -100,7 +100,7 @@ void compute_OMP_WithMaster(FileLoaderType &loader, PartitionHelperType &ph,
   // do some work using openmp
 
   ///  get the start and end iterator position.
-  ParserType parser(loader.begin(), loader.getRange().start);
+  ParserType parser;
 
 
 #ifdef USE_OPENMP
@@ -155,15 +155,15 @@ int buffer_size = 8192*1024;
             BaseIterType begin = nullptr, end = nullptr;
             size_t chunkRead;
 
-            while ((chunkRead = loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying)) > 0) {
+            while ((chunkRead = length(loader.getNextChunkAtomic(ph, begin, end, chunkSize, copying))) > 0) {
               li = i;
               ++i;
 
   #pragma omp task firstprivate(read, li, begin, end, chunkRead, copying) shared(op, rank, parser, counts) default(none)
               {
 
-                IteratorType fastq_start(parser, begin, end);
-                IteratorType fastq_end(parser, end);
+                IteratorType fastq_start(parser, begin, end, loader.getRange());
+                IteratorType fastq_end(parser, end, loader.getRange());
 
                 for (; fastq_start != fastq_end; ++fastq_start)
                 {
@@ -232,7 +232,7 @@ void compute_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
   INFO("NO MASTER");
 
   ///  get the start and end iterator position.
-  ParserType parser(loader.begin(), loader.getRange().start);
+  ParserType parser;
 
 
 
@@ -397,7 +397,7 @@ void compute_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
   INFO("NO MASTER");
 
   ///  get the start and end iterator position.
-  ParserType parser(loader.begin(), loader.getRange().start);
+  ParserType parser;
 
 
 

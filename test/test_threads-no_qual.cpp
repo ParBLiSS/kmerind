@@ -234,7 +234,7 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader, PartitionHelperType &ph,
   // do some work using openmp
 
   ///  get the start and end iterator position.
-  ParserType parser(loader.begin(), loader.getRange().start);
+  ParserType parser;
 
 
 #ifdef USE_OPENMP
@@ -420,7 +420,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
   INFO("NO MASTER");
 
   ///  get the start and end iterator position.
-  ParserType parser(loader.begin(), loader.getRange().start);
+  ParserType parser;
 
 
 
@@ -630,7 +630,7 @@ void compute_MPI_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
   INFO("NO MASTER");
 
   ///  get the start and end iterator position.
-  ParserType parser(loader.begin(), loader.getRange().start);
+  ParserType parser;
 
 
 

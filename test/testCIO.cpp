@@ -460,7 +460,7 @@ struct FASTQIterator {
         return 0;
 
       // traverse using fastq iterator.
-      ParserType parser = ParserType(startPtr, rn.start);
+      ParserType parser;
       IteratorType fastq_start(parser, startPtr, endPtr);
       IteratorType fastq_end(parser, endPtr);
 
@@ -585,7 +585,7 @@ struct FASTQIterator2 {
         return 0;
 
       // traverse using fastq iterator.
-      ParserType parser = ParserType(startPtr, rn.start);
+      ParserType parser;
       IteratorType fastq_start(parser, startPtr, endPtr);
       IteratorType fastq_end(parser, endPtr);
 
@@ -689,7 +689,7 @@ struct FASTQIteratorNoQual {
       }
 
       // traverse using fastq iterator.
-      ParserType parser = ParserType(startPtr, rn.start);
+      ParserType parser;
       IteratorType fastq_start(parser, startPtr, endPtr);
       IteratorType fastq_end(parser, endPtr);
 
@@ -792,7 +792,7 @@ struct FASTQIteratorNoQualIndie {
       }
 
       // traverse using fastq iterator.
-      ParserType parser = ParserType(startPtr, rn.start);
+      ParserType parser;
       IteratorType fastq_start(parser, startPtr, endPtr);
       IteratorType fastq_end(parser, endPtr);
 

@@ -35,7 +35,9 @@
 #include "sys/sysinfo.h"  // for meminfo
 
 #include "iterators/range.hpp"
+#include "io/data_block.hpp"
 #include "utils/logging.h"
+
 
 namespace bliss
 {
@@ -245,7 +247,7 @@ namespace bliss
         }
 
         /**
-         * return the full range for this file mmap.  (in units of data type T)
+         * return the full range for this file.  (in units of data type T)
          * @return
          */
         const RangeType& getFullRange() const {
@@ -271,6 +273,7 @@ namespace bliss
           range.align_to_page(page_size);
           chunkPos = range.start;
         }
+
 
         /**
          * search at the start and end of the block partition for some matching condition,
@@ -612,15 +615,18 @@ namespace bliss
 
 
       protected:
-        std::string filename;
-        RangeType range;      // offset in file from where to read
-        RangeType fullRange;  // offset in file from where to read
-
         SizeType page_size;
         int file_handle;      // file handle
+        std::string filename;
 
-        T* data;              // actual start of data
+        RangeType fullRange;  // offset in file from where to read
         T* aligned_data;      // mem-mapped data, page aligned.  strictly internal
+
+
+        bliss:io::DataBlock<T*, RangeType> dataBlock;
+        RangeType range;      // offset in file from where to read
+        T* data;              // actual start of data
+
 
         bool loaded;
         bool preloaded;

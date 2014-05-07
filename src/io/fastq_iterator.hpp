@@ -157,13 +157,9 @@ namespace bliss
                                                                             QualityType;
 
         SeqType output;
-        const Iterator _start;
-        const size_t _global_offset;
 
-        fastq_parser(const Iterator & start, const size_t & global_offset)
-            : output(), _start(start), _global_offset(global_offset)
+        fastq_parser() : output()
         {
-          //printf("start: %lx, global offset: %lu\n", start, global_offset);
         }
 
         template <typename Q = Quality>
@@ -180,14 +176,12 @@ namespace bliss
         /**
          * parses with an iterator, so as to have complete control over the increment.
          */
-        Iterator operator()(const Iterator &it, const Iterator &end)
+        Iterator operator()(const Iterator &it, const Iterator &end, const RangeType &coordinates)
         {
           // first initialize  (on windowed version, will need to have a separate
           // way of initializing., perhaps with an overloaded operator.
           Iterator iter = it;
           output = SeqType();
-
-          size_t offset = _global_offset + (iter - _start);
 
           // trim leading \n
           while ((*iter == '\n') && (iter != end))
@@ -197,7 +191,7 @@ namespace bliss
 
           if (iter == end) // if the range consists of \n only. at end, terminate
           {
-            printf("ERROR: nothing was parsed. %lu to %lu.  global offset: %lu, start %p.  iter %p, end %p\n", offset, _global_offset + (end - _start), _global_offset, _start, iter, end);
+            printf("ERROR: nothing was parsed. %lu to %lu.  iter %p, end %p\n", coordinates.start, coordinates.end, iter, end);
             return iter;
           }
 
@@ -260,7 +254,7 @@ namespace bliss
           // check to make sure we finished okay  - if not, don't update the
           // fastq_sequence object.
           if ((iter == end) && (line_num < 4)) {
-            printf("ERROR: parsing failed. lines %d, %lu to %lu.  global offset: %lu, range start %p.  start %p, curr %p, end %p\n", line_num, offset, _global_offset + (end - _start), _global_offset, _start, it, iter, end);
+            printf("ERROR: parsing failed. lines %d, %lu to %lu.  start %p, curr %p, end %p\n", line_num, coordinates.start, coordinates.end, it, iter, end);
             unsigned char* offending = new unsigned char[(end - it) + 1];
             memcpy(offending, it, (end - it));
             memset(offending + (end - it), 0, sizeof(unsigned char));
@@ -273,7 +267,7 @@ namespace bliss
           assert(*(starts[2]) == '+');
 
           // now populate the output
-          output.id.composite = offset;
+          output.id.composite = coordinates.start + (starts[0] - it);
           output.name = starts[0];
           output.name_end = ends[0];
           output.seq = starts[1];
@@ -326,8 +320,10 @@ namespace bliss
         Iterator _curr;
         Iterator _next;
         Iterator _end;
+        Iterator _temp;
         Parser _f;
         typename std::remove_reference<typename functor_traits::return_type>::type empty_output;
+        RangeType range;
 
       public:
         typedef fastq_iterator<Parser, Iterator> type;
@@ -353,20 +349,20 @@ namespace bliss
 
         // class specific constructor
         fastq_iterator(const Parser & f, const Iterator& curr,
-                       const Iterator& end)
-            : _curr(curr), _next(curr), _end(end), _f(f), empty_output()
+                       const Iterator& end, const RangeType &_range)
+            : _curr(curr), _next(curr), _end(end), _f(f), empty_output(), range(_range)
         {
         }
 
-        fastq_iterator(const Parser & f, const Iterator& end)
-            : _curr(end), _next(end), _end(end), _f(f), empty_output()
+        fastq_iterator(const Parser & f, const Iterator& end, const RangeType &_range)
+            : _curr(end), _next(end), _end(end), _f(f), empty_output(), range(_range.end, _range.end)
         {
         }
 
         // for all classes
         fastq_iterator(const type& Other)
             : _curr(Other._curr), _next(Other._next), _end(Other._end),
-              _f(Other._f), empty_output()
+              _f(Other._f), empty_output(), range(Other.range)
         {
         }
 
@@ -376,6 +372,7 @@ namespace bliss
           _curr = Other._curr;
           _next = Other._next;
           _end = Other._end;
+          range = Other.range;
           return *this;
         }
 
@@ -399,7 +396,9 @@ namespace bliss
             // walk the base iterator until function is done with construction or
             // at end.
             // doing the construction here because we have to walk anyways.
-            _next = _f(_next, _end);    // _next is moved.
+            _temp = _next;
+            _next = _f(_next, _end, range);    // _next is moved.
+            range.start += (_next - _temp) / sizeof(BaseValueType);
           }
           // else next has already been moved (by * operator)
 
@@ -455,7 +454,9 @@ namespace bliss
           if (_curr == _next)
           {
             // after parse, _next has been moved but curr stays where it is.
-            _next = _f(_next, _end);
+            _temp = _next;
+            _next = _f(_next, _end, range);
+            range.start += (_next - _temp) / sizeof(BaseValueType);
           }
           // else result was already computed and stored in the functor.
 

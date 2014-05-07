@@ -377,7 +377,10 @@ with quality scores
 	
 	there are some failure that occur at the same place - is it disk related or code?  need to debug more.
 5/6/2014
-	found a problem:  parser initialized with loader's start ptr, but if loader is copying at run time, then a new thing is allocated. 
+	found a problem:  parser initialized with loader's start ptr, but if loader is copying at run time, then a new start ptr is allocated. 
 		to fix:  create new parser object each time.
 		to optimize:  preallocate within loader possible?  or alternatively, have thread hold a cache area.
+		
+	the api does not lend itself well to "create new parser object each time"
+	abstract with the a new DataBlock class that has internally start and end ptr, plus range matching the global coord of startptr.
 	
