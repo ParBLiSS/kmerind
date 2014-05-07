@@ -384,3 +384,5 @@ with quality scores
 	the api does not lend itself well to "create new parser object each time"
 	abstract with the a new DataBlock class that has internally start and end ptr, plus range matching the global coord of startptr.
 	
+	changing interface of file loader to use DataBlock - this abstracts the buffering as well.
+	
