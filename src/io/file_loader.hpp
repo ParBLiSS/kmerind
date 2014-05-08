@@ -117,15 +117,15 @@ namespace bliss
 #if defined(USE_MPI)
         explicit file_loader(const std::string &_filename,
                     const MPI_Comm& _comm = MPI_COMM_SELF) throw (io_exception)
-            : filename(_filename), range(), fullRange(), file_handle(-1),
-              data(nullptr), aligned_data(nullptr), loaded(false), preloaded(false),
+            : file_handle(-1), filename(_filename), fullRange(), aligned_data(nullptr),
+              range(), data(nullptr), loaded(false), preloaded(false),
               chunkPos(0),
               nprocs(1), rank(0), comm(_comm)
 #else
         explicit file_loader(const std::string &_filename,
                              const int _nParts = 1, const int _rank = 0) throw (io_exception)
-            : filename(_filename), range(), fullRange(), file_handle(-1),
-              data(nullptr), aligned_data(nullptr), loaded(false),preloaded(false),
+            : file_handle(-1), filename(_filename), fullRange(), aligned_data(nullptr),
+              range(), data(nullptr), loaded(false), preloaded(false),
               chunkPos(0),
               nprocs(_nParts), rank(_rank)
 #endif
@@ -203,6 +203,100 @@ namespace bliss
             close(file_handle);
             file_handle = -1;
           }
+        }
+
+
+        /**
+         *  performs memmap, and optionally preload the data into memory.
+         *
+         * @param _memUseFraction value between 0.0 and 0.5, representing percentage of FREE memory to be used.  0 means no preloading.
+         */
+        void load(const float _memUseFraction = 0.0f) throw (io_exception)
+        {
+          // clean up any previous runs.
+          //DEBUG("Loading");
+          unload();
+
+          //DEBUG("loading");
+
+          range.align_to_page(page_size);
+
+          /// do the mem map
+          aligned_data = map(range);
+
+          /// check if can load the region into memory.
+          float memUseFraction = (_memUseFraction > 0.5f) ? 0.5f :
+              (_memUseFraction < 0.0f) ? 0.0f : _memUseFraction;
+
+
+          preloaded = false;
+          if (memUseFraction > 0.0f) {
+            /// check if we can preload.
+            struct sysinfo memInfo;
+            sysinfo (&memInfo);
+            long long limit = static_cast<long long>(static_cast<float>(memInfo.freeram * memInfo.mem_unit) * memUseFraction);
+
+            if (limit < (this->size() * sizeof(T)) ) {
+              preloaded = true;
+            } else {
+              //WARNING("Insufficient memory requested during file loading.  Not preloading file.");
+            }
+          }
+
+          //DEBUG("mapped");
+
+          if (preloaded)
+          {
+            // allocate space
+            data = new T[this->size() + 1];
+            //copy data over
+            memcpy(data, aligned_data + (range.start - range.block_start),
+                   sizeof(T) * this->size());
+
+            data[this->size()] = 0;
+
+            // close the input
+            unmap(aligned_data, range);
+
+            aligned_data = data;
+          }
+          else
+          {
+
+            data = aligned_data + (range.start - range.block_start);
+
+          }
+          //DEBUG("loaded");
+          loaded = true;
+
+        }
+
+        void unload()
+        {
+          //DEBUG("Unloading");
+
+          if (preloaded)
+          {
+            if (data != nullptr)
+              delete [] data;
+            preloaded = false;
+          }
+          else
+          {
+            if (aligned_data != nullptr && aligned_data != MAP_FAILED)
+              unmap(aligned_data, range);
+          }
+          aligned_data = nullptr;
+          data = nullptr;
+          //DEBUG("unloaded");
+          loaded = false;
+        }
+
+        inline DataBlock& getData() {
+          assert(loaded);
+
+          return
+
         }
 
         /**
@@ -526,91 +620,6 @@ namespace bliss
         return RangeType(s, e);
       }
 
-        /**
-         *  performs memmap, and optionally preload the data into memory.
-         *
-         * @param _memUseFraction value between 0.0 and 0.5, representing percentage of FREE memory to be used.  0 means no preloading.
-         */
-        void load(const float _memUseFraction = 0.0f) throw (io_exception)
-        {
-          // clean up any previous runs.
-          //DEBUG("Loading");
-          unload();
-
-          //DEBUG("loading");
-
-          range.align_to_page(page_size);
-
-          /// do the mem map
-          aligned_data = map(range);
-
-          /// check if can load the region into memory.
-          float memUseFraction = (_memUseFraction > 0.5f) ? 0.5f :
-              (_memUseFraction < 0.0f) ? 0.0f : _memUseFraction;
-
-
-          preloaded = false;
-          if (memUseFraction > 0.0f) {
-            /// check if we can preload.
-            struct sysinfo memInfo;
-            sysinfo (&memInfo);
-            long long limit = static_cast<long long>(static_cast<float>(memInfo.freeram * memInfo.mem_unit) * memUseFraction);
-
-            if (limit < (this->size() * sizeof(T)) ) {
-              preloaded = true;
-            } else {
-              //WARNING("Insufficient memory requested during file loading.  Not preloading file.");
-            }
-          }
-
-          //DEBUG("mapped");
-
-          if (preloaded)
-          {
-            // allocate space
-            data = new T[this->size() + 1];
-            //copy data over
-            memcpy(data, aligned_data + (range.start - range.block_start),
-                   sizeof(T) * this->size());
-
-            data[this->size()] = 0;
-
-            // close the input
-            unmap(aligned_data, range);
-
-            aligned_data = data;
-          }
-          else
-          {
-
-            data = aligned_data + (range.start - range.block_start);
-
-          }
-          //DEBUG("loaded");
-          loaded = true;
-
-        }
-
-        void unload()
-        {
-          //DEBUG("Unloading");
-
-          if (preloaded)
-          {
-            if (data != nullptr)
-              delete [] data;
-            preloaded = false;
-          }
-          else
-          {
-            if (aligned_data != nullptr && aligned_data != MAP_FAILED)
-              unmap(aligned_data, range);
-          }
-          aligned_data = nullptr;
-          data = nullptr;
-          //DEBUG("unloaded");
-          loaded = false;
-        }
 
 
 
@@ -623,7 +632,7 @@ namespace bliss
         T* aligned_data;      // mem-mapped data, page aligned.  strictly internal
 
 
-        bliss:io::DataBlock<T*, RangeType> dataBlock;
+        bliss::io::DataBlock<T*, RangeType, void> dataBlock;
         RangeType range;      // offset in file from where to read
         T* data;              // actual start of data
 

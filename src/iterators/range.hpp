@@ -38,6 +38,8 @@ namespace bliss
     template<typename T>
     struct range
     {
+        typedef T ValueType;
+
         /**
          * @var   block_start
          * @brief starting position of range aligned to underlying block boundary
