@@ -26,6 +26,7 @@
 // own includes
 #include <utils/logging.h>
 #include <iterators/function_traits.hpp>
+#include <iterators/range.hpp>
 
 namespace bliss
 {
@@ -155,6 +156,7 @@ namespace bliss
         typedef Alphabet                                                    AlphabetType;
         typedef std::enable_if<!std::is_same<Quality, void>::value, Quality>
                                                                             QualityType;
+        typedef bliss::iterator::range<size_t>                              RangeType;
 
         SeqType output;
 
@@ -316,6 +318,7 @@ namespace bliss
         // define first, to avoid -Wreorder error (where the variables are initialized before fastq_iterator::Parser, etc are defined.
         typedef std::iterator_traits<Iterator> base_traits;
         typedef bliss::functional::function_traits<Parser> functor_traits;
+        typedef typename Parser::RangeType RangeType;
 
         Iterator _curr;
         Iterator _next;

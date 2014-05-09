@@ -18,6 +18,8 @@
 #include <vector>
 #include <algorithm>
 
+#include "iterators/container_traits.hpp"
+
 namespace bliss
 {
   namespace io
@@ -46,7 +48,7 @@ namespace bliss
      *          this is hard to achieve because runtime information is needed.
      *          can template the caller, but this gives less flexibiltiy.
      *          can make this class choose at runtime whether to buffer or not.  may be expensive.
-     *          can add member function with template parameter to select "True" or "False" for using the buffer.
+     *          can add member function with template parameter to select "True" or "False" for using the buffer.  Providing 2 types BUFFERING and NO_BUFFERING for this.
      *
      *  issue with reference:  need to initialize this object with references, so harder to do for member variable instances.
      *
@@ -59,40 +61,49 @@ namespace bliss
      *
      *  container can be specified as T*.  internally it will use a std::vector in that case.
      *
+     *  The DataBlock class is used for both having a backing store and not, decidable at run time.
      *
+     *
+     *  member function specialization:
      *
      */
-
-
-
+    struct BUFFER_CHOICE {};
+    struct BUFFER_ON : public BUFFER_CHOICE {};
+    struct BUFFER_OFF : public BUFFER_CHOICE {};
 
     /**
      * @class     bliss::io::DataBlock
      * @brief     abstraction to represent a block of data.
-     * @details
+     * @details   container type defaults to Iterator type.
+     *            Iterator:  can be pointer or an iterator class.
+     *            Container:  defaults to Iterator.  container is pointer or a regular iterator,
+     *              then default to a std::vector.
      */
-    template<typename Iterator, typename Range, typename Container = void>
+    template<typename Iterator, typename Range,
+             typename Container = std::vector<typename std::iterator_traits<Iterator>::value_type> >
     class DataBlock
     {
       public:
-        constexpr bool hasContainer = !std::is_same<Container, void>::value;
 
-        typedef typename std""
+        typedef typename std::iterator_traits<Iterator>::value_type           ValueType;
 
-        constexpr bool containerIsPointer = std::is_pointer<Container>::value;
+      protected:
+        static constexpr bool iteratorIsValid = !(std::is_same<ValueType, void>::value);
 
-        // if Container is a pointer type, use it directly as iterator.  else use it directly.
-        typedef typename std::conditional<containerIsPointer,
-                                          Container,
-                                          typename Container::iterator>::type   InternalIterT;
-        typedef typename std::iterator_traits<InternalIterT>::value_type        OutputValueType;
-        typedef typename std::conditional<containerIsPointer,
-                                          std::vector<OutputValueType>,
-                                          Container>                            StoreType;
-//        typedef Container                                                       StoreType;
-        typedef typename StoreType::iterator                                    OutputIteratorType;
+        static_assert(iteratorIsValid, "Iterator is NOT valid.");
+        static_assert(is_container<Container>::value, "Container is not valid.  Should support begin() and end() at the least.");
+        static_assert(std::is_same<ValueType, typename Container::value_type>::value, "Iterator and Container should have the same element types");
 
-        DataBlock() : range(), startIter(), endIter(), buffer()
+
+
+      public:
+
+        /**
+         *
+         */
+
+        // begin and end functions need to choose the return iterator type depending on information available at time of "calling".
+        DataBlock() : range(), startIter(), endIter(), buffer(), buffered(false)
         {
         }
 
@@ -102,99 +113,101 @@ namespace bliss
          * @param _end
          * @param _range
          */
-        template <bool copy>
-
-        void assign(const Iterator &_start, const Iterator &_end, const Range &_range)
-        {
+        template<typename buffering>
+        void assign(const Iterator &_start, const Iterator &_end, const Range &_range, buffering) {
           range = _range;
           startIter = _start;
           endIter = _end;
 
           buffer.clear();
-          std::copy(startIter, endIter, std::inserter(buffer, buffer.begin()));
+          buffered = std::is_same<buffering, BUFFER_ON>::value;
+          if (buffered)
+            std::copy(startIter, endIter, std::inserter(buffer, buffer.begin()));
         }
 
+        /**
+         *
+         */
         virtual ~DataBlock() {
+          buffer.clear();
         }
 
-        template<bool buffering>
-        typename std::enable_if<buffering, OutputIteratorType>::type
-        begin() {
+//        /**
+//         *
+//         * @return
+//         */
+//        template<typename buffering>
+//        typename std::enable_if<std::is_same<buffering, BUFFER_ON>::value, typename Container::iterator>::type begin(buffering = BUFFER_ON())
+//        {
+//          assert(buffered);
+//          return buffer.begin();
+//        }
+//        template<typename buffering>
+//        typename std::enable_if<std::is_same<buffering, BUFFER_OFF>::value, Iterator>::type begin(buffering = BUFFER_OFF())
+//        {
+//          return startIter;
+//        }
+
+        // TODO:  use auto return type.
+        auto begin(BUFFER_ON) {  // was typename Container::iterator
+          assert(buffered);
           return buffer.begin();
         }
-        OutputIteratorType end() {
-          return buffer.end();
+        auto begin(BUFFER_OFF) {  // was Iterator
+          return startIter;
         }
-
-        const OutputIteratorType& cbegin() const {
+        /**
+         *
+         * @return
+         */
+        template<typename buffering>
+        typename std::enable_if<std::is_same<buffering, BUFFER_ON>::value, typename std::add_lvalue_reference<typename Container::const_iterator>::type >::type cbegin(buffering = BUFFER_ON()) const
+        {
+          assert(buffered);
           return buffer.cbegin();
         }
-        const OutputIteratorType& cend() const {
+
+        template<typename buffering>
+        typename std::enable_if<std::is_same<buffering, BUFFER_OFF>::value, typename std::add_lvalue_reference<typename std::add_const<Iterator>::type>::type >::type cbegin(buffering = BUFFER_OFF()) const
+        {
+          return startIter;
+        }
+
+        /**
+         *
+         * @return
+         */
+        template<typename buffering>
+        typename std::enable_if<std::is_same<buffering, BUFFER_ON>::value, typename Container::iterator>::type end(buffering = BUFFER_ON())
+        {
+          assert(buffered);
+          return buffer.end();
+        }
+        template<typename buffering>
+        typename std::enable_if<std::is_same<buffering, BUFFER_OFF>::value, Iterator>::type end(buffering = BUFFER_OFF())
+        {
+          return endIter;
+        }
+        /**
+         *
+         * @return
+         */
+        template<typename buffering>
+        typename std::enable_if<std::is_same<buffering, BUFFER_ON>::value, typename std::add_lvalue_reference<typename Container::const_iterator>::type >::type cend(buffering = BUFFER_ON()) const
+        {
+          assert(buffered);
           return buffer.cend();
         }
 
-        const Range& getRange() const {
-          return range;
-        }
-
-      protected:
-        Range range;
-        Iterator startIter;   // if buffering, kept for future use.
-        Iterator endIter;     // kept for future use.
-                                        // reference so will update with caller's values
-        StoreType buffer;
-
-
-
-    };
-
-    /**
-     * @class     bliss::io::DataBlock
-     * @brief     abstraction to represent a block of data.
-     * @details   buffer has to be allocated externally to the right size.  This is to allow reusing a buffer by the calling code.
-     *            constructor determines whether buffering or not.  (could have done it as template, but that is not as flexible during runtime.
-     *            constructors have _end in case Iterator is not a random access iterator so can't do _start + n
-     */
-    template<typename Iterator, typename Range>
-    class DataBlock<Iterator, Range, void>
-    {
-      public:
-        typedef Iterator OutputIterator;
-
-        DataBlock() : range(), startIter(), endIter()
+        template<typename buffering>
+        typename std::enable_if<std::is_same<buffering, BUFFER_OFF>::value, typename std::add_lvalue_reference<typename std::add_const<Iterator>::type>::type >::type cend(buffering = BUFFER_OFF()) const
         {
+          return endIter;
         }
-
-
         /**
-         * constructor for non-buffering
-         * @param _start
-         * @param _end
-         * @param _range
+         *
+         * @return
          */
-        void assign(const Iterator &_start, const Iterator &_end, const Range &_range)
-        {
-          range = _range;
-          startIter = _start;
-          endIter = _end;
-        }
-
-        virtual ~DataBlock() {
-        }
-
-        OutputIterator begin() {
-          return startIter;
-        }
-        OutputIterator end() {
-          return endIter;
-        }
-
-        const OutputIterator& cbegin() const {
-          return startIter;
-        }
-        const OutputIterator& cend() const {
-          return endIter;
-        }
         const Range& getRange() const {
           return range;
         }
@@ -203,9 +216,10 @@ namespace bliss
         Range range;
         Iterator startIter;   // if buffering, kept for future use.
         Iterator endIter;     // kept for future use.
-                                        // reference so will update with caller's values
-    };
 
+        Container buffer;
+        bool buffered;
+    };
 
 
   } /* namespace io */

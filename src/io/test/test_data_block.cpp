@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 #include <cstdint>  // for uint64_t, etc.
 #include <vector>
+#include <set>
 #include <limits>
 #include <algorithm>
 
@@ -46,59 +47,97 @@ TYPED_TEST_CASE_P(DataBlockTest);
 
 // testing the equal function
 TYPED_TEST_P(DataBlockTest, NoBuffer){
-  typedef bliss::io::DataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>, void > NoBuffer_DB_Type;
+  typedef bliss::io::DataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t> >    NoBuffer_DB_Type;
 
   bliss::iterator::range<size_t> r(0, this->slen);
   NoBuffer_DB_Type db;
-  db.assign(this->src.begin(), this->src.end(), r);
-  EXPECT_EQ(this->src.begin(), db.begin());
-  EXPECT_EQ(this->src.end(),   db.end()  );
+  db.assign(this->src.begin(), this->src.end(), r, BUFFER_OFF());
+  EXPECT_EQ(this->src.begin(), db.begin(BUFFER_OFF()));
+  EXPECT_EQ(this->src.end(),   db.end(BUFFER_OFF())  );
 
 
   bliss::iterator::range<size_t> r2(10, this->slen / 2);
   NoBuffer_DB_Type db2;
-  db2.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2);
-  EXPECT_EQ(this->src.begin()+ r2.start, db2.begin());
-  EXPECT_EQ(this->src.begin()+ r2.end  , db2.end()  );
+  db2.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2, BUFFER_OFF());
+  EXPECT_EQ(this->src.begin()+ r2.start, db2.begin(BUFFER_OFF()));
+  EXPECT_EQ(this->src.begin()+ r2.end  , db2.end(BUFFER_OFF())  );
 
 
 }
 
 // testing the equal function
-TYPED_TEST_P(DataBlockTest, BufferVector){
-  typedef bliss::io::DataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>, std::vector<TypeParam> > Buffer_DB_Type;
+TYPED_TEST_P(DataBlockTest, BufferSet){
+  typedef bliss::io::DataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>, std::multiset<TypeParam> > Buffer_DB_Type;
 
   bliss::iterator::range<size_t> r(10, 10 + this->dlen);
   Buffer_DB_Type db;
-  db.assign(this->src.begin() + r.start, this->src.begin() + r.end, r);
+  db.assign(this->src.begin() + r.start, this->src.begin() + r.end, r, BUFFER_ON());
 
   int i = r.start;
-  for (auto it = db.begin(); it != db.end(); ++it, ++i) {
+  for (auto it = db.begin(BUFFER_ON()); it != db.end(BUFFER_ON()); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }
 
-  std::vector<TypeParam> result1(db.begin(), db.end());
+  std::vector<TypeParam> result1(db.begin(BUFFER_ON()), db.end(BUFFER_ON()));
 
 
 
   bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
-  db.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2);
+  db.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2, BUFFER_ON());
 
 
   i = r2.start;
-  for (auto it = db.begin(); it != db.end(); ++it, ++i) {
+  for (auto it = db.begin(BUFFER_ON()); it != db.end(BUFFER_ON()); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Shifted Vectors x and y differ at index " << i;
   }
 
   i = r2.start;
-  for (auto it = db.begin(), it2 = result1.begin(); it != db.end() && i < r2.end; ++it, ++i, ++it2) {
+  for (auto it = db.begin(BUFFER_ON()), it2 = result1.begin(); it != db.end(BUFFER_ON()) && i < r2.end; ++it, ++i, ++it2) {
     EXPECT_NE(*it2, *it) << "Vectors x and y same at index " << i;
   }
 
 }
 
+
+// testing the equal function
+TYPED_TEST_P(DataBlockTest, BufferVector){
+  typedef bliss::io::DataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t> > Buffer_DB_Type;
+
+  bliss::iterator::range<size_t> r(10, 10 + this->dlen);
+  Buffer_DB_Type db;
+  db.assign(this->src.begin() + r.start, this->src.begin() + r.end, r, BUFFER_ON());
+
+  int i = r.start;
+  for (auto it = db.begin(BUFFER_ON()); it != db.end(BUFFER_ON()); ++it, ++i) {
+    EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
+  }
+
+  std::vector<TypeParam> result1(db.begin(BUFFER_ON()), db.end(BUFFER_ON()));
+
+
+
+  bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
+  db.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2, BUFFER_ON());
+
+
+  i = r2.start;
+  for (auto it = db.begin(BUFFER_ON()); it != db.end(BUFFER_ON()); ++it, ++i) {
+    EXPECT_EQ(this->src[i], *it) << "Shifted Vectors x and y differ at index " << i;
+  }
+
+  i = r2.start;
+  for (auto it = db.begin(BUFFER_ON()), it2 = result1.begin(); it != db.end(BUFFER_ON()) && i < r2.end; ++it, ++i, ++it2) {
+    EXPECT_NE(*it2, *it) << "Vectors x and y same at index " << i;
+  }
+
+}
+
+
+
+
+
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(DataBlockTest, NoBuffer, BufferVector);
+REGISTER_TYPED_TEST_CASE_P(DataBlockTest, NoBuffer, BufferSet, BufferVector);
 
 
 /*
@@ -136,76 +175,106 @@ TYPED_TEST_CASE_P(DataBlockPtrTest);
 
 // testing the equal function
 TYPED_TEST_P(DataBlockPtrTest, NoBuffer){
-  typedef bliss::io::DataBlock<TypeParam*, bliss::iterator::range<size_t>, void> NoBuffer_DB_Type;
+  typedef bliss::io::DataBlock<TypeParam*, bliss::iterator::range<size_t> > NoBuffer_DB_Type;
 
   bliss::iterator::range<size_t> r(0, this->slen);
   NoBuffer_DB_Type db;
-  db.assign(this->src, this->src + this->slen, r);
-  EXPECT_EQ(this->src,                db.begin());
-  EXPECT_EQ(this->src + this->slen,   db.end()  );
+  db.assign(this->src, this->src + this->slen, r, BUFFER_OFF());
+  EXPECT_EQ(this->src,                db.begin(BUFFER_OFF()));
+  EXPECT_EQ((this->src + this->slen),   db.end(BUFFER_OFF())  );
 
   int i = r.start;
-  for (auto it = db.begin(); it != db.end(); ++it, ++i) {
+  for (auto it = db.begin(BUFFER_OFF()); it != db.end(BUFFER_OFF()); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }
 
   bliss::iterator::range<size_t> r2(10, this->slen / 2);
   NoBuffer_DB_Type db2;
-  db2.assign(this->src + r2.start, this->src + r2.end, r2);
-  EXPECT_EQ(this->src + r2.start, db2.begin());
-  EXPECT_EQ(this->src + r2.end  , db2.end()  );
+  db2.assign(this->src + r2.start, this->src + r2.end, r2, BUFFER_OFF());
+  EXPECT_EQ(this->src + r2.start, db2.begin(BUFFER_OFF()));
+  EXPECT_EQ(this->src + r2.end  , db2.end(BUFFER_OFF())  );
 
   i = r2.start;
-  for (auto it = db2.begin(); it != db2.end(); ++it, ++i) {
+  for (auto it = db2.begin(BUFFER_OFF()); it != db2.end(BUFFER_OFF()); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }
 
 }
 
+
+
 // testing the equal function
-TYPED_TEST_P(DataBlockPtrTest, BufferIter){
+TYPED_TEST_P(DataBlockPtrTest, BufferVector){
   typedef bliss::io::DataBlock<TypeParam*, bliss::iterator::range<size_t>, std::vector<TypeParam> > Buffer_DB_Type;
 
   bliss::iterator::range<size_t> r(10, 10 + this->dlen);
   Buffer_DB_Type db;
-  db.assign(this->src + r.start, this->src + r.end, r);
+  db.assign(this->src + r.start, this->src + r.end, r, BUFFER_ON());
 
   int i = r.start;
-  for (auto it = db.begin(); it != db.end(); ++it, ++i) {
+  for (auto it = db.begin(BUFFER_ON()); it != db.end(BUFFER_ON()); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }
 
 
-  std::vector<TypeParam> result1(db.begin(), db.end());
+  std::vector<TypeParam> result1(db.begin(BUFFER_ON()), db.end(BUFFER_ON()));
 
   bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
-  db.assign(this->src + r2.start, this->src + r2.end, r2);
+  db.assign(this->src + r2.start, this->src + r2.end, r2, BUFFER_ON());
 
   i = r2.start;
-  for (auto it = db.begin(); it != db.end(); ++it, ++i) {
+  for (auto it = db.begin(BUFFER_ON()); it != db.end(BUFFER_ON()); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "shifted Vectors x and y differ at index " << i;
   }
 
 
   i = r2.start;
 //  std::cerr << "length = " << this->dlen << std::endl;
-  for (auto it = db.begin(), it2 = result1.begin(); it != db.end() && i < r2.end; ++it, ++i, ++it2) {
+  for (auto it = db.begin(BUFFER_ON()), it2 = result1.begin(); it != db.end(BUFFER_ON()) && i < r2.end; ++it, ++i, ++it2) {
 //    std::cerr << (int)(*it2) << " vs " << (int)(this->src[i]) << std::endl;
     EXPECT_NE(*it2, *it) << "Vectors x and y same at index " << i;
   }
 
-  i = r2.start;
-  for (auto val : db) {
-    EXPECT_EQ(this->src[i], val) << "Vectors x and y differ at index " << i;
-    ++i;
-  }
 
 }
 
+// testing the equal function
+TYPED_TEST_P(DataBlockPtrTest, BufferSet){
+  typedef bliss::io::DataBlock<TypeParam*, bliss::iterator::range<size_t>, std::multiset<TypeParam> > Buffer_DB_Type;
 
+  bliss::iterator::range<size_t> r(10, 10 + this->dlen);
+  Buffer_DB_Type db;
+  db.assign(this->src + r.start, this->src + r.end, r, BUFFER_ON());
+
+  int i = r.start;
+  for (auto it = db.begin(BUFFER_ON()); it != db.end(BUFFER_ON()); ++it, ++i) {
+    EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
+  }
+
+
+  std::vector<TypeParam> result1(db.begin(BUFFER_ON()), db.end(BUFFER_ON()));
+
+  bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
+  db.assign(this->src + r2.start, this->src + r2.end, r2, BUFFER_ON());
+
+  i = r2.start;
+  for (auto it = db.begin(BUFFER_ON()); it != db.end(BUFFER_ON()); ++it, ++i) {
+    EXPECT_EQ(this->src[i], *it) << "shifted Vectors x and y differ at index " << i;
+  }
+
+
+  i = r2.start;
+//  std::cerr << "length = " << this->dlen << std::endl;
+  for (auto it = db.begin(BUFFER_ON()), it2 = result1.begin(); it != db.end(BUFFER_ON()) && i < r2.end; ++it, ++i, ++it2) {
+//    std::cerr << (int)(*it2) << " vs " << (int)(this->src[i]) << std::endl;
+    EXPECT_NE(*it2, *it) << "Vectors x and y same at index " << i;
+  }
+
+
+}
 
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(DataBlockPtrTest, NoBuffer, BufferIter);
+REGISTER_TYPED_TEST_CASE_P(DataBlockPtrTest, NoBuffer,BufferVector, BufferSet);
 
 
 

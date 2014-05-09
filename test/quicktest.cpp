@@ -22,6 +22,7 @@
 #include "index/kmer_index_element.hpp"
 #include "io/fastq_iterator.hpp"
 
+
 using namespace std;
 using namespace bliss::index;
 using namespace bliss::io;

@@ -94,6 +94,7 @@ namespace bliss
         typedef SizeT                             SizeType;
         typedef bliss::iterator::range<SizeType>  RangeType;
         typedef T*                                IteratorType;
+        typedef bliss::io::DataBlock<IteratorType, RangeType>  DataBlockType;
 
         /**
          * opens the file and save file handle.  specifies the range to load.
@@ -247,23 +248,25 @@ namespace bliss
 
           if (preloaded)
           {
-            // allocate space
-            data = new T[this->size() + 1];
-            //copy data over
-            memcpy(data, aligned_data + (range.start - range.block_start),
-                   sizeof(T) * this->size());
-
-            data[this->size()] = 0;
-
-            // close the input
+//            // allocate space
+//            data = new T[this->size() + 1];
+//            //copy data over
+//            memcpy(data, aligned_data + (range.start - range.block_start),
+//                   sizeof(T) * this->size());
+//
+//            data[this->size()] = 0;
+//
+//            // close the input
+//            unmap(aligned_data, range);
+//
+//            aligned_data = data;
+            dataBlock.assign(aligned_data + (range.start - range.block_start), aligned_data + (range.end - range.block_start), range, BUFFER_ON());
             unmap(aligned_data, range);
-
-            aligned_data = data;
           }
           else
           {
-
-            data = aligned_data + (range.start - range.block_start);
+            dataBlock.assign(aligned_data + (range.start - range.block_start), aligned_data + (range.end - range.block_start), range, BUFFER_OFF());
+            //data = aligned_data + (range.start - range.block_start);
 
           }
           //DEBUG("loaded");
@@ -277,8 +280,8 @@ namespace bliss
 
           if (preloaded)
           {
-            if (data != nullptr)
-              delete [] data;
+//            if (data != nullptr)
+//              delete [] data;
             preloaded = false;
           }
           else
@@ -292,10 +295,10 @@ namespace bliss
           loaded = false;
         }
 
-        inline DataBlock& getData() {
+        inline DataBlockType& getData() {
           assert(loaded);
 
-          return
+          return dataBlock;
 
         }
 
@@ -308,7 +311,8 @@ namespace bliss
         {
           assert(loaded);
 
-          return data;
+          // TODO: testing...
+          return dataBlock.begin(BUFFER_ON());
         }
         inline const T* begin() const
         {
@@ -323,7 +327,7 @@ namespace bliss
         {
           assert(loaded);
 
-          return data + this->size();
+          return dataBlock.end(BUFFER_ON());
         }
         inline const T* end() const
         {
@@ -632,7 +636,7 @@ namespace bliss
         T* aligned_data;      // mem-mapped data, page aligned.  strictly internal
 
 
-        bliss::io::DataBlock<T*, RangeType, void> dataBlock;
+        DataBlockType dataBlock;
         RangeType range;      // offset in file from where to read
         T* data;              // actual start of data
 
@@ -648,7 +652,6 @@ namespace bliss
 #if defined(USE_MPI)
         MPI_Comm comm;
 #endif
-
 
         /**
          * map a region of the file to memory.
