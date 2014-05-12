@@ -86,16 +86,57 @@ namespace bliss
      *    destroy file_loader
      *
      */
-    template <typename T, typename SizeT = size_t>
+    template <typename T, bool Buffering = true, bool Preloading = false, typename SizeT = size_t>
     class file_loader
     {
-      public:
 
+        /////// type defintions.
+
+      public:
         typedef SizeT                             SizeType;
         typedef bliss::iterator::range<SizeType>  RangeType;
         typedef T*                                IteratorType;
-        typedef bliss::io::DataBlock<IteratorType, RangeType>  DataBlockType;
 
+      protected:
+        typedef bliss::io::DataBlockFactory<IteratorType, RangeType>  DataBlockFactoryType;
+
+      public:
+
+        typedef typename DataBlockFactoryType::BufferedDataBlockType  BufferedDataBlockType;
+        typedef typename DataBlockFactoryType::UnbufferedDataBlockType  UnbufferedDataBlockType;
+
+
+
+        ////// member variables
+      protected:
+        SizeType page_size;
+        int file_handle;      // file handle
+        std::string filename;
+
+        RangeType fullRange;  // offset in file from where to read
+        T* aligned_data;      // mem-mapped data, page aligned.  strictly internal
+
+
+        DataBlockFactoryType dataBlockFactory;
+        RangeType range;      // offset in file from where to read
+//        T* data;              // actual start of data
+
+
+        bool loaded;
+        bool preloaded;
+
+        SizeType chunkPos;    // for chunked iteration.  size since "data".
+
+        int nprocs;           // for partitioning.
+        int rank;             // for partitioning.
+#if defined(USE_MPI)
+        MPI_Comm comm;
+#endif
+
+
+
+        /////////////// Constructor and Destructor
+      public:
         /**
          * opens the file and save file handle.  specifies the range to load.
          *
@@ -207,6 +248,16 @@ namespace bliss
         }
 
 
+      private:
+        // disallow default constructor.
+        file_loader() {};
+
+
+        ////// PUBLIC METHODS
+
+
+      public:
+
         /**
          *  performs memmap, and optionally preload the data into memory.
          *
@@ -260,12 +311,12 @@ namespace bliss
 //            unmap(aligned_data, range);
 //
 //            aligned_data = data;
-            dataBlock.assign(aligned_data + (range.start - range.block_start), aligned_data + (range.end - range.block_start), range, BUFFER_ON());
+            dataBlockFactory.assign(aligned_data + (range.start - range.block_start), aligned_data + (range.end - range.block_start), range, BUFFER_ON());
             unmap(aligned_data, range);
           }
           else
           {
-            dataBlock.assign(aligned_data + (range.start - range.block_start), aligned_data + (range.end - range.block_start), range, BUFFER_OFF());
+            dataBlockFactory.assign(aligned_data + (range.start - range.block_start), aligned_data + (range.end - range.block_start), range, BUFFER_OFF());
             //data = aligned_data + (range.start - range.block_start);
 
           }
@@ -289,17 +340,17 @@ namespace bliss
             if (aligned_data != nullptr && aligned_data != MAP_FAILED)
               unmap(aligned_data, range);
           }
+          dataBlockFactory.clear();
           aligned_data = nullptr;
           data = nullptr;
           //DEBUG("unloaded");
           loaded = false;
         }
 
-        inline DataBlockType& getData() {
+        inline DataBlockFactoryType& getData() {
           assert(loaded);
 
-          return dataBlock;
-
+          return dataBlockFactory;
         }
 
         /**
@@ -626,32 +677,7 @@ namespace bliss
 
 
 
-
       protected:
-        SizeType page_size;
-        int file_handle;      // file handle
-        std::string filename;
-
-        RangeType fullRange;  // offset in file from where to read
-        T* aligned_data;      // mem-mapped data, page aligned.  strictly internal
-
-
-        DataBlockType dataBlock;
-        RangeType range;      // offset in file from where to read
-        T* data;              // actual start of data
-
-
-        bool loaded;
-        bool preloaded;
-
-        SizeType chunkPos;    // for chunked iteration.  size since "data".
-
-        int nprocs;           // for partitioning.
-        int rank;             // for partitioning.
-
-#if defined(USE_MPI)
-        MPI_Comm comm;
-#endif
 
         /**
          * map a region of the file to memory.
@@ -697,10 +723,6 @@ namespace bliss
           //DEBUG("unmapped");
 
         }
-
-      private:
-        // disallow default constructor.
-        file_loader() {};
 
     };
 
