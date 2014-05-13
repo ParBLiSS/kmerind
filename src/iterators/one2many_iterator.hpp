@@ -742,7 +742,7 @@ public:
 
   /*
   // specific to at least fwd iterators: default contructable
-  template< typename = std::enable_if<is_min_fwd && !is_ra> >
+  template< typename = typename std::enable_if<is_min_fwd && !is_ra>::type >
   one2many_iterator()
       :  _base(), _next(), _end(), _f(), _m(0)
   {
@@ -751,7 +751,7 @@ public:
 
   /*
   // specific to RandomAccessIterators
-  template< typename = std::enable_if<is_ra> >
+  template< typename = typename std::enable_if<is_ra>::type >
   one2many_iterator()
       :  _base(), _end(), _f(), _m(0)
   {

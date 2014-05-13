@@ -22,12 +22,12 @@ add_executable(testTypes test_types.cpp)
 target_link_libraries(testTypes ${EXTRA_LIBS})
 
 
-## EXECUTABLES
-add_executable(testThreads test_threads.cpp)
-target_link_libraries(testThreads ${EXTRA_LIBS})
-#target_link_libraries(testThreads bliss-io)
-target_link_libraries(testThreads bliss-common)
-#target_link_libraries(testThreads bliss-index)
+### EXECUTABLES
+#add_executable(testThreads test_threads.cpp)
+#target_link_libraries(testThreads ${EXTRA_LIBS})
+##target_link_libraries(testThreads bliss-io)
+#target_link_libraries(testThreads bliss-common)
+##target_link_libraries(testThreads bliss-index)
 
 ### EXECUTABLES
 #add_executable(testThreadsNoQual test_threads-no_qual.cpp)

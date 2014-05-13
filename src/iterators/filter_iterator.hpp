@@ -176,11 +176,10 @@ namespace bliss
 
         // forward iterator
         template<
-            typename = std::enable_if<
-                std::is_same<iterator_category, std::forward_iterator_tag>::value || std::is_same<
-                    iterator_category, std::bidirectional_iterator_tag>::value
-                || std::is_same<iterator_category,
-                    std::random_access_iterator_tag>::value> >
+            typename = typename std::enable_if<
+                std::is_same<iterator_category, std::forward_iterator_tag>::value ||
+                std::is_same<iterator_category, std::bidirectional_iterator_tag>::value ||
+                std::is_same<iterator_category, std::random_access_iterator_tag>::value >::type >
         explicit filter_iterator()
             : _curr(), _start(), _end(), _f(), before_start(false)
         {

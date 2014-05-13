@@ -47,17 +47,18 @@ TYPED_TEST_CASE_P(DataBlockTest);
 
 // testing the equal function
 TYPED_TEST_P(DataBlockTest, NoBuffer){
-  typedef bliss::io::DataBlockFactory<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t> >    DBFactoryType;
-  DBFactoryType dbf;
+  typedef bliss::io::UnbufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t> >    DB_Type;
 
   bliss::iterator::range<size_t> r(0, this->slen);
-  auto db = dbf.assign(this->src.begin(), this->src.end(), r, BUFFER_OFF());
+  DB_Type db;
+  db.assign(this->src.begin(), this->src.end(), r);
   EXPECT_EQ(this->src.begin(), db.begin());
   EXPECT_EQ(this->src.end(),   db.end()  );
 
 
   bliss::iterator::range<size_t> r2(10, this->slen / 2);
-  auto db2 = dbf.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2, BUFFER_OFF());
+  DB_Type db2;
+  db2.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2);
   EXPECT_EQ(this->src.begin()+ r2.start, db2.begin());
   EXPECT_EQ(this->src.begin()+ r2.end  , db2.end()  );
 
@@ -66,11 +67,11 @@ TYPED_TEST_P(DataBlockTest, NoBuffer){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockTest, BufferSet){
-  typedef bliss::io::DataBlockFactory<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>, std::multiset<TypeParam> >    DBFactoryType;
-  DBFactoryType dbf;
+  typedef bliss::io::BufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>, std::multiset<TypeParam> > DB_Type;
 
   bliss::iterator::range<size_t> r(10, 10 + this->dlen);
-  auto db = dbf.assign(this->src.begin() + r.start, this->src.begin() + r.end, r, BUFFER_ON());
+  DB_Type db;
+  db.assign(this->src.begin() + r.start, this->src.begin() + r.end, r);
 
   int i = r.start;
   for (auto it = db.begin(); it != db.end(); ++it, ++i) {
@@ -82,7 +83,7 @@ TYPED_TEST_P(DataBlockTest, BufferSet){
 
 
   bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
-  db = dbf.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2, BUFFER_ON());
+  db.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2);
 
 
   i = r2.start;
@@ -100,11 +101,11 @@ TYPED_TEST_P(DataBlockTest, BufferSet){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockTest, BufferVector){
-  typedef bliss::io::DataBlockFactory<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t> > DBFactoryType;
-  DBFactoryType dbf;
+  typedef bliss::io::BufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t> > DB_Type;
 
   bliss::iterator::range<size_t> r(10, 10 + this->dlen);
-  auto db = dbf.assign(this->src.begin() + r.start, this->src.begin() + r.end, r, BUFFER_ON());
+  DB_Type db;
+  db.assign(this->src.begin() + r.start, this->src.begin() + r.end, r);
 
   int i = r.start;
   for (auto it = db.begin(); it != db.end(); ++it, ++i) {
@@ -116,7 +117,7 @@ TYPED_TEST_P(DataBlockTest, BufferVector){
 
 
   bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
-  db = dbf.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2, BUFFER_ON());
+  db.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2);
 
 
   i = r2.start;
@@ -174,11 +175,11 @@ TYPED_TEST_CASE_P(DataBlockPtrTest);
 
 // testing the equal function
 TYPED_TEST_P(DataBlockPtrTest, NoBuffer){
-  typedef bliss::io::DataBlockFactory<TypeParam*, bliss::iterator::range<size_t> > DBFactoryType;
-  DBFactoryType dbf;
+  typedef bliss::io::UnbufferedDataBlock<TypeParam*, bliss::iterator::range<size_t> > DB_Type;
 
   bliss::iterator::range<size_t> r(0, this->slen);
-  auto db = dbf.assign(this->src, this->src + this->slen, r, BUFFER_OFF());
+  DB_Type db;
+  db.assign(this->src, this->src + this->slen, r);
   EXPECT_EQ(this->src,                db.begin());
   EXPECT_EQ((this->src + this->slen),   db.end()  );
 
@@ -188,7 +189,8 @@ TYPED_TEST_P(DataBlockPtrTest, NoBuffer){
   }
 
   bliss::iterator::range<size_t> r2(10, this->slen / 2);
-  auto db2 = dbf.assign(this->src + r2.start, this->src + r2.end, r2, BUFFER_OFF());
+  DB_Type db2;
+  db2.assign(this->src + r2.start, this->src + r2.end, r2);
   EXPECT_EQ(this->src + r2.start, db2.begin());
   EXPECT_EQ(this->src + r2.end  , db2.end()  );
 
@@ -203,11 +205,11 @@ TYPED_TEST_P(DataBlockPtrTest, NoBuffer){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockPtrTest, BufferVector){
-  typedef bliss::io::DataBlockFactory<TypeParam*, bliss::iterator::range<size_t>, std::vector<TypeParam> > DBFactoryType;
-  DBFactoryType dbf;
+  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::iterator::range<size_t>, std::vector<TypeParam> > DB_Type;
 
   bliss::iterator::range<size_t> r(10, 10 + this->dlen);
-  auto db = dbf.assign(this->src + r.start, this->src + r.end, r, BUFFER_ON());
+  DB_Type db;
+  db.assign(this->src + r.start, this->src + r.end, r);
 
   int i = r.start;
   for (auto it = db.begin(); it != db.end(); ++it, ++i) {
@@ -218,7 +220,7 @@ TYPED_TEST_P(DataBlockPtrTest, BufferVector){
   std::vector<TypeParam> result1(db.begin(), db.end());
 
   bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
-  db = dbf.assign(this->src + r2.start, this->src + r2.end, r2, BUFFER_ON());
+  db.assign(this->src + r2.start, this->src + r2.end, r2);
 
   i = r2.start;
   for (auto it = db.begin(); it != db.end(); ++it, ++i) {
@@ -238,11 +240,11 @@ TYPED_TEST_P(DataBlockPtrTest, BufferVector){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockPtrTest, BufferSet){
-  typedef bliss::io::DataBlockFactory<TypeParam*, bliss::iterator::range<size_t>, std::multiset<TypeParam> > DBFactoryType;
-  DBFactoryType dbf;
+  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::iterator::range<size_t>, std::multiset<TypeParam> > DB_Type;
 
   bliss::iterator::range<size_t> r(10, 10 + this->dlen);
-  auto db = dbf.assign(this->src + r.start, this->src + r.end, r, BUFFER_ON());
+  DB_Type db;
+  db.assign(this->src + r.start, this->src + r.end, r);
 
   int i = r.start;
   for (auto it = db.begin(); it != db.end(); ++it, ++i) {
@@ -253,7 +255,7 @@ TYPED_TEST_P(DataBlockPtrTest, BufferSet){
   std::vector<TypeParam> result1(db.begin(), db.end());
 
   bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
-  db = dbf.assign(this->src + r2.start, this->src + r2.end, r2, BUFFER_ON());
+  db.assign(this->src + r2.start, this->src + r2.end, r2);
 
   i = r2.start;
   for (auto it = db.begin(); it != db.end(); ++it, ++i) {
@@ -310,13 +312,13 @@ REGISTER_TYPED_TEST_CASE_P(DataBlockPtrTest, NoBuffer,BufferVector, BufferSet);
 //// failed construction due to asserts
 //TYPED_TEST_P(DataBlockDeathTest, badRange){
 //
-//  typedef bliss::io::DataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>> DBFactoryType;
+//  typedef bliss::io::DataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>> DB_Type;
 //
 //  bliss::iterator::range<size_t> r2(0, this->slen);
 //  std::string err_regex = ".data_block.hpp.* Assertion .* failed.*";
 //
 //  // basically, if start is larger than end.
-//  EXPECT_EXIT(DBFactoryType(this->src.begin(), this->src.begin() + this->dlen, r2, this->dest.begin(), this->dlen), ::testing::KilledBySignal(SIGABRT), err_regex);
+//  EXPECT_EXIT(DB_Type(this->src.begin(), this->src.begin() + this->dlen, r2, this->dest.begin(), this->dlen), ::testing::KilledBySignal(SIGABRT), err_regex);
 //}
 //
 //

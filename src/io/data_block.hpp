@@ -48,14 +48,11 @@ namespace bliss
      *
      *  The DataBlock class is used for both having a backing store and not, decidable at run time.
      *
-     *  FORGET ABOUT HAVING 1 CLASS THAT ALLOWS BOTH RUNTIME BUFFERING AND NOT.
+     *  FORGET ABOUT HAVING 1 CLASS THAT ALLOWS BOTH RUNTIME BUFFERING AND NOT.  complicating the usage and API.
      *    DO TEMPLATING.
      *    Type is templated.  Interface is identical.
      *
      */
-    struct BUFFER_CHOICE {};
-    struct BUFFER_ON : public BUFFER_CHOICE {};
-    struct BUFFER_OFF : public BUFFER_CHOICE {};
 
 
     template<typename Derived, typename Iterator, typename Range>
@@ -152,7 +149,6 @@ namespace bliss
         Container buffer;
     };
 
-
     template<typename Iterator, typename Range>
     class UnbufferedDataBlock : public DataBlock<UnbufferedDataBlock<Iterator, Range>, Iterator, Range>
     {
@@ -192,73 +188,6 @@ namespace bliss
     };
 
 
-
-    /**
-     * @class     bliss::io::DataBlock
-     * @brief     abstraction to represent a block of data.
-     * @details   container type defaults to Iterator type.
-     *            Iterator:  can be pointer or an iterator class.
-     *            Container:  defaults to Iterator.  container is pointer or a regular iterator,
-     *              then default to a std::vector.
-     */
-    template<typename Iterator, typename Range,
-             typename Container = std::vector<typename std::iterator_traits<Iterator>::value_type> >
-    class DataBlockFactory
-    {
-      public:
-
-        typedef BufferedDataBlock<Iterator, Range, Container>           BufferedDataBlockType;
-        typedef UnbufferedDataBlock<Iterator, Range>                    UnbufferedDataBlockType;
-
-
-        /**
-         *
-         */
-        DataBlockFactory() : buffered(), unbuffered(), bufferOn(false)
-        {
-        }
-        /**
-         *
-         */
-        virtual ~DataBlockFactory() {
-          this->clear();
-        }
-
-        /**
-         * constructor for non-buffering
-         * @param _start
-         * @param _end
-         * @param _range
-         */
-        template<typename buffering>
-        typename std::enable_if<std::is_same<buffering, BUFFER_ON>::value, BufferedDataBlockType>::type
-        assign(const Iterator &_start, const Iterator &_end, const Range &_range, buffering) {
-          bufferOn = true;
-          buffered.assign(_start, _end, _range);
-          return buffered;
-        }
-        template<typename buffering>
-        typename std::enable_if<std::is_same<buffering, BUFFER_OFF>::value, UnbufferedDataBlockType>::type
-        assign(const Iterator &_start, const Iterator &_end, const Range &_range, buffering) {
-          bufferOn = false;
-          unbuffered.assign(_start, _end, _range);
-          return unbuffered;
-        }
-
-        void clear() {
-          if (bufferOn)
-            buffered.clear();
-          else
-            unbuffered.clear();
-        }
-
-
-      protected:
-        BufferedDataBlockType buffered;
-        UnbufferedDataBlockType unbuffered;
-
-        bool bufferOn;
-    };
 
 
   } /* namespace io */

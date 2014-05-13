@@ -154,7 +154,7 @@ namespace bliss
               fastq_sequence<Iterator, Alphabet>,
               fastq_sequence_quality<Iterator, Alphabet, Quality> >::type   SeqType;
         typedef Alphabet                                                    AlphabetType;
-        typedef std::enable_if<!std::is_same<Quality, void>::value, Quality>
+        typedef typename std::enable_if<!std::is_same<Quality, void>::value, Quality>::type
                                                                             QualityType;
         typedef bliss::iterator::range<size_t>                              RangeType;
 
@@ -473,11 +473,11 @@ namespace bliss
 
         // forward iterator
         template<
-            typename = std::enable_if<
+            typename = typename std::enable_if<
                 std::is_same<iterator_category, std::forward_iterator_tag>::value || std::is_same<
                     iterator_category, std::bidirectional_iterator_tag>::value
                 || std::is_same<iterator_category,
-                    std::random_access_iterator_tag>::value> >
+                    std::random_access_iterator_tag>::value>::type >
         explicit fastq_iterator()
             : _f(), _curr(), _next(), empty_output()
         {
