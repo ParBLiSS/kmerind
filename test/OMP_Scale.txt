@@ -393,9 +393,16 @@ member function template - no real point in doing it outside of the class declar
 overloading functions by template - make sure parameter typess are not the same.
 when calling templated member functions, either 1. use X.template f<T>()... form, or let the compiler deduce by supplying the type in the function parameters.
 
-DataBlock appear to be working
+DataBlock appear to be working  (traditional templating with CRTP static polymorphism.)
 	although, don't like the fact that the buffering state is kept external.
 	begin/end calls - no point in using templates to specialize, since we are doing run-time choice and both templates may get instantiated when coded.
 now integrate with other code.
+
+
+Debugging for testCIO.  problem: when chunk size is smaller than read record size.  really need to read at least 1 record to be able to determine the minimum chunk size.
+	need to read most of a record to be able to determine it's starting position:  need at least 3 whole lines, so that's a bit more than 1/2 of a fastq read.
+	minimimum chunk size is at least 1 whole read's span.
+	
+	best thing to do is probably to ASSUME reads are same length, and check the first few for size.
 
 	

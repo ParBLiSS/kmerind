@@ -143,6 +143,8 @@ namespace bliss
 
         DataBlockType *dataBlocks;
 
+        SizeType seqSize;
+
         /////////////// Constructor and Destructor
       public:
         /**
@@ -170,14 +172,14 @@ namespace bliss
             : file_handle(-1), filename(_filename), fileRange(), aligned_data(nullptr),
               range(), loaded(false), preloaded(false),
               chunkPos(0),
-              nprocs(1), rank(0), comm(_comm), dataBlocks(nullptr)
+              nprocs(1), rank(0), comm(_comm), dataBlocks(nullptr), seqSize(0)
 #else
         explicit file_loader(const std::string &_filename,
                              const int _nParts = 1, const int _rank = 0) throw (io_exception)
             : file_handle(-1), filename(_filename), fileRange(), aligned_data(nullptr),
               range(), loaded(false), preloaded(false),
               chunkPos(0),
-              nprocs(_nParts), rank(_rank), dataBlocks(nullptr)
+              nprocs(_nParts), rank(_rank), dataBlocks(nullptr), seqSize(0)
 #endif
         {
 #if defined(USE_MPI)
@@ -448,6 +450,8 @@ namespace bliss
           // map the content
           InputIteratorType searchData = this->map(searchRange) + searchRange.start - searchRange.block_start;
 
+          // NOTE: assume that the range is large enough that we would not run into trouble with partition search not finding a starting position.
+
           // for output
           RangeType output(range);
 
@@ -589,9 +593,12 @@ namespace bliss
         template <typename PartitionHelper>
         DataBlockType& getNextChunkAtomic(const PartitionHelper &partitioner, const SizeType &chunkSize = 0) {
 
+          getSeqSize(partitioner, 3);
+
+
           static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for getNextChunk() has a different SizeType than FileLoader\n");
-          assert(chunkSize >= 0);
           assert(loaded);
+
 
           int tid = 0;
 #if defined(USE_OPENMP)
@@ -599,7 +606,7 @@ namespace bliss
 #endif
 
 
-          SizeType cs = (chunkSize == 0 ? page_size : chunkSize);
+          SizeType cs = std::max(seqSize * 2,  std::min(page_size, chunkSize));  // we need at least seqSize * 2
           SizeType s = range.end,
                    e = range.end;
           SizeType readLen = 0;
@@ -612,13 +619,16 @@ namespace bliss
           { s = chunkPos; chunkPos += cs; }  // get the current value and then update
 
           if (s >= range.end) {
+            printf("should not be here often\n");
               s = range.end;
               readLen = 0;
           } else {
             // since we are just partitioning, need to search for start and for end.
             RangeType curr(s, s + cs);
-            curr &= range;
+            curr &= srcData.getRange();
             /// search start part.
+
+             //printf("curr: %lu %lu\n", s, s+cs);
             try {
               // search for end.
               s = partitioner(srcData.begin() + (curr.start - range.start), range, curr);
@@ -626,18 +636,22 @@ namespace bliss
               // did not find the end, so set e to next.end.
               // TODO: need to handle this scenario better - should keep search until end.
               WARNING(ex.what());
+
+              printf("got an exception:  %s \n", ex.what());
               s = curr.end;
             }
 
             RangeType next = curr >> cs;
-            next &= range;
+            next &= srcData.getRange();
             /// search end part only.  update localPos for next search.
+            //printf("next: %lu %lu\n", next.start, next.end);
             try {
               // search for end.
               e = partitioner(srcData.begin() + (next.start - range.start), range, next);
             } catch (io_exception& ex) {
               // did not find the end, so set e to next.end.
               // TODO: need to handle this scenario better - should keep search until end.
+              printf("got an exception\n");
               WARNING(ex.what());
               e = next.end;
             }
@@ -663,9 +677,39 @@ namespace bliss
         return dataBlocks[tid];
       }
 
+      template<typename PartitionHelper>
+      SizeType getSeqSize(const PartitionHelper &partitioner, int iterations) {
+
+        //// TODO: if a different partitioner is used, seqSize may be incorrect.
+        ////   seqSize is a property of the partitioner applied to the data.
+
+        assert(loaded);
+
+        if (seqSize == 0) {
+          SizeType s, e;
+          RangeType r(range);
+
+          s = partitioner(srcData.begin(), range, r);
+
+          for (int i = 0; i < iterations; ++i) {
+            r.start = s + 1;   // advance by 1, in order to search for next entry.
+            r &= range;
+            e = partitioner(srcData.begin() + (r.start - range.start), range, r);
+            seqSize += (e - s);
+            s = e;
+          }
+          seqSize /= iterations;
+
+          printf("sequence size is %lu\n", seqSize);
+        }
+        return seqSize;
+      }
+
 
 
       protected:
+
+
 
         /**
          * map a region of the file to memory.

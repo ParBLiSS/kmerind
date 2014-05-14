@@ -21,6 +21,8 @@
 
 // C++ STL includes
 #include <iterator>
+#include <algorithm>
+#include <sstream>
 #include <type_traits>
 
 // own includes
@@ -193,7 +195,7 @@ namespace bliss
 
           if (iter == end) // if the range consists of \n only. at end, terminate
           {
-            printf("ERROR: nothing was parsed. %lu to %lu.  iter %p, end %p\n", coordinates.start, coordinates.end, iter, end);
+            printf("ERROR: nothing was parsed. %lu to %lu.\n", coordinates.start, coordinates.end);
             return iter;
           }
 
@@ -256,12 +258,12 @@ namespace bliss
           // check to make sure we finished okay  - if not, don't update the
           // fastq_sequence object.
           if ((iter == end) && (line_num < 4)) {
-            printf("ERROR: parsing failed. lines %d, %lu to %lu.  start %p, curr %p, end %p\n", line_num, coordinates.start, coordinates.end, it, iter, end);
-            unsigned char* offending = new unsigned char[(end - it) + 1];
-            memcpy(offending, it, (end - it));
-            memset(offending + (end - it), 0, sizeof(unsigned char));
-            printf("  offending string is %s\n", offending);
-            delete [] offending;
+            printf("ERROR: parsing failed. lines %d, %lu to %lu. \n", line_num, coordinates.start, coordinates.end);
+            std::stringstream ss;
+            std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
+
+            std::copy(it, end, oit);
+            printf("  offending string is %s\n", ss.str().c_str());
             return iter;
           }
 

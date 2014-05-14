@@ -9,6 +9,8 @@
 #define FASTQ_PARTITION_HELPER_HPP_
 
 #include <sstream>
+#include <iterator>  // for ostream_iterator
+#include <algorithm> // for copy.
 
 #include "config.hpp"
 
@@ -364,7 +366,10 @@ namespace bliss
             std::stringstream ss;
             ss << "ERROR in file processing: file segment \n" << "\t\t"
                << t << "\n\t\t(original " << target << ")\n"
-               << "\t\tdoes not contain valid FASTQ markers.";
+               << "\t\tdoes not contain valid FASTQ markers.\n String:";
+            std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
+            std::copy(_data, _data + (target.end - target.start), oit);
+
             throw bliss::io::io_exception(ss.str());
 
           }

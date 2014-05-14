@@ -6,9 +6,9 @@
 add_executable(test1 test.cpp)
 target_link_libraries(test1 ${EXTRA_LIBS})
 
-## EXECUTABLES
-#add_executable(test2 testCIO.cpp)
-#target_link_libraries(test2 ${EXTRA_LIBS})
+# EXECUTABLES
+add_executable(test2 testCIO.cpp)
+target_link_libraries(test2 ${EXTRA_LIBS})
 
 ## EXECUTABLES
 #add_executable(testIndex2 testIndex.cpp)

@@ -22,7 +22,7 @@ typedef bliss::iterator::range<size_t> RangeType;
 
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t)>::type >
-OT P2P(OP &op, int &nthreads, RangeType &r, size_t &step) {
+OT P2P(OP &op, int &nthreads, RangeType &r, size_t step) {
 
   size_t i = r.start;
   OT v = 0;
@@ -59,7 +59,7 @@ OT P2P(OP &op, int &nthreads, RangeType &r, size_t &step) {
 
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t)>::type>
-OT P2P_atomic(OP &op, int &nthreads, RangeType &r, size_t &step) {
+OT P2P_atomic(OP &op, int &nthreads, RangeType &r, size_t step) {
 
 
   size_t i = r.start;
@@ -97,7 +97,7 @@ OT P2P_atomic(OP &op, int &nthreads, RangeType &r, size_t &step) {
 
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t)>::type>
-OT MasterSlave(OP &op, int &nthreads, RangeType &r, size_t &step) {
+OT MasterSlave(OP &op, int &nthreads, RangeType &r, size_t step) {
 
   OT *v = new OT[nthreads];
 #pragma omp parallel for num_threads(nthreads) default(none) shared(nthreads, v) schedule(static)
@@ -139,7 +139,7 @@ OT MasterSlave(OP &op, int &nthreads, RangeType &r, size_t &step) {
 }
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t)>::type>
-OT MasterSlaveNoWait(OP &op, int &nthreads, RangeType &r, size_t &step) {
+OT MasterSlaveNoWait(OP &op, int &nthreads, RangeType &r, size_t step) {
 
   OT *v = new OT[nthreads];
 #pragma omp parallel for num_threads(nthreads) default(none) shared(nthreads, v) schedule(static)
@@ -184,7 +184,7 @@ OT MasterSlaveNoWait(OP &op, int &nthreads, RangeType &r, size_t &step) {
 
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t)>::type>
-OT ParFor(OP &op, int &nthreads, RangeType &r, size_t &step) {
+OT ParFor(OP &op, int &nthreads, RangeType &r, size_t step) {
 
   OT v = 0;
 
@@ -203,7 +203,7 @@ OT ParFor(OP &op, int &nthreads, RangeType &r, size_t &step) {
 
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t)>::type>
-OT Sequential(OP &op, int &nthreads, RangeType &r, size_t &step) {
+OT Sequential(OP &op, int &nthreads, RangeType &r, size_t step) {
 
   OT v = 0;
   printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);

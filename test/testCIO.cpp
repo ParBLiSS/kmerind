@@ -24,7 +24,7 @@
 #include "common/alphabets.hpp"
 #include "io/fastq_iterator.hpp"
 
-template <typename OT>
+template <typename OT, bool buffering = false, bool preloading = false>
 struct readMMap {
 
     RangeType r;
@@ -33,10 +33,8 @@ struct readMMap {
 
     int file_handle;
     size_t page_size;
-    bool buffering;
-    bool preloading;
 
-    readMMap(std::string filename, RangeType _r, bool _preloading = false, bool _buffering = false) {
+    readMMap(std::string filename, RangeType _r) {
       /// open the file and get a handle.
       file_handle = open(filename.c_str(), O_RDONLY);
       if (file_handle == -1)
@@ -46,10 +44,8 @@ struct readMMap {
         exit(-1);
       }
 
-      buffering = _buffering;
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
-
 
       // mmap
       r = _r.align_to_page(page_size);
@@ -59,7 +55,6 @@ struct readMMap {
                                            r.block_start);
       data = mapped_data + r.start - r.block_start;
 
-      preloading = _preloading;
       if (preloading)
       {
         data = new unsigned char[r.end - r.start];
@@ -83,6 +78,10 @@ struct readMMap {
         close(file_handle);
         file_handle = -1;
       }
+    }
+
+    size_t getSeqSize() {
+      return 1;
     }
 
     void reset() {
@@ -134,38 +133,38 @@ struct readMMap {
 };
 
 
-template <typename OT>
+template <typename OT, bool buffering = false, bool preloading = false>
 struct readFileLoader {
 
+    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
+
     RangeType r;
-    unsigned char* data;
     size_t page_size;
-    bool buffering;
+    typename LoaderType::DataType data;
 
-    bliss::io::file_loader<unsigned char> loader;
+    LoaderType loader;
 
-    readFileLoader(std::string filename, RangeType _r, bool _preloading = false, bool _buffering = false) :
-      buffering(_buffering), loader(filename)  {
+    readFileLoader(std::string filename, RangeType _r) :
+      loader(filename)  {
 
-      if (_preloading)
-        loader.load(0.1f);
-      else
-        loader.load();
+      loader.load();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
 
-      // mmap
       r = loader.getRange();
       printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
-      data = loader.begin();
+      data = loader.getData();
     }
 
     ~readFileLoader() {
       // unmap
       loader.unload();
-      data = nullptr;
+    }
+
+    size_t getSeqSize() {
+      return 1;
     }
 
     void reset() {
@@ -216,37 +215,36 @@ struct readFileLoader {
     }
 };
 
-template<typename CharT, typename SizeT = size_t>
+template<typename Iterator, typename Range>
 struct PartitionHelper {
-    typedef SizeT SizeType;
+    typedef typename Range::ValueType SizeType;
+    typedef typename std::iterator_traits<Iterator>::value_type ValueType;
+    typedef Iterator  IteratorType;
 
-    SizeT operator()(const CharT* _data,
-                            const SizeT &start, const SizeT &end) {
-      return start;
+    const SizeType operator()(const Iterator &iter, const Range & parent, const Range &target) const {
+      return target.start;
     }
 };
 
 
-template <typename OT>
+template <typename OT, bool buffering = false, bool preloading = false>
 struct readFileLoaderAtomic {
 
+    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
+
     RangeType r;
-    unsigned char* data;
     size_t page_size;
-    bool buffering;
 
-    bliss::io::file_loader<unsigned char> loader;
-    PartitionHelper<unsigned char> helper;
+    LoaderType loader;
+    PartitionHelper<typename LoaderType::InputIteratorType, RangeType> helper;
+    PartitionHelper<typename LoaderType::IteratorType, RangeType> chunkHelper;
 
-    readFileLoaderAtomic(std::string filename, RangeType _r, bool _preloading = false, bool _buffering = false) :
-      buffering(_buffering), loader(filename)  {
+    readFileLoaderAtomic(std::string filename, RangeType _r) :
+      loader(filename)  {
 
       loader.adjustRange(helper);
 
-      if (_preloading)
-        loader.load(0.1f);
-      else
-        loader.load();
+      loader.load();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -255,14 +253,16 @@ struct readFileLoaderAtomic {
       r = loader.getRange();
       printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
-      data = loader.begin();
     }
 
     ~readFileLoaderAtomic() {
       // unmap
       loader.unload();
-      data = nullptr;
     }
+    size_t getSeqSize() {
+      return loader.getSeqSize(chunkHelper, 3);
+    }
+
 
     void reset() {
       loader.resetChunks();
@@ -272,40 +272,36 @@ struct readFileLoaderAtomic {
 
       // try copying the data.
 
-      unsigned char *startPtr = nullptr, *endPtr = nullptr;
-      loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
+      typename LoaderType::DataType data = loader.getNextChunkAtomic(chunkHelper, end - start);
 
-      if (startPtr == nullptr || endPtr == nullptr)
+      if (data.begin() == data.end())
         return 0;
 
       // simulate multiple traversals.
       unsigned char c = 0;
-      for (unsigned char *iter = startPtr; iter != endPtr; ++iter) {
+      for (auto iter = data.begin(); iter != data.end(); ++iter) {
         c = std::max(*iter, c);
       }
 
       unsigned char d = 255;
 
-      for (unsigned char *iter = startPtr; iter != endPtr; ++iter) {
+      for (auto iter = data.begin(); iter != data.end(); ++iter) {
         d = std::min(*iter, d);
       }
 
       // simulate kmer computation
       uint64_t km = c;
       km += d;
-      for (unsigned char *iter = startPtr; iter != endPtr; ++iter) {
+      for (auto iter = data.begin(); iter != data.end(); ++iter) {
         km <<= 8;
         km |= static_cast<uint64_t>(*iter);
       }
 
       // simulate quality score computation.
       OT tv = static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-      for (unsigned char *iter = startPtr; iter != endPtr; ++iter) {
+      for (auto iter = data.begin(); iter != data.end(); ++iter) {
         tv += log2(*iter);
       }
-
-      if (buffering)
-        delete [] startPtr;
 
       return tv;
     }
@@ -313,26 +309,23 @@ struct readFileLoaderAtomic {
 
 
 
-template <typename OT>
+template <typename OT, bool buffering = false, bool preloading = false>
 struct readFASTQ {
+    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
 
     RangeType r;
-    unsigned char* data;
     size_t page_size;
-    bool buffering;
 
-    bliss::io::file_loader<unsigned char> loader;
-    bliss::io::FASTQPartitionHelper<unsigned char> helper;
+    LoaderType loader;
+    bliss::io::FASTQPartitionHelper<typename LoaderType::InputIteratorType, RangeType> helper;
+    bliss::io::FASTQPartitionHelper<typename LoaderType::IteratorType, RangeType> chunkHelper;
 
-    readFASTQ(std::string filename, RangeType _r, bool _preloading = false, bool _buffering = false) :
-      buffering(_buffering), loader(filename)  {
+    readFASTQ(std::string filename, RangeType _r) :
+      loader(filename)  {
 
       loader.adjustRange(helper);
 
-      if (_preloading)
-        loader.load(0.1f);
-      else
-        loader.load();
+      loader.load();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -341,14 +334,16 @@ struct readFASTQ {
       r = loader.getRange();
       printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
-      data = loader.begin();
     }
 
     ~readFASTQ() {
       // unmap
       loader.unload();
-      data = nullptr;
     }
+    size_t getSeqSize() {
+      return loader.getSeqSize(chunkHelper, 3);
+    }
+
 
     void reset() {
       loader.resetChunks();
@@ -357,74 +352,67 @@ struct readFASTQ {
     OT operator()(const size_t start, const size_t end) {
 
       // try copying the data.
+      typename LoaderType::DataType data = loader.getNextChunkAtomic(chunkHelper, end - start);
 
-      unsigned char *startPtr = nullptr, *endPtr = nullptr;
-      loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
-
-      if (startPtr == nullptr || endPtr == nullptr)
+      if (data.begin() == data.end() )
         return 0;
 
       // simulate multiple traversals.
       unsigned char c = 0;
-      for (unsigned char *iter = startPtr; iter != endPtr; ++iter) {
+      for (auto iter = data.begin(); iter != data.end(); ++iter) {
         c = std::max(*iter, c);
       }
 
       unsigned char d = 255;
 
-      for (unsigned char *iter = startPtr; iter != endPtr; ++iter) {
+      for (auto iter = data.begin(); iter != data.end(); ++iter) {
         d = std::min(*iter, d);
       }
 
       // simulate kmer computation
       uint64_t km = c;
       km += d;
-      for (unsigned char *iter = startPtr; iter != endPtr; ++iter) {
+      for (auto iter = data.begin(); iter != data.end(); ++iter) {
         km <<= 8;
         km |= static_cast<uint64_t>(*iter);
       }
 
       // simulate quality score computation.
       OT tv = static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-      for (unsigned char *iter = startPtr; iter != endPtr; ++iter) {
+      for (auto iter = data.begin(); iter != data.end(); ++iter) {
         tv += log2(*iter);
       }
-
-      if (buffering)
-        delete [] startPtr;
 
       return tv;
     }
 };
 
-template <typename OT>
+template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIterator {
+    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
 
     RangeType r;
-    unsigned char* data;
     size_t page_size;
-    bool buffering;
 
-    bliss::io::file_loader<unsigned char> loader;
-    bliss::io::FASTQPartitionHelper<unsigned char> helper;
+
+    LoaderType loader;
+    bliss::io::FASTQPartitionHelper<typename LoaderType::InputIteratorType, RangeType> helper;
+    bliss::io::FASTQPartitionHelper<typename LoaderType::IteratorType, RangeType> chunkHelper;
 
     typedef float QualityType;
     typedef DNA Alphabet;
-    typedef unsigned char* BaseIterType;
+    typedef typename LoaderType::BlockIteratorType BaseIterType;
     typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
     typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
     typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
 
-    FASTQIterator(std::string filename, RangeType _r, bool _preloading = false, bool _buffering = false) :
-      buffering(_buffering), loader(filename)  {
+    FASTQIterator(std::string filename, RangeType _r) :
+      loader(filename)  {
 
       loader.adjustRange(helper);
 
-      if (_preloading)
-        loader.load(0.1f);
-      else
-        loader.load();
+      loader.load();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -432,16 +420,17 @@ struct FASTQIterator {
       // mmap
       r = loader.getRange();
       printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
-
-      data = loader.begin();
 
     }
 
     ~FASTQIterator() {
       // unmap
       loader.unload();
-      data = nullptr;
     }
+    size_t getSeqSize() {
+      return loader.getSeqSize(chunkHelper, 3);
+    }
+
 
     void reset() {
       loader.resetChunks();
@@ -450,19 +439,15 @@ struct FASTQIterator {
     OT operator()(const size_t start, const size_t end) {
 
       // try copying the data.
+      typename LoaderType::DataBlockType data = loader.getNextChunkAtomic(chunkHelper, end - start);
 
-      unsigned char *startPtr = nullptr, *endPtr = nullptr;
-      RangeType rn = loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
-
-
-
-      if (startPtr == nullptr || endPtr == nullptr)
+      if (data.begin() ==  data.end())
         return 0;
 
       // traverse using fastq iterator.
       ParserType parser;
-      IteratorType fastq_start(parser, startPtr, endPtr);
-      IteratorType fastq_end(parser, endPtr);
+      IteratorType fastq_start(parser, data.begin(), data.end(), data.getRange());
+      IteratorType fastq_end(parser, data.end(), data.getRange());
 
       SequenceType read;
       unsigned char c = 0;
@@ -513,43 +498,37 @@ struct FASTQIterator {
 
       }
 
-
-      if (buffering)
-        delete [] startPtr;
-
       return tv;
     }
 };
 
 
-template <typename OT>
+template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIterator2 {
+    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
 
     RangeType r;
-    unsigned char* data;
     size_t page_size;
-    bool buffering;
 
-    bliss::io::file_loader<unsigned char> loader;
-    bliss::io::FASTQPartitionHelper<unsigned char> helper;
+
+    LoaderType loader;
+    bliss::io::FASTQPartitionHelper<typename LoaderType::InputIteratorType, RangeType> helper;
+    bliss::io::FASTQPartitionHelper<typename LoaderType::IteratorType, RangeType> chunkHelper;
 
     typedef float QualityType;
     typedef DNA Alphabet;
-    typedef unsigned char* BaseIterType;
+    typedef typename LoaderType::BlockIteratorType BaseIterType;
     typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
     typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
     typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
 
-    FASTQIterator2(std::string filename, RangeType _r, bool _preloading = false, bool _buffering = false) :
-      buffering(_buffering), loader(filename)  {
+    FASTQIterator2(std::string filename, RangeType _r) :
+      loader(filename)  {
 
       loader.adjustRange(helper);
 
-      if (_preloading)
-        loader.load(0.1f);
-      else
-        loader.load();
+      loader.load();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -558,15 +537,16 @@ struct FASTQIterator2 {
       r = loader.getRange();
       printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
-      data = loader.begin();
-
     }
 
     ~FASTQIterator2() {
       // unmap
       loader.unload();
-      data = nullptr;
     }
+    size_t getSeqSize() {
+      return loader.getSeqSize(chunkHelper, 3);
+    }
+
 
     void reset() {
       loader.resetChunks();
@@ -575,19 +555,15 @@ struct FASTQIterator2 {
     OT operator()(const size_t start, const size_t end) {
 
       // try copying the data.
+      typename LoaderType::DataBlockType data = loader.getNextChunkAtomic(chunkHelper, end - start);
 
-      unsigned char *startPtr = nullptr, *endPtr = nullptr;
-      RangeType rn = loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
-
-
-
-      if (startPtr == nullptr || endPtr == nullptr)
+      if (data.begin() ==  data.end())
         return 0;
 
       // traverse using fastq iterator.
       ParserType parser;
-      IteratorType fastq_start(parser, startPtr, endPtr);
-      IteratorType fastq_end(parser, endPtr);
+      IteratorType fastq_start(parser, data.begin(), data.end(), data.getRange());
+      IteratorType fastq_end(parser, data.end(), data.getRange());
 
       SequenceType read;
       uint64_t km = 0;
@@ -616,42 +592,37 @@ struct FASTQIterator2 {
       }
 
 
-      if (buffering)
-        delete [] startPtr;
-
       return tv;
     }
 };
 
 
-template <typename OT>
+template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIteratorNoQual {
+    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
 
     RangeType r;
-    unsigned char* data;
     size_t page_size;
-    bool buffering;
 
-    bliss::io::file_loader<unsigned char> loader;
-    bliss::io::FASTQPartitionHelper<unsigned char> helper;
+
+    LoaderType loader;
+    bliss::io::FASTQPartitionHelper<typename LoaderType::InputIteratorType, RangeType> helper;
+    bliss::io::FASTQPartitionHelper<typename LoaderType::IteratorType, RangeType> chunkHelper;
 
     typedef float QualityType;
     typedef DNA Alphabet;
-    typedef unsigned char* BaseIterType;
+    typedef typename LoaderType::BlockIteratorType BaseIterType;
     typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
     typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
     typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
 
-    FASTQIteratorNoQual(std::string filename, RangeType _r, bool _preloading = false, bool _buffering = false) :
-      buffering(_buffering), loader(filename)  {
+    FASTQIteratorNoQual(std::string filename, RangeType _r) :
+      loader(filename)  {
 
       loader.adjustRange(helper);
 
-      if (_preloading)
-        loader.load(0.1f);
-      else
-        loader.load();
+      loader.load();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -659,14 +630,16 @@ struct FASTQIteratorNoQual {
       // mmap
       r = loader.getRange();
       printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
-      data = loader.begin();
 
     }
 
     ~FASTQIteratorNoQual() {
       // unmap
       loader.unload();
-      data = nullptr;
+    }
+
+    size_t getSeqSize() {
+      return loader.getSeqSize(chunkHelper, 3);
     }
 
     void reset() {
@@ -675,23 +648,29 @@ struct FASTQIteratorNoQual {
 
     OT operator()(const size_t start, const size_t end) {
 
+
       // try copying the data.
+      //printf("thread %d getting block %lu-%lu\n", omp_get_thread_num(), start, end);
 
-      unsigned char *startPtr = nullptr, *endPtr = nullptr;
-      RangeType rn = loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
+      typename LoaderType::DataBlockType data = loader.getNextChunkAtomic(chunkHelper, end - start);
 
-      printf("thread %d getting block %lu-%lu, got block of length %ld\n", omp_get_thread_num(), start, end, (endPtr - startPtr));
+//      printf("thread %d getting block %lu-%lu, got block of length %ld\n", omp_get_thread_num(), start, end, (data.end() - data.begin()));
 
 
-      if (startPtr == nullptr || endPtr == nullptr) {
+      if (data.begin() == data.end()) {
 //        std::cerr << " range = " << start << "-" << end << std::endl;
         return 0;
       }
 
+//      std::cout << "Range: " << data.getRange() << std::endl;
+//      std::cout << "Start: " << data.begin()[0] << std::endl;
+//      std::cout << "End: "   << data.end()[0] << std::endl;
+
+
       // traverse using fastq iterator.
       ParserType parser;
-      IteratorType fastq_start(parser, startPtr, endPtr);
-      IteratorType fastq_end(parser, endPtr);
+      IteratorType fastq_start(parser, data.begin(), data.end(), data.getRange());
+      IteratorType fastq_end(parser, data.end(), data.getRange());
 
       SequenceType read;
       uint64_t km = 0;
@@ -716,116 +695,10 @@ struct FASTQIteratorNoQual {
 
       }
 
-
-      if (buffering)
-        delete [] startPtr;
-
       return tv;
     }
 };
 
-
-template <typename OT>
-struct FASTQIteratorNoQualIndie {
-
-    RangeType r;
-    unsigned char* data;
-    size_t page_size;
-    bool buffering;
-
-    bliss::io::file_loader<unsigned char> loader;
-    bliss::io::FASTQPartitionHelper<unsigned char> helper;
-
-    typedef float QualityType;
-    typedef DNA Alphabet;
-    typedef unsigned char* BaseIterType;
-    typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
-
-    typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
-    typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
-
-    FASTQIteratorNoQualIndie(std::string filename, RangeType _r, bool _preloading = false, bool _buffering = false) :
-      buffering(_buffering), loader(filename)  {
-
-
-      loader.adjustRange(helper);
-
-      if (_preloading)
-        loader.load(0.1f);
-      else
-        loader.load();
-
-
-      /// get the block size
-      page_size = sysconf(_SC_PAGE_SIZE);
-
-      // mmap
-      r = loader.getRange();
-      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
-
-      data = loader.begin();
-
-    }
-
-    ~FASTQIteratorNoQualIndie() {
-      // unmap
-      loader.unload();
-      data = nullptr;
-    }
-
-    void reset() {
-      loader.resetChunks();
-    }
-
-    OT operator()(const size_t start, const size_t end) {
-
-      // try copying the data.
-
-      unsigned char *startPtr = nullptr, *endPtr = nullptr;
-      RangeType rn = loader.getNextChunkAtomic(helper, startPtr, endPtr, end - start, buffering);
-
-
-
-      if (startPtr == nullptr || endPtr == nullptr) {
-//        std::cerr << " range = " << start << "-" << end << std::endl;
-        return 0;
-      }
-
-      // traverse using fastq iterator.
-      ParserType parser;
-      IteratorType fastq_start(parser, startPtr, endPtr);
-      IteratorType fastq_end(parser, endPtr);
-
-      SequenceType read;
-      uint64_t km = 0;
-      OT tv = 0;
-
-      for (; fastq_start != fastq_end; ++fastq_start)
-      {
-        read = *fastq_start;
-
-        // now simulate the compute
-
-        // simulate kmer computation
-
-        // simulate kmer computation
-        for (BaseIterType iter = read.seq; iter != read.seq_end; ++iter) {
-          km <<= 8;
-          km |= static_cast<uint64_t>(*iter);
-        }
-
-        // simulate quality score computation.
-        tv += static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-
-      }
-
-
-      if (buffering)
-        delete [] startPtr;
-
-      return tv;
-    }
-};
 
 
 void printTiming(std::string tag, int rank, int nprocs, int nthreads,
@@ -898,15 +771,14 @@ int main(int argc, char* argv[])
 #endif
 
   RangeType r = RangeType::block_partition(nprocs, rank, 0, file_size, 0);
-  //readMMap<double> op(filename, r, false, true);
-  //readFileLoader<double> op(filename, r, false, true);
-  //readFileLoaderAtomic<double> op(filename, r, false, true);
-  //readFASTQ<double> op(filename, r, false, true);
-  //FASTQIterator<double> op(filename, r, false, true);
-  //FASTQIterator2<double> op(filename, r, false, true);
-  FASTQIteratorNoQual<double> op(filename, r, false, true);
+  //readMMap<             double, true, false> op(filename, r, false, true);
+  //readFileLoader<       double, true, false> op(filename, r, false, true);
+  //readFileLoaderAtomic< double, true, false> op(filename, r, false, true);
+  //readFASTQ<            double, true, false> op(filename, r, false, true);
+  //FASTQIterator<        double, true, false> op(filename, r, false, true);
+  //FASTQIterator2<       double, true, false> op(filename, r, false, true);
+  FASTQIteratorNoQual<    double, false, false> op(filename, r);
 
-  //FASTQIteratorNoQualIndie<double> op(filename, r, false, true);
   double v = 0.0;
 
   std::chrono::high_resolution_clock::time_point t1, t2;
@@ -919,7 +791,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v = P2P(op, nthreads, r, step);
+    v = P2P(op, nthreads, r, op.getSeqSize() * step);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -939,7 +811,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v = P2P_atomic(op, nthreads, r, step);
+    v = P2P_atomic(op, nthreads, r, op.getSeqSize() * step);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -959,7 +831,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v= MasterSlave(op, nthreads, r, step);
+    v= MasterSlave(op, nthreads, r, op.getSeqSize() * step);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -978,7 +850,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v= MasterSlaveNoWait(op, nthreads, r, step);
+    v= MasterSlaveNoWait(op, nthreads, r, op.getSeqSize() * step);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -997,7 +869,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v = ParFor(op, nthreads, r, step);
+    v = ParFor(op, nthreads, r, op.getSeqSize() * step);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -1017,12 +889,12 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     v = 0;
-#pragma omp parallel default(none) shared(nthreads, step, filename, r) reduction(+:v)
+#pragma omp parallel default(none) shared(nthreads, step, filename, r) num_threads(nthreads) reduction(+:v)
     {
       RangeType r2 = r.block_partition(nthreads, omp_get_thread_num());
-      FASTQIteratorNoQual<double> op2(filename, r2, false, true);
+      FASTQIteratorNoQual<double, false, false> op2(filename, r2);
 
-      v += Sequential(op2, nthreads, r2, step);
+      v += Sequential(op2, nthreads, r2, op2.getSeqSize() * step);
     }
   }
 #if defined(USE_MPI)
@@ -1044,7 +916,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v = Sequential(op, nthreads, r, step);
+    v = Sequential(op, nthreads, r, op.getSeqSize() * step);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
