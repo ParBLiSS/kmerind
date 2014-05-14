@@ -184,7 +184,7 @@ TYPED_TEST_P(DataBlockPtrTest, NoBuffer){
   EXPECT_EQ((this->src + this->slen),   db.end()  );
 
   int i = r.start;
-  for (auto it = db.begin(); it != db.end(); ++it, ++i) {
+  for (typename DB_Type::iterator it = db.begin(); it != db.end(); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }
 
@@ -195,7 +195,7 @@ TYPED_TEST_P(DataBlockPtrTest, NoBuffer){
   EXPECT_EQ(this->src + r2.end  , db2.end()  );
 
   i = r2.start;
-  for (auto it = db2.begin(); it != db2.end(); ++it, ++i) {
+  for (typename DB_Type::iterator it = db2.begin(); it != db2.end(); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }
 

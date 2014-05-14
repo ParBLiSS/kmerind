@@ -15,10 +15,12 @@
 #include <cassert>
 
 #include <iterator>
+#include <type_traits>
 #include <vector>
 #include <algorithm>
 
 #include "iterators/container_traits.hpp"
+#include "iterators/range.hpp"
 
 namespace bliss
 {
@@ -55,11 +57,13 @@ namespace bliss
      */
 
 
-    template<typename Derived, typename Iterator, typename Range>
+    template<typename Derived, typename Iterator, typename Range, typename OutputIterator>
     class DataBlock {
       public:
         typedef typename std::iterator_traits<Iterator>::value_type           ValueType;
         static_assert(!(std::is_same<ValueType, void>::value), "Iterator is NOT valid.");
+        typedef OutputIterator                                    iterator;
+        typedef typename std::add_const<OutputIterator>::type     const_iterator;
 
         const Range& getRange() const {
           return range;
@@ -72,9 +76,10 @@ namespace bliss
           return static_cast<Derived*>(this)->hasBufferImpl();
         }
         void assign(const Iterator &_start, const Iterator &_end, const Range &_range) {
-          empty = false;
+          empty = _range.end <= _range.start;
           range = _range;
-          static_cast<Derived*>(this)->assignImpl(_start, _end);
+          static_cast<Derived*>(this)->clearImpl();
+          if (!empty) static_cast<Derived*>(this)->assignImpl(_start, _end);
         }
         void clear() {
           empty = true;
@@ -88,11 +93,14 @@ namespace bliss
 
     };
 
+
+
+
     template<typename Iterator, typename Range, typename Container = std::vector<typename std::iterator_traits<Iterator>::value_type> >
-    class BufferedDataBlock : public DataBlock<BufferedDataBlock<Iterator, Range, Container>, Iterator, Range>
+    class BufferedDataBlock : public DataBlock<BufferedDataBlock<Iterator, Range, Container>, Iterator, Range, typename Container::iterator>
     {
       public:
-        typedef DataBlock<BufferedDataBlock<Iterator, Range, Container>, Iterator, Range> SuperType;
+        typedef DataBlock<BufferedDataBlock<Iterator, Range, Container>, Iterator, Range, typename Container::iterator> SuperType;
         static_assert(is_container<Container>::value, "Container is not valid.  Should support begin() and end() at the least.");
         static_assert(std::is_same<typename SuperType::ValueType, typename Container::value_type>::value, "Iterator and Container should have the same element types");
 
@@ -100,7 +108,6 @@ namespace bliss
           return true;
         }
         void assignImpl(const Iterator &_start, const Iterator &_end) {
-          buffer.clear();
           std::copy(_start, _end, std::inserter(buffer, buffer.begin()));
         }
         void clearImpl() {
@@ -149,11 +156,28 @@ namespace bliss
         Container buffer;
     };
 
+    /**
+     * @brief << operator to write out range object's fields.
+     * @param[in/out] ost   output stream to which the content is directed.
+     * @param[in]     r     range object to write out
+     * @return              output stream object
+     */
+    template<typename Iterator, typename Range, typename Container>
+    std::ostream& operator<<(std::ostream& ost, const BufferedDataBlock<Iterator, Range, Container>& db)
+    {
+      std::ostream_iterator<typename Container::value_type> oit(ost);
+      std::copy(db.cbegin(), db.cend(), oit);
+      return ost;
+    }
+
+
+
     template<typename Iterator, typename Range>
-    class UnbufferedDataBlock : public DataBlock<UnbufferedDataBlock<Iterator, Range>, Iterator, Range>
+    class UnbufferedDataBlock :
+        public DataBlock<UnbufferedDataBlock<Iterator, Range>, Iterator, Range, typename std::remove_const<typename std::remove_reference<Iterator>::type>::type>
     {
       public:
-        typedef DataBlock<UnbufferedDataBlock<Iterator, Range>, Iterator, Range>  SuperType;
+        typedef DataBlock<UnbufferedDataBlock<Iterator, Range>, Iterator, Range, typename std::remove_const<typename std::remove_reference<Iterator>::type>::type>  SuperType;
 
         bool hasBufferImpl() {
           return false;
@@ -163,6 +187,7 @@ namespace bliss
           endIter = _end;
         }
         void clearImpl() {
+          startIter = endIter = Iterator();
         }
 
         typename std::remove_const<typename std::remove_reference<Iterator>::type>::type begin()
@@ -187,6 +212,19 @@ namespace bliss
         Iterator endIter;     // kept for future use.
     };
 
+    /**
+     * @brief << operator to write out range object's fields.
+     * @param[in/out] ost   output stream to which the content is directed.
+     * @param[in]     r     range object to write out
+     * @return              output stream object
+     */
+    template<typename Iterator, typename Range>
+    std::ostream& operator<<(std::ostream& ost, const UnbufferedDataBlock<Iterator, Range>& db)
+    {
+      std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type > oit(ost);
+      std::copy(db.cbegin(), db.cend(), oit);
+      return ost;
+    }
 
 
 

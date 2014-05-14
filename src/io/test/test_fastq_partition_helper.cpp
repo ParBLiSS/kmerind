@@ -25,13 +25,12 @@ using namespace bliss::io;
 
 template<typename Iter1, typename Iter2>
 bool equal(const Iter1 &i1, const Iter2 &i2, size_t len) {
-  bool result = true;
   Iter1 ii1(i1);
   Iter2 ii2(i2);
   for (size_t i = 0; i < len; ++i, ++ii1, ++ii2) {
-    result &= *ii1 == *ii2;
+    if (*ii1 != *ii2) return false;
   }
-  return result;
+  return true;
 }
 
 template <typename T>
@@ -92,9 +91,11 @@ TYPED_TEST_P(FASTQPartitionHelperTest, AdjustRange)
   RangeType r2 = loader.getRange();
   loader.load();
 
-  std::cout << "range: " << r2 << std::endl;
-  std::cout << " characters = '" << loader.getData().begin()  << "'" << std::endl;
-  std::cout << " characters = '" << loader.getData().end()  << "'" << std::endl;
+//  std::cout << "range: " << r2 << std::endl;
+  ASSERT_EQ('@', loader.getData().begin()[0]);
+  ASSERT_EQ('@', loader.getData().end()[0]);
+//  std::cout << " characters = '" << loader.getData().begin()[0]  << "'" << std::endl;
+//  std::cout << " characters = '" << loader.getData().end()[0]  << "'" << std::endl;
   loader.unload();
 }
 
@@ -119,7 +120,7 @@ TYPED_TEST_P(FASTQPartitionHelperTest, AdjustConsecutiveRanges)
     loader.adjustRange(ip);
     r2 = loader.getRange();
 
-    EXPECT_EQ(lastEnd, r2.start);
+    ASSERT_EQ(lastEnd, r2.start);
     lastEnd = r2.end;
   }
 }
@@ -134,7 +135,8 @@ TYPED_TEST_P(FASTQPartitionHelperTest, BufferChunks)
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::FASTQPartitionHelper<typename FileLoaderType::IteratorType, RangeType> ip;
+  bliss::io::FASTQPartitionHelper<typename FileLoaderType::InputIteratorType, RangeType> ip;
+  bliss::io::FASTQPartitionHelper<typename FileLoaderType::IteratorType,      RangeType> ip2;
 
   FileLoaderType loader(this->fileName);
 
@@ -151,25 +153,31 @@ TYPED_TEST_P(FASTQPartitionHelperTest, BufferChunks)
   size_t len;
   TypeParam* gold;
 
-  typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip, 2048);
 
-  while (data.getRange().end - data.getRange().start  > 0) {
+  typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip2, 2048);
 
-    r2 = data.getRange();
+  r2 = data.getRange();
+  len = r2.end - r2.start;
 
-    EXPECT_EQ(lastEnd, data.getRange().start);
-    lastEnd = data.getRange().end;
+  while (len  > 0) {
 
 
-    len = r2.end - r2.start;
+    ASSERT_EQ(lastEnd, r2.start);
+    lastEnd = r2.end;
+
+
     gold = new TypeParam[len + 1];
-    FASTQPartitionHelperTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
+    FASTQPartitionHelperTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
 
     ASSERT_TRUE(equal(gold, data.begin(), len));
     delete [] gold;
 
-    data= loader.getNextChunkAtomic(ip, 2048);
+    data= loader.getNextChunkAtomic(ip2, 2048);
+    r2 = data.getRange();
+    len = r2.end - r2.start;
+
   }
+
 
   loader.unload();
 }
@@ -184,7 +192,8 @@ TYPED_TEST_P(FASTQPartitionHelperTest, UnbufferChunks)
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::FASTQPartitionHelper<typename FileLoaderType::IteratorType, RangeType> ip;
+  bliss::io::FASTQPartitionHelper<typename FileLoaderType::InputIteratorType, RangeType> ip;
+  bliss::io::FASTQPartitionHelper<typename FileLoaderType::IteratorType,      RangeType> ip2;
 
   FileLoaderType loader(this->fileName);
 
@@ -201,25 +210,28 @@ TYPED_TEST_P(FASTQPartitionHelperTest, UnbufferChunks)
   size_t len;
   TypeParam* gold;
 
-  typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip, 2048);
+  typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip2, 2048);
 
-  while (data.getRange().end - data.getRange().start  > 0) {
+  r2 = data.getRange();
+  len = r2.end - r2.start;
 
-    r2 = data.getRange();
-
-    EXPECT_EQ(lastEnd, data.getRange().start);
-    lastEnd = data.getRange().end;
+  while (len  > 0) {
 
 
-    len = r2.end - r2.start;
+    ASSERT_EQ(lastEnd, r2.start);
+    lastEnd = r2.end;
+
+
     gold = new TypeParam[len + 1];
-    FASTQPartitionHelperTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
+    FASTQPartitionHelperTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
 
-    int comp = memcmp(gold, data.begin(), len * sizeof(TypeParam));
-    ASSERT_EQ(0, comp);
+    ASSERT_TRUE(equal(gold, data.begin(), len));
     delete [] gold;
 
-    data= loader.getNextChunkAtomic(ip, 2048);
+    data= loader.getNextChunkAtomic(ip2, 2048);
+    r2 = data.getRange();
+    len = r2.end - r2.start;
+
   }
 
   loader.unload();
@@ -235,7 +247,8 @@ TYPED_TEST_P(FASTQPartitionHelperTest, BufferChunksWithPreload)
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::FASTQPartitionHelper<typename FileLoaderType::IteratorType, RangeType> ip;
+  bliss::io::FASTQPartitionHelper<typename FileLoaderType::InputIteratorType, RangeType> ip;
+  bliss::io::FASTQPartitionHelper<typename FileLoaderType::IteratorType,      RangeType> ip2;
 
   FileLoaderType loader(this->fileName);
 
@@ -252,24 +265,28 @@ TYPED_TEST_P(FASTQPartitionHelperTest, BufferChunksWithPreload)
   size_t len;
   TypeParam* gold;
 
-  typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip, 2048);
+  typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip2, 2048);
 
-  while (data.getRange().end - data.getRange().start  > 0) {
+  r2 = data.getRange();
+  len = r2.end - r2.start;
 
-    r2 = data.getRange();
-
-    EXPECT_EQ(lastEnd, data.getRange().start);
-    lastEnd = data.getRange().end;
+  while (len  > 0) {
 
 
-    len = r2.end - r2.start;
+    ASSERT_EQ(lastEnd, r2.start);
+    lastEnd = r2.end;
+
+
     gold = new TypeParam[len + 1];
-    FASTQPartitionHelperTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
+    FASTQPartitionHelperTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
 
     ASSERT_TRUE(equal(gold, data.begin(), len));
     delete [] gold;
 
-    data= loader.getNextChunkAtomic(ip, 2048);
+    data= loader.getNextChunkAtomic(ip2, 2048);
+    r2 = data.getRange();
+    len = r2.end - r2.start;
+
   }
 
   loader.unload();
@@ -285,7 +302,8 @@ TYPED_TEST_P(FASTQPartitionHelperTest, UnbufferChunksWithPreload)
   int rank = 3;
   int nprocs = 7;
 
-  bliss::io::FASTQPartitionHelper<typename FileLoaderType::IteratorType, RangeType> ip;
+  bliss::io::FASTQPartitionHelper<typename FileLoaderType::InputIteratorType, RangeType> ip;
+  bliss::io::FASTQPartitionHelper<typename FileLoaderType::IteratorType,      RangeType> ip2;
 
   FileLoaderType loader(this->fileName);
 
@@ -302,25 +320,28 @@ TYPED_TEST_P(FASTQPartitionHelperTest, UnbufferChunksWithPreload)
   size_t len;
   TypeParam* gold;
 
-  typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip, 2048);
+  typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip2, 2048);
 
-  while (data.getRange().end - data.getRange().start  > 0) {
+  r2 = data.getRange();
+  len = r2.end - r2.start;
 
-    r2 = data.getRange();
-
-    EXPECT_EQ(lastEnd, data.getRange().start);
-    lastEnd = data.getRange().end;
+  while (len  > 0) {
 
 
-    len = r2.end - r2.start;
+    ASSERT_EQ(lastEnd, r2.start);
+    lastEnd = r2.end;
+
+
     gold = new TypeParam[len + 1];
-    FASTQPartitionHelperTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
+    FASTQPartitionHelperTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
 
-    int comp = memcmp(gold, data.begin(), len * sizeof(TypeParam));
-    ASSERT_EQ(0, comp);
+    ASSERT_TRUE(equal(gold, data.begin(), len));
     delete [] gold;
 
-    data= loader.getNextChunkAtomic(ip, 2048);
+    data= loader.getNextChunkAtomic(ip2, 2048);
+    r2 = data.getRange();
+    len = r2.end - r2.start;
+
   }
 
   loader.unload();

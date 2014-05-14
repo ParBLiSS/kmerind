@@ -25,21 +25,24 @@ using namespace bliss::io;
 template<typename Iterator, typename Range>
 struct IdentityPartition {
     typedef typename Range::ValueType SizeType;
+    typedef typename std::iterator_traits<Iterator>::value_type ValueType;
+    typedef Iterator  IteratorType;
 
     const SizeType operator()(const Iterator &iter, const Range & parent, const Range &target) const {
-      return target.start + 2;
+      return std::min(parent.end, target.start + 2);
     }
 };
 
 template<typename Iter1, typename Iter2>
-bool equal(const Iter1 &i1, const Iter2 &i2, size_t len) {
-  bool result = true;
+bool equal(const Iter1 &i1, const Iter2 &i2, size_t len, bool print = false) {
   Iter1 ii1(i1);
   Iter2 ii2(i2);
   for (size_t i = 0; i < len; ++i, ++ii1, ++ii2) {
-    result &= *ii1 == *ii2;
+    if (print && *ii1 != *ii2) std::cout << i << " ";
+
+    if (*ii1 != *ii2) return false;
   }
-  return result;
+  return true;
 }
 
 
@@ -219,7 +222,6 @@ TYPED_TEST_P(FileLoaderTest, OpenConsecutiveRanges)
 
   // get this->fileName
   int nprocs = 7;
-  typename RangeType::ValueType lastEnd = 0;
 
   FileLoaderType loader(this->fileName);
   RangeType r;
@@ -255,10 +257,10 @@ TYPED_TEST_P(FileLoaderTest, AdjustRange)
 
   RangeType r = loader.getFileRange().block_partition(nprocs, rank);
   loader.setRange(r);
-  loader.adjustRange(IdentityPartition<typename FileLoaderType::IteratorType, RangeType>());
+  loader.adjustRange(IdentityPartition<typename FileLoaderType::InputIteratorType, RangeType>());
   RangeType r2 = loader.getRange();
 
-  EXPECT_EQ(r.start + 2, r2.start);
+  ASSERT_EQ(r.start + 2, r2.start);
 }
 
 
@@ -269,11 +271,11 @@ TYPED_TEST_P(FileLoaderTest, AdjustConsecutiveRanges)
 
   // get this->fileName
   int nprocs = 7;
-  typename RangeType::ValueType lastEnd = 0;
+  typename RangeType::ValueType lastEnd = 2;
 
   FileLoaderType loader(this->fileName);
   RangeType r, r2;
-  IdentityPartition<typename FileLoaderType::IteratorType, RangeType> ip;
+  IdentityPartition<typename FileLoaderType::InputIteratorType, RangeType> ip;
 
   for (int rank = 0; rank < nprocs; ++rank) {
 
@@ -282,7 +284,7 @@ TYPED_TEST_P(FileLoaderTest, AdjustConsecutiveRanges)
     loader.adjustRange(ip);
     r2 = loader.getRange();
 
-    EXPECT_EQ(lastEnd, r2.start);
+    ASSERT_EQ(lastEnd, r2.start);
     lastEnd = r2.end;
   }
 }
@@ -312,21 +314,23 @@ TYPED_TEST_P(FileLoaderTest, BufferChunks)
   IdentityPartition<typename FileLoaderType::IteratorType, RangeType> ip;
   typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip, 2048);
 
-  while (data.getRange().end - data.getRange().start  > 0) {
+  r2 = data.getRange();
+  len = r2.end - r2.start;
 
-    EXPECT_EQ(lastEnd, data.getRange().start);
-    lastEnd = data.getRange().end;
+  while (len  > 0) {
 
-    r2 = data.getRange();
+    ASSERT_EQ(lastEnd, r2.start);
+    lastEnd = r2.end;
 
-    len = r2.end - r2.start;
     gold = new TypeParam[len + 1];
-    FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
+    FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
 
     ASSERT_TRUE(equal(gold, data.begin(), len));
     delete [] gold;
 
     data= loader.getNextChunkAtomic(ip, 2048);
+    r2 = data.getRange();
+    len = r2.end - r2.start;
   }
 
   loader.unload();
@@ -358,22 +362,25 @@ TYPED_TEST_P(FileLoaderTest, UnbufferChunks)
   IdentityPartition<typename FileLoaderType::IteratorType, RangeType> ip;
   typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip, 2048);
 
-  while (data.getRange().end - data.getRange().start  > 0) {
 
-    EXPECT_EQ(lastEnd, data.getRange().start);
-    lastEnd = data.getRange().end;
+  r2 = data.getRange();
+  len = r2.end - r2.start;
 
-    r2 = data.getRange();
+  while (len  > 0) {
 
-    len = r2.end - r2.start;
+    EXPECT_NE(lastEnd, r2.end);
+    ASSERT_EQ(lastEnd, r2.start);
+    lastEnd = r2.end;
+
     gold = new TypeParam[len + 1];
-    FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
+    FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
 
-    int comp = memcmp(gold, data.begin(), len * sizeof(TypeParam));
-    ASSERT_EQ(0, comp);
+    ASSERT_TRUE(equal(gold, data.begin(), len));
     delete [] gold;
 
     data= loader.getNextChunkAtomic(ip, 2048);
+    r2 = data.getRange();
+    len = r2.end - r2.start;
   }
 
   loader.unload();
@@ -404,21 +411,24 @@ TYPED_TEST_P(FileLoaderTest, BufferChunksWithPreload)
   IdentityPartition<typename FileLoaderType::IteratorType, RangeType> ip;
   typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip, 2048);
 
-  while (data.getRange().end - data.getRange().start  > 0) {
 
-    EXPECT_EQ(lastEnd, data.getRange().start);
-    lastEnd = data.getRange().end;
+  r2 = data.getRange();
+  len = r2.end - r2.start;
 
-    r2 = data.getRange();
+  while (len  > 0) {
 
-    len = r2.end - r2.start;
+    ASSERT_EQ(lastEnd, r2.start);
+    lastEnd = r2.end;
+
     gold = new TypeParam[len + 1];
-    FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
+    FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
 
     ASSERT_TRUE(equal(gold, data.begin(), len));
     delete [] gold;
 
     data= loader.getNextChunkAtomic(ip, 2048);
+    r2 = data.getRange();
+    len = r2.end - r2.start;
   }
 
   loader.unload();
@@ -449,22 +459,29 @@ TYPED_TEST_P(FileLoaderTest, UnbufferChunksWithPreload)
   IdentityPartition<typename FileLoaderType::IteratorType, RangeType> ip;
   typename FileLoaderType::DataBlockType data = loader.getNextChunkAtomic(ip, 2048);
 
-  while (data.getRange().end - data.getRange().start  > 0) {
 
-    EXPECT_EQ(lastEnd, data.getRange().start);
-    lastEnd = data.getRange().end;
+  r2 = data.getRange();
+  len = r2.end - r2.start;
 
-    r2 = data.getRange();
+  int i = 0;
 
-    len = r2.end - r2.start;
+  while (len > 0) {
+
+    ASSERT_EQ(lastEnd, r2.start);
+    lastEnd = r2.end;
+
     gold = new TypeParam[len + 1];
-    FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
+    FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
+    gold[len] = 0;
 
-    int comp = memcmp(gold, data.begin(), len * sizeof(TypeParam));
-    ASSERT_EQ(0, comp);
+    ASSERT_TRUE(equal(gold, data.begin(), len));
     delete [] gold;
 
     data= loader.getNextChunkAtomic(ip, 2048);
+    r2 = data.getRange();
+    len = r2.end - r2.start;
+
+    ++i;
   }
 
   loader.unload();
@@ -521,25 +538,10 @@ REGISTER_TYPED_TEST_CASE_P(FileLoaderTest, OpenWithFullRange, PreloadWithFullRan
 
 
 
-typedef ::testing::Types<unsigned char, char, int16_t, uint16_t, int32_t, uint32_t,
-    int64_t, uint64_t> FileLoaderTestTypes;
+typedef ::testing::Types<unsigned char, char> //, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t>
+    FileLoaderTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderTest, FileLoaderTestTypes);
 //INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderDeathTest, FileLoaderTestTypes);
 
 
-int main(int argc, char* argv[]) {
-    int result = 0;
-
-    ::testing::InitGoogleTest(&argc, argv);
-
-
-#if defined(USE_MPI)
-    MPI_Init(&argc, &argv);
-#endif
-    result = RUN_ALL_TESTS();
-#if defined(USE_MPI)
-    MPI_Finalize();
-#endif
-    return result;
-}
 

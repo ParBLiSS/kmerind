@@ -100,18 +100,21 @@ namespace bliss
       public:
         typedef SizeT                             SizeType;
         typedef bliss::iterator::range<SizeType>  RangeType;
-        typedef T*                                IteratorType;
+        typedef T*                                        InputIteratorType;
 
       protected:
+        // internal DataBlock type.  uses T* as iterator type.
         typedef typename std::conditional<Preloading,
-                                          bliss::io::BufferedDataBlock<IteratorType, RangeType>,
-                                          bliss::io::UnbufferedDataBlock<IteratorType, RangeType> >::type     DataType;
+                                          bliss::io::BufferedDataBlock<InputIteratorType, RangeType>,
+                                          bliss::io::UnbufferedDataBlock<InputIteratorType, RangeType> >::type     DataType;
 
       public:
         typedef typename std::conditional<Buffering,
-                                          bliss::io::BufferedDataBlock<IteratorType, RangeType>,
-                                          bliss::io::UnbufferedDataBlock<IteratorType, RangeType> >::type     DataBlockType;
+                                          bliss::io::BufferedDataBlock<typename DataType::iterator, RangeType>,
+                                          bliss::io::UnbufferedDataBlock<typename DataType::iterator, RangeType> >::type     DataBlockType;
 
+        typedef typename DataType::iterator               IteratorType;               // this is for use with the Preloaded datablock
+        typedef typename DataBlockType::iterator          BlockIteratorType;     // this is for use with the buffered data chunk
 
         ////// member variables
       protected:
@@ -120,7 +123,7 @@ namespace bliss
         std::string filename;
 
         RangeType fileRange;  // offset in file from where to read
-        T* aligned_data;      // mem-mapped data, page aligned.  strictly internal
+        InputIteratorType aligned_data;      // mem-mapped data, page aligned.  strictly internal
 
 
         DataType srcData;
@@ -429,6 +432,9 @@ namespace bliss
         void adjustRange(const PartitionHelper &partitioner) throw (io_exception) {
 
           static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for adjustRange() has a different SizeType than FileLoader\n");
+          static_assert(std::is_same<typename PartitionHelper::ValueType, T>::value, "PartitionHelper for adjustRange() has a different ValueType than FileLoader\n");
+          static_assert(std::is_same<typename PartitionHelper::IteratorType, InputIteratorType>::value, "PartitionHelper for adjustRange() has a different IteratorType than FileLoader\n");
+
 
           // range where to search for the new end
           RangeType next = range >> (range.end - range.start);
@@ -440,7 +446,7 @@ namespace bliss
           searchRange.align_to_page(page_size);
 
           // map the content
-          T* searchData = this->map(searchRange) + searchRange.start - searchRange.block_start;
+          InputIteratorType searchData = this->map(searchRange) + searchRange.start - searchRange.block_start;
 
           // for output
           RangeType output(range);
@@ -648,10 +654,7 @@ namespace bliss
           // now can set in parallel
           // set the start.  guaranteed to be at the start of a record according to the partitionhelper.
 
-          dataBlocks[tid].clear();
-          if (readLen > 0) {
-            dataBlocks[tid].assign(srcData.begin() + (s - range.start), srcData.begin() + (e - range.start), RangeType(s,e));
-          }
+          dataBlocks[tid].assign(srcData.begin() + (s - range.start), srcData.begin() + (e - range.start), RangeType(s,e) & range);
 //         DEBUG("read " << readLen << " elements, start at " << s << " [" << *startPtr << "] end at "<< e << " [" << *endPtr << "]");
 
 //          if (startPtr == nullptr || endPtr == nullptr) {
@@ -669,12 +672,12 @@ namespace bliss
          * @param r
          * @return
          */
-        T* map(RangeType r) throw (io_exception) {
+        InputIteratorType map(RangeType r) throw (io_exception) {
 
           r.align_to_page(page_size);
 
           // NOT using MAP_POPULATE.  it slows things done when testing on single node.
-          T* result = (T*)mmap64(nullptr, (r.end - r.block_start ) * sizeof(T),
+          InputIteratorType result = (InputIteratorType)mmap64(nullptr, (r.end - r.block_start ) * sizeof(T),
                                      PROT_READ,
                                      MAP_PRIVATE, file_handle,
                                      r.block_start * sizeof(T));
@@ -702,7 +705,7 @@ namespace bliss
           return result;
         }
 
-        void unmap(T* d, RangeType r) {
+        void unmap(InputIteratorType d, RangeType r) {
 
           munmap(d, (r.end - r.block_start) * sizeof(T));
           //DEBUG("unmapped");

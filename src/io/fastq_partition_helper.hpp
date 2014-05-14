@@ -120,6 +120,7 @@ namespace bliss
 //        }
         typedef typename Range::ValueType                                 SizeType;
         typedef typename std::iterator_traits<Iterator>::value_type       ValueType;
+        typedef Iterator                                                  IteratorType;
 
 
 //        /**
@@ -292,7 +293,7 @@ namespace bliss
             if (t.start == t.end) return t.start;
 
             SizeType i = t.start;
-            const Iterator data = _data;
+            Iterator data(_data);
             bool wasEOL = false;
 
             ////// remove leading newlines
