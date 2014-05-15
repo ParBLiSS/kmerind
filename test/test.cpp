@@ -15,10 +15,10 @@
 
 template <typename OT>
 struct compute {
-    OT operator()(size_t iter, size_t end) {
+    OT operator()(size_t i, size_t end, size_t &count) {
       OT tv = 0;
-      for ( ; iter < end; ++iter) {
-        tv += log2(iter + 1);
+      for ( ; i < end; ++i, ++count) {
+        tv += log2(i + 1);
         //ofs << j << std::endl;
       }
       return tv;
@@ -28,12 +28,12 @@ struct compute {
 
 void printTiming(std::string tag, int rank, int nprocs, int nthreads,
                  const std::chrono::duration<double>& time_span, int iter,
-                 double v)
+                 double v, size_t &count)
 {
   std::cout << tag << "\tMPI rank: " << rank << "/" << nprocs << "\tOMP "
             << nthreads << " threads\ttook " << std::fixed
             << std::setprecision(6) << time_span.count() / iter
-            << "s,\tresult = " << v << std::endl;
+            << "s,\tresult = " << v << ",\tcount" << count << std::endl;
 }
 
 int main(int argc, char* argv[])
@@ -80,6 +80,7 @@ int main(int argc, char* argv[])
   RangeType r = RangeType::block_partition(nprocs, rank, 0, max, 0);
   compute<double> op;
   double v = 0.0;
+  size_t count = 0;
 
   std::chrono::high_resolution_clock::time_point t1, t2;
   std::chrono::duration<double> time_span;
@@ -89,8 +90,9 @@ int main(int argc, char* argv[])
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   t1 = std::chrono::high_resolution_clock::now();
+  count = 0;
   for (int i = 0; i < iter; ++i)
-    v = P2P(op, nthreads, r, step);
+    v = P2P(op, nthreads, r, step, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -99,7 +101,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-    printTiming("P2P critical:", rank, nprocs, nthreads, time_span, iter, v);
+    printTiming("P2P critical:", rank, nprocs, nthreads, time_span, iter, v, count);
 
 
 
@@ -108,8 +110,9 @@ int main(int argc, char* argv[])
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   t1 = std::chrono::high_resolution_clock::now();
+  count = 0;
   for (int i = 0; i < iter; ++i)
-    v = P2P_atomic(op, nthreads, r, step);
+    v = P2P_atomic(op, nthreads, r, step, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -118,7 +121,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-    printTiming("P2P atomic:", rank, nprocs, nthreads, time_span, iter, v);
+    printTiming("P2P atomic:", rank, nprocs, nthreads, time_span, iter, v, count);
 
 
   /// master slave
@@ -126,8 +129,9 @@ int main(int argc, char* argv[])
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   t1 = std::chrono::high_resolution_clock::now();
+  count = 0;
   for (int i = 0; i < iter; ++i)
-    v= MasterSlave(op, nthreads, r, step);
+    v= MasterSlave(op, nthreads, r, step, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -136,15 +140,16 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-    printTiming("MS Wait:", rank, nprocs, nthreads, time_span, iter, v);
+    printTiming("MS Wait:", rank, nprocs, nthreads, time_span, iter, v, count);
 
   /// master slave No Wait
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   t1 = std::chrono::high_resolution_clock::now();
+  count = 0;
   for (int i = 0; i < iter; ++i)
-    v= MasterSlaveNoWait(op, nthreads, r, step);
+    v= MasterSlaveNoWait(op, nthreads, r, step, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -153,15 +158,16 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-    printTiming("MS NoWait:", rank, nprocs, nthreads, time_span, iter, v);
+    printTiming("MS NoWait:", rank, nprocs, nthreads, time_span, iter, v, count);
 
   /// parallel for
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   t1 = std::chrono::high_resolution_clock::now();
+  count = 0;
   for (int i = 0; i < iter; ++i)
-    v = ParFor(op, nthreads, r, step);
+    v = ParFor(op, nthreads, r, step, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -170,15 +176,16 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-    printTiming("PARFOR:\t", rank, nprocs, nthreads, time_span, iter, v);
+    printTiming("PARFOR:\t", rank, nprocs, nthreads, time_span, iter, v, count);
 
   //// serial for
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   t1 = std::chrono::high_resolution_clock::now();
+  count = 0;
   for (int i = 0; i < iter; ++i)
-    v = Sequential(op, nthreads, r, step);
+    v = Sequential(op, nthreads, r, step, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -187,7 +194,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-    printTiming("SEQFOR:\t", rank, nprocs, nthreads, time_span, iter, v);
+    printTiming("SEQFOR:\t", rank, nprocs, nthreads, time_span, iter, v, count);
 
 #ifdef USE_MPI
   MPI_Finalize();

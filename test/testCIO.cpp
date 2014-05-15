@@ -88,7 +88,7 @@ struct readMMap {
     }
 
 
-    OT operator()(const size_t start, const size_t end) {
+    OT operator()(const size_t start, const size_t end, size_t &count) {
       size_t s = std::max(r.start, start);
       size_t e = std::min(r.end, end);
       size_t e2 = std::min(r.end, end + (end-start));
@@ -120,13 +120,16 @@ struct readMMap {
       }
 
       // simulate quality score computation.
+      size_t lcount = 0;
       OT tv = static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-      for (size_t i = e-s ; i < (e2 - s); ++i) {
+      for (size_t i = e-s ; i < (e2 - s); ++i, ++lcount) {
         tv += log2(ld[i]);
       }
 
       if (buffering)
         delete [] ld;
+
+      count += lcount;
 
       return tv;
     }
@@ -153,7 +156,7 @@ struct readFileLoader {
       page_size = sysconf(_SC_PAGE_SIZE);
 
       r = loader.getRange();
-      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
       data = loader.getData();
     }
@@ -171,7 +174,7 @@ struct readFileLoader {
       loader.resetChunks();
     }
 
-    OT operator()(const size_t start, const size_t end) {
+    OT operator()(const size_t start, const size_t end, size_t &count) {
       size_t s = std::max(r.start, start);
       size_t e = std::min(r.end, end);
       size_t e2 = std::min(r.end, end + (end-start));
@@ -202,15 +205,17 @@ struct readFileLoader {
         km |= static_cast<uint64_t>(ld[i]);
       }
 
+      size_t lcount = 0;
       // simulate quality score computation.
       OT tv = static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-      for (size_t i = e-s ; i < (e2 - s); ++i) {
+      for (size_t i = e-s ; i < (e2 - s); ++i, ++lcount) {
         tv += log2(ld[i]);
       }
 
       if (buffering)
         delete [] ld;
 
+      count += lcount;
       return tv;
     }
 };
@@ -251,7 +256,7 @@ struct readFileLoaderAtomic {
 
       // mmap
       r = loader.getRange();
-      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
     }
 
@@ -268,7 +273,7 @@ struct readFileLoaderAtomic {
       loader.resetChunks();
     }
 
-    OT operator()(const size_t start, const size_t end) {
+    OT operator()(const size_t start, const size_t end, size_t &count) {
 
       // try copying the data.
 
@@ -297,12 +302,15 @@ struct readFileLoaderAtomic {
         km |= static_cast<uint64_t>(*iter);
       }
 
+      size_t lcount = 0;
+
       // simulate quality score computation.
       OT tv = static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-      for (auto iter = data.begin(); iter != data.end(); ++iter) {
+      for (auto iter = data.begin(); iter != data.end(); ++iter, ++lcount) {
         tv += log2(*iter);
       }
 
+      count += lcount;
       return tv;
     }
 };
@@ -332,7 +340,7 @@ struct readFASTQ {
 
       // mmap
       r = loader.getRange();
-      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
     }
 
@@ -349,7 +357,7 @@ struct readFASTQ {
       loader.resetChunks();
     }
 
-    OT operator()(const size_t start, const size_t end) {
+    OT operator()(const size_t start, const size_t end, size_t &count) {
 
       // try copying the data.
       typename LoaderType::DataType data = loader.getNextChunkAtomic(chunkHelper, end - start);
@@ -377,12 +385,14 @@ struct readFASTQ {
         km |= static_cast<uint64_t>(*iter);
       }
 
+      size_t lcount = 0;
       // simulate quality score computation.
       OT tv = static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-      for (auto iter = data.begin(); iter != data.end(); ++iter) {
+      for (auto iter = data.begin(); iter != data.end(); ++iter, ++lcount) {
         tv += log2(*iter);
       }
 
+      count += lcount;
       return tv;
     }
 };
@@ -419,7 +429,7 @@ struct FASTQIterator {
 
       // mmap
       r = loader.getRange();
-      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+    //  printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
     }
 
@@ -436,7 +446,7 @@ struct FASTQIterator {
       loader.resetChunks();
     }
 
-    OT operator()(const size_t start, const size_t end) {
+    OT operator()(const size_t start, const size_t end, size_t &count) {
 
       // try copying the data.
       typename LoaderType::DataBlockType data = loader.getNextChunkAtomic(chunkHelper, end - start);
@@ -454,8 +464,9 @@ struct FASTQIterator {
       unsigned char d = 255;
       uint64_t km = 0;
       OT tv = 0;
+      size_t lcount = 0;
 
-      for (; fastq_start != fastq_end; ++fastq_start)
+      for (; fastq_start != fastq_end; ++fastq_start, ++lcount)
       {
         read = *fastq_start;
 
@@ -498,6 +509,7 @@ struct FASTQIterator {
 
       }
 
+      count += lcount;
       return tv;
     }
 };
@@ -535,7 +547,7 @@ struct FASTQIterator2 {
 
       // mmap
       r = loader.getRange();
-      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+    //  printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
     }
 
@@ -552,7 +564,7 @@ struct FASTQIterator2 {
       loader.resetChunks();
     }
 
-    OT operator()(const size_t start, const size_t end) {
+    OT operator()(const size_t start, const size_t end, size_t &count) {
 
       // try copying the data.
       typename LoaderType::DataBlockType data = loader.getNextChunkAtomic(chunkHelper, end - start);
@@ -568,8 +580,9 @@ struct FASTQIterator2 {
       SequenceType read;
       uint64_t km = 0;
       OT tv = 0;
+      size_t lcount = 0;
 
-      for (; fastq_start != fastq_end; ++fastq_start)
+      for (; fastq_start != fastq_end; ++fastq_start, ++lcount)
       {
         read = *fastq_start;
 
@@ -591,7 +604,7 @@ struct FASTQIterator2 {
 
       }
 
-
+      count += lcount;
       return tv;
     }
 };
@@ -629,7 +642,7 @@ struct FASTQIteratorNoQual {
 
       // mmap
       r = loader.getRange();
-      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+    //  printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
     }
 
@@ -646,7 +659,7 @@ struct FASTQIteratorNoQual {
       loader.resetChunks();
     }
 
-    OT operator()(const size_t start, const size_t end) {
+    OT operator()(const size_t start, const size_t end, size_t &count) {
 
 
       // try copying the data.
@@ -665,6 +678,7 @@ struct FASTQIteratorNoQual {
 //      std::cout << "Range: " << data.getRange() << std::endl;
 //      std::cout << "Start: " << data.begin()[0] << std::endl;
 //      std::cout << "End: "   << data.end()[0] << std::endl;
+//      std::cout << "len: "   << (data.end() - data.begin())  << " len from range: " << (data.getRange().end - data.getRange().start) << std::endl;
 
 
       // traverse using fastq iterator.
@@ -675,8 +689,9 @@ struct FASTQIteratorNoQual {
       SequenceType read;
       uint64_t km = 0;
       OT tv = 0;
+      size_t lcount = 0;
 
-      for (; fastq_start != fastq_end; ++fastq_start)
+      for (; fastq_start != fastq_end; ++fastq_start, ++lcount)
       {
         read = *fastq_start;
 
@@ -694,7 +709,7 @@ struct FASTQIteratorNoQual {
         tv += static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
 
       }
-
+      count += lcount;
       return tv;
     }
 };
@@ -703,12 +718,12 @@ struct FASTQIteratorNoQual {
 
 void printTiming(std::string tag, int rank, int nprocs, int nthreads,
                  const std::chrono::duration<double>& time_span, int iter,
-                 double v)
+                 double v, size_t count)
 {
   std::cout << tag << "\tMPI rank: " << rank << "/" << nprocs << "\tOMP "
             << nthreads << " threads\ttook " << std::fixed
             << std::setprecision(6) << time_span.count() / iter
-            << "s,\tresult = " << v << std::endl;
+            << "s,\tresult = " << v << " count = " << count << std::endl;
 }
 
 int main(int argc, char* argv[])
@@ -771,15 +786,16 @@ int main(int argc, char* argv[])
 #endif
 
   RangeType r = RangeType::block_partition(nprocs, rank, 0, file_size, 0);
-  //readMMap<             double, true, false> op(filename, r, false, true);
-  //readFileLoader<       double, true, false> op(filename, r, false, true);
-  //readFileLoaderAtomic< double, true, false> op(filename, r, false, true);
-  //readFASTQ<            double, true, false> op(filename, r, false, true);
-  //FASTQIterator<        double, true, false> op(filename, r, false, true);
-  //FASTQIterator2<       double, true, false> op(filename, r, false, true);
+  //readMMap<             double, true, false> op(filename, r);
+  //readFileLoader<       double, true, false> op(filename, r);
+  //readFileLoaderAtomic< double, true, false> op(filename, r);
+  //readFASTQ<            double, true, false> op(filename, r);
+  //FASTQIterator<        double, true, false> op(filename, r);
+  //FASTQIterator2<       double, true, false> op(filename, r);
   FASTQIteratorNoQual<    double, false, false> op(filename, r);
 
   double v = 0.0;
+  size_t count = 0;
 
   std::chrono::high_resolution_clock::time_point t1, t2;
   std::chrono::duration<double> time_span;
@@ -791,7 +807,8 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v = P2P(op, nthreads, r, op.getSeqSize() * step);
+    count = 0;
+    v = P2P(op, nthreads, r, op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -801,7 +818,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("P2P critical:", rank, nprocs, nthreads, time_span, iter, v);
+  printTiming("P2P critical:", rank, nprocs, nthreads, time_span, iter, v, count);
 
 
   /// Workers only, atomic  - close to time for parfor.
@@ -811,7 +828,8 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v = P2P_atomic(op, nthreads, r, op.getSeqSize() * step);
+    count = 0;
+    v = P2P_atomic(op, nthreads, r, op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -821,7 +839,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("P2P atomic:", rank, nprocs, nthreads, time_span, iter, v);
+  printTiming("P2P atomic:", rank, nprocs, nthreads, time_span, iter, v, count);
 
 
   /// master slave
@@ -831,7 +849,8 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v= MasterSlave(op, nthreads, r, op.getSeqSize() * step);
+    count = 0;
+    v= MasterSlave(op, nthreads, r, op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -841,7 +860,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("MS Wait:", rank, nprocs, nthreads, time_span, iter, v);
+  printTiming("MS Wait:", rank, nprocs, nthreads, time_span, iter, v, count);
 
   /// master slave No Wait
 #if defined(USE_MPI)
@@ -850,7 +869,8 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v= MasterSlaveNoWait(op, nthreads, r, op.getSeqSize() * step);
+    count = 0;
+    v= MasterSlaveNoWait(op, nthreads, r, op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -860,7 +880,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("MS NoWait:", rank, nprocs, nthreads, time_span, iter, v);
+  printTiming("MS NoWait:", rank, nprocs, nthreads, time_span, iter, v, count);
 
   /// parallel for
 #if defined(USE_MPI)
@@ -869,7 +889,8 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v = ParFor(op, nthreads, r, op.getSeqSize() * step);
+    count = 0;
+    v = ParFor(op, nthreads, r, op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -879,7 +900,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("PARFOR:\t", rank, nprocs, nthreads, time_span, iter, v);
+  printTiming("PARFOR:\t", rank, nprocs, nthreads, time_span, iter, v, count);
 
 
   //// block parallel  for
@@ -887,14 +908,15 @@ int main(int argc, char* argv[])
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   t1 = std::chrono::high_resolution_clock::now();
+  count = 0;
   for (int i = 0; i < iter; ++i) {
     v = 0;
-#pragma omp parallel default(none) shared(nthreads, step, filename, r) num_threads(nthreads) reduction(+:v)
+    count = 0;
+#pragma omp parallel default(none) shared(nthreads, step, filename, r) num_threads(nthreads) reduction(+:v, count)
     {
       RangeType r2 = r.block_partition(nthreads, omp_get_thread_num());
       FASTQIteratorNoQual<double, false, false> op2(filename, r2);
-
-      v += Sequential(op2, nthreads, r2, op2.getSeqSize() * step);
+      v = Sequential(op2, nthreads, r2, op2.getSeqSize() * step, count);
     }
   }
 #if defined(USE_MPI)
@@ -905,7 +927,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("BLOCK PARFOR:", rank, nprocs, nthreads, time_span, iter, v);
+  printTiming("BLOCK PARFOR:", rank, nprocs, nthreads, time_span, iter, v, count);
 
 
 
@@ -916,7 +938,8 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iter; ++i) {
     op.reset();
-    v = Sequential(op, nthreads, r, op.getSeqSize() * step);
+    count = 0;
+    v = Sequential(op, nthreads, r, op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -926,7 +949,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("SEQFOR:\t", rank, nprocs, nthreads, time_span, iter, v);
+  printTiming("SEQFOR:\t", rank, nprocs, nthreads, time_span, iter, v, count);
 
 
 #ifdef USE_MPI

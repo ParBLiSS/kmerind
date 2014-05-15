@@ -598,6 +598,8 @@ namespace bliss
 
           static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for getNextChunk() has a different SizeType than FileLoader\n");
           assert(loaded);
+//          printf("chunkSize = %lu\n", chunkSize);
+          assert(chunkSize >= (seqSize * 2));
 
 
           int tid = 0;
@@ -606,7 +608,7 @@ namespace bliss
 #endif
 
 
-          SizeType cs = std::max(seqSize * 2,  std::min(page_size, chunkSize));  // we need at least seqSize * 2
+          SizeType cs = chunkSize;  // we need at least seqSize * 2
           SizeType s = range.end,
                    e = range.end;
           SizeType readLen = 0;
@@ -700,7 +702,7 @@ namespace bliss
           }
           seqSize /= iterations;
 
-          printf("sequence size is %lu\n", seqSize);
+          // DEBUG("Sequence size is " << seqSize);
         }
         return seqSize;
       }
