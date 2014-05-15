@@ -404,5 +404,114 @@ Debugging for testCIO.  problem: when chunk size is smaller than read record siz
 	minimimum chunk size is at least 1 whole read's span.
 	
 	best thing to do is probably to ASSUME reads are same length, and check the first few for size.
+	
+	
+	
+performance testing:
+on lab computer.  small test dataset.  30 * 134 as chunk size.  MPI 1, 2, 3, 4 processes.
 
+	still observing:  MPI: near linear scaling.
+					OMP: scale sublinearly to 2 or 3 cores (50% faster than 1 core), then go back up to +/- 3-5% of 1 core performance while using 4 cores
+					
+theory:  maybe sharing mmap is causing issue.
+	parallel for with block decomp should perform same as MPI. made sure we had separate mmaps. DID NOT SEE SCALABILITY HERE.
+	
+testing different operators with different patterns of file open/close to try to identify source of error.  
+
+
+working with mmap and bytes directly: 3x speed up. okay.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+readMMap	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.423245s,	result = 198468849.039295 count = 34111308
+readMMap	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.412104s,	result = 198468849.039295 count = 34111308
+readMMap	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.412962s,	result = 198468849.039295 count = 34111308
+readMMap	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.412991s,	result = 198468849.039295 count = 34111308
+readMMap	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.412712s,	result = 198468849.039295 count = 34111308
+readMMap	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.423080s,	result = 198397389.504605 count = 34111308
+readMMap	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.193920s,	result = 198468849.039295 count = 34111308
+
+with FileLoader and direct manipulation of bytes:  3x speed up.  okay.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+readFileLoader	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.434065s,	result = 198468849.039295 count = 34107212
+readFileLoader	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.443037s,	result = 198468849.039295 count = 34107212
+readFileLoader	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.433244s,	result = 198468849.039295 count = 34107212
+readFileLoader	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.444934s,	result = 198468849.039295 count = 34107212
+readFileLoader	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.434963s,	result = 198468849.039295 count = 34107212
+readFileLoader	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.443098s,	result = 198397389.504605 count = 34094924
+readFileLoader	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.184777s,	result = 198468849.039295 count = 34107212
+
+
+with FileLoader and direct manipulation of bytes, using atomic instead of critical:  2x speed up.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+readFileLoaderAtomic	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.587989s,	result = 198492697.728996 count = 34111308
+readFileLoaderAtomic	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.591198s,	result = 198492697.728996 count = 34111308
+readFileLoaderAtomic	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.595413s,	result = 198492697.728996 count = 34111308
+readFileLoaderAtomic	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.598931s,	result = 198492697.728996 count = 34111308
+readFileLoaderAtomic	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.596042s,	result = 198492697.529930 count = 34111308
+readFileLoaderAtomic	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.591934s,	result = 198492723.589341 count = 34111308
+readFileLoaderAtomic	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.215553s,	result = 198492697.728995 count = 34111308
+
+with FASTQ reader and direct manipulation of bytes: 2x speed up.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+readFileLoaderAtomic	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.587989s,	result = 198492697.728996 count = 34111308
+readFileLoaderAtomic	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.591198s,	result = 198492697.728996 count = 34111308
+readFileLoaderAtomic	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.595413s,	result = 198492697.728996 count = 34111308
+readFileLoaderAtomic	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.598931s,	result = 198492697.728996 count = 34111308
+readFileLoaderAtomic	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.596042s,	result = 198492697.529930 count = 34111308
+readFileLoaderAtomic	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.591934s,	result = 198492723.589341 count = 34111308
+readFileLoaderAtomic	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.215553s,	result = 198492697.728995 count = 34111308
+
+
+with FASTQ reader and iterator for the reads: 2x speedup
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIterator	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.572842s,	result = 179553631.598798 count = 254562
+FASTQIterator	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.608760s,	result = 179553631.598798 count = 254562
+FASTQIterator	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.564186s,	result = 179553631.598798 count = 254562
+FASTQIterator	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.553498s,	result = 179553631.598798 count = 254562
+FASTQIterator	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.584838s,	result = 179553631.598798 count = 254562
+FASTQIterator	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.553000s,	result = 179553631.598799 count = 254562
+FASTQIterator	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.160227s,	result = 179553631.598798 count = 254562
+
+with FASTQ reader and iterator for the reads, better simulation (kmer on half, quality score on second half): nearly no speedup.  also note that sequential has dropped down in time, but OMP has not.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIterator2	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.517633s,	result = 85218178.612075 count = 254562
+FASTQIterator2	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.549043s,	result = 85218178.612075 count = 254562
+FASTQIterator2	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.530148s,	result = 85218178.612075 count = 254562
+FASTQIterator2	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.562787s,	result = 85218178.612075 count = 254562
+FASTQIterator2	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.545723s,	result = 85218178.612075 count = 254562
+FASTQIterator2	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.551951s,	result = 85218178.612081 count = 254562
+FASTQIterator2	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.610684s,	result = 85218178.612075 count = 254562
+
+
+with FASTQ reader and iterator, no quality score, actually worse.  over 4x slower.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIteratorNoQual	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.764564s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.761331s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.764582s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.740004s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.752029s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.742496s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.135387s,	result = 66877.148914 count = 254562
+
+
+
+
+
+
+
+
+	
 	

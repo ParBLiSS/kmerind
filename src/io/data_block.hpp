@@ -104,11 +104,13 @@ namespace bliss
         static_assert(is_container<Container>::value, "Container is not valid.  Should support begin() and end() at the least.");
         static_assert(std::is_same<typename SuperType::ValueType, typename Container::value_type>::value, "Iterator and Container should have the same element types");
 
+        static_assert(has_assign_method<Container, Iterator>(nullptr), "Container needs to be a sequence container with 'assign' method.");
+
         bool hasBufferImpl() {
           return true;
         }
         void assignImpl(const Iterator &_start, const Iterator &_end) {
-          std::copy(_start, _end, std::inserter(buffer, buffer.begin()));
+          buffer.assign(_start, _end);   // using assign (and let buffer grow, do not explicitly clear in between) sped things up TREMENDOUSLY.
         }
         void clearImpl() {
           buffer.clear();

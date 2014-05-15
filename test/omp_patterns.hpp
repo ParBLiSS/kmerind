@@ -22,14 +22,14 @@ typedef bliss::iterator::range<size_t> RangeType;
 
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t, size_t&)>::type >
-OT P2P(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count) {
+OT P2P(OP &op, const int &nthreads, const RangeType &r, const size_t step, size_t &_count) {
 
   size_t i = r.start;
   OT v = 0;
   size_t count = 0;
 
 
-#pragma omp parallel num_threads(nthreads) shared(r, step, i, op) default(none) reduction(+:v, count)
+#pragma omp parallel num_threads(nthreads) shared(r, i, op) default(none) reduction(+:v, count)
   {
 //      printf("MPI rank: %d/%d OMP thread: %d/%d\n", (rank+1), nprocs, (tid+1), nthreads);
 //    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
@@ -60,7 +60,7 @@ OT P2P(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count) {
 
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t, size_t&)>::type>
-OT P2P_atomic(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count) {
+OT P2P_atomic(OP &op, const int &nthreads, const RangeType &r, const size_t step, size_t &_count) {
 
 
   size_t i = r.start;
@@ -68,7 +68,7 @@ OT P2P_atomic(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count) 
   size_t count = 0;
 
 
-#pragma omp parallel num_threads(nthreads) shared(r, step, i, op) default(none) reduction(+:v, count)
+#pragma omp parallel num_threads(nthreads) shared(r, i, op) default(none) reduction(+:v, count)
   {
 //      printf("MPI rank: %d/%d OMP thread: %d/%d\n", (rank+1), nprocs, (tid+1), nthreads);
 //    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
@@ -99,7 +99,7 @@ OT P2P_atomic(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count) 
 
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t, size_t&)>::type>
-OT MasterSlave(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count) {
+OT MasterSlave(OP &op, const int &nthreads, const RangeType &r, const size_t step, size_t &_count) {
 
   OT *v = new OT[nthreads];
   size_t *counts = new size_t[nthreads];
@@ -109,7 +109,7 @@ OT MasterSlave(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count)
     counts[i] = 0;
   }
 
-#pragma omp parallel num_threads(nthreads) shared(r, step, v, op, counts) default(none)
+#pragma omp parallel num_threads(nthreads) shared(r, v, op, counts) default(none)
   {
 //    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 // wait or nowait?
@@ -147,7 +147,7 @@ OT MasterSlave(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count)
 }
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t, size_t&)>::type>
-OT MasterSlaveNoWait(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count) {
+OT MasterSlaveNoWait(OP &op, const int &nthreads, const RangeType &r, const size_t step, size_t &_count) {
 
   OT *v = new OT[nthreads];
   size_t *counts = new size_t[nthreads];
@@ -157,7 +157,7 @@ OT MasterSlaveNoWait(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_
     counts[i] = 0;
   }
 
-#pragma omp parallel num_threads(nthreads) shared(r, step, v, op, counts) default(none)
+#pragma omp parallel num_threads(nthreads) shared(r, v, op, counts) default(none)
   {
 //    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 
@@ -170,7 +170,8 @@ OT MasterSlaveNoWait(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_
 #pragma omp task
         {
 #ifdef USE_OPENMP
-          v[omp_get_thread_num()] += op(i, std::min(i + step, r.end), counts[omp_get_thread_num()]);
+          int tid = omp_get_thread_num();
+          v[tid] += op(i, std::min(i + step, r.end), counts[tid]);
 
 #else
           v[0] += op(i, std::min(i + step, r.end), counts[0]);
@@ -198,12 +199,12 @@ _count = count;
 
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t, size_t&)>::type>
-OT ParFor(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count) {
+OT ParFor(OP &op, const int &nthreads, const RangeType &r, const size_t step, size_t &_count) {
 
   OT v = 0;
   size_t count = 0;
 
-#pragma omp parallel num_threads(nthreads) default(none) shared(r, step, op, v, count)
+#pragma omp parallel num_threads(nthreads) default(none) shared(r, op, v, count)
   {
 //    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 
@@ -219,7 +220,7 @@ OT ParFor(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count) {
 
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t, size_t&)>::type>
-OT Sequential(OP &op, int &nthreads, RangeType &r, size_t step, size_t &_count) {
+OT Sequential(OP &op, const int &nthreads, const RangeType &r, const size_t step, size_t &_count) {
 
   OT v = 0;
   size_t count = 0;

@@ -102,13 +102,11 @@ namespace bliss
         typedef bliss::iterator::range<SizeType>  RangeType;
         typedef T*                                        InputIteratorType;
 
-      protected:
         // internal DataBlock type.  uses T* as iterator type.
         typedef typename std::conditional<Preloading,
                                           bliss::io::BufferedDataBlock<InputIteratorType, RangeType>,
                                           bliss::io::UnbufferedDataBlock<InputIteratorType, RangeType> >::type     DataType;
 
-      public:
         typedef typename std::conditional<Buffering,
                                           bliss::io::BufferedDataBlock<typename DataType::iterator, RangeType>,
                                           bliss::io::UnbufferedDataBlock<typename DataType::iterator, RangeType> >::type     DataBlockType;
@@ -172,7 +170,7 @@ namespace bliss
             : file_handle(-1), filename(_filename), fileRange(), aligned_data(nullptr),
               range(), loaded(false), preloaded(false),
               chunkPos(0),
-              nprocs(1), rank(0), comm(_comm), dataBlocks(nullptr), seqSize(0)
+              comm(_comm), dataBlocks(nullptr), seqSize(0)
 #else
         explicit file_loader(const std::string &_filename,
                              const int _nParts = 1, const int _rank = 0) throw (io_exception)
@@ -210,22 +208,13 @@ namespace bliss
             MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, comm);
           }
 #endif
-          if (rank == nprocs - 1)
-          {
+//          if (rank == nprocs - 1)
+//          {
 //            INFO("file size for " << filename << " is " << file_size);
-          }
+//          }
 
           // compute the full range
-          fileRange.block_start = 0;
-          fileRange.start = 0;
-          fileRange.end = file_size / sizeof(T);   // range is in units of T
-          fileRange.overlap = 0;
-
-          // partition the full range
-          range = fileRange.block_partition(nprocs, rank);
-          range = range.align_to_page(page_size);
-
-          chunkPos = range.start;
+          fileRange = RangeType(0, file_size / sizeof(T));   // range is in units of T
 
           /// open the file and get a handle.
           file_handle = open64(filename.c_str(), O_RDONLY);
@@ -245,7 +234,12 @@ namespace bliss
 #if defined(USE_OPENMP)
           nthreads = omp_get_max_threads();
 #endif
+
           dataBlocks = new DataBlockType[nthreads];
+
+
+          // partition the full range
+          setRange(fileRange.block_partition(nprocs, rank));
         }
 
         /**
@@ -621,7 +615,7 @@ namespace bliss
           { s = chunkPos; chunkPos += cs; }  // get the current value and then update
 
           if (s >= range.end) {
-            printf("should not be here often\n");
+            printf("WARNING: should not be here often\n");
               s = range.end;
               readLen = 0;
           } else {
@@ -630,16 +624,16 @@ namespace bliss
             curr &= srcData.getRange();
             /// search start part.
 
-             //printf("curr: %lu %lu\n", s, s+cs);
             try {
-              // search for end.
+              // search for start.
               s = partitioner(srcData.begin() + (curr.start - range.start), range, curr);
             } catch (io_exception& ex) {
               // did not find the end, so set e to next.end.
               // TODO: need to handle this scenario better - should keep search until end.
               WARNING(ex.what());
 
-              printf("got an exception:  %s \n", ex.what());
+              printf("curr range: chunk %lu, s %lu-%lu, curr %lu-%lu, srcData range %lu-%lu, range %lu-%lu\n", cs, s, s+cs, curr.start, curr.end, srcData.getRange().start, srcData.getRange().end, range.start, range.end);
+              printf("got an exception search for start:  %s \n", ex.what());
               s = curr.end;
             }
 
@@ -653,9 +647,12 @@ namespace bliss
             } catch (io_exception& ex) {
               // did not find the end, so set e to next.end.
               // TODO: need to handle this scenario better - should keep search until end.
-              printf("got an exception\n");
               WARNING(ex.what());
-              e = next.end;
+
+              printf("next range: chunk %lu,  s %lu-%lu, curr %lu-%lu, srcData range %lu-%lu, range %lu-%lu\n", cs, s, s+cs, curr.start, curr.end, srcData.getRange().start, srcData.getRange().end, range.start, range.end);
+
+              printf("got an exception search for end: %s \n", ex.what());
+              e = curr.end;
             }
 
             readLen = e - s;

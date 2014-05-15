@@ -11,7 +11,7 @@
 #include <gtest/gtest.h>
 #include <cstdint>  // for uint64_t, etc.
 #include <vector>
-#include <set>
+#include <list>
 #include <limits>
 #include <algorithm>
 
@@ -66,8 +66,8 @@ TYPED_TEST_P(DataBlockTest, NoBuffer){
 }
 
 // testing the equal function
-TYPED_TEST_P(DataBlockTest, BufferSet){
-  typedef bliss::io::BufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>, std::multiset<TypeParam> > DB_Type;
+TYPED_TEST_P(DataBlockTest, BufferList){
+  typedef bliss::io::BufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>, std::list<TypeParam> > DB_Type;
 
   bliss::iterator::range<size_t> r(10, 10 + this->dlen);
   DB_Type db;
@@ -137,7 +137,7 @@ TYPED_TEST_P(DataBlockTest, BufferVector){
 
 
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(DataBlockTest, NoBuffer, BufferSet, BufferVector);
+REGISTER_TYPED_TEST_CASE_P(DataBlockTest, NoBuffer, BufferList, BufferVector);
 
 
 /*
@@ -239,8 +239,8 @@ TYPED_TEST_P(DataBlockPtrTest, BufferVector){
 }
 
 // testing the equal function
-TYPED_TEST_P(DataBlockPtrTest, BufferSet){
-  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::iterator::range<size_t>, std::multiset<TypeParam> > DB_Type;
+TYPED_TEST_P(DataBlockPtrTest, BufferList){
+  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::iterator::range<size_t>, std::list<TypeParam> > DB_Type;
 
   bliss::iterator::range<size_t> r(10, 10 + this->dlen);
   DB_Type db;
@@ -274,7 +274,7 @@ TYPED_TEST_P(DataBlockPtrTest, BufferSet){
 }
 
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(DataBlockPtrTest, NoBuffer,BufferVector, BufferSet);
+REGISTER_TYPED_TEST_CASE_P(DataBlockPtrTest, NoBuffer, BufferVector, BufferList);
 
 
 
@@ -306,6 +306,7 @@ REGISTER_TYPED_TEST_CASE_P(DataBlockPtrTest, NoBuffer,BufferVector, BufferSet);
 //    }
 //};
 //
+
 //// annotate that DataBlockDeathTest is typed
 //TYPED_TEST_CASE_P(DataBlockDeathTest);
 //

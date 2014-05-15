@@ -84,6 +84,14 @@ struct readMMap {
       return 1;
     }
 
+    RangeType getRange() {
+      return r;
+    }
+
+    std::string getName() {
+      return "readMMap";
+    }
+
     void reset() {
     }
 
@@ -114,15 +122,15 @@ struct readMMap {
       // simulate kmer computation
       uint64_t km = c;
       km += d;
-      for (size_t i = 0 ; i < e - s; ++i) {
+      size_t lcount = 0;
+      for (size_t i = 0 ; i < e - s; ++i, ++lcount) {
         km <<= 8;
         km |= static_cast<uint64_t>(ld[i]);
       }
 
       // simulate quality score computation.
-      size_t lcount = 0;
       OT tv = static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-      for (size_t i = e-s ; i < (e2 - s); ++i, ++lcount) {
+      for (size_t i = e-s ; i < (e2 - s); ++i) {
         tv += log2(ld[i]);
       }
 
@@ -141,7 +149,6 @@ struct readFileLoader {
 
     typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
 
-    RangeType r;
     size_t page_size;
     typename LoaderType::DataType data;
 
@@ -150,13 +157,14 @@ struct readFileLoader {
     readFileLoader(std::string filename, RangeType _r) :
       loader(filename)  {
 
+      loader.setRange(_r);
+
       loader.load();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
 
-      r = loader.getRange();
-//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
       data = loader.getData();
     }
@@ -170,21 +178,25 @@ struct readFileLoader {
       return 1;
     }
 
+    RangeType getRange() {
+      return data.getRange();
+    }
+
+    std::string getName() {
+      return "readFileLoader";
+    }
+
     void reset() {
       loader.resetChunks();
     }
 
     OT operator()(const size_t start, const size_t end, size_t &count) {
-      size_t s = std::max(r.start, start);
-      size_t e = std::min(r.end, end);
-      size_t e2 = std::min(r.end, end + (end-start));
+      size_t s = std::max(data.getRange().start, start);
+      size_t e = std::min(data.getRange().end, end);
+      size_t e2 = std::min(data.getRange().end, end + (end-start));
       // try copying the data.
 
-      unsigned char * ld = data + s - r.start;
-      if (buffering) {
-        ld = new unsigned char[e2-s];   // TODO: can preallocate.
-        memcpy(ld, data + s - r.start, e2-s);
-      }
+      auto ld = data.begin() + (s - data.getRange().start);
 
       // simulate multiple traversals.
       unsigned char c = 0;
@@ -212,9 +224,6 @@ struct readFileLoader {
         tv += log2(ld[i]);
       }
 
-      if (buffering)
-        delete [] ld;
-
       count += lcount;
       return tv;
     }
@@ -237,7 +246,7 @@ struct readFileLoaderAtomic {
 
     typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
 
-    RangeType r;
+
     size_t page_size;
 
     LoaderType loader;
@@ -246,6 +255,8 @@ struct readFileLoaderAtomic {
 
     readFileLoaderAtomic(std::string filename, RangeType _r) :
       loader(filename)  {
+      loader.setRange(_r);
+
 
       loader.adjustRange(helper);
 
@@ -255,8 +266,7 @@ struct readFileLoaderAtomic {
       page_size = sysconf(_SC_PAGE_SIZE);
 
       // mmap
-      r = loader.getRange();
-//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
     }
 
@@ -268,6 +278,13 @@ struct readFileLoaderAtomic {
       return loader.getSeqSize(chunkHelper, 3);
     }
 
+    RangeType getRange() {
+      return loader.getData().getRange();
+    }
+
+    std::string getName() {
+      return "readFileLoaderAtomic";
+    }
 
     void reset() {
       loader.resetChunks();
@@ -277,7 +294,7 @@ struct readFileLoaderAtomic {
 
       // try copying the data.
 
-      typename LoaderType::DataType data = loader.getNextChunkAtomic(chunkHelper, end - start);
+      typename LoaderType::DataBlockType data = loader.getNextChunkAtomic(chunkHelper, end - start);
 
       if (data.begin() == data.end())
         return 0;
@@ -321,7 +338,7 @@ template <typename OT, bool buffering = false, bool preloading = false>
 struct readFASTQ {
     typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
 
-    RangeType r;
+
     size_t page_size;
 
     LoaderType loader;
@@ -331,6 +348,8 @@ struct readFASTQ {
     readFASTQ(std::string filename, RangeType _r) :
       loader(filename)  {
 
+      loader.setRange(_r);
+
       loader.adjustRange(helper);
 
       loader.load();
@@ -339,8 +358,7 @@ struct readFASTQ {
       page_size = sysconf(_SC_PAGE_SIZE);
 
       // mmap
-      r = loader.getRange();
-//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
     }
 
@@ -352,6 +370,12 @@ struct readFASTQ {
       return loader.getSeqSize(chunkHelper, 3);
     }
 
+    RangeType getRange() {
+      return loader.getData().getRange();
+    }
+    std::string getName() {
+      return "readFASTQ";
+    }
 
     void reset() {
       loader.resetChunks();
@@ -360,7 +384,7 @@ struct readFASTQ {
     OT operator()(const size_t start, const size_t end, size_t &count) {
 
       // try copying the data.
-      typename LoaderType::DataType data = loader.getNextChunkAtomic(chunkHelper, end - start);
+      typename LoaderType::DataBlockType data = loader.getNextChunkAtomic(chunkHelper, end - start);
 
       if (data.begin() == data.end() )
         return 0;
@@ -401,7 +425,6 @@ template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIterator {
     typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
 
-    RangeType r;
     size_t page_size;
 
 
@@ -420,16 +443,15 @@ struct FASTQIterator {
     FASTQIterator(std::string filename, RangeType _r) :
       loader(filename)  {
 
+      loader.setRange(_r);
       loader.adjustRange(helper);
-
       loader.load();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
 
       // mmap
-      r = loader.getRange();
-    //  printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
     }
 
@@ -439,6 +461,13 @@ struct FASTQIterator {
     }
     size_t getSeqSize() {
       return loader.getSeqSize(chunkHelper, 3);
+    }
+
+    RangeType getRange() {
+      return loader.getData().getRange();
+    }
+    std::string getName() {
+      return "FASTQIterator";
     }
 
 
@@ -519,7 +548,6 @@ template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIterator2 {
     typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
 
-    RangeType r;
     size_t page_size;
 
 
@@ -538,16 +566,20 @@ struct FASTQIterator2 {
     FASTQIterator2(std::string filename, RangeType _r) :
       loader(filename)  {
 
+//      printf("loader from thread %d initial range = %lu %lu\n", omp_get_thread_num(), loader.getRange().start, loader.getRange().end);
+
+      loader.setRange(_r);
+//      printf("loader from thread %d requested range = %lu %lu\n", omp_get_thread_num(), loader.getRange().start, loader.getRange().end);
       loader.adjustRange(helper);
 
+//      printf("loader from thread %d adjusted range = %lu %lu\n", omp_get_thread_num(), loader.getRange().start, loader.getRange().end);
+
       loader.load();
+//      printf("loader from thread %d loaded range = %lu %lu\n", omp_get_thread_num(), loader.getData().getRange().start, loader.getData().getRange().end);
+//      printf("loader from thread %d file range = %lu %lu\n", omp_get_thread_num(), loader.getFileRange().start, loader.getFileRange().end);
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
-
-      // mmap
-      r = loader.getRange();
-    //  printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
 
     }
 
@@ -558,7 +590,12 @@ struct FASTQIterator2 {
     size_t getSeqSize() {
       return loader.getSeqSize(chunkHelper, 3);
     }
-
+    RangeType getRange() {
+      return loader.getData().getRange();
+    }
+    std::string getName() {
+      return "FASTQIterator2";
+    }
 
     void reset() {
       loader.resetChunks();
@@ -614,7 +651,6 @@ template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIteratorNoQual {
     typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
 
-    RangeType r;
     size_t page_size;
 
 
@@ -633,6 +669,9 @@ struct FASTQIteratorNoQual {
     FASTQIteratorNoQual(std::string filename, RangeType _r) :
       loader(filename)  {
 
+      loader.setRange(_r);
+
+
       loader.adjustRange(helper);
 
       loader.load();
@@ -641,8 +680,7 @@ struct FASTQIteratorNoQual {
       page_size = sysconf(_SC_PAGE_SIZE);
 
       // mmap
-      r = loader.getRange();
-    //  printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), r.start, r.end);
+//      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
     }
 
@@ -654,7 +692,12 @@ struct FASTQIteratorNoQual {
     size_t getSeqSize() {
       return loader.getSeqSize(chunkHelper, 3);
     }
-
+    RangeType getRange() {
+      return loader.getData().getRange();
+    }
+    std::string getName() {
+      return "FASTQIteratorNoQual";
+    }
     void reset() {
       loader.resetChunks();
     }
@@ -716,11 +759,11 @@ struct FASTQIteratorNoQual {
 
 
 
-void printTiming(std::string tag, int rank, int nprocs, int nthreads,
+void printTiming(std::string tag, std::string name, int rank, int nprocs, int nthreads,
                  const std::chrono::duration<double>& time_span, int iter,
                  double v, size_t count)
 {
-  std::cout << tag << "\tMPI rank: " << rank << "/" << nprocs << "\tOMP "
+  std::cout << name << "\t" << tag <<"\tMPI rank: " << rank << "/" << nprocs << "\tOMP "
             << nthreads << " threads\ttook " << std::fixed
             << std::setprecision(6) << time_span.count() / iter
             << "s,\tresult = " << v << " count = " << count << std::endl;
@@ -754,7 +797,7 @@ int main(int argc, char* argv[])
   if (argc > 1)
     nthreads = atoi(argv[1]);
 
-  size_t step = 128;
+  size_t step = 30;
   if (argc > 2)
     step = atoi(argv[2]);
 
@@ -786,13 +829,17 @@ int main(int argc, char* argv[])
 #endif
 
   RangeType r = RangeType::block_partition(nprocs, rank, 0, file_size, 0);
-  //readMMap<             double, true, false> op(filename, r);
-  //readFileLoader<       double, true, false> op(filename, r);
-  //readFileLoaderAtomic< double, true, false> op(filename, r);
-  //readFASTQ<            double, true, false> op(filename, r);
-  //FASTQIterator<        double, true, false> op(filename, r);
-  //FASTQIterator2<       double, true, false> op(filename, r);
-  FASTQIteratorNoQual<    double, false, false> op(filename, r);
+
+
+//  typedef readMMap<             double, true , false> OpType;
+//  typedef readFileLoader<       double, true , false> OpType;
+//  typedef readFileLoaderAtomic< double, true , false> OpType;
+//  typedef readFASTQ<            double, true , false> OpType;
+//  typedef FASTQIterator<        double, true , false> OpType;
+//  typedef FASTQIterator2<       double, true , false> OpType;
+  typedef FASTQIteratorNoQual<  double, true , false> OpType;
+
+  OpType op(filename, r);
 
   double v = 0.0;
   size_t count = 0;
@@ -808,7 +855,7 @@ int main(int argc, char* argv[])
   for (int i = 0; i < iter; ++i) {
     op.reset();
     count = 0;
-    v = P2P(op, nthreads, r, op.getSeqSize() * step, count);
+    v = P2P(op, nthreads, op.getRange(), op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -818,7 +865,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("P2P critical:", rank, nprocs, nthreads, time_span, iter, v, count);
+  printTiming("P2P critical:", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
 
   /// Workers only, atomic  - close to time for parfor.
@@ -829,7 +876,7 @@ int main(int argc, char* argv[])
   for (int i = 0; i < iter; ++i) {
     op.reset();
     count = 0;
-    v = P2P_atomic(op, nthreads, r, op.getSeqSize() * step, count);
+    v = P2P_atomic(op, nthreads, op.getRange(), op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -839,7 +886,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("P2P atomic:", rank, nprocs, nthreads, time_span, iter, v, count);
+  printTiming("P2P atomic:", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
 
   /// master slave
@@ -850,7 +897,7 @@ int main(int argc, char* argv[])
   for (int i = 0; i < iter; ++i) {
     op.reset();
     count = 0;
-    v= MasterSlave(op, nthreads, r, op.getSeqSize() * step, count);
+    v= MasterSlave(op, nthreads, op.getRange(), op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -860,7 +907,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("MS Wait:", rank, nprocs, nthreads, time_span, iter, v, count);
+  printTiming("MS Wait:", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
   /// master slave No Wait
 #if defined(USE_MPI)
@@ -870,7 +917,7 @@ int main(int argc, char* argv[])
   for (int i = 0; i < iter; ++i) {
     op.reset();
     count = 0;
-    v= MasterSlaveNoWait(op, nthreads, r, op.getSeqSize() * step, count);
+    v= MasterSlaveNoWait(op, nthreads, op.getRange(), op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -880,7 +927,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("MS NoWait:", rank, nprocs, nthreads, time_span, iter, v, count);
+  printTiming("MS NoWait:", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
   /// parallel for
 #if defined(USE_MPI)
@@ -890,7 +937,7 @@ int main(int argc, char* argv[])
   for (int i = 0; i < iter; ++i) {
     op.reset();
     count = 0;
-    v = ParFor(op, nthreads, r, op.getSeqSize() * step, count);
+    v = ParFor(op, nthreads, op.getRange(), op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -900,7 +947,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("PARFOR:\t", rank, nprocs, nthreads, time_span, iter, v, count);
+  printTiming("PARFOR:\t", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
 
   //// block parallel  for
@@ -912,11 +959,11 @@ int main(int argc, char* argv[])
   for (int i = 0; i < iter; ++i) {
     v = 0;
     count = 0;
-#pragma omp parallel default(none) shared(nthreads, step, filename, r) num_threads(nthreads) reduction(+:v, count)
+#pragma omp parallel default(none) firstprivate(nthreads, step, filename, r) num_threads(nthreads) reduction(+:v, count)
     {
       RangeType r2 = r.block_partition(nthreads, omp_get_thread_num());
-      FASTQIteratorNoQual<double, false, false> op2(filename, r2);
-      v = Sequential(op2, nthreads, r2, op2.getSeqSize() * step, count);
+      OpType op2(filename, r2);
+      v = Sequential(op2, nthreads, op2.getRange(), op2.getSeqSize() * step, count);
     }
   }
 #if defined(USE_MPI)
@@ -927,7 +974,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("BLOCK PARFOR:", rank, nprocs, nthreads, time_span, iter, v, count);
+  printTiming("BLOCK PARFOR:", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
 
 
@@ -939,7 +986,7 @@ int main(int argc, char* argv[])
   for (int i = 0; i < iter; ++i) {
     op.reset();
     count = 0;
-    v = Sequential(op, nthreads, r, op.getSeqSize() * step, count);
+    v = Sequential(op, 1, op.getRange(), op.getSeqSize() * step, count);
   }
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -949,7 +996,7 @@ int main(int argc, char* argv[])
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   if (rank == 0)
-  printTiming("SEQFOR:\t", rank, nprocs, nthreads, time_span, iter, v, count);
+  printTiming("SEQFOR:\t", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
 
 #ifdef USE_MPI
