@@ -569,6 +569,41 @@ FASTQIteratorNoQual	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.056525s,	result 
 FASTQIteratorNoQual	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.057895s,	result = 66877.148914 count = 254562
 FASTQIteratorNoQual	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.076298s,	result = 66877.148914 count = 254562
 
+at the moment, there is a correctness check that is not avoidable.  so this may be t he best performance I can get.
+
+FASTQIterator2 works okay.  about same as before with a 20ms penalty.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIterator2	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.220252s,	result = 85218178.612075 count = 254562
+FASTQIterator2	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.217712s,	result = 85218178.612075 count = 254562
+FASTQIterator2	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.218280s,	result = 85218178.612075 count = 254562
+FASTQIterator2	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.219854s,	result = 85218178.612075 count = 254562
+FASTQIterator2	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.221251s,	result = 85218178.612075 count = 254562
+FASTQIterator2	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.230574s,	result = 85218178.612081 count = 254562
+FASTQIterator2	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.567208s,	result = 85218178.612075 count = 254562
+
+tpan@denali:~/builds/bliss$ bin/test2 3 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIterator2	P2P critical:	MPI rank: 0/1	OMP 3 threads	took 0.258199s,	result = 85218178.612075 count = 254562
+FASTQIterator2	P2P atomic:	MPI rank: 0/1	OMP 3 threads	took 0.251466s,	result = 85218178.612075 count = 254562
+FASTQIterator2	MS Wait:	MPI rank: 0/1	OMP 3 threads	took 0.252469s,	result = 85218178.612075 count = 254562
+FASTQIterator2	MS NoWait:	MPI rank: 0/1	OMP 3 threads	took 0.253033s,	result = 85218178.612075 count = 254562
+FASTQIterator2	PARFOR:		MPI rank: 0/1	OMP 3 threads	took 0.257162s,	result = 85218178.612075 count = 254562
+FASTQIterator2	BLOCK PARFOR:	MPI rank: 0/1	OMP 3 threads	took 0.257554s,	result = 85218178.612079 count = 254562
+FASTQIterator2	SEQFOR:		MPI rank: 0/1	OMP 3 threads	took 0.571188s,	result = 85218178.612075 count = 254562
+tpan@denali:~/builds/bliss$ bin/test2 2 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIterator2	P2P critical:	MPI rank: 0/1	OMP 2 threads	took 0.354959s,	result = 85218178.612075 count = 254562
+FASTQIterator2	P2P atomic:	MPI rank: 0/1	OMP 2 threads	took 0.354753s,	result = 85218178.612075 count = 254562
+FASTQIterator2	MS Wait:	MPI rank: 0/1	OMP 2 threads	took 0.354668s,	result = 85218178.612075 count = 254562
+FASTQIterator2	MS NoWait:	MPI rank: 0/1	OMP 2 threads	took 0.355096s,	result = 85218178.612075 count = 254562
+FASTQIterator2	PARFOR:		MPI rank: 0/1	OMP 2 threads	took 0.355183s,	result = 85218178.612075 count = 254562
+FASTQIterator2	BLOCK PARFOR:	MPI rank: 0/1	OMP 2 threads	took 0.358626s,	result = 85218178.612074 count = 254562
+FASTQIterator2	SEQFOR:		MPI rank: 0/1	OMP 2 threads	took 0.567487s,	result = 85218178.612075 count = 254562
+
 
 processing 1000 genome file is very slow?
 

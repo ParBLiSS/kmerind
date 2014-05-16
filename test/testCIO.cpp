@@ -836,8 +836,8 @@ int main(int argc, char* argv[])
 //  typedef readFileLoaderAtomic< double, true , false> OpType;
 //  typedef readFASTQ<            double, true , false> OpType;
 //  typedef FASTQIterator<        double, true , false> OpType;
-//  typedef FASTQIterator2<       double, true , false> OpType;
-  typedef FASTQIteratorNoQual<  double, true , false> OpType;
+  typedef FASTQIterator2<       double, true , false> OpType;
+//  typedef FASTQIteratorNoQual<  double, true , false> OpType;
 
   OpType op(filename, r);
 
