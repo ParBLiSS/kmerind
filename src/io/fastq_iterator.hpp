@@ -162,7 +162,7 @@ namespace bliss
 
         SeqType output;
 
-        fastq_parser() : output()
+        fastq_parser() : output()  // having this reduces run time slightly...
         {
         }
 
@@ -180,22 +180,28 @@ namespace bliss
         /**
          * parses with an iterator, so as to have complete control over the increment.
          */
-        Iterator operator()(const Iterator &it, const Iterator &end, const RangeType &coordinates)
+        Iterator operator()(const Iterator &it, const Iterator &end, RangeType &coordinates)
         {
           // first initialize  (on windowed version, will need to have a separate
           // way of initializing., perhaps with an overloaded operator.
           Iterator iter = it;
-          output = SeqType();
+//          typename RangeType::ValueType step = 0;
+
+          //parsing = (iter != end);
 
           // trim leading \n
+//          while ((*iter == '\n') && parsing)
           while ((*iter == '\n') && (iter != end))
           {
             ++iter;
+//            parsing = (iter != end);
           }
 
-          if (iter == end) // if the range consists of \n only. at end, terminate
+//          if (!parsing) // if the range consists of \n only. at end, terminate
+          if (iter == end)
           {
             printf("ERROR: nothing was parsed. %lu to %lu.\n", coordinates.start, coordinates.end);
+            output = SeqType();
             return iter;
           }
 
@@ -207,18 +213,20 @@ namespace bliss
           bool isEOL;
 
           // increment after the "end" of a line, so as to allow immediate termination
+//          std::stringstream ss1;
 
           // first char is already known (and not \n).  also, not at end.
+//          ss1 << "line " << line_num;
           starts[line_num] = iter;
           ++iter;
-          bool parsing = (iter != end);
+          bool found = false;
           bool wasEOL = false;
 
 
           //TODO:  optimize further.  even grep is faster (below takes about 50ms.
           // grep is at 30ms to search @
           // walk through the data range
-          while (parsing)
+          while ((iter != end))
           {
             isEOL = (*iter == '\n');  // slow
 
@@ -229,16 +237,21 @@ namespace bliss
               // we have \nX or X\n
               if (isEOL)  // a new eol.  X\n case
               {
+//                ss1 << "; ";
                 ends[line_num] = iter;
 
                 ++line_num;
                 if (line_num >= 4)
                 {
-                  parsing = false;
+//                  ss1 << " got the 4 lines" << std::endl;
+                  found = true;
+                  ++iter;
+                  break;
                 }
               }
               else  // first char.  \nX case
               {
+//               ss1 << line_num << " ";
                 starts[line_num] = iter;
               }
               // iter == \n and newline Char.  keep going.
@@ -248,23 +261,30 @@ namespace bliss
             }
 
             ++iter;   // kind of slow
-            if (iter == end) {
-              parsing = false;
+          }
+
+          if (iter == end) {
+
+            if (!found) {
+  //              ss1 << " at end" << std::endl;
               ends[line_num] = iter;
               ++line_num;
             }
-          }
 
           // check to make sure we finished okay  - if not, don't update the
           // fastq_sequence object.
-          if ((iter == end) && (line_num < 4)) {
-            printf("ERROR: parsing failed. lines %d, %lu to %lu. \n", line_num, coordinates.start, coordinates.end);
-            std::stringstream ss;
-            std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
+            if (line_num < 4) {
+              printf("ERROR: parsing failed. lines %d, %lu to %lu. \n", line_num, coordinates.start, coordinates.end);
+              std::stringstream ss;
+              std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
 
-            std::copy(it, end, oit);
-            printf("  offending string is %s\n", ss.str().c_str());
-            return iter;
+              std::copy(it, end, oit);
+              printf("  offending string is %s\n", ss.str().c_str());
+  //            printf(" parsing record is %s\n", ss1.str().c_str());
+
+              output = SeqType();
+              return iter;
+            }
           }
 
           assert(*(starts[0]) == '@');
@@ -278,6 +298,8 @@ namespace bliss
           output.seq_end = ends[1];
 
           populateQuality(starts[3], ends[3]);
+
+          coordinates.start += iter - it;
           return iter;
         }
 
@@ -300,26 +322,27 @@ namespace bliss
      *
      *
      */
-    template<typename Parser, typename Iterator>
+    template<typename Parser, typename Iterator, typename base_traits = std::iterator_traits<Iterator> >
     class fastq_iterator :
         public std::iterator<
             typename std::conditional<
-                std::is_same<
-                    typename std::iterator_traits<Iterator>::iterator_category,
-                    std::random_access_iterator_tag>::value
-                || std::is_same<
-                    typename std::iterator_traits<Iterator>::iterator_category,
-                    std::bidirectional_iterator_tag>::value,
-                std::forward_iterator_tag,
-                typename std::iterator_traits<Iterator>::iterator_category>::type,
-            typename std::remove_reference<
-                typename bliss::functional::function_traits<Parser>::return_type>::type,
-            typename std::iterator_traits<Iterator>::difference_type>
+                  std::is_same<typename base_traits::iterator_category, std::random_access_iterator_tag>::value ||
+                  std::is_same<typename base_traits::iterator_category, std::bidirectional_iterator_tag>::value,
+                  std::forward_iterator_tag,
+                  typename base_traits::iterator_category
+                >::type,
+            typename std::remove_reference<typename bliss::functional::function_traits<Parser>::return_type>::type,
+            typename base_traits::difference_type
+          >
     {
+      public:
+
+
       protected:
         // define first, to avoid -Wreorder error (where the variables are initialized before fastq_iterator::Parser, etc are defined.
-        typedef std::iterator_traits<Iterator> base_traits;
-        typedef bliss::functional::function_traits<Parser> functor_traits;
+        typedef fastq_iterator<Parser, Iterator> type;
+
+        typedef std::iterator_traits<type> traits;
         typedef typename Parser::RangeType RangeType;
 
         Iterator _curr;
@@ -327,28 +350,10 @@ namespace bliss
         Iterator _end;
         Iterator _temp;
         Parser _f;
-        typename std::remove_reference<typename functor_traits::return_type>::type empty_output;
-        RangeType range;
+        typename traits::value_type empty_output;
+        RangeType range;     // the offsets in the base iterator.  if base iterator is pointer, then units are in bytes.
 
       public:
-        typedef fastq_iterator<Parser, Iterator> type;
-        typedef std::iterator_traits<type> traits;
-
-//TODO
-        typedef typename std::conditional<
-            std::is_same<
-                typename std::iterator_traits<Iterator>::iterator_category,
-                std::random_access_iterator_tag>::value
-            || std::is_same<
-                typename std::iterator_traits<Iterator>::iterator_category,
-                std::bidirectional_iterator_tag>::value,
-            std::forward_iterator_tag,
-            typename std::iterator_traits<Iterator>::iterator_category>::type iterator_category;
-        typedef typename std::remove_reference<
-            typename functor_traits::return_type>::type ValueType;
-        typedef typename base_traits::difference_type difference_type;
-        typedef typename std::add_rvalue_reference<ValueType>::type reference_type;
-        typedef typename std::add_pointer<ValueType>::type pointer_type;
 
         typedef typename base_traits::value_type BaseValueType;
 
@@ -402,8 +407,7 @@ namespace bliss
             // at end.
             // doing the construction here because we have to walk anyways.
             _temp = _next;
-            _next = _f(_next, _end, range);    // _next is moved.
-            range.start += (_next - _temp) / sizeof(BaseValueType);
+            _next = _f(_temp, _end, range);    // _next is moved.
           }
           // else next has already been moved (by * operator)
 
@@ -447,7 +451,7 @@ namespace bliss
           return _curr != rhs._curr;
         }
 
-        inline ValueType operator*()
+        inline typename traits::value_type operator*()
         {
           // boundary case: at end of iterators
           if (_curr == _end)
@@ -460,8 +464,7 @@ namespace bliss
           {
             // after parse, _next has been moved but curr stays where it is.
             _temp = _next;
-            _next = _f(_next, _end, range);
-            range.start += (_next - _temp) / sizeof(BaseValueType);
+            _next = _f(_temp, _end, range);
           }
           // else result was already computed and stored in the functor.
 
@@ -476,10 +479,10 @@ namespace bliss
         // forward iterator
         template<
             typename = typename std::enable_if<
-                std::is_same<iterator_category, std::forward_iterator_tag>::value || std::is_same<
-                    iterator_category, std::bidirectional_iterator_tag>::value
-                || std::is_same<iterator_category,
-                    std::random_access_iterator_tag>::value>::type >
+                std::is_same<typename traits::iterator_category, std::forward_iterator_tag>::value ||
+                std::is_same<typename traits::iterator_category, std::bidirectional_iterator_tag>::value ||
+                std::is_same<typename traits::iterator_category, std::random_access_iterator_tag>::value>::type
+               >
         explicit fastq_iterator()
             : _f(), _curr(), _next(), empty_output()
         {

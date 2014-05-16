@@ -109,7 +109,7 @@ OT MasterSlave(OP &op, const int &nthreads, const RangeType &r, const size_t ste
     counts[i] = 0;
   }
 
-#pragma omp parallel num_threads(nthreads) shared(r, v, op, counts) default(none)
+#pragma omp parallel num_threads(nthreads) shared(r, v, counts, op) default(none)
   {
 //    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 // wait or nowait?
@@ -157,7 +157,7 @@ OT MasterSlaveNoWait(OP &op, const int &nthreads, const RangeType &r, const size
     counts[i] = 0;
   }
 
-#pragma omp parallel num_threads(nthreads) shared(r, v, op, counts) default(none)
+#pragma omp parallel num_threads(nthreads) shared(r, v, counts, op) default(none)
   {
 //    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 
@@ -204,7 +204,7 @@ OT ParFor(OP &op, const int &nthreads, const RangeType &r, const size_t step, si
   OT v = 0;
   size_t count = 0;
 
-#pragma omp parallel num_threads(nthreads) default(none) shared(r, op, v, count)
+#pragma omp parallel num_threads(nthreads) default(none) shared(r, v, count, op)
   {
 //    printf("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 

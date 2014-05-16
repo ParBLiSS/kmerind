@@ -508,10 +508,69 @@ FASTQIteratorNoQual	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.135387s,	result 
 
 
 
+Using Intel VTune Amplifier, removing explicit vector insert (and reallocate?) calls. (use assign instead) - now speed up is more inline with expectations: >2.5x.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIterator2	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.202141s,	result = 85218178.612075 count = 254562
+FASTQIterator2	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.202800s,	result = 85218178.612075 count = 254562
+FASTQIterator2	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.202225s,	result = 85218178.612075 count = 254562
+FASTQIterator2	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.205676s,	result = 85218178.612075 count = 254562
+FASTQIterator2	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.205787s,	result = 85218178.612075 count = 254562
+FASTQIterator2	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.207574s,	result = 85218178.612081 count = 254562
+FASTQIterator2	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.535699s,	result = 85218178.612075 count = 254562
+
+and 
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIteratorNoQual	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.040098s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.039694s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.040392s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.040416s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.040646s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.043578s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.058250s,	result = 66877.148914 count = 254562
 
 
+looking at the profile - a good chunk of time is spent doing local variable allocation in parser.operator().  tried to switch to using member variable and results were very bad.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIteratorNoQual	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.213516s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.212891s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.213329s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.215727s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.204578s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.202952s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.084413s,	result = 66877.148914 count = 254562
+
+switching back, but let parser update the range instead of iterator doing that: at least 25 % slower.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIteratorNoQual	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.056318s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.056236s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.057135s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.058095s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.057138s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.060097s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.075553s,	result = 66877.148914 count = 254562
+
+let iterator update the range instead: no change.
+tpan@denali:~/builds/bliss$ bin/test2 4 4096
+USE_MPI is set
+USE_OPENMP is set
+FASTQIteratorNoQual	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.056629s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.055593s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.056148s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.056150s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.056525s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.057895s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.076298s,	result = 66877.148914 count = 254562
 
 
+processing 1000 genome file is very slow?
 
 	
 	
