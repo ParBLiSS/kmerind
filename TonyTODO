@@ -244,3 +244,7 @@ simple kmer counting.
 
 
 optimization:  may want to have a way to mark a variable as requiring synchronization, and change OMP pattern.
+
+
+try avoiding iterator comparison.  user offsets instead.  May or may not help depend on compiler optimization.
+

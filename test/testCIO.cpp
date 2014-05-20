@@ -619,6 +619,10 @@ struct FASTQIterator2 {
       OT tv = 0;
       size_t lcount = 0;
 
+//      int i = 0, j = 0;
+
+      BaseIterType iter;
+
       for (; fastq_start != fastq_end; ++fastq_start, ++lcount)
       {
         read = *fastq_start;
@@ -628,16 +632,26 @@ struct FASTQIterator2 {
         // simulate kmer computation
 
         // simulate kmer computation
-        for (BaseIterType iter = read.seq; iter != read.seq_end; ++iter) {
+        iter = read.seq;
+        for (;
+            iter != read.seq_end;
+            ++iter) {
           km <<= 8;
           km |= static_cast<uint64_t>(*iter);
+//          ++i;
         }
 
         // simulate quality score computation.
         tv += static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-        for (BaseIterType iter = read.qual; iter != read.qual_end; ++iter) {
+        iter = read.qual;
+        for (;   // slow because of log2.
+            iter != read.qual_end;
+            ++iter) {
           tv += log2(*iter);
+//          ++j;
         }
+
+//        assert(i == j);
 
       }
 
@@ -831,13 +845,33 @@ int main(int argc, char* argv[])
   RangeType r = RangeType::block_partition(nprocs, rank, 0, file_size, 0);
 
 
-//  typedef readMMap<             double, true , false> OpType;
-//  typedef readFileLoader<       double, true , false> OpType;
-//  typedef readFileLoaderAtomic< double, true , false> OpType;
-//  typedef readFASTQ<            double, true , false> OpType;
-//  typedef FASTQIterator<        double, true , false> OpType;
-  typedef FASTQIterator2<       double, true , false> OpType;
-//  typedef FASTQIteratorNoQual<  double, true , false> OpType;
+#if defined(TEST_OP_MMAP)
+  typedef readMMap<             double, true, false> OpType;
+#endif
+
+#if defined(TEST_OP_FILELOADER)
+  typedef readFileLoader<       double, true, false> OpType;
+#endif
+
+#if defined(TEST_OP_FILELOADER_ATOMIC)
+  typedef readFileLoaderAtomic< double, true, false> OpType;
+#endif
+
+#if defined(TEST_OP_FASTQ)
+  typedef readFASTQ<            double, true, false> OpType;
+#endif
+
+#if defined(TEST_OP_FASTQIter)
+  typedef FASTQIterator<        double, true, false> OpType;
+#endif
+
+#if defined(TEST_OP_FASTQIter2)
+  typedef FASTQIterator2<       double, true, false> OpType;
+#endif
+
+#if defined(TEST_OP_FASTQIterNoQual)
+  typedef FASTQIteratorNoQual<  double, true, false> OpType;
+#endif
 
   OpType op(filename, r);
 
@@ -864,7 +898,6 @@ int main(int argc, char* argv[])
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  if (rank == 0)
   printTiming("P2P critical:", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
 
@@ -885,7 +918,6 @@ int main(int argc, char* argv[])
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  if (rank == 0)
   printTiming("P2P atomic:", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
 
@@ -906,7 +938,6 @@ int main(int argc, char* argv[])
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  if (rank == 0)
   printTiming("MS Wait:", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
   /// master slave No Wait
@@ -926,7 +957,6 @@ int main(int argc, char* argv[])
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  if (rank == 0)
   printTiming("MS NoWait:", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
   /// parallel for
@@ -946,7 +976,6 @@ int main(int argc, char* argv[])
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  if (rank == 0)
   printTiming("PARFOR:\t", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
 
@@ -959,11 +988,11 @@ int main(int argc, char* argv[])
   for (int i = 0; i < iter; ++i) {
     v = 0;
     count = 0;
-#pragma omp parallel default(none) firstprivate(nthreads, step, filename, r) num_threads(nthreads) reduction(+:v, count)
+#pragma omp parallel default(none) shared(nthreads, step, filename, r) num_threads(nthreads) reduction(+:v, count)
     {
       RangeType r2 = r.block_partition(nthreads, omp_get_thread_num());
       OpType op2(filename, r2);
-      v = Sequential(op2, nthreads, op2.getRange(), op2.getSeqSize() * step, count);
+      v += Sequential(op2, 1, op2.getRange(), op2.getSeqSize() * step, count);
     }
   }
 #if defined(USE_MPI)
@@ -973,7 +1002,6 @@ int main(int argc, char* argv[])
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  if (rank == 0)
   printTiming("BLOCK PARFOR:", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
 
@@ -995,7 +1023,6 @@ int main(int argc, char* argv[])
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  if (rank == 0)
   printTiming("SEQFOR:\t", op.getName(), rank, nprocs, nthreads, time_span, iter, v, count);
 
 

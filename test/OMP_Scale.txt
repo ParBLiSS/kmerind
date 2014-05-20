@@ -604,8 +604,125 @@ FASTQIterator2	PARFOR:		MPI rank: 0/1	OMP 2 threads	took 0.355183s,	result = 852
 FASTQIterator2	BLOCK PARFOR:	MPI rank: 0/1	OMP 2 threads	took 0.358626s,	result = 85218178.612074 count = 254562
 FASTQIterator2	SEQFOR:		MPI rank: 0/1	OMP 2 threads	took 0.567487s,	result = 85218178.612075 count = 254562
 
+Log2 (looking at PARFOR) is very slow.  this shows up as the loop time.  Log2 may be blocking between threads?
+OMP_dynamic - no effect.  leave as 0.
+OMP_nested  - no effect.  leave as 1.
+mmap MAP_PRIVATE vs MAP_SHARED make no difference.
 
-processing 1000 genome file is very slow?
+
+currently:
+tpan@denali:~/builds/bliss$ bin/testCIO_MMAP 4 30 
+USE_MPI is set
+USE_OPENMP is set
+readMMap	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.543355s,	result = 198755469.386663 count = 34111308
+readMMap	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.537312s,	result = 198755469.386665 count = 34111308
+readMMap	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.628301s,	result = 198755469.386664 count = 34111308
+readMMap	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.635062s,	result = 198755469.386664 count = 34111308
+readMMap	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.536288s,	result = 198755469.386664 count = 34111308
+readMMap	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.531045s,	result = 198758404.531938 count = 34111308
+readMMap	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.310787s,	result = 198755469.386584 count = 34111308
+
+tpan@denali:~/builds/bliss$ bin/testCIO_FILELOADER 4 30 
+USE_MPI is set
+USE_OPENMP is set
+readFileLoader	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.524163s,	result = 198755469.386664 count = 34111278
+readFileLoader	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.505606s,	result = 198755469.386664 count = 34111278
+readFileLoader	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.589760s,	result = 198755469.386665 count = 34111278
+readFileLoader	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.602946s,	result = 198755469.386665 count = 34111278
+readFileLoader	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.496327s,	result = 198755469.386664 count = 34111278
+readFileLoader	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.560147s,	result = 198758404.531938 count = 34111188
+readFileLoader	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.290444s,	result = 198755469.386584 count = 34111278
+
+tpan@denali:~/builds/bliss$ bin/testCIO_FILELOADER_ATOMIC 4 30 
+USE_MPI is set
+USE_OPENMP is set
+readFileLoaderAtomic	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.672454s,	result = 198755652.209772 count = 34111308
+readFileLoaderAtomic	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.658648s,	result = 198755652.209772 count = 34111308
+readFileLoaderAtomic	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.705104s,	result = 198755652.209769 count = 34111308
+readFileLoaderAtomic	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.707025s,	result = 198755652.209770 count = 34111308
+readFileLoaderAtomic	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.663752s,	result = 198755652.209772 count = 34111308
+readFileLoaderAtomic	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.645445s,	result = 198759090.906883 count = 34111308
+readFileLoaderAtomic	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.264185s,	result = 198755652.210215 count = 34111308
+
+USE_MPI is set
+USE_OPENMP is set
+readFASTQ	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.411359s,	result = 198492987.017263 count = 34111308
+readFASTQ	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.416278s,	result = 198492987.017263 count = 34111308
+readFASTQ	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.412280s,	result = 198492987.017263 count = 34111308
+readFASTQ	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.416717s,	result = 198492987.017263 count = 34111308
+readFASTQ	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.413006s,	result = 198492987.017263 count = 34111308
+readFASTQ	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.429071s,	result = 198492987.542754 count = 34111308
+readFASTQ	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.142204s,	result = 198492987.017248 count = 34111308
+
+
+tpan@denali:~/builds/bliss$ bin/testCIO_FASTQIter 4 30 
+USE_MPI is set
+USE_OPENMP is set
+FASTQIterator	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.406196s,	result = 179553631.599285 count = 254562
+FASTQIterator	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.401217s,	result = 179553631.599285 count = 254562
+FASTQIterator	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.400439s,	result = 179553631.599285 count = 254562
+FASTQIterator	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.403523s,	result = 179553631.599285 count = 254562
+FASTQIterator	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.405203s,	result = 179553631.599285 count = 254562
+FASTQIterator	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.417814s,	result = 179553631.599285 count = 254562
+FASTQIterator	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 1.107326s,	result = 179553631.599282 count = 254562
+
+tpan@denali:~/builds/bliss$ bin/testCIO_FASTQIter2 4 30 
+USE_MPI is set
+USE_OPENMP is set
+FASTQIterator2	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.213604s,	result = 85218178.612221 count = 254562
+FASTQIterator2	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.206929s,	result = 85218178.612221 count = 254562
+FASTQIterator2	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.206325s,	result = 85218178.612221 count = 254562
+FASTQIterator2	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.207611s,	result = 85218178.612221 count = 254562
+FASTQIterator2	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.208890s,	result = 85218178.612221 count = 254562
+FASTQIterator2	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.213165s,	result = 85218178.612221 count = 254562
+FASTQIterator2	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.553515s,	result = 85218178.612222 count = 254562
+
+tpan@denali:~/builds/bliss$ bin/testCIO_FASTQIterNoQual 4 30 
+USE_MPI is set
+USE_OPENMP is set
+FASTQIteratorNoQual	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 0.056387s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 0.053270s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 0.053986s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 0.053499s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 0.054296s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 0.055935s,	result = 66877.148914 count = 254562
+FASTQIteratorNoQual	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 0.074097s,	result = 66877.148914 count = 254562
+
+
+
+processing 1000 genome file.  for some reason, BLOCK PARFOR is problematic.
+
+
+tpan@denali:~/builds/bliss$ bin/testCIO_FASTQIter2 4 30 /mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq 1
+USE_MPI is set
+USE_OPENMP is set
+FASTQIterator2	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 38.922878s,	result = 14519027769.609604 count = 23861612
+FASTQIterator2	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 42.139113s,	result = 14519027769.609596 count = 23861612
+FASTQIterator2	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 38.093474s,	result = 14519027769.609570 count = 23861612
+FASTQIterator2	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 38.597691s,	result = 14519027769.609587 count = 23861612
+FASTQIterator2	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 38.914658s,	result = 14519027769.609579 count = 23861612
+FASTQIterator2	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 59.509555s,	result = 14519027769.609821 count = 23861612
+FASTQIterator2	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 91.378208s,	result = 14519027769.609804 count = 23861612
+
+
+tpan@denali:~/builds/bliss$ bin/testCIO_FASTQIterNoQual 4 30 /mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq 1
+USE_MPI is set
+USE_OPENMP is set
+FASTQIteratorNoQual	P2P critical:	MPI rank: 0/1	OMP 4 threads	took 27.087864s,	result = 6735850.398731 count = 23861612
+FASTQIteratorNoQual	P2P atomic:	MPI rank: 0/1	OMP 4 threads	took 23.195768s,	result = 6735850.398731 count = 23861612
+FASTQIteratorNoQual	MS Wait:	MPI rank: 0/1	OMP 4 threads	took 25.079438s,	result = 6735850.398731 count = 23861612
+FASTQIteratorNoQual	MS NoWait:	MPI rank: 0/1	OMP 4 threads	took 23.844029s,	result = 6735850.398731 count = 23861612
+FASTQIteratorNoQual	PARFOR:		MPI rank: 0/1	OMP 4 threads	took 25.168981s,	result = 6735850.398731 count = 23861612
+FASTQIteratorNoQual	BLOCK PARFOR:	MPI rank: 0/1	OMP 4 threads	took 58.466978s,	result = 6735850.398737 count = 23861612
+FASTQIteratorNoQual	SEQFOR:		MPI rank: 0/1	OMP 4 threads	took 40.933422s,	result = 6735850.398760 count = 23861612
+
+
+in parser, instead of comparing iterator, compare the range, update the iterator.
+
+see if a formal queue works?
+
+
+
 
 	
 	

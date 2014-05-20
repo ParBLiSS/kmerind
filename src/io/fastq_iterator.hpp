@@ -167,13 +167,13 @@ namespace bliss
         }
 
         template <typename Q = Quality>
-        typename std::enable_if<!std::is_same<Q, void>::value>::type
+        inline typename std::enable_if<!std::is_same<Q, void>::value>::type
         populateQuality(const Iterator & start, const Iterator & end) {
           output.qual = start;
           output.qual_end = end;
         }
         template <typename Q = Quality>
-        typename std::enable_if<std::is_same<Q, void>::value>::type
+        inline typename std::enable_if<std::is_same<Q, void>::value>::type
         populateQuality(const Iterator & start, const Iterator & end) {
         }
 
@@ -239,8 +239,8 @@ namespace bliss
               {
 //                ss1 << "; ";
                 ends[line_num] = iter;
-
                 ++line_num;
+
                 if (line_num >= 4)
                 {
 //                  ss1 << " got the 4 lines" << std::endl;

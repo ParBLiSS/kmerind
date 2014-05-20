@@ -146,6 +146,9 @@ OT MasterSlave(OP &op, const int &nthreads, const RangeType &r, const size_t ste
   return vo;
 }
 
+// TODO:  explicit queueing of input data read from disk.
+
+
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t, size_t&)>::type>
 OT MasterSlaveNoWait(OP &op, const int &nthreads, const RangeType &r, const size_t step, size_t &_count) {
 

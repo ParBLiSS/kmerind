@@ -319,9 +319,9 @@ namespace bliss
             struct sysinfo memInfo;
             sysinfo (&memInfo);
 
-            if ((this->size() * sizeof(T)) > (memInfo.freeram * memInfo.mem_unit / 20)) { // use too much mem.  throw exception.
+            if ((this->size() * sizeof(T)) > (memInfo.freeram * memInfo.mem_unit / 2)) { // use too much mem.  throw exception.  linux freeram is limited to 10 to 15 % of physical.
               std::stringstream ss;
-              ss << "ERROR in file preloading: ["  << filename << "] mem required " << (this->size() * sizeof(T)) << " bytes; (1/20th) available: " << (memInfo.freeram * memInfo.mem_unit / 20);
+              ss << "ERROR in file preloading: ["  << filename << "] mem required " << (this->size() * sizeof(T)) << " bytes; (1/20th) available: " << (memInfo.freeram * memInfo.mem_unit / 2) << " free: " << memInfo.freeram << " unit " << memInfo.mem_unit;
               throw io_exception(ss.str());
             }
           }

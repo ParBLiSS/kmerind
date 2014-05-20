@@ -7,8 +7,41 @@ add_executable(test1 test.cpp)
 target_link_libraries(test1 ${EXTRA_LIBS})
 
 # EXECUTABLES
-add_executable(test2 testCIO.cpp)
-target_link_libraries(test2 ${EXTRA_LIBS})
+add_executable(testCIO_MMAP testCIO.cpp)
+SET_TARGET_PROPERTIES(testCIO_MMAP PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP)
+target_link_libraries(testCIO_MMAP ${EXTRA_LIBS})
+
+# EXECUTABLES
+add_executable(testCIO_FILELOADER testCIO.cpp)
+SET_TARGET_PROPERTIES(testCIO_FILELOADER PROPERTIES COMPILE_FLAGS -DTEST_OP_FILELOADER)
+target_link_libraries(testCIO_FILELOADER ${EXTRA_LIBS})
+
+# EXECUTABLES
+add_executable(testCIO_FILELOADER_ATOMIC testCIO.cpp)
+SET_TARGET_PROPERTIES(testCIO_FILELOADER_ATOMIC PROPERTIES COMPILE_FLAGS -DTEST_OP_FILELOADER_ATOMIC)
+target_link_libraries(testCIO_FILELOADER_ATOMIC ${EXTRA_LIBS})
+
+# EXECUTABLES
+add_executable(testCIO_FASTQ testCIO.cpp)
+SET_TARGET_PROPERTIES(testCIO_FASTQ PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQ)
+target_link_libraries(testCIO_FASTQ ${EXTRA_LIBS})
+
+# EXECUTABLES
+add_executable(testCIO_FASTQIter testCIO.cpp)
+SET_TARGET_PROPERTIES(testCIO_FASTQIter PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQIter)
+target_link_libraries(testCIO_FASTQIter ${EXTRA_LIBS})
+
+# EXECUTABLES
+add_executable(testCIO_FASTQIter2 testCIO.cpp)
+SET_TARGET_PROPERTIES(testCIO_FASTQIter2 PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQIter2)
+target_link_libraries(testCIO_FASTQIter2 ${EXTRA_LIBS})
+
+# EXECUTABLES
+add_executable(testCIO_FASTQIterNoQual testCIO.cpp)
+SET_TARGET_PROPERTIES(testCIO_FASTQIterNoQual PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQIterNoQual)
+target_link_libraries(testCIO_FASTQIterNoQual ${EXTRA_LIBS})
+
+
 
 ## EXECUTABLES
 #add_executable(testIndex2 testIndex.cpp)
