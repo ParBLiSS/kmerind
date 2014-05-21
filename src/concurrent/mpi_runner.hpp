@@ -81,6 +81,7 @@ namespace bliss
           comm = _comm;
           MPI_Comm_size(comm, &nprocs);
           MPI_Comm_rank(comm, &rank);
+          commWasCreated = false;
 
         };
 
@@ -88,8 +89,6 @@ namespace bliss
           if (commWasCreated) {
             MPI_Finalize();
           }
-
-
 
         };
     };

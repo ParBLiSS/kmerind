@@ -39,7 +39,7 @@
 
 #include "sys/sysinfo.h"  // for meminfo
 
-#include "iterators/range.hpp"
+#include "partition/range.hpp"
 #include "io/data_block.hpp"
 #include "utils/logging.h"
 
@@ -99,7 +99,7 @@ namespace bliss
 
       public:
         typedef SizeT                             SizeType;
-        typedef bliss::iterator::range<SizeType>  RangeType;
+        typedef bliss::partition::range<SizeType>  RangeType;
         typedef T*                                        InputIteratorType;
 
         // internal DataBlock type.  uses T* as iterator type.
@@ -585,7 +585,7 @@ namespace bliss
          * @return                  actual chunk size created
          */
         template <typename PartitionHelper>
-        DataBlockType& getNextChunkAtomic(const PartitionHelper &partitioner, const SizeType &chunkSize = 0) {
+        DataBlockType& getNextChunk(const PartitionHelper &partitioner, const SizeType &chunkSize = 0) {
 
           getSeqSize(partitioner, 3);
 
@@ -677,7 +677,7 @@ namespace bliss
       }
 
       template<typename PartitionHelper>
-      SizeType getSeqSize(const PartitionHelper &partitioner, int iterations) {
+      SizeType getRecordSize(const PartitionHelper &partitioner, int iterations) {
 
         //// TODO: if a different partitioner is used, seqSize may be incorrect.
         ////   seqSize is a property of the partitioner applied to the data.

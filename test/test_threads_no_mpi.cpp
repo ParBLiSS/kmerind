@@ -598,10 +598,9 @@ int main(int argc, char** argv) {
     nthreads = atoi(argv[2]);
     if (nthreads == -1)
       nthreads = omp_get_max_threads();
-
   }
 
-  int chunkSize = 4000;
+  int chunkSize = 30;
   if (argc > 3)
   {
     chunkSize = atoi(argv[3]);

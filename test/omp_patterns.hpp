@@ -20,6 +20,103 @@
 typedef bliss::iterator::range<size_t> RangeType;
 
 
+////// TODO:  need to make the pipelines better.  DO THESE MAKE SENSE?
+///**
+// * transforms data retrieved from InputOp, using ComputeOp, and put results in OutputOp.
+// * InputOp and OutputOp are operators, not just data structures.  examples are MPI receiver/senders
+// *
+// * Map or Reduce pattern.
+// *
+// * @param in
+// * @param comp
+// * @param out
+// * @param nthreads
+// * @param r
+// * @param step
+// */
+//template<typename InputOp, typename ComputeOp, typename OutputOp>
+//void TransformingPipeline(InputOp &in, ComputeOp &comp, OutputOp &out, const int &nthreads, const RangeType &r, const size_t step) {
+//#pragma omp parallel sections num_threads(3) default(none)
+//  {
+//#pragma omp section
+//    {
+//      out(nthreads, r, step);
+//    }
+//
+//#pragma omp section
+//    {
+//      in(nthreads, r, step);
+//    }
+//
+//#pragma omp section
+//    {
+//      comp(nthreads, r, step);
+//    }
+//  }
+//}
+//
+//
+///**
+// * generate data using ComputeOp and put results in OutputOp
+// * OutputOp is an operator, not jsut data structure.  example is MPI Sender
+// *
+// * Map or Reduce pattern.
+// *
+// * @param comp
+// * @param out
+// * @param nthreads
+// * @param r
+// * @param step
+// */
+//template<typename ComputeOp, typename OutputOp>
+//void GeneratingPipeline(ComputeOp &comp, OutputOp &out, const int &nthreads, const RangeType &r, const size_t step) {
+//#pragma omp parallel sections num_threads(2) default(none)
+//  {
+//#pragma omp section
+//    {
+//      out(nthreads, r, step);
+//    }
+//
+//#pragma omp section
+//    {
+//      comp(nthreads, r, step);
+//    }
+//  }
+//}
+//
+//
+///**
+// * retrieve data from Input and compute some final output using ComputeOp
+// * Input is an operator, not just data structure.  example is a MPI Receiver
+// *
+// * Map or Reduce Pattern.
+// *
+// * @param in
+// * @param comp
+// * @param nthreads
+// * @param r
+// * @param step
+// */
+//template<typename InputOp, typename ComputeOp>
+//void ConsumingPipeline(InputOp &in, ComputeOp &comp, const int &nthreads, const RangeType &r, const size_t step) {
+//#pragma omp parallel sections num_threads(numOps) default(none)
+//  {
+//#pragma omp section
+//    {
+//      in(nthreads, r, step);
+//    }
+//
+//#pragma omp section
+//    {
+//      comp(nthreads, r, step);
+//    }
+//  }
+//}
+//
+//////// TODO:  need to make the pipelines better.
+
+
+
 
 template<typename OP, typename OT = typename std::result_of<OP(size_t, size_t, size_t&)>::type >
 OT P2P(OP &op, const int &nthreads, const RangeType &r, const size_t step, size_t &_count) {

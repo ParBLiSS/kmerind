@@ -28,7 +28,7 @@
 // own includes
 #include <utils/logging.h>
 #include <iterators/function_traits.hpp>
-#include <iterators/range.hpp>
+#include <partition/range.hpp>
 
 namespace bliss
 {
@@ -83,24 +83,24 @@ namespace bliss
 
         fastq_sequence_id id;
 
-        static void allocCopy(const fastq_sequence<Iterator, Alphabet>& src, fastq_sequence<Iterator, Alphabet>& dest) {
-          dest.id.composite = src.id.composite;
-
-          size_t length = src.name_end - src.name;
-          dest.name = new ValueType[length];
-          memcpy(dest.name, src.name, length);
-          dest.name_end = dest.name + length;
-
-          length = src.seq_end - src.seq;
-          dest.seq = new ValueType[length];
-          memcpy(dest.seq, src.seq, length);
-          dest.seq_end = dest.seq + length;
-
-        }
-        static void deleteCopy(fastq_sequence<Iterator, Alphabet>& dest) {
-          delete [] dest.name;
-          delete [] dest.seq;
-        }
+//        static void allocCopy(const fastq_sequence<Iterator, Alphabet>& src, fastq_sequence<Iterator, Alphabet>& dest) {
+//          dest.id.composite = src.id.composite;
+//
+//          size_t length = src.name_end - src.name;
+//          dest.name = new ValueType[length];
+//          memcpy(dest.name, src.name, length);
+//          dest.name_end = dest.name + length;
+//
+//          length = src.seq_end - src.seq;
+//          dest.seq = new ValueType[length];
+//          memcpy(dest.seq, src.seq, length);
+//          dest.seq_end = dest.seq + length;
+//
+//        }
+//        static void deleteCopy(fastq_sequence<Iterator, Alphabet>& dest) {
+//          delete [] dest.name;
+//          delete [] dest.seq;
+//        }
     };
 
     /**
@@ -127,19 +127,19 @@ namespace bliss
         Iterator qual;
         Iterator qual_end;
 
-        static void allocCopy(const fastq_sequence_quality<Iterator, Alphabet, Quality>& src, fastq_sequence_quality<Iterator, Alphabet, Quality>& dest) {
-          base_class_t::allocCopy(src, dest);
-
-          size_t length = src.qual_end - src.qual;
-          dest.qual = new ValueType[length];
-          memcpy(dest.qual, src.qual, length);
-          dest.qual_end = dest.qual + length;
-
-        }
-        static void deleteCopy(fastq_sequence_quality<Iterator, Alphabet, Quality>& dest) {
-          base_class_t::deleteCopy(dest);
-          delete [] dest.qual;
-        }
+//        static void allocCopy(const fastq_sequence_quality<Iterator, Alphabet, Quality>& src, fastq_sequence_quality<Iterator, Alphabet, Quality>& dest) {
+//          base_class_t::allocCopy(src, dest);
+//
+//          size_t length = src.qual_end - src.qual;
+//          dest.qual = new ValueType[length];
+//          memcpy(dest.qual, src.qual, length);
+//          dest.qual_end = dest.qual + length;
+//
+//        }
+//        static void deleteCopy(fastq_sequence_quality<Iterator, Alphabet, Quality>& dest) {
+//          base_class_t::deleteCopy(dest);
+//          delete [] dest.qual;
+//        }
     };
 
 
@@ -158,7 +158,7 @@ namespace bliss
         typedef Alphabet                                                    AlphabetType;
         typedef typename std::enable_if<!std::is_same<Quality, void>::value, Quality>::type
                                                                             QualityType;
-        typedef bliss::iterator::range<size_t>                              RangeType;
+        typedef bliss::partition::range<size_t>                              RangeType;
 
         SeqType output;
 
@@ -178,9 +178,11 @@ namespace bliss
         }
 
         /**
+         * TODO:  change to use range coordinates for comparison instead of iterators.  measure performance...
+         *
          * parses with an iterator, so as to have complete control over the increment.
          */
-        Iterator operator()(const Iterator &it, const Iterator &end, RangeType &coordinates)
+        Iterator increment(const Iterator &it, const Iterator &end, RangeType &coordinates)
         {
           // first initialize  (on windowed version, will need to have a separate
           // way of initializing., perhaps with an overloaded operator.
@@ -303,7 +305,7 @@ namespace bliss
           return iter;
         }
 
-        SeqType& operator()()
+        SeqType& dereference()
         {
           return output;
         }
@@ -407,7 +409,7 @@ namespace bliss
             // at end.
             // doing the construction here because we have to walk anyways.
             _temp = _next;
-            _next = _f(_temp, _end, range);    // _next is moved.
+            _next = _f.increment(_temp, _end, range);    // _next is moved.
           }
           // else next has already been moved (by * operator)
 
@@ -464,11 +466,11 @@ namespace bliss
           {
             // after parse, _next has been moved but curr stays where it is.
             _temp = _next;
-            _next = _f(_temp, _end, range);
+            _next = _f.increment(_temp, _end, range);
           }
           // else result was already computed and stored in the functor.
 
-          return _f();
+          return _f.dereference();
         }
 
         // no -> operator.  -> returns a pointer to the value held in iterator.

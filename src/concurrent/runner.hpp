@@ -23,14 +23,14 @@ namespace bliss
      * @details   uses data Src, data Sink, and Task for computation.
      *
      *            multiple sources can be represented as a single one with some non-conflicting mapping
-     *              One-to-One (block or cyclic partition), demand driven, or random (locking)
+     *              One-to-One (block or cyclic partition), demand driven (locking), or random (locking)
      *              many to many is a mapping function (hash) followed by demand driven (locking)
      *            task may be independent of source (constant source or zero source)
      *            multiple sink assignment (hash).  single sink requires locking.
      *
      *            there is always a sink.
      */
-    template <typename Task, typename Source, typename TaskToSourceMap, typename Sink, typename TaskToSinkMap>
+    template <typename Task, typename Sink, typename TaskToSinkMap, typename Source = void, typename TaskToSourceMap = void >
     class Runner
     {
       public:

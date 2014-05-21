@@ -5,14 +5,14 @@
  *      Author: tpan
  */
 
-#include "iterators/range.hpp"
+#include "partition/range.hpp"
 
 #include <gtest/gtest.h>
 #include <cstdint>  // for uint64_t, etc.
 #include <vector>
 #include <limits>
 
-using namespace bliss::iterator;
+using namespace bliss::partition;
 
 /*
  * test class holding some information.  Also, needed for the typed tests

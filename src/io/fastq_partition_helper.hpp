@@ -22,6 +22,9 @@ namespace bliss
   namespace io
   {
 
+    ///// TODO: deprecate this.
+
+
 
     /**
      *  for coordinated distributed quality score reads to map back to original.
