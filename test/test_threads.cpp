@@ -34,7 +34,7 @@
 #include "common/base_types.hpp"
 #include "common/alphabets.hpp"
 #include "common/AlphabetTraits.hpp"
-#include "iterators/range.hpp"
+#include "partition/range.hpp"
 #include "iterators/buffered_transform_iterator.hpp"
 #include "io/fastq_partition_helper.hpp"
 #include "io/MPISendBuffer.hpp"
@@ -58,7 +58,7 @@ constexpr bool thread_safe = false;
 typedef bliss::io::MPISendBuffer<KmerIndexType, thread_safe> BufferType;
 
 // define raw data type :  use CharType
-typedef bliss::io::file_loader<CharType>                       FileLoaderType;
+typedef bliss::io::FileLoader<CharType>                       FileLoaderType;
 typedef bliss::io::FASTQPartitionHelper<CharType, size_t> PartitionHelperType;
 typedef typename FileLoaderType::IteratorType                  BaseIterType;
 typedef typename std::iterator_traits<BaseIterType>::value_type BaseValueType;
@@ -79,7 +79,7 @@ typedef std::unordered_multimap<KmerType, KmerIndexType> IndexType;
 typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
 typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
 typedef bliss::index::KmerIndexGeneratorWithQuality<kmer_op_type, BufferType, bliss::index::XorModulus<KmerType>, qual_op_type> ComputeType;
-typedef bliss::iterator::range<size_t> RangeType;
+typedef bliss::partition::range<size_t> RangeType;
 
 
 /**
@@ -164,58 +164,7 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
 
 }
 
-/**
- * initializes MPI and OpenMP.
- *
- * @param argc
- * @param argv
- * @param comm
- * @param nproc
- * @param rank
- * @param nthreads
- * @param tid
- */
-void init(int &argc, char** &argv, MPI_Comm &comm, int &nprocs, int &rank) {
 
-
-#ifdef USE_MPI
-  // initialize MPI
-
-#ifdef USE_OPENMP
-  int provided;
-  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-
-  if (provided < MPI_THREAD_MULTIPLE) {
-    printf("ERROR: The MPI Library Does not have full thread support.\n");
-    MPI_Abort(MPI_COMM_WORLD, 1);
-  }
-#else
-  MPI_Init(&argc, &argv);
-#endif
-
-  comm = MPI_COMM_WORLD;
-
-  MPI_Comm_size(comm, &nprocs);
-  MPI_Comm_rank(comm, &rank);
-
-  if (rank == 0)
-    std::cout << "USE_MPI is set" << std::endl;
-#else
-  //TODO:  need to support no MPI.
-  fprintf(stderr, "ERROR: need MPI support\n");
-  exit(1);
-#endif
-
-}
-
-/**
- * finalizes MPI (and OpenMP)
- */
-void finalize(MPI_Comm &comm) {
-  #ifdef USE_MPI
-    MPI_Finalize();
-  #endif
-}
 
 // TODO: make these function with/without MPI, with/without OpenMP.
 // TODO: 1. make a communicator that encapsulates the nprocs, rank, nthread, tid, etc - this refactors KmerIndexGenerator so there is no dependency on nprocs, rank, and tid.
@@ -856,6 +805,16 @@ void compute(Source src, Destination dest) {
 }
 
 
+struct kmerIndexAndQuery {
+
+    void operator()() {
+
+    }
+
+
+};
+
+
 /**
  *
  * @param argc
@@ -903,19 +862,47 @@ int main(int argc, char** argv) {
 
 
   //////////////// initialize MPI and openMP
+  MPIRunner<>
   int rank = 0, nprocs = 1;
-  MPI_Comm comm;
+
+
+  MPI_Comm comm = ;
   init(argc, argv, comm, nprocs, rank);
+  // replace with MPIRunner
+
 
 
   /////////////// initialize output variables
   IndexType index;
 
 
+
+
   /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   {
     std::chrono::high_resolution_clock::time_point t1, t2;
     std::chrono::duration<double> time_span;
+
+
+    /// open file
+    // create file loader
+    // get file size (full range) from loader
+    // use partitioner to do rough partition of the range
+    // then use fastq_partitioner to adjust partition
+    // then load the file.
+
+    // set up new partitioner for chunking
+    // set up OMP call:  input file_loader, partitioner, compute op, and output buffer
+    // set up MPI receiver. - capture output
+    // (set up MPI sender)
+
+    // query.
+
+
+
+
+
+
 
     //////////////// now partition and open the file.
     t1 = std::chrono::high_resolution_clock::now();

@@ -41,6 +41,7 @@
 
 #include "partition/range.hpp"
 #include "io/data_block.hpp"
+#include "io/io_exception.hpp"
 #include "utils/logging.h"
 
 
@@ -49,27 +50,6 @@ namespace bliss
   namespace io
   {
 
-    class io_exception : public std::exception
-    {
-      protected:
-        std::string message;
-
-      public:
-        io_exception(const char* _msg)
-        {
-          message = _msg;
-        }
-
-        io_exception(const std::string &_msg)
-        {
-          message = _msg;
-        }
-
-        virtual const char* what() const throw ()
-        {
-          return message.c_str();
-        }
-    };
 
     /**
      *  real data:  mmap is better for large files and limited memory.
@@ -78,6 +58,11 @@ namespace bliss
      *
      *
      *  file access:  better to work with a few pages at a time, or to work with large block?
+     *
+     *
+     *  To reuse chunk and range, we'd want to limit to only a fixed number of entries.
+     *  however, this means we it's most convenient to say that the max number of entires is the number of threads.
+     *  else we don't have a good way of matching the tid to threads.
      *
      *  Usage:
      *    instantiate file_loader()  - default partitions the file equally
@@ -91,21 +76,23 @@ namespace bliss
      *    destroy file_loader
      *
      */
-    template <typename T, bool Buffering = true, bool Preloading = false, typename SizeT = size_t>
-    class file_loader
+    template <typename T, bool Buffering = true, bool Preloading = false,
+          typename ChunkPartitioner = bliss::partition::DemandDrivenPartitioner<size_t>,
+          typename Derived = void >
+    class FileLoader
     {
 
         /////// type defintions.
 
       public:
-        typedef SizeT                             SizeType;
-        typedef bliss::partition::range<SizeType>  RangeType;
-        typedef T*                                        InputIteratorType;
+        typedef size_t                             SizeType;
+        typedef bliss::partition::range<SizeType>    RangeType;
+        typedef T*                                InputIteratorType;
 
         // internal DataBlock type.  uses T* as iterator type.
         typedef typename std::conditional<Preloading,
                                           bliss::io::BufferedDataBlock<InputIteratorType, RangeType>,
-                                          bliss::io::UnbufferedDataBlock<InputIteratorType, RangeType> >::type     DataType;
+                                          bliss::io::UnbufferedDataBlock<InputIteratorType, RangeType> >::type              DataType;
 
         typedef typename std::conditional<Buffering,
                                           bliss::io::BufferedDataBlock<typename DataType::iterator, RangeType>,
@@ -121,18 +108,18 @@ namespace bliss
         std::string filename;
 
         RangeType fileRange;  // offset in file from where to read
-        InputIteratorType aligned_data;      // mem-mapped data, page aligned.  strictly internal
-
+        InputIteratorType mmap_data;      // mem-mapped data, page aligned.  strictly internal
+        RangeType mmap_range;      // offset in file from where to read
 
         DataType srcData;
-        RangeType range;      // offset in file from where to read
-
 
         bool loaded;
         bool preloaded;
 
-        SizeType chunkPos;    // for chunked iteration.  size since "data".
+//        SizeType chunkPos;    // for chunked iteration.  size since "data".
 
+        int nthreads;
+        size_t chunkSize;
         int nprocs;           // for partitioning.
         int rank;             // for partitioning.
 #if defined(USE_MPI)
@@ -141,7 +128,11 @@ namespace bliss
 
         DataBlockType *dataBlocks;
 
-        SizeType seqSize;
+        bliss::partition::BlockPartitioner<SizeType> partitioner;   // block partitioning is the default.
+        ChunkPartitioner chunkPartitioner;                          // construct when mmap_range change, on load.
+
+
+        SizeType recordSize;
 
         /////////////// Constructor and Destructor
       public:
@@ -157,6 +148,8 @@ namespace bliss
          *  NOTE: range's overlap is included in range.end.
          *        range is in units of T
          *
+         * default behavior is to block partition the file based on number of processors.  to make it load only part, call getMMapRange, then modify it.
+         *
          * TODO: test on remotely mounted file system.
          *
          * @param _filename       input file name
@@ -165,19 +158,17 @@ namespace bliss
          *                        to get just the calling node, use MPI_COMM_SELF (gives the right nprocs).
          */
 #if defined(USE_MPI)
-        explicit file_loader(const std::string &_filename,
-                    const MPI_Comm& _comm = MPI_COMM_SELF) throw (io_exception)
-            : file_handle(-1), filename(_filename), fileRange(), aligned_data(nullptr),
-              range(), loaded(false), preloaded(false),
-              chunkPos(0),
-              comm(_comm), dataBlocks(nullptr), seqSize(0)
+        explicit FileLoader(const std::string &_filename, const int _nThreads = 1, const size_t _chunkSize,
+                    const MPI_Comm& _comm = MPI_COMM_SELF) throw (IOException)
+            : file_handle(-1), filename(_filename), fileRange(), mmap_data(nullptr),
+              mmap_range(), loaded(false), preloaded(false),
+              nthreads(_nThreads), chunkSize(_chunkSize), comm(_comm), dataBlocks(nullptr)
 #else
-        explicit file_loader(const std::string &_filename,
-                             const int _nParts = 1, const int _rank = 0) throw (io_exception)
-            : file_handle(-1), filename(_filename), fileRange(), aligned_data(nullptr),
-              range(), loaded(false), preloaded(false),
-              chunkPos(0),
-              nprocs(_nParts), rank(_rank), dataBlocks(nullptr), seqSize(0)
+        explicit FileLoader(const std::string &_filename, const int _nThreads = 1, const size_t chunkSize,
+                            const int _nProcs = 1, const int _rank = 0 ) throw (IOException)
+            : file_handle(-1), filename(_filename), fileRange(), mmap_data(nullptr),
+              mmap_range(), loaded(false), preloaded(false),
+              nthreads(_nThreads), chunkSize(_chunkSize), nprocs(_nProcs), rank(_rank), dataBlocks(nullptr)
 #endif
         {
 #if defined(USE_MPI)
@@ -196,7 +187,7 @@ namespace bliss
           {
             struct stat filestat;
             stat(filename.c_str(), &filestat);
-            file_size = static_cast<SizeT>(filestat.st_size);
+            file_size = static_cast<SizeType>(filestat.st_size);
 //            std::cerr << "file size is " << file_size;
 //            std::cerr << " block size is " << filestat.st_blksize;
 //            std::cerr << " sysconf block size is " << page_size << std::endl;
@@ -213,7 +204,7 @@ namespace bliss
 //            INFO("file size for " << filename << " is " << file_size);
 //          }
 
-          // compute the full range
+          // compute the full mmap_range
           fileRange = RangeType(0, file_size / sizeof(T));   // range is in units of T
 
           /// open the file and get a handle.
@@ -223,29 +214,24 @@ namespace bliss
             std::stringstream ss;
             int myerr = errno;
             ss << "ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr);
-            throw io_exception(ss.str());
+            throw IOException(ss.str());
           }
 
           //DEBUG("file_loader initialized for " << filename);
 
 
-          /// allocate per thread datablocks
-          int nthreads = 1;
-#if defined(USE_OPENMP)
-          nthreads = omp_get_max_threads();
-#endif
-
-          dataBlocks = new DataBlockType[nthreads];
+          dataBlocks = new DataBlockType[nthreads];  // as many as there are threads, to allow delayed access to the datablocks.
 
 
-          // partition the full range
-          setRange(fileRange.block_partition(nprocs, rank));
+          // partition the full mmap_range
+          partitioner = bliss::partition::BlockPartitioner<SizeType>(fileRange, nprocs, chunkSize);
+
         }
 
         /**
          * closes the file.
          */
-        virtual ~file_loader()
+        virtual ~FileLoader()
         {
           //DEBUG("DESTROY");
           delete [] dataBlocks;
@@ -262,134 +248,13 @@ namespace bliss
 
       private:
         // disallow default constructor.
-        file_loader() {};
+        FileLoader() {};
 
 
         ////// PUBLIC METHODS
 
 
       public:
-
-        /**
-         *  performs memmap, and optionally preload the data into memory.
-         *
-         * @param _memUseFraction value between 0.0 and 0.5, representing percentage of FREE memory to be used.  0 means no preloading.
-         *                        if template specified preloading=false, then this param is ignored.
-         */
-        void load() throw (io_exception)
-        {
-          // clean up any previous runs.
-          //DEBUG("Loading");
-          unload();
-
-          //DEBUG("loading");
-
-          range.align_to_page(page_size);
-
-          /// do the mem map
-          aligned_data = map(range);
-
-
-//////////////// check to see if there is enough memory for preloading.
-///  since Preloading is a template param, can't choose a srcData type if Preloading is true but there is not enough memory.
-/// so we have to assert it.
-//          preloaded = false;
-//          if (Preloading) {
-//            /// check if can load the region into memory.
-//            float memUseFraction = (_memUseFraction > 0.5f) ? 0.5f :
-//                (_memUseFraction < 0.0f) ? 0.0f : _memUseFraction;
-//
-//            if (memUseFraction > 0.0f) {
-//              /// check if we can preload.
-//              struct sysinfo memInfo;
-//              sysinfo (&memInfo);
-//              long long limit = static_cast<long long>(static_cast<float>(memInfo.freeram * memInfo.mem_unit) * memUseFraction);
-//
-//              if (limit < (this->size() * sizeof(T)) ) {
-//                preloaded = true;
-//              } else {
-//                //WARNING("Insufficient memory requested during file loading.  Not preloading file.");
-//              }
-//            }
-//          }
-          if (Preloading) {
-            /// check if can load the region into memory.
-
-            /// check if we can preload.  use at most 1/20 of the available memory because of kmer expansion.
-            struct sysinfo memInfo;
-            sysinfo (&memInfo);
-
-            if ((this->size() * sizeof(T)) > (memInfo.freeram * memInfo.mem_unit / 2)) { // use too much mem.  throw exception.  linux freeram is limited to 10 to 15 % of physical.
-              std::stringstream ss;
-              ss << "ERROR in file preloading: ["  << filename << "] mem required " << (this->size() * sizeof(T)) << " bytes; (1/20th) available: " << (memInfo.freeram * memInfo.mem_unit / 2) << " free: " << memInfo.freeram << " unit " << memInfo.mem_unit;
-              throw io_exception(ss.str());
-            }
-          }
-
-
-
-          //DEBUG("mapped");
-          srcData.assign(aligned_data + (range.start - range.block_start), aligned_data + (range.end - range.block_start), range);
-
-          if (Preloading)
-          {
-//            // allocate space
-//            data = new T[this->size() + 1];
-//            //copy data over
-//            memcpy(data, aligned_data + (range.start - range.block_start),
-//                   sizeof(T) * this->size());
-//
-//            data[this->size()] = 0;
-//
-//            // close the input
-//            unmap(aligned_data, range);
-//
-//            aligned_data = data;
-            unmap(aligned_data, range);
-//          }
-//          else
-//          {
-//            data = aligned_data + (range.start - range.block_start);
-          }
-          //DEBUG("loaded");
-          loaded = true;
-        }
-
-        void unload()
-        {
-          //DEBUG("Unloading");
-
-          if (!Preloading)
-          {
-            if (aligned_data != nullptr && aligned_data != MAP_FAILED)
-              unmap(aligned_data, range);
-          }
-//          else
-//          {
-//            //            if (data != nullptr)
-//            //              delete [] data;
-//                        preloaded = false;
-//          }
-          srcData.clear();
-          aligned_data = nullptr;
-          //DEBUG("unloaded");
-          loaded = false;
-        }
-
-        DataType& getData() {
-          assert(loaded);
-
-          return srcData;
-        }
-
-        /**
-         * recall that range.end includes the overlap
-         *
-         * @return    size of the mmap region (or preloaded data) in units of T.
-         */
-        inline SizeType size() {
-          return range.end - range.start;
-        }
 
         /**
          * return the full range for this file.  (in units of data type T)
@@ -401,177 +266,135 @@ namespace bliss
         }
 
         /**
-         * return the range for this file mmap.  (in units of data type T)
+         * return the range for this file mmap.  (in units of data type T).  valid only after loading.
          * @return
          */
-        const RangeType& getRange() const {
-          return range;
+        const RangeType& getMMapRange() const {
+          assert(loaded);
+          return mmap_range;
+        }
+
+
+        void resetPartitionRange() {
+          partitioner.reset();
         }
 
         /**
-         * return the range for this file mmap.  (in units of data type T)
+         * get the Partitioned Range.  this method allows calling Derived class' version, to further refine the partitioned range.
          * @return
          */
-        void setRange(const RangeType& r) {
-          //DEBUG("set range to: " << r);
-          range = r;
-          range.align_to_page(page_size);
-          chunkPos = range.start;
+        RangeType getNextPartitionRange() {
+          if (std::is_same<Derived, void>::value) {
+            // if just FileLoader calls this.
+            return partitioner.getNext(rank);
+          } else {
+            // use the derived one.
+            return static_cast<Derived*>(this)->getNextPartitionRangeImpl();
+          }
+        }
+
+
+        void resetChunkRange() {
+          assert(loaded);
+          chunkPartitioner.reset();
+        }
+
+        // partitioner has chunk size. and current position.  at most as many as number of threads (specified in constructor) calling this function.
+        RangeType getNextChunkRange(const int tid) {
+          if (std::is_same<Derived, void>::value) {
+            assert(loaded);
+            return chunkPartitioner.getNext(tid);
+          } else {
+            return static_cast<Derived*>(this)->getNextChunkRangeImpl(tid);
+          }
         }
 
 
         /**
-         * search at the start and end of the block partition for some matching condition,
-         * and set as new partition positions.
+         *  performs memmap, and optionally preload the data into memory.
+         *
+         * @param r   range that will be mapped and loaded into memory (with buffering or without)
          */
-        template <typename PartitionHelper>
-        void adjustRange(const PartitionHelper &partitioner) throw (io_exception) {
+        void load(const RangeType &range) throw (IOException)
+        {
+          // clean up any previous runs.
+          //DEBUG("Loading");
+          unload();
 
-          static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for adjustRange() has a different SizeType than FileLoader\n");
-          static_assert(std::is_same<typename PartitionHelper::ValueType, T>::value, "PartitionHelper for adjustRange() has a different ValueType than FileLoader\n");
-          static_assert(std::is_same<typename PartitionHelper::IteratorType, InputIteratorType>::value, "PartitionHelper for adjustRange() has a different IteratorType than FileLoader\n");
+          //DEBUG("loading");
+
+          mmap_range = range & fileRange;
+          mmap_range.align_to_page(page_size);
+
+          /// do the mem map
+          mmap_data = map(mmap_range);
+
+//////////////// check to see if there is enough memory for preloading.
+///  since Preloading is a template param, can't choose a srcData type if Preloading is true but there is not enough memory.
+/// so we have to assert it.
+
+          if (Preloading) {
+            /// check if can load the region into memory.
+
+            /// check if we can preload.  use at most 1/20 of the available memory because of kmer expansion.
+            struct sysinfo memInfo;
+            sysinfo (&memInfo);
+
+            if ((mmap_range.size() * sizeof(T)) > (memInfo.freeram * memInfo.mem_unit / 2)) { // use too much mem.  throw exception.  linux freeram is limited to 10 to 15 % of physical.
+              std::stringstream ss;
+              ss << "ERROR in file preloading: ["  << filename << "] mem required " << (mmap_range.size() * sizeof(T)) << " bytes; (1/20th) available: " << (memInfo.freeram * memInfo.mem_unit / 2) << " free: " << memInfo.freeram << " unit " << memInfo.mem_unit;
+              throw IOException(ss.str());
+            }
+          }
 
 
-          // range where to search for the new end
-          RangeType next = range >> (range.end - range.start);
-          // limit to the full range length
+          //DEBUG("mapped");
+          srcData.assign(mmap_data + (mmap_range.start - mmap_range.block_start), mmap_data + (mmap_range.end - mmap_range.block_start), mmap_range);
 
-          // concatenate current and next ranges
-          RangeType searchRange = range | next;
-          searchRange &= fileRange;
-          searchRange.align_to_page(page_size);
+          if (Preloading)
+          {
+            unmap(mmap_data, mmap_range);
+          }
+          //DEBUG("loaded");
+          loaded = true;
 
-          // map the content
-          InputIteratorType searchData = this->map(searchRange) + searchRange.start - searchRange.block_start;
+          recordSize = getRecordSize(3);
+          chunkPartitioner = ChunkPartitioner(mmap_range, nthreads, std::max(chunkSize, 2 * recordSize));   // TODO: copy constructor works?
+                // at least 2 x the record size for a chunk.
 
-          // NOTE: assume that the range is large enough that we would not run into trouble with partition search not finding a starting position.
+        }
 
-          // for output
-          RangeType output(range);
+        /**
+         * unmap the file
+         */
+        void unload()
+        {
+          //DEBUG("Unloading");
 
-          // search for new start using finder
-          output.start = partitioner(searchData, fileRange, range);
+          if (!Preloading)
+          {
+            if (mmap_data != nullptr && mmap_data != MAP_FAILED)
+              unmap(mmap_data, mmap_range);
+          }
 
-          // get the new ending offset
-          output.end = partitioner(searchData + (range.end - range.start), fileRange, next);
-
-          // clean up and unmap
-          this->unmap(searchData, searchRange);
-
-          // readjust
-          this->setRange(output);
+          srcData.clear();
+          mmap_data = nullptr;
+          //DEBUG("unloaded");
+          loaded = false;
+          mmap_range = RangeType();
         }
 
 
 
-//
-//
-//        template <typename PartitionHelper>
-//        RangeType adjustChunkRange(PartitionHelper &partitioner, const RangeType &chunkRange) {
-//          // make sure the file is open
-//          assert(loaded);
-//
-//          // make sure the search range is within bounds
-//          RangeType next = (chunkRange >> (chunkRange.end - chunkRange.start)) & range;
-//
-//          // adjust the end only - assume start is okay.
-//          auto e = partitioner(srcData.begin() + (next.start - range.start), range, next);
-//
-//          RangeType result(chunkRange);
-//          result.end = e;
-//          return result;
-//        }
+        /**
+         * get the loaded source data.
+         * @return
+         */
+        DataType& getData() {
+          assert(loaded);
 
-        void resetChunks() {
-          chunkPos = range.start;
+          return srcData;
         }
-
-//        /**
-//         * search at the start and end of the block partition for some matching condition,
-//         * and set as new partition positions.
-//         *
-//         * @param[in]  partitioner       to find the partition boundaries
-//         * @param[out] start        output start pointer. at least "begin".  if copying, then caller needs to manage "start"
-//         * @param[out] end          output end pointer.  at most "end"
-//         * @param[in]  chunkSize    suggested partition size.  default to 0, which is translated to system page size.
-//         * @param[in]  copying      if copying, then start and end point to a memory block that is a copy of the underlying file mmap.
-//         * @return                  absolute range of for the chunk returned.
-//         */
-//        template <typename PartitionHelper>
-//        RangeType getNextChunk(PartitionHelper &partitioner, T* &startPtr, T* &endPtr, const SizeType &chunkSize = 0, const bool copying = true) {
-//
-//          static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for getNextChunk() has a different SizeType than FileLoader\n");
-//          assert(chunkSize >= 0);
-//          assert(loaded);
-//
-////          assert(loaded);
-//
-//          // traversed all.  so done.
-//          SizeType len = range.end - range.start;
-//          SizeType cs = (chunkSize == 0 ? page_size : chunkSize);
-//          SizeType s = range.end, e = range.end;
-//          SizeType readLen = 0;
-//
-//          /// part that needs to be sequential
-//
-//          //DEBUG("range " << range << " chunk " << cs << " chunkPos " << chunkPos);
-//
-//#pragma omp critical (computeChunkBoundary)
-//          {
-//            if (chunkPos >= range.end) {
-//              endPtr = startPtr = data + len;
-//              readLen = 0;
-//            } else {
-//
-//              s = chunkPos;
-//              RangeType next(chunkPos + cs, chunkPos + 2 * cs);
-//              next &= range;
-//              /// search end part only.  update chunkPos for next search.
-//              try {
-//                // search for end.
-//                e = partitioner(data + (next.start - range.start), range.start, next.start, next.end);
-//              } catch (io_exception& ex) {
-//                // did not find the end, so set e to next.end.
-//                // TODO: need to handle this scenario better - should keep search until end.
-//                WARNING(ex.what());
-//                e = next.end;
-//              }
-//
-//
-//              chunkPos = e;
-//#pragma omp flush(chunkPos)
-//              readLen = e - s;
-//              //printf("s = %lu, e = %lu, chunkPos = %lu, readLen 1 = %lu\n", s, e, chunkPos, readLen);
-//              //std::cout << "range: " << range << " next: " << next << std::endl;
-//            }
-//          }
-//          /// end part that needs to be serial
-//
-//          //DEBUG(" new chunkPos " << chunkPos << " start: " << s << " end: " << e);
-//
-//          // now can set in parallel
-//          // set the start.  guaranteed to be at the start of a record according to the partitionhelper.
-//
-//          if (readLen > 0) {
-//             if (copying) {
-//              //unique_ptr is not appropriate, as ownership is either by this object (no copy) or by calling thread. (copying)
-//              startPtr = new T[readLen + 1];
-//              endPtr = startPtr + readLen;
-//              *endPtr = 0;
-//              memcpy(startPtr, data + (s - range.start), readLen * sizeof(T));
-//            } else {
-//              startPtr = data + (s - range.start);
-//              endPtr = data + (e - range.start);
-//            }
-//         }
-////         DEBUG("read " << readLen << " elements, start at " << s << " [" << *startPtr << "] end at "<< e << " [" << *endPtr << "]");
-//
-//          if (startPtr == nullptr || endPtr == nullptr) {
-//            std::cerr << "ERROR: file loader get chunk returning null ptrs. readlen = " << readLen << " start and end are " << s << "-" << e << " range is " << range << std::endl;
-//          }
-//        return RangeType(s, e);
-//      }
-
 
         /**
          * search at the start and end of the block partition for some matching condition,
@@ -584,90 +407,12 @@ namespace bliss
          * @param[in]  copying      if copying, then start and end point to a memory block that is a copy of the underlying file mmap.
          * @return                  actual chunk size created
          */
-        template <typename PartitionHelper>
-        DataBlockType& getNextChunk(const PartitionHelper &partitioner, const SizeType &chunkSize = 0) {
-
-          getSeqSize(partitioner, 3);
-
-
-          static_assert(std::is_same<typename PartitionHelper::SizeType, SizeType>::value, "PartitionHelper for getNextChunk() has a different SizeType than FileLoader\n");
+        DataBlockType& getChunk(const int tid, const RangeType &chunkRange) {
           assert(loaded);
 //          printf("chunkSize = %lu\n", chunkSize);
-          assert(chunkSize >= (seqSize * 2));
+          RangeType r = chunkRange & mmap_range;
 
-
-          int tid = 0;
-#if defined(USE_OPENMP)
-          tid = omp_get_thread_num();
-#endif
-
-
-          SizeType cs = chunkSize;  // we need at least seqSize * 2
-          SizeType s = range.end,
-                   e = range.end;
-          SizeType readLen = 0;
-
-
-          //DEBUG("range " << range << " chunk " << cs << " chunkPos " << chunkPos);
-
-          /// part that needs to be sequential
-#pragma omp atomic capture
-          { s = chunkPos; chunkPos += cs; }  // get the current value and then update
-
-          if (s >= range.end) {
-            printf("WARNING: should not be here often\n");
-              s = range.end;
-              readLen = 0;
-          } else {
-            // since we are just partitioning, need to search for start and for end.
-            RangeType curr(s, s + cs);
-            curr &= srcData.getRange();
-            /// search start part.
-
-            try {
-              // search for start.
-              s = partitioner(srcData.begin() + (curr.start - range.start), range, curr);
-            } catch (io_exception& ex) {
-              // did not find the end, so set e to next.end.
-              // TODO: need to handle this scenario better - should keep search until end.
-              WARNING(ex.what());
-
-              printf("curr range: chunk %lu, s %lu-%lu, curr %lu-%lu, srcData range %lu-%lu, range %lu-%lu\n", cs, s, s+cs, curr.start, curr.end, srcData.getRange().start, srcData.getRange().end, range.start, range.end);
-              printf("got an exception search for start:  %s \n", ex.what());
-              s = curr.end;
-            }
-
-            RangeType next = curr >> cs;
-            next &= srcData.getRange();
-            /// search end part only.  update localPos for next search.
-            //printf("next: %lu %lu\n", next.start, next.end);
-            try {
-              // search for end.
-              e = partitioner(srcData.begin() + (next.start - range.start), range, next);
-            } catch (io_exception& ex) {
-              // did not find the end, so set e to next.end.
-              // TODO: need to handle this scenario better - should keep search until end.
-              WARNING(ex.what());
-
-              printf("next range: chunk %lu,  s %lu-%lu, curr %lu-%lu, srcData range %lu-%lu, range %lu-%lu\n", cs, s, s+cs, curr.start, curr.end, srcData.getRange().start, srcData.getRange().end, range.start, range.end);
-
-              printf("got an exception search for end: %s \n", ex.what());
-              e = curr.end;
-            }
-
-            readLen = e - s;
-            //printf("s = %lu, e = %lu, chunkPos = %lu, readLen 1 = %lu\n", s, e, chunkPos, readLen);
-            //std::cout << "range: " << range << " next: " << next << std::endl;
-          }
-
-          /// end part that needs to be serial
-
-          //DEBUG(" new chunkPos " << chunkPos << " start: " << s << " end: " << e);
-
-          // now can set in parallel
-          // set the start.  guaranteed to be at the start of a record according to the partitionhelper.
-
-          dataBlocks[tid].assign(srcData.begin() + (s - range.start), srcData.begin() + (e - range.start), RangeType(s,e) & range);
+          dataBlocks[tid].assign(srcData.begin() + (r.start - mmap_range.start), srcData.begin() + (r.end - mmap_range.start), r);
 //         DEBUG("read " << readLen << " elements, start at " << s << " [" << *startPtr << "] end at "<< e << " [" << *endPtr << "]");
 
 //          if (startPtr == nullptr || endPtr == nullptr) {
@@ -676,38 +421,19 @@ namespace bliss
         return dataBlocks[tid];
       }
 
-      template<typename PartitionHelper>
-      SizeType getRecordSize(const PartitionHelper &partitioner, int iterations) {
-
-        //// TODO: if a different partitioner is used, seqSize may be incorrect.
-        ////   seqSize is a property of the partitioner applied to the data.
-
-        assert(loaded);
-
-        if (seqSize == 0) {
-          SizeType s, e;
-          RangeType r(range);
-
-          s = partitioner(srcData.begin(), range, r);
-
-          for (int i = 0; i < iterations; ++i) {
-            r.start = s + 1;   // advance by 1, in order to search for next entry.
-            r &= range;
-            e = partitioner(srcData.begin() + (r.start - range.start), range, r);
-            seqSize += (e - s);
-            s = e;
-          }
-          seqSize /= iterations;
-
-          // DEBUG("Sequence size is " << seqSize);
-        }
-        return seqSize;
-      }
 
 
 
       protected:
 
+        // partitioner has chunk size. and current position.  at most as many as number of threads (specified in constructor) calling this function.
+        SizeType getRecordSize(int iterations) {
+          if (std::is_same<Derived, void>::value) {
+            return 1;
+          } else {
+            return static_cast<Derived*>(this)->getRecordSizeImpl(iterations);
+          }
+        }
 
 
         /**
@@ -715,7 +441,7 @@ namespace bliss
          * @param r
          * @return
          */
-        InputIteratorType map(RangeType r) throw (io_exception) {
+        InputIteratorType map(RangeType r) throw (IOException) {
 
           r.align_to_page(page_size);
 
@@ -740,7 +466,7 @@ namespace bliss
             std::stringstream ss;
             int myerr = errno;
             ss << "ERROR in mmap: " << myerr << ": " << strerror(myerr);
-            throw io_exception(ss.str());
+            throw IOException(ss.str());
           }
 
           //DEBUG("mapped");

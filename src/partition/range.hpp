@@ -488,7 +488,10 @@ namespace bliss
         }
 
 
-
+        size_t size() const
+        {
+          return end - start;
+        }
 
     };
 

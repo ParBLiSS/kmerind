@@ -56,7 +56,7 @@ constexpr bool thread_safe = false;
 typedef bliss::io::MPISendBuffer<KmerIndexType, thread_safe> BufferType;
 
 // define raw data type :  use CharType
-typedef bliss::io::file_loader<CharType>                       FileLoaderType;
+typedef bliss::io::FileLoader<CharType>                       FileLoaderType;
 typedef bliss::io::FASTQPartitionHelper<CharType, size_t> PartitionHelperType;
 typedef typename FileLoaderType::IteratorType                  BaseIterType;
 typedef typename std::iterator_traits<BaseIterType>::value_type BaseValueType;

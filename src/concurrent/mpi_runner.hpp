@@ -16,6 +16,7 @@
 #include "cassert"
 
 #include "config.hpp"
+#include "concurrent/runner.hpp"
 
 namespace bliss
 {
@@ -24,24 +25,20 @@ namespace bliss
 
     /**
      * @class			bliss::concurrent::MPIRunner
-     * @brief
-     * @details
+     * @brief     runs a set of tasks on MPI processes
+     * @details   note that each MPI process is in its own memory address space.  we need to assign a single task to it based on its rank.
      *
      */
     template <bool threaded>
-    class MPIRunner
+    class MPIRunner : public Runner
     {
       protected:
         MPI_Comm comm;
-        int nprocs;
-        int rank;
         bool commWasCreated;
-
 
       public:
         MPIRunner(int argc, char** argv) {
-
-#if defined(USE_MPI)
+#ifdef USE_MPI
           if (threaded) {
 
             int provided;
@@ -57,19 +54,15 @@ namespace bliss
 
           comm = MPI_COMM_WORLD;
 
-          MPI_Comm_size(comm, &nprocs);
-          MPI_Comm_rank(comm, &rank);
+          MPI_Comm_size(comm, &groupSize);
+          MPI_Comm_rank(comm, &id);
 
           commWasCreated = true;
 
-          if (rank == 0)
+          if (id == 0)
             std::cout << "USE_MPI is set" << std::endl;
-
-
 #else
-          //TODO:  need to support no MPI.
-          fprintf(stderr, "ERROR: need MPI support\n");
-          exit(1);
+          static_assert(false, "MPIRunner Used when compilation is not set to use MPI");
 #endif
         };
 
@@ -79,8 +72,8 @@ namespace bliss
         // comm is now handled by the MPIRunner.
         MPIRunner(MPI_Comm &_comm) {
           comm = _comm;
-          MPI_Comm_size(comm, &nprocs);
-          MPI_Comm_rank(comm, &rank);
+          MPI_Comm_size(comm, &groupSize);
+          MPI_Comm_rank(comm, &id);
           commWasCreated = false;
 
         };
@@ -90,7 +83,27 @@ namespace bliss
             MPI_Finalize();
           }
 
-        };
+        }; first
+
+        MPI_Comm & getComm() {
+          return comm;
+        }
+
+        virtual void addTask(Runnable &t) {
+          r = t;
+        }
+
+        virtual void run() {
+          r.run();
+        }
+
+        virtual void synchronize() {
+          MPI_Barrier(comm);
+        }
+
+      protected:
+        Runnable r;
+
     };
 
   } /* namespace concurrent */

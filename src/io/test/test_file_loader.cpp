@@ -87,7 +87,7 @@ TYPED_TEST_CASE_P(FileLoaderTest);
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, OpenWithFullRange)
 {
-  typedef file_loader<TypeParam, false, false> FileLoaderType;
+  typedef FileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get fileName
@@ -109,7 +109,7 @@ TYPED_TEST_P(FileLoaderTest, OpenWithFullRange)
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, PreloadWithFullRange)
 {
-  typedef file_loader<TypeParam, false, true> FileLoaderType;
+  typedef FileLoader<TypeParam, false, true> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get fileName
@@ -131,7 +131,7 @@ TYPED_TEST_P(FileLoaderTest, PreloadWithFullRange)
 
 TYPED_TEST_P(FileLoaderTest, OpenWithRange)
 {
-  typedef file_loader<TypeParam, false, false> FileLoaderType;
+  typedef FileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -156,7 +156,7 @@ TYPED_TEST_P(FileLoaderTest, OpenWithRange)
 
 TYPED_TEST_P(FileLoaderTest, OpenWithAlignedRange)
 {
-  typedef file_loader<TypeParam, false, false> FileLoaderType;
+  typedef FileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -192,7 +192,7 @@ TYPED_TEST_P(FileLoaderTest, OpenWithAlignedRange)
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, PreloadWithRange)
 {
-  typedef file_loader<TypeParam, false, true> FileLoaderType;
+  typedef FileLoader<TypeParam, false, true> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -217,7 +217,7 @@ TYPED_TEST_P(FileLoaderTest, PreloadWithRange)
 
 TYPED_TEST_P(FileLoaderTest, OpenConsecutiveRanges)
 {
-  typedef file_loader<TypeParam, false, false> FileLoaderType;
+  typedef FileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -246,7 +246,7 @@ TYPED_TEST_P(FileLoaderTest, OpenConsecutiveRanges)
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, AdjustRange)
 {
-  typedef file_loader<TypeParam, false, false> FileLoaderType;
+  typedef FileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -266,7 +266,7 @@ TYPED_TEST_P(FileLoaderTest, AdjustRange)
 
 TYPED_TEST_P(FileLoaderTest, AdjustConsecutiveRanges)
 {
-  typedef file_loader<TypeParam, false, false> FileLoaderType;
+  typedef FileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -292,7 +292,7 @@ TYPED_TEST_P(FileLoaderTest, AdjustConsecutiveRanges)
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, BufferChunks)
 {
-  typedef file_loader<TypeParam, true, false> FileLoaderType;
+  typedef FileLoader<TypeParam, true, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -339,7 +339,7 @@ TYPED_TEST_P(FileLoaderTest, BufferChunks)
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, UnbufferChunks)
 {
-  typedef file_loader<TypeParam, false, false> FileLoaderType;
+  typedef FileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -389,7 +389,7 @@ TYPED_TEST_P(FileLoaderTest, UnbufferChunks)
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, BufferChunksWithPreload)
 {
-  typedef file_loader<TypeParam, true, true> FileLoaderType;
+  typedef FileLoader<TypeParam, true, true> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -437,7 +437,7 @@ TYPED_TEST_P(FileLoaderTest, BufferChunksWithPreload)
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, UnbufferChunksWithPreload)
 {
-  typedef file_loader<TypeParam, false, true> FileLoaderType;
+  typedef FileLoader<TypeParam, false, true> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName

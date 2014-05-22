@@ -147,7 +147,7 @@ struct readMMap {
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFileLoader {
 
-    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
     typename LoaderType::DataType data;
@@ -244,7 +244,7 @@ struct PartitionHelper {
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFileLoaderAtomic {
 
-    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
 
 
     size_t page_size;
@@ -336,7 +336,7 @@ struct readFileLoaderAtomic {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFASTQ {
-    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
 
 
     size_t page_size;
@@ -423,7 +423,7 @@ struct readFASTQ {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIterator {
-    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
 
@@ -546,7 +546,7 @@ struct FASTQIterator {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIterator2 {
-    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
 
@@ -663,7 +663,7 @@ struct FASTQIterator2 {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIteratorNoQual {
-    typedef bliss::io::file_loader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
 

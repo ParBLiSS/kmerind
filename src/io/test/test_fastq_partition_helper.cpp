@@ -76,7 +76,7 @@ TYPED_TEST_CASE_P(FASTQPartitionHelperTest);
 // normal test cases
 TYPED_TEST_P(FASTQPartitionHelperTest, AdjustRange)
 {
-  typedef file_loader<TypeParam, false, false> FileLoaderType;
+  typedef FileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -102,7 +102,7 @@ TYPED_TEST_P(FASTQPartitionHelperTest, AdjustRange)
 
 TYPED_TEST_P(FASTQPartitionHelperTest, AdjustConsecutiveRanges)
 {
-  typedef file_loader<TypeParam, false, false> FileLoaderType;
+  typedef FileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -128,7 +128,7 @@ TYPED_TEST_P(FASTQPartitionHelperTest, AdjustConsecutiveRanges)
 // normal test cases
 TYPED_TEST_P(FASTQPartitionHelperTest, BufferChunks)
 {
-  typedef file_loader<TypeParam, true, false> FileLoaderType;
+  typedef FileLoader<TypeParam, true, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -185,7 +185,7 @@ TYPED_TEST_P(FASTQPartitionHelperTest, BufferChunks)
 // normal test cases
 TYPED_TEST_P(FASTQPartitionHelperTest, UnbufferChunks)
 {
-  typedef file_loader<TypeParam, false, false> FileLoaderType;
+  typedef FileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -240,7 +240,7 @@ TYPED_TEST_P(FASTQPartitionHelperTest, UnbufferChunks)
 // normal test cases
 TYPED_TEST_P(FASTQPartitionHelperTest, BufferChunksWithPreload)
 {
-  typedef file_loader<TypeParam, true, true> FileLoaderType;
+  typedef FileLoader<TypeParam, true, true> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -295,7 +295,7 @@ TYPED_TEST_P(FASTQPartitionHelperTest, BufferChunksWithPreload)
 // normal test cases
 TYPED_TEST_P(FASTQPartitionHelperTest, UnbufferChunksWithPreload)
 {
-  typedef file_loader<TypeParam, false, true> FileLoaderType;
+  typedef FileLoader<TypeParam, false, true> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName

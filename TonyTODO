@@ -243,8 +243,24 @@ simple kmer counting.
 
 
 
+
+
 optimization:  may want to have a way to mark a variable as requiring synchronization, and change OMP pattern.
 
 
 try avoiding iterator comparison.  user offsets instead.  May or may not help depend on compiler optimization.
+
+
+refactoring
+introduce partitioner,
+	runnable
+	runner
+	task
+		with compute op, src (e.g. file), and dest (e.g. mpibuffer)
+		e.g. index generator.
+	rework file_loader, and reintroduce fastq_loader.
+	
+
+
+
 

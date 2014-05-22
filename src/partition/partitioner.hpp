@@ -24,29 +24,34 @@ namespace bliss
     /**
      * @class			bliss::partition::Partitioner
      * @brief
-     * @details
+     * @details   partition a range.  (without knowledge of the data specified by the range,  so no "search" type of partitioning)
      *
      */
     template<typename T, typename Derived>
     class Partitioner {
       public:
-        Partitioner(const range<T> &src, const size_t &numPartitions) : r(src), end(src.end, src.end), nParts(numPartitions) {
-          assert( r.start <= r.end);
-          assert( r.overlap >= 0);
+        Partitioner(const range<T> &src, const int &numPartitions, const size_t &_chunkSize) : r(src), end(src.end, src.end), nParts(numPartitions), chunkSize(_chunkSize) {
+          length = src.end - src.start;
         };
         virtual ~Partitioner() {};
 
-        inline range<T>& getNext(const size_t &pid) {
+        inline range<T>& getNext(const int pid) {
           assert(pid >= 0);
           assert(pid < nParts);  // both non-negative.
 
           return static_cast<Derived*>(this)->getNextImpl(pid);
         }
 
+        void reset() {
+          static_cast<Derived*>(this)->resetImpl();
+        }
+
       protected:
         range<T> r;
         range<T> end;
-        size_t nParts;
+        T length;
+        int nParts;
+        size_t chunkSize;
 
     };
 
@@ -55,35 +60,35 @@ namespace bliss
     class BlockPartitioner : public Partitioner<T, BlockPartitioner<T> >
     {
       public:
-        BlockPartitioner(const range<T> &src, const size_t &numPartitions) :
+        BlockPartitioner(const range<T> &src, const int &numPartitions, const size_t &chunkSize) :
           Partitioner<T, BlockPartitioner<T> >(src, numPartitions), curr(src), done(false) {
 
+          div = length / nParts;
+          rem = length % nParts;
         }
         virtual ~BlockPartitioner() {};
 
       protected:
         range<T> curr;
         bool done;
+        T div;
+        T rem;
 
-        inline range<T>& getNextImpl(const size_t &pid) {
+        inline range<T>& getNextImpl(const int pid) {
 
           if (done) return end;  // can only call this once.
 
           if (nParts == 1) return r;
 
-          T length = curr.end - curr.start;
-
-          T div = length / nParts;
-          T rem = length % nParts;
           if (pid < rem)
           {
             curr.start += static_cast<T>(pid * (div + 1));
-            curr.end = curr.start + static_cast<T>(div + 1) + curr.overlap;
+            curr.end = curr.start + static_cast<T>(div + 1) + r.overlap;
           }
           else
           {
             curr.start += static_cast<T>(pid * div + rem);
-            curr.end = curr.start + static_cast<T>(div) + curr.overlap;
+            curr.end = curr.start + static_cast<T>(div) + r.overlap;
           }
 
           // last entry.  no overlap.
@@ -94,6 +99,11 @@ namespace bliss
           done = true;
           return curr;
         }
+
+        void resetImpl() {
+          curr = r;
+          done = false;
+        }
     };
 
 
@@ -101,15 +111,14 @@ namespace bliss
     class CyclicPartitioner : public Partitioner<T, CyclicPartitioner<T> >
     {
       public:
-        CyclicPartitioner(const range<T> &src, const size_t &numPartitions, const size_t &_chunkSize) :
-          Partitioner<T, CyclicPartitioner<T> >(src, numPartitions), chunkSize(_chunkSize) {
+        CyclicPartitioner(const range<T> &src, const int &numPartitions, const size_t &_chunkSize) :
+          Partitioner<T, CyclicPartitioner<T> >(src, numPartitions) {
 
           done = new bool[numPartitions];
           curr = new range<T>[numPartitions];
-          for (size_t i = 0; i < numPartitions; ++i) {
-            done[i] = false;
-            curr[i] = range<T>(i * _chunkSize, (i+1) * _chunkSize, src.overlap) & r;
-          }
+
+          resetImpl();
+
           iterSize = _chunkSize * numPartitions;
         };
         virtual ~CyclicPartitioner() {
@@ -120,10 +129,9 @@ namespace bliss
       protected:
         bool *done;
         range<T> *curr;
-        size_t chunkSize;
         size_t iterSize;
 
-        inline range<T>& getNextImpl(const size_t &pid) {
+        inline range<T>& getNextImpl(const int pid) {
 
           if (done[pid])  return end;                                // if done, return.
 
@@ -138,6 +146,14 @@ namespace bliss
 
           return curr[pid];
         }
+
+        void resetImpl()
+        {
+          for (size_t i = 0; i < numPartitions; ++i) {
+            done[i] = false;
+            curr[i] = range<T>(i * chunkSize, (i+1) * chunkSize, r.overlap) & r;
+          }
+        }
     };
 
 
@@ -146,13 +162,12 @@ namespace bliss
     class DemandDrivenPartitioner : public Partitioner<T, DemandDrivenPartitioner<T> >
     {
       public:
-        DemandDrivenPartitioner(const range<T> &src, const size_t &numPartitions, const size_t &_chunkSize) :
-          Partitioner<T, DemandDrivenPartitioner<T> >(src, numPartitions), chunkOffset(src.start), chunkSize(_chunkSize), done(false) {
+        DemandDrivenPartitioner(const range<T> &src, const int &numPartitions, const size_t &_chunkSize) :
+          Partitioner<T, DemandDrivenPartitioner<T> >(src, numPartitions) {
 
           curr = new range<T>[numPartitions];
-          for (size_t i = 0; i < numPartitions; ++i) {
-            curr[i] = range<T>();
-          }
+
+          resetImpl();
         };
         virtual ~DemandDrivenPartitioner() {
           delete [] curr;
@@ -160,11 +175,10 @@ namespace bliss
 
       protected:
         size_t chunkOffset;
-        size_t chunkSize;
         range<T> *curr;
         bool done;
 
-        inline range<T>& getNextImpl(const size_t &pid) {
+        inline range<T>& getNextImpl(const int pid) {
           // TODO:  what is MPI equivalent?
           if (done) return end;
 
@@ -173,7 +187,7 @@ namespace bliss
 #pragma omp atomic capture
           {
             s = chunkOffset;
-            chunkPos += chunkSize;
+            chunkOffset += chunkSize;
           }
 
           if (s >= r.end) {
@@ -186,6 +200,14 @@ namespace bliss
           curr[pid] &= r;
 
           return curr[pid];
+        }
+
+        void resetImpl() {
+          chunkOffset = r.start;
+          done = false;
+          for (size_t i = 0; i < numPartitions; ++i) {
+            curr[i] = range<T>();
+          }
         }
     };
 
