@@ -358,7 +358,7 @@ namespace bliss
           //DEBUG("loaded");
           loaded = true;
 
-          recordSize = getRecordSize(3);
+          recordSize = getRecordSize(3);   // look through 3 records to see the max sizeof records.
           chunkPartitioner = ChunkPartitioner(mmap_range, nthreads, std::max(chunkSize, 2 * recordSize));   // TODO: copy constructor works?
                 // at least 2 x the record size for a chunk.
 
