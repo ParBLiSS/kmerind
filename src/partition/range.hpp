@@ -26,7 +26,7 @@
 namespace bliss
 {
   /**
-   * @namespace iterator
+   * @namespace partition
    */
   namespace partition
   {
@@ -88,6 +88,10 @@ namespace bliss
             : block_start(other.block_start), start(other.start),
               end(other.end), overlap(other.overlap)
         {}
+
+        ////// move constructor and move assignment operator
+        ///  NOTE: these are NOT defined because they would take more ops than the copy constructor/assignment operator.
+
 
         /**
          * @brief   default constructor.  construct an empty range, with start and end initialized to 0.
@@ -256,187 +260,6 @@ namespace bliss
           output <<= amount;
           return output;
         }
-
-
-
-        /**
-         * @brief   static function.  block partitioning of a range
-         * @details Given the number of partition, the partition element desired, and a start and end range, deterministically compute the subrange.
-         *    start and end are allowed to be negative, but end >= start is required.
-         *    OVERLAP IS PART OF END.
-         *
-         * @param[in] np        number of partitions
-         * @param[in] pid       id of specific partition desired
-         * @param[in] start     the starting offset of the range to be partitioned.
-         * @param[in] end       the ending offset of the range to be partitioned
-         * @param[in] _overlap  the overlap between partitions
-         * @return              computed subrange
-         */
-        static range<T> block_partition(const size_t &np, const size_t &pid,
-                                        const T &start, const T &end,
-                                        const T &_overlap = 0)
-        {
-          std::cerr << "range::block_partition  TESTING ONLY.  to be deprecated." << std::endl;
-
-          BlockPartitioner<T> partitioner(range<T>(start, end, _overlap), np);
-          return partitioner.getNext(pid);
-
-//          assert( start <= end);
-//          assert(_overlap >= 0);
-//          assert(pid >= 0);
-//          assert(pid < np);  // both non-negative.
-//
-//          range<T> output(start, end, _overlap);
-//
-//          if (np == 1)
-//            return output;
-//
-//          size_t length = end - start;
-//
-//          size_t div = length / np;
-//          size_t rem = length % np;
-//          if (pid < rem)
-//          {
-//            output.start += static_cast<T>(pid * (div + 1));
-//            output.end = output.start + static_cast<T>(div + 1) + _overlap;
-//          }
-//          else
-//          {
-//            output.start += static_cast<T>(pid * div + rem);
-//            output.end = output.start + static_cast<T>(div) + _overlap;
-//          }
-//
-//          // last entry.  no overlap.
-//          if (output.end > end) {
-//            output.end = end;
-//            output.overlap = 0;
-//          }
-//          assert(output.start <= output.end);
-//
-//          output.block_start = output.start;
-//          return output;
-        }
-
-        /**
-         * @brief static function.  block partitioning of a range
-         * @details Given the number of partition, the partition element desired, and a start and end range, deterministically compute the subrange.
-         *    start end end are allowed to be negative, but end >= start is required.
-         *
-         * @param[in] np        number of partitions
-         * @param[in] pid       id of specific partition desired
-         * @param[in] other     range object to be partitioned
-         * @return              computed subrange
-         */
-        static range<T> block_partition(const size_t &np, const size_t &pid,
-                                        const range<T> &other)
-        {
-          return block_partition(np, pid, other.start, other.end, other.overlap);
-        }
-
-        /**
-         * @brief static function.  block partitioning of a range
-         * @details Given the number of partition, the partition element desired, deterministically compute a subrange for the current range object.
-         *    start end end are allowed to be negative, but end >= start is required.
-         *
-         * @param[in] np        number of partitions
-         * @param[in] pid       id of specific partition desired
-         * @return              computed subrange
-         */
-        range<T> block_partition(const size_t &np, const size_t &pid) const
-        {
-          return block_partition(np, pid, this->start, this->end, this->overlap);
-        }
-
-//        /**
-//
-//         * @brief   static function.  page aligned, non-overlapping block partitioning of a range
-//         * @details Given the number of partition, the partition element desired, and a start and end range, deterministically compute the subrange.
-//         *    start and end are allowed to be negative, but end >= start is required.
-//         *    OVERLAP IS PART OF END.
-//         *
-//         * @param[in] np        number of partitions
-//         * @param[in] pid       id of specific partition desired
-//         * @param[in] page_size the size of the underlying block.
-//         * @param[in] start     the starting offset of the range to be partitioned.
-//         * @param[in] end       the ending offset of the range to be partitioned
-//         * @param[in] _overlap  the overlap between partitions
-//         * @return              computed subrange
-//         */
-//        static range<T> paged_block_partition(const size_t &np, const size_t &pid, const size_t& page_size,
-//                                              const T &start, const T &end,
-//                                              const T &_overlap = 0)
-//        {
-//          assert( start <= end);
-//          assert(_overlap >= 0);
-//          assert(pid >= 0)
-//          assert(pid < np);  // both non-negative.
-//          assert(page_size > 0);
-//
-//          range<T> output(start, end, _overlap);
-//
-//          if (np == 1)
-//          {
-//            return output;
-//          }
-//
-//
-//          // construct in units of page.
-//          range<T> pages;
-//          pages.start = start / page_size;
-//          pages.end = (end + page_size - 1) / page_size;
-//          pages.overlap = (_overlap + page_size - 1) / page_size;
-//
-//          // now partition the pages
-//          output = block_partition(np, pid, pages);
-//
-//          // expand the new output
-//          output.start *= page_size;
-//          output.end *= page_size;
-//          output.overlap = 0;
-//
-//          // bound by original start and end.
-//          output.start = std::max(output.start, start);
-//          output.end = std::min(output.end, end);
-//
-//          // last check
-//          assert(output.start <= output.end);
-//          output.block_start = output.start;
-//
-//          return output;
-//        }
-//
-//
-//
-//        /**
-//         * @brief static function.  page aligned, non-overlapping block partitioning of a range
-//         * @details Given the number of partition, the partition element desired, and a start and end range, deterministically compute the subrange.
-//         *    start end end are allowed to be negative, but end >= start is required.
-//         *
-//         * @param[in] np        number of partitions
-//         * @param[in] pid       id of specific partition desired
-//         * @param[in] other     range object to be partitioned
-//         * @return              computed subrange
-//         */
-//        static range<T> paged_block_partition(const size_t &np, const size_t &pid,
-//                                              const size_t &page_size,
-//                                              const range<T> &other)
-//        {
-//          return paged_block_partition(np, pid, page_size, other.start, other.end, other.overlap);
-//        }
-//
-//        /**
-//         * @brief static function.  page aligned, non-overlapping block partitioning of a range
-//         * @details Given the number of partition, the partition element desired, deterministically compute a subrange for the current range object.
-//         *    start end end are allowed to be negative, but end >= start is required.
-//         *
-//         * @param[in] np        number of partitions
-//         * @param[in] pid       id of specific partition desired
-//         * @return              computed subrange
-//         */
-//        range<T> paged_block_partition(const size_t &np, const size_t &pid, const size_t &page_size) const
-//        {
-//          return paged_block_partition(np, pid, page_size, this->start, this->end, this->overlap);
-//        }
 
 
         /**

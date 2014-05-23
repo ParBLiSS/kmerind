@@ -57,6 +57,8 @@ namespace bliss
     };
 
 
+    /// TODO: change this to use a single iterator, with ranges for the other fields?
+
 
     /**
      * @class     bliss::io::fastq_sequence
@@ -76,8 +78,8 @@ namespace bliss
         typedef Alphabet AlphabetType;
         typedef Iterator IteratorType;
 
-        Iterator name;
-        Iterator name_end;
+//        Iterator name;
+//        Iterator name_end;
         Iterator seq;
         Iterator seq_end;
 
@@ -167,13 +169,13 @@ namespace bliss
         }
 
         template <typename Q = Quality>
-        inline typename std::enable_if<!std::is_same<Q, void>::value>::type
+        inline typename std::enable_if<!std::is_void<Q>::value>::type
         populateQuality(const Iterator & start, const Iterator & end) {
           output.qual = start;
           output.qual_end = end;
         }
         template <typename Q = Quality>
-        inline typename std::enable_if<std::is_same<Q, void>::value>::type
+        inline typename std::enable_if<std::is_void<Q>::value>::type
         populateQuality(const Iterator & start, const Iterator & end) {
         }
 
@@ -294,8 +296,8 @@ namespace bliss
 
           // now populate the output
           output.id.composite = coordinates.start + (starts[0] - it);
-          output.name = starts[0];
-          output.name_end = ends[0];
+//          output.name = starts[0];
+//          output.name_end = ends[0];
           output.seq = starts[1];
           output.seq_end = ends[1];
 

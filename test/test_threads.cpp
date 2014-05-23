@@ -885,14 +885,16 @@ int main(int argc, char** argv) {
 
 
     /// open file
-    // create file loader
-    // get file size (full range) from loader
-    // use partitioner to do rough partition of the range
-    // then use fastq_partitioner to adjust partition
-    // then load the file.
+    // create FASTQ Loader
+    // call get NextPartition Range to block partition,
+    // call "load" with the partition range.
 
-    // set up new partitioner for chunking
-    // set up OMP call:  input file_loader, partitioner, compute op, and output buffer
+    /// processing
+    //  get Next Chunk Range
+    // then call getChunk with the range.
+    // call compute with the DataBlock.
+
+    // set up OMP call:  input file_loader, compute op, and output buffer
     // set up MPI receiver. - capture output
     // (set up MPI sender)
 

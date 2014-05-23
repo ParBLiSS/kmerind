@@ -18,9 +18,10 @@
 #include <type_traits>
 #include <vector>
 #include <algorithm>
+#include <utility>
 
-#include "iterators/container_traits.hpp"
-#include "iterators/range.hpp"
+#include "utils/container_traits.hpp"
+#include "partition/range.hpp"
 
 namespace bliss
 {
@@ -65,6 +66,37 @@ namespace bliss
         typedef OutputIterator                                    iterator;
         typedef typename std::add_const<OutputIterator>::type     const_iterator;
 
+        /// constructor is default
+        DataBlock() : range(), empty(true) {};
+
+        /// move constructor and assignment operator
+        DataBlock(DataBlock<Derived, Iterator, Range, OutputIterator>&& other) : range(other.range), empty(other.empty) {
+          other.range = Range();
+          other.empty = true;
+        }
+
+        DataBlock<Derived, Iterator, Range, OutputIterator>& operator=(DataBlock<Derived, Iterator, Range, OutputIterator>&& other) {
+          if (this != &other) {
+            empty = other.empty;  other.empty = true;
+            range = other.range;  other.range = Range();
+          }
+          return *this;
+        }
+
+        /// copy constructor and assignemtn operator
+        DataBlock(const DataBlock<Derived, Iterator, Range, OutputIterator>& other) : range(other.range), empty(other.empty){
+        }
+
+        DataBlock<Derived, Iterator, Range, OutputIterator>& operator=(const DataBlock<Derived, Iterator, Range, OutputIterator>& other) {
+          if (this != &other) {
+            empty = other.empty;
+            range = other.range;
+          }
+          return *this;
+        }
+
+        virtual ~DataBlock() {};
+
         const Range& getRange() const {
           return range;
         }
@@ -105,6 +137,39 @@ namespace bliss
         static_assert(std::is_same<typename SuperType::ValueType, typename Container::value_type>::value, "Iterator and Container should have the same element types");
 
         static_assert(has_assign_method<Container, Iterator>(nullptr), "Container needs to be a sequence container with 'assign' method.");
+
+
+        /// constructor is default
+        BufferedDataBlock() : SuperType() {};
+
+        /// move constructor and assignment operator
+        BufferedDataBlock(BufferedDataBlock<Iterator, Range, Container>&& other) :
+          SuperType(std::forward(other)), buffer(std::move(other.buffer)) {
+        }
+
+        BufferedDataBlock<Iterator, Range, Container>& operator=(BufferedDataBlock<Iterator, Range, Container>&& other) {
+          if (this != &other) {
+            this->SuperType::operator=(std::forward(other));
+            buffer = std::move(other.buffer);
+          }
+          return *this;
+        }
+
+        /// copy constructor and assignemtn operator
+        BufferedDataBlock(const BufferedDataBlock<Iterator, Range, Container>& other) : SuperType(other), buffer(other.buffer) {
+        }
+
+        BufferedDataBlock<Iterator, Range, Container>& operator=(const BufferedDataBlock<Iterator, Range, Container>& other) {
+          if (this != &other) {
+            this->SuperType::operator=(other);
+            buffer = other.buffer;
+          }
+          return *this;
+        }
+
+        virtual ~BufferedDataBlock() {};
+
+
 
         bool hasBufferImpl() {
           return true;
@@ -180,6 +245,42 @@ namespace bliss
     {
       public:
         typedef DataBlock<UnbufferedDataBlock<Iterator, Range>, Iterator, Range, typename std::remove_const<typename std::remove_reference<Iterator>::type>::type>  SuperType;
+
+        /// constructor is default
+        UnbufferedDataBlock() : SuperType() {};
+
+        /// move constructor and assignment operator
+        UnbufferedDataBlock(UnbufferedDataBlock<Iterator, Range>&& other) :
+          SuperType(std::forward(other)), startIter(other.startIter), endIter(other.endIter) {
+          other.startIter = Iterator();
+          other.endIter = Iterator();
+        }
+
+        UnbufferedDataBlock<Iterator, Range>& operator=(UnbufferedDataBlock<Iterator, Range>&& other) {
+          if (this != &other) {
+            this->SuperType::operator=(std::forward(other));
+            startIter = other.startIter;      other.startIter = Iterator();
+            endIter = other.endIter;          other.endIter = Iterator();
+          }
+          return *this;
+        }
+
+        /// copy constructor and assignemtn operator
+        UnbufferedDataBlock(const UnbufferedDataBlock<Iterator, Range>& other) : SuperType(other), startIter(other.startIter), endIter(other.endIter) {
+        }
+
+        UnbufferedDataBlock<Iterator, Range>& operator=(const UnbufferedDataBlock<Iterator, Range>& other) {
+          if (this != &other) {
+            this->SuperType::operator=(other);
+            startIter = other.startIter;
+            endIter = other.endIter;
+          }
+          return *this;
+        }
+
+        virtual ~UnbufferedDataBlock() {};
+
+
 
         bool hasBufferImpl() {
           return false;

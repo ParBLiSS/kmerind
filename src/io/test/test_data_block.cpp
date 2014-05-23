@@ -6,7 +6,7 @@
  */
 
 #include "io/data_block.hpp"
-#include "iterators/range.hpp"
+#include "partition/range.hpp"
 
 #include <gtest/gtest.h>
 #include <cstdint>  // for uint64_t, etc.
@@ -47,16 +47,16 @@ TYPED_TEST_CASE_P(DataBlockTest);
 
 // testing the equal function
 TYPED_TEST_P(DataBlockTest, NoBuffer){
-  typedef bliss::io::UnbufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t> >    DB_Type;
+  typedef bliss::io::UnbufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::partition::range<size_t> >    DB_Type;
 
-  bliss::iterator::range<size_t> r(0, this->slen);
+  bliss::partition::range<size_t> r(0, this->slen);
   DB_Type db;
   db.assign(this->src.begin(), this->src.end(), r);
   EXPECT_EQ(this->src.begin(), db.begin());
   EXPECT_EQ(this->src.end(),   db.end()  );
 
 
-  bliss::iterator::range<size_t> r2(10, this->slen / 2);
+  bliss::partition::range<size_t> r2(10, this->slen / 2);
   DB_Type db2;
   db2.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2);
   EXPECT_EQ(this->src.begin()+ r2.start, db2.begin());
@@ -67,9 +67,9 @@ TYPED_TEST_P(DataBlockTest, NoBuffer){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockTest, BufferList){
-  typedef bliss::io::BufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>, std::list<TypeParam> > DB_Type;
+  typedef bliss::io::BufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::partition::range<size_t>, std::list<TypeParam> > DB_Type;
 
-  bliss::iterator::range<size_t> r(10, 10 + this->dlen);
+  bliss::partition::range<size_t> r(10, 10 + this->dlen);
   DB_Type db;
   db.assign(this->src.begin() + r.start, this->src.begin() + r.end, r);
 
@@ -82,7 +82,7 @@ TYPED_TEST_P(DataBlockTest, BufferList){
 
 
 
-  bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
+  bliss::partition::range<size_t> r2(15, 15 + this->dlen);
   db.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2);
 
 
@@ -101,9 +101,9 @@ TYPED_TEST_P(DataBlockTest, BufferList){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockTest, BufferVector){
-  typedef bliss::io::BufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t> > DB_Type;
+  typedef bliss::io::BufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::partition::range<size_t> > DB_Type;
 
-  bliss::iterator::range<size_t> r(10, 10 + this->dlen);
+  bliss::partition::range<size_t> r(10, 10 + this->dlen);
   DB_Type db;
   db.assign(this->src.begin() + r.start, this->src.begin() + r.end, r);
 
@@ -116,7 +116,7 @@ TYPED_TEST_P(DataBlockTest, BufferVector){
 
 
 
-  bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
+  bliss::partition::range<size_t> r2(15, 15 + this->dlen);
   db.assign(this->src.begin() + r2.start, this->src.begin() + r2.end, r2);
 
 
@@ -175,9 +175,9 @@ TYPED_TEST_CASE_P(DataBlockPtrTest);
 
 // testing the equal function
 TYPED_TEST_P(DataBlockPtrTest, NoBuffer){
-  typedef bliss::io::UnbufferedDataBlock<TypeParam*, bliss::iterator::range<size_t> > DB_Type;
+  typedef bliss::io::UnbufferedDataBlock<TypeParam*, bliss::partition::range<size_t> > DB_Type;
 
-  bliss::iterator::range<size_t> r(0, this->slen);
+  bliss::partition::range<size_t> r(0, this->slen);
   DB_Type db;
   db.assign(this->src, this->src + this->slen, r);
   EXPECT_EQ(this->src,                db.begin());
@@ -188,7 +188,7 @@ TYPED_TEST_P(DataBlockPtrTest, NoBuffer){
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }
 
-  bliss::iterator::range<size_t> r2(10, this->slen / 2);
+  bliss::partition::range<size_t> r2(10, this->slen / 2);
   DB_Type db2;
   db2.assign(this->src + r2.start, this->src + r2.end, r2);
   EXPECT_EQ(this->src + r2.start, db2.begin());
@@ -205,9 +205,9 @@ TYPED_TEST_P(DataBlockPtrTest, NoBuffer){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockPtrTest, BufferVector){
-  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::iterator::range<size_t>, std::vector<TypeParam> > DB_Type;
+  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::partition::range<size_t>, std::vector<TypeParam> > DB_Type;
 
-  bliss::iterator::range<size_t> r(10, 10 + this->dlen);
+  bliss::partition::range<size_t> r(10, 10 + this->dlen);
   DB_Type db;
   db.assign(this->src + r.start, this->src + r.end, r);
 
@@ -219,7 +219,7 @@ TYPED_TEST_P(DataBlockPtrTest, BufferVector){
 
   std::vector<TypeParam> result1(db.begin(), db.end());
 
-  bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
+  bliss::partition::range<size_t> r2(15, 15 + this->dlen);
   db.assign(this->src + r2.start, this->src + r2.end, r2);
 
   i = r2.start;
@@ -240,9 +240,9 @@ TYPED_TEST_P(DataBlockPtrTest, BufferVector){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockPtrTest, BufferList){
-  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::iterator::range<size_t>, std::list<TypeParam> > DB_Type;
+  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::partition::range<size_t>, std::list<TypeParam> > DB_Type;
 
-  bliss::iterator::range<size_t> r(10, 10 + this->dlen);
+  bliss::partition::range<size_t> r(10, 10 + this->dlen);
   DB_Type db;
   db.assign(this->src + r.start, this->src + r.end, r);
 
@@ -254,7 +254,7 @@ TYPED_TEST_P(DataBlockPtrTest, BufferList){
 
   std::vector<TypeParam> result1(db.begin(), db.end());
 
-  bliss::iterator::range<size_t> r2(15, 15 + this->dlen);
+  bliss::partition::range<size_t> r2(15, 15 + this->dlen);
   db.assign(this->src + r2.start, this->src + r2.end, r2);
 
   i = r2.start;
@@ -313,9 +313,9 @@ REGISTER_TYPED_TEST_CASE_P(DataBlockPtrTest, NoBuffer, BufferVector, BufferList)
 //// failed construction due to asserts
 //TYPED_TEST_P(DataBlockDeathTest, badRange){
 //
-//  typedef bliss::io::DataBlock<typename std::vector<TypeParam>::iterator, bliss::iterator::range<size_t>> DB_Type;
+//  typedef bliss::io::DataBlock<typename std::vector<TypeParam>::iterator, bliss::partition::range<size_t>> DB_Type;
 //
-//  bliss::iterator::range<size_t> r2(0, this->slen);
+//  bliss::partition::range<size_t> r2(0, this->slen);
 //  std::string err_regex = ".data_block.hpp.* Assertion .* failed.*";
 //
 //  // basically, if start is larger than end.

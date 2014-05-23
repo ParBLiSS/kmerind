@@ -93,64 +93,6 @@ TYPED_TEST_P(RangeTest, copyConstruct){
 }
 
 
-// test the block partitioning operation.  Only testing the base function that all other overloaded functions calls
-TYPED_TEST_P(RangeTest, partition){
-  range<TypeParam> r;
-  TypeParam e;
-
-  std::vector<TypeParam> starts =
-  { std::numeric_limits<TypeParam>::min(), std::numeric_limits<TypeParam>::lowest(),
-    0, 1, 2,
-    std::numeric_limits<TypeParam>::max()-2, (std::numeric_limits<TypeParam>::max() >> 1) + 1};
-
-  std::vector<TypeParam> lens =
-  { 0, 1, 2};
-
-  std::vector<size_t> partitionCount =
-  { 1, 2, std::numeric_limits<size_t>::max()};
-
-  for (auto start : starts)
-  {
-    for (auto len : lens)
-    {
-      for (size_t p : partitionCount)
-      {
-//        if (len < i)
-//          continue;
-
-        auto rem = len % p;
-        auto div = len / p;
-
-        //      printf("%ld, %d\n", static_cast<size_t>(len), i);
-        size_t block = 0;
-
-        // first block
-        r = range<TypeParam>::block_partition(p, block, start, start+len);
-        EXPECT_EQ(start, r.start);
-        e = (rem == 0 ? (div) : (div + 1)) + start;
-        EXPECT_EQ(e, r.end);
-
-        // middle block
-        block = (p-1)/2;
-        r = range<TypeParam>::block_partition(p, block, start, start+len);
-        e = (rem == 0 ? block * div :
-            ( block >= rem ? block * div + rem : block * (div + 1))) + start;
-        EXPECT_EQ(e, r.start);
-        e = (rem == 0 ? (block + 1) * div :
-            ( (block + 1) >= rem ? (block + 1) * div + rem : (block + 1) * (div + 1))) + start;
-        EXPECT_EQ(e, r.end);
-
-        // last block
-        block = p-1;
-        r = range<TypeParam>::block_partition(p, block, start, start+len);
-        e = (rem == 0 ? block * div :
-            ( block >= rem ? block * div + rem : block * (div + 1))) + start;
-        EXPECT_EQ(e, r.start);
-        EXPECT_EQ(start+len, r.end);
-      }
-    }
-  }
-}
 
 // test page alignment
 TYPED_TEST_P(RangeTest, align){
@@ -185,8 +127,7 @@ TYPED_TEST_P(RangeTest, align){
 }
 
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(RangeTest, equal, assignment, copyConstruct,
-                           partition, align);
+REGISTER_TYPED_TEST_CASE_P(RangeTest, equal, assignment, copyConstruct, align);
 
 ////////////////////////
 //  DEATH TESTS - test class named BlahDeathTest so gtest will not run these in a threaded context. and will run first
@@ -218,54 +159,6 @@ TYPED_TEST_P(RangeDeathTest, constructFails){
 }
 
 
-// failed partitions due to asserts.
-TYPED_TEST_P(RangeDeathTest, partitionFails){
-  range<TypeParam> r;
-
-  std::string err_regex = ".*range.hpp.*block_partition.* Assertion .* failed.*";
-
-  // end is before start
-  std::vector<TypeParam> starts =
-  { std::numeric_limits<TypeParam>::min()+1, std::numeric_limits<TypeParam>::lowest()+1, 1, 2, std::numeric_limits<TypeParam>::max(), (std::numeric_limits<TypeParam>::max() >> 1) + 1};
-
-  std::vector<size_t> partitionCount =
-  { 1, 2, std::numeric_limits<size_t>::max()};
-  for (auto start : starts)
-  {
-    for (size_t i : partitionCount)
-    {
-      //printf("%ld, %ld\n", static_cast<int64_t>(start), i);
-      EXPECT_EXIT(range<TypeParam>::block_partition(i, 0,         start, start - 1), ::testing::KilledBySignal(SIGABRT), err_regex);
-      EXPECT_EXIT(range<TypeParam>::block_partition(i, (i-1) / 2, start, start - 1), ::testing::KilledBySignal(SIGABRT), err_regex);
-      EXPECT_EXIT(range<TypeParam>::block_partition(i, i-1,       start, start - 1), ::testing::KilledBySignal(SIGABRT), err_regex);
-    }
-  }
-
-  // proc id is too big
-  for (auto start : starts)
-  {
-    for (size_t i : partitionCount)
-    {
-      //printf("%ld, %ld\n", static_cast<int64_t>(start), i);
-      EXPECT_EXIT(range<TypeParam>::block_partition(i, i, start - 1, start), ::testing::KilledBySignal(SIGABRT), err_regex);
-    }
-  }
-
-  // negative or zero parition sizes
-  partitionCount =
-  { 0, std::numeric_limits<size_t>::lowest(), std::numeric_limits<size_t>::min()};
-  for (auto start : starts)
-  {
-    for (size_t i : partitionCount)
-    {
-      //printf("%ld, %ld\n", static_cast<int64_t>(start), i);
-
-      EXPECT_EXIT(range<TypeParam>::block_partition(i, 0,         start - 1, start), ::testing::KilledBySignal(SIGABRT), err_regex);
-      EXPECT_EXIT(range<TypeParam>::block_partition(i, (i-1) / 2, start - 1, start), ::testing::KilledBySignal(SIGABRT), err_regex);
-      EXPECT_EXIT(range<TypeParam>::block_partition(i, i-1,       start - 1, start), ::testing::KilledBySignal(SIGABRT), err_regex);
-    }
-  }
-}
 
 
 // failed alignment
@@ -308,8 +201,7 @@ TYPED_TEST_P(RangeDeathTest, alignFails){
 }
 
 // register the death test cases
-REGISTER_TYPED_TEST_CASE_P(RangeDeathTest, constructFails, partitionFails,
-                           alignFails);
+REGISTER_TYPED_TEST_CASE_P(RangeDeathTest, constructFails, alignFails);
 
 //////////////////// RUN the tests with different types.
 

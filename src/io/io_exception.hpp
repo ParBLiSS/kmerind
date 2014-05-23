@@ -21,7 +21,7 @@ namespace bliss
      * @class			bliss::io::IOException
      * @brief
      * @details
-     *
+     *            Note: have move constructor and assignment operators.
      */
     class IOException : public std::exception
     {
@@ -37,6 +37,18 @@ namespace bliss
         IOException(const std::string &_msg)
         {
           message = _msg;
+        }
+
+        IOException(IOException&& other) {
+          message.swap(other.message);
+        }
+
+        IOException& operator=(IOException&& other) {
+          if (this != &other) {
+            std::string().swap(message);
+            message.swap(other.message);
+          }
+          return *this;
         }
 
         virtual ~IOException() {};

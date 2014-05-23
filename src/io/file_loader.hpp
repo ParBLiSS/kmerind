@@ -77,7 +77,7 @@ namespace bliss
      *
      */
     template <typename T, bool Buffering = true, bool Preloading = false,
-          typename ChunkPartitioner = bliss::partition::DemandDrivenPartitioner<size_t>,
+          typename ChunkPartitioner = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
           typename Derived = void >
     class FileLoader
     {
@@ -108,7 +108,7 @@ namespace bliss
         std::string filename;
 
         RangeType fileRange;  // offset in file from where to read
-        InputIteratorType mmap_data;      // mem-mapped data, page aligned.  strictly internal
+        T* mmap_data;      // mem-mapped data, page aligned.  strictly internal
         RangeType mmap_range;      // offset in file from where to read
 
         DataType srcData;
@@ -128,7 +128,7 @@ namespace bliss
 
         DataBlockType *dataBlocks;
 
-        bliss::partition::BlockPartitioner<SizeType> partitioner;   // block partitioning is the default.
+        bliss::partition::BlockPartitioner<RangeType > partitioner;   // block partitioning is the default.
         ChunkPartitioner chunkPartitioner;                          // construct when mmap_range change, on load.
 
 
@@ -136,6 +136,74 @@ namespace bliss
 
         /////////////// Constructor and Destructor
       public:
+
+        /// defining move constructor will disallow automatic copy constructor.
+        //  this is to prevent copying the buffers, to keep a single handle on the input file.
+        FileLoader(FileLoader<T, Buffering, Preloading, ChunkPartitioner, Derived>&& other) {
+          page_size   = other.page_size;                         other.page_size = 1;
+          file_handle = other.file_handle;                       other.file_handle = -1;
+          filename.swap(other.filename);
+          fileRange   = other.fileRange;                         other.fileRange = RangeType();
+          mmap_data   = other.mmap_data;                         other.mmap_data = nullptr;
+          mmap_range  = other.mmap_range;                        other.mmap_range = RangeType();
+          srcData     = std::move(other.srcData);
+          loaded      = other.loaded;                            other.loaded = false;
+          preloaded   = other.preloaded;                         other.preloaded = false;
+          nthreads    = other.nthreads;                          other.nthreads = 1;
+          chunkSize   = other.chunkSize;                         other.chunkSize = 1;
+          nprocs      = other.nprocs;                            other.nprocs = 1;
+          rank        = other.rank;                              other.rank = 0;
+#if defined(USE_MPI)
+          comm        = other.comm;                              other.comm = MPI_COMM_NULL;
+#endif
+          dataBlocks  = other.dataBlocks;                        other.dataBlocks = nullptr;
+          partitioner = other.partitioner;                       other.partitioner = bliss::partition::BlockPartitioner<RangeType>();
+          chunkPartitioner = other.chunkPartitioner;             other.chunkPartitioner = ChunkPartitioner();
+          recordSize  = other.recordSize;                        other.recordSize = 1;
+        }
+
+        /// defining move assignment will disallow automatic copy assignment operator
+        FileLoader& operator=(FileLoader<T, Buffering, Preloading, ChunkPartitioner, Derived>&& other) {
+          if (this != &other) {
+            //DEBUG("DESTROY");
+            delete [] dataBlocks;
+
+            unload();
+
+            //printf("unloading complete.\n");
+            if (file_handle != -1) {
+              close(file_handle);
+              file_handle = -1;
+            }
+
+            page_size   = other.page_size;                         other.page_size = 1;
+            file_handle = other.file_handle;                       other.file_handle = -1;
+            filename.swap(other.filename);
+            fileRange   = other.fileRange;                         other.fileRange = RangeType();
+            mmap_data   = other.mmap_data;                         other.mmap_data = nullptr;
+            mmap_range  = other.mmap_range;                        other.mmap_range = RangeType();
+            srcData     = std::move(other.srcData);
+            loaded      = other.loaded;                            other.loaded = false;
+            preloaded   = other.preloaded;                         other.preloaded = false;
+            nthreads    = other.nthreads;                          other.nthreads = 1;
+            chunkSize   = other.chunkSize;                         other.chunkSize = 1;
+            nprocs      = other.nprocs;                            other.nprocs = 1;
+            rank        = other.rank;                              other.rank = 0;
+  #if defined(USE_MPI)
+            comm        = other.comm;                              other.comm = MPI_COMM_NULL;
+  #endif
+            dataBlocks  = other.dataBlocks;                        other.dataBlocks = nullptr;
+            partitioner = other.partitioner;                       other.partitioner = bliss::partition::BlockPartitioner<RangeType>();
+            chunkPartitioner = other.chunkPartitioner;             other.chunkPartitioner = ChunkPartitioner();
+            recordSize  = other.recordSize;                        other.recordSize = 1;
+          }
+          return *this;
+        }
+
+
+        /// defining a constructor automatically disallows the default no arg constructor.
+
+
         /**
          * opens the file and save file handle.  specifies the range to load.
          *
@@ -158,28 +226,21 @@ namespace bliss
          *                        to get just the calling node, use MPI_COMM_SELF (gives the right nprocs).
          */
 #if defined(USE_MPI)
-        explicit FileLoader(const std::string &_filename, const int _nThreads = 1, const size_t _chunkSize,
-                    const MPI_Comm& _comm = MPI_COMM_SELF) throw (IOException)
+        explicit FileLoader(const std::string &_filename, const MPI_Comm& _comm, const int _nThreads = 1, const size_t _chunkSize = 1) throw (bliss::io::IOException)
             : file_handle(-1), filename(_filename), fileRange(), mmap_data(nullptr),
               mmap_range(), loaded(false), preloaded(false),
-              nthreads(_nThreads), chunkSize(_chunkSize), comm(_comm), dataBlocks(nullptr)
-#else
-        explicit FileLoader(const std::string &_filename, const int _nThreads = 1, const size_t chunkSize,
-                            const int _nProcs = 1, const int _rank = 0 ) throw (IOException)
-            : file_handle(-1), filename(_filename), fileRange(), mmap_data(nullptr),
-              mmap_range(), loaded(false), preloaded(false),
-              nthreads(_nThreads), chunkSize(_chunkSize), nprocs(_nProcs), rank(_rank), dataBlocks(nullptr)
-#endif
+              nthreads(_nThreads), chunkSize(_chunkSize), comm(_comm), dataBlocks(nullptr), recordSize(1)
         {
-#if defined(USE_MPI)
+          assert(filename.length() > 0);
+
+          assert(_nThreads > 0);
+          assert(_chunkSize > 0);
+
           // get the processor rank and nprocessors.
           MPI_Comm_rank(comm, &rank);
           MPI_Comm_size(comm, &nprocs);
-#endif
-          //DEBUG("CONSTRUCT");
 
-          assert(filename.length() > 0);
-          page_size = sysconf(_SC_PAGE_SIZE);
+          //DEBUG("CONSTRUCT");
 
           /// get the file size.
           SizeType file_size = 0;
@@ -193,40 +254,54 @@ namespace bliss
 //            std::cerr << " sysconf block size is " << page_size << std::endl;
           }
 
-#if defined(USE_MPI)
           if (nprocs > 1) {
             /// broadcast filesize to all
             MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, comm);
           }
-#endif
+
 //          if (rank == nprocs - 1)
 //          {
 //            INFO("file size for " << filename << " is " << file_size);
 //          }
 
-          // compute the full mmap_range
-          fileRange = RangeType(0, file_size / sizeof(T));   // range is in units of T
-
-          /// open the file and get a handle.
-          file_handle = open64(filename.c_str(), O_RDONLY);
-          if (file_handle == -1)
-          {
-            std::stringstream ss;
-            int myerr = errno;
-            ss << "ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr);
-            throw IOException(ss.str());
-          }
-
-          //DEBUG("file_loader initialized for " << filename);
-
-
-          dataBlocks = new DataBlockType[nthreads];  // as many as there are threads, to allow delayed access to the datablocks.
-
-
-          // partition the full mmap_range
-          partitioner = bliss::partition::BlockPartitioner<SizeType>(fileRange, nprocs, chunkSize);
-
+          init(file_size);
         }
+#endif
+
+
+        explicit FileLoader(const std::string &_filename,
+                            const int _nProcs = 1, const int _rank = 0,
+                            const int _nThreads = 1, const size_t _chunkSize = 1 ) throw (bliss::io::IOException)
+            : file_handle(-1), filename(_filename), fileRange(), mmap_data(nullptr),
+              mmap_range(), loaded(false), preloaded(false),
+              nthreads(_nThreads), chunkSize(_chunkSize), nprocs(_nProcs), rank(_rank), dataBlocks(nullptr), recordSize(1)
+        {
+          //DEBUG("CONSTRUCT");
+
+          assert(filename.length() > 0);
+          assert(_nThreads > 0);
+          assert(_chunkSize > 0);
+          assert(_rank >= 0);
+          assert(_nProcs > _rank);
+
+
+          /// get the file size.
+          SizeType file_size = 0;
+          struct stat filestat;
+          stat(filename.c_str(), &filestat);
+          file_size = static_cast<SizeType>(filestat.st_size);
+//            std::cerr << "file size is " << file_size;
+//            std::cerr << " block size is " << filestat.st_blksize;
+//            std::cerr << " sysconf block size is " << page_size << std::endl;
+
+//          if (rank == nprocs - 1)
+//          {
+//            INFO("file size for " << filename << " is " << file_size);
+//          }
+
+          init(file_size);
+        }
+
 
         /**
          * closes the file.
@@ -245,10 +320,6 @@ namespace bliss
           }
         }
 
-
-      private:
-        // disallow default constructor.
-        FileLoader() {};
 
 
         ////// PUBLIC METHODS
@@ -281,17 +352,28 @@ namespace bliss
 
         /**
          * get the Partitioned Range.  this method allows calling Derived class' version, to further refine the partitioned range.
+         * have a default.  if default is -1, then use rank.  not in inner loop so okay to check param value each call
+         *
+         * @param pid
          * @return
          */
-        RangeType getNextPartitionRange() {
-          if (std::is_same<Derived, void>::value) {
-            // if just FileLoader calls this.
+        template<typename D = Derived>
+        typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextPartitionRange(const int pid = -1) {
+          // if just FileLoader calls this.
+          if (pid == -1)
             return partitioner.getNext(rank);
-          } else {
-            // use the derived one.
-            return static_cast<Derived*>(this)->getNextPartitionRangeImpl();
-          }
+          else
+            return partitioner.getNext(pid);
         }
+        template<typename D = Derived>
+        typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextPartitionRange(const int pid = -1) {
+          // use the derived one.
+          if (pid == -1)
+            return static_cast<Derived*>(this)->getNextPartitionRangeImpl(rank);
+          else
+            return static_cast<Derived*>(this)->getNextPartitionRangeImpl(pid);
+        }
+
 
 
         void resetChunkRange() {
@@ -300,13 +382,20 @@ namespace bliss
         }
 
         // partitioner has chunk size. and current position.  at most as many as number of threads (specified in constructor) calling this function.
-        RangeType getNextChunkRange(const int tid) {
-          if (std::is_same<Derived, void>::value) {
-            assert(loaded);
-            return chunkPartitioner.getNext(tid);
-          } else {
-            return static_cast<Derived*>(this)->getNextChunkRangeImpl(tid);
-          }
+        // not using a default tid because this function could be called a lot.
+        /**
+         *
+         * @param tid
+         * @return
+         */
+        template <typename D = Derived>
+        typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextChunkRange(const int tid) {
+          assert(loaded);
+          return chunkPartitioner.getNext(tid);
+        }
+        template <typename D = Derived>
+        typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextChunkRange(const int tid) {
+          return static_cast<Derived*>(this)->getNextChunkRangeImpl(tid);
         }
 
 
@@ -358,8 +447,8 @@ namespace bliss
           //DEBUG("loaded");
           loaded = true;
 
-          recordSize = getRecordSize(3);   // look through 3 records to see the max sizeof records.
-          chunkPartitioner = ChunkPartitioner(mmap_range, nthreads, std::max(chunkSize, 2 * recordSize));   // TODO: copy constructor works?
+          recordSize = getRecordSize<Derived>(3);   // look through 3 records to see the max sizeof records.
+          chunkPartitioner.configure(mmap_range, nthreads, std::max(chunkSize, 2 * recordSize));   // TODO: copy constructor works?
                 // at least 2 x the record size for a chunk.
 
         }
@@ -426,13 +515,39 @@ namespace bliss
 
       protected:
 
-        // partitioner has chunk size. and current position.  at most as many as number of threads (specified in constructor) calling this function.
-        SizeType getRecordSize(int iterations) {
-          if (std::is_same<Derived, void>::value) {
-            return 1;
-          } else {
-            return static_cast<Derived*>(this)->getRecordSizeImpl(iterations);
+        void init(const size_t &file_size) {
+          page_size = sysconf(_SC_PAGE_SIZE);
+
+          // compute the full mmap_range
+          fileRange = RangeType(0, file_size / sizeof(T));   // range is in units of T
+
+          /// open the file and get a handle.
+          file_handle = open64(filename.c_str(), O_RDONLY);
+          if (file_handle == -1)
+          {
+            std::stringstream ss;
+            int myerr = errno;
+            ss << "ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr);
+            throw IOException(ss.str());
           }
+
+          //DEBUG("file_loader initialized for " << filename);
+
+          dataBlocks = new DataBlockType[nthreads];  // as many as there are threads, to allow delayed access to the datablocks.
+
+          // partition the full mmap_range
+          partitioner.configure(fileRange, nprocs, chunkSize);
+        }
+
+
+        // partitioner has chunk size. and current position.  at most as many as number of threads (specified in constructor) calling this function.
+        template<typename D = Derived>
+        typename std::enable_if<std::is_void<D>::value, SizeType>::type getRecordSize(const int iterations = 3) {
+          return 1;
+        }
+        template<typename D = Derived>
+        typename std::enable_if<!std::is_void<D>::value, SizeType>::type getRecordSize(const int iterations = 3) {
+          return static_cast<Derived*>(this)->getRecordSizeImpl(iterations);
         }
 
 
@@ -441,7 +556,7 @@ namespace bliss
          * @param r
          * @return
          */
-        InputIteratorType map(RangeType r) throw (IOException) {
+        InputIteratorType map(RangeType &r) throw (IOException) {
 
           r.align_to_page(page_size);
 
@@ -474,7 +589,7 @@ namespace bliss
           return result;
         }
 
-        void unmap(InputIteratorType d, RangeType r) {
+        void unmap(InputIteratorType &d, RangeType &r) {
 
           munmap(d, (r.end - r.block_start) * sizeof(T));
           //DEBUG("unmapped");

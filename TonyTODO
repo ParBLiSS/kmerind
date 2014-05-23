@@ -260,7 +260,53 @@ introduce partitioner,
 		e.g. index generator.
 	rework file_loader, and reintroduce fastq_loader.
 	
+	
+TODO:  5/23.
+
+Bug in gtest.  if single parameter constructor is used with ASSERT_THROW or ASSERT_NO_THROW, it will not find the correct constructor during compilation.
+	workaround:  user "new Class(param)" or "(Class(param))"
 
 
+integration testing.
+
+Move:  useful when there is allocation of memory, even if implicit.
+	std::move used to create a rvalue reference (&&).  
+	std::forward used to do similar, but to forward a function parameter. (used when parameter type is a rvalue reference to type parameter).
+	std::swap
+	swap on containers, including std::string
+	return reference instead of lvalue
+	
+Move constructor and move assignment operator for:
+	utils		- none
+	partition 	- none (too simple)
+	iterators	- TBD
+	io			-
+		io_exception	- done. move for speed.
+		MPISendBuffer/MPISendBuffers  - TODO move for correctness
+		file_loader		- done. move for correctness
+		fastq_loader	- done. no instance variable.  move reuses superclass stuff.  move for correctness
+		fastq_iterator	- TBD copy construct may be fine...  ???
+		data_block		- done.  move for correctness
+	concurrent	- TODO
+		task			- should move for correctness
+		runnable		- nothing
+		runner			- nothing
+		sequential_runner	- has queue. should move for correctness
+		omp/mpi			- should move for correctness.
+		mixed_omp		- should move for correctness.
+	index		- TBD
+		kmer_index_element
+		
+		
+		
+use of move semantics - TBD
+	io
+		MPISendBuffer/MPISendBuffers
+		FileLoader
+		FASTQLoader
+	index
+	concurrent
 
 
+Chagne FASTQIterator to use ranges for sequence and quality, and keep only 1 iterator.
+Change Range to have different subclasses.

@@ -16,8 +16,8 @@
 #include <omp.h>
 #endif
 
-#include <iterators/range.hpp>
-typedef bliss::iterator::range<size_t> RangeType;
+#include <partition/range.hpp>
+typedef bliss::partition::range<size_t> RangeType;
 
 
 ////// TODO:  need to make the pipelines better.  DO THESE MAKE SENSE?
