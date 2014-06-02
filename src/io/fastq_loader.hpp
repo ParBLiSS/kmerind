@@ -49,17 +49,19 @@ namespace bliss
      *
      */
     template<typename T, bool Buffering = true, bool Preloading = false,
-        typename ChunkPartitioner = bliss::partition::DemandDrivenPartitioner<size_t> >
+        typename ChunkPartitioner = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
     class FASTQLoader : public FileLoader<T, Buffering, Preloading, ChunkPartitioner,
                                           FASTQLoader<T, Buffering, Preloading, ChunkPartitioner> >
     {
       protected:
         typedef FileLoader<T, Buffering, Preloading, ChunkPartitioner,
             FASTQLoader<T, Buffering, Preloading, ChunkPartitioner> >    SuperType;
-        typedef typename SuperType::RangeType                             RangeType;
+
+      public:
+        typedef typename SuperType::RangeType                            RangeType;
         typedef typename SuperType::SizeType                             SizeType;
 
-
+      protected:
         /**
          * search for first occurence of @ from an arbitrary starting point.  Specifically, we are looking for the pairing of @ and + separated by 1 line
          *    e.g. .*\n[@][^\n]*\n[ATCGN]+\n[+].*\n.*
@@ -99,21 +101,36 @@ namespace bliss
          *
          *  first block in the parent range is treated differently.
          *
-         * @param _data     start of iterator.
-         * @param parent    the "full" range to which the target range belongs.  used to determine if the target is a "first" block.
-         * @param target    the target range in which to search for a record.  the start and end position in the file.
-         * @return          position of the start of next read sequence (@).  if there is no complete sequence, return "end"
+         * @param _data       start of iterator.
+         * @param partRange   the "full" range to which the target range belongs.  used to determine if the target is a "first" block.
+         * @param loadedRange the portion of the "full" range that's loaded in memory (via mmap or in DataBlock)
+         * @param searchRange the range in which to search for a record.  the start and end position in the file.
+         * @return            position of the start of next read sequence (@).  if there is no complete sequence, return "end"
          */
         template<typename Iterator>
-        const SizeType findStart(const Iterator &_data, const RangeType &parent, const RangeType &target) const
+        const SizeType findStart(const Iterator &_data, const RangeType &partRange, const RangeType &loadedRange, const RangeType &searchRange) const
         throw (bliss::io::IOException) {
 
-          RangeType t = target & parent; // intersection to bound target to between parent's ends.
+          typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
+
+          RangeType t = searchRange & loadedRange; // intersection to bound target to between parent's ends.
           if (t.start == t.end) return t.start;
 
           SizeType i = t.start;
           Iterator data(_data);
-          bool wasEOL = false;
+          bool wasEOL;
+
+          ///// if at beginning of parent partition, treat as if previous line was EOL
+          if (t.start == partRange.start) { // beginning of parent range, treat specially, since there is no preceeding \n for the @
+            // all other partitions will lose the part before the first "\n@" (will be caught by the previous partition)
+            // if this is called to partition, then partRange is the whole thing, with first part start with @ (implicit \n prior).
+            // if this is called to chunk, then partRange is the loaded partition, already aligned to @, so previous is \n.
+            wasEOL = true;
+          } else {
+            std::advance(data, t.start - loadedRange.start);
+            wasEOL = false;
+          }
+
 
           ////// remove leading newlines
           while ((i < t.end) && (*data == '\n')) {
@@ -126,11 +143,7 @@ namespace bliss
           if (i == t.end)  // this part only contained \n
             return t.end;
 
-          ///// if at beginning of parent partition, treat as if previous line was EOL
-          if (t.start == parent.start) { // beginning of parent range, treat specially, since there is no preceeding \n for the @
-            // all other partitions will lose the part before the first "\n@" (will be caught by the previous partition)
-            wasEOL = true;
-          }
+
 
 
 
@@ -169,6 +182,8 @@ namespace bliss
             ++i;
           }
 
+//          printf("chars: %c %c %c %c, %lu - %lu, lines: %d\n", first[0], first[1], first[2], first[3], target.start, target.end, currLineId);
+
           //////////// determine the position of a read by looking for @...+ or +...@
           // at this point, first[0] is pointing to first char after first newline, or in the case of first block, the first char.
           // everything in "first" are right after newline.
@@ -182,10 +197,17 @@ namespace bliss
           // is it an error not to find a fastq marker?
           std::stringstream ss;
           ss << "ERROR in file processing: file segment \n" << "\t\t"
-              << t << "\n\t\t(original " << target << ")\n"
+              << t << "\n\t\t(original " << searchRange << ")\n"
               << "\t\tdoes not contain valid FASTQ markers.\n String:";
           std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
-          std::copy(_data, _data + (target.end - target.start), oit);
+          Iterator s(_data);
+          std::advance(s, (t.start - loadedRange.start));
+          Iterator e(_data);
+          std::advance(e, (t.end - loadedRange.start));
+
+          std::copy(s, e, oit);
+
+          printf("\nchars: %c %c %c %c, %lu - %lu, lines: %d\n", first[0], first[1], first[2], first[3], t.start, t.end, currLineId);
 
           throw bliss::io::IOException(ss.str());
 
@@ -226,21 +248,22 @@ namespace bliss
          */
         RangeType getNextPartitionRangeImpl(const int pid = -1) {
           int p = pid;
-          if (p == -1) p = rank;
+          if (p == -1) p = this->rank;
 
-          RangeType hint = partitioner.getNext(p);
-          hint &= fileRange;
+          RangeType hint = this->partitioner.getNext(p);
+          hint &= this->fileRange;
           SizeType length = hint.size();
 
           RangeType next = hint >> length;
-          next &= fileRange;
+          next &= this->fileRange;
 
           // concatenate current and next ranges
-          RangeType searchRange = hint | next;
-          searchRange.align_to_page(page_size);
+          RangeType loadRange = hint | next;
+          loadRange.align_to_page(this->page_size);
 
           // map the content
-          InputIteratorType searchData = this->map(searchRange) + searchRange.start - searchRange.block_start;
+          typename SuperType::InputIteratorType mappedData = this->map(loadRange);
+          typename SuperType::InputIteratorType searchData = mappedData + (loadRange.start - loadRange.block_start);
 
           // NOTE: assume that the range is large enough that we would not run into trouble with partition search not finding a starting position.
 
@@ -248,13 +271,35 @@ namespace bliss
           RangeType output(hint);
 
           // search for new start using finder
-          output.start = findStart(searchData, fileRange, hint);
+          try {
+            output.start = findStart(searchData, this->fileRange, loadRange, hint);
+          } catch (IOException& ex) {
+            // did not find the end, so set e to next.end.
+            // TODO: need to handle this scenario better - should keep search until end.
+            WARNING(ex.what());
+
+            printf("curr range: partition s %lu-%lu, file_range %lu-%lu\n",
+                   hint.start, hint.end, this->fileRange.start, this->fileRange.end);
+            printf("got an exception search for start for partition:  %s \n", ex.what());
+            output.start = hint.end;
+          }
 
           // get the new ending offset
-          output.end = findStart(searchData + length, fileRange, next);
+          try{
+            output.end = findStart(searchData, this->fileRange, loadRange, next);
+          } catch (IOException& ex) {
+            // did not find the end, so set e to next.end.
+            // TODO: need to handle this scenario better - should keep search until end.
+            WARNING(ex.what());
+
+            printf("curr range: partition s %lu-%lu, file_range %lu-%lu\n",
+                   next.start, next.end, this->fileRange.start, this->fileRange.end);
+            printf("got an exception search for end for partition:  %s \n", ex.what());
+            output.end = hint.end;
+          }
 
           // clean up and unmap
-          this->unmap(searchData, searchRange);
+          this->unmap(mappedData, loadRange);
 
           // readjust
           return output;
@@ -262,10 +307,10 @@ namespace bliss
 
 
         RangeType getNextChunkRangeImpl(const int tid) {
-          assert(loaded);
-          RangeType srcRange = srcData.getRange();
+          assert(this->loaded);
+          RangeType srcRange = this->srcData.getRange();
 
-          RangeType hint = chunkPartitioner.getNext(tid);    // chunkPartitioner has this as atomic if needed
+          RangeType hint = this->chunkPartitioner.getNext(tid);    // chunkPartitioner has this as atomic if needed
           hint &= srcRange;
           SizeType length = hint.size();
 
@@ -275,19 +320,19 @@ namespace bliss
           RangeType output(hint);
 
           if (length == 0) {
-            printf("WARNING: search range for next chunk is empty.  should not be here often\n");
+            //printf("WARNING: search range for next chunk is empty.  should not be here often\n");
           } else {
             /// search for start position.
             try {
               // search for start.
-              output.start = findStart(srcData.begin() + (hint.start - srcRange.start), srcRange, hint);
+              output.start = findStart(this->srcData.begin(), srcRange, srcRange, hint);
             } catch (IOException& ex) {
               // did not find the end, so set e to next.end.
               // TODO: need to handle this scenario better - should keep search until end.
               WARNING(ex.what());
 
               printf("curr range: chunk %lu, s %lu-%lu, srcData range %lu-%lu, mmap_range %lu-%lu\n",
-                     chunkSize, hint.start, hint.end, srcRange.start, srcRange.end, mmap_range.start, mmap_range.end);
+                     this->chunkSize, hint.start, hint.end, srcRange.start, srcRange.end, this->mmap_range.start, this->mmap_range.end);
               printf("got an exception search for start:  %s \n", ex.what());
               output.start = hint.end;
             }
@@ -300,14 +345,14 @@ namespace bliss
             //printf("next: %lu %lu\n", next.start, next.end);
             try {
               // search for end.
-              output.end = findStart(srcData.begin() + (next.start - srcRange.start), srcRange, next);
+              output.end = findStart(this->srcData.begin(), srcRange, srcRange, next);
             } catch (IOException& ex) {
               // did not find the end, so set e to next.end.
               // TODO: need to handle this scenario better - should keep search until end.
               WARNING(ex.what());
 
               printf("next range: chunk %lu, e %lu-%lu, srcData range %lu-%lu, mmap_range %lu-%lu\n",
-                     chunkSize, next.start, next.end, srcRange.start, srcRange.end, mmap_range.start, mmap_range.end);
+                     this->chunkSize, next.start, next.end, srcRange.start, srcRange.end, this->mmap_range.start, this->mmap_range.end);
 
               printf("got an exception search for end: %s \n", ex.what());
               output.end = hint.end;
@@ -326,19 +371,19 @@ namespace bliss
           //// TODO: if a different partitioner is used, seqSize may be incorrect.
           ////   seqSize is a property of the partitioner applied to the data.
 
-          assert(loaded);
+          assert(this->loaded);
 
           SizeType s, e;
           SizeType ss = 0;
-          RangeType parent(srcData.getRange());
-          RangeType r(srcData.getRange());
+          RangeType parent(this->srcData.getRange());
+          RangeType r(this->srcData.getRange());
 
-          s = findStart(srcData.begin(), parent, r);
+          s = findStart(this->srcData.begin(), this->fileRange, parent, r);
 
           for (int i = 0; i < iterations; ++i) {
             r.start = s + 1;   // advance by 1, in order to search for next entry.
             r &= parent;
-            e = findStart(srcData.begin() + (r.start - parent.start), parent, r);
+            e = findStart(this->srcData.begin(), this->fileRange, parent, r);
             ss = std::max(ss, (e - s));
             s = e;
           }

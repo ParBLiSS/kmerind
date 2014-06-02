@@ -307,12 +307,11 @@ namespace bliss
           return iter;
         }
 
-        SeqType& dereference()
+        SeqType& operator()()
         {
           return output;
         }
     };
-
 
 
 
@@ -472,7 +471,7 @@ namespace bliss
           }
           // else result was already computed and stored in the functor.
 
-          return _f.dereference();
+          return _f();
         }
 
         // no -> operator.  -> returns a pointer to the value held in iterator.

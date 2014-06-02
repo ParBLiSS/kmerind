@@ -77,7 +77,8 @@ int main(int argc, char* argv[])
   if (argc > 4)
     iter = atoi(argv[4]);
 
-  bliss::partition::BlockPartitioner<RangeType> part(RangeType(0, max), nprocs, 1);
+  bliss::partition::BlockPartitioner<RangeType> part;
+  part.configure(RangeType(0, max), nprocs, 1);
 
   RangeType r = part.getNext(rank);
   compute<double> op;

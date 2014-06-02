@@ -62,6 +62,8 @@ class FileLoaderTest : public ::testing::Test
       size_t read = fread_unlocked(result, sizeof(T), length, fp);
       fclose(fp);
 
+      //printf("filename %s, offset %lu, length %lu\n", fileName.c_str(), offset, length);
+
       ASSERT_GT(read, 0);
     }
 
@@ -219,8 +221,10 @@ TYPED_TEST_P(FileLoaderTest, OpenConsecutiveRanges)
 
   for (int rank = 0; rank < nprocs; ++rank) {
 
-    r = loader.getNextPartitionRange(rank);
+    loader.resetPartitionRange();
 
+    r = loader.getNextPartitionRange(rank);
+    //std::cout << "partition for rank " << rank << ": " << r << std::endl;
 
     size_t len = r.end - r.start;
     TypeParam* gold = new TypeParam[len + 1];
@@ -379,8 +383,9 @@ TYPED_TEST_P(FileLoaderDeathTest, BadNProcs)
   std::string fileName;
   fileName.append("/test/data/test.fastq");
 
-  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
-  ASSERT_THROW(new FileLoaderType(fileName, 0), bliss::io::IOException);
+//  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
+  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
+  ASSERT_EXIT(new FileLoaderType(fileName, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
 }
 
 TYPED_TEST_P(FileLoaderDeathTest, BadRank)
@@ -390,8 +395,8 @@ TYPED_TEST_P(FileLoaderDeathTest, BadRank)
   std::string fileName;
   fileName.append("/test/data/test.fastq");
 
-  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
-  ASSERT_THROW(new FileLoaderType(fileName, 1, -1), bliss::io::IOException);
+  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
+  ASSERT_EXIT(new FileLoaderType(fileName, 1, -1), ::testing::KilledBySignal(SIGABRT), err_regex);
 }
 
 TYPED_TEST_P(FileLoaderDeathTest, BadNThreads)
@@ -401,8 +406,8 @@ TYPED_TEST_P(FileLoaderDeathTest, BadNThreads)
   std::string fileName;
   fileName.append("/test/data/test.fastq");
 
-  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
-  ASSERT_THROW(new FileLoaderType(fileName, 1, 0, 0), bliss::io::IOException);
+  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
+  ASSERT_EXIT(new FileLoaderType(fileName, 1, 0, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
 }
 
 TYPED_TEST_P(FileLoaderDeathTest, BadChunkSize)
@@ -412,8 +417,8 @@ TYPED_TEST_P(FileLoaderDeathTest, BadChunkSize)
   std::string fileName;
   fileName.append("/test/data/test.fastq");
 
-  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
-  ASSERT_THROW(new FileLoaderType(fileName, 1, 0, 0, 0), bliss::io::IOException);
+  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
+  ASSERT_EXIT(new FileLoaderType(fileName, 1, 0, 0, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
 }
 
 

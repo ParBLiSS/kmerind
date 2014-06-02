@@ -86,8 +86,8 @@ namespace bliss
 
       public:
         typedef size_t                             SizeType;
-        typedef bliss::partition::range<SizeType>    RangeType;
-        typedef T*                                InputIteratorType;
+        typedef bliss::partition::range<SizeType>  RangeType;
+        typedef T*                                 InputIteratorType;
 
         // internal DataBlock type.  uses T* as iterator type.
         typedef typename std::conditional<Preloading,
@@ -232,7 +232,6 @@ namespace bliss
               nthreads(_nThreads), chunkSize(_chunkSize), comm(_comm), dataBlocks(nullptr), recordSize(1)
         {
           assert(filename.length() > 0);
-
           assert(_nThreads > 0);
           assert(_chunkSize > 0);
 
@@ -247,7 +246,15 @@ namespace bliss
           if (rank == 0)
           {
             struct stat filestat;
-            stat(filename.c_str(), &filestat);
+            int ret = stat(filename.c_str(), &filestat);
+
+            if (ret < 0) {
+
+              std::stringstream ss;
+              ss << "ERROR in file size detection: ["  << filename << "] error ";
+              throw IOException(ss.str());
+            }
+
             file_size = static_cast<SizeType>(filestat.st_size);
 //            std::cerr << "file size is " << file_size;
 //            std::cerr << " block size is " << filestat.st_blksize;
@@ -288,7 +295,15 @@ namespace bliss
           /// get the file size.
           SizeType file_size = 0;
           struct stat filestat;
-          stat(filename.c_str(), &filestat);
+          int ret = stat(filename.c_str(), &filestat);
+
+          if (ret < 0) {
+
+            std::stringstream ss;
+            ss << "ERROR in file size detection: ["  << filename << "] error ";
+            throw IOException(ss.str());
+          }
+
           file_size = static_cast<SizeType>(filestat.st_size);
 //            std::cerr << "file size is " << file_size;
 //            std::cerr << " block size is " << filestat.st_blksize;
@@ -324,8 +339,9 @@ namespace bliss
 
         ////// PUBLIC METHODS
 
-
-      public:
+        const size_t& getChunkSize() const {
+          return chunkSize;
+        }
 
         /**
          * return the full range for this file.  (in units of data type T)
@@ -399,6 +415,8 @@ namespace bliss
         }
 
 
+
+
         /**
          *  performs memmap, and optionally preload the data into memory.
          *
@@ -438,6 +456,7 @@ namespace bliss
 
 
           //DEBUG("mapped");
+          // okay to use + since mmap_data is a pointer so it's a random access iterator.
           srcData.assign(mmap_data + (mmap_range.start - mmap_range.block_start), mmap_data + (mmap_range.end - mmap_range.block_start), mmap_range);
 
           if (Preloading)
@@ -501,7 +520,13 @@ namespace bliss
 //          printf("chunkSize = %lu\n", chunkSize);
           RangeType r = chunkRange & mmap_range;
 
-          dataBlocks[tid].assign(srcData.begin() + (r.start - mmap_range.start), srcData.begin() + (r.end - mmap_range.start), r);
+          auto s = srcData.begin();
+          std::advance(s, (r.start - mmap_range.start));
+          auto e = srcData.begin();
+          std::advance(e, (r.end - mmap_range.start));
+
+
+          dataBlocks[tid].assign(s, e, r);
 //         DEBUG("read " << readLen << " elements, start at " << s << " [" << *startPtr << "] end at "<< e << " [" << *endPtr << "]");
 
 //          if (startPtr == nullptr || endPtr == nullptr) {

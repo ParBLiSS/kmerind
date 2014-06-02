@@ -56,6 +56,8 @@ namespace bliss
         }
 
         inline Range& getNext(const int pid) {
+//          if (pid >= nParts) printf("pid: %d, parts %d", pid, nParts);
+
           assert(pid >= 0);
           assert(pid < nParts);  // both non-negative.
 
@@ -87,10 +89,10 @@ namespace bliss
         void configure(const Range &src, const int &numPartitions, const size_t &_chunkSize) {
           this->Partitioner<Range, BlockPartitioner<Range> >::configure(src, numPartitions, _chunkSize);
 
-          curr = src;
-          done = false;
           div = this->length / numPartitions;
           rem = this->length % numPartitions;
+
+          resetImpl();
         }
 
 
@@ -138,9 +140,11 @@ namespace bliss
         size_t iterSize;
 
       public:
+        CyclicPartitioner() : done(nullptr), curr(nullptr), iterSize(0) {};
+
         virtual ~CyclicPartitioner() {
-          delete [] done;
-          delete [] curr;
+          if (done) delete [] done;
+          if (curr) delete [] curr;
         }
 
         void configure(const Range &src, const int &numPartitions, const size_t &_chunkSize) {
@@ -195,8 +199,10 @@ namespace bliss
         typedef typename Range::ValueType T;
 
       public:
+        DemandDrivenPartitioner() : chunkOffset(0), curr(nullptr), done(false) {};
+
         virtual ~DemandDrivenPartitioner() {
-          delete [] curr;
+          if (curr) delete [] curr;
         }
         void configure(const Range &src, const int &numPartitions, const size_t &_chunkSize) {
           this->Partitioner<Range, DemandDrivenPartitioner<Range> >::configure(src, numPartitions, _chunkSize);

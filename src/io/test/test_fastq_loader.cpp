@@ -110,6 +110,7 @@ TYPED_TEST_P(FASTQLoaderTest, OpenConsecutiveRanges)
   RangeType r;
 
   for (int rank = 0; rank < nprocs; ++rank) {
+    loader.resetPartitionRange();
 
     r = loader.getNextPartitionRange(rank);
     loader.load(r);
@@ -119,7 +120,10 @@ TYPED_TEST_P(FASTQLoaderTest, OpenConsecutiveRanges)
 
     //  std::cout << "range: " << r2 << std::endl;
       ASSERT_EQ('@', loader.getData().begin()[0]);
-      ASSERT_EQ('@', loader.getData().end()[0]);
+      if (r.end == loader.getFileRange().end)
+        ASSERT_EQ(0, loader.getData().end()[0]);
+      else
+        ASSERT_EQ('@', loader.getData().end()[0]);
     //  std::cout << " characters = '" << loader.getData().begin()[0]  << "'" << std::endl;
     //  std::cout << " characters = '" << loader.getData().end()[0]  << "'" << std::endl;
       loader.unload();
@@ -193,19 +197,19 @@ TYPED_TEST_P(FASTQLoaderBufferTest, BufferingChunks)
   int nThreads = 2;
 
 
-  FASTQLoaderType loader(this->fileName, nprocs, rank, nthreads, 2048);
+  FASTQLoaderType loader(this->fileName, nprocs, rank, nThreads, 2048);
 
   RangeType r = loader.getNextPartitionRange(rank);
   loader.load(r);
 
   typename RangeType::ValueType lastEnd = r.start;
 
-  RangeType r2;
 
-  TypeParam* gold;
+  ValueType* gold;
+  int i = 0;
 
   RangeType r2 = loader.getNextChunkRange(0);
-  blockType data = loader.getChunk(0, r2);
+  blockType data = loader.getChunk(i, r2);
   size_t len = r2.size();
 
   while (len  > 0) {
@@ -215,14 +219,15 @@ TYPED_TEST_P(FASTQLoaderBufferTest, BufferingChunks)
     lastEnd = r2.end;
 
 
-    gold = new TypeParam[len + 1];
-    FASTQLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
+    gold = new ValueType[len + 1];
+    FASTQLoaderBufferTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
 
     ASSERT_TRUE(equal(gold, data.begin(), len));
     delete [] gold;
 
-    r2 = loader.getNextChunkRange(0 ^ 1);
-    data = loader.getChunk(0 ^ 1, r2);
+    i ^= 1;
+    r2 = loader.getNextChunkRange(i);
+    data = loader.getChunk(i, r2);
     len = r2.size();
 
   }

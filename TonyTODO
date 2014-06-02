@@ -310,3 +310,10 @@ use of move semantics - TBD
 
 Chagne FASTQIterator to use ranges for sequence and quality, and keep only 1 iterator.
 Change Range to have different subclasses.
+
+
+
+testing:  concurrentIO - back to working with some exceptions:
+	FASTQ, FASTQIter2, FASTQIterNoQual are failing for block parallel - errors.  but numeric results are still fine.
+	BLOCK PARALLEL is not generating same numeric results for mmap, fileloader, fileloader atomic - 
+		1 problem was due to boundaries.  another due to numeric precision.
