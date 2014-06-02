@@ -315,5 +315,6 @@ Change Range to have different subclasses.
 
 testing:  concurrentIO - back to working with some exceptions:
 	FASTQ, FASTQIter2, FASTQIterNoQual are failing for block parallel - errors.  but numeric results are still fine.
+		theory:  the last chunk in the partition is a partial, and there is no @ in that chunk.  previous chunk search return the end of the partition, but current chunk search is having problem.  why?
 	BLOCK PARALLEL is not generating same numeric results for mmap, fileloader, fileloader atomic - 
 		1 problem was due to boundaries.  another due to numeric precision.
