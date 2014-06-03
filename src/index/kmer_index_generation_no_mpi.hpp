@@ -55,7 +55,7 @@ namespace bliss
     // given kmer index element type, and fastq sequence type, should be able to specialize kmer generator type.  DONE
     // given the kmer index element type, should be able to define sendbuffer type.  But won't.  SendBuffer may be of different types.
 
-    struct alignas(64) countType {
+    struct countType {
         uint64_t c;
     };
 

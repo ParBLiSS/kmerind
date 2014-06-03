@@ -54,8 +54,8 @@ namespace bliss
     // given those + k, should be able to get kmer index element type  - DONE
     // given kmer index element type, and fastq sequence type, should be able to specialize kmer generator type.  DONE
     // given the kmer index element type, should be able to define sendbuffer type.  But won't.  SendBuffer may be of different types.
-
-    struct alignas(64) countType {
+    // alignas(64)
+    struct countType {
         uint64_t c;
     };
 
@@ -80,7 +80,7 @@ namespace bliss
                         "Kmer Generation and Send Buffer should use the same type");
         }
 
-        void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<countType> &counts) {
+        void operator()(SequenceType &read, BufferType &buffers, std::vector<countType> &counts) {
           KmerGenOp kmer_op(read.id);
           KmerIter start(read.seq, kmer_op);
           KmerIter end(read.seq_end, kmer_op);
@@ -152,7 +152,7 @@ namespace bliss
         }
 
 
-        void operator()(SequenceType &read, int j, BufferType &buffers, std::vector<countType> &counts) {
+        void operator()(SequenceType &read, BufferType &buffers, std::vector<countType> &counts) {
 
           KmerGenOp kmer_op(read.id);
           KmerIter start(read.seq, kmer_op);

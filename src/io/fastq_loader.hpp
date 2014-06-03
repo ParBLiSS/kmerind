@@ -58,6 +58,12 @@ namespace bliss
             FASTQLoader<T, Buffering, Preloading, ChunkPartitioner> >    SuperType;
 
       public:
+        /// exposing types from super
+        typedef typename SuperType::InputIteratorType                   InputIteratorType;
+        typedef typename SuperType::IteratorType                        IteratorType;
+        typedef typename SuperType::BlockIteratorType                   BlockIteratorType;
+
+
         typedef typename SuperType::RangeType                            RangeType;
         typedef typename SuperType::SizeType                             SizeType;
 

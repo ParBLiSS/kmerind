@@ -46,8 +46,7 @@ namespace bliss
         virtual ~Task() {};
 
         virtual void run() {
-          bool has
-          while ()
+
 
 
         }

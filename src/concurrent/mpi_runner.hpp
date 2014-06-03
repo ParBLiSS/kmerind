@@ -82,8 +82,7 @@ namespace bliss
           if (commWasCreated) {
             MPI_Finalize();
           }
-
-        }; first
+        };
 
         MPI_Comm & getComm() {
           return comm;
