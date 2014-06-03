@@ -261,6 +261,13 @@ namespace bliss
           return output;
         }
 
+        inline bool contains(const range<T> &other) const {
+          return (other.start >= this->start) && (other.end <= this->end);
+        }
+        inline bool overlaps(const range<T> &other) const {
+          return (other & *this).size() > 0;
+        }
+
 
         /**
          * @brief   align the range to underlying block boundaries, e.g. disk page size
