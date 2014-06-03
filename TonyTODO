@@ -319,3 +319,18 @@ testing:  concurrentIO - back to working with some exceptions:
 		FIXED by adding a check (if can't find a "start") for the end of the partition range.  if at end of partition range and not found a start, return the end of partition range.
 	BLOCK PARALLEL is not generating same numeric results for mmap, fileloader, fileloader atomic - 
 		1 problem was due to boundaries.  another due to numeric precision.
+		
+		
+index generation is back up and running.  however, scalability is still problem.
+	1 thread: .88 sec on small dataset, quality compute on.
+	2 - 4 threads, about 1.44 to 1.41 s.
+	
+	with MPI:  2 mpi with 2 threads each - 0.7 sec.
+		4 mpi with 1 thread each - fail with segv.
+		
+		
+TODO:
+	1. query API 
+	2. better runtime api
+	
+	
