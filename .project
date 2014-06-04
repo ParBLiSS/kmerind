@@ -20,6 +20,11 @@
 			<location>/home/tpan/src/bliss/src/common</location>
 		</link>
 		<link>
+			<name>[Subprojects]/bliss-concurrent</name>
+			<type>2</type>
+			<location>/home/tpan/src/bliss/src/concurrent</location>
+		</link>
+		<link>
 			<name>[Subprojects]/bliss-index</name>
 			<type>2</type>
 			<location>/home/tpan/src/bliss/src/index</location>

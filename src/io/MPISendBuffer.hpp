@@ -85,6 +85,8 @@ namespace bliss
         void buffer(T val) {
           assert(accepting);   // if this assert fails, the calling thread's logic is faulty.
 
+
+
           // locking.
     #ifdef USE_OPENMP
           if (THREAD_SAFE)

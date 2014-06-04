@@ -245,6 +245,7 @@ if (ENABLE_TESTING)
     # set the name for the test target and executable
     set(test_target_name test-${module_name})
     # add all give files
+    message(STATUS ${ARGN})
     add_executable(${test_target_name} ${ARGN})
     # add the googletest dependency
     add_dependencies(${test_target_name} googletest)
@@ -271,6 +272,40 @@ if (ENABLE_TESTING)
     # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
     add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
   endfunction(bliss_add_test)
+
+  function(bliss_add_non_google_test module_names module_link)
+      foreach(f ${ARGN})
+        get_filename_component(test_name ${f} NAME_WE)
+  
+        # set the name for the test target and executable
+        set(test_target_name ${test_name})
+        # add all give files
+        add_executable(${test_target_name} ${f})
+        # set binary output path for tests
+        set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
+    
+        # all the extra libs
+        target_link_libraries(${test_target_name} ${EXTRA_LIBS})
+    
+        # link to the tested module (but only if that module produces a linkable
+        # library)
+        if (module_link)
+            target_link_libraries(${test_target_name} ${module_names})
+        endif (module_link)
+        
+        # if code coverage is to be determined: link with gcov
+        if (ENABLE_COVERAGE)
+          target_link_libraries(${test_target_name} gcov)
+        endif(ENABLE_COVERAGE)
+    
+        # generate google test XML results, to be parsed by Jenkins
+        # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
+        add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name})
+      endforeach(f)
+  
+  endfunction(bliss_add_non_google_test)
+
+
 endif (ENABLE_TESTING)
 
 
@@ -323,6 +358,7 @@ set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)
 
 
 add_subdirectory(src/common)
+add_subdirectory(src/concurrent)
 add_subdirectory(src/io)
 add_subdirectory(src/index)
 add_subdirectory(src/iterators)
