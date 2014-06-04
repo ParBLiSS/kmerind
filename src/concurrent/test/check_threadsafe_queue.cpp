@@ -66,11 +66,11 @@ class QueueTest
     int nthreads;
 
   public:
-    QueueTest(int nThreads) : nthreads(nThreads) {};
+    QueueTest(int nThreads) : q(), nthreads(nThreads) {};
 
     void run(int entries) {
 
-#pragma omp parallel for default(none) shared(std::cout, q, entries) num_threads(nthreads)
+#pragma omp parallel for num_threads(nthreads) shared(std::cout, q, entries) default(none)
       for (int i = 0; i < entries; ++i) {
         int tid = omp_get_thread_num();
 
@@ -97,7 +97,7 @@ class QueueTest
       for (int i = 0; i < entries; ++i) {
 
         if (i % 2 == 0)
-          q.tryPush(T(i));
+          q.push(T(i));
         else
             q.tryPop(output);
       }
