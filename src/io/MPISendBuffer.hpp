@@ -15,6 +15,7 @@
 #include "mpi.h"
 
 #include <cassert>
+#include <unistd.h>  // for usleep
 
 #include <vector>
 
@@ -39,11 +40,11 @@ namespace bliss
         // need some default MPI buffer size, then pack in sizeof(T) blocks as many times as possible.
 
       public:
-        static const int END_TAG = 0;
+        static constexpr int END_TAG = 0;
         typedef T ValueType;
 
         MPISendBuffer(MPI_Comm _comm, const int _targetRank, const size_t nbytes)
-           : accepting(true), targetRank(_targetRank), comm(_comm), send_request(MPI_REQUEST_NULL), total(0)  {
+           : accepting(true), targetRank(_targetRank), comm(_comm), send_request(MPI_REQUEST_NULL), tid(0), rank(0), total(0)  {
           // initialize internal buffers (double buffering)
           capacity = nbytes / sizeof(T);
 
@@ -53,6 +54,9 @@ namespace bliss
          // printf("targetrank is %d \n", targetRank);
 
           MPI_Comm_rank(comm, &rank);
+          int nprocs;
+          MPI_Comm_size(comm, &nprocs);
+          usleep_duration = (1000 + nprocs - 1) / nprocs;
 
     #ifdef USE_OPENMP
           if (THREAD_SAFE)
@@ -105,19 +109,20 @@ namespace bliss
         }
 
         void flush() {
+          //printf("flushing %d target %d.\n", rank, targetRank);
 
           accepting = false;
 
           // no more entries to buffer. send all remaining.
           send();
 
-          // one more time to wait for prev send to finish.
+          // one more time to clear double buffer and wait for previous send to finish.
           send();
 
           // send termination signal (send empty message).
           //printf("%d done sending to %d\n", rank, targetRank); fflush(stdout);
           MPI_Send(nullptr, 0, MPI_INT, targetRank, END_TAG, comm);
-          //printf("%d.%d  %ld flushed to %d.\n", rank, tid, total, targetRank); fflush(stdout);
+          printf("%d.%d  %ld flushed to %d.\n", rank, tid, total, targetRank); fflush(stdout);
         }
 
         size_t size() {
@@ -145,6 +150,7 @@ namespace bliss
         int rank;
 
         size_t total;
+        int usleep_duration;
 
     #ifdef USE_OPENMP
           omp_lock_t lock;
@@ -157,19 +163,22 @@ namespace bliss
           std::chrono::high_resolution_clock::time_point time1, time2;
           std::chrono::duration<double> time_span;
 
+          //printf("SEND %d -> %d,  inactive size: %lu, active size: %lu\n", rank, targetRank, inactive_buf.size(), active_buf.size());
+
           // check inactive buffer is sending?
-          if (send_request != MPI_REQUEST_NULL) {
+          int finished = 0;
+          do {
+            // repeatedly check to see if request was completed.
+            // okay to test against a NULL request.
+
             // if being sent, wait for that to complete
-            //printf("Waiting for prev send %d -> %d to finish\n", rank, targetRank); fflush(stdout);
-            //time1 = std::chrono::high_resolution_clock::now();Traffic
+            MPI_Test(&send_request, &finished, MPI_STATUS_IGNORE );
+            usleep(usleep_duration);
 
-            MPI_Wait(&send_request, MPI_STATUS_IGNORE);
-            //time2 = std::chrono::high_resolution_clock::now();
-            //time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
-            //    time2 - time1);
+            //printf("SEND %d -> %d Waiting for prev send \n", rank, targetRank); fflush(stdout);
 
-            //printf("Waiting for prev send %d -> %d finished in %f\n", rank, targetRank, time_span.count()); fflush(stdout);
-          }
+          } while(finished == 0);
+
           // clear the inactive buf
           inactive_buf.clear();
           assert(inactive_buf.size() == 0);
@@ -184,9 +193,8 @@ namespace bliss
           // TODO: send the data as bytes.  This assumes the receive end knows how to parse the elements
           if (inactive_buf.size() > 0) {
             total += inactive_buf.size();
-            //printf("%d sending to %d\n", rank, targetRank);
             MPI_Isend(inactive_buf.data(), inactive_buf.size() * sizeof(T), MPI_UNSIGNED_CHAR, targetRank, tid + 1, comm, &send_request);
-            //printf("SEND %d.%d send to %d, number of entries %ld, total %ld\n", rank, pid, targetRank, inactive_buf.size(), total); fflush(stdout);
+            //printf("SEND %d -> %d, number of entries %ld, total %ld\n", rank, targetRank, inactive_buf.size(), total); fflush(stdout);
 
           }
 

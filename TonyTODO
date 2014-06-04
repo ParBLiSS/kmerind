@@ -318,7 +318,7 @@ testing:  concurrentIO - back to working with some exceptions:
 		theory:  the last chunk in the partition is a partial, and there is no @ in that chunk.  previous chunk search return the end of the partition, but current chunk search is having problem.  not sure why that asymmetry
 		FIXED by adding a check (if can't find a "start") for the end of the partition range.  if at end of partition range and not found a start, return the end of partition range.
 	BLOCK PARALLEL is not generating same numeric results for mmap, fileloader, fileloader atomic - 
-		1 problem was due to boundaries.  another due to numeric precision.
+		1 problem was due to boundaries; FIXED.  another due to numeric precision.
 		
 		
 index generation is back up and running.  however, scalability is still problem.
@@ -328,6 +328,22 @@ index generation is back up and running.  however, scalability is still problem.
 	with MPI:  2 mpi with 2 threads each - 0.7 sec.
 		4 mpi with 1 thread each - fail with segv.
 		
+	
+problem:
+	with 1 thread, MPI, deadlock.
+		problem: 2 different MPI procs could get into a deadlock 
+			
+			another explanation:
+				t0:  proc 0 sender buffer for proc 1 full.  isend to proc 1
+				t1:  proc 0 sender buffer for proc 1 full.  waiting for t0 send to complete before isend to proc 1. - blocking.
+				t2:  proc 1 receiver iprobe successful.  enters receive from t0.  waiting for proc 0 - blocking. 
+				
+		using MPI_Test instead of MPI_Wait reduces the problem but does not solve it.  MPI_Test ends up still in a busywait loop so effectively it's same as MPI_Wait.
+			proper fix:  sending needs its own thread, along with a thread-safe buffer function.
+			symmetry - receiver should have a thread-safe retrieve function, and live in its own thread?
+		
+		there may also be a a data hazard problem - evidence: sometime deadlock, sometimes segv, sometime works.
+	with 2+ threads, MPI, fine.
 		
 TODO:
 	1. query API 

@@ -112,26 +112,28 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
     // NOTE: that was still kind of slow.
     // NOTE: using Iprobe with usleep is even less CPU utilization.
     //        length between probing needs to be tuned.
-    while (!hasMessage) {
+    while (hasMessage == 0) {
       MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
       usleep(usleep_duration);
+      //printf("%dw",rank); fflush(stdout);
     }
+    //printf("\n");
     hasMessage = 0;
 
     src = status.MPI_SOURCE;
     tag = status.MPI_TAG;
     MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &received);   // length is always > 0?
 
-    if (tag ==  BufferType::END_TAG) {
+    if (tag == BufferType::END_TAG) {
       // end of messaging.
-      //printf("RECV %d receiving END signal %d from %d\n", rank, received, src); fflush(stdout);
       MPI_Recv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
       --n_senders;
+      //printf("RECV rank %d receiving END signal %d from %d, num sanders remaining is %d\n", rank, received, src, n_senders); fflush(stdout);
+
       continue;
     }
 
     //printf("RECV %d receiving %d bytes from %d.%d\n", rank, received, src, tag - 1); fflush(stdout);
-
     MPI_Recv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
 
     // if message size is 0, then no work to do.
@@ -150,9 +152,9 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
 
     // now process the array
     //TODO:  DEBUG: temp comment out.
-//    for (int i = 0; i < count; ++i) {
-//      kmers.insert(IndexType::value_type(array[i].kmer, array[i]));
-//    }
+    for (int i = 0; i < count; ++i) {
+      kmers.insert(IndexType::value_type(array[i].kmer, array[i]));
+    }
 
 
 
@@ -204,7 +206,7 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
     MPI_Allreduce(&nt, &senders, 1, MPI_INT, MPI_SUM, comm);
 #endif
 
-//    printf("senders = %d\n", senders);
+    //printf("senders = %d\n", senders);
 
 #pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, index, nthreads, loader, senders) default(none)
     {
@@ -227,6 +229,8 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
               t2 - t1);
       INFO(
           "Level 0: Index storage: rank " << rank << " elapsed time: " << time_span.count() << "s, " << index.size() << " records.");
+
+      printf("rank %d done network receive\n", rank);
     } // omp network read section
 
 #pragma omp section
@@ -368,12 +372,15 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
       INFO("Level 0: Computation: rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
 
 
+
       // send the last part out.
-#pragma omp parallel for default(none) shared(nprocs, nthreads, rank, buffers)
+//#pragma omp parallel for default(none) shared(nprocs, nthreads, rank, buffers)
       for (int i = 0; i < nprocs * nthreads; ++i) {
+        //printf("rank %d thread %d flushing buffer for buffer %d\n", rank, omp_get_thread_num(), (i+rank) % (nprocs * nthreads));
         buffers[(i + rank) % (nprocs * nthreads)].flush();   /// + rank to avoid all threads sending to the same node.
       }
       INFO("flush rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
+      //printf("flush rank %d thread %d elapsed time %f\n", rank, omp_get_thread_num(), time_span.count());
 
       size_t count = 0;
       for (size_t j = 0; j < counts.size(); ++j) {
@@ -382,11 +389,12 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
       }
       INFO("rank " << rank << "COUNTS total: " << count);
 
+      //printf("rank %d done compute\n", rank);
     } // omp compute section
 
 
     }  // outer parallel sections
-
+    //printf("rank %d done\n", rank);
 }
 
 
@@ -418,9 +426,8 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
 
 template<typename ComputeType>
 struct RunTask {
-    void operator()(const std::string &filename, MPI_Comm &comm, const int &nprocs, const int &rank, const int &nthreads, const int &chunkSize) {
+    void operator()(const std::string &filename, IndexType &index, MPI_Comm &comm, const int &nprocs, const int &rank, const int &nthreads, const int &chunkSize) {
       /////////////// initialize output variables
-      IndexType index;
 
 
         std::chrono::high_resolution_clock::time_point t1, t2;
@@ -561,15 +568,18 @@ int main(int argc, char** argv) {
 
 
 
+          IndexType index;
 
 
 
   /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
           RunTask<ComputeType> t;
-          t(filename, comm, groupSize, id, nthreads, chunkSize);
+          t(filename, index, comm, groupSize, id, nthreads, chunkSize);
+
+          printf("number of entries in index for rank %d is %lu\n", id, index.size());
 
 
-
+          MPI_Barrier(comm);
   //////////////  clean up MPI.
   MPI_Finalize();
 
