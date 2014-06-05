@@ -50,6 +50,10 @@ namespace bliss
         ThreadSafeFixedSizeQueue(size_t max_size) : maxSize(max_size) {
         }
 
+        const size_t& getMaxSize() const {
+          return maxSize;
+        }
+
         bool full() const
         {
           std::unique_lock<std::mutex> lock(mutex);
@@ -100,7 +104,10 @@ namespace bliss
           while (q.size() == maxSize) {
             // full q.  wait for someone to signal.
             full_cv.wait(lock);
+//            printf("full wait over\n");
+            //printf(".");
           }
+          //printf("\n");
 
           q.push(data);    // move using predefined move reference version of push
           lock.unlock();
@@ -137,7 +144,9 @@ namespace bliss
           std::unique_lock<std::mutex> lock(mutex);
           while (q.empty()) {
             // empty q.  wait for someone to signal.
+//            printf("empty wait\n");
             empty_cv.wait(lock);
+//            printf("empty wait over\n");
           }
           // when cond_var is notified, then lock will be acquired and q will be examined.
 

@@ -334,16 +334,16 @@ problem:
 		problem: 2 different MPI procs could get into a deadlock 
 			
 			another explanation:
-				t0:  proc 0 sender buffer for proc 1 full.  isend to proc 1
-				t1:  proc 0 sender buffer for proc 1 full.  waiting for t0 send to complete before isend to proc 1. - blocking.
-				t2:  proc 1 receiver iprobe successful.  enters receive from t0.  waiting for proc 0 - blocking. 
+				t0:  proc 0 thread t sender buffer for proc 1 full.  isend to proc 1
+				t1:  proc 0 thread t sender buffer for proc 1 full.  waiting for t0 send to complete before isend to proc 1. - blocking.
+				t2:  proc 1 thread 0 receiver iprobe successful.  enters receive from t0.  waiting for proc 0 - blocking. 
 				
 		using MPI_Test instead of MPI_Wait reduces the problem but does not solve it.  MPI_Test ends up still in a busywait loop so effectively it's same as MPI_Wait.
 			proper fix:  sending needs its own thread, along with a thread-safe buffer function.
 			symmetry - receiver should have a thread-safe retrieve function, and live in its own thread?
 			
 		GOOD TIME TO create a single thread for MPI communication.
-		
+			need a few queues - for send buffer that are ready to send, and for receive buffers to be put into the index. 
 		there may also be a a data hazard problem - evidence: sometime deadlock, sometimes segv, sometime works.
 	with 2+ threads, MPI, fine.
 		
