@@ -403,6 +403,219 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
  */
 
 
+
+/*
+ * single thread for mpi messages.
+ */
+template <typename Compute>
+void computeP2P(FileLoaderType &loader,
+                              const int &nthreads, IndexType &index,
+                              MPI_Comm &comm, const int &nprocs, const int &rank, const int &chunkSize)
+{
+
+  ///  get the start and end iterator position.
+
+#ifdef USE_OPENMP
+    INFO("rank " << rank << " MAX THRADS = " << nthreads);
+    omp_set_nested(1);
+    omp_set_dynamic(0);
+#endif
+
+
+    int srcs = nprocs;
+
+
+    // defined outbound message structure
+    // create shared queue for MPI outbound messages. produced by compute threads via MPISendBuffer. consumed by MPI comm thread.
+
+
+    // define inbound message structure
+    // create shared queue for MPI inbound messages. produced by MPI comm thread.  consumed by index hashing thread.
+
+
+    // shared flag to indicate compute is done.
+
+    // shared flag to indicate receiving is done.
+
+
+#pragma omp parallel sections num_threads(3) shared(comm, nprocs, rank, index, nthreads, loader, senders) default(none)
+    {
+
+#pragma omp section
+      {  // section for handling the received MPI messages
+
+        /// process the inbound messages until MPI comm thread indicates no more messages.
+        while (srcs > 0) {
+          /// check for messages
+          if (recvQueue.tryPop()) {
+
+            /// process messages;
+          }
+
+#pragma omp flush(srcs)
+        }
+
+        /// received done message.  now flush the remainder
+
+        bool gotNext = recvQueue.tryPop();
+        while (gotNext) {
+          /// process messages;
+
+          /// check for next.
+          gotNext = recvQueue.tryPop();
+        }
+
+
+      }  // section for handling the received MPI messages
+
+
+
+#pragma omp section
+    {  // section for handling the MPI communications
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
+
+      /// loop until : 1. no more srcs.  2. no more compute threads.
+      while (true) {
+
+        /// probe for messages
+
+
+
+        /// check queue
+
+
+
+
+
+      }
+
+
+
+    }  // section for handling the MPI communications
+
+#pragma omp section
+    {    // section for processing the data and generating the kmers.
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
+
+      INFO("Level 0: compute tid = " << omp_get_thread_num());
+
+      t1 = std::chrono::high_resolution_clock::now();
+
+      // if atEnd, done.
+//      bool atEnd = false;
+
+      std::vector<  BufferType > buffers;
+      buffers.reserve(nprocs * nthreads);
+
+      for (int i = 0; i < nprocs; ++i) {
+        // over provision by the number of threads as well.  (this is okay for smaller number of procs)
+        for (int j = 0; j < nthreads; ++j) {
+          buffers.push_back(std::move( BufferType(comm, i, 8192*1024)));
+        }
+      }
+      INFO("Level 0: compute num buffers = " << buffers.size());
+
+
+      std::vector<bliss::index::countType> counts;
+      for (int j = 0; j < nthreads; ++j) {
+        bliss::index::countType c;
+        c.c = 0;
+        counts.push_back(std::move(c));
+      }
+
+
+      // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
+      //   at this point, no strong difference.
+#pragma omp parallel num_threads(nthreads) shared(loader, buffers, counts, nprocs, nthreads, rank) default(none)
+      {
+        ParserType parser;
+
+        int tid = 0;
+#ifdef USE_OPENMP
+        tid = omp_get_thread_num();
+#endif
+        Compute op(nprocs, rank, nthreads);
+
+
+//        std::vector<  BufferType > buffers;
+//        for (int j = 0; j < nprocs; ++j) {
+//          // over provision by the number of threads as well.  (this is okay for smaller number of procs)
+//            buffers.push_back(std::move( BufferType(comm, j, 8192*1024)));
+//        }
+
+        int i = 0;
+        int j = 0;
+        RangeType r = loader.getNextChunkRange(tid);
+
+        while (r.size() > 0) {
+
+          auto chunk = loader.getChunk(tid, r);
+
+          IteratorType fastq_start(parser, chunk.begin(), chunk.end(), r);
+          IteratorType fastq_end(parser, chunk.end(), r);
+
+          SequenceType read;
+
+          for (; fastq_start != fastq_end; ++fastq_start)
+          {
+            // get data, and move to next for the other threads
+
+            // first get read
+            read = *fastq_start;
+
+            // then compute
+            op(read, buffers, counts);
+            ++i;
+
+            if (i % 20000 == 0)
+              INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed seq " << i);
+          }
+
+          r = loader.getNextChunkRange(tid);
+          ++j;
+
+        }
+
+        INFO("Level 1: rank " << rank << " thread " << tid << " processed total of " << j << " chunks");
+
+
+      }  // compute threads parallel
+
+
+      t2 = std::chrono::high_resolution_clock::now();
+      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+      INFO("Level 0: Computation: rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
+
+
+
+      // send the last part out.
+//#pragma omp parallel for default(none) shared(nprocs, nthreads, rank, buffers)
+      for (int i = 0; i < nprocs * nthreads; ++i) {
+        //printf("rank %d thread %d flushing buffer for buffer %d\n", rank, omp_get_thread_num(), (i+rank) % (nprocs * nthreads));
+        buffers[(i + rank) % (nprocs * nthreads)].flush();   /// + rank to avoid all threads sending to the same node.
+      }
+      INFO("flush rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
+      //printf("flush rank %d thread %d elapsed time %f\n", rank, omp_get_thread_num(), time_span.count());
+
+      size_t count = 0;
+      for (size_t j = 0; j < counts.size(); ++j) {
+        INFO("rank " << rank << " COUNTS by thread "<< j << ": "<< counts[j].c);
+        count += counts[j].c;
+      }
+      INFO("rank " << rank << "COUNTS total: " << count);
+
+      //printf("rank %d done compute\n", rank);
+    }     // section for processing the data and generating the kmers.
+
+
+    }  // outer parallel sections
+    //printf("rank %d done\n", rank);
+}
+
+
+
 ///**
 // * source:              source data,  e.g. fastq_loader
 // * Compute:             transformation to index

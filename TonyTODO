@@ -344,11 +344,16 @@ problem:
 			
 		GOOD TIME TO create a single thread for MPI communication.
 			need a few queues - for send buffer that are ready to send, and for receive buffers to be put into the index. 
+TODO:	threadsafe queue - correct but may be slow.
+		REPLACE LATER.  for now, it may be  fine for buffer management with MPI.  Need multiple producer, single/multiple consumer.
+			
+			
 		there may also be a a data hazard problem - evidence: sometime deadlock, sometimes segv, sometime works.
 	with 2+ threads, MPI, fine.
 		
 TODO:
 	1. query API 
 	2. better runtime api
-	
+	3. testing query with/out mpi, with/out omp from 1 code base
+	4. mpi persistent communication
 	

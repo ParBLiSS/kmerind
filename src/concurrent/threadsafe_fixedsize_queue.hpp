@@ -11,6 +11,7 @@
  *
  *            note that this is NOT truly concurrent.  the class serializes parallel access.  move semantic should minimize the copy operations needed.
  *
+ *          DUE TO LOCKS, this is NOT fast.  but may be fast enough for MPI buffer management.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
