@@ -79,7 +79,7 @@ namespace bliss
                         "Kmer Generation and Send Buffer should use the same type");
         }
 
-        void operator()(SequenceType &read, int j, std::vector<countType> &counts) {
+        void operator()(SequenceType &read) {
           KmerGenOp kmer_op(read.id);
           KmerIter start(read.seq, kmer_op);
           KmerIter end(read.seq_end, kmer_op);
@@ -151,7 +151,7 @@ namespace bliss
         }
 
 
-        void operator()(SequenceType &read, int j, std::vector<countType> &counts) {
+        void operator()(SequenceType &read) {
 
           KmerGenOp kmer_op(read.id);
           KmerIter start(read.seq, kmer_op);

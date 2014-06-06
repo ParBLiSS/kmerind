@@ -98,7 +98,7 @@ namespace bliss
           // careful.  when growing, the content is automatically copied to new and destroyed in old.
           //   the destruction could cause double free error or segv.
 
-          active_buf.push_back(val);
+          active_buf.push_back(std::forward(val));
           // if full, call send (block if other buffer is sending)
           if (active_buf.size() == capacity) {
             send();
@@ -162,8 +162,6 @@ namespace bliss
         void send() {
 
           // only called from within locked code block
-          std::chrono::high_resolution_clock::time_point time1, time2;
-          std::chrono::duration<double> time_span;
 
           //printf("SEND %d -> %d,  inactive size: %lu, active size: %lu\n", rank, targetRank, inactive_buf.size(), active_buf.size());
 

@@ -123,7 +123,7 @@ namespace bliss
           }
           // else result was already computed and stored in the functor.
 
-          return _f();
+          return _f();   // always constructs, not cached.
         }
 
         type& operator++()

@@ -120,7 +120,7 @@ namespace bliss
 
 
         static constexpr T log2_10DivNeg10 = std::log2(10.0) / -10.0;
-        constexpr ValueType operator()(const size_t v)
+        constexpr ValueType operator()(const size_t &v)
         {
           // some limits: v / -10 has to be negative as this becomes probability, so v > 0
           //
