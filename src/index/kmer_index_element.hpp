@@ -43,7 +43,7 @@ namespace bliss
 
         Kmer kmer;
 
-        virtual ~KmerIndexElement() {}
+//        virtual ~KmerIndexElement() {}
     };
 
 
@@ -61,7 +61,7 @@ namespace bliss
         typedef Id PositionType;
 
         Id id;
-        virtual ~KmerIndexElementWithId() {}
+//        virtual ~KmerIndexElementWithId() {}
     };
 
 
@@ -82,7 +82,7 @@ namespace bliss
 
         Qual qual;
 
-        virtual ~KmerIndexElementWithIdAndQuality() {}
+//        virtual ~KmerIndexElementWithIdAndQuality() {}
     };
 
 

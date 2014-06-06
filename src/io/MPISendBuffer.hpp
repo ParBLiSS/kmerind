@@ -79,7 +79,7 @@ namespace bliss
         }
 
         void buffer(T val) {
-          assert(accepting == true);   // if this assert fails, the calling thread's logic is faulty.
+          assert(accepting);   // if this assert fails, the calling thread's logic is faulty.
 
           // locking.
     #ifdef USE_OPENMP
@@ -106,7 +106,6 @@ namespace bliss
 
         void flush() {
 
-          printf("flushing");  fflush(stdout);
           accepting = false;
 
           // no more entries to buffer. send all remaining.

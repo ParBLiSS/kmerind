@@ -140,6 +140,15 @@ the omp version is not as performant.  not sure why.
 
 for now, refactor to make code more maintainable.
 
+ERROR: double free or buffer corruption, segV, abort, memory corruption, etc.  only happens with master-slave version.
+	turn on thread safety -> working okay.  no memory leak.
+	this is probably due to wrong thread id, and subsequently wrong bin computation, then multiple threads writing to the same buffer.
+	change signature of XorModulus (hashfunction to get threadid at call time.  make the KmerIndexGenerators produce the threadid.
+	this works better because we can't tell the assignment of tasks until they are scheduled onto the node.
+
+Each thread owning its own set of buffers - if 1000 procs, 16 threads each, 8MB each buffer, -> 128G.  need smarter locking.
+
+
 Need to use MPI persistent communication. 
 	
 major improvement when removing MAP_POPULATE.  else file mmap time in tens of seconds.
@@ -150,6 +159,11 @@ query...
 random sequence generator
 
 // support queries for read id, read positions, and count
+
+
+IndexStruct:  aligned to 8 bytes, so even using float - 24 bytes.
+	need MPI derived data types to reduce memory usage.
+
 
 
 spaced seeds?
