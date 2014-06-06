@@ -34,9 +34,10 @@ namespace bliss
      * @class			bliss::io::MPISendBuffer
      * @brief     a data structure to buffer and send MPI messages
      * @details   THREAD_SAFE enables omp_lock for OMP thread safety.  this likely introduces a good amount of contention.
+     *            approach:
+     *                have reference to downstream queue.
+     *                when full, create a new vector, swap, enqueue std::pair with target rank and stdvector.
      *
-     *
-     * TODO: 1. abstract the MPI requirement.  in fact, abstract the send/flush calls - make it a generic (thread-safe) buffer.
      */
     template<typename T, bool THREAD_SAFE=true>
     class SendBuffer {
@@ -54,8 +55,6 @@ namespace bliss
         size_t capacity;
 
         mutable std::mutex mutex;
-        std::condition_variable cond_var;
-
 
       public:
         typedef T ValueType;
@@ -70,32 +69,18 @@ namespace bliss
 
         virtual ~SendBuffer() {}
 
-        void buffer(T val) {
+        bool buffer(T val) {
           if (THREAD_SAFE)
             std::unique_lock<std::mutex> lock(mutex);
 
           assert(accepting);   // if this assert fails, the calling thread's logic is faulty.
+          if (isFull()) return false;
 
           // careful.  when growing, the content is automatically copied to new and destroyed in old.
           //   the destruction could cause double free error or segv.
 
-          buf.push_back(val);
-          // if full, call send (block if other buffer is sending)
-          if (buf.size() == capacity) {
-            send();
-          }
-
-        }
-
-        void flush() {
-          //printf("flushing %d target %d.\n", rank, targetRank);
-          if (THREAD_SAFE)
-            std::unique_lock<std::mutex> lock(mutex);
-
-          accepting = false;
-
-          // no more entries to buffer. send all remaining.
-          send();
+          buf.push_back(std::move(val));
+          return true;
         }
 
         size_t size() {

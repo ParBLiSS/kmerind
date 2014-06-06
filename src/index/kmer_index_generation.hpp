@@ -96,7 +96,8 @@ namespace bliss
           for (; start != end; ++start, ++i)
           {
 
-            index_kmer = *start;
+            index_kmer = *start;  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
+                                  // then copy assign
 
             // some debugging output
             // printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);

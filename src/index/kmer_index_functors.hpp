@@ -87,7 +87,7 @@ namespace bliss
         {
           //      KmerValueType xored_recoverable = (xored & ~mask_lower_half) | (_kmer.forward & mask_lower_half);
 
-          return OutputType(kmer, revcomp);
+          return OutputType(kmer, revcomp);   // constructing a new result.
         }
 
     };
