@@ -26,7 +26,7 @@
 
 #include <iterators/many2one_iterator.hpp>
 #include <iterators/one2many_iterator.hpp>
-
+#include <iterators/sliding_window_iterator.hpp>
 
 namespace bliss
 {
@@ -290,6 +290,46 @@ private:
   BitSizeType curCharOffset = 0;
 };
 */
+template <typename BaseIterator, unsigned int KMER_SIZE, unsigned int BITS_PER_CHAR, typename word_type>
+class KmerSlidingWindow
+{
+public:
+  /// The Kmer type (same as the `value_type` of this iterator)
+  typedef Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> kmer_type;
+  /// The value_type of the underlying iterator
+  typedef typename std::iterator_traits<BaseIterator>::value_type base_value_type;
+  /// The padding traits of the underlying stream
+  typedef PaddingTraits<base_value_type, BITS_PER_CHAR> padtraits;
+
+  template<typename offset_t>
+  void init(BaseIterator& it, offset_t& offset)
+  {
+    // there is no implementation yet to handle the case that the first
+    // k-mer starts from an offset != 0:
+    assert(offset == 0);
+
+    // fill kmer from the given packed and padded stream
+    // this leaves the iterator and the offset ON the last read position
+    // and NOT AFTER this (i.e. NOT on the position to be read NEXT)
+    offset = kmer.fillFromPaddedStream(it, true);
+  }
+
+  template<typename offset_t>
+  void next(BaseIterator& it, offset_t& offset)
+  {
+    kmer.nextFromPaddedStream(it, offset);
+  }
+
+  kmer_type getValue()
+  {
+    // return a copy of the current kmer
+    return this->kmer;
+  }
+
+private:
+  /// The kmer buffer (i.e. the window of the sliding window)
+  kmer_type kmer;
+};
 
 template <class BaseIterator, class Kmer>
 class KmerGenerationIterator {};
@@ -447,10 +487,13 @@ private:
    */
   void initFirstKmer()
   {
-    bitOffsetRead = kmer_buffer.fillFromPaddedStream(baseRead);
+    bitOffsetRead = kmer_buffer.fillFromPaddedStream(baseRead, true);
     // init the `Current` iterator at one position prior
     // TODO: replace KMER_SIZE by Kmer.getSize() operation
-    advance_chars(KMER_SIZE - 1);
+    advance_chars(KMER_SIZE);
+    // dumb workaround
+    std::swap(bitOffsetRead, bitOffsetCurrent);
+    std::swap(baseRead, baseCurrent);
   }
 
   /**

@@ -147,6 +147,7 @@ public:
    */
 
   /**
+   * FIXME: update documentation for `size => (size-1)`
    * @brief   Fills this k-mer from a packed and padded input sequence.
    *
    * The k-mer's data is filled from the given input sequence using
@@ -162,13 +163,18 @@ public:
    *                        returned by this function, this defines where to
    *                        continue to generate k-mers from the input sequence
    *                        via the `nextFromPaddedStream()` function.
+   * @param stop_on_last    Whether to stop the iterator on the last read
+   *                        element, rather than stopping on the next element
+   *                        after the one that was last read. This influences
+   *                        both the given iterator `begin` and the returned
+   *                        offset.
    * @returns               The bit offset of the current iterator position
    *                        to the bits that have to be read in the next
    *                        iteration.
    */
   template <typename InputIterator>
   // TODO: add option for bit offset in input sequence?
-  unsigned int fillFromPaddedStream(InputIterator& begin)
+  unsigned int fillFromPaddedStream(InputIterator& begin, bool stop_on_last = false)
   {
     // remove padding and copy to own data structure
     typedef typename std::iterator_traits<InputIterator>::value_type input_word_type;
@@ -180,8 +186,9 @@ public:
 
     // the bit offset in the input sequence
     // TODO: do this inside the removePadding function!?
-    unsigned int offset = (size*bitsPerChar) % PaddingTraits<input_word_type, bitsPerChar>::data_bits;
-    std::advance(begin, (size*bitsPerChar) / PaddingTraits<input_word_type, bitsPerChar>::data_bits);
+    unsigned int total_bits = stop_on_last ? (size-1)*bitsPerChar : size*bitsPerChar;
+    unsigned int offset = total_bits % PaddingTraits<input_word_type, bitsPerChar>::data_bits;
+    std::advance(begin, total_bits / PaddingTraits<input_word_type, bitsPerChar>::data_bits);
 
     // return the offset
     return offset;

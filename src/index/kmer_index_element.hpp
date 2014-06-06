@@ -86,7 +86,7 @@ namespace bliss
     };
 
 
-  } /* namespace io */
+  } /* namespace index */
 } /* namespace bliss */
 
 #endif /* KMER_INDEX_ELEMENT_HPP_ */

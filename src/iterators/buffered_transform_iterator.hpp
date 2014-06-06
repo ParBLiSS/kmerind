@@ -112,6 +112,20 @@ namespace bliss
           return *this;
         }
 
+        inline value_type operator*()
+        {
+
+          // special case, have not yet parsed the content
+          if (_curr == _next)
+          {
+            // after parse, _next has been moved but curr stays where it is.
+            _f(_next);
+          }
+          // else result was already computed and stored in the functor.
+
+          return _f();
+        }
+
         type& operator++()
         {
 
@@ -167,19 +181,6 @@ namespace bliss
           return _curr != rhs._curr;
         }
 
-        inline value_type operator*()
-        {
-
-          // special case, have not yet parsed the content
-          if (_curr == _next)
-          {
-            // after parse, _next has been moved but curr stays where it is.
-            _f(_next);
-          }
-          // else result was already computed and stored in the functor.
-
-          return _f();
-        }
 
         // no -> operator.  -> returns a pointer to the value held in iterator.
         // however, in transform iterator, we are not holding data, so pointer does not make sense.
