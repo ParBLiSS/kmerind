@@ -202,7 +202,7 @@ namespace bliss
         DemandDrivenPartitioner() : chunkOffset(0), curr(nullptr), done(false) {};
 
         virtual ~DemandDrivenPartitioner() {
-          if (curr) delete [] curr;
+          if (curr != nullptr) delete [] curr;
         }
         void configure(const Range &src, const int &numPartitions, const size_t &_chunkSize) {
           this->Partitioner<Range, DemandDrivenPartitioner<Range> >::configure(src, numPartitions, _chunkSize);

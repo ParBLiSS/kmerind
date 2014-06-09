@@ -22,6 +22,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <vector>
+#include <utility>
 
 #include "config.hpp"
 
@@ -44,43 +45,77 @@ namespace bliss
         // need some default MPI buffer size, then pack in sizeof(T) blocks as many times as possible.
 
       protected:
+        // rank of target entry.
+        int targetRank;
+
         // 2 buffers per target
         std::vector<T> buf;
-
-        // if buffer is still accepting stuff
-        bool accepting;
-
-        // rank of target entry.
-        const int targetRank;
         size_t capacity;
 
         mutable std::mutex mutex;
 
       public:
         typedef T ValueType;
+        typedef std::pair<int, std::vector<T> > ExportType;
 
        SendBuffer(const int _targetRank, const size_t nbytes)
-           : accepting(true), targetRank(_targetRank) {
+           : targetRank(_targetRank) {
           // initialize internal buffers (double buffering)
           capacity = nbytes / sizeof(T);
 
           buf.reserve(capacity);
+          //printf("construct size: %lu\n", buf.size());
+          if (capacity == 0) printf("capacity is 0!!!\n");
         }
 
-        virtual ~SendBuffer() {}
+       // copy constructor.
+       SendBuffer(const SendBuffer<T, THREAD_SAFE>& other) :
+         targetRank(other.targetRank), buf(other.buf), capacity(other.capacity) {
+         //printf("copy size: %lu\n", buf.size());
+         if (capacity == 0) printf("capacity is 0!!!\n");
 
-        bool buffer(T val) {
+       }
+
+       // copy assign operator
+       SendBuffer<T, THREAD_SAFE>& operator=(const SendBuffer<T, THREAD_SAFE>& other) {
+         targetRank = other.targetRank;
+         buf = other.buf;  // copy
+         capacity = other.capacity;
+         //printf("copy assign size: %lu\n", buf.size());
+         if (capacity == 0) printf("capacity is 0!!!\n");
+         return *this;
+       }
+
+       // move constructor.
+       SendBuffer(SendBuffer<T, THREAD_SAFE>&& other) :
+         targetRank(other.targetRank), buf(std::move(other.buf)), capacity(other.capacity) {
+         //printf("move size: %lu\n", buf.size());
+         if (capacity == 0) printf("capacity is 0!!!\n");
+
+       }
+
+       // copy assign operator
+       SendBuffer<T, THREAD_SAFE>& operator=(SendBuffer<T, THREAD_SAFE>&& other) {
+         targetRank = other.targetRank;
+         buf = std::move(other.buf);  // copy
+         capacity = other.capacity;
+         //printf("move assign size: %lu\n", buf.size());
+         if (capacity == 0) printf("capacity is 0!!!\n");
+         return *this;
+       }
+
+
+       virtual ~SendBuffer() {}
+
+        void buffer(T val) {
           if (THREAD_SAFE)
             std::unique_lock<std::mutex> lock(mutex);
 
-          assert(accepting);   // if this assert fails, the calling thread's logic is faulty.
-          if (isFull()) return false;
-
           // careful.  when growing, the content is automatically copied to new and destroyed in old.
-          //   the destruction could cause double free error or segv.
-
-          buf.push_back(std::move(val));
-          return true;
+          //   the destruction could cause double free error or segv if T does not have the move constructor/assignemnt operator.
+//          if (capacity < 1) printf("capacity 0!!!\n");
+//          if ((buf.size() >= capacity) && ((buf.size() - capacity) % 100000 == 0)) printf("size:  %lu\n", buf.size());
+          buf.push_back(val);
         }
 
         size_t size() {
@@ -92,31 +127,25 @@ namespace bliss
         bool isFull() {
           if (THREAD_SAFE)
             std::unique_lock<std::mutex> lock(mutex);
-          return buf.size() == capacity;
+          return buf.size() >= capacity;
         }
 
-      protected:
 
-        void send() {
-          if (buf.size() == 0) return;
+        /**
+         * moves the internal data to a new vector, and return that vector in the ExportType instance.
+         * this readies the buffer for new data.
+         * @return
+         */
+        ExportType exportData() {
+          if (THREAD_SAFE)
+            std::unique_lock<std::mutex> lock(mutex);
 
-          // TODO: send the data as bytes.  This assumes the receive end knows how to parse the elements
-
-          // clear the inactive buf
-          inactive_buf.clear();
-          assert(inactive_buf.size() == 0);
-          int s = active_buf.size();
-          // swap active and inactive buffer  (this swaps the contents)
-          inactive_buf.swap(active_buf);
-          assert(active_buf.size() == 0);
-          assert(inactive_buf.size() == s);
-
-          buf.data(),
-
-            MPI_Isend(inactive_buf.data(), inactive_buf.size() * sizeof(T), MPI_UNSIGNED_CHAR, targetRank, tid + 1, comm, &send_request);
-            //printf("SEND %d -> %d, number of entries %ld, total %ld\n", rank, targetRank, inactive_buf.size(), total); fflush(stdout);
-
-
+          printf("exporting data. %lu\n", buf.size());
+          std::vector<T> temp;
+          temp.reserve(buf.size());
+          std::swap(buf, temp);
+          assert(buf.size() == 0);
+          return ExportType(targetRank, temp);
         }
     };
 

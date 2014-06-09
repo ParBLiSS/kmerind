@@ -351,6 +351,12 @@ TODO:	threadsafe queue - correct but may be slow.
 		there may also be a a data hazard problem - evidence: sometime deadlock, sometimes segv, sometime works.
 	with 2+ threads, MPI, fine.
 		
+		
+Created a single thread for MPI communication.
+	having trouble with compute thread consistency
+	
+		
+		
 TODO:
 	1. query API 
 	2. better runtime api

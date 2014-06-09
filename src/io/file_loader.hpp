@@ -166,7 +166,7 @@ namespace bliss
         FileLoader& operator=(FileLoader<T, Buffering, Preloading, ChunkPartitioner, Derived>&& other) {
           if (this != &other) {
             //DEBUG("DESTROY");
-            delete [] dataBlocks;
+            if (dataBlocks != nullptr) delete [] dataBlocks;
 
             unload();
 
@@ -324,7 +324,7 @@ namespace bliss
         virtual ~FileLoader()
         {
           //DEBUG("DESTROY");
-          delete [] dataBlocks;
+          if (dataBlocks != nullptr) delete [] dataBlocks;
 
           unload();
 

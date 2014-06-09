@@ -18,6 +18,7 @@
 #include <unistd.h>  // for usleep
 
 #include <vector>
+#include <utility>
 
 #include "config.hpp"
 
@@ -98,7 +99,7 @@ namespace bliss
           // careful.  when growing, the content is automatically copied to new and destroyed in old.
           //   the destruction could cause double free error or segv.
 
-          active_buf.push_back(std::forward(val));
+          active_buf.push_back(val);
           // if full, call send (block if other buffer is sending)
           if (active_buf.size() == capacity) {
             send();
