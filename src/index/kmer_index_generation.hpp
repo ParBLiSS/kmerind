@@ -1,7 +1,7 @@
 /**
- * @file		kmer_index_generation.hpp
+ * @file    kmer_index_generation.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *
@@ -63,8 +63,8 @@ namespace bliss
     template<typename KmerGenOp, typename SendBuffer, typename HashFunc>
     class KmerIndexGenerator {
       public:
-        typedef typename KmerGenOp::SequenceType		SequenceType;
-        typedef std::vector<SendBuffer>  				    BufferType;
+        typedef typename KmerGenOp::SequenceType    SequenceType;
+        typedef std::vector<SendBuffer>              BufferType;
         typedef typename KmerGenOp::KmerIndexType                   KmerIndexType;
         typedef typename KmerIndexType::KmerType                    KmerType;
         typedef typename KmerIndexType::SizeType                    KmerSizeType;

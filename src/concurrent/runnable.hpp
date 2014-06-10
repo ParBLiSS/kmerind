@@ -1,7 +1,7 @@
 /**
- * @file		runnable.hpp
+ * @file    runnable.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *
@@ -14,29 +14,34 @@
 
 namespace bliss
 {
-  namespace concurrent
-  {
+namespace concurrent
+{
 
-    /**
-     * @class			bliss::concurrent::Runnable
-     * @brief     not instantiable.  an abstract concept of a runnable task.  could be multithreaded, mpi based, or a single threaded task.
-     * @details   subclasses include runner and is subclasses, and user defined tasks.
-     *
-     *
-     *            since we allow mix of different types of Runnables (tasks), we cannot use CRTP and static polymorphism, which requires all types to be known at compile time.
-     *
-     *            Use dynamic polymorphism and restrict task to be coarse grain (NOT inside inner loop).
-     */
-    class Runnable
-    {
-      public:
-        Runnable();
-        virtual ~Runnable();
+/**
+ * @class   bliss::concurrent::Runnable
+ * @brief   not instantiable. An abstract concept of a runnable task.
+ *          could be multithreaded, mpi based, or a single threaded task.
+ * @details subclasses include runner and is subclasses, and user defined
+ *          tasks.
+ *
+ *          since we allow mix of different types of Runnables (tasks),
+ *          we cannot use CRTP and static polymorphism, which requires
+ *          all types to be known at compile time.
+ *
+ *          Use dynamic polymorphism and restrict task to be coarse grain
+ *          (NOT inside inner loop).
+ */
+class Runnable
+{
+  public:
+    Runnable();
 
-        virtual void run();
-    };
+    virtual ~Runnable();
 
-  } /* namespace concurrent */
+    virtual void run();
+};
+
+} /* namespace concurrent */
 } /* namespace bliss */
 
 #endif /* RUNNABLE_HPP_ */

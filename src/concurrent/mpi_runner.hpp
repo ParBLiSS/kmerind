@@ -1,7 +1,7 @@
 /**
- * @file		mpi_runner.hpp
+ * @file    mpi_runner.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief   runs some MPI work.  has a source, a compute algo, and a sink.
  * @details can either initialize directly, or use an existing MPI communicator.
  *
@@ -20,92 +20,101 @@
 
 namespace bliss
 {
-  namespace concurrent
-  {
+namespace concurrent
+{
 
-    /**
-     * @class			bliss::concurrent::MPIRunner
-     * @brief     runs a set of tasks on MPI processes
-     * @details   note that each MPI process is in its own memory address space.  we need to assign a single task to it based on its rank.
-     *
-     */
-    template <bool threaded>
-    class MPIRunner : public Runner
+/**
+ * @class     bliss::concurrent::MPIRunner
+ * @brief     runs a set of tasks on MPI processes
+ * @details   note that each MPI process is in its own memory address
+ *            space. We need to assign a single task to it based on its
+ *            rank.
+ *
+ */
+template <bool threaded>
+class MPIRunner : public Runner
+{
+  protected:
+    MPI_Comm comm;
+    bool commWasCreated;
+
+  public:
+    MPIRunner(int argc, char** argv)
     {
-      protected:
-        MPI_Comm comm;
-        bool commWasCreated;
-
-      public:
-        MPIRunner(int argc, char** argv) {
 #ifdef USE_MPI
-          if (threaded) {
+      if (threaded) {
+        int provided;
+        MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
-            int provided;
-            MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+        // check if there is MPI thread support
+        if (provided < MPI_THREAD_MULTIPLE) {
+          printf("ERROR: The MPI Library Does not have full thread support.\n");
+          MPI_Abort(MPI_COMM_WORLD, 1);
+        }
+      } else {
+        MPI_Init(&argc, &argv);
+      }
 
-            if (provided < MPI_THREAD_MULTIPLE) {
-              printf("ERROR: The MPI Library Does not have full thread support.\n");
-              MPI_Abort(MPI_COMM_WORLD, 1);
-            }
-          } else {
-            MPI_Init(&argc, &argv);
-          }
+      // get size and rank
+      comm = MPI_COMM_WORLD;
+      MPI_Comm_size(comm, &groupSize);
+      MPI_Comm_rank(comm, &id);
 
-          comm = MPI_COMM_WORLD;
+      commWasCreated = true;
 
-          MPI_Comm_size(comm, &groupSize);
-          MPI_Comm_rank(comm, &id);
-
-          commWasCreated = true;
-
-          if (id == 0)
-            std::cout << "USE_MPI is set" << std::endl;
+      if (id == 0)
+        // TODO: replace with logging
+        std::cout << "USE_MPI is set" << std::endl;
 #else
-          static_assert(false, "MPIRunner Used when compilation is not set to use MPI");
+      static_assert(false, "MPIRunner Used when compilation is not set to use MPI");
 #endif
-        };
+    }
 
-        // TODO: a splitting comm constructor
+    // TODO: a splitting comm constructor
 
 
-        // comm is now handled by the MPIRunner.
-        MPIRunner(MPI_Comm &_comm) {
-          comm = _comm;
-          MPI_Comm_size(comm, &groupSize);
-          MPI_Comm_rank(comm, &id);
-          commWasCreated = false;
+    // comm is now handled by the MPIRunner.
+    MPIRunner(MPI_Comm &_comm)
+    {
+      comm = _comm;
+      MPI_Comm_size(comm, &groupSize);
+      MPI_Comm_rank(comm, &id);
+      commWasCreated = false;
+    }
 
-        };
+    virtual ~MPIRunner()
+    {
+      if (commWasCreated) {
+        MPI_Finalize();
+      }
+    }
 
-        virtual ~MPIRunner() {
-          if (commWasCreated) {
-            MPI_Finalize();
-          }
-        };
+    MPI_Comm & getComm()
+    {
+      return comm;
+    }
 
-        MPI_Comm & getComm() {
-          return comm;
-        }
+    virtual void addTask(Runnable &t)
+    {
+      r = t;
+    }
 
-        virtual void addTask(Runnable &t) {
-          r = t;
-        }
+    virtual void run()
+    {
+      r.run();
+    }
 
-        virtual void run() {
-          r.run();
-        }
+    virtual void synchronize()
+    {
+      MPI_Barrier(comm);
+    }
 
-        virtual void synchronize() {
-          MPI_Barrier(comm);
-        }
+  protected:
+    Runnable r;
 
-      protected:
-        Runnable r;
+};
 
-    };
-
-  } /* namespace concurrent */
+} /* namespace concurrent */
 } /* namespace bliss */
 
 #endif /* MPIRUNNER_HPP_ */

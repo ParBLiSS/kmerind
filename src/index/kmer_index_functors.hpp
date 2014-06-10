@@ -1,7 +1,7 @@
 /**
- * @file		kmer_index_functors.hpp
+ * @file    kmer_index_functors.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *
@@ -16,10 +16,10 @@
 
 #include <array>
 
-#include "utils/constexpr_array.hpp"
-#include "common/AlphabetTraits.hpp"
-#include "io/fastq_iterator.hpp"
-#include "index/kmer_index_element.hpp"
+#include <utils/constexpr_array.hpp>
+#include <common/AlphabetTraits.hpp>
+#include <io/fastq_iterator.hpp>
+#include <index/kmer_index_element.hpp>
 
 namespace bliss
 {
@@ -36,9 +36,12 @@ namespace bliss
         typedef typename KmerIndex::KmerType        KmerValueType;
         typedef std::pair<KmerIndex, KmerValueType> OutputType;
 
+        /// Current Kmer buffer
         KmerIndex kmer;
-
+        /// Current reverse complement
         KmerValueType revcomp;
+
+        /// current position in the read sequence
         uint16_t pos;
 
         static constexpr BitSizeType nBits =

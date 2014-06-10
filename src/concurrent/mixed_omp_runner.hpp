@@ -1,7 +1,7 @@
 /**
- * @file		mixed_omp_runner.hpp
+ * @file    mixed_omp_runner.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *
@@ -20,59 +20,62 @@
 
 namespace bliss
 {
-  namespace concurrent
-  {
+namespace concurrent
+{
 
-    /**
-     * @class			bliss::concurrent::MixedOMPRunner
-     * @brief
-     * @details
-     *
-     */
-    class MixedOMPRunner : public Runner
+/**
+ * @class      bliss::concurrent::MixedOMPRunner
+ * @brief
+ * @details
+ *
+ */
+class MixedOMPRunner : public Runner
+{
+  public:
+    MixedOMPRunner(int nThreads) : groupSize(nThreads)
     {
-      public:
-        MixedOMPRunner(int nThreads) : groupSize(nThreads) {
 #ifdef USE_OPENMP
-          omp_set_num_threads(nThreads);
-          id = omp_get_thread_num();
+      omp_set_num_threads(nThreads);
+      id = omp_get_thread_num();
 #else
-          static_assert(false, "OMPRunner Used When compilation is not set to use OpenMP");
+      static_assert(false, "OMPRunner Used When compilation is not set to use OpenMP");
 #endif
 
-        }
-        virtual ~MixedOMPRunner() {};
+    }
+    virtual ~MixedOMPRunner() {};
 
-        virtual void addTask(Runnable &t) {
-          q.push_back(t);
-        }
+    virtual void addTask(Runnable &t)
+    {
+      q.push_back(t);
+    }
 
-        virtual void run() {
+    virtual void run()
+    {
 #pragma omp parallel num_threads(groupSize) default(none) shared(q)
-          {
+      {
 #pragma omp single nowait
-            {
-              for (Runnable r : q) {
+        {
+          for (Runnable r : q)
+          {
 #pragma omp task
-                {
-                  r.run();
-                }
-              }
+            {
+              r.run();
             }
           }
         }
+      }
+    }
 
-        virtual void synchronize() {
+    virtual void synchronize()
+    {
 #pragma omp barrier
-        }
+    }
 
-      protected:
-        std::vector<Runnable> q;
+  protected:
+    std::vector<Runnable> q;
+};
 
-
-    };
-
-  } /* namespace concurrent */
+} /* namespace concurrent */
 } /* namespace bliss */
 
 #endif /* MIXED_OMP_RUNNER_HPP_ */
