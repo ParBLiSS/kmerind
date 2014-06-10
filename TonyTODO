@@ -361,5 +361,6 @@ TODO:
 	1. query API 
 	2. better runtime api
 	3. testing query with/out mpi, with/out omp from 1 code base
-	4. mpi persistent communication
+	4. mpi persistent communication - buffer sizes varies, and performance gain for large packets is small - don't worry about it.
 	5. iterator dereferencing, functor and copy/move construction:  need a way to make clear what CAN and CANNOT be moved from iterator, i.e. repeated calls to dereference operator should be stable.
+	6. precompute all.  bucket. mpi all-to-all. hash 
