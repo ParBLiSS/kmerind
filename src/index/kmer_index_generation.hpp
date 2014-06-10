@@ -30,8 +30,8 @@ namespace bliss
         const T nprocs;
         const T nthreads;
         XorModulus(T _procs, T _threads) : nprocs(_procs), nthreads(_threads) {
-//          assert(_procs > 0);
-//          assert(_threads > 0);
+          assert(_procs > 0);
+          assert(_threads > 0);
 //          printf("XorModulus nprocs %lu, nthreads %lu\n", nprocs, nthreads); fflush(stdout);
         };
 
@@ -40,12 +40,10 @@ namespace bliss
          * @param v1
          * @param v2
          * @param tid     set this at run time so the same object can be used by multiple threads.
-         * @return
+         * @return        processor to send this stuff to.
          */
-        T operator()(const T &v1, const T &v2, const T &tid) {
-          assert(tid >= 0);
-          T offset = nprocs * tid;
-          return (nprocs == 1 ? offset : (v1 ^ v2) % nprocs + offset);
+        T operator()(const T &v1, const T &v2) {
+          return (nprocs == 1 ? 0 : (v1 ^ v2) % nprocs);
         }
     };
 
@@ -106,10 +104,10 @@ namespace bliss
             //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, index_kmer.first % nprocs + (nprocs * tid) );
 
             // TODO: abstract this to hide details.
-            uint64_t index = this->_hash(index_kmer.first.kmer, index_kmer.second, tid);
+            uint64_t index = this->_hash(index_kmer.first.kmer, index_kmer.second);
 //            if (counts[this->_tid] % 100000 == 0)
 //              printf("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, this->_tid, index, buffers.size()); fflush(stdout);
-            //printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, this->_tid, index, buffers[index].size());
+            //printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, tid, index, buffers[index].size());
             buffers[index].buffer(index_kmer.first);
             //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
 //            ++kmerCount;
@@ -167,7 +165,7 @@ namespace bliss
 //          int kmerCount = 0;
 
           // NOTE: need to get tid here. depending on how this is called, thread id may not be initialized correctly.
-          int tid = omp_get_thread_num();
+          //int tid = omp_get_thread_num();
 
           // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
           int i = 0;
@@ -189,10 +187,10 @@ namespace bliss
               //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, index_kmer.first % nprocs + (nprocs * tid) );
 
               // TODO: abstract this to hide details.
-              uint64_t index = this->_hash(index_kmer.first.kmer, index_kmer.second, tid);
+              uint64_t index = this->_hash(index_kmer.first.kmer, index_kmer.second);
 //              if (counts[tid] % 100000 == 0)
 //                printf("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, tid, index, buffers.size()); fflush(stdout);
-              //printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, this->_tid, index, buffers[index].size());
+              //printf("rank %d thread %d hashing %lu to %lu, fill = %lu\n", this->_rank, tid, index_kmer.first.kmer, index, buffers[index].size());
               buffers[index].buffer(index_kmer.first);
               //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", index_kmer.first, index_kmer.second.kmer, index_kmer.second.id.components.pos, index_kmer.second.qual);
 //              ++kmerCount;

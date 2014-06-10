@@ -269,16 +269,20 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
       // if atEnd, done.
 //      bool atEnd = false;
 
-      std::vector<  MPIBufferType > buffers;
-      buffers.reserve(nprocs * nthreads);
+      // create local buffers
+      std::vector<  std::vector<MPIBufferType > > buffers;
+      // buffers.reserve(nprocs); don't reserve.  no need.
+      for (int j = 0; j < nthreads; ++j) {
 
-      for (int i = 0; i < nprocs; ++i) {
-        // over provision by the number of threads as well.  (this is okay for smaller number of procs)
-        for (int j = 0; j < nthreads; ++j) {
-          buffers.push_back(std::move( MPIBufferType(comm, i, 8192*1024)));
+        std::vector< MPIBufferType > temp;
+        for (int i = 0; i < nprocs; ++i) {
+          temp.push_back(std::move(MPIBufferType(comm, i, 8192*1024)));
         }
+
+        buffers.push_back(std::move(temp));
       }
-      INFO("Level 0: compute num buffers = " << buffers.size());
+      INFO("Level 1: compute num buffers = " << buffers.size());
+
 
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
@@ -321,11 +325,11 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
             read = *fastq_start;
 
             // then compute
-            op(read, buffers);
+            op(read, buffers[tid]);
             ++i;
 
             if (i % 20000 == 0)
-              INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed seq " << i);
+              INFO("Level 1: rank " << rank << " thread " << tid << " processed seq " << i);
           }
 
           r = loader.getNextChunkRange(tid);
@@ -391,10 +395,13 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
 
       // send the last part out.
 //#pragma omp parallel for default(none) shared(nprocs, nthreads, rank, buffers)
-      for (int i = 0; i < nprocs * nthreads; ++i) {
+      for (int j = 0; j < nthreads; ++j) {
+        for (int i = 0; i < nprocs; ++i) {
         //printf("rank %d thread %d flushing buffer for buffer %d\n", rank, omp_get_thread_num(), (i+rank) % (nprocs * nthreads));
-        buffers[(i + rank) % (nprocs * nthreads)].flush();   /// + rank to avoid all threads sending to the same node.
+          buffers[j][(i + rank) % nprocs].flush();   /// + rank to avoid all threads sending to the same node.
+        }
       }
+
       INFO("flush rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
       //printf("flush rank %d thread %d elapsed time %f\n", rank, omp_get_thread_num(), time_span.count());
 
@@ -457,11 +464,11 @@ void computeP2P(FileLoaderType &loader,
 
     // define inbound message structure
     // create shared queue for MPI inbound messages. produced by MPI comm thread.  consumed by index hashing thread.
-    bliss::concurrent::ThreadSafeQueue<RecvQueueElementType> recvQueue;
+    bliss::concurrent::ThreadSafeFixedSizeQueue<RecvQueueElementType> recvQueue(nprocs * 2);
 
 
 
-#pragma omp parallel sections num_threads(3) shared(comm, nprocs, rank, index, nthreads, loader, mpi_senders, computes, sendQueue, recvQueue, ompi_mpi_unsigned_char, ompi_mpi_int) default(none)
+#pragma omp parallel sections num_threads(3) shared(comm, nprocs, rank, index, nthreads, loader, mpi_senders, computes, sendQueue, recvQueue, ompi_mpi_unsigned_char, ompi_mpi_int, ompi_request_null) default(none)
     {
 
 #pragma omp section
@@ -474,7 +481,7 @@ void computeP2P(FileLoaderType &loader,
         while (mpi_senders > 0) {
           /// check for messages
           if (recvQueue.tryPop(re)) {
-            printf("%d received %d. rec queue %lu\n", rank, re.first, recvQueue.size());
+            //printf("%d received %d. rec queue %lu\n", rank, re.first, recvQueue.size());
 
             RecvQueueElementType lre(std::move(re));
 
@@ -496,7 +503,7 @@ void computeP2P(FileLoaderType &loader,
         /// received done message.  now flush the remainder
         bool gotNext = recvQueue.tryPop(re);
         while (gotNext) {
-          printf("received. %lu\n", recvQueue.size());
+//          printf("flushing recv queue. %lu\n", recvQueue.size());
 
           RecvQueueElementType lre(std::move(re));
 
@@ -510,6 +517,7 @@ void computeP2P(FileLoaderType &loader,
           gotNext = recvQueue.tryPop(re);
         }
 
+        printf("finally: %lu -> %lu\n", sendQueue.size(), recvQueue.size());
       }  // section for handling the received MPI messages
 
 
@@ -521,7 +529,7 @@ void computeP2P(FileLoaderType &loader,
 
       /// loop until : 1. no more srcs.  2. no more compute threads.
       bool computeDone = false;  // 2 is computing, 1 is flushing, 0 is done
-
+      bool recvDone = false;
       SendQueueElementType se;
 
 
@@ -544,14 +552,16 @@ void computeP2P(FileLoaderType &loader,
         size_t waiting = recvInProgress.size();  // getting the size ahead of time.
         int fin = 0;
         for (int i = 0; i < waiting; ++i) {
-          std::pair<MPI_Request, RecvQueueElementType> el = recvInProgress.front();
+          std::pair<MPI_Request, RecvQueueElementType> el = std::move(recvInProgress.front());
           recvInProgress.pop();
 
           MPI_Test(&(el.first), &fin, MPI_STATUS_IGNORE);
 
           if (fin == 1) {
             // finished receiving.  insert into recvQueue
-            recvQueue.push(std::move(el.second));
+            while (!recvQueue.tryPush(std::move(el.second))) {
+              usleep(50);
+            }
           } else {
             recvInProgress.push(std::move(el));
           }
@@ -559,7 +569,7 @@ void computeP2P(FileLoaderType &loader,
         // now check send
         waiting = sendInProgress.size();
         for (int i = 0; i < waiting; ++i) {
-          std::pair<MPI_Request, SendQueueElementType> el = sendInProgress.front();
+          std::pair<MPI_Request, SendQueueElementType> el = std::move(sendInProgress.front());
           sendInProgress.pop();
 
           MPI_Test(&(el.first), &fin, MPI_STATUS_IGNORE);
@@ -568,7 +578,6 @@ void computeP2P(FileLoaderType &loader,
             // finished sending.  insert into recvQueue
             sendInProgress.push(std::move(el));
           }
-
         }
 
 
@@ -591,14 +600,14 @@ void computeP2P(FileLoaderType &loader,
               MPI_Recv(nullptr, received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
 #pragma omp atomic
               --mpi_senders;
-              //printf("RECV rank %d receiving END signal %d from %d, num sanders remaining is %d\n", rank, received, src, n_senders); fflush(stdout);
+              printf("RECV rank %d receiving END signal %d from %d, num sanders remaining is %d\n", rank, received, src, mpi_senders);
 #pragma omp flush(mpi_senders)
             } else {
               KmerIndexType* array = new KmerIndexType[received / sizeof(KmerIndexType)];
               //printf("created temp storage for read, capacity = %ld\n", capacity); fflush(stdout);
               MPI_Request req;
 
-              printf("RECV %d receiving %d bytes from %d.%d\n", rank, received, src, tag - 1);
+              printf("RECV %d->%d receiving %d bytes with tag %d\n", src, rank, received, tag);
               MPI_Irecv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
 
               // put into queue. - std::move version.  this part has to complete.
@@ -606,39 +615,49 @@ void computeP2P(FileLoaderType &loader,
                   req,
                   std::move(RecvQueueElementType(received/ sizeof(KmerIndexType), array))
               )));
-              printf("%d received %d. in progress: %lu\n", rank, received, recvInProgress.size());
+              //printf("%d received %d. in progress: %lu\n", rank, received, recvInProgress.size());
 
             }
           }
+        } else {
+          if ((recvDone == false) && recvInProgress.empty())
+            recvDone = true;
         }
 
 
 #pragma omp flush(computes)
-       if (computes == 0 && sendQueue.empty()) {
-         /// no more generators.  and queue is empty.
-         computeDone = true;
+       if ((computes == 0) && sendQueue.empty()) {
 
-         // now send end message to everyone except self.
-         int targetRank = rank;
+         if (sendInProgress.empty() && (computeDone == false)) {
+           /// no more generators.  and queue is empty.
+           computeDone = true;
+           printf("%d compute done\n", rank);
 
-         // first deal with sending to self.
-#pragma omp atomic
-         // local (same rank), just update.
-         --mpi_senders;
-#pragma omp flush(mpi_senders)
+           // now send end message to everyone except self.
 
-         // next send to all others.
-         MPI_Request endRequests[nprocs - 1];
-         for (int i = 1; i > nprocs; ++i) {
-           targetRank = (i + rank) % nprocs;
 
-           // send end message.
-           MPI_Isend(nullptr, 0, MPI_INT, targetRank, MPIBufferType::END_TAG, comm, &(endRequests[targetRank - 1]));
+           // next send to all others.
+           printf("%d terminating\n", rank);
+           MPI_Request endRequests[nprocs];
+           for (int i = 0; i < nprocs; ++i) {
+             if (i == rank) {
+               // first deal with sending to self.
+      #pragma omp atomic
+               // local (same rank), just update.
+               --mpi_senders;
+      #pragma omp flush(mpi_senders)
+               endRequests[i] = MPI_REQUEST_NULL;
+
+             } else {
+               // send end message.
+               MPI_Isend(nullptr, 0, MPI_INT, i, MPIBufferType::END_TAG, comm, &(endRequests[i]));
+             }
+           }
+
+           // wait for them all to finish
+           printf("%d wait for everyone to finish\n", rank);
+           MPI_Waitall(nprocs, endRequests, MPI_STATUSES_IGNORE);
          }
-
-         // wait for them all to finish
-         MPI_Waitall(nprocs - 1 , endRequests, MPI_STATUSES_IGNORE);
-
        } else {
          /// try dequeue and iSend.
          if (sendQueue.tryPop(se)) {
@@ -649,18 +668,21 @@ void computeP2P(FileLoaderType &loader,
              // local, directly handle by creating an output object and directly insert into the recv queue
              KmerIndexType* array = new KmerIndexType[se.second.size()];
              memcpy(array, se.second.data(), se.second.size() * sizeof(KmerIndexType));
-             recvQueue.push(std::move(RecvQueueElementType(se.second.size(), array)));
+             RecvQueueElementType temp(se.second.size(), array);
+             while(!recvQueue.tryPush(std::move(temp))) {
+               usleep(50);
+             }
 
-             printf("%d Sent %lu locally. in queue: sendQueue size %lu\n", rank, se.second.size(), sendQueue.size());
+             printf("%d->%d Sent %lu locally. in queue: sendQueue size %lu\n", rank, rank, se.second.size(), sendQueue.size());
 
            } else {
              MPI_Request req;
 
              SendQueueElementType lse(std::move(se));
-             MPI_Isend(lse.second.data(), lse.second.size() * sizeof(KmerIndexType), MPI_UNSIGNED_CHAR, lse.first, rank, comm, &req);
+             MPI_Isend(lse.second.data(), lse.second.size() * sizeof(KmerIndexType), MPI_UNSIGNED_CHAR, lse.first, rank+1, comm, &req);
              // lse is automatically cleaned up.
 
-             printf("%d Sent %lu remotely. in queue: sendQueue size %lu\n", rank, se.second.size(), sendQueue.size());
+             printf("%d->%d Sent %lu remotely. in queue: sendQueue size %lu\n", rank, lse.first, lse.second.size(), sendQueue.size());
 
              sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElementType>(req, std::move(lse))));
            }
@@ -669,7 +691,8 @@ void computeP2P(FileLoaderType &loader,
 
        }
 
-        if (computeDone && (mpi_senders == 0)) {
+        if (computeDone && recvDone) {
+          printf("inprogress:  send queue %lu -> %lu -> %lu -> %lu recv queue\n", sendQueue.size(), sendInProgress.size(), recvInProgress.size(), recvQueue.size());
           break;
         }
         usleep(50);
@@ -686,12 +709,27 @@ void computeP2P(FileLoaderType &loader,
       t1 = std::chrono::high_resolution_clock::now();
 
 
+
+      // create local buffers
+      std::vector<  std::vector<BufferType > > buffers;
+      // buffers.reserve(nprocs); don't reserve.  no need.
+      for (int j = 0; j < nthreads; ++j) {
+
+        std::vector< BufferType > temp;
+        for (int i = 0; i < nprocs; ++i) {
+          temp.push_back(std::move(BufferType(i, 8192*1024)));
+        }
+
+        buffers.push_back(std::move(temp));
+      }
+      INFO("Level 1: compute num buffers = " << buffers.size());
+
       int tcount = 0;
 
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(loader, nprocs, nthreads, rank, sendQueue, computes) default(none) reduction(+:tcount)
+#pragma omp parallel num_threads(nthreads) shared(loader, nprocs, nthreads, rank, sendQueue, computes, buffers) default(none) reduction(+:tcount)
       {
         /// initialize variables.
         ParserType parser;
@@ -702,17 +740,8 @@ void computeP2P(FileLoaderType &loader,
 #endif
         Compute op(nprocs, rank, nthreads);
 
-        // create local buffers
-        std::vector<  BufferType > buffers;
-        buffers.reserve(nprocs);
 
-        for (int i = 0; i < nprocs; ++i) {
-          buffers.push_back(std::move(BufferType(i, 8192*1024)));
-        }
-        INFO("Level 1: compute num buffers = " << buffers.size());
-#pragma omp barrier
-
-        printf("thread %d in %d.  requested %d\n", omp_get_thread_num(), omp_get_num_threads(), nthreads);
+        printf("thread %d in %d.  requested %d\n", tid, omp_get_num_threads(), nthreads);
 
 
         tcount = 0;
@@ -740,19 +769,19 @@ void computeP2P(FileLoaderType &loader,
             read = *fastq_start;
 
             // compute and buffer results
-            op(read, buffers);
+            op(read, buffers[tid]);
             ++tcount;
 
             if (tcount % 20000 == 0)
-              INFO("Level 1: rank " << rank << " thread " << omp_get_thread_num() << " processed seq " << tcount);
+              INFO("Level 1: rank " << rank << " thread " << tid << " processed seq " << tcount);
           }
 
           /// now check the buffers and send if needed.
-          for (int i = 0; i < buffers.size(); ++i) {
+          for (int i = 0; i < buffers[tid].size(); ++i) {
             targetRank =(i + rank) % nprocs;
-            if (buffers[targetRank].isFull()) {
-              printf("%d pushing %d into queue.  %lu\n", omp_get_thread_num(), targetRank, buffers[targetRank].size());
-              sendQueue.waitAndPush(std::move(buffers[targetRank].exportData()));
+            if (buffers[tid][targetRank].isFull()) {
+              printf("%d pushing %d->%d into queue (size %lu). entries %lu\n", tid, rank, targetRank, buffers[tid].size(), buffers[tid][targetRank].size());
+              sendQueue.waitAndPush(std::move(buffers[tid][targetRank].exportData()));
             }
           }
 
@@ -763,21 +792,23 @@ void computeP2P(FileLoaderType &loader,
 
         INFO("Level 1: rank " << rank << " thread " << tid << " processed total of " << j << " chunks");
 
+      }  // compute threads parallel
 
 
-        /// send the last part out.
-        for (int i = 0; i < buffers.size(); ++i) {
+      /// send the last part out.
+      int targetRank;
+      for (int j = 0; j < buffers.size(); ++j) {
+        for (int i = 0; i < buffers[j].size(); ++i) {
           //printf("rank %d thread %d flushing buffer for buffer %d\n", rank, omp_get_thread_num(), (i+rank) % (nprocs * nthreads));
           targetRank =(i + rank) % nprocs;
-          printf("%d flushing %d, %lu\n", omp_get_thread_num(), targetRank, buffers[targetRank].size());
-          if (buffers[targetRank].size() > 0)
-            sendQueue.waitAndPush(std::move(buffers[targetRank].exportData()));   /// + rank to avoid all threads sending to the same node.
+          //printf("%d flushing %d, %lu\n", omp_get_thread_num(), targetRank, buffers[j][targetRank].size());
+          if (buffers[j][targetRank].size() > 0)
+            sendQueue.waitAndPush(std::move(buffers[j][targetRank].exportData()));   /// + rank to avoid all threads sending to the same node.
         }
-        INFO("flush rank " << rank << " thread " << omp_get_thread_num() << "s.");
-        //printf("flush rank %d thread %d elapsed time %f\n", rank, omp_get_thread_num(), time_span.count());
+      }
+      INFO("flush rank " << rank << " thread " << omp_get_thread_num() << "s.");
+      //printf("flush rank %d thread %d elapsed time %f\n", rank, omp_get_thread_num(), time_span.count());
 
-
-      }  // compute threads parallel
 
       /// signaling done for this thread.
       computes = 0;
@@ -795,7 +826,7 @@ void computeP2P(FileLoaderType &loader,
     }     // section for processing the data and generating the kmers.
 
 
-    }  // outer parallel sections
+  }  // outer parallel sections
     //printf("rank %d done\n", rank);
 }
 
@@ -1036,13 +1067,15 @@ MPI_Barrier(comm);
 
 
 
-  /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-          RunTask<MPIComputeType> t;
-          t(filename, index, comm, groupSize, id, nthreads, chunkSize);
+//          /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+//          RunTask<MPIComputeType> t;
+//          t(filename, index, comm, groupSize, id, nthreads, chunkSize);
+//
+//          printf("MPI number of entries in index for rank %d is %lu\n", id, index.size());
+//
+//          MPI_Barrier(comm);
 
-          printf("MPI number of entries in index for rank %d is %lu\n", id, index.size());
 
-MPI_Barrier(comm);
           //// do it one more time.
           index.clear();
 

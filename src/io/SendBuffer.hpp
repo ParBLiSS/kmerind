@@ -61,10 +61,11 @@ namespace bliss
        SendBuffer(const int _targetRank, const size_t nbytes)
            : targetRank(_targetRank) {
           // initialize internal buffers (double buffering)
-          capacity = nbytes / sizeof(T);
+          capacity = 3 * nbytes / (2 * sizeof(T));
 
           buf.reserve(capacity);
-          //printf("construct size: %lu\n", buf.size());
+
+          printf("construct size, capacity: %lu, %lu. datastructure size %lu\n", buf.size(), buf.capacity(), sizeof(*this));
           if (capacity == 0) printf("capacity is 0!!!\n");
         }
 
@@ -107,7 +108,7 @@ namespace bliss
 
        virtual ~SendBuffer() {}
 
-        void buffer(T val) {
+        void buffer(const T& val) {
           if (THREAD_SAFE)
             std::unique_lock<std::mutex> lock(mutex);
 
@@ -140,7 +141,7 @@ namespace bliss
           if (THREAD_SAFE)
             std::unique_lock<std::mutex> lock(mutex);
 
-          printf("exporting data. %lu\n", buf.size());
+          //printf("exporting data. %lu\n", buf.size());
           std::vector<T> temp;
           temp.reserve(buf.size());
           std::swap(buf, temp);
