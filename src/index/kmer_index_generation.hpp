@@ -29,20 +29,23 @@ namespace bliss
     {
         const T nprocs;
         const T nthreads;
-        XorModulus(T _procs, T _threads) : nprocs(_procs), nthreads(_threads) {
+        XorModulus(T _procs, T _threads) : nprocs(_procs), nthreads(_threads)
+        {
 //          assert(_procs > 0);
 //          assert(_threads > 0);
 //          printf("XorModulus nprocs %lu, nthreads %lu\n", nprocs, nthreads); fflush(stdout);
-        };
+        }
 
         /**
          *
          * @param v1
          * @param v2
-         * @param tid     set this at run time so the same object can be used by multiple threads.
+         * @param tid   set this at run time so the same object can be used
+         *              by multiple threads.
          * @return
          */
-        T operator()(const T &v1, const T &v2, const T &tid) {
+        T operator()(const T &v1, const T &v2, const T &tid)
+        {
           assert(tid >= 0);
           T offset = nprocs * tid;
           return (nprocs == 1 ? offset : (v1 ^ v2) % nprocs + offset);
@@ -55,7 +58,8 @@ namespace bliss
     // given kmer index element type, and fastq sequence type, should be able to specialize kmer generator type.  DONE
     // given the kmer index element type, should be able to define sendbuffer type.  But won't.  SendBuffer may be of different types.
     // alignas(64)
-    struct countType {
+    struct countType
+    {
         uint64_t c;
     };
 
