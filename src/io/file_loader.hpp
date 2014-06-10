@@ -166,7 +166,7 @@ namespace bliss
         FileLoader& operator=(FileLoader<T, Buffering, Preloading, ChunkPartitioner, Derived>&& other) {
           if (this != &other) {
             //DEBUG("DESTROY");
-            delete [] dataBlocks;
+            if (dataBlocks != nullptr) delete [] dataBlocks;
 
             unload();
 
@@ -226,7 +226,7 @@ namespace bliss
          *                        to get just the calling node, use MPI_COMM_SELF (gives the right nprocs).
          */
 #if defined(USE_MPI)
-        explicit FileLoader(const std::string &_filename, const MPI_Comm& _comm, const int _nThreads = 1, const size_t _chunkSize = 1) throw (bliss::io::IOException)
+        FileLoader(const std::string &_filename, const MPI_Comm& _comm, const int _nThreads = 1, const size_t _chunkSize = 1) throw (bliss::io::IOException)
             : file_handle(-1), filename(_filename), fileRange(), mmap_data(nullptr),
               mmap_range(), loaded(false), preloaded(false),
               nthreads(_nThreads), chunkSize(_chunkSize), comm(_comm), dataBlocks(nullptr), recordSize(1)
@@ -276,7 +276,7 @@ namespace bliss
 #endif
 
 
-        explicit FileLoader(const std::string &_filename,
+        FileLoader(const std::string &_filename,
                             const int _nProcs = 1, const int _rank = 0,
                             const int _nThreads = 1, const size_t _chunkSize = 1 ) throw (bliss::io::IOException)
             : file_handle(-1), filename(_filename), fileRange(), mmap_data(nullptr),
@@ -324,7 +324,7 @@ namespace bliss
         virtual ~FileLoader()
         {
           //DEBUG("DESTROY");
-          delete [] dataBlocks;
+          if (dataBlocks != nullptr) delete [] dataBlocks;
 
           unload();
 

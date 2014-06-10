@@ -112,6 +112,11 @@ namespace bliss
           return *this;
         }
 
+        /**
+         *
+         * @return    the return value should be the same when repeatedly called.  this does not mean that we need to cache the result, but it should mean that we have
+         *            a way to deal with caller using std::move on the returned result (specifically, when caching for performance, should return a copy of the data.).
+         */
         inline value_type operator*()
         {
 
@@ -123,7 +128,7 @@ namespace bliss
           }
           // else result was already computed and stored in the functor.
 
-          return _f();
+          return _f();   // always constructs, not cached.
         }
 
         type& operator++()

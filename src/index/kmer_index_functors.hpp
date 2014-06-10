@@ -90,7 +90,7 @@ namespace bliss
         {
           //      KmerValueType xored_recoverable = (xored & ~mask_lower_half) | (_kmer.forward & mask_lower_half);
 
-          return OutputType(kmer, revcomp);
+          return OutputType(kmer, revcomp);   // constructing a new result.
         }
 
     };
@@ -123,7 +123,7 @@ namespace bliss
 
 
         static constexpr T log2_10DivNeg10 = std::log2(10.0) / -10.0;
-        constexpr ValueType operator()(const size_t v)
+        constexpr ValueType operator()(const size_t &v)
         {
           // some limits: v / -10 has to be negative as this becomes probability, so v > 0
           //
