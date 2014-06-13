@@ -1,7 +1,7 @@
 /**
- * @file		omp_runner.hpp
+ * @file    omp_runner.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *
@@ -20,49 +20,69 @@
 
 namespace bliss
 {
-  namespace concurrent
-  {
+namespace concurrent
+{
+
+/**
+ * @class      bliss::concurrent::OMPRunner
+ * @brief
+ * @details
+ *
+ */
+class OMPRunner : public Runner
+{
+  public:
 
     /**
-     * @class			bliss::concurrent::OMPRunner
-     * @brief
-     * @details
+     * @brief Creates a new OMPRunner instance with the given number of
+     *        threads
      *
+     * @param nThreads The number of OpenMP threads to use.
      */
-    class OMPRunner : public Runner
-    {
-      public:
-        OMPRunner(int nThreads) : groupSize(nThreads) {
+    OMPRunner(int nThreads) : groupSize(nThreads) {
 #ifdef USE_OPENMP
-          omp_set_num_threads(nThreads);
-          id = omp_get_thread_num();
+      omp_set_num_threads(nThreads);
+      id = omp_get_thread_num();
 #else
-          static_assert(false, "OMPRunner Used When compilation is not set to use OpenMP");
+      static_assert(false, "OMPRunner used although compilation is not set to use OpenMP");
 #endif
+    }
 
-        }
-        virtual ~OMPRunner() {};
+    /**
+     * @brief The destructor of this class.
+     */
+    virtual ~OMPRunner() {};
 
-        virtual void addTask(Runnable &t) {
-          r = t;
-        }
+    /**
+     * @brief Adds a task to this Runner.
+     *
+     * @param t
+     */
+    virtual void addTask(Runnable &t) {
+      r = t;
+    }
 
-        virtual void run() {
-
+    /**
+     * @brief Runs all tasks.
+     */
+    virtual void run() {
 #pragma omp parallel num_threads(groupSize) default(none) firstprivate(r)
-          r.run();
-        }
+      r.run();
+    }
 
-        virtual void synchronize() {
+    /**
+     * @brief Synchronizes all threads using a barrier.
+     */
+    virtual void synchronize() {
 #pragma omp barrier
-        }
+    }
 
-      protected:
-        Runnable r;
+  protected:
+    /// The task
+    Runnable r;
+};
 
-    };
-
-  } /* namespace concurrent */
+} /* namespace concurrent */
 } /* namespace bliss */
 
 #endif /* OMP_RUNNER_HPP_ */

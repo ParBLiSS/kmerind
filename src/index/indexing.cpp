@@ -6,6 +6,10 @@
  *
  *  Description:  testing code to try different ways of generating the index key from a collection of strings
  *
+ * TODO:
+ *  - Refactor the random read generator into some util classes
+ *  - This is mostly a benchmarking/test code for k-mer generation:
+ *      => rename it and file it that way
  */
 
 #include <vector>
@@ -198,7 +202,7 @@ void computeKeys<SCALAR>(const SequenceT &seq, const ReadLengthType &key_count,
   uint8_t last_block = DIV;  // these point to the "next" positions.
   uint8_t last_block_pos = REM;
   KeyType block = seq[last_block];
-  //std::cout << "key_count " << key_count << " last block: " << static_cast<int>(last_block) << " size of seq: "  << seq.size()  << std::endl;
+
   for (ReadLengthType j = 1; j < key_count; j++)
   { // for each packed char
 

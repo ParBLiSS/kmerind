@@ -1,7 +1,7 @@
 /**
- * @file		sequential_runner.hpp
+ * @file    sequential_runner.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *
@@ -21,39 +21,44 @@
 
 namespace bliss
 {
-  namespace concurrent
-  {
+namespace concurrent
+{
 
-    /**
-     * @class			bliss::concurrent::SequentialRunner
-     * @brief
-     * @details   can have multiple tasks, run in order of adding.
-     *
-     */
-    class SequentialRunner : public Runner
+/**
+ * @class     bliss::concurrent::SequentialRunner
+ * @brief
+ * @details   can have multiple tasks, run in order of adding.
+ *
+ */
+class SequentialRunner : public Runner
+{
+  public:
+    SequentialRunner() : Runner() {};
+
+    virtual ~SequentialRunner() {};
+
+    virtual void addTask(Runnable &t)
     {
-      public:
-        SequentialRunner() : Runner() {};
-        virtual ~SequentialRunner() {};
+      q.push_back(t);
+    }
 
-        virtual void addTask(Runnable &t) {
-          q.push_back(t);
-        }
+    virtual void run()
+    {
+      for (Runnable t : q)
+      {
+        t.run();
+      }
+    }
 
-        virtual void run() {
-          for (Runnable t : q) {
-            t.run();
-          }
-        }
+    virtual void synchronize()
+    {
+    }
 
-        virtual void synchronize() {
-        }
-      protected:
-        std::vector<Runnable> q;
+  protected:
+    std::vector<Runnable> q;
+};
 
-    };
-
-  } /* namespace concurrent */
+} /* namespace concurrent */
 } /* namespace bliss */
 
 #endif /* SEQUENTIAL_RUNNER_HPP_ */

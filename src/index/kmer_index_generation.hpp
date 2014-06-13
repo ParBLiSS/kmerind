@@ -1,7 +1,7 @@
 /**
- * @file		kmer_index_generation.hpp
+ * @file    kmer_index_generation.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *
@@ -33,7 +33,7 @@ namespace bliss
           assert(_procs > 0);
           assert(_threads > 0);
 //          printf("XorModulus nprocs %lu, nthreads %lu\n", nprocs, nthreads); fflush(stdout);
-        };
+        }
 
         /**
          *
@@ -53,7 +53,8 @@ namespace bliss
     // given kmer index element type, and fastq sequence type, should be able to specialize kmer generator type.  DONE
     // given the kmer index element type, should be able to define sendbuffer type.  But won't.  SendBuffer may be of different types.
     // alignas(64)
-    struct countType {
+    struct countType
+    {
         uint64_t c;
     };
 
@@ -61,8 +62,8 @@ namespace bliss
     template<typename KmerGenOp, typename SendBuffer, typename HashFunc>
     class KmerIndexGenerator {
       public:
-        typedef typename KmerGenOp::SequenceType		SequenceType;
-        typedef std::vector<SendBuffer>  				    BufferType;
+        typedef typename KmerGenOp::SequenceType    SequenceType;
+        typedef std::vector<SendBuffer>              BufferType;
         typedef typename KmerGenOp::KmerIndexType                   KmerIndexType;
         typedef typename KmerIndexType::KmerType                    KmerType;
         typedef typename KmerIndexType::SizeType                    KmerSizeType;

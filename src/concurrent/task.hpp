@@ -1,7 +1,7 @@
 /**
- * @file		task.hpp
+ * @file    task.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *
@@ -16,43 +16,48 @@
 
 namespace bliss
 {
-  namespace concurrent
+namespace concurrent
+{
+
+/**
+ * @class     bliss::concurrent::Task
+ * @brief
+ * @details   assumption is that the run method contains a loop, which
+ *            calls src repeatedly to get data block, compute, then put
+ *            data in Dest.  compute should take a datablock as input, and
+ *            dest as output target (write directly into dest).  Src should
+ *            know how to partition itself, and have a "getNextChunk"
+ *            method Dest should know how to hash the values it receives,
+ *            and have a "put" method.
+ *
+   *            because of the repeated runs, the three classes should avoid
+   *            dynamic polymorphism.  we use static polymorphism to ensure
+   *            that the types specified are correct.  we also use
+   *            static_assert to ensure that the input/output types are
+   *            matched up.
+   *
+   */
+  template<typename Compute, typename Src, typename Dest>
+  class Task : public Runnable
   {
+    protected:
+      Compute comp;
+      Src input;
+      Dest output;
 
-    /**
-     * @class			bliss::concurrent::Task
-     * @brief
-     * @details   assumption is that the run method contains a loop, which calls src repeatedly to get data block, compute, then put data in Dest.
-     *              compute should take a datablock as input, and dest as output target (write directly into dest).
-     *              Src should know how to partition itself, and have a "getNextChunk" method
-     *              Dest should know how to hash the values it receives, and have a "put" method.
-     *
-     *
-     *            because of the repeated runs, the three classes should avoid dynamic polymorphism.
-     *            we use static polymorphism to ensure that the types specified are correct.
-     *            we also use static_assert to ensure that the input/output types are matched up.
-     *
-     */
-    template<typename Compute, typename Src, typename Dest>
-    class Task : public Runnable
-    {
-      protected:
-        Compute comp;
-        Src input;
-        Dest output;
+    public:
+      Task(Compute &_comp, Src &_input, Dest &_output)
+        : comp(_comp), input(_input), output(_output) {};
 
-      public:
-        Task(Compute &_comp, Src &_input, Dest &_output) : comp(_comp), input(_input), output(_output) {};
-        virtual ~Task() {};
+      virtual ~Task() {};
 
-        virtual void run() {
+      virtual void run()
+      {
 
+      }
+  };
 
-
-        }
-    };
-
-  } /* namespace concurrent */
+} /* namespace concurrent */
 } /* namespace bliss */
 
 #endif /* TASK_HPP_ */

@@ -1,7 +1,7 @@
 /**
- * @file		MPISendBuffer.hpp
+ * @file    MPISendBuffer.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *

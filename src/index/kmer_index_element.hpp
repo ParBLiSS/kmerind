@@ -1,7 +1,7 @@
 /**
- * @file		kmer_index_element.hpp
+ * @file    kmer_index_element.hpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *
@@ -14,79 +14,79 @@
 
 namespace bliss
 {
-  namespace index
-  {
+namespace index
+{
 
-    /**
-     * @class     bliss::io::kmer_size
-     * @brief     represents the size of the kmer.
-     * @details
-     */
-    template<int K>
-    struct KmerSize
-    {
-        static constexpr int size = K;
-    };
+/**
+ * @class     bliss::io::kmer_size
+ * @brief     represents the size of the kmer.
+ * @details
+ */
+template<int K>
+struct KmerSize
+{
+    static constexpr int size = K;
+};
 
 
-    /**
-     * @class     bliss::io::KmerIndexElement
-     * @brief     basic struct for storing a kmer (no position or quality).
-     * @details
-     *  K is a typename so that we do not use memory.
-     */
-    template<typename K, typename Kmer>
-    struct KmerIndexElement
-    {
-        typedef K SizeType;
-        typedef Kmer KmerType;
+/**
+ * @class     bliss::io::KmerIndexElement
+ * @brief     basic struct for storing a kmer (no position or quality).
+ * @details
+ *  K is a typename so that we do not use memory.
+ */
+template<typename K, typename Kmer>
+struct KmerIndexElement
+{
+    typedef K SizeType;
+    typedef Kmer KmerType;
 
-        Kmer kmer;
+    Kmer kmer;
 
 //        virtual ~KmerIndexElement() {}
-    };
+};
 
 
-    /**
-     * @class     bliss::io::KmerIndexElement
-     * @brief     basic struct for storing position of a kmer (no quality score).
-     * @details
-     *  K is a typename so that we do not use memory.
-     */
-    template<typename K, typename Kmer, typename Id>
-    struct KmerIndexElementWithId : public KmerIndexElement<K, Kmer>
-    {
-        typedef K SizeType;
-        typedef Kmer KmerType;
-        typedef Id PositionType;
+/**
+ * @class     bliss::io::KmerIndexElement
+ * @brief     basic struct for storing position of a kmer (no quality score).
+ * @details
+ *  K is a typename so that we do not use memory.
+ */
+template<typename K, typename Kmer, typename Id>
+struct KmerIndexElementWithId : public KmerIndexElement<K, Kmer>
+{
+    typedef K SizeType;
+    typedef Kmer KmerType;
+    typedef Id PositionType;
 
-        Id id;
+    Id id;
 //        virtual ~KmerIndexElementWithId() {}
-    };
+};
 
 
-    /**
-     * @class     bliss::io::KmerIndexElement
-     * @brief     basic struct for storing position and quality of a kmer.
-     * @details
-     *  K is a typename so that we do not use memory.
-     *
-     */
-    template<typename K, typename Kmer, typename Id, typename Qual>
-    struct KmerIndexElementWithIdAndQuality : public KmerIndexElementWithId<K, Kmer, Id>
-    {
-        typedef K SizeType;
-        typedef Kmer KmerType;
-        typedef Id PositionType;
-        typedef Qual QualityType;
+/**
+ * @class     bliss::io::KmerIndexElement
+ * @brief     basic struct for storing position and quality of a kmer.
+ * @details
+ *  K is a typename so that we do not use memory.
+ *
+ */
+template<typename K, typename Kmer, typename Id, typename Qual>
+struct KmerIndexElementWithIdAndQuality : public KmerIndexElementWithId<K, Kmer, Id>
+{
+    typedef K SizeType;
+    typedef Kmer KmerType;
+    typedef Id PositionType;
+    typedef Qual QualityType;
 
-        Qual qual;
+    Qual qual;
 
 //        virtual ~KmerIndexElementWithIdAndQuality() {}
-    };
+};
 
 
-  } /* namespace index */
+} /* namespace index */
 } /* namespace bliss */
 
 #endif /* KMER_INDEX_ELEMENT_HPP_ */
