@@ -109,37 +109,49 @@ namespace bliss
        virtual ~SendBuffer() {}
 
         void buffer(const T& val) {
-          if (THREAD_SAFE)
+          if (THREAD_SAFE) {
             std::unique_lock<std::mutex> lock(mutex);
 
           // careful.  when growing, the content is automatically copied to new and destroyed in old.
           //   the destruction could cause double free error or segv if T does not have the move constructor/assignemnt operator.
 //          if (capacity < 1) printf("capacity 0!!!\n");
 //          if ((buf.size() >= capacity) && ((buf.size() - capacity) % 100000 == 0)) printf("size:  %lu\n", buf.size());
-          buf.push_back(val);
+            buf.push_back(val);
+          } else {
+            buf.push_back(val);
+          }
+
         }
 
         void buffer(T&& val) {
-          if (THREAD_SAFE)
+          if (THREAD_SAFE) {
             std::unique_lock<std::mutex> lock(mutex);
 
           // careful.  when growing, the content is automatically copied to new and destroyed in old.
           //   the destruction could cause double free error or segv if T does not have the move constructor/assignemnt operator.
 //          if (capacity < 1) printf("capacity 0!!!\n");
 //          if ((buf.size() >= capacity) && ((buf.size() - capacity) % 100000 == 0)) printf("size:  %lu\n", buf.size());
-          buf.push_back(val);
+            buf.push_back(val);
+          } else {
+            buf.push_back(val);
+          }
+          }
         }
 
         size_t size() {
-          if (THREAD_SAFE)
+          if (THREAD_SAFE) {
             std::unique_lock<std::mutex> lock(mutex);
-          return buf.size();
+            return buf.size();
+          } else
+            return buf.size();
         }
 
         bool isFull() {
-          if (THREAD_SAFE)
+          if (THREAD_SAFE) {
             std::unique_lock<std::mutex> lock(mutex);
-          return buf.size() >= capacity;
+            return buf.size() >= capacity;
+          } else
+            return buf.size() >= capacity;
         }
 
 
@@ -149,15 +161,20 @@ namespace bliss
          * @return
          */
         ExportType exportData() {
-          if (THREAD_SAFE)
+          std::vector<T> temp;
+          int trank = targetRank;
+          if (THREAD_SAFE) {
             std::unique_lock<std::mutex> lock(mutex);
 
           //printf("exporting data. %lu\n", buf.size());
-          std::vector<T> temp;
-          temp.reserve(buf.size());
-          std::swap(buf, temp);
-          assert(buf.size() == 0);
-          int trank = targetRank;
+            temp.reserve(buf.size());
+            std::swap(buf, temp);
+            assert(buf.size() == 0);
+          } else {
+            temp.reserve(buf.size());
+            std::swap(buf, temp);
+            assert(buf.size() == 0);
+          }
           return ExportType(std::move(trank), std::move(temp));
         }
     };

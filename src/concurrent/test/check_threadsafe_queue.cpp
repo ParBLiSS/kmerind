@@ -11,14 +11,6 @@
  */
 
 
-
-/**
- * range_test.cpp
- * Test range class
- *  Created on: Feb 18, 2014
- *      Author: tpan
- */
-
 #include <iostream>
 #include <cstdio>
 #include <unistd.h>
