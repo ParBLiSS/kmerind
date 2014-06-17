@@ -12,13 +12,22 @@
 #ifndef BLISS_COMMUNICATION_LAYER_HPP
 #define BLISS_COMMUNICATION_LAYER_HPP
 
+#include <mpi.h>
+
 class CommunicationLayer
 {
 public:
 
   constexpr static int default_tag = 0;
 
-  CommunicationLayer (const MPI_Comm& communicator);
+  CommunicationLayer (const MPI_Comm& communicator)
+    : comm(communicator)
+  {
+    // init communicator rank and size
+    MPI_Comm_size(comm, &commSize);
+    MPI_Comm_rank(comm, &commRank);
+  }
+
   virtual ~CommunicationLayer ();
 
   /// potentially buffered communication
@@ -26,25 +35,27 @@ public:
   ///    also for lookups and answers (two way comm)
   ///    and end tag messages (should also be definable from the outside)
   /// TODO: what is the `message` per se?
-  template<typename T>
-  void sendMessage(int dst_rank, const T* data, std::size_t data_size, int tag=default_tag)
+  void sendMessage(const void* data, int count, int dst_rank, int tag=default_tag)
   {
-    
-  }
-
-  template<typename T>
-  void sendMessage(int dst_rank, const T& data, int tag=default_tag)
-  {
-    int count = sizeof(T);
-    // how to deserialize the data?
+    MPI_Request req;
+    MPI_ISend(data, count, MPI_UINT8_T, dst_rank, tag, comm, &req);
   }
 
 
+  int getCommSize() const
+  {
+    return commSize;
+  }
+
+  int getCommRank() const
+  {
+    return commRank;
+  }
 
   void flush();
 
   // This _requires_ some kind of async threading system
-  void addReceiveCallback(sometag, std::function something);
+  void addReceiveCallback(int sometag, std::function something);
 
   // active receiving (by polling) for when there is no callback set
   // these must be thread-safe!
@@ -59,6 +70,12 @@ private:
 
   /// The MPI Communicator object for this communication layer
   MPI_Comm comm;
+
+  /// The MPI Communicator size
+  int commSize;
+
+  /// The MPI Communicator rank
+  int commRank;
 };
 
 #endif // BLISS_COMMUNICATION_LAYER_HPP
