@@ -404,6 +404,6 @@ TODO:
 				
 6/17/2014
 	refactor SendBuffer to 3 parts:  MessageBuffer(MPI specific), BufferPool (for memory reuse), and Buffer(reusable memory block).
-	
+		buffer is working.  bufferpool: usage:  when message buffer detects a buffer being full, an empty buffer is obtained.  need to define the api carefully here.
 	
 				
