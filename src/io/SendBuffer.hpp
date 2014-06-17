@@ -135,7 +135,6 @@ namespace bliss
           } else {
             buf.push_back(val);
           }
-          }
         }
 
         size_t size() {
