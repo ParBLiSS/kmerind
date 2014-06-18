@@ -16,8 +16,7 @@
 #ifndef BUFFER_HPP_A
 #define BUFFER_HPP_
 
-#include <string.h>
-
+#include <cstring>
 #include <cassert>
 
 #include <memory>
@@ -55,10 +54,12 @@ namespace bliss
       friend class Buffer<bliss::concurrent::THREAD_UNSAFE>;
 
       protected:
+        typedef std::unique_ptr<uint8_t[], std::default_delete<uint8_t[]> >  DataType;
+
         size_t capacity;
         std::atomic<size_t> size;
 
-        std::unique_ptr<unsigned char[], std::default_delete<unsigned char[]> > data;
+        DataType data;
 
         mutable std::mutex mutex;
       private:
@@ -157,11 +158,12 @@ namespace bliss
         /**
          * note that the data should not be deleted by something else.  also, read it.
          * read only.
+         * no reason to pass back the data unique_ptr - no functions to be called by user.
+         * can't template this since can't overload function by return type only.
          */
-        const unsigned char* getData() const {
+        const uint8_t* getData() const {
           return data.get();
         }
-
 
 
         /**
@@ -172,7 +174,7 @@ namespace bliss
         }
 
         /**
-         * check if a buffer is full.
+         * check if a buffer is full.  if return true, guaranteed to be full.  false does not guarantee - size may be modified before returning.
          * @return
          */
         bool isFull() {
@@ -182,31 +184,64 @@ namespace bliss
 
 
         /**
-         * append data to the buffer.
+         * append data to the buffer.  semantically, a "false" return value does not mean
+         *  the buffer if full.  it means that there is not enough room for the new data.
          * @param add_data
          * @param add_size
          */
-        bool append(const void* add_data, const size_t add_size) {
-          // can't use memory ordering alone, because we need
-          // to check if we have room to add.  if not, then don't add.
-          // the check and add have to happen atomically, so fetch_add does not work.
+
+        template<typename T>
+        bool append(const T* typed_data, const size_t count) {
           if (capacity == 0) return false;
 
+          size_t addS = count * sizeof(T);
+
+
+          // can't use memory ordering alone
+          // we need to check if we have room to add.  if not, then don't add.
+          // the check and add have to happen atomically, so fetch_add does not work.
           std::unique_lock<std::mutex> lock(mutex);
           size_t s = size.load(std::memory_order_relaxed);  // no memory ordering within mutex lock
-          size_t newS = s + add_size;
-          if (newS > capacity) {
-            return false;
-          }
-
+          size_t newS = s + addS;
+          if (newS > capacity) return false;
           size.store(newS, std::memory_order_relaxed);
           lock.unlock();
 
-          memcpy(data.get() + s, add_data, add_size);
+          std::memcpy(data.get() + s, typed_data, addS);
           return true;
         }
+        /**
+         * lockfree version.  sync version is faster on 4 threads.  using compare_exchange_weak vs strong - no major difference.
+         *    using relaxed and release vs acquire and acq_rel - no major difference.
+         *
+         *    DO NO USE.
+         * @param typed_data
+         * @param count
+         * @return
+         */
+        template<typename T>
+        bool append_lockfree(const T* typed_data, const size_t count) {
+          if (capacity == 0) return false;
+
+          size_t addS = count * sizeof(T);
 
 
+          // can't use memory ordering alone
+          // we need to check if we have room to add.  if not, then don't add.
+          // the check and add have to happen atomically, so fetch_add does not work
+
+          // try with compare and exchange weak.
+          size_t s = size.load(std::memory_order_consume);
+          size_t newS = s;
+          do {
+            newS = s + addS;
+            if (newS > capacity) return false;
+          } while (!size.compare_exchange_strong(s, newS, std::memory_order_acq_rel, std::memory_order_consume));  // choosing strong, since we return.
+
+
+          std::memcpy(data.get() + s, typed_data, addS);
+          return true;
+        }
 
     };
 
@@ -227,10 +262,14 @@ namespace bliss
 
 
       protected:
+        typedef std::unique_ptr<uint8_t[], std::default_delete<uint8_t[]> >  DataType;
+
+
         size_t capacity;
         size_t size;
 
-        std::unique_ptr<unsigned char[], std::default_delete<unsigned char[]> > data;
+        DataType data;
+
 
       private:
         /**
@@ -323,8 +362,10 @@ namespace bliss
         /**
          * note that the data should not be deleted by something else.  also, read it.
          * read only.
+         * no reason to pass back the data unique_ptr - no functions to be called by user.
+         * can't template this since can't overload function by return type only.
          */
-        const unsigned char* getData() const {
+        const uint8_t* getData() const {
           return data.get();
         }
 
@@ -345,18 +386,22 @@ namespace bliss
         }
 
         /**
-         * append data to the buffer.
+         * append data to the buffer.  semantically, a "false" return value does not mean
+         *  the buffer if full.  it means that there is not enough room for the new data.
          * @param add_data
          * @param add_size
          * @return
          */
-        bool append(const void* add_data, const size_t add_size) {
+        template<typename T>
+        bool append(const T* typed_data, const size_t count) {
           if (capacity == 0) return false;
 
-          if ((size + add_size) > capacity) return false;
+          size_t addS = count * sizeof(T);
 
-          memcpy(data.get() + size, add_data, add_size);
-          size += add_size;
+          if ((size + addS) > capacity) return false;
+
+          std::memcpy(data.get() + size, typed_data, addS);
+          size += addS;
           return true;
         }
     };

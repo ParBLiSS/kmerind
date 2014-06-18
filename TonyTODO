@@ -405,5 +405,9 @@ TODO:
 6/17/2014
 	refactor SendBuffer to 3 parts:  MessageBuffer(MPI specific), BufferPool (for memory reuse), and Buffer(reusable memory block).
 		buffer is working.  bufferpool: usage:  when message buffer detects a buffer being full, an empty buffer is obtained.  need to define the api carefully here.
-	
+		buffer:  lockfree (using memory fence) is not faster than using mutex lock (for append.  with 4 threads)
+	Buffer contains unique_ptr - our goal - Buffer maintains ownership.  to pass content around: see
+		http://stackoverflow.com/questions/8114276/how-do-i-pass-a-unique-ptr-argument-to-a-constructor-or-a-function
 				
+				
+	BufferPool - coded.  need testing.  design is to get an id, then seperately get the buffer.

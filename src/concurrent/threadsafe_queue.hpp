@@ -23,15 +23,16 @@
 #include <mutex>
 #include <condition_variable>
 #include <queue>
+#include <limits>
+#include <atomic>
 
 
 namespace bliss
 {
   namespace concurrent
   {
-
     /**
-     * @class			bliss::concurrent::ThreadSafeQueue
+     * @class     bliss::concurrent::ThreadSafeQueue
      * @brief
      * @details
      *
@@ -42,28 +43,74 @@ namespace bliss
       private:
         std::queue<T> q;
         mutable std::mutex mutex;
-        std::condition_variable cond_var;
+        std::condition_variable empty_cv;
+        std::condition_variable full_cv;
+        const size_t capacity;
 
       public:
 
-        void push (T const& data) {
+        ThreadSafeQueue(const size_t &_capacity = std::numeric_limits<size_t>::max()) : capacity(_capacity) {};
+
+        const size_t& getMaxSize() const {
+          return capacity;
+        }
+
+        bool full() const {
+        	if (capacity == std::numeric_limits<size_t>::max()) return false;
+        
           std::unique_lock<std::mutex> lock(mutex);
+          return q.size() >= capacity;
+        }
+
+
+        bool tryPush (T const& data) {
+          std::unique_lock<std::mutex> lock(mutex);
+          if (q.size() >= capacity) {
+            // empty q.  wait for someone to signal.
+            return false;
+          }
+
           q.push(data);   // move using predefined copy refernece version of push
           lock.unlock();
-          cond_var.notify_one();
+          empty_cv.notify_one();
+          return true;
         }
 
-        void push (T && data) {
+        bool tryPush (T && data) {
           std::unique_lock<std::mutex> lock(mutex);
-          q.push(data);    // move using predefined move reference version of push
+          if (q.size() >= capacity) {
+            // empty q.  wait for someone to signal.
+            return false;
+          }
+
+          q.push(std::move(data));    // move using predefined move reference version of push
           lock.unlock();
-          cond_var.notify_one();
+          empty_cv.notify_one();
+          return true;
         }
 
-        bool empty() const
-        {
+        void waitAndPush (T const& data) {
           std::unique_lock<std::mutex> lock(mutex);
-          return q.empty();
+          while (q.size() >= capacity) {
+            // full q.  wait for someone to signal.
+            full_cv.wait(lock);
+          }
+
+          q.push(data);   // move using predefined copy refernece version of push
+          lock.unlock();
+          empty_cv.notify_one();
+        }
+
+        void waitAndPush (T && data) {
+          std::unique_lock<std::mutex> lock(mutex);
+          while (q.size() >= capacity) {
+            // full q.  wait for someone to signal.
+            full_cv.wait(lock);
+          }
+
+          q.push(std::move(data));    // move using predefined move reference version of push
+          lock.unlock();
+          empty_cv.notify_one();
         }
 
         size_t size() const
@@ -72,6 +119,11 @@ namespace bliss
           return q.size();
         }
 
+        bool empty() const
+        {
+          std::unique_lock<std::mutex> lock(mutex);
+          return q.empty();
+        }
 
         bool tryPop(T& output) {
           std::unique_lock<std::mutex> lock(mutex);
@@ -82,6 +134,8 @@ namespace bliss
 
           output = std::move(q.front());  // convert to movable reference and move-assign.
           q.pop();
+          lock.unlock();
+          full_cv.notify_one();
           return true;
         }
 
@@ -89,17 +143,23 @@ namespace bliss
           std::unique_lock<std::mutex> lock(mutex);
           while (q.empty()) {
             // empty q.  wait for someone to signal.
-            cond_var.wait(lock);
+//            printf("empty wait\n");
+            empty_cv.wait(lock);
+//            printf("empty wait over\n");
           }
           // when cond_var is notified, then lock will be acquired and q will be examined.
 
           output = std::move(q.front());  // convert to movable reference and move-assign.
           q.pop();
+          lock.unlock();
+          full_cv.notify_one();
         }
 
-
-
     };
+
+
+
+
 
   } /* namespace concurrent */
 } /* namespace bliss */

@@ -43,7 +43,6 @@
 #include "index/kmer_index_element.hpp"
 #include "index/kmer_index_functors.hpp"
 #include "index/kmer_index_generation.hpp"
-#include "concurrent/threadsafe_fixedsize_queue.hpp"
 #include "concurrent/threadsafe_queue.hpp"
 
 /*
@@ -461,11 +460,11 @@ void computeP2P(FileLoaderType &loader,
 
     // outbound message structure
     // create shared queue for MPI outbound messages. produced by compute threads via MPISendBuffer. consumed by MPI comm thread.
-    bliss::concurrent::ThreadSafeFixedSizeQueue<SendQueueElementType> sendQueue(nthreads * 2);
+    bliss::concurrent::ThreadSafeQueue<SendQueueElementType> sendQueue(nthreads * 2);
 
     // define inbound message structure
     // create shared queue for MPI inbound messages. produced by MPI comm thread.  consumed by index hashing thread.
-    bliss::concurrent::ThreadSafeFixedSizeQueue<RecvQueueElementType> recvQueue(nprocs * 2);
+    bliss::concurrent::ThreadSafeQueue<RecvQueueElementType> recvQueue(nprocs * 2);
 
 
 
@@ -1037,13 +1036,13 @@ void queryP2P(FileLoaderType &loader,
 
     // outbound message structure
     // create shared queue for MPI outbound messages. produced by compute threads via MPISendBuffer. consumed by MPI comm thread.
-    bliss::concurrent::ThreadSafeFixedSizeQueue<SendQueueElementType> sendQueue(nthreads * 2);
+    bliss::concurrent::ThreadSafeQueue<SendQueueElementType> sendQueue(nthreads * 2);
 
     // define inbound message structure
     // create shared queue for MPI inbound messages. produced by MPI comm thread.  consumed by index hashing thread.
-    bliss::concurrent::ThreadSafeFixedSizeQueue<RecvQueueElementType> recvQueue(nprocs * 2);
+    bliss::concurrent::ThreadSafeQueue<RecvQueueElementType> recvQueue(nprocs * 2);
 
-    bliss::concurrent::ThreadSafeFixedSizeQueue<CountQueryQueueElementType>  resultQueue(nprocs * 2);
+    bliss::concurrent::ThreadSafeQueue<CountQueryQueueElementType>  resultQueue(nprocs * 2);
 
 #pragma omp parallel sections num_threads(3) shared(comm, nprocs, rank, index, nthreads, loader, mpi_senders, computes, sendQueue, recvQueue, ompi_mpi_unsigned_char, ompi_mpi_int, ompi_request_null) default(none)
     {

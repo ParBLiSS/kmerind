@@ -14,6 +14,7 @@
 #include "io/buffer.hpp"
 #include "omp.h"
 #include <cassert>
+#include <chrono>
 
 int main(int argc, char** argv) {
 
@@ -25,8 +26,8 @@ int main(int argc, char** argv) {
   // check insertion.
   int start = -1, end = -1;
   int i = 0;
-  for (i = 0; i < 9000; i += 4) {
-    if (! tlBuffer.append(&i, sizeof(int))) {
+  for (i = 0; i < 9000; ++i) {
+    if (! tlBuffer.append(&i, 1)) {
        if (start == -1) start = i;
     }
   }
@@ -43,18 +44,18 @@ int main(int argc, char** argv) {
   start = -1;
   end = -1;
   i = 0;
-  for (i = 0; i < 9000; i += 4) {
+  for (i = 0; i < 9000; ++i) {
     if (tlBuffer.isFull()) {
       if (start == -1) start = i;
     }
-    tlBuffer.append(&i, sizeof(int));
+    tlBuffer.append(&i, 1);
   }
   end = i;
   printf("isFULL from %d to %d!\n", start, end);
 
   const int* temp = reinterpret_cast<const int*>(tlBuffer.getData());
   for (unsigned int j = 0; j < (8192/sizeof(int)); ++j) {
-    assert(temp[j] == static_cast<int>(j*4));
+    assert(temp[j] == static_cast<int>(j));
   }
   printf("CONTENT Passes check after insert\n");
 
@@ -117,7 +118,7 @@ int main(int argc, char** argv) {
 
   temp = reinterpret_cast<const int*>(tlBuffer.getData());
   for (unsigned int j = 0; j < (8192/sizeof(int)); ++j) {
-    assert(temp[j] == static_cast<int>(j*4));
+    assert(temp[j] == static_cast<int>(j));
   }
   printf("CONTENT Passes check after move\n");
 
@@ -125,26 +126,34 @@ int main(int argc, char** argv) {
 
 
   // check concurrent insert
-  printf(" check thread local buffer.\n");
+  printf(" check thread safe buffer.\n");
 
 
   // check clear
-  bliss::io::Buffer<bliss::concurrent::THREAD_SAFE> tsBuffer4(8192);
+  bliss::io::Buffer<bliss::concurrent::THREAD_SAFE> tsBuffer4(32768);
 
 
   // check insertion.
-  end = -1;
-  std::atomic<int> start2(-1);
   i = 0;
-#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4, start2, end) private(i)
-  for (i = 0; i < 9000; i += 4) {
-    if (! tsBuffer4.append(&i, sizeof(int))) {
-       start2.compare_exchange_strong(end, i);
+  int fail = 0;
+#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i) reduction(+:fail)
+  for (i = 0; i < 9000; ++i) {
+    if (! tsBuffer4.append(&i, 1)) {
+      ++fail;
     }
   }
-  end = i;
-  printf("can't insert (full) from %d to %d!\n", start2.load(), end);
-//
+
+
+  temp = reinterpret_cast<const int*>(tsBuffer4.getData());
+  for (unsigned int j = 0; j < (8192/sizeof(int)); ++j) {
+    printf("[%d %d], ", j, temp[j]);
+    if ((j % 8) == 7) printf("\n");
+  }
+  printf("\n\n");
+
+
+
+  //
 //  temp = reinterpret_cast<const int*>(tsBuffer4.getData());
 //  for (unsigned int j = 0; j < (8192/sizeof(int)); ++j) {
 //    printf("%d %d\n", j, temp[j]);
@@ -159,20 +168,18 @@ int main(int argc, char** argv) {
 
 
   // check isFull
-  start2 = -1;
-  end = -1;
   i = 0;
-
-#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4, start2, end) private(i)
-  for (i = 0; i < 9000; i += 4) {
+  fail = 0;
+#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i) reduction(+ : fail)
+  for (i = 0; i < 9000; ++i) {
     if (tsBuffer4.isFull()) {
-      start2.compare_exchange_strong(end, i);
+      ++fail;
+    } else {
+      if (!tsBuffer4.append(&i, 1)) {
+        ++fail;
+      }
     }
-    tsBuffer4.append(&i, sizeof(int));
   }
-  end = i;
-  printf("isFULL from %d to %d!\n", start2.load(), end);
-
 
   temp = reinterpret_cast<const int*>(tsBuffer4.getData());
   for (unsigned int j = 0; j < (8192/sizeof(int)); ++j) {
@@ -182,8 +189,58 @@ int main(int argc, char** argv) {
   printf("\n\n");
 
 
+  printf("isFULL for %d iterations\n", fail);
 
 
 
 
+
+  ////////////// timing.  the insert before this is to warm up.
+  int cap = 10000;
+
+  bliss::io::Buffer<bliss::concurrent::THREAD_SAFE> tsBuffer5(cap);
+
+
+
+    std::chrono::high_resolution_clock::time_point t1, t2;
+    std::chrono::duration<double> time_span;
+
+    for (int k = 0; k < 3; ++k) {
+
+      tsBuffer5.clear();
+      t1 = std::chrono::high_resolution_clock::now();
+
+      // check insertion.
+      i = 0;
+      fail = 0;
+    #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap) private(i) reduction(+:fail)
+      for (i = 0; i < cap/sizeof(int); ++i) {
+        if (! tsBuffer5.append(&i, 1)) {
+          ++fail;
+        }
+      }
+      t2 = std::chrono::high_resolution_clock::now();
+
+      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+      printf("locking append can't insert (full) %d iterations!  duration = %f\n", fail, time_span.count());
+
+
+      tsBuffer5.clear();
+      t1 = std::chrono::high_resolution_clock::now();
+
+      // check insertion.
+      i = 0;
+      fail = 0;
+    #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap) private(i) reduction(+:fail)
+      for (i = 0; i < cap/sizeof(int); ++i) {
+        if (! tsBuffer5.append_lockfree(&i, 1)) {
+          ++fail;
+        }
+      }
+      t2 = std::chrono::high_resolution_clock::now();
+
+      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+      printf("lockfree append can't insert (full) %d iterations!  duration = %f\n", fail, time_span.count());
+
+    }
 }
