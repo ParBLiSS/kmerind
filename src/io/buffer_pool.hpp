@@ -19,7 +19,9 @@
 #include <mutex>
 #include <deque>
 #include <vector>
+#include <sstream>
 
+#include "io/io_exception.hpp"
 #include "io/buffer.hpp"
 #include "concurrent/concurrent.hpp"
 #include "concurrent/threadsafe_queue.hpp"
@@ -29,7 +31,7 @@ namespace bliss
   namespace io
   {
 
-    template<bliss::concurrent::ThreadSafety PoolTS, bliss::concurrent::ThreadSafety BufferThreadSafety>
+    template<bliss::concurrent::ThreadSafety PoolTS, bliss::concurrent::ThreadSafety BufferTS = PoolTS>
     class BufferPool;
 
 
@@ -44,63 +46,94 @@ namespace bliss
     {
       public:
         typedef bliss::io::Buffer<BufferThreadSafety>     BufferType;
+        typedef size_t                                    IdType;
 
       protected:
 
         size_t capacity;
         size_t buffer_capacity;
 
-        bliss::concurrent::ThreadSafeQueue<int> available;
+        bliss::concurrent::ThreadSafeQueue<size_t> available;
+
         std::vector<BufferType> buffers;
 
         mutable std::mutex mutex;
 
         bool fixedSize;
 
-        int createNewBuffer() {
-          int bufferId;
-          std::unique_lock<std::mutex> lock(mutex);
-          bufferId = buffers.size();
+        /**
+         * should be called from within a mutex locked block
+         * @return
+         */
+        size_t createNewBuffer() {
+          size_t bufferId = buffers.size();
           buffers.push_back(BufferType(buffer_capacity));
-          lock.unlock();
 
-          available.tryPush(bufferId);    // available is not fixedSized, so will just succeed.
           return bufferId;
         }
 
 
       public:
         /**
-         * if capacity is set to size_t max value then we populate the array with 100.  else the _capacity number of entries are created.
-         * @param _capacity
+         *  construct a Buffer Pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is set to _pool_capacity.
+         *
+         * @param _pool_capacity       number of buffers in the pool
+         * @param _buffer_capacity    size of the individual buffers
          */
-        BufferPool(const size_t _buffer_capacity, const size_t pool_capacity = std::numeric_limits<size_t>::max()) :
-          capacity(pool_capacity), buffer_capacity(_buffer_capacity), available(),   // ThreadSafeQueue is not size bound.
-          buffers(), fixedSize(pool_capacity == std::numeric_limits<size_t>::max()) {
+        BufferPool(const size_t _pool_capacity, const size_t _buffer_capacity) :
+          capacity(_pool_capacity), buffer_capacity(_buffer_capacity), available(),   // ThreadSafeQueue is not size bound.
+          buffers(), fixedSize(_pool_capacity != std::numeric_limits<size_t>::max()) {
 
           // get an estimated size first, so don't have to keep growing the vector
-          size_t size_hint = fixedSize ? 128 : capacity;
+          size_t size_hint = fixedSize ? capacity : 128;
 
           // reserve the buffer, and configure.
           buffers.reserve(size_hint);
-          for (int i = 0; i < size_hint; ++i) {
+          for (size_t i = 0; i < size_hint; ++i) {
             buffers.push_back(BufferType(buffer_capacity));
             available.waitAndPush(i);
           }
         };
 
         /**
+         * construct a Buffer pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is unbounded.
+         *
+         * @param _buffer_capacity    size of the individual buffers
+         */
+        explicit BufferPool(const size_t _buffer_capacity) :
+            BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>(std::numeric_limits<size_t>::max(), _buffer_capacity) {};
+
+
+        /**
          * all auto deleted.
          */
         virtual ~BufferPool() {};
 
+        size_t getSize() {
+          return buffers.size();
+        }
+        size_t getCapacity() {
+          return (fixedSize ? capacity : getSize());
+        }
+        bool isFixedSize() {
+          return fixedSize;
+        }
+
+        void reset() {
+          std::lock_guard<std::mutex> lock(mutex);
+          available.clear();
+          for (size_t i = 0; i < buffers.size(); ++i) {
+            available.tryPush(i);
+            buffers[i].clear();
+          }
+        }
 
         /**
          *
          * @param bufferId
          * @return
          */
-        bool tryAcquireBuffer(int & bufferId) {
+        bool tryAcquireBuffer(size_t & bufferId) {
 
           if (fixedSize) {
             // if there is something available in "available", get it.  else get false.
@@ -109,12 +142,10 @@ namespace bliss
             // can grow, but first check for available.
             if (!available.tryPop(bufferId)) {
               // non available.  so allocate a new one and return.
+              std::lock_guard<std::mutex> lock(mutex);
               bufferId = createNewBuffer();
-              return true;
-            } else {
-              //got one
-              return true;
-            }
+            } // else already got one.
+            return true;
           }
         }
 
@@ -122,7 +153,7 @@ namespace bliss
          *
          * @param bufferId
          */
-        void waitAndAcquireBuffer(int & bufferId) {
+        void waitAndAcquireBuffer(size_t & bufferId) {
           if (fixedSize) {
             // have to wait for available
             available.waitAndPop(bufferId);
@@ -130,20 +161,55 @@ namespace bliss
           } else {  // can grow, but first see if we can reuse one.
             // check if there are some available.
             if (!available.tryPop(bufferId)) {
+              std::lock_guard<std::mutex> lock(mutex);
               bufferId = createNewBuffer();
             }
           }
         }
 
-        void releaseBuffer(const int& bufferId) {
+        /**
+         * release a buffer back to pool, by id.  if id is incorrect, throw exception.
+         * @param bufferId
+         */
+        void releaseBuffer(const size_t& bufferId) throw (bliss::io::IOException) {
+          std::unique_lock<std::mutex> lock(mutex);
+          if (bufferId >= buffers.size()) {
+            std::stringstream ss;
+            ss << "ERROR: BufferPool releasing buffer with id " << bufferId << ", buffer does not exist.";
+            throw IOException(ss.str());
+          }
           // insert the buffer into "available"
+          lock.unlock();
+
           available.tryPush(bufferId);
         }
 
-        const BufferType& getBuffer(const int& bufferId) {
+        /**
+         * get the buffer by id.  if id is incorrect, throw exception.
+         * @param bufferId
+         * @return
+         */
+        const BufferType& operator[](const size_t& bufferId) throw (bliss::io::IOException) {
+          if (bufferId >= buffers.size()) {
+            if (fixedSize) {
+              std::stringstream ss;
+              ss << "ERROR: BufferPool get buffer with id " << bufferId << ", buffer does not exist.";
+              throw IOException(ss.str());
+            } else {
+              std::unique_lock<std::mutex> lock(mutex);
+              for (size_t i = buffers.size(); i <= bufferId; ++i) {
+                createNewBuffer();
+              }
+            }
+          }
+          // insert the buffer into "available"
+
           return buffers[bufferId];
         }
 
+        const BufferType& at(const size_t& bufferId) throw (bliss::io::IOException) {
+          return this->operator[](bufferId);
+        }
     };
 
 
@@ -155,62 +221,89 @@ namespace bliss
      *
      */
     template<>
-    class BufferPool<bliss::concurrent::THREAD_UNSAFE, bliss::concurrent::THREAD_UNSAFE>
+    class BufferPool<bliss::concurrent::THREAD_UNSAFE>
     {
       public:
         typedef bliss::io::Buffer<bliss::concurrent::THREAD_UNSAFE>     BufferType;
-
+        typedef size_t                                                  IdType;
       protected:
 
         size_t capacity;
         size_t buffer_capacity;
 
-        std::deque<int> available;
+        std::deque<size_t> available;
         std::vector<BufferType> buffers;
 
         bool fixedSize;
 
-        int createNewBuffer() {
-          int bufferId = buffers.size();
+        size_t createNewBuffer() {
+          size_t bufferId = buffers.size();
           buffers.push_back(BufferType(buffer_capacity));
 
-          available.push_back(bufferId);    // available is not fixedSized, so will just succeed.
           return bufferId;
         }
 
 
       public:
         /**
-         * if capacity is set to size_t max value then we populate the array with 100.  else the _capacity number of entries are created.
-         * @param _capacity
+         *  construct a Buffer Pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is set to _pool_capacity.
+         *
+         * @param _pool_capacity       number of buffers in the pool
+         * @param _buffer_capacity    size of the individual buffers
          */
-        BufferPool(const size_t _buffer_capacity, const size_t pool_capacity = std::numeric_limits<size_t>::max()) :
+        BufferPool(const size_t pool_capacity, const size_t _buffer_capacity) :
           capacity(pool_capacity), buffer_capacity(_buffer_capacity), available(),   // ThreadSafeQueue is not size bound.
-          buffers(), fixedSize(pool_capacity == std::numeric_limits<size_t>::max()) {
+          buffers(), fixedSize(pool_capacity != std::numeric_limits<size_t>::max()) {
 
           // get an estimated size first, so don't have to keep growing the vector
-          size_t size_hint = fixedSize ? 128 : capacity;
+          size_t size_hint = fixedSize ? capacity : 128;
 
           // reserve the buffer, and configure.
           buffers.reserve(size_hint);
-          for (int i = 0; i < size_hint; ++i) {
+          for (size_t i = 0; i < size_hint; ++i) {
             buffers.push_back(BufferType(buffer_capacity));
             available.push_back(i);
           }
         };
 
         /**
+         * construct a Buffer pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is unbounded.
+         *
+         * @param _buffer_capacity    size of the individual buffers
+         */
+        explicit BufferPool(const size_t _buffer_capacity) :
+            BufferPool<bliss::concurrent::THREAD_UNSAFE>(std::numeric_limits<size_t>::max(), _buffer_capacity) {};
+
+        /**
          * all auto deleted.
          */
         virtual ~BufferPool() {};
 
+        size_t getSize() {
+          return buffers.size();
+        }
+        size_t getCapacity() {
+          return (fixedSize ? capacity : getSize());
+        }
+        bool isFixedSize() {
+          return fixedSize;
+        }
+
+
+        void reset() {
+          available.clear();
+          for (size_t i = 0; i < buffers.size(); ++i) {
+            available.push_back(i);
+            buffers[i].clear();
+          }
+        }
 
         /**
          *
          * @param bufferId
          * @return
          */
-        bool tryAcquireBuffer(int & bufferId) {
+        bool tryAcquireBuffer(size_t & bufferId) {
 
           if (available.empty()) {
             // if empty,...
@@ -220,14 +313,15 @@ namespace bliss
             } else {
               // if there is no capacity limit, create a new buffer, insert into vector, and return it.
               bufferId = createNewBuffer();
-              return true;
             }
           } else {
+
             // if there is something available in "available", get it
             bufferId = available.front();
             available.pop_front();
-            return true;
           }
+          return true;
+
         }
 
         /**
@@ -235,7 +329,7 @@ namespace bliss
          *  for the same thread to update does not make sense.
          * @param bufferId
          */
-//        void waitAndAcquireBuffer(int & bufferId) {
+//        void waitAndAcquireBuffer(size_t & bufferId) {
 //          // if empty, and can grow, then grow.
 //          if (available.empty()) {
 //            if (!fixedSize) {
@@ -256,13 +350,35 @@ namespace bliss
 //          }
 //        }
 
-        void releaseBuffer(const int& bufferId) {
+        void releaseBuffer(const size_t& bufferId) throw (bliss::io::IOException) {
+          if (bufferId >= buffers.size()) {
+            std::stringstream ss;
+            ss << "ERROR: BufferPool releasing buffer with id " << bufferId << ", buffer does not exist.";
+            throw IOException(ss.str());
+          }
+
           // insert the buffer into "available"
           available.push_back(bufferId);
         }
 
-        const BufferType& getBuffer(const int& bufferId) {
+        const BufferType& operator[](const size_t& bufferId) throw (bliss::io::IOException) {
+          if (bufferId >= buffers.size()) {
+            if (fixedSize) {
+              std::stringstream ss;
+              ss << "ERROR: BufferPool get buffer with id " << bufferId << ", buffer does not exist.";
+              throw IOException(ss.str());
+            } else {
+              for (size_t i = buffers.size(); i <= bufferId; ++i) {
+                createNewBuffer();
+              }
+            }
+          }
+
           return buffers[bufferId];
+        }
+
+        const BufferType& at(const size_t& bufferId) throw (bliss::io::IOException) {
+          return this->operator[](bufferId);
         }
     };
 

@@ -22,7 +22,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-#include <queue>
+#include <deque>
 #include <limits>
 #include <atomic>
 
@@ -41,7 +41,7 @@ namespace bliss
     class ThreadSafeQueue
     {
       private:
-        std::queue<T> q;
+        std::deque<T> q;
         mutable std::mutex mutex;
         std::condition_variable empty_cv;
         std::condition_variable full_cv;
@@ -70,7 +70,7 @@ namespace bliss
             return false;
           }
 
-          q.push(data);   // move using predefined copy refernece version of push
+          q.push_back(data);   // move using predefined copy refernece version of push
           lock.unlock();
           empty_cv.notify_one();
           return true;
@@ -83,7 +83,7 @@ namespace bliss
             return false;
           }
 
-          q.push(std::move(data));    // move using predefined move reference version of push
+          q.push_back(std::move(data));    // move using predefined move reference version of push
           lock.unlock();
           empty_cv.notify_one();
           return true;
@@ -96,7 +96,7 @@ namespace bliss
             full_cv.wait(lock);
           }
 
-          q.push(data);   // move using predefined copy refernece version of push
+          q.push_back(data);   // move using predefined copy refernece version of push
           lock.unlock();
           empty_cv.notify_one();
         }
@@ -108,7 +108,7 @@ namespace bliss
             full_cv.wait(lock);
           }
 
-          q.push(std::move(data));    // move using predefined move reference version of push
+          q.push_back(std::move(data));    // move using predefined move reference version of push
           lock.unlock();
           empty_cv.notify_one();
         }
@@ -117,6 +117,12 @@ namespace bliss
         {
           std::unique_lock<std::mutex> lock(mutex);
           return q.size();
+        }
+
+        void clear()
+        {
+          std::unique_lock<std::mutex> lock(mutex);
+          q.clear();
         }
 
         bool empty() const
@@ -133,7 +139,7 @@ namespace bliss
           }
 
           output = std::move(q.front());  // convert to movable reference and move-assign.
-          q.pop();
+          q.pop_front();
           lock.unlock();
           full_cv.notify_one();
           return true;
@@ -150,7 +156,7 @@ namespace bliss
           // when cond_var is notified, then lock will be acquired and q will be examined.
 
           output = std::move(q.front());  // convert to movable reference and move-assign.
-          q.pop();
+          q.pop_front();
           lock.unlock();
           full_cv.notify_one();
         }

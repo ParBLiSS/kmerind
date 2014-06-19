@@ -57,11 +57,11 @@ namespace bliss
         typedef std::unique_ptr<uint8_t[], std::default_delete<uint8_t[]> >  DataType;
 
         size_t capacity;
-        std::atomic<size_t> size;
 
+        mutable std::atomic<size_t> size;     // mutable so can call append from a const Buffer object.  conceptually size and data are constant members of the Buffer.
         DataType data;
 
-        mutable std::mutex mutex;
+        mutable std::mutex mutex;  // mutable so can lock
       private:
         /**
          * called after acquiring mutex on "other"
@@ -80,7 +80,8 @@ namespace bliss
          * Constructor.  allocation of memory array is automatic.
          * @param _capacity   The number of bytes to store.
          */
-        Buffer(const size_t _capacity) : capacity(_capacity), size(0), data(new unsigned char[_capacity]) {
+        Buffer(const size_t _capacity) : capacity(_capacity), size(0), data(new uint8_t[_capacity]) {
+          memset(data.get(), 0, _capacity * sizeof(uint8_t));
           assert(_capacity > 0);
         };
         /**
@@ -143,7 +144,7 @@ namespace bliss
          * get the current size of the buffer.
          * @return
          */
-        size_t getSize() {
+        size_t getSize() const {
           return size.load(std::memory_order_consume);
         }
 
@@ -151,7 +152,7 @@ namespace bliss
          * get the capacity of the buffer.
          * @return
          */
-        size_t getCapacity() {
+        const size_t & getCapacity() const {
           return capacity;
         }
 
@@ -169,7 +170,7 @@ namespace bliss
         /**
          * clear the buffer. (just set the size to 0)
          */
-        void clear() {
+        void clear() const {
           size.store(0, std::memory_order_release);
         }
 
@@ -177,7 +178,7 @@ namespace bliss
          * check if a buffer is full.  if return true, guaranteed to be full.  false does not guarantee - size may be modified before returning.
          * @return
          */
-        bool isFull() {
+        bool isFull() const {
           size_t s = size.load(std::memory_order_consume);
           return s >= capacity;
         }
@@ -191,7 +192,8 @@ namespace bliss
          */
 
         template<typename T>
-        bool append(const T* typed_data, const size_t count) {
+        bool append(const T* typed_data, const size_t count) const {     // const method because the user will have const reference to Buffers.
+                                                                         // because of the const-ness, we have mutable data and size.
           if (capacity == 0) return false;
 
           size_t addS = count * sizeof(T);
@@ -220,7 +222,8 @@ namespace bliss
          * @return
          */
         template<typename T>
-        bool append_lockfree(const T* typed_data, const size_t count) {
+        bool append_lockfree(const T* typed_data, const size_t count) const {    // const method because the user will have const reference to Buffers.
+                                                                                 // because of the const-ness, we have mutable data and size.
           if (capacity == 0) return false;
 
           size_t addS = count * sizeof(T);
@@ -266,9 +269,9 @@ namespace bliss
 
 
         size_t capacity;
-        size_t size;
 
-        DataType data;
+        mutable size_t size;        // mutable so can call append on a const Buffer object. conceptually size and data are constant members of the Buffer.
+        DataType data;      // mutable so can call append on a const Buffer object. conceptually size and data are constant members of the Buffer.
 
 
       private:
@@ -284,7 +287,8 @@ namespace bliss
          * Constructor.  allocation of memory array is automatic.
          * @param _capacity   The number of bytes to store.
          */
-        Buffer(const size_t _capacity) : capacity(_capacity), size(0), data(new unsigned char[_capacity]) {
+        Buffer(const size_t _capacity) : capacity(_capacity), size(0), data(new uint8_t[_capacity]) {
+          memset(data.get(), 0, _capacity * sizeof(uint8_t));
           assert(_capacity > 0);
         };
         /**
@@ -347,7 +351,7 @@ namespace bliss
          * get the current size of the buffer.
          * @return
          */
-        size_t getSize() {
+        size_t getSize() const {
           return size;
         }
 
@@ -355,7 +359,7 @@ namespace bliss
          * get the capacity of the buffer.
          * @return
          */
-        size_t getCapacity() {
+        const size_t& getCapacity() const {
           return capacity;
         }
 
@@ -373,7 +377,7 @@ namespace bliss
         /**
          * clear the buffer. (just set the size to 0)
          */
-        void clear() {
+        void clear() const {
           size = 0;
         }
 
@@ -381,7 +385,7 @@ namespace bliss
          * check if buffer if full.
          * @return
          */
-        bool isFull() {
+        bool isFull() const {
           return size >= capacity;
         }
 
@@ -393,7 +397,8 @@ namespace bliss
          * @return
          */
         template<typename T>
-        bool append(const T* typed_data, const size_t count) {
+        bool append(const T* typed_data, const size_t count) const {   // const method because the user will have const reference to Buffers.
+                                                                       // because of the const-ness, we have mutable data and size.
           if (capacity == 0) return false;
 
           size_t addS = count * sizeof(T);

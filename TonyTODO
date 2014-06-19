@@ -411,3 +411,6 @@ TODO:
 				
 				
 	BufferPool - coded.  need testing.  design is to get an id, then seperately get the buffer.
+		tested
+		
+	updating message buffer class.

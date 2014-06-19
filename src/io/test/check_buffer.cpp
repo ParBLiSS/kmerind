@@ -18,6 +18,9 @@
 
 int main(int argc, char** argv) {
 
+  typedef int valType;
+  int typeSize = sizeof(valType);
+  valType val;
 
   printf(" check thread local buffer.\n");
 
@@ -27,7 +30,8 @@ int main(int argc, char** argv) {
   int start = -1, end = -1;
   int i = 0;
   for (i = 0; i < 9000; ++i) {
-    if (! tlBuffer.append(&i, 1)) {
+    val = static_cast<valType>(i);
+    if (! tlBuffer.append(&val, 1)) {
        if (start == -1) start = i;
     }
   }
@@ -48,14 +52,15 @@ int main(int argc, char** argv) {
     if (tlBuffer.isFull()) {
       if (start == -1) start = i;
     }
-    tlBuffer.append(&i, 1);
+    val = static_cast<valType>(i);
+    tlBuffer.append(&val, 1);
   }
   end = i;
   printf("isFULL from %d to %d!\n", start, end);
 
-  const int* temp = reinterpret_cast<const int*>(tlBuffer.getData());
-  for (unsigned int j = 0; j < (8192/sizeof(int)); ++j) {
-    assert(temp[j] == static_cast<int>(j));
+  const valType* temp = reinterpret_cast<const valType*>(tlBuffer.getData());
+  for (int j = 0; j < (8192/typeSize); ++j) {
+    assert(temp[j] == j);
   }
   printf("CONTENT Passes check after insert\n");
 
@@ -116,9 +121,9 @@ int main(int argc, char** argv) {
 
 
 
-  temp = reinterpret_cast<const int*>(tlBuffer.getData());
-  for (unsigned int j = 0; j < (8192/sizeof(int)); ++j) {
-    assert(temp[j] == static_cast<int>(j));
+  temp = reinterpret_cast<const valType*>(tlBuffer.getData());
+  for (int j = 0; j < (8192/typeSize); ++j) {
+    assert(temp[j] == j);
   }
   printf("CONTENT Passes check after move\n");
 
@@ -136,26 +141,28 @@ int main(int argc, char** argv) {
   // check insertion.
   i = 0;
   int fail = 0;
-#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i) reduction(+:fail)
+#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i, val) reduction(+:fail)
   for (i = 0; i < 9000; ++i) {
-    if (! tsBuffer4.append(&i, 1)) {
+    val = static_cast<valType>(i);
+
+    if (! tsBuffer4.append(&val, 1)) {
       ++fail;
     }
   }
 
 
-  temp = reinterpret_cast<const int*>(tsBuffer4.getData());
-  for (unsigned int j = 0; j < (8192/sizeof(int)); ++j) {
-    printf("[%d %d], ", j, temp[j]);
-    if ((j % 8) == 7) printf("\n");
-  }
-  printf("\n\n");
+//  temp = reinterpret_cast<const valType*>(tsBuffer4.getData());
+//  for (int j = 0; j < (8192/typeSize); ++j) {
+//    printf("[%d %d], ", j, temp[j]);
+//    if ((j % 8) == 7) printf("\n");
+//  }
+//  printf("\n\n");
 
 
 
   //
 //  temp = reinterpret_cast<const int*>(tsBuffer4.getData());
-//  for (unsigned int j = 0; j < (8192/sizeof(int)); ++j) {
+//  for (unsigned int j = 0; j < (8192/typeSize); ++j) {
 //    printf("%d %d\n", j, temp[j]);
 //  }
 //  printf("\n\n");
@@ -170,19 +177,21 @@ int main(int argc, char** argv) {
   // check isFull
   i = 0;
   fail = 0;
-#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i) reduction(+ : fail)
+#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i, val) reduction(+ : fail)
   for (i = 0; i < 9000; ++i) {
     if (tsBuffer4.isFull()) {
       ++fail;
     } else {
-      if (!tsBuffer4.append(&i, 1)) {
+      val = static_cast<valType>(i);
+
+      if (!tsBuffer4.append(&val, 1)) {
         ++fail;
       }
     }
   }
 
-  temp = reinterpret_cast<const int*>(tsBuffer4.getData());
-  for (unsigned int j = 0; j < (8192/sizeof(int)); ++j) {
+  temp = reinterpret_cast<const valType*>(tsBuffer4.getData());
+  for (int j = 0; j < (8192/typeSize); ++j) {
     printf("[%d %d], ", j, temp[j]);
     if ((j % 8) == 7) printf("\n");
   }
@@ -213,9 +222,11 @@ int main(int argc, char** argv) {
       // check insertion.
       i = 0;
       fail = 0;
-    #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap) private(i) reduction(+:fail)
-      for (i = 0; i < cap/sizeof(int); ++i) {
-        if (! tsBuffer5.append(&i, 1)) {
+    #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap, typeSize) private(i, val) reduction(+:fail)
+      for (i = 0; i < cap/typeSize; ++i) {
+        val = static_cast<valType>(i);
+
+        if (! tsBuffer5.append(&val, 1)) {
           ++fail;
         }
       }
@@ -231,9 +242,11 @@ int main(int argc, char** argv) {
       // check insertion.
       i = 0;
       fail = 0;
-    #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap) private(i) reduction(+:fail)
-      for (i = 0; i < cap/sizeof(int); ++i) {
-        if (! tsBuffer5.append_lockfree(&i, 1)) {
+    #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap, typeSize) private(i, val) reduction(+:fail)
+      for (i = 0; i < cap/typeSize; ++i) {
+        val = static_cast<valType>(i);
+
+        if (! tsBuffer5.append_lockfree(&val, 1)) {
           ++fail;
         }
       }
