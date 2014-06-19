@@ -60,7 +60,7 @@ public:
 
 protected:
   // for positional index
-  void receivedInsertCallback(void* msg, int count, int fromRank)
+  void receivedInsertCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
     // deserialize
     std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
@@ -74,7 +74,7 @@ protected:
   }
 
   // for counting index
-  void receivedCountCallback(void* msg, int count, int fromRank)
+  void receivedCountCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
     // deserialize
     K* keys = reinterpret_cast<K*>(msg);
@@ -87,7 +87,7 @@ protected:
     }
   }
 
-  void receivedLookupCallback(void* msg, int count, int fromRank)
+  void receivedLookupCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
     // deserialize
     K* keys = reinterpret_cast<K*>(msg);
@@ -106,7 +106,7 @@ protected:
     }
   }
 
-  void receivedLookupAnswerCallback(void* msg, int count, int fromRank)
+  void receivedLookupAnswerCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
     // deserialize
     std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
@@ -123,8 +123,8 @@ protected:
   void sendKey(const K& key, const int dstRank, const int tag)
   {
     // cast key into pointer and get byte size
-    const void* msg = reinterpret_cast<void*>(&key);
-    const int count = sizeof(key);
+    const uint8_t* msg = reinterpret_cast<uint8_t*>(&key);
+    const std::size_t count = sizeof(key);
 
     // send the key as a message with the approriate tag
     commLayer.sendMessage(msg, count, dstRank, tag);
@@ -142,8 +142,8 @@ protected:
   void sendPair(const std::pair<K, T>& keyValue, const int dstRank, const int tag)
   {
     // create key-value pair and serialize as pointer
-    const void* msg = reinterpret_cast<void*>(&keyValue);
-    const int count = sizeof(keyValue);
+    const uint8_t* msg = reinterpret_cast<uint8_t*>(&keyValue);
+    const std::size_t count = sizeof(keyValue);
 
     // send the message
     commLayer.sendMessage(msg, count, dstRank, tag);
