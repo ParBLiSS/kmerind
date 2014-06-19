@@ -27,7 +27,7 @@
 #include <unistd.h> // for usleep()
 
 // BLISS includes
-#include <concurrent/threadsafe_fixedsize_queue.hpp>
+#include <concurrent/threadsafe_queue.hpp>
 
 
 struct ReceivedMessage
@@ -63,11 +63,11 @@ public:
 
   /// Outbound message structure, Multiple-Producer-Single-Consumer queue
   /// consumed by the internal MPI-comm thread
-  bliss::concurrent::ThreadSafeFixedSizeQueue<SendQueueElement> sendQueue;
+  bliss::concurrent::ThreadSafeQueue<SendQueueElement> sendQueue;
 
   // Inbound message structure, Single-Producer-Multiple-Consumer queue
   // produced by the internal MPI-comm thread
-  bliss::concurrent::ThreadSafeFixedSizeQueue<ReceivedMessage> recvQueue;
+  bliss::concurrent::ThreadSafeQueue<ReceivedMessage> recvQueue;
 
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
     : sendQueue(2 * omp_get_num_threads()), recvQueue(2 * comm_size),
