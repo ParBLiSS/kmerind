@@ -11,20 +11,12 @@
  */
 
 
-
-/**
- * range_test.cpp
- * Test range class
- *  Created on: Feb 18, 2014
- *      Author: tpan
- */
-
 #include <iostream>
 #include <cstdio>
 #include <unistd.h>
+#include <queue>
 
 #include "concurrent/threadsafe_queue.hpp"
-#include "concurrent/threadsafe_fixedsize_queue.hpp"
 
 #include "omp.h"
 
@@ -89,7 +81,7 @@ class QueueTest
 
       // now push and pop
       for (i = 0; (i < entries); ++i) {
-        queue.push(T(i));
+        queue.tryPush(T(i));
       }
       result = true;
       for (i = 0; (i < entries); ++i) {
@@ -100,7 +92,7 @@ class QueueTest
       // now push in parallel
 #pragma omp parallel for num_threads(nthreads) private(i) shared(queue, entries) default(none)
       for (i = 0; (i < entries); ++i) {
-        queue.push(T(i));
+        queue.tryPush(T(i));
       }
       printf("TSQueue finished push in parallel with %lu entries\n", queue.size());
 
@@ -116,7 +108,7 @@ class QueueTest
 
       // now push then do waitAndPop in parallel
       for (i = 0; (i < entries); ++i) {
-        queue.push(T(i));
+        queue.tryPush(T(i));
       }
       count = 0;
 #pragma omp parallel for num_threads(nthreads) private(i) shared(queue, entries) default(none) reduction(+: count)
@@ -144,7 +136,7 @@ class QueueTest
         {
           usleep(1000);
           for (int i = 0; (i < entries); ++i) {
-            queue.push(T(i));
+            queue.tryPush(T(i));
           }
           done = true;
 #pragma omp flush(done)
@@ -184,7 +176,7 @@ class QueueTest
         {
           usleep(1000);
           for (int i = 0; (i < entries); ++i) {
-            queue.push(T(i));
+            queue.tryPush(T(i));
           }
           done = true;
 #pragma omp flush(done)
@@ -227,7 +219,7 @@ class QueueTest
           int nt = nthreads - 1;
 #pragma omp parallel for default(none) num_threads(nt) shared(queue, entries)
           for (int i = 0; (i < entries); ++i) {
-            queue.push(T(i));
+            queue.tryPush(T(i));
           }
           done = true;
 #pragma omp flush(done)
@@ -254,7 +246,7 @@ class QueueTest
       printf("TSQueue is empty? %s\n", (queue.empty() ? "yes" : "no"));
 
 
-      // now have 1 thread wait and push, and n-1 thread tryPop.
+      // now have 1 thread wait and tryPush, and n-1 thread tryPop.
       count = 0;
       count2 = 0;
       count3 = 0;
@@ -265,7 +257,7 @@ class QueueTest
         {
           usleep(1000);
           for (int i = 0; (i < entries); ++i) {
-            queue.push(T(i));
+            queue.tryPush(T(i));
           }
           done = true;
 #pragma omp flush(done)
@@ -339,7 +331,7 @@ class QueueTest
           int nt = nthreads - 1;
 #pragma omp parallel for default(none) num_threads(nt) shared(queue, entries)
           for (int i = 0; (i < entries); ++i) {
-            queue.push(T(i));
+            queue.tryPush(T(i));
           }
           done = true;
 #pragma omp flush(done)
@@ -386,7 +378,7 @@ class QueueTest
           int nt = nthreads / 2;
 #pragma omp parallel for default(none) num_threads(nt) shared(queue, entries)
           for (int i = 0; (i < entries); ++i) {
-            queue.push(T(i));
+            queue.tryPush(T(i));
           }
           done = true;
 #pragma omp flush(done)
@@ -449,12 +441,12 @@ class QueueTest
     }
 
     void run2(int entries) {
-      T output;
+      T output = 0;
       T result = 0;
       for (int i = 0; i < entries; ++i) {
 
         if (i % 2 == 0)
-          q.push(std::move(T(i)));
+          q.tryPush(std::move(T(i)));
         else {
           q.tryPop(output);
           result ^= output;
@@ -464,22 +456,21 @@ class QueueTest
     }
 };
 
-template<typename T>
+template<typename T, size_t N>
 class FixedSizeQueueTest
 {
   protected:
-    bliss::concurrent::ThreadSafeFixedSizeQueue<T> q;
+    bliss::concurrent::ThreadSafeQueue<T> q;
     int nthreads;
-    size_t size;
 
   public:
-    FixedSizeQueueTest(int nThreads, int _size) : q(_size), nthreads(nThreads), size(_size) {};
+    FixedSizeQueueTest(int nThreads) : q(N), nthreads(nThreads) {};
 
-    bliss::concurrent::ThreadSafeFixedSizeQueue<T>& getQueue() {
+    bliss::concurrent::ThreadSafeQueue<T>& getQueue() {
       return q;
     }
 
-    void run(int entries, bliss::concurrent::ThreadSafeFixedSizeQueue<T>& queue) {
+    void run(int entries, bliss::concurrent::ThreadSafeQueue<T>& queue) {
       // check tryPop
 
       // check tryPop
@@ -1242,10 +1233,9 @@ int main(int argc, char** argv) {
 
   }
 
-  int size = 1000;
-  typedef FixedSizeQueueTest<int> FSQTestType;
+  typedef FixedSizeQueueTest<int, 1000> FSQTestType;
   for (int i = 1; i <=4; ++i) {
-    FSQTestType qt(i, size);
+    FSQTestType qt(i);
     qt.run(elements,  qt.getQueue());
 
     t1 = std::chrono::high_resolution_clock::now();
@@ -1255,7 +1245,7 @@ int main(int argc, char** argv) {
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
 
-    printf("fixed queueTest size %d nthread %d time %f\n", size, i, time_span.count());
+    printf("fixed queueTest size %d nthread %d time %f\n", 1000, i, time_span.count());
 
   }
 

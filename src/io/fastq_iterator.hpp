@@ -43,6 +43,8 @@ namespace bliss
      *            this keeps a 40 bit sequence ID, a file id, and a position within the file.
      *
      *            A separate FASTA version will have a different partitioning.
+     *
+     *            file size is at the moment limited to 1TB in number of bytes.
      */
     union fastq_sequence_id
     {

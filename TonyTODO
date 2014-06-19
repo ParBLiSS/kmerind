@@ -359,7 +359,58 @@ Created a single thread for MPI communication.
 		
 TODO:
 	1. query API 
+		refactor to create a communication layer - for MPI messaging
+			-includes a MPI messaging function callable from a thread
+			-messagebuffer that aggregates message for send/recv
+			-queue for the messaging function that holds message buffer
+			
+			- NOT publish-subscribe at MPI level:  the messages at the MPI level are targetted to specific MPI processes.
+			- can be publish-subscribe at threading level:  the messages at the thread level can be publish subscribe.
+				comm layer contains event bus, with store-and-forward.  broker may be implicit.
+			- message queue pattern may be better. 
+			
+		to simplify:  query result also include kmer, so don't have to match send and recv messages up into transactions.
+			
+			
+			-serialize/deserialize via callback function
+			-callback function from distributed index.
+			-distributed index holds tag to type mapping.
+	
 	2. better runtime api
 	3. testing query with/out mpi, with/out omp from 1 code base
-	4. mpi persistent communication
+	4. mpi persistent communication - buffer sizes varies, and performance gain for large packets is small or nonexistent - don't worry about it.
 	5. iterator dereferencing, functor and copy/move construction:  need a way to make clear what CAN and CANNOT be moved from iterator, i.e. repeated calls to dereference operator should be stable.
+	6. precompute all.  bucket. mpi all-to-all. hash 
+	7. std move : more to worry about in code.  may be simpler to use pointer.
+		NOTE:  "= default" uses compiler auto generated function body, and "= delete" turns the auto generation for a function
+				can be useful to force only move or only copy constructions/assignment.
+				rules here:  http://stackoverflow.com/questions/4782757/rule-of-three-becomes-rule-of-five-with-c11
+				check copy elision
+				need to make move and copy constructor thread safe.
+					use constructor forwarding and private constructor with lock_guard.
+					there is also claim that move constructor argument is single threaded.  http://stackoverflow.com/questions/14182258/c11-write-move-constructor-with-atomicbool-member
+				
+	8. use std::atomic features and memory model
+		NOTE:  std::unique_lock vs std::lock_guard (unique_lock can be unlocked.)
+		NOTE:  memory model:  relaxed - no ordering
+							  release - mark a write.
+							  release-consume - make write and all upstream var dependencies visible to consuming thread
+							  release-acquire - make write and all upstream MEM CHANGES visible to consuming thread
+							  acq-rel - either rel or acq depending on load/store
+							  seq-cst - full sync between all threads and ensure sequential consistency.
+				require atomic types, and applies to atomic operations.
+				abstracts hardware and compilers.
+				
+				
+6/17/2014
+	refactor SendBuffer to 3 parts:  MessageBuffer(MPI specific), BufferPool (for memory reuse), and Buffer(reusable memory block).
+		buffer is working.  bufferpool: usage:  when message buffer detects a buffer being full, an empty buffer is obtained.  need to define the api carefully here.
+		buffer:  lockfree (using memory fence) is not faster than using mutex lock (for append.  with 4 threads)
+	Buffer contains unique_ptr - our goal - Buffer maintains ownership.  to pass content around: see
+		http://stackoverflow.com/questions/8114276/how-do-i-pass-a-unique-ptr-argument-to-a-constructor-or-a-function
+				
+				
+	BufferPool - coded.  need testing.  design is to get an id, then seperately get the buffer.
+		tested
+		
+	updating message buffer class.

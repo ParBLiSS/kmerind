@@ -1,5 +1,5 @@
 /**
- * @file		threadsafe_fixed_size_queue.hpp
+ * @file		concurrent_queue.hpp
  * @ingroup
  * @author	tpan
  * @brief
@@ -7,9 +7,8 @@
  *          with modifications
  *            1. use c++11 std::thread constructs
  *            2. incorporating move semantics.
- *            3. support fixed size queue - blocking if queue is full.
  *
- *            note that this is NOT truly concurrent.  the class serializes parallel access.  move semantic should minimize the copy operations needed.
+ *          note that this is NOT truly concurrent.  the class serializes parallel access.  move semantic should minimize the copy operations needed.
  *
  *          DUE TO LOCKS, this is NOT fast.  but may be fast enough for MPI buffer management.
  *
@@ -17,103 +16,74 @@
  *
  * TODO add License
  */
-#ifndef THREADSAFE_FIXEDSIZE_QUEUE_HPP_
-#define THREADSAFE_FIXEDSIZE_QUEUE_HPP_
+#ifndef THREADSAFE_QUEUE_HPP_
+#define THREADSAFE_QUEUE_HPP_
 
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <queue>
+#include <limits>
+#include <atomic>
+
 
 namespace bliss
 {
   namespace concurrent
   {
 
+
+
     /**
-     * @class			bliss::concurrent::ThreadSafeFixedSizeQueue
+     * @class			bliss::concurrent::ThreadSafeQueue
      * @brief
      * @details
      *
      */
     template <typename T>
-    class ThreadSafeFixedSizeQueue
+    class ThreadSafeQueue<T>
     {
       private:
         std::queue<T> q;
         mutable std::mutex mutex;
-        std::condition_variable empty_cv;
-        std::condition_variable full_cv;
-        const size_t maxSize;
+        std::condition_variable cond_var;
+
 
       public:
 
-        ThreadSafeFixedSizeQueue(size_t max_size) : maxSize(max_size) {
-        }
 
         const size_t& getMaxSize() const {
-          return maxSize;
+          return std::numeric_limits<size_t>::max();
         }
 
         bool full() const
         {
-          std::unique_lock<std::mutex> lock(mutex);
-          return q.size() == maxSize;
+          return false;
         }
-
 
         bool tryPush (T const& data) {
-          std::unique_lock<std::mutex> lock(mutex);
-          if (q.size() == maxSize) {
-            // empty q.  wait for someone to signal.
-            return false;
-          }
-
-          q.push(data);   // move using predefined copy refernece version of push
-          lock.unlock();
-          empty_cv.notify_one();
+          waitAndPush(data);
           return true;
         }
-
         bool tryPush (T && data) {
-          std::unique_lock<std::mutex> lock(mutex);
-          if (q.size() == maxSize) {
-            // empty q.  wait for someone to signal.
-            return false;
-          }
-
-          q.push(data);    // move using predefined move reference version of push
-          lock.unlock();
-          empty_cv.notify_one();
+          waitAndPush(std::move(data));
           return true;
         }
-
         void waitAndPush (T const& data) {
           std::unique_lock<std::mutex> lock(mutex);
-          while (q.size() == maxSize) {
-            // full q.  wait for someone to signal.
-            full_cv.wait(lock);
-          }
-
           q.push(data);   // move using predefined copy refernece version of push
           lock.unlock();
-          empty_cv.notify_one();
+          cond_var.notify_one();
         }
 
         void waitAndPush (T && data) {
           std::unique_lock<std::mutex> lock(mutex);
-          while (q.size() == maxSize) {
-            // full q.  wait for someone to signal.
-            full_cv.wait(lock);
-//            printf("full wait over\n");
-            //printf(".");
-          }
-          //printf("\n");
-
-          q.push(data);    // move using predefined move reference version of push
+          q.push(std::move(data));    // move using predefined move reference version of push
           lock.unlock();
-          empty_cv.notify_one();
+          cond_var.notify_one();
         }
+
+
 
         size_t size() const
         {
@@ -127,6 +97,8 @@ namespace bliss
           return q.empty();
         }
 
+
+
         bool tryPop(T& output) {
           std::unique_lock<std::mutex> lock(mutex);
           if (q.empty()) {
@@ -136,8 +108,6 @@ namespace bliss
 
           output = std::move(q.front());  // convert to movable reference and move-assign.
           q.pop();
-          lock.unlock();
-          full_cv.notify_one();
           return true;
         }
 
@@ -145,21 +115,21 @@ namespace bliss
           std::unique_lock<std::mutex> lock(mutex);
           while (q.empty()) {
             // empty q.  wait for someone to signal.
-//            printf("empty wait\n");
-            empty_cv.wait(lock);
-//            printf("empty wait over\n");
+            cond_var.wait(lock);
           }
           // when cond_var is notified, then lock will be acquired and q will be examined.
 
           output = std::move(q.front());  // convert to movable reference and move-assign.
           q.pop();
-          lock.unlock();
-          full_cv.notify_one();
         }
 
     };
 
+
+
+
+
   } /* namespace concurrent */
 } /* namespace bliss */
 
-#endif /* THREADSAFE_FIXEDSIZE_QUEUE_HPP_ */
+#endif /* THREADSAFE_QUEUE_HPP_ */

@@ -43,7 +43,6 @@
 #include "index/kmer_index_element.hpp"
 #include "index/kmer_index_functors.hpp"
 #include "index/kmer_index_generation.hpp"
-#include "concurrent/threadsafe_fixedsize_queue.hpp"
 #include "concurrent/threadsafe_queue.hpp"
 
 /*
@@ -101,6 +100,7 @@ typedef bliss::index::KmerIndexGeneratorWithQuality<KmerOpType, MPIBufferType, b
                                                                   MPIComputeType;
 typedef bliss::index::KmerIndexGeneratorWithQuality<KmerOpType, BufferType, bliss::index::XorModulus<KmerType>, QualOpType>
                                                                   ComputeType;
+
 
 
 
@@ -460,11 +460,11 @@ void computeP2P(FileLoaderType &loader,
 
     // outbound message structure
     // create shared queue for MPI outbound messages. produced by compute threads via MPISendBuffer. consumed by MPI comm thread.
-    bliss::concurrent::ThreadSafeFixedSizeQueue<SendQueueElementType> sendQueue(nthreads * 2);
+    bliss::concurrent::ThreadSafeQueue<SendQueueElementType> sendQueue(nthreads * 2);
 
     // define inbound message structure
     // create shared queue for MPI inbound messages. produced by MPI comm thread.  consumed by index hashing thread.
-    bliss::concurrent::ThreadSafeFixedSizeQueue<RecvQueueElementType> recvQueue(nprocs * 2);
+    bliss::concurrent::ThreadSafeQueue<RecvQueueElementType> recvQueue(nprocs * 2);
 
 
 
@@ -832,6 +832,9 @@ void computeP2P(FileLoaderType &loader,
 
 
 
+
+
+
 ///**
 // * source:              source data,  e.g. fastq_loader
 // * Compute:             transformation to index
@@ -987,6 +990,491 @@ struct RunTask2 {
 };
 
 
+
+/////////  QUERY
+typedef std::pair<KmerType, typename IndexType::size_type>        CountQueryResultType;
+typedef bliss::io::SendBuffer< CountQueryResultType >             CountQueryResultBufferType;
+typedef std::pair<int, std::vector<CountQueryResultType> >        CountQueryQueueElementType;
+
+/**
+ * receiver for MPI communications.
+ */
+struct CountQueryProcessor {
+  void operator()(RecvQueueElementType &buf, IndexType &kmers, CountQueryResultBufferType& result) {
+    if (buf.first == 0) return;
+
+    for (int i = 0; i < buf.first; ++i) {
+      result.buffer(std::move(CountQueryResultType(buf.second[i].kmer, kmers.count(buf.second[i].kmer))));
+    }
+  }
+};
+
+
+
+/*
+ * single thread for mpi messages.
+ */
+template <typename Compute>
+void queryP2P(FileLoaderType &loader,
+                              const int &nthreads, IndexType &index,
+                              MPI_Comm &comm, const int &nprocs, const int &rank, const int &chunkSize)
+{
+
+  ///  get the start and end iterator position.
+
+#ifdef USE_OPENMP
+    INFO("rank " << rank << " MAX THRADS = " << nthreads);
+    omp_set_nested(1);
+    omp_set_dynamic(0);
+#endif
+
+
+    // shared flag to indicate receiving is done.
+    int mpi_senders = nprocs;
+    // shared flag to indicate compute is done.
+    int computes = nthreads;  // for now, oversubscribe by 2.
+
+    // outbound message structure
+    // create shared queue for MPI outbound messages. produced by compute threads via MPISendBuffer. consumed by MPI comm thread.
+    bliss::concurrent::ThreadSafeQueue<SendQueueElementType> sendQueue(nthreads * 2);
+
+    // define inbound message structure
+    // create shared queue for MPI inbound messages. produced by MPI comm thread.  consumed by index hashing thread.
+    bliss::concurrent::ThreadSafeQueue<RecvQueueElementType> recvQueue(nprocs * 2);
+
+    bliss::concurrent::ThreadSafeQueue<CountQueryQueueElementType>  resultQueue(nprocs * 2);
+
+#pragma omp parallel sections num_threads(3) shared(comm, nprocs, rank, index, nthreads, loader, mpi_senders, computes, sendQueue, recvQueue, ompi_mpi_unsigned_char, ompi_mpi_int, ompi_request_null) default(none)
+    {
+
+#pragma omp section
+      {  // section for handling the received MPI messages
+
+        RecvQueueElementType re;
+        RecvProcessor rp;
+
+        /// process the inbound messages until MPI comm thread indicates no more messages.
+        while (mpi_senders > 0) {
+          /// check for messages
+          if (recvQueue.tryPop(re)) {
+            //printf("%d received %d. rec queue %lu\n", rank, re.first, recvQueue.size());
+
+            RecvQueueElementType lre(std::move(re));
+
+            /// process messages;
+            rp(lre, index);
+
+            // clean up
+            delete [] lre.second;
+
+          } else {
+            usleep(50);
+          }
+
+
+
+#pragma omp flush(mpi_senders)
+        }
+
+        /// received done message.  now flush the remainder
+        bool gotNext = recvQueue.tryPop(re);
+        while (gotNext) {
+//          printf("flushing recv queue. %lu\n", recvQueue.size());
+
+          RecvQueueElementType lre(std::move(re));
+
+          /// process messages;
+          rp(lre, index);
+
+          // clean up.
+          delete [] lre.second;
+
+          /// check for next.
+          gotNext = recvQueue.tryPop(re);
+        }
+
+        printf("finally: %lu -> %lu\n", sendQueue.size(), recvQueue.size());
+      }  // section for handling the received MPI messages
+
+
+
+#pragma omp section
+    {  // section for handling the MPI communications
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
+
+      /// loop until : 1. no more srcs.  2. no more compute threads.
+      bool computeDone = false;  // 2 is computing, 1 is flushing, 0 is done
+      bool recvDone = false;
+      SendQueueElementType se;
+
+
+      MPI_Status status;
+
+      // for receiving.
+      int hasMessage = 0;
+      int src;
+      int tag;
+      int received = 0;
+
+      // for sending
+      std::queue<std::pair<MPI_Request, RecvQueueElementType> > recvInProgress;
+      std::queue<std::pair<MPI_Request, SendQueueElementType> > sendInProgress;
+
+      while (true) {
+
+        /// clear out any completed requests.
+        // MPI_Test - not using immediate mode Send/Recv.
+        size_t waiting = recvInProgress.size();  // getting the size ahead of time.
+        int fin = 0;
+        for (int i = 0; i < waiting; ++i) {
+          std::pair<MPI_Request, RecvQueueElementType> el = std::move(recvInProgress.front());
+          recvInProgress.pop();
+
+          MPI_Test(&(el.first), &fin, MPI_STATUS_IGNORE);
+
+          if (fin == 1) {
+            // finished receiving.  insert into recvQueue
+            while (!recvQueue.tryPush(std::move(el.second))) {
+              usleep(50);
+            }
+          } else {
+            recvInProgress.push(std::move(el));
+          }
+        }
+        // now check send
+        waiting = sendInProgress.size();
+        for (int i = 0; i < waiting; ++i) {
+          std::pair<MPI_Request, SendQueueElementType> el = std::move(sendInProgress.front());
+          sendInProgress.pop();
+
+          MPI_Test(&(el.first), &fin, MPI_STATUS_IGNORE);
+
+          if (fin == 0) {
+            // finished sending.  insert into recvQueue
+            sendInProgress.push(std::move(el));
+          }
+        }
+
+
+        // try to receive 1 message.
+        if (mpi_senders > 0) {
+        /// probe for messages
+          hasMessage = 0;
+          MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
+
+          if (hasMessage > 0) {
+            //// if message, check if end message.  if so, decrement mpi_sender.
+            //// if data message, put into queue
+
+            src = status.MPI_SOURCE;
+            tag = status.MPI_TAG;
+            MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &received);   // length is always > 0?
+
+            if (tag == MPIBufferType::END_TAG) {
+              // end of messaging.
+              MPI_Recv(nullptr, received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
+#pragma omp atomic
+              --mpi_senders;
+              printf("RECV rank %d receiving END signal %d from %d, num sanders remaining is %d\n", rank, received, src, mpi_senders);
+#pragma omp flush(mpi_senders)
+            } else {
+              KmerIndexType* array = new KmerIndexType[received / sizeof(KmerIndexType)];
+              //printf("created temp storage for read, capacity = %ld\n", capacity); fflush(stdout);
+              MPI_Request req;
+
+              printf("RECV %d->%d receiving %d bytes with tag %d\n", src, rank, received, tag);
+              MPI_Irecv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
+
+              // put into queue. - std::move version.  this part has to complete.
+              recvInProgress.push(std::move(std::pair<MPI_Request, RecvQueueElementType>(
+                  req,
+                  std::move(RecvQueueElementType(received/ sizeof(KmerIndexType), array))
+              )));
+              //printf("%d received %d. in progress: %lu\n", rank, received, recvInProgress.size());
+
+            }
+          }
+        } else {
+          if ((recvDone == false) && recvInProgress.empty())
+            recvDone = true;
+        }
+
+
+#pragma omp flush(computes)
+       if ((computes == 0) && sendQueue.empty()) {
+
+         if (sendInProgress.empty() && (computeDone == false)) {
+           /// no more generators.  and queue is empty.
+           computeDone = true;
+           printf("%d compute done\n", rank);
+
+           // now send end message to everyone except self.
+
+
+           // next send to all others.
+           printf("%d terminating\n", rank);
+           MPI_Request endRequests[nprocs];
+           for (int i = 0; i < nprocs; ++i) {
+             if (i == rank) {
+               // first deal with sending to self.
+      #pragma omp atomic
+               // local (same rank), just update.
+               --mpi_senders;
+      #pragma omp flush(mpi_senders)
+               endRequests[i] = MPI_REQUEST_NULL;
+
+             } else {
+               // send end message.
+               MPI_Isend(nullptr, 0, MPI_INT, i, MPIBufferType::END_TAG, comm, &(endRequests[i]));
+             }
+           }
+
+           // wait for them all to finish
+           printf("%d wait for everyone to finish\n", rank);
+           MPI_Waitall(nprocs, endRequests, MPI_STATUSES_IGNORE);
+         }
+       } else {
+         /// try dequeue and iSend.
+         if (sendQueue.tryPop(se)) {
+
+           /// iSend.  put request into a vector..
+
+           if (se.first == rank) {
+             // local, directly handle by creating an output object and directly insert into the recv queue
+             KmerIndexType* array = new KmerIndexType[se.second.size()];
+             memcpy(array, se.second.data(), se.second.size() * sizeof(KmerIndexType));
+             RecvQueueElementType temp(se.second.size(), array);
+             while(!recvQueue.tryPush(std::move(temp))) {
+               usleep(50);
+             }
+
+             printf("%d->%d Sent %lu locally. in queue: sendQueue size %lu\n", rank, rank, se.second.size(), sendQueue.size());
+
+           } else {
+             MPI_Request req;
+
+             SendQueueElementType lse(std::move(se));
+             MPI_Isend(lse.second.data(), lse.second.size() * sizeof(KmerIndexType), MPI_UNSIGNED_CHAR, lse.first, rank+1, comm, &req);
+             // lse is automatically cleaned up.
+
+             printf("%d->%d Sent %lu remotely. in queue: sendQueue size %lu\n", rank, lse.first, lse.second.size(), sendQueue.size());
+
+             sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElementType>(req, std::move(lse))));
+           }
+
+         }
+
+       }
+
+        if (computeDone && recvDone) {
+          printf("inprogress:  send queue %lu -> %lu -> %lu -> %lu recv queue\n", sendQueue.size(), sendInProgress.size(), recvInProgress.size(), recvQueue.size());
+          break;
+        }
+        usleep(50);
+      }
+    }  // section for handling the MPI communications
+
+#pragma omp section
+    {    // section for processing the data and generating the kmers.
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
+
+      INFO("Level 0: compute tid = " << omp_get_thread_num());
+
+      t1 = std::chrono::high_resolution_clock::now();
+
+
+
+      // create local buffers
+      std::vector<  std::vector<BufferType > > buffers;
+      // buffers.reserve(nprocs); don't reserve.  no need.
+      for (int j = 0; j < nthreads; ++j) {
+
+        std::vector< BufferType > temp;
+        for (int i = 0; i < nprocs; ++i) {
+          temp.push_back(std::move(BufferType(i, 8192*1024)));
+        }
+
+        buffers.push_back(std::move(temp));
+      }
+      INFO("Level 1: compute num buffers = " << buffers.size());
+
+      int tcount = 0;
+
+
+      // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
+      //   at this point, no strong difference.
+#pragma omp parallel num_threads(nthreads) shared(loader, nprocs, nthreads, rank, sendQueue, computes, buffers) default(none) reduction(+:tcount)
+      {
+        /// initialize variables.
+        ParserType parser;
+
+        int tid = 0;
+#ifdef USE_OPENMP
+        tid = omp_get_thread_num();
+#endif
+        Compute op(nprocs, rank, nthreads);
+
+
+        printf("thread %d in %d.  requested %d\n", tid, omp_get_num_threads(), nthreads);
+
+
+        tcount = 0;
+        int j = 0;
+        SequenceType read;
+        typename FileLoaderType::DataBlockType chunk;
+        /// repeatedly get from source, and process.
+
+        RangeType r = loader.getNextChunkRange(tid);
+        int targetRank;
+
+        while (r.size() > 0) {
+          /// get the actual chunk
+           chunk = loader.getChunk(tid, r);
+
+          /// processing
+          IteratorType fastq_start(parser, chunk.begin(), chunk.end(), r);
+          IteratorType fastq_end(parser, chunk.end(), r);
+
+          for (; fastq_start != fastq_end; ++fastq_start)
+          {
+            // get data, and move to next for the other threads
+
+            // first get read
+            read = *fastq_start;
+
+            // compute and buffer results
+            op(read, buffers[tid]);
+            ++tcount;
+
+            if (tcount % 20000 == 0)
+              INFO("Level 1: rank " << rank << " thread " << tid << " processed seq " << tcount);
+          }
+
+          /// now check the buffers and send if needed.
+          for (int i = 0; i < buffers[tid].size(); ++i) {
+            targetRank =(i + rank) % nprocs;
+            if (buffers[tid][targetRank].isFull()) {
+              printf("%d pushing %d->%d into queue (size %lu). entries %lu\n", tid, rank, targetRank, buffers[tid].size(), buffers[tid][targetRank].size());
+              sendQueue.waitAndPush(std::move(buffers[tid][targetRank].exportData()));
+            }
+          }
+
+          r = loader.getNextChunkRange(tid);
+          ++j;
+
+        }
+
+        INFO("Level 1: rank " << rank << " thread " << tid << " processed total of " << j << " chunks");
+
+      }  // compute threads parallel
+
+
+      /// send the last part out.
+      int targetRank;
+      for (int j = 0; j < buffers.size(); ++j) {
+        for (int i = 0; i < buffers[j].size(); ++i) {
+          //printf("rank %d thread %d flushing buffer for buffer %d\n", rank, omp_get_thread_num(), (i+rank) % (nprocs * nthreads));
+          targetRank =(i + rank) % nprocs;
+          //printf("%d flushing %d, %lu\n", omp_get_thread_num(), targetRank, buffers[j][targetRank].size());
+          if (buffers[j][targetRank].size() > 0)
+            sendQueue.waitAndPush(std::move(buffers[j][targetRank].exportData()));   /// + rank to avoid all threads sending to the same node.
+        }
+      }
+      INFO("flush rank " << rank << " thread " << omp_get_thread_num() << "s.");
+      //printf("flush rank %d thread %d elapsed time %f\n", rank, omp_get_thread_num(), time_span.count());
+
+
+      /// signaling done for this thread.
+      computes = 0;
+#pragma omp flush(computes)
+
+
+
+      t2 = std::chrono::high_resolution_clock::now();
+      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+      INFO("Level 0: Computation: rank " << rank << " thread " << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s, " << tcount << "reads");
+
+      INFO("rank " << rank << "COUNTS total: " << tcount);
+
+      //printf("rank %d done compute\n", rank);
+    }     // section for processing the data and generating the kmers.
+
+
+  }  // outer parallel sections
+    //printf("rank %d done\n", rank);
+}
+
+
+
+
+template<typename ComputeType>
+struct QueryTask {
+    void operator()(const std::string &filename, IndexType &index, MPI_Comm &comm, const int &nprocs, const int &rank, const int &nthreads, const int &chunkSize) {
+      /////////////// initialize output variables
+
+
+        std::chrono::high_resolution_clock::time_point t1, t2;
+        std::chrono::duration<double> time_span;
+
+
+        /// open file
+        // create FASTQ Loader
+        // call get NextPartition Range to block partition,
+        // call "load" with the partition range.
+
+        /// processing
+        //  get Next Chunk Range
+        // then call getChunk with the range.
+        // call compute with the DataBlock.
+
+        // set up OMP call:  input file_loader, compute op, and output buffer
+        // set up MPI receiver. - capture output
+        // (set up MPI sender)
+
+        // query.
+
+
+
+
+
+
+
+        //////////////// now partition and open the file.
+        t1 = std::chrono::high_resolution_clock::now();
+
+        // get the file ready for read
+        FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire execution.
+        RangeType pr = loader.getNextPartitionRange(rank);
+        loader.load(pr);
+
+
+        t2 = std::chrono::high_resolution_clock::now();
+        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+        std::cout << "MMap rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
+
+        std::cout << rank << " file partition: " << loader.getMMapRange() << std::endl;
+
+        t1 = std::chrono::high_resolution_clock::now();
+        /////////////// now process the file using version with master.
+        // do some work using openmp  // version without master
+        queryP2P<ComputeType>(loader, nthreads, index, comm, nprocs, rank, chunkSize);
+
+        t2 = std::chrono::high_resolution_clock::now();
+        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+        std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
+
+        t1 = std::chrono::high_resolution_clock::now();
+        loader.unload();
+        t2 = std::chrono::high_resolution_clock::now();
+        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+        std::cout << "Unload rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
+
+      }  // scope to ensure file loader is destroyed.
+
+};
+
 /**
  *
  * @param argc
@@ -1067,13 +1555,6 @@ MPI_Barrier(comm);
 
 
 
-//          /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-//          RunTask<MPIComputeType> t;
-//          t(filename, index, comm, groupSize, id, nthreads, chunkSize);
-//
-//          printf("MPI number of entries in index for rank %d is %lu\n", id, index.size());
-//
-//          MPI_Barrier(comm);
 
 
           //// do it one more time.
@@ -1086,6 +1567,24 @@ MPI_Barrier(comm);
 
 
           MPI_Barrier(comm);
+
+
+
+        /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+        RunTask<MPIComputeType> t;
+        t(filename, index, comm, groupSize, id, nthreads, chunkSize);
+
+        printf("MPI number of entries in index for rank %d is %lu\n", id, index.size());
+
+        MPI_Barrier(comm);
+
+
+        //// query:  use the same file as input.  walk through and generate kmers as before.  send query
+
+
+
+
+
   //////////////  clean up MPI.
   MPI_Finalize();
 
