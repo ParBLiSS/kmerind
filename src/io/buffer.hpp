@@ -84,6 +84,11 @@ namespace bliss
           memset(data.get(), 0, _capacity * sizeof(uint8_t));
           assert(_capacity > 0);
         };
+
+        Buffer(const void* _data, const size_t count) : capacity(count), size(count), data(data) {
+          assert(count > 0);
+        }
+
         /**
          * deallocation is automatic.
          */
@@ -162,7 +167,7 @@ namespace bliss
          * no reason to pass back the data unique_ptr - no functions to be called by user.
          * can't template this since can't overload function by return type only.
          */
-        const uint8_t* getData() const {
+        const void* getData() const {
           return data.get();
         }
 
@@ -190,26 +195,21 @@ namespace bliss
          * @param add_data
          * @param add_size
          */
-
-        template<typename T>
-        bool append(const T* typed_data, const size_t count) const {     // const method because the user will have const reference to Buffers.
+        bool append(const void* typed_data, const size_t count) const {     // const method because the user will have const reference to Buffers.
                                                                          // because of the const-ness, we have mutable data and size.
           if (capacity == 0) return false;
-
-          size_t addS = count * sizeof(T);
-
 
           // can't use memory ordering alone
           // we need to check if we have room to add.  if not, then don't add.
           // the check and add have to happen atomically, so fetch_add does not work.
           std::unique_lock<std::mutex> lock(mutex);
           size_t s = size.load(std::memory_order_relaxed);  // no memory ordering within mutex lock
-          size_t newS = s + addS;
+          size_t newS = s + count;
           if (newS > capacity) return false;
           size.store(newS, std::memory_order_relaxed);
           lock.unlock();
 
-          std::memcpy(data.get() + s, typed_data, addS);
+          std::memcpy(data.get() + s, typed_data, count);
           return true;
         }
         /**
@@ -221,12 +221,9 @@ namespace bliss
          * @param count
          * @return
          */
-        template<typename T>
-        bool append_lockfree(const T* typed_data, const size_t count) const {    // const method because the user will have const reference to Buffers.
+        bool append_lockfree(const void* typed_data, const size_t count) const {    // const method because the user will have const reference to Buffers.
                                                                                  // because of the const-ness, we have mutable data and size.
           if (capacity == 0) return false;
-
-          size_t addS = count * sizeof(T);
 
 
           // can't use memory ordering alone
@@ -237,12 +234,12 @@ namespace bliss
           size_t s = size.load(std::memory_order_consume);
           size_t newS = s;
           do {
-            newS = s + addS;
+            newS = s + count;
             if (newS > capacity) return false;
           } while (!size.compare_exchange_strong(s, newS, std::memory_order_acq_rel, std::memory_order_consume));  // choosing strong, since we return.
 
 
-          std::memcpy(data.get() + s, typed_data, addS);
+          std::memcpy(data.get() + s, typed_data, count);
           return true;
         }
 
@@ -291,6 +288,11 @@ namespace bliss
           memset(data.get(), 0, _capacity * sizeof(uint8_t));
           assert(_capacity > 0);
         };
+
+        Buffer(const void* _data, const size_t count) : capacity(count), size(count), data(data) {
+          assert(count > 0);
+        }
+
         /**
          * deallocation is automatic because of unique_ptr.
          */
@@ -369,7 +371,7 @@ namespace bliss
          * no reason to pass back the data unique_ptr - no functions to be called by user.
          * can't template this since can't overload function by return type only.
          */
-        const uint8_t* getData() const {
+        const void* getData() const {
           return data.get();
         }
 
@@ -396,17 +398,14 @@ namespace bliss
          * @param add_size
          * @return
          */
-        template<typename T>
-        bool append(const T* typed_data, const size_t count) const {   // const method because the user will have const reference to Buffers.
+        bool append(const void* typed_data, const size_t count) const {   // const method because the user will have const reference to Buffers.
                                                                        // because of the const-ness, we have mutable data and size.
           if (capacity == 0) return false;
 
-          size_t addS = count * sizeof(T);
+          if ((size + count) > capacity) return false;
 
-          if ((size + addS) > capacity) return false;
-
-          std::memcpy(data.get() + size, typed_data, addS);
-          size += addS;
+          std::memcpy(data.get() + size, typed_data, count);
+          size += count;
           return true;
         }
     };

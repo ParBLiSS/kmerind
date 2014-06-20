@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
   int i = 0;
   for (i = 0; i < 9000; ++i) {
     val = static_cast<valType>(i);
-    if (! tlBuffer.append(&val, 1)) {
+    if (! tlBuffer.append(&val, sizeof(valType))) {
        if (start == -1) start = i;
     }
   }
@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
       if (start == -1) start = i;
     }
     val = static_cast<valType>(i);
-    tlBuffer.append(&val, 1);
+    tlBuffer.append(&val, sizeof(valType));
   }
   end = i;
   printf("isFULL from %d to %d!\n", start, end);
@@ -145,7 +145,7 @@ int main(int argc, char** argv) {
   for (i = 0; i < 9000; ++i) {
     val = static_cast<valType>(i);
 
-    if (! tsBuffer4.append(&val, 1)) {
+    if (! tsBuffer4.append(&val, sizeof(valType))) {
       ++fail;
     }
   }
@@ -184,7 +184,7 @@ int main(int argc, char** argv) {
     } else {
       val = static_cast<valType>(i);
 
-      if (!tsBuffer4.append(&val, 1)) {
+      if (!tsBuffer4.append(&val, sizeof(valType))) {
         ++fail;
       }
     }
@@ -226,7 +226,7 @@ int main(int argc, char** argv) {
       for (i = 0; i < cap/typeSize; ++i) {
         val = static_cast<valType>(i);
 
-        if (! tsBuffer5.append(&val, 1)) {
+        if (! tsBuffer5.append(&val, sizeof(valType))) {
           ++fail;
         }
       }
@@ -246,7 +246,7 @@ int main(int argc, char** argv) {
       for (i = 0; i < cap/typeSize; ++i) {
         val = static_cast<valType>(i);
 
-        if (! tsBuffer5.append_lockfree(&val, 1)) {
+        if (! tsBuffer5.append_lockfree(&val, sizeof(valType))) {
           ++fail;
         }
       }
