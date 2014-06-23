@@ -112,7 +112,7 @@ namespace bliss
          * @param numDests          number of destinations.  e.g. mpi comm size.
          * @param buffer_capacity   individual buffer's size in bytes
          */
-        MessageBuffers(const int & numDests, const int & _buffer_capacity, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
+        MessageBuffers(const int & _buffer_capacity, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
           pool(pool_capacity, _buffer_capacity), bufferCapacity(_buffer_capacity) {};
         MessageBuffers() = delete;
 
@@ -154,8 +154,8 @@ namespace bliss
         std::vector< IdType > bufferIds;  // mapping from process id (0 to vector size), to buffer Ids (from BufferPool)
 
       public:
-        SendMessageBuffers(const int & numDests, const int & buffer_capacity, const int & pool_capacity) :
-          MessageBuffers<ThreadSafety>(numDests, buffer_capacity, pool_capacity),
+        SendMessageBuffers(const int & numDests, const int & buffer_capacity, const int pool_capacity) :
+          MessageBuffers<ThreadSafety>(buffer_capacity, pool_capacity),
           bufferIds(numDests) {
           /// initialize the bufferIds by acquiring them from the pool.
 
@@ -163,7 +163,7 @@ namespace bliss
         };
 
         SendMessageBuffers(const int & numDests, const int & buffer_capacity) :
-          MessageBuffers<ThreadSafety>(numDests, buffer_capacity, 3 * numDests)
+          SendMessageBuffers<ThreadSafety>(numDests, buffer_capacity, 3 * numDests)
         {};
 
 
