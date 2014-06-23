@@ -21,6 +21,7 @@
 // STL includes
 #include <vector>
 #include <queue>
+#include <mutex>
 
 // system includes
 // TODO: make this system indepenedent!?
@@ -28,6 +29,10 @@
 
 // BLISS includes
 #include <concurrent/threadsafe_queue.hpp>
+#include <concurrent/concurrent.hpp>
+#include <io/message_buffers.hpp>
+
+typedef bliss::io::MessageBuffers<bliss::concurrent::THREAD_SAFE> BuffersType;
 
 
 struct ReceivedMessage
@@ -45,10 +50,13 @@ struct ReceivedMessage
 // TODO: rename (either this or the ReceivedMessage) for identical naming scheme
 struct SendQueueElement
 {
-  uint8_t* data;
-  std::size_t count;
+  typename bliss::io::MessageBuffers<bliss::concurrent::THREAD_SAFE>::BufferIdType bufferId;
   int tag;
   int dst;
+
+  SendQueueElement(bliss::io::MessageBuffers<bliss::concurrent::THREAD_SAFE>::BufferIdType _id, int _tag, int _dst)
+    : bufferId(_id), tag(_tag), dst(_dst) {}
+  SendQueueElement() = delete;
 };
 
 
@@ -58,9 +66,11 @@ public:
 
   constexpr static int default_tag = 0;
 
-
-  std::queue<std::tuple<MPI_Request, uint8_t*, std::size_t> > recvInProgress;
-  std::queue<std::pair<MPI_Request, uint8_t*> > sendInProgress;
+protected:
+  // request, data pointer, data size
+  std::queue<std::pair<MPI_Request, ReceivedMessage> > recvInProgress;
+  // request, data pointer, tag
+  std::queue<std::pair<MPI_Request, SendQueueElement> > sendInProgress;
 
   /// Outbound message structure, Multiple-Producer-Single-Consumer queue
   /// consumed by the internal MPI-comm thread
@@ -69,6 +79,16 @@ public:
   // Inbound message structure, Single-Producer-Multiple-Consumer queue
   // produced by the internal MPI-comm thread
   bliss::concurrent::ThreadSafeQueue<ReceivedMessage> recvQueue;
+
+  // outbound temporary data buffer type for the producer threads.  ThreadSafe version for now.
+  typedef bliss::io::MessageBuffers<bliss::concurrent::THREAD_SAFE> BuffersType;
+  // outbound temporary data buffers.  one per tag.
+  std::unordered_map<int, BuffersType> buffers;
+  typedef typename bliss::io::MessageBuffers<bliss::concurrent::THREAD_SAFE>::BufferIdType BufferIdType;
+
+  mutable std::mutex mutex;
+
+public:
 
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
     : sendQueue(2 * omp_get_num_threads()), recvQueue(2 * comm_size),
@@ -83,11 +103,49 @@ public:
   virtual ~CommunicationLayer ();
 
 
-  void sendMessage(const uint8_t* data, std::size_t count, int dst_rank, int tag=default_tag)
+  void sendMessage(const void* data, std::size_t count, int dst_rank, int tag=default_tag)
   {
-    // TODO: add the message to the appropriate MessageBuffer queue
-    // which might in turn add a new buffered message into the sendQueue
+    /// if there isn't already a tag listed, add the MessageBuffers for that tag.
+
+    // multiple threads may call this.
+    std::unique_lock<std::mutex> lock(mutex);
+    if (buffers.find(tag) == buffers.end())
+      buffers[tag] = std::move(BuffersType(commSize, 8192));
+    lock.unlock();
+
+    /// try to append the new data - repeat until successful.
+    /// along the way, if a full buffer's id is returned, queue it for send.
+    BufferIdType fullId = -1;
+    while (!buffers[tag].append(data, count, dst_rank, fullId)) {
+      // repeat until success;
+      if (fullId != -1) {
+        // have a full buffer - put in send queue.
+        SendQueueElement v(fullId, tag, dst_rank);
+        while (!sendQueue.tryPush(std::move(v))) {
+          usleep(20);
+        }
+      }
+
+      usleep(20);
+    }
+
+    /// that's it.
   }
+
+  void flush(int tag)
+  {
+    // flush out all the send buffers matching a particular tag.
+    int i = 0;
+    for (auto id : buffers[tag].getActiveIds()) {
+      if (id != -1) {
+        SendQueueElement v(id, tag, i);
+        while (!sendQueue.tryPush(std::move(v))) {
+          usleep(20);
+        }
+      }
+    }
+  }
+
 
   //
   void commThread()
@@ -104,6 +162,7 @@ public:
       // start pending sends
       tryStartSend();
     }
+
   }
 
   void tryStartReceive()
@@ -135,8 +194,7 @@ public:
         MPI_Irecv(msg_data, received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
 
         // insert into the in-progress queue
-        std::size_t cnt = static_cast<std::size_t>(received_count);
-        std::tuple<MPI_Request, uint8_t*, std::size_t> msg(req, msg_data, cnt);
+        std::tuple<MPI_Request, ReceivedMessage> msg(req, ReceivedMessage(msg_data, received_count, tag, src));
         recvInProgress.push(std::move(msg));
 
      // }
@@ -148,19 +206,26 @@ public:
     // try to get the send element
     SendQueueElement se;
     if (sendQueue.tryPop(se)) {
+      auto data = buffers[se.tag].getBackBuffer(se.bufferId).getData();
+      auto count = buffers[se.tag].getBackBuffer(se.bufferId).getSize();
+
+
       if (se.dst == commRank) {
         // local, directly handle by creating an output object and directly
         // insert into the recv queue
-        uint8_t* array = new uint8_t[se.count];
-        memcpy(array, se.data, se.count);
-        ReceivedMessage msg(array, se.count, se.tag, se.dst);
-        while(!recvQueue.tryPush(msg)) {
+        uint8_t* array = new uint8_t[count];
+        memcpy(array, data, count);
+        ReceivedMessage msg(array, count, se.tag, se.dst);
+        while(!recvQueue.tryPush(std::move(msg))) {
           usleep(50);
         }
+
+        // finished inserting.  release the buffer
+        buffers[se.tag].releaseBuffer(se.bufferId);
       } else {
         MPI_Request req;
-        MPI_Isend(se.data, se.count, MPI_UINT8_T, se.dst, se.tag, comm, &req);
-        sendInProgress.push(std::move(std::pair<MPI_Request, uint8_t*>(req, se.data)));
+        MPI_Isend(data, count, MPI_UINT8_T, se.dst, se.tag, comm, &req);
+        sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElement>(req, se)));
       }
     }
   }
@@ -170,14 +235,13 @@ public:
     int finished = 0;
     while(!sendInProgress.empty())
     {
-      std::pair<MPI_Request, uint8_t*>& front = sendInProgress.front();
+      std::pair<MPI_Request, SendQueueElement>& front = sendInProgress.front();
       MPI_Test(&front.first, &finished, MPI_STATUS_IGNORE);
 
       if (finished)
       {
-        // cleanup, i.e., free the buffer memory
-        delete [] front.second;
-        front.second = nullptr;
+        // cleanup, i.e., release the buffer back into the pool
+        buffers[front.second.tag].releaseBuffer(front.second.bufferId);
         sendInProgress.pop();
       }
       else
@@ -194,17 +258,20 @@ public:
     MPI_Status status;
     while(!recvInProgress.empty())
     {
-      std::tuple<MPI_Request, uint8_t*, std::size_t>& front = recvInProgress.front();
+      std::pair<MPI_Request, ReceivedMessage>& front = recvInProgress.front();
       MPI_Test(&std::get<0>(front), &finished, &status);
 
       if (finished)
       {
+        assert(front.second.tag == status.MPI_TAG);
+        assert(front.second.src == status.MPI_SOURCE);
+
         // add the received messages into the recvQueue
-        ReceivedMessage msg(std::get<1>(front), std::get<2>(front),
-                            status.MPI_TAG, status.MPI_SOURCE);
+//        ReceivedMessage msg(std::get<1>(front), std::get<2>(front),
+//                            status.MPI_TAG, status.MPI_SOURCE);
         // TODO: (maybe) one queue per tag?? Where does this
         //       sorting/categorizing happen?
-        while (!recvQueue.tryPush(msg)) {
+        while (!recvQueue.tryPush(std::move(front.second))) {
           usleep(50);
         }
 
@@ -229,10 +296,6 @@ public:
     return commRank;
   }
 
-  void flush()
-  {
-    // TODO
-  }
 
 
   void callbackThread()
@@ -248,6 +311,7 @@ public:
 
       // call the matching callback function
       (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
+      delete [] msg.data;
     }
   }
 

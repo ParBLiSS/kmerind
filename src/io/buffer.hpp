@@ -143,6 +143,9 @@ namespace bliss
          */
         Buffer<bliss::concurrent::THREAD_SAFE>& operator=(Buffer<bliss::concurrent::THREAD_UNSAFE>&& other);
 
+        Buffer(const Buffer<bliss::concurrent::THREAD_SAFE>& other) = delete;
+        Buffer<bliss::concurrent::THREAD_SAFE>& operator=(const Buffer<bliss::concurrent::THREAD_SAFE>& other) = delete;
+
 
         /// copy ctor/assign are automatically NOT generated because of available destructor and move ctor/assign.
         /**
@@ -347,6 +350,8 @@ namespace bliss
           return *this;
         }
 
+        Buffer(const Buffer<bliss::concurrent::THREAD_UNSAFE>& other) = delete;
+        Buffer<bliss::concurrent::THREAD_UNSAFE>& operator=(const Buffer<bliss::concurrent::THREAD_UNSAFE>& other) = delete;
 
         /// copy ctor/assign are automatically NOT generated because of available destructor and move ctor/assign.
         /**

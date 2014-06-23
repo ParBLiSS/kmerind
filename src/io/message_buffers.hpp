@@ -114,6 +114,7 @@ namespace bliss
          */
         MessageBuffers(const int & numDests, const int & _buffer_capacity, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
           pool(pool_capacity, _buffer_capacity), bufferCapacity(_buffer_capacity) {};
+        MessageBuffers() = delete;
 
       public:
 
@@ -124,7 +125,7 @@ namespace bliss
          * after the buffer has been consumed, release it back to the pool
          * @param id
          */
-        void releaseBuffer(const size_t &id) throw (bliss::io::IOException) {
+        void releaseBuffer(const BufferIdType &id) throw (bliss::io::IOException) {
           pool.releaseBuffer(id);
         }
 
@@ -153,7 +154,7 @@ namespace bliss
         std::vector< IdType > bufferIds;  // mapping from process id (0 to vector size), to buffer Ids (from BufferPool)
 
       public:
-        SendMessageBuffers(const int & numDests, const int & buffer_capacity, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
+        SendMessageBuffers(const int & numDests, const int & buffer_capacity, const int & pool_capacity) :
           MessageBuffers<ThreadSafety>(numDests, buffer_capacity, pool_capacity),
           bufferIds(numDests) {
           /// initialize the bufferIds by acquiring them from the pool.
@@ -161,12 +162,31 @@ namespace bliss
           this->reset();
         };
 
+        SendMessageBuffers(const int & numDests, const int & buffer_capacity) :
+          MessageBuffers<ThreadSafety>(numDests, buffer_capacity, 3 * numDests)
+        {};
+
+
+        SendMessageBuffers() = delete;
+        SendMessageBuffers(const SendMessageBuffers<ThreadSafety> &other) = delete;
+        SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) = default;
+        SendMessageBuffers<ThreadSafety>& operator=(const SendMessageBuffers<ThreadSafety> &other) = delete;
+        SendMessageBuffers<ThreadSafety>& operator=(SendMessageBuffers<ThreadSafety> && other) = default;
+
+
         virtual ~SendMessageBuffers() {};
 
         size_t getSize() {
           return bufferIds.size();
         }
 
+        const Buffer<ThreadSafety> & getBackBuffer(const BufferIdType& id) {
+          return this->pool[id];
+        }
+
+        const std::vector< IdType >& getActiveIds() {
+          return bufferIds;
+        }
 
         virtual void reset() {
           MessageBuffers<ThreadSafety>::reset();
