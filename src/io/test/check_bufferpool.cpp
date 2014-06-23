@@ -26,7 +26,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   printf("TEST acquire\n");
   int expected;
   int i = 0;
-  size_t id = 0;
+  typename PoolType::IdType id = 0;
   int count = 0;
 #pragma omp parallel for num_threads(pool_threads) default(none) private(i, id) shared(pool) reduction(+ : count)
   for (i = 0; i < 100; ++i) {
@@ -75,7 +75,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool)
   {
       int v = omp_get_thread_num() + 5;
-    pool[omp_get_thread_num()+ 1].append(&v, 1);
+    pool[omp_get_thread_num()+ 1].append(&v, sizeof(int));
   }
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool)
   {
@@ -88,7 +88,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 #pragma omp parallel num_threads(buffer_threads) default(none) shared(pool)
   {
     int v = omp_get_thread_num() + 7;
-    pool[1].append(&v, 1);
+    pool[1].append(&v, sizeof(int));
   }
   printf("values inserted were ");
   for (int i = 0; i <= buffer_threads ; ++i) {
@@ -125,7 +125,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       }
 
       int v = 128;
-      pool[155 + omp_get_thread_num()].append(&v, 1);
+      pool[155 + omp_get_thread_num()].append(&v, sizeof(int));
       int u = reinterpret_cast<const int*>(pool[155 + omp_get_thread_num()].getData())[0];
       if (v != u) printf("ERROR: %d value inserted was %d, getting %d\n", omp_get_thread_num(), v, u);
 
@@ -141,7 +141,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool, pool_threads, buffer_threads)
   {
     // Id range is 0 to 100
-    size_t id;
+    typename PoolType::IdType id;
     int iter;
     int j = 0;
     for (int i = 0; i < 100; ++i) {
@@ -153,13 +153,13 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       iter = rand() % 100;
 #pragma omp parallel for num_threads(buffer_threads) default(none) shared(pool, id, iter) private(j)
       for (j = 0; j < iter; ++j) {
-        pool[id].append(&j, 1);
+        pool[id].append(&j, sizeof(int));
       }
 
       // random sleep
       usleep(rand() % 1000);
       if (pool[id].getSize() != sizeof(int) * iter)
-        printf("ERROR: thread %d/%d buffer %lu size is %lu, expected %lu\n", omp_get_thread_num(), pool_threads, id, pool[id].getSize(), sizeof(int) * iter);
+        printf("ERROR: thread %d/%d buffer %d size is %lu, expected %lu\n", omp_get_thread_num(), pool_threads, id, pool[id].getSize(), sizeof(int) * iter);
 
       // clear buffer
       pool[id].clear();
