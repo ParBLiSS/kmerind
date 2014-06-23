@@ -139,6 +139,7 @@ namespace bliss
             // if there is something available in "available", get it.  else get false.
             return available.tryPop(bufferId);
           } else {
+
             // can grow, but first check for available.
             if (!available.tryPop(bufferId)) {
               // non available.  so allocate a new one and return.
@@ -159,6 +160,7 @@ namespace bliss
             available.waitAndPop(bufferId);
 
           } else {  // can grow, but first see if we can reuse one.
+
             // check if there are some available.
             if (!available.tryPop(bufferId)) {
               std::lock_guard<std::mutex> lock(mutex);
@@ -168,7 +170,7 @@ namespace bliss
         }
 
         /**
-         * release a buffer back to pool, by id.  if id is incorrect, throw exception.
+         * release a buffer back to pool, by id.  if id is incorrect, throw exception.  clears buffer before release.
          * @param bufferId
          */
         void releaseBuffer(const IdType& bufferId) throw (bliss::io::IOException) {
@@ -181,6 +183,7 @@ namespace bliss
           // insert the buffer into "available"
           lock.unlock();
 
+          buffers[bufferId].clear();
           available.tryPush(bufferId);
         }
 
@@ -292,7 +295,7 @@ namespace bliss
 
         void reset() {
           available.clear();
-          for (IdType i = 0; i < buffers.size(); ++i) {
+          for (IdType i = 0; i < static_cast<IdType>(buffers.size()); ++i) {
             available.push_back(i);
             buffers[i].clear();
           }
@@ -304,7 +307,6 @@ namespace bliss
          * @return
          */
         bool tryAcquireBuffer(IdType & bufferId) {
-
           if (available.empty()) {
             // if empty,...
             if (fixedSize) {
@@ -315,7 +317,6 @@ namespace bliss
               bufferId = createNewBuffer();
             }
           } else {
-
             // if there is something available in "available", get it
             bufferId = available.front();
             available.pop_front();
@@ -350,19 +351,24 @@ namespace bliss
 //          }
 //        }
 
+        /**
+         * release a buffer back to the available queue.  also mark the buffer as cleared.
+         * @param bufferId    the id of the buffer to be released.
+         */
         void releaseBuffer(const IdType& bufferId) throw (bliss::io::IOException) {
-          if (bufferId >= buffers.size()) {
+          if (bufferId >= static_cast<IdType>(buffers.size())) {
             std::stringstream ss;
             ss << "ERROR: BufferPool releasing buffer with id " << bufferId << ", buffer does not exist.";
             throw IOException(ss.str());
           }
 
           // insert the buffer into "available"
+          buffers[bufferId].clear();
           available.push_back(bufferId);
         }
 
         const BufferType& operator[](const IdType& bufferId) throw (bliss::io::IOException) {
-          if (bufferId >= buffers.size()) {
+          if (bufferId >= static_cast<IdType>(buffers.size())) {
             if (fixedSize) {
               std::stringstream ss;
               ss << "ERROR: BufferPool get buffer with id " << bufferId << ", buffer does not exist.";

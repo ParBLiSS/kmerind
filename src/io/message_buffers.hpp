@@ -57,6 +57,8 @@
 
 #include <mutex>
 #include <vector>
+#include <type_traits>
+#include <typeinfo>
 
 #include "config.hpp"
 #include "io/buffer.hpp"
@@ -89,28 +91,32 @@ namespace bliss
      *              RecvMessageBuffers is not needed at the moment so not implemented.
      *
      */
-    template<int TAG, bliss::concurrent::ThreadSafety ThreadSafety>
+    template<bliss::concurrent::ThreadSafety ThreadSafety>
     class MessageBuffers
     {
       protected:
+        typedef typename bliss::io::BufferPool<ThreadSafety>::IdType    BufferIdType;
+
         bliss::io::BufferPool<ThreadSafety> pool;
         const int bufferCapacity;
 
-        /**
-         * superclass MessageBuffers is not to be instantiated directly.
-         * default, internal pool has unlimited capacity.
-         *
-         * @param numDests          number of destinations.  e.g. mpi comm size.
-         * @param buffer_capacity   individual buffer's size in bytes
-         */
-        MessageBuffers(const int & numDests, const int & _buffer_capacity) : pool(_buffer_capacity), bufferCapacity(_buffer_capacity) {};
 
 
         const int getBufferCapacity() {
           return bufferCapacity;
         }
 
+        /**
+         * default, internal pool has unlimited capacity.
+         *
+         * @param numDests          number of destinations.  e.g. mpi comm size.
+         * @param buffer_capacity   individual buffer's size in bytes
+         */
+        MessageBuffers(const int & numDests, const int & _buffer_capacity, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
+          pool(pool_capacity, _buffer_capacity), bufferCapacity(_buffer_capacity) {};
+
       public:
+
         virtual ~MessageBuffers() {};
 
 //        virtual bool acquireBuffer(size_t &id);
@@ -122,7 +128,9 @@ namespace bliss
           pool.releaseBuffer(id);
         }
 
-
+        virtual void reset() {
+          pool.reset();
+        }
       private:
 
     };
@@ -134,29 +142,23 @@ namespace bliss
      * access the internal BufferPool by id.
      *
      */
-    template<int TAG, bliss::concurrent::ThreadSafety ThreadSafety>
-    class SendMessageBuffers;
-
-    /// specializations
-    template<int TAG>
-    class SendMessageBuffers<TAG, bliss::concurrent::THREAD_SAFE> : public MessageBuffers<TAG, bliss::concurrent::THREAD_SAFE>
+    template<bliss::concurrent::ThreadSafety ThreadSafety>
+    class SendMessageBuffers : public MessageBuffers<ThreadSafety>
     {
-      protected:
-        typedef typename bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>::IdType    BufferIdType;
+      public:
+        typedef typename bliss::io::BufferPool<ThreadSafety>::IdType    BufferIdType;
 
-        std::vector<std::atomic<BufferIdType> > bufferIds;  // mapping from process id (0 to vector size), to buffer Ids (from BufferPool)
+      protected:
+        typedef typename std::conditional<ThreadSafety, std::atomic<BufferIdType>, BufferIdType>::type   IdType;
+        std::vector< IdType > bufferIds;  // mapping from process id (0 to vector size), to buffer Ids (from BufferPool)
 
       public:
-        SendMessageBuffers(const int & numDests, const int & buffer_capacity) :
-          MessageBuffers<TAG, bliss::concurrent::THREAD_SAFE>(numDests, buffer_capacity),
+        SendMessageBuffers(const int & numDests, const int & buffer_capacity, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
+          MessageBuffers<ThreadSafety>(numDests, buffer_capacity, pool_capacity),
           bufferIds(numDests) {
           /// initialize the bufferIds by acquiring them from the pool.
 
-          BufferIdType t;
-          for (int i = 0; i < numDests; ++i) {
-            pool.tryAcquireBuffer(t);
-            bufferIds[i] = t;
-          }
+          this->reset();
         };
 
         virtual ~SendMessageBuffers() {};
@@ -166,7 +168,16 @@ namespace bliss
         }
 
 
+        virtual void reset() {
+          MessageBuffers<ThreadSafety>::reset();
 
+          BufferIdType t = -1;
+          for (int i = 0; i < this->bufferIds.size(); ++i) {
+            t= -1;
+            this->pool.tryAcquireBuffer(t);
+            bufferIds[i] = t;
+          }
+        }
 
         /**
          * function appends data to the target message buffer.   internally will try to swap in a new buffer when full, and notify the caller of the full buffer's id.
@@ -182,12 +193,13 @@ namespace bliss
          * @param[out] fullBufferId   id of the full buffer, if full.  if not full, -1.
          * @return
          */
+        template<bliss::concurrent::ThreadSafety TS = ThreadSafety, typename std::enable_if<TS>::type* = nullptr >
         bool append(const void* data, const size_t &count, const int &dest, BufferIdType& oldBufferId) throw (bliss::io::IOException) {
 
           /// if there is not enough room for the new data in even a new buffer, LOGIC ERROR IN CODE: throw exception
-          if (count > bufferCapacity) {
+          if (count > this->bufferCapacity) {
             std::stringstream ss;
-            ss << "ERROR: MessageBuffer append with count " << count << " larger than buffer capacity " << bufferCapacity;
+            ss << "ERROR: MessageBuffer append with count " << count << " larger than buffer capacity " << this->bufferCapacity;
             throw (bliss::io::IOException(ss.str()));
           }
 
@@ -199,7 +211,7 @@ namespace bliss
 
           /// need to replace bufferIds[dest], if it's -1, or if new data can't fit
           if ((targetBufferId == -1) ||
-              ((this->bufferCapacity - pool[targetBufferId].getSize()) < count)) {
+              ((this->bufferCapacity - this->pool[targetBufferId].getSize()) < count)) {
             // at this point, targetBufferId may be -1 or some value, and the local variables may be out of date already.
 
             /// get a new buffer and try to replace the existing.
@@ -228,7 +240,7 @@ namespace bliss
 
               // return the unused buffer id to pool.
               if (hasNewBuffer)
-                pool.releaseBuffer(newBufferId);
+                this->pool.releaseBuffer(newBufferId);
 
             }
           }
@@ -242,33 +254,7 @@ namespace bliss
 
         }
 
-    };
 
-    template<int TAG>
-    class SendMessageBuffers<TAG, bliss::concurrent::THREAD_UNSAFE> : public MessageBuffers<TAG, bliss::concurrent::THREAD_UNSAFE>
-    {
-      protected:
-        typedef typename bliss::io::BufferPool<bliss::concurrent::THREAD_UNSAFE>::IdType    BufferIdType;
-
-        std::vector<BufferIdType> bufferIds;  // mapping from process id (0 to vector size), to buffer Ids (from BufferPool)
-
-      public:
-        SendMessageBuffers(const int & numDests, const int & buffer_capacity) :
-          MessageBuffers<TAG, bliss::concurrent::THREAD_UNSAFE>(numDests, buffer_capacity),
-          bufferIds(numDests) {
-          /// initialize the bufferIds by acquiring them from the pool.
-
-          BufferIdType t;
-          for (int i = 0; i < numDests; ++i) {
-            pool.tryAcquireBuffer(t);
-            bufferIds[i] = t;
-          }
-        };
-        virtual ~SendMessageBuffers() {};
-
-        size_t getSize() {
-          return bufferIds.size();
-        }
 
         /**
          * function appends data to the target message buffer.   internally will try to swap in a new buffer when full, and notify the caller of the full buffer's id.
@@ -282,12 +268,13 @@ namespace bliss
          * @param[out] fullBufferId   id of the full buffer, if full.  if not full, -1.
          * @return
          */
+        template<bliss::concurrent::ThreadSafety TS = ThreadSafety, typename std::enable_if<!TS>::type* = nullptr >
         bool append(const void* data, const size_t &count, const int &dest, BufferIdType& oldBufferId) throw (bliss::io::IOException) {
 
           /// if there is not enough room for the new data in even a new buffer, throw exception
-          if (count > bufferCapacity) {
+          if (count > this->bufferCapacity) {
             std::stringstream ss;
-            ss << "ERROR: MessageBuffer append with count " << count << " larger than buffer capacity " << this->pool[targetBufferId].getCapacity();
+            ss << "ERROR: MessageBuffer append with count " << count << " larger than buffer capacity " << this->bufferCapacity;
             throw (bliss::io::IOException(ss.str()));
           }
 
@@ -300,7 +287,7 @@ namespace bliss
 
           /// need to replace bufferIds[dest], if it's -1, or if new data can't fit
           if ((targetBufferId == -1) ||
-              ((this->bufferCapacity - pool[targetBufferId].getSize()) < count)) {
+              ((this->bufferCapacity - this->pool[targetBufferId].getSize()) < count)) {
 
             // save the old buffer/full buffer to return
             fullBufferId = targetBufferId;
@@ -322,6 +309,7 @@ namespace bliss
             return this->pool[targetBufferId].append(data, count);
 
         }
+
 
     };
 

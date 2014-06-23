@@ -13,7 +13,7 @@
  *
  * TODO add License
  */
-#ifndef BUFFER_HPP_A
+#ifndef BUFFER_HPP_
 #define BUFFER_HPP_
 
 #include <cstring>
@@ -85,7 +85,7 @@ namespace bliss
           assert(_capacity > 0);
         };
 
-        Buffer(const void* _data, const size_t count) : capacity(count), size(count), data(data) {
+        Buffer(void* _data, const size_t count) : capacity(count), size(count), data(static_cast<uint8_t*>(_data)) {
           assert(count > 0);
         }
 
@@ -289,7 +289,7 @@ namespace bliss
           assert(_capacity > 0);
         };
 
-        Buffer(const void* _data, const size_t count) : capacity(count), size(count), data(data) {
+        Buffer(void* _data, const size_t count) : capacity(count), size(count), data(static_cast<uint8_t*>(_data)) {
           assert(count > 0);
         }
 

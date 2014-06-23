@@ -26,7 +26,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   printf("TEST acquire\n");
   int expected;
   int i = 0;
-  size_t id = 0;
+  typename PoolType::IdType id = 0;
   int count = 0;
 #pragma omp parallel for num_threads(pool_threads) default(none) private(i, id) shared(pool) reduction(+ : count)
   for (i = 0; i < 100; ++i) {
@@ -141,7 +141,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool, pool_threads, buffer_threads)
   {
     // Id range is 0 to 100
-    size_t id;
+    typename PoolType::IdType id;
     int iter;
     int j = 0;
     for (int i = 0; i < 100; ++i) {
@@ -159,7 +159,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       // random sleep
       usleep(rand() % 1000);
       if (pool[id].getSize() != sizeof(int) * iter)
-        printf("ERROR: thread %d/%d buffer %lu size is %lu, expected %lu\n", omp_get_thread_num(), pool_threads, id, pool[id].getSize(), sizeof(int) * iter);
+        printf("ERROR: thread %d/%d buffer %d size is %lu, expected %lu\n", omp_get_thread_num(), pool_threads, id, pool[id].getSize(), sizeof(int) * iter);
 
       // clear buffer
       pool[id].clear();

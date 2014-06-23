@@ -15,10 +15,10 @@
 namespace bliss {
   namespace concurrent {
 
-    enum ThreadSafety : uint8_t {
-      THREAD_UNSAFE = 0,
-      THREAD_SAFE = 1
-    };
+    typedef bool ThreadSafety;
+    constexpr bool THREAD_SAFE = true;
+    constexpr bool THREAD_UNSAFE = false;
+
 
   }
 }
