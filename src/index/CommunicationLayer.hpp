@@ -27,7 +27,7 @@
 #include <unistd.h> // for usleep()
 
 // BLISS includes
-#include <concurrent/threadsafe_fixedsize_queue.hpp>
+#include <concurrent/threadsafe_queue.hpp>
 
 
 struct ReceivedMessage
@@ -39,6 +39,7 @@ struct ReceivedMessage
 
   ReceivedMessage(uint8_t* data, std::size_t count, int tag, int src)
     : data(data), count(count), tag(tag), src(src) {}
+  ReceivedMessage() = default;
 };
 
 // TODO: rename (either this or the ReceivedMessage) for identical naming scheme
@@ -63,11 +64,11 @@ public:
 
   /// Outbound message structure, Multiple-Producer-Single-Consumer queue
   /// consumed by the internal MPI-comm thread
-  bliss::concurrent::ThreadSafeFixedSizeQueue<SendQueueElement> sendQueue;
+  bliss::concurrent::ThreadSafeQueue<SendQueueElement> sendQueue;
 
   // Inbound message structure, Single-Producer-Multiple-Consumer queue
   // produced by the internal MPI-comm thread
-  bliss::concurrent::ThreadSafeFixedSizeQueue<ReceivedMessage> recvQueue;
+  bliss::concurrent::ThreadSafeQueue<ReceivedMessage> recvQueue;
 
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
     : sendQueue(2 * omp_get_num_threads()), recvQueue(2 * comm_size),
@@ -234,6 +235,22 @@ public:
   }
 
 
+  void callbackThread()
+  {
+    // TODO: add termination condition
+    while(true)
+    {
+      // get next element from the queue, wait if none is available
+      ReceivedMessage msg;
+      recvQueue.waitAndPop(msg);
+
+      // TODO: check if the tag exists as callback function
+
+      // call the matching callback function
+      (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
+    }
+  }
+
   // adding the callback function with signature:
   // void(uint8_t* msg, std::size_t count, int fromRank)
   void addReceiveCallback(int tag, std::function<void(uint8_t*, std::size_t, int)> callbackFunction)
@@ -248,6 +265,7 @@ public:
     callbackFunctions[tag] = callbackFunction;
   }
 
+  /*
   // active receiving (by polling) for when there is no callback set
   // these must be thread-safe!
   Message receiveAnyOne();
@@ -255,6 +273,7 @@ public:
 
   Message receiveOne(tag);
   std::vector<message> receiveAll(tag);
+*/
 
 private:
   /* data */

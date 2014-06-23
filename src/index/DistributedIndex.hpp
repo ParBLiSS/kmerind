@@ -14,6 +14,7 @@
 
 #include <utility> // for std::pair
 #include <unordered_map> // local storage hash table
+#include <vector>
 
 template<typename K, typename T, typename CommunicationLayer, typename DistrFunction, typename LocalContainer=std::unordered_multimap<K, T> >
 class DistributedIndex
@@ -147,6 +148,44 @@ protected:
 
     // send the message
     commLayer.sendMessage(msg, count, dstRank, tag);
+  }
+
+  // implementation depends on wheather we use multimap or map saving counts
+  // explicitly
+  std::size_t getLocalCount(const K& key)
+  {
+    return hashTable.count(key);
+  }
+
+  void countHistrogram()
+  {
+    // determine some granuarity?
+    
+    
+    // first determine the maximum count
+    std::size_t max_count = 0;
+    for (auto iter=hashTable.begin(); iter!=hashTable.end();
+         iter=hashTable.equal_range(iter->first)->second)
+    {
+      std::size_t count = getLocalCount(iter->first);
+      max_count = (count > max_count) ? count : max_count;
+    }
+
+    // TODO: get max accross all processors
+    MPI_Reduce(MPI_MAX)
+
+    // count the counts to create local histogram
+    std::vector<std::size_t> count_hist(max_count+1, 0);
+    for (auto iter=hashTable.begin(); iter!=hashTable.end();
+         iter=hashTable.equal_range(iter->first)->second)
+    {
+      std::size_t count = getLocalCount(iter->first);
+      count_hist[count]++;
+    }
+
+    // then accumulate accross all processors
+    // TODO
+    MPI_Reduce(MPI_SUM)
   }
 
   // returns the target rank for a given key (uses the distribution function)
