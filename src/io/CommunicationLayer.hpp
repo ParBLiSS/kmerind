@@ -8,6 +8,16 @@
  * Copyright (c) TODO
  *
  * TODO add Licence
+ *
+ *
+ * TODO:  stopping the communication.
+ *    need 1. mapping between message types.  assumption, each incoming message type corresponds to one or more outgoing message types.
+ *          2. method to mark a message type producer as being done. - single thread.
+ *              also notify remote receiver with done (for that message type/tag)
+ *          3. receiver decrements sender count down to 0, at which point, mark the corresponding response send message as done.
+ *          4. when all send types are done, and all receive types are done, the comm thread terminates.
+ *          5. when all receive type are done, the recv thread terminates.
+ *
  */
 
 #ifndef BLISS_COMMUNICATION_LAYER_HPP
