@@ -34,11 +34,11 @@ namespace concurrent
 class Runnable
 {
   public:
-    Runnable();
+    Runnable() {};
 
-    virtual ~Runnable();
+    virtual ~Runnable() {};
 
-    virtual void run();
+    virtual void run() {};
 };
 
 } /* namespace concurrent */

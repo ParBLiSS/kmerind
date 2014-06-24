@@ -20,8 +20,8 @@
 class Test : public bliss::concurrent::Runnable
 {
   public:
-    test(std::string msg) : content(msg) {};
-    virtual ~test() {};
+    Test(std::string msg) : content(msg) {};
+    virtual ~Test() {};
 
     virtual void run() {
       printf("%s\n", content.c_str());
@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
 
   //// test mpi
   printf("test MPI runner\n");
-  bliss::concurrent::MPIRunner mpir(argc, argv);
+  bliss::concurrent::MPIRunner<false> mpir(argc, argv);
   if (mpir.getId() == 0) mpir.addTask(t1);
   if (mpir.getId() == 1) mpir.addTask(t2);
   if (mpir.getId() == 2) mpir.addTask(t3);
@@ -79,12 +79,12 @@ int main(int argc, char** argv) {
     mompr.addTask(t3);
     mompr.addTask(t4);
     mompr.addTask(t4);
-    mompr.run;
+    mompr.run();
   }
 
   //// test mixing different runners
   printf("mpi runner with omp child runners\n");
-  bliss::concurrent::MPIRunner mpir2(mpir.getComm());
+  bliss::concurrent::MPIRunner<false> mpir2(mpir.getComm());
   if (mpir2.getId() == 0) mpir2.addTask(t1);
   if (mpir2.getId() == 1) mpir2.addTask(sr);
   mpir2.run();

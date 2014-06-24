@@ -50,13 +50,14 @@ class Runner : public Runnable
 
   public:
     Runner() : id(0), groupSize(1) {};
+    Runner(const int _id, const int _groupSize) : id(_id), groupSize(_groupSize) {};
     virtual ~Runner() {};
 
-    virtual void addTask(Runnable &_t);
+    virtual void addTask(Runnable &_t) {};
 
-    virtual void run();
+    virtual void run() {};
 
-    virtual void synchronize();
+    virtual void synchronize() {};
 
     int getId() {
       return id;

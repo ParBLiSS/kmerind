@@ -31,6 +31,11 @@ namespace concurrent
  */
 class OMPRunner : public Runner
 {
+  protected:
+    /// The task
+    Runnable r;
+
+
   public:
 
     /**
@@ -39,14 +44,15 @@ class OMPRunner : public Runner
      *
      * @param nThreads The number of OpenMP threads to use.
      */
-    OMPRunner(int nThreads) : groupSize(nThreads) {
 #ifdef USE_OPENMP
+    OMPRunner(int nThreads) : Runner(omp_get_thread_num(), nThreads) {
       omp_set_num_threads(nThreads);
-      id = omp_get_thread_num();
-#else
-      static_assert(false, "OMPRunner used although compilation is not set to use OpenMP");
-#endif
     }
+#else
+    OMPRunner(int nThreads) : Runner() {
+      static_assert(false, "OMPRunner used although compilation is not set to use OpenMP");
+    }
+#endif
 
     /**
      * @brief The destructor of this class.
@@ -59,15 +65,16 @@ class OMPRunner : public Runner
      * @param t
      */
     virtual void addTask(Runnable &t) {
-      r = t;
+      this->r = t;
     }
 
     /**
      * @brief Runs all tasks.
      */
     virtual void run() {
-#pragma omp parallel num_threads(groupSize) default(none) firstprivate(r)
-      r.run();
+      Runnable lr = r;
+#pragma omp parallel num_threads(groupSize) default(none) firstprivate(lr)
+      this->r.run();
     }
 
     /**
@@ -77,9 +84,6 @@ class OMPRunner : public Runner
 #pragma omp barrier
     }
 
-  protected:
-    /// The task
-    Runnable r;
 };
 
 } /* namespace concurrent */

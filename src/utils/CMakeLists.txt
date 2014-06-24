@@ -14,3 +14,10 @@ if (IS_DIRECTORY ./test)
     bliss_add_test(${PROJECT_NAME} TRUE ${TEST_FILES})
 endif()
 
+# load the testing:
+if (IS_DIRECTORY ./test)
+    # get all files from ./test
+    FILE(GLOB CHECK_FILES test/check_*.cpp)
+    
+    bliss_add_non_google_test(${PROJECT_NAME} FALSE ${CHECK_FILES})
+endif()

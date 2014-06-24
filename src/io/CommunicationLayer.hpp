@@ -2,6 +2,7 @@
  * @file    CommunicationLayer.hpp
  * @ingroup index
  * @author  Patrick Flick <patrick.flick@gmail.com>
+ * @author  Tony Pan <tpan@gatech.edu>
  * @brief   descr
  *
  * Copyright (c) TODO

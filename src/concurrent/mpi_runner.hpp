@@ -35,11 +35,14 @@ template <bool threaded>
 class MPIRunner : public Runner
 {
   protected:
+    Runnable r;
+
+  protected:
     MPI_Comm comm;
     bool commWasCreated;
 
   public:
-    MPIRunner(int argc, char** argv)
+    MPIRunner(int argc, char** argv) : Runner()
     {
 #ifdef USE_MPI
       if (threaded) {
@@ -74,7 +77,7 @@ class MPIRunner : public Runner
 
 
     // comm is now handled by the MPIRunner.
-    MPIRunner(MPI_Comm &_comm)
+    MPIRunner(MPI_Comm &_comm) : Runner()
     {
       comm = _comm;
       MPI_Comm_size(comm, &groupSize);
@@ -109,8 +112,7 @@ class MPIRunner : public Runner
       MPI_Barrier(comm);
     }
 
-  protected:
-    Runnable r;
+
 
 };
 

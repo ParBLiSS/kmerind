@@ -15,13 +15,21 @@
 
 template <typename OT>
 struct compute {
-    OT operator()(size_t i, size_t end, size_t &count) {
-      OT tv = 0;
-      for ( ; i < end; ++i, ++count) {
-        tv += log2(i + 1);
+    bool operator()(int tid, size_t count, OT &v) {
+      v = 0;
+      for (size_t i = 0 ; i < count; ++i) {
+        v += log2(static_cast<double>(i) + 1);
         //ofs << j << std::endl;
       }
-      return tv;
+      return true;
+    }
+
+    RangeType getRange() {
+      return RangeType(0, 100);
+    }
+
+    size_t getChunkSize() {
+      return 100;
     }
 };
 
@@ -65,22 +73,17 @@ int main(int argc, char* argv[])
   if (argc > 1)
     nthreads = atoi(argv[1]);
 
-  size_t step = 128;
-  if (argc > 2)
-    step = atoi(argv[2]);
-
   size_t max = 1000000;
-  if (argc > 3)
-    max = atoi(argv[3]);
+  if (argc > 2)
+    max = atoi(argv[2]);
 
   int iter = 10;
-  if (argc > 4)
-    iter = atoi(argv[4]);
+  if (argc > 3)
+    iter = atoi(argv[3]);
 
   bliss::partition::BlockPartitioner<RangeType> part;
   part.configure(RangeType(0, max), nprocs, 1);
 
-  RangeType r = part.getNext(rank);
   compute<double> op;
   double v = 0.0;
   size_t count = 0;
@@ -95,7 +98,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   count = 0;
   for (int i = 0; i < iter; ++i)
-    v = P2P(op, nthreads, r, step, count);
+    v = P2P<compute<double>, double>(op, nthreads, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -108,25 +111,6 @@ int main(int argc, char* argv[])
 
 
 
-  /// Workers only, atomic  - close to time for parfor.
-#if defined(USE_MPI)
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-  t1 = std::chrono::high_resolution_clock::now();
-  count = 0;
-  for (int i = 0; i < iter; ++i)
-    v = P2P_atomic(op, nthreads, r, step, count);
-#if defined(USE_MPI)
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-          t2 - t1);
-  if (rank == 0)
-    printTiming("P2P atomic:", rank, nprocs, nthreads, time_span, iter, v, count);
-
-
   /// master slave
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -134,7 +118,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   count = 0;
   for (int i = 0; i < iter; ++i)
-    v= MasterSlave(op, nthreads, r, step, count);
+    v= MasterSlave<compute<double>, double>(op, nthreads, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -152,7 +136,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   count = 0;
   for (int i = 0; i < iter; ++i)
-    v= MasterSlaveNoWait(op, nthreads, r, step, count);
+    v= MasterSlaveNoWait<compute<double>, double>(op, nthreads, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -170,7 +154,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   count = 0;
   for (int i = 0; i < iter; ++i)
-    v = ParFor(op, nthreads, r, step, count);
+    v = ParFor<compute<double>, double>(op, nthreads, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -188,7 +172,7 @@ int main(int argc, char* argv[])
   t1 = std::chrono::high_resolution_clock::now();
   count = 0;
   for (int i = 0; i < iter; ++i)
-    v = Sequential(op, nthreads, r, step, count);
+    v = Sequential<compute<double>, double>(op, nthreads, count);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
 #endif

@@ -14,6 +14,7 @@
 
 #include "omp.h"
 #include <cassert>
+#include <vector>
 
 #include "config.hpp"
 #include "concurrent/runner.hpp"
@@ -31,17 +32,21 @@ namespace concurrent
  */
 class MixedOMPRunner : public Runner
 {
+  protected:
+    std::vector<Runnable> q;
+
   public:
-    MixedOMPRunner(int nThreads) : groupSize(nThreads)
-    {
 #ifdef USE_OPENMP
+    MixedOMPRunner(int nThreads) : Runner(omp_get_thread_num(), nThreads)
+    {
       omp_set_num_threads(nThreads);
-      id = omp_get_thread_num();
+    }
 #else
+    MixedOMPRunner(int nThreads) : Runner() {
       static_assert(false, "OMPRunner Used When compilation is not set to use OpenMP");
+    }
 #endif
 
-    }
     virtual ~MixedOMPRunner() {};
 
     virtual void addTask(Runnable &t)
@@ -51,7 +56,8 @@ class MixedOMPRunner : public Runner
 
     virtual void run()
     {
-#pragma omp parallel num_threads(groupSize) default(none) shared(q)
+      std::vector<Runnable> lq = q;
+#pragma omp parallel num_threads(groupSize) default(none) shared(lq)
       {
 #pragma omp single nowait
         {
@@ -71,8 +77,6 @@ class MixedOMPRunner : public Runner
 #pragma omp barrier
     }
 
-  protected:
-    std::vector<Runnable> q;
 };
 
 } /* namespace concurrent */

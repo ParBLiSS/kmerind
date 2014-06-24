@@ -1,49 +1,43 @@
 
-#add_subdirectory(testlib)
-
 
 ## EXECUTABLES
-#add_executable(test1 test.cpp)
-#target_link_libraries(test1 ${EXTRA_LIBS})
-
-add_executable(TextInspector TextInspector.cpp)
-target_link_libraries(TextInspector ${EXTRA_LIBS})
-
+add_executable(test_omp_patterns test_omp_patterns.cpp)
+target_link_libraries(test_omp_patterns ${EXTRA_LIBS})
 
 # EXECUTABLES
-add_executable(testCIO_MMAP testCIO.cpp)
-SET_TARGET_PROPERTIES(testCIO_MMAP PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP)
-target_link_libraries(testCIO_MMAP ${EXTRA_LIBS})
+add_executable(benchmark_concurrent_IO_MMAP benchmark_concurrent_IO.cpp)
+SET_TARGET_PROPERTIES(benchmark_concurrent_IO_MMAP PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP)
+target_link_libraries(benchmark_concurrent_IO_MMAP ${EXTRA_LIBS})
 
 # EXECUTABLES
-add_executable(testCIO_FILELOADER testCIO.cpp)
-SET_TARGET_PROPERTIES(testCIO_FILELOADER PROPERTIES COMPILE_FLAGS -DTEST_OP_FILELOADER)
-target_link_libraries(testCIO_FILELOADER ${EXTRA_LIBS})
+add_executable(benchmark_concurrent_IO_FILELOADER benchmark_concurrent_IO.cpp)
+SET_TARGET_PROPERTIES(benchmark_concurrent_IO_FILELOADER PROPERTIES COMPILE_FLAGS -DTEST_OP_FILELOADER)
+target_link_libraries(benchmark_concurrent_IO_FILELOADER ${EXTRA_LIBS})
 
 # EXECUTABLES
-add_executable(testCIO_FILELOADER_ATOMIC testCIO.cpp)
-SET_TARGET_PROPERTIES(testCIO_FILELOADER_ATOMIC PROPERTIES COMPILE_FLAGS -DTEST_OP_FILELOADER_ATOMIC)
-target_link_libraries(testCIO_FILELOADER_ATOMIC ${EXTRA_LIBS})
+add_executable(benchmark_concurrent_IO_FILELOADER_ATOMIC benchmark_concurrent_IO.cpp)
+SET_TARGET_PROPERTIES(benchmark_concurrent_IO_FILELOADER_ATOMIC PROPERTIES COMPILE_FLAGS -DTEST_OP_FILELOADER_ATOMIC)
+target_link_libraries(benchmark_concurrent_IO_FILELOADER_ATOMIC ${EXTRA_LIBS})
 
 # EXECUTABLES
-add_executable(testCIO_FASTQ testCIO.cpp)
-SET_TARGET_PROPERTIES(testCIO_FASTQ PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQ)
-target_link_libraries(testCIO_FASTQ ${EXTRA_LIBS})
+add_executable(benchmark_concurrent_IO_FASTQ benchmark_concurrent_IO.cpp)
+SET_TARGET_PROPERTIES(benchmark_concurrent_IO_FASTQ PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQ)
+target_link_libraries(benchmark_concurrent_IO_FASTQ ${EXTRA_LIBS})
 
 # EXECUTABLES
-add_executable(testCIO_FASTQIter testCIO.cpp)
-SET_TARGET_PROPERTIES(testCIO_FASTQIter PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQIter)
-target_link_libraries(testCIO_FASTQIter ${EXTRA_LIBS})
+add_executable(benchmark_concurrent_IO_FASTQIter benchmark_concurrent_IO.cpp)
+SET_TARGET_PROPERTIES(benchmark_concurrent_IO_FASTQIter PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQIter)
+target_link_libraries(benchmark_concurrent_IO_FASTQIter ${EXTRA_LIBS})
 
 # EXECUTABLES
-add_executable(testCIO_FASTQIter2 testCIO.cpp)
-SET_TARGET_PROPERTIES(testCIO_FASTQIter2 PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQIter2)
-target_link_libraries(testCIO_FASTQIter2 ${EXTRA_LIBS})
+add_executable(benchmark_concurrent_IO_FASTQIter2 benchmark_concurrent_IO.cpp)
+SET_TARGET_PROPERTIES(benchmark_concurrent_IO_FASTQIter2 PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQIter2)
+target_link_libraries(benchmark_concurrent_IO_FASTQIter2 ${EXTRA_LIBS})
 
 # EXECUTABLES
-add_executable(testCIO_FASTQIterNoQual testCIO.cpp)
-SET_TARGET_PROPERTIES(testCIO_FASTQIterNoQual PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQIterNoQual)
-target_link_libraries(testCIO_FASTQIterNoQual ${EXTRA_LIBS})
+add_executable(benchmark_concurrent_IO_FASTQIterNoQual benchmark_concurrent_IO.cpp)
+SET_TARGET_PROPERTIES(benchmark_concurrent_IO_FASTQIterNoQual PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQIterNoQual)
+target_link_libraries(benchmark_concurrent_IO_FASTQIterNoQual ${EXTRA_LIBS})
 
 
 
@@ -55,8 +49,8 @@ target_link_libraries(testCIO_FASTQIterNoQual ${EXTRA_LIBS})
 
 
 ## EXECUTABLES
-add_executable(testTypes test_types.cpp)
-target_link_libraries(testTypes ${EXTRA_LIBS})
+add_executable(test_iterator_and_function_traits test_iterator_and_function_traits.cpp)
+target_link_libraries(test_iterator_and_function_traits ${EXTRA_LIBS})
 
 
 ## EXECUTABLES
@@ -64,32 +58,11 @@ add_executable(testThreads test_threads.cpp)
 target_link_libraries(testThreads ${EXTRA_LIBS})
 target_link_libraries(testThreads bliss-common)
 
-### EXECUTABLES
-#add_executable(testThreadsNoQual test_threads-no_qual.cpp)
-#target_link_libraries(testThreadsNoQual ${EXTRA_LIBS})
-##target_link_libraries(testThreadsNoQual bliss-io)
-#target_link_libraries(testThreadsNoQual bliss-common)
-##target_link_libraries(testThreadsNoQual bliss-index)
-#
-#
-### EXECUTABLES
-#add_executable(testThreadsNoMPI test_threads_no_mpi.cpp)
-#target_link_libraries(testThreadsNoMPI ${EXTRA_LIBS})
-##target_link_libraries(testThreadsNoMPI bliss-io)
-#target_link_libraries(testThreadsNoMPI bliss-common)
-##target_link_libraries(testThreadsNoMPI bliss-index)
-#
-#
-### EXECUTABLES
-#add_executable(testThreadsNoQualNoMPI test_threads_no_mpi_no_qual.cpp)
-#target_link_libraries(testThreadsNoQualNoMPI ${EXTRA_LIBS})
-##target_link_libraries(testThreadsNoQualNoMPI bliss-io)
-#target_link_libraries(testThreadsNoQualNoMPI bliss-common)
-##target_link_libraries(testThreadsNoQualNoMPI bliss-index)
+
 
 ## EXECUTABLES
-add_executable(testIndexEl quicktest.cpp)
-target_link_libraries(testIndexEl ${EXTRA_LIBS})
+add_executable(profile_mem_usage profile_mem_usage.cpp)
+target_link_libraries(profile_mem_usage ${EXTRA_LIBS})
 #target_link_libraries(testThreads bliss-io)
-target_link_libraries(testIndexEl bliss-common)
+target_link_libraries(profile_mem_usage bliss-common)
 #target_link_libraries(testThreads bliss-index)
