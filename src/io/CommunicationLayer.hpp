@@ -51,11 +51,11 @@ struct ReceivedMessage
 // TODO: rename (either this or the ReceivedMessage) for identical naming scheme
 struct SendQueueElement
 {
-  typename bliss::io::MessageBuffers<bliss::concurrent::THREAD_SAFE>::BufferIdType bufferId;
+  typename BuffersType::BufferIdType bufferId;
   int tag;
   int dst;
 
-  SendQueueElement(bliss::io::MessageBuffers<bliss::concurrent::THREAD_SAFE>::BufferIdType _id, int _tag, int _dst)
+  SendQueueElement(BuffersType::BufferIdType _id, int _tag, int _dst)
     : bufferId(_id), tag(_tag), dst(_dst) {}
   SendQueueElement() = delete;
 };
@@ -82,10 +82,10 @@ protected:
   bliss::concurrent::ThreadSafeQueue<ReceivedMessage> recvQueue;
 
   // outbound temporary data buffer type for the producer threads.  ThreadSafe version for now.
-  typedef bliss::io::MessageBuffers<bliss::concurrent::THREAD_SAFE> BuffersType;
+  typedef BuffersType BuffersType;
   // outbound temporary data buffers.  one per tag.
   std::unordered_map<int, BuffersType> buffers;
-  typedef typename bliss::io::MessageBuffers<bliss::concurrent::THREAD_SAFE>::BufferIdType BufferIdType;
+  typedef typename BuffersType::BufferIdType BufferIdType;
 
   mutable std::mutex mutex;
 
@@ -122,9 +122,10 @@ public:
       if (fullId != -1) {
         // have a full buffer - put in send queue.
         SendQueueElement v(fullId, tag, dst_rank);
-        while (!sendQueue.tryPush(std::move(v))) {
-          usleep(20);
-        }
+//        while (!sendQueue.tryPush(std::move(v))) {
+//          usleep(20);
+//        }
+				sendQueue.waitAndPush(std::move(v));
       }
 
       usleep(20);
@@ -140,11 +141,14 @@ public:
     for (auto id : buffers[tag].getActiveIds()) {
       if (id != -1) {
         SendQueueElement v(id, tag, i);
-        while (!sendQueue.tryPush(std::move(v))) {
-          usleep(20);
-        }
+//        while (!sendQueue.tryPush(std::move(v))) {
+//          usleep(20);
+//        }
+				sendQueue.waitAndPush(std::move(v));
       }
     }
+    
+    /// mark as no more coming in.
   }
 
 
@@ -195,7 +199,7 @@ public:
         MPI_Irecv(msg_data, received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
 
         // insert into the in-progress queue
-        std::tuple<MPI_Request, ReceivedMessage> msg(req, ReceivedMessage(msg_data, received_count, tag, src));
+        std::pair<MPI_Request, ReceivedMessage> msg(req, ReceivedMessage(msg_data, received_count, tag, src));
         recvInProgress.push(std::move(msg));
 
      // }
