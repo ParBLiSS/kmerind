@@ -72,7 +72,12 @@ namespace bliss
           return bufferId;
         }
 
-
+        BufferPool(BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>&& other, const std::lock_guard<std::mutex>&) :
+          capacity(other.capacity), buffer_capacity(other.buffer_capacity), available(std::move(other.available)),
+          buffers(std::move(other.buffers)), fixedSize(other.fixedSize) {
+          other.capacity = 0;
+          other.buffer_capacity = 0;
+        };
       public:
         /**
          *  construct a Buffer Pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is set to _pool_capacity.
@@ -104,9 +109,20 @@ namespace bliss
             BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>(std::numeric_limits<IdType>::max(), _buffer_capacity) {};
 
         BufferPool(const BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& other) = delete;
-        BufferPool(BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>&& other) = default;
+        BufferPool(BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>&& other) :
+          BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
         BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& operator=(const BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& other) = delete;
-        BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& operator=(BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>&& other) = default;
+        BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& operator=(BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>&& other) {
+          capacity = other.capacity; other.capacity = 0;
+          buffer_capacity = other.buffer_capacity; other.buffer_capacity = 0;
+          fixedSize = other.fixedSize;
+          std::unique_lock<std::mutex> mylock(mutex, std::defer_lock),
+                                        otherlock(other.mutex, std::defer_lock);
+          std::lock(mylock, otherlock);
+          available = std::move(other.available);
+          buffers = std::move(other.buffers);
+          return *this;
+        };
 
 
         /**
@@ -283,10 +299,21 @@ namespace bliss
             BufferPool<bliss::concurrent::THREAD_UNSAFE>(std::numeric_limits<IdType>::max(), _buffer_capacity) {};
 
         BufferPool(const BufferPool<bliss::concurrent::THREAD_UNSAFE>& other) = delete;
-        BufferPool(BufferPool<bliss::concurrent::THREAD_UNSAFE>&& other) = default;
+        BufferPool(BufferPool<bliss::concurrent::THREAD_UNSAFE>&& other) :
+          capacity(other.capacity), buffer_capacity(other.buffer_capacity), available(std::move(other.available)),
+          buffers(std::move(other.buffers)), fixedSize(other.fixedSize) {
+          other.capacity = 0;
+          other.buffer_capacity = 0;
+        };
         BufferPool<bliss::concurrent::THREAD_UNSAFE>& operator=(const BufferPool<bliss::concurrent::THREAD_UNSAFE>& other) = delete;
-        BufferPool<bliss::concurrent::THREAD_UNSAFE>& operator=(BufferPool<bliss::concurrent::THREAD_UNSAFE>&& other) = default;
-
+        BufferPool<bliss::concurrent::THREAD_UNSAFE>& operator=(BufferPool<bliss::concurrent::THREAD_UNSAFE>&& other) {
+          capacity = other.capacity; other.capacity = 0;
+          buffer_capacity = other.buffer_capacity; other.buffer_capacity = 0;
+          available = std::move(other.available);
+          buffers = std::move(other.buffers);
+          fixedSize = other.fixedSize;
+          return *this;
+        };
 
 
         /**

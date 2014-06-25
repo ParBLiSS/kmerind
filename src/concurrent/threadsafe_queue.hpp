@@ -45,11 +45,29 @@ namespace bliss
         mutable std::mutex mutex;
         std::condition_variable empty_cv;
         std::condition_variable full_cv;
-        const size_t capacity;
+        size_t capacity;
+
+        ThreadSafeQueue(ThreadSafeQueue<T>&& other, const std::lock_guard<std::mutex>&) : q(std::move(other.q)),
+            capacity(other.capacity) {
+          other.capacity = 0;
+        };
+
 
       public:
 
         ThreadSafeQueue(const size_t &_capacity = std::numeric_limits<size_t>::max()) : capacity(_capacity) {};
+
+        ThreadSafeQueue(const ThreadSafeQueue<T>& other) = delete;
+        ThreadSafeQueue(ThreadSafeQueue<T>&& other) : ThreadSafeQueue<T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
+        ThreadSafeQueue<T>& operator=(ThreadSafeQueue<T>&& other) {
+          capacity = other.capacity; other.capacity = 0;
+          std::unique_lock<std::mutex> mylock(mutex, std::defer_lock), otherlock(other.mutex, std::defer_lock);
+          std::lock(mylock, otherlock);
+          q = std::move(other.q);
+          return *this;
+        }
+        ThreadSafeQueue<T>& operator=(const ThreadSafeQueue<T>& other) = delete;
+
 
         const size_t& getMaxSize() const {
           return capacity;

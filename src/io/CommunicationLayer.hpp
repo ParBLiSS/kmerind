@@ -24,7 +24,7 @@
 #define BLISS_COMMUNICATION_LAYER_HPP
 
 #include <mpi.h>
-//#include <omp.h>
+#include <omp.h>
 
 // C stdlib includes
 #include <assert.h>
@@ -33,6 +33,10 @@
 #include <vector>
 #include <queue>
 #include <mutex>
+#include <unordered_map>
+#include <unordered_set>
+
+
 
 // system includes
 // TODO: make this system indepenedent!?
@@ -43,7 +47,7 @@
 #include <concurrent/concurrent.hpp>
 #include <io/message_buffers.hpp>
 
-typedef bliss::io::MessageBuffers<bliss::concurrent::THREAD_SAFE> BuffersType;
+typedef bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE> BuffersType;
 
 
 struct ReceivedMessage
@@ -55,12 +59,7 @@ struct ReceivedMessage
 
   ReceivedMessage(uint8_t* data, std::size_t count, int tag, int src)
     : data(data), count(count), tag(tag), src(src) {}
-  ReceivedMessage() = delete;
-  ReceivedMessage(ReceivedMessage&& other) = default;
-  ReceivedMessage(const ReceivedMessage& other) = delete;
-  ReceivedMessage& operator=(ReceivedMessage&& other) = default;
-  ReceivedMessage& operator=(const ReceivedMessage& other) = delete;
-
+  ReceivedMessage() = default;
 };
 
 // TODO: rename (either this or the ReceivedMessage) for identical naming scheme
@@ -72,11 +71,7 @@ struct SendQueueElement
 
   SendQueueElement(BuffersType::BufferIdType _id, int _tag, int _dst)
     : bufferId(_id), tag(_tag), dst(_dst) {}
-  SendQueueElement() = delete;
-  SendQueueElement(SendQueueElement&& other) = default;
-  SendQueueElement(const SendQueueElement& other) = delete;
-  SendQueueElement& operator=(SendQueueElement&& other) = default;
-  SendQueueElement& operator=(const SendQueueElement& other) = delete;
+  SendQueueElement() = default;
 };
 
 
@@ -101,7 +96,7 @@ protected:
   bliss::concurrent::ThreadSafeQueue<ReceivedMessage> recvQueue;
 
   // outbound temporary data buffer type for the producer threads.  ThreadSafe version for now.
-  typedef BuffersType BuffersType;
+  //typedef SendMessageBuffers<> BuffersType;
   // outbound temporary data buffers.  one BuffersType per tag value.
   std::unordered_map<int, BuffersType> buffers;
 
@@ -125,7 +120,7 @@ public:
     MPI_Comm_rank(comm, &commRank);
   }
 
-  virtual ~CommunicationLayer ();
+  virtual ~CommunicationLayer () {};
 
 
 
@@ -182,17 +177,17 @@ public:
     // multiple threads may call this.
     std::unique_lock<std::mutex> lock(mutex);
     if (buffers.find(tag) == buffers.end()) {
-      buffers[tag] = std::move(BuffersType(commSize, 8192));
+      buffers.insert(std::move(std::pair<int, BuffersType>(std::move(tag), std::move(BuffersType(commSize, 8192)))));
     }
     lock.unlock();
 
     /// try to append the new data - repeat until successful.
     /// along the way, if a full buffer's id is returned, queue it for sendQueue.
     BufferIdType fullId = -1;
-    while (!buffers[tag].append(data, count, dst_rank, fullId)) {
+    while (!(buffers.at(tag).append(data, count, dst_rank, fullId))) {
       // repeat until success;
       if (fullId != -1) {
-        if (!(buffers[tag].getBackBuffer(fullId).isEmpty())) {
+        if (!(buffers.at(tag).getBackBuffer(fullId).isEmpty())) {
         // have a full buffer - put in send queue.
 //        SendQueueElement v(fullId, tag, dst_rank);
 //        while (!sendQueue.tryPush(std::move(v))) {
@@ -224,9 +219,10 @@ public:
 
 
     // flush out all the send buffers matching a particular tag.
-    int i = 0;
-    for (auto id : buffers[tag].getActiveIds()) {
-      if ((id != -1) && !(buffers[tag].getBackBuffer(id).isEmpty())) {
+    int idCount = buffers.at(tag).getActiveIds().size();
+    for (int i = 0; i < idCount; ++i) {
+      auto id = buffers.at(tag).getActiveId(i);
+      if ((id != -1) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
 //        SendQueueElement v(id, tag, i);
 //        while (!sendQueue.tryPush(std::move(v))) {
 //          usleep(20);
@@ -235,7 +231,6 @@ public:
       }
       // send the end message for this tag.
       sendQueue.waitAndPush(std::move(SendQueueElement(-1, tag, i)));
-      ++i;
     }
     
     /// mark as no more coming in for this tag.
@@ -335,8 +330,8 @@ public:
           }
 
         } else {  // real data.
-          auto data = buffers[se.tag].getBackBuffer(se.bufferId).getData();
-          auto count = buffers[se.tag].getBackBuffer(se.bufferId).getSize();
+          void* data = const_cast<void*>(buffers.at(se.tag).getBackBuffer(se.bufferId).getData());
+          auto count = buffers.at(se.tag).getBackBuffer(se.bufferId).getSize();
 
 
           if (se.dst == commRank) {
@@ -348,7 +343,7 @@ public:
             recvQueue.waitAndPush(std::move(ReceivedMessage(array, count, se.tag, commRank)));
 
             // finished inserting directly to local RecvQueue.  release the buffer
-            buffers[se.tag].releaseBuffer(se.bufferId);
+            buffers.at(se.tag).releaseBuffer(se.bufferId);
 
           } else {
 
@@ -374,7 +369,7 @@ public:
         {
           if (front.second.bufferId != -1) {
             // cleanup, i.e., release the buffer back into the pool
-            buffers[front.second.tag].releaseBuffer(front.second.bufferId);
+            buffers.at(front.second.tag).releaseBuffer(front.second.bufferId);
           }
           sendInProgress.pop();
         }

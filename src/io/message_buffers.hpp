@@ -98,7 +98,7 @@ namespace bliss
         typedef typename bliss::io::BufferPool<ThreadSafety>::IdType    BufferIdType;
 
         bliss::io::BufferPool<ThreadSafety> pool;
-        const int bufferCapacity;
+        int bufferCapacity;
 
 
 
@@ -115,6 +115,16 @@ namespace bliss
         MessageBuffers(const int & _buffer_capacity, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
           pool(pool_capacity, _buffer_capacity), bufferCapacity(_buffer_capacity) {};
         MessageBuffers() = delete;
+
+        MessageBuffers(const MessageBuffers<ThreadSafety>& other) = delete;
+        MessageBuffers<ThreadSafety>& operator=(const MessageBuffers<ThreadSafety>& other) = delete;
+        MessageBuffers(MessageBuffers<ThreadSafety>&& other) : pool(std::move(other.pool)), bufferCapacity(other.bufferCapacity) {};
+        MessageBuffers<ThreadSafety>& operator=(MessageBuffers<ThreadSafety>&& other) {
+          pool = std::move(other.pool);
+          bufferCapacity = other.bufferCapacity; other.bufferCapacity = 0;
+          return *this;
+        }
+
 
       public:
 
@@ -166,12 +176,18 @@ namespace bliss
           SendMessageBuffers<ThreadSafety>(numDests, buffer_capacity, 3 * numDests)
         {};
 
-
-        SendMessageBuffers() = delete;
+        SendMessageBuffers() :  MessageBuffers<ThreadSafety>() {};
+//        SendMessageBuffers() = delete;
         SendMessageBuffers(const SendMessageBuffers<ThreadSafety> &other) = delete;
-        SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) = default;
+        SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) : MessageBuffers<ThreadSafety>(std::move(other)),
+          bufferIds(std::move(other.bufferIds)) {};
         SendMessageBuffers<ThreadSafety>& operator=(const SendMessageBuffers<ThreadSafety> &other) = delete;
-        SendMessageBuffers<ThreadSafety>& operator=(SendMessageBuffers<ThreadSafety> && other) = default;
+        SendMessageBuffers<ThreadSafety>& operator=(SendMessageBuffers<ThreadSafety> && other) {
+          bufferIds = std::move(other.bufferIds);
+          this->bufferCapacity = other.bufferCapacity; other.bufferCapacity = 0;
+          this->pool = std::move(other.pool);
+          return *this;
+        }
 
 
         virtual ~SendMessageBuffers() {};
@@ -182,6 +198,10 @@ namespace bliss
 
         const Buffer<ThreadSafety> & getBackBuffer(const BufferIdType& id) {
           return this->pool[id];
+        }
+
+        const BufferIdType getActiveId(int idx) {
+          return BufferIdType(bufferIds[idx]);
         }
 
         const std::vector< IdType >& getActiveIds() {
