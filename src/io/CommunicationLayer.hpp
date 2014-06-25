@@ -55,7 +55,12 @@ struct ReceivedMessage
 
   ReceivedMessage(uint8_t* data, std::size_t count, int tag, int src)
     : data(data), count(count), tag(tag), src(src) {}
-  ReceivedMessage() = default;
+  ReceivedMessage() = delete;
+  ReceivedMessage(ReceivedMessage&& other) = default;
+  ReceivedMessage(const ReceivedMessage& other) = delete;
+  ReceivedMessage& operator=(ReceivedMessage&& other) = default;
+  ReceivedMessage& operator=(const ReceivedMessage& other) = delete;
+
 };
 
 // TODO: rename (either this or the ReceivedMessage) for identical naming scheme
@@ -68,6 +73,10 @@ struct SendQueueElement
   SendQueueElement(BuffersType::BufferIdType _id, int _tag, int _dst)
     : bufferId(_id), tag(_tag), dst(_dst) {}
   SendQueueElement() = delete;
+  SendQueueElement(SendQueueElement&& other) = default;
+  SendQueueElement(const SendQueueElement& other) = delete;
+  SendQueueElement& operator=(SendQueueElement&& other) = default;
+  SendQueueElement& operator=(const SendQueueElement& other) = delete;
 };
 
 
