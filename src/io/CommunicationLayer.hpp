@@ -107,11 +107,13 @@ protected:
   typedef typename BuffersType::BufferIdType BufferIdType;
 
   mutable std::mutex mutex;
+  std::condition_variable cond_var;
+  volatile int flushing;
 
 public:
 
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
-    : sendQueue(2 * omp_get_num_threads()), recvQueue(2 * comm_size),
+    : sendQueue(2 * omp_get_num_threads()), recvQueue(2 * comm_size), flushing(-1),
       comm(communicator)
   {
     // init communicator rank and size
@@ -217,7 +219,6 @@ public:
       return;
     }
 
-
     // flush out all the send buffers matching a particular tag.
     int idCount = buffers.at(tag).getActiveIds().size();
     for (int i = 0; i < idCount; ++i) {
@@ -236,6 +237,14 @@ public:
     /// mark as no more coming in for this tag.
     sendAccept.erase(tag);
     /// leave the MessageBuffers. - have to wait until all's sent.
+
+    // waiting for all messages of this tag to flush.
+    std::unique_lock<std::mutex> lock(mutex);
+    flushing = tag;
+
+    while (flushing == tag) {
+      cond_var.wait(lock);
+    }
   }
 
 
@@ -262,7 +271,6 @@ public:
       std::vector<message> receiveAll(tag);
     */
 
-  protected:
 
 
     //
@@ -295,12 +303,21 @@ public:
 
         // TODO: check if the tag exists as callback function
 
+        if (msg.data == nullptr && msg.count == 0 && flushing == msg.tag) {
+          std::unique_lock<std::mutex> lock(mutex);
+          flushing = -1;
+          lock.unlock();
+          cond_var.notify_one();
+        }
+
+
         // call the matching callback function
         (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
         delete [] msg.data;
       }
     }
 
+  protected:
 
     //// Order of message matters so make sure end message will be sent/recv'd after data messages.
     //// same source/destination messages goes between queues directly, bypassing MPI, so need to enqueue local termination message into "inprogress" (data can go into recv queue)
