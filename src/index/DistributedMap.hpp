@@ -27,8 +27,8 @@
 //  - [ ] split up distributed index into multimap and counting map
 //  - [ ] populate(Iterator)
 //  - [ ] WAIT FOR COMM_LAYER: flush()
-//  - [ ] expose local iterators
-//  - [X] finish the count Histrogram
+//  - [x] expose local iterators
+//  - [x] finish the count Histrogram
 //  - [x] filter() function -> (maybe with broadcast??)
 //  - [ ] take apart commlayer into one-way and two-way comm with proper destruction
 
@@ -36,6 +36,10 @@ template<typename K, typename T, typename CommunicationLayer, typename LocalCont
 class DistributedMap
 {
 public:
+  /// The iterator type of the local container type
+  typedef typename LocalContainer::iterator local_iterator;
+  /// The constant iterator type of the local container type
+  typedef typename LocalContainer::const_iterator local_const_iterator;
 
   static constexpr int INSERT_MPI_TAG = 13;
   static constexpr int LOOKUP_MPI_TAG = 14;
@@ -103,6 +107,49 @@ public:
       // advance loop iterator
       iter = cur_end_iter;
     }
+  }
+
+
+  /**
+   * @brief Returns an iterator to the first element of the local container.
+   *
+   * @return Iterator to the first local element.
+   */
+  local_iterator begin()
+  {
+    return hashTable.begin();
+  }
+
+  /**
+   * @brief Returns an iterator to the element following the last element of
+   * the local container.
+   *
+   * @return Iterator the the element following the last local element.
+   */
+  local_iterator end()
+  {
+    return hashTable.end();
+  }
+
+  /**
+   * @brief Returns an iterator to the first element of the local container.
+   *
+   * @return Iterator to the first local element.
+   */
+  local_const_iterator begin() const
+  {
+    return hashTable.begin();
+  }
+
+  /**
+   * @brief Returns an iterator to the element following the last element of
+   * the local container.
+   *
+   * @return Iterator the the element following the last local element.
+   */
+  local_const_iterator end() const
+  {
+    return hashTable.end();
   }
 
 protected:
