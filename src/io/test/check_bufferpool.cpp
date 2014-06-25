@@ -147,7 +147,8 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
     for (int i = 0; i < 100; ++i) {
       // acquire
       while (!pool.tryAcquireBuffer(id)) usleep(50);
-      //if (i % 25 == 0) printf("thread %d acquired buffer %lu\n", omp_get_thread_num(), id);
+      //if (i % 25 == 0)
+//      printf("thread %d acquired buffer %d\n", omp_get_thread_num(), id);
 
       // access
       iter = rand() % 100;
@@ -166,7 +167,8 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 
       //release
       pool.releaseBuffer(id);
-      //if (i % 25 == 0) printf("thread %d released buffer %lu\n", omp_get_thread_num(), id);
+      //if (i % 25 == 0)
+//      printf("thread %d released buffer %d\n", omp_get_thread_num(), id);
 
     }
   }

@@ -126,7 +126,10 @@ public:
     MPI_Comm_rank(comm, &commRank);
   }
 
-  virtual ~CommunicationLayer () {};
+  virtual ~CommunicationLayer () {
+    callback_thread.join();
+    comm_thread.join();
+  };
 
   // FIXME: rename me
   void startThreads()
@@ -190,14 +193,20 @@ public:
     // multiple threads may call this.
     std::unique_lock<std::mutex> lock(mutex);
     if (buffers.find(tag) == buffers.end()) {
-      buffers.insert(std::move(std::pair<int, BuffersType>(std::move(tag), std::move(BuffersType(commSize, 8192)))));
+      std::cout << std::this_thread::get_id() << " create buffers for tag " << tag << std::endl;
+      buffers.insert(std::pair<int, BuffersType>(tag, BuffersType(commSize, 8192)));
     }
     lock.unlock();
+
+ //   printf("%lu ", count);
 
     /// try to append the new data - repeat until successful.
     /// along the way, if a full buffer's id is returned, queue it for sendQueue.
     BufferIdType fullId = -1;
-    while (!(buffers.at(tag).append(data, count, dst_rank, fullId))) {
+    bool success = false;
+    do {
+      success = buffers.at(tag).append(data, count, dst_rank, fullId);
+
       // repeat until success;
       if (fullId != -1) {
         if (!(buffers.at(tag).getBackBuffer(fullId).isEmpty())) {
@@ -206,12 +215,13 @@ public:
 //        while (!sendQueue.tryPush(std::move(v))) {
 //          usleep(20);
 //        }
+          //printf("full buffer %d\n", fullId );
           sendQueue.waitAndPush(std::move(SendQueueElement(fullId, tag, dst_rank)));
         }
       }
-
+      fullId = -1;
       usleep(20);
-    }
+    } while (!success);
 
   }
 
@@ -231,6 +241,8 @@ public:
     }
 
     // flush out all the send buffers matching a particular tag.
+    printf("Flushing %d.  Active Buffer Ids in message buffer: %s\n", tag, buffers.at(tag).activeIdsToString().c_str());
+
     int idCount = buffers.at(tag).getActiveIds().size();
     for (int i = 0; i < idCount; ++i) {
       auto id = buffers.at(tag).getActiveId(i);
@@ -301,6 +313,7 @@ public:
         tryStartSend();
       }
 
+      printf("comm thread finished on %d\n", commRank);
     }
 
     void callbackThread()
@@ -326,6 +339,8 @@ public:
         (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
         delete [] msg.data;
       }
+      printf("recv thread finished on %d\n", commRank);
+
     }
 
   protected:
@@ -346,9 +361,9 @@ public:
 
           if (se.dst == commRank) {
             // local, directly handle by creating an output object and directly
-            // insert into the recvInProgress (need to maintain message ordering.
-            recvQueue.waitAndPush(std::move(ReceivedMessage(nullptr, 0, se.tag, commRank)));
-
+            // insert into the recvInProgress (need to use the receiver decrement logic in "finishReceive")
+            MPI_Request req = MPI_REQUEST_NULL;
+            recvInProgress.push(std::pair<MPI_Request, ReceivedMessage>(req, ReceivedMessage(nullptr, 0, se.tag, commRank)));
 
           } else {
             // remote.  send a terminating message. with the same tag to ensure message ordering.
@@ -361,7 +376,7 @@ public:
           void* data = const_cast<void*>(buffers.at(se.tag).getBackBuffer(se.bufferId).getData());
           auto count = buffers.at(se.tag).getBackBuffer(se.bufferId).getSize();
 
-
+//          printf ("sending %d\n", se.bufferId);
           if (se.dst == commRank) {
             // local, directly handle by creating an output object and directly
             // insert into the recv queue
@@ -372,6 +387,7 @@ public:
 
             // finished inserting directly to local RecvQueue.  release the buffer
             buffers.at(se.tag).releaseBuffer(se.bufferId);
+//            printf("released %d.  recvQueue size is %lu\n", se.bufferId, recvQueue.size());
 
           } else {
 
@@ -429,9 +445,8 @@ public:
         MPI_Irecv(msg_data, received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
 
         // insert into the in-progress queue
-        recvInProgress.push(std::move(std::pair<MPI_Request,
-                                                ReceivedMessage>(req,
-                                                                 ReceivedMessage(msg_data, received_count, tag, src))));
+        recvInProgress.push(std::pair<MPI_Request, ReceivedMessage>(req,
+                                                                 ReceivedMessage(msg_data, received_count, tag, src)));
 
       }
     }
@@ -456,7 +471,7 @@ public:
           if (front.second.count == 0) {  // terminating message.
             // end of messaging.
             --recvRemaining[front.second.tag];
-            printf("RECV rank %d receiving END signal %d from %d, num sanders remaining is %d\n", commRank, front.second.tag, front.second.src, recvRemaining[front.second.tag]);
+            printf("RECV rank %d receiving END signal %d from %d, num senders remaining is %d\n", commRank, front.second.tag, front.second.src, recvRemaining[front.second.tag]);
 
             if (recvRemaining[front.second.tag] == 0) {
               // received all end messages.  there may still be message in progress and in recvQueue from this and other sources.

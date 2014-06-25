@@ -30,6 +30,8 @@ namespace bliss
 {
   namespace io
   {
+    // TODO: move constructor and assignment operators between BufferPools of different thread safeties.
+
 
     template<bliss::concurrent::ThreadSafety PoolTS, bliss::concurrent::ThreadSafety BufferTS = PoolTS>
     class BufferPool;

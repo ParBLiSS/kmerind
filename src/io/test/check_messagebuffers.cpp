@@ -39,8 +39,10 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   int i;
   int count = 0;
   int count2 = 0;
+  int count3 = 0;
+  int count4 = 0;
 
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, id, success, fullBufferId) shared(buffers, data, fullBuffers) reduction(+ : count, count2)
+#pragma omp parallel for num_threads(nthreads) default(none) private(i, id, success, fullBufferId) shared(buffers, data, fullBuffers) reduction(+ : count, count2, count3, count4)
   for (i = 0; i < 1000; ++i) {
     id = 0;
     fullBufferId = -1;
@@ -48,28 +50,37 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
     success = buffers.append(data.c_str(), data.length(), id, fullBufferId);
 
-    if (!success) {
+    if (success) {
       ++count;
     } else {
       ++count2;
     }
 
-    while (fullBufferId != -1) {
-      if (fullBuffers.tryPush(fullBufferId)) fullBufferId = -1;
+    if (fullBufferId != -1) {
+      ++count3;
+    } else {
+      if (!success) {
+        ++count4;
+      }
     }
+
+    if (fullBufferId != -1)
+      fullBuffers.waitAndPush(fullBufferId);
   }
-  printf("Number of failed attempt to append to buffer is %d, success %d. full buffers size: %lu \n", count, count2, fullBuffers.size());
+  printf("Number of failed attempt to append to buffer is %d, success %d. full buffers size: %lu.  numFullBuffers = %d.  num failed append due to no buffer = %d\n", count2, count, fullBuffers.size(), count3, count4);
 
   printf("TEST release\n");
   count = 0;
-  printf("buffer ids 0 to %lu initially in use.\n", buffers.getSize() - 1);
+//  printf("buffer ids 0 to %lu initially in use.\n", buffers.getSize() - 1);
 //  printf("releasing: ");
 #pragma omp parallel for num_threads(nthreads) default(none) private(id, fullBufferId) shared(buffers, data, fullBuffers) reduction(+ : count)
   for (id = 0; id < 350; ++id) {
     try {
+      fullBufferId = -1;
       if (fullBuffers.tryPop(fullBufferId)) {
 //        printf("%d ", fullBufferId);
-        buffers.releaseBuffer(fullBufferId);
+        if (fullBufferId != -1)
+          buffers.releaseBuffer(fullBufferId);
       }
     } catch(const bliss::io::IOException & e)
     {
@@ -83,7 +94,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   buffers.reset();
 
   printf("TEST all operations together\n");
-  int count3 = 0;
+  count3 = 0;
   count = 0;
   count2 = 0;
   //printf("full buffer: ");
