@@ -190,6 +190,10 @@ namespace bliss
           size_t s = size.load(std::memory_order_consume);
           return s >= capacity;
         }
+        bool isEmpty() const {
+          size_t s = size.load(std::memory_order_consume);
+          return s == 0;
+        }
 
 
         /**
@@ -395,6 +399,11 @@ namespace bliss
         bool isFull() const {
           return size >= capacity;
         }
+
+        bool isEmpty() const {
+          return size == 0;
+        }
+
 
         /**
          * append data to the buffer.  semantically, a "false" return value does not mean
