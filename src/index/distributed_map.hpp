@@ -1,5 +1,5 @@
 /**
- * @file    DistributedMap.hpp
+ * @file    distributed_map.hpp
  * @ingroup index
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   descr
@@ -33,7 +33,7 @@
 //  - [ ] take apart commlayer into one-way and two-way comm with proper destruction
 
 template<typename K, typename T, typename CommunicationLayer, typename LocalContainer=std::unordered_multimap<K, T> >
-class DistributedMap
+class distributed_map
 {
 public:
   /// The iterator type of the local container type
@@ -45,18 +45,41 @@ public:
   static constexpr int LOOKUP_MPI_TAG = 14;
   static constexpr int LOOKUP_ANSWER_MPI_TAG = 15;
 
-  DistributedMap (CommunicationLayer& commLayer, MPI_Comm mpi_comm, std::function<std::size_t(K)> hashFunction = std::hash<K>())
+  distributed_map (CommunicationLayer& commLayer, MPI_Comm mpi_comm, std::function<std::size_t(K)> hashFunction = std::hash<K>())
       : commLayer(commLayer), comm(mpi_comm), hashFunct(hashFunction)
   {
     // TODO: add callback function for commLayer receive
   }
 
-  virtual ~DistributedMap () {}
+  virtual ~distributed_map () {}
+
+  void remoteInsert(const std::pair<K, T>& keyvalue)
+  {
+    int targetRank = getTargetRank(keyvalue.first);
+    sendPair(keyvalue, targetRank, INSERT_MPI_TAG);
+  }
 
   void remoteInsert(const K& key, const T& value)
   {
     int targetRank = getTargetRank(key);
     sendPair(key, value, targetRank, INSERT_MPI_TAG);
+  }
+
+  template<typename Iterator>
+  void populate(const Iterator& begin, const Iterator& end)
+  {
+    // get the iterator traits
+    typedef typename std::iterator_traits<Iterator> traits;
+    typedef typename traits::value_type value_type;
+    // check for the correct iterator traits
+    static_assert(std::is_same<value_type, std::pair<K, T> >::value, "Iterator value_type must be a std::pair of (key,value)");
+
+    // iterate through all elements and insert them
+    for (Iterator it = begin; it != end; ++it)
+    {
+      int targetRank = getTargetRank(it->first);
+      sendPair(*it, targetRank, INSERT_MPI_TAG);
+    }
   }
 
   /// Flushes all buffered elements to be inserted at the target processor.
