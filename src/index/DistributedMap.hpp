@@ -1,5 +1,5 @@
 /**
- * @file    DistributedIndex.hpp
+ * @file    DistributedMap.hpp
  * @ingroup index
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   descr
@@ -9,15 +9,31 @@
  * TODO add Licence
  */
 
-#ifndef BLISS_DISTRIBUTED_INDEX_HPP
-#define BLISS_DISTRIBUTED_INDEX_HPP
+#ifndef BLISS_DISTRIBUTED_MAP_HPP
+#define BLISS_DISTRIBUTED_MAP_HPP
 
 #include <utility> // for std::pair
 #include <unordered_map> // local storage hash table
 #include <vector>
+#include <functional> // for std::function and std::hash
+#include <limits>
+#include <stdexcept>
+#include <algorithm> // for std::max
 
-template<typename K, typename T, typename CommunicationLayer, typename DistrFunction, typename LocalContainer=std::unordered_multimap<K, T> >
-class DistributedIndex
+// include MPI
+#include <mpi.h>
+
+// TODO LIST:
+//  - [ ] split up distributed index into multimap and counting map
+//  - [ ] populate(Iterator)
+//  - [ ] WAIT FOR COMM_LAYER: flush()
+//  - [ ] expose local iterators
+//  - [X] finish the count Histrogram
+//  - [x] filter() function -> (maybe with broadcast??)
+//  - [ ] take apart commlayer into one-way and two-way comm with proper destruction
+
+template<typename K, typename T, typename CommunicationLayer, typename LocalContainer=std::unordered_multimap<K, T> >
+class DistributedMap
 {
 public:
 
@@ -25,13 +41,13 @@ public:
   static constexpr int LOOKUP_MPI_TAG = 14;
   static constexpr int LOOKUP_ANSWER_MPI_TAG = 15;
 
-  DistributedIndex (CommunicationLayer& commLayer)
-      : commLayer(commLayer)
+  DistributedMap (CommunicationLayer& commLayer, MPI_Comm mpi_comm, std::function<std::size_t(K)> hashFunction = std::hash<K>())
+      : commLayer(commLayer), comm(mpi_comm), hashFunct(hashFunction)
   {
     // TODO: add callback function for commLayer receive
   }
 
-  virtual ~DistributedIndex () {}
+  virtual ~DistributedMap () {}
 
   void remoteInsert(const K& key, const T& value)
   {
@@ -57,6 +73,36 @@ public:
     const int targetRank = getTargetRank(key);
     sendKey(key, targetRank, LOOKUP_MPI_TAG);
     // TODO: wait for answer somehow
+  }
+
+
+  /**
+   * @brief Removes all (key,value) pairs with a key count of less than `count`.
+   *
+   * This function has to be called on each MPI process with the same parameter
+   * value. This function only operates locally, there is no communication
+   * involved.
+   *
+   * @param count   The key count threshold. Everything lower than this will be
+   *                removed.
+   */
+  void filter(const std::size_t count)
+  {
+    // iterate through all keys
+    for (auto iter = hashTable.begin(); iter!=hashTable.end();)
+    {
+      // get end of the range of identical key
+      auto cur_end_iter = hashTable.equal_range(iter->first)->second;
+      std::size_t cur_count = getLocalCount(iter->first);
+      if (cur_count < count)
+      {
+        // remove all entries with this key, this will invalidate the `iter`
+        // iterator
+        hashTable.erase(iter, cur_end_iter);
+      }
+      // advance loop iterator
+      iter = cur_end_iter;
+    }
   }
 
 protected:
@@ -157,35 +203,47 @@ protected:
     return hashTable.count(key);
   }
 
-  void countHistrogram()
+  // TODO: - granularity/resolution of histogram (i.e., bin size)
+  //       - sampling rather than full histogram (estimation)
+  std::vector<int> countHistrogram()
   {
     // determine some granuarity?
-    
-    
+    // TODO
+
     // first determine the maximum count
-    std::size_t max_count = 0;
+    uint64_t local_max_count = 0; // use uint64_t for all systems!
     for (auto iter=hashTable.begin(); iter!=hashTable.end();
          iter=hashTable.equal_range(iter->first)->second)
     {
       std::size_t count = getLocalCount(iter->first);
-      max_count = (count > max_count) ? count : max_count;
+      local_max_count = std::max<uint64_t>(local_max_count, count);
     }
 
-    // TODO: get max accross all processors
-    MPI_Reduce(MPI_MAX)
+    // cast max count to int and check that it doesn't overflow
+    if (local_max_count >= std::numeric_limits<int>::max())
+    {
+      throw std::range_error("Histrogram of counts: maximum count exceeds integer range");
+    }
+    int max_count = static_cast<int>(local_max_count);
+
+    // get max accross all processors
+    int all_max_count;
+    MPI_Allreduce(&max_count, &all_max_count, 1, MPI_INT, MPI_MAX, comm);
 
     // count the counts to create local histogram
-    std::vector<std::size_t> count_hist(max_count+1, 0);
+    std::vector<int> local_count_hist(all_max_count+1, 0);
     for (auto iter=hashTable.begin(); iter!=hashTable.end();
          iter=hashTable.equal_range(iter->first)->second)
     {
       std::size_t count = getLocalCount(iter->first);
-      count_hist[count]++;
+      local_count_hist[count]++;
     }
 
     // then accumulate accross all processors
-    // TODO
-    MPI_Reduce(MPI_SUM)
+    std::vector<int> count_hist(all_max_count+1, 0);
+    MPI_Allreduce(&local_count_hist[0], &count_hist[0], all_max_count+1, MPI_UINT64_T, MPI_SUM, comm);
+
+    return count_hist;
   }
 
   // returns the target rank for a given key (uses the distribution function)
@@ -198,7 +256,9 @@ protected:
 
   CommunicationLayer commLayer;
 
-  DistrFunction hashFunct;
+  MPI_Comm comm;
+
+  std::function<std::size_t(K)> hashFunct;
 
   LocalContainer hashTable;
 
@@ -206,4 +266,4 @@ private:
   /* data */
 };
 
-#endif // BLISS_DISTRIBUTED_INDEX_HPP
+#endif // BLISS_DISTRIBUTED_MAP_HPP
