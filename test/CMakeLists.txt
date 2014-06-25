@@ -58,7 +58,10 @@ add_executable(testThreads test_threads.cpp)
 target_link_libraries(testThreads ${EXTRA_LIBS})
 target_link_libraries(testThreads bliss-common)
 
-
+## EXECUTABLES
+add_executable(testCommLayer test_distr_index.cpp)
+target_link_libraries(testCommLayer ${EXTRA_LIBS})
+target_link_libraries(testCommLayer bliss-common)
 
 ## EXECUTABLES
 add_executable(profile_mem_usage profile_mem_usage.cpp)
