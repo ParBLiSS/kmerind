@@ -35,6 +35,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include <thread>
 
 
 
@@ -110,6 +111,9 @@ protected:
   std::condition_variable cond_var;
   volatile int flushing;
 
+  std::thread comm_thread;
+  std::thread callback_thread;
+
 public:
 
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
@@ -124,7 +128,12 @@ public:
 
   virtual ~CommunicationLayer () {};
 
-
+  // FIXME: rename me
+  void startThreads()
+  {
+    comm_thread = std::thread(&CommunicationLayer::commThread, this);
+    callback_thread = std::thread(&CommunicationLayer::callbackThread, this);
+  }
 
   // adding the callback function with signature:
   // void(uint8_t* msg, std::size_t count, int fromRank)
@@ -135,10 +144,12 @@ public:
       return;
     }
 
+    /*
     if (recvRemaining[tag] == 0) {
       printf("function already had finished processing for tag %d.\n", tag);
       return;
     }
+    */
 
 
     if (callbackFunctions.empty())
@@ -169,7 +180,7 @@ public:
   void sendMessage(const void* data, std::size_t count, int dst_rank, int tag=default_tag)
   {
     // check to see if the target tag is still accepting
-    if (sendAccept.find(tag) != sendAccept.end()) {
+    if (sendAccept.find(tag) == sendAccept.end()) {
       // TODO:  change to using FATAL on logger.
       printf("ERROR: calling CommunicationLayer::sendMessage with a tag that has been flushed already.  tag=%d\n", tag);
       return;

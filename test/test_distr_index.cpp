@@ -87,7 +87,7 @@ struct Tester
     }
   }
 
-  void test_comm_layer(int repeat_sends=100)
+  void test_comm_layer(int repeat_sends=10000)
   {
     DEBUG("Testing Comm Layer");
     DEBUG("Size: " << commLayer.getCommSize());
@@ -115,6 +115,7 @@ struct Tester
     if (msgs_received != repeat_sends * commLayer.getCommSize())
     {
       DEBUG("ERROR: wrong amount of messages received in phase 1");
+      DEBUG("received: " << msgs_received << ", should: " << repeat_sends * commLayer.getCommSize());
       exit(EXIT_FAILURE);
     }
 
@@ -153,7 +154,9 @@ struct Tester
     DEBUG("It's hard to overstate my satisfaction.");
   }
 
-  Tester(MPI_Comm comm, int comm_size) : commLayer(comm, comm_size) {}
+  Tester(MPI_Comm comm, int comm_size) : commLayer(comm, comm_size) {
+    commLayer.startThreads();
+  }
 
   CommunicationLayer commLayer;
 };
@@ -171,7 +174,7 @@ int main(int argc, char *argv[])
 
   /* code */
   Tester tester(comm, p);
-  tester.test_comm_layer(100);
+  tester.test_comm_layer(10000);
 
   // finalize MPI
   MPI_Finalize();
