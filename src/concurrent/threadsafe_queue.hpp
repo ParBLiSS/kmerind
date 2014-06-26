@@ -149,21 +149,26 @@ namespace bliss
           return q.empty();
         }
 
-        bool tryPop(T& output) {
+        std::pair<bool, T> tryPop() {
+          std::pair<bool, T> output;
           std::unique_lock<std::mutex> lock(mutex);
           if (q.empty()) {
+            lock.unlock();
             // empty q, nothing.
-            return false;
+            output.first = false;
+            return output;
+          } else {
+            output.second = std::move(q.front());  // convert to movable reference and move-assign.
+            q.pop_front();
+            lock.unlock();
+            output.first = true;
+            full_cv.notify_one();
+            return output;
           }
-
-          output = std::move(q.front());  // convert to movable reference and move-assign.
-          q.pop_front();
-          lock.unlock();
-          full_cv.notify_one();
-          return true;
         }
 
-        void waitAndPop(T& output) {
+        T waitAndPop() {
+          T output;
           std::unique_lock<std::mutex> lock(mutex);
           while (q.empty()) {
             // empty q.  wait for someone to signal.
@@ -177,6 +182,8 @@ namespace bliss
           q.pop_front();
           lock.unlock();
           full_cv.notify_one();
+
+          return output;
         }
 
     };

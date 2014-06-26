@@ -203,9 +203,8 @@ public:
     /// try to append the new data - repeat until successful.
     /// along the way, if a full buffer's id is returned, queue it for sendQueue.
     BufferIdType fullId = -1;
-    bool success = false;
-    do {
-      success = buffers.at(tag).append(data, count, dst_rank, fullId);
+    //bool success = false;
+    while (!buffers.at(tag).append(data, count, dst_rank, fullId)) {
 
       // repeat until success;
       if (fullId != -1) {
@@ -221,7 +220,7 @@ public:
       }
       fullId = -1;
       usleep(20);
-    } while (!success);
+    }
 
   }
 

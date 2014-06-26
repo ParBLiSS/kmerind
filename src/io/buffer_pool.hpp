@@ -156,28 +156,25 @@ namespace bliss
          * @param bufferId
          * @return
          */
-        bool tryAcquireBuffer(IdType & bufferId) {
-
-          if (fixedSize) {
-            // if there is something available in "available", get it.  else get false.
-            return available.tryPop(bufferId);
-          } else {
-
-            // can grow, but first check for available.
-            if (!available.tryPop(bufferId)) {
-              // non available.  so allocate a new one and return.
-              std::lock_guard<std::mutex> lock(mutex);
-              bufferId = createNewBuffer();
-            } // else already got one.
-            return true;
+        std::pair<bool, IdType> tryAcquireBuffer() {
+          std::pair<bool, IdType> output = available.tryPop();
+          if (!output.first && !fixedSize) {
+            // can grow
+            // non available.  so allocate a new one and return.
+            output.first = true;
+            std::lock_guard<std::mutex> lock(mutex);
+            output.second = createNewBuffer();
           }
+
+          return output;
         }
 
         /**
          *
          * @param bufferId
          */
-        void waitAndAcquireBuffer(IdType & bufferId) {
+        IdType waitAndAcquireBuffer() {
+          IdType bufferId;
           if (fixedSize) {
             // have to wait for available
             available.waitAndPop(bufferId);
@@ -190,6 +187,7 @@ namespace bliss
               bufferId = createNewBuffer();
             }
           }
+          return IdType;
         }
 
         /**
@@ -347,22 +345,24 @@ namespace bliss
          * @param bufferId
          * @return
          */
-        bool tryAcquireBuffer(IdType & bufferId) {
+        std::pair<bool, IdType> tryAcquireBuffer() {
+          IdType bufferId = -1;
+          bool result = false;
           if (available.empty()) {
             // if empty,...
-            if (fixedSize) {
-              // none available and fixed size.  return false.
-              return false;
-            } else {
+            if (!fixedSize) {
               // if there is no capacity limit, create a new buffer, insert into vector, and return it.
               bufferId = createNewBuffer();
-            }
+              result = true;
+            } // else none available and fixed size.  return false.
+
           } else {
             // if there is something available in "available", get it
             bufferId = available.front();
             available.pop_front();
+            result = true;
           }
-          return true;
+          return std::pair<bool, IdType>(result, bufferId);
 
         }
 

@@ -223,7 +223,7 @@ namespace bliss
           return this->pool[id];
         }
 
-        const BufferIdType getActiveId(int idx) {
+        const BufferIdType getActiveId(const int idx) {
           return BufferIdType(bufferIds[idx]);
         }
 
@@ -253,19 +253,20 @@ namespace bliss
         /**
          * function appends data to the target message buffer.   internally will try to swap in a new buffer when full, and notify the caller of the full buffer's id.
          * need to return 3 things:
-         *  status of current insert (in case the bufferpool is fixed size, and there is no available place to buffer)
-         *  indicator that there is a full buffer, and the full buffer's id.
+         *  status of current insert
+         *  indicator that there is a full buffer ( the full buffer's id).
          *
          *  TODO:  show a table for compare exchange values and behavior
          *
          * @param[in] data
          * @param[in] count
          * @param[in] dest
-         * @param[out] fullBufferId   id of the full buffer, if full.  if not full, -1.
-         * @return
+         * @param[out] fullBufferId   id of the full buffer, if full.  if not full, -1.  if -1, guaranteed to return false as well.
+         * @return                    true if insert is successful (guarantee -1 fullBufferId.  false if insert fails, or if a full buffer is returned.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety, typename std::enable_if<TS>::type* = nullptr >
-        bool append(const void* data, const size_t &count, const int &dest, BufferIdType& oldBufferId) throw (bliss::io::IOException) {
+        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
+
 
           /// if there is not enough room for the new data in even a new buffer, LOGIC ERROR IN CODE: throw exception
           if (count > this->bufferCapacity) {
@@ -287,7 +288,10 @@ namespace bliss
 
             /// get a new buffer and try to replace the existing.
             BufferIdType newBufferId = -1;
-            bool hasNewBuffer = this->pool.tryAcquireBuffer(newBufferId);
+            std::pair<bool, BufferIdType> newBuffer = this->pool.tryAcquireBuffer();
+
+            bool hasNewBuffer = newBufferId.first;
+            newBufferId = newBuffer.second;
             // if acquire fails, we have -1 for newBufferId.
 
 //            std::cout << std::this_thread::get_id();
@@ -326,12 +330,13 @@ namespace bliss
             }
           }
 
-          oldBufferId = fullBufferId;
-          // now try insert using the new targetBufferId.
-          if (targetBufferId == -1)   // some other thread may have set this to -1 because it could not get a buffer from pool.  try again.
-            return false;
-          else
-            return this->pool[targetBufferId].append(data, count);
+          if (fullBufferId != -1 || targetBufferId == -1)
+            // returning a full buffer.  don't insert.
+            // or  some other thread may have set this to -1 because it could not get a buffer from pool.  try again.
+            return std::pair<bool, BufferIdType>(false, fullBufferId);
+
+          // did not return a fullBuffer, and there is a place to insert into, so do it.
+          return std::pair<bool, BufferIdType>(this->pool[targetBufferId].append(data, count), fullBufferId);
 
         }
 
@@ -350,7 +355,7 @@ namespace bliss
          * @return
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety, typename std::enable_if<!TS>::type* = nullptr >
-        bool append(const void* data, const size_t &count, const int &dest, BufferIdType& oldBufferId) throw (bliss::io::IOException) {
+        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
 
           /// if there is not enough room for the new data in even a new buffer, throw exception
           if (count > this->bufferCapacity) {
@@ -374,20 +379,23 @@ namespace bliss
             fullBufferId = targetBufferId;
 
             /// get a new buffer and try to replace the existing.
-            targetBufferId = -1;
-            this->pool.tryAcquireBuffer(targetBufferId);
+            targetBufferId = this->pool.tryAcquireBuffer().second;
 
             /// now try to set the bufferIds[dest] to the new buffer id (valid, or -1 if can't get a new one)
             bufferIds[dest] = targetBufferId;
 
           }
 
+
           // now try insert using the new targetBufferId.
-          oldBufferId = fullBufferId;
-          if (targetBufferId == -1)
-            return false;
-          else
-            return this->pool[targetBufferId].append(data, count);
+          if (fullBufferId != -1 || targetBufferId == -1) {
+            // we got a full buffer - don't insert
+            // or  we don't have a buffer to insert into
+            return std::pair<bool, BufferIdType>(false, fullBufferId);
+          }
+
+          // else we are not returning a full buffer and have a buffer to insert into, so try insert
+          return std::pair<bool, BufferIdType>(this->pool[targetBufferId].append(data, count), fullBufferId);
 
         }
 

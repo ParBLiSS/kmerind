@@ -199,8 +199,9 @@ namespace bliss
         /**
          * append data to the buffer.  semantically, a "false" return value does not mean
          *  the buffer if full.  it means that there is not enough room for the new data.
-         * @param add_data
-         * @param add_size
+         * @param[in] add_data
+         * @param[in] add_size
+         * @return  bool indicated whether operation succeeded.
          */
         bool append(const void* typed_data, const size_t count) const {     // const method because the user will have const reference to Buffers.
                                                                          // because of the const-ness, we have mutable data and size.
@@ -224,9 +225,9 @@ namespace bliss
          *    using relaxed and release vs acquire and acq_rel - no major difference.
          *
          *    DO NO USE.
-         * @param typed_data
-         * @param count
-         * @return
+         * @param[in] typed_data
+         * @param[in] count
+         * @return   success/fail
          */
         bool append_lockfree(const void* typed_data, const size_t count) const {    // const method because the user will have const reference to Buffers.
                                                                                  // because of the const-ness, we have mutable data and size.
@@ -408,9 +409,9 @@ namespace bliss
         /**
          * append data to the buffer.  semantically, a "false" return value does not mean
          *  the buffer if full.  it means that there is not enough room for the new data.
-         * @param add_data
-         * @param add_size
-         * @return
+         * @param[in] add_data
+         * @param[in] add_size
+         * @return success/failure
          */
         bool append(const void* typed_data, const size_t count) const {   // const method because the user will have const reference to Buffers.
                                                                        // because of the const-ness, we have mutable data and size.
