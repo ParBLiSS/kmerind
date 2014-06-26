@@ -315,6 +315,8 @@ public:
         // TODO: check if the tag exists as callback function
 
         if (msg.data == nullptr && msg.count == 0 && flushing == msg.tag) {
+          printf("EMTPY MESSAGE Received, Notifying Cond\n");
+          fflush(stdout);
           std::unique_lock<std::mutex> lock(mutex);
           flushing = -1;
           lock.unlock();
@@ -457,12 +459,16 @@ public:
             // end of messaging.
             --recvRemaining[front.second.tag];
             printf("RECV rank %d receiving END signal %d from %d, num sanders remaining is %d\n", commRank, front.second.tag, front.second.src, recvRemaining[front.second.tag]);
+            fflush(stdout);
 
             if (recvRemaining[front.second.tag] == 0) {
               // received all end messages.  there may still be message in progress and in recvQueue from this and other sources.
               recvRemaining.erase(front.second.tag);
 
+              printf("ALL END received, pushing to recv queue");
+              fflush(stdout);
               recvQueue.waitAndPush(std::move(front.second));
+
             } else if (recvRemaining[front.second.tag] == 0) {
               printf("ERROR: number of remaining receivers for tag %d is now NEGATIVE\n", front.second.tag);
             }

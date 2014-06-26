@@ -95,8 +95,6 @@ struct Tester
 
     // set global rank
     my_rank = commLayer.getCommRank();
-    using namespace std::placeholders;
-    commLayer.addReceiveCallback(FIRST_TAG, std::bind(&Tester::receivedCallback, this, _1, _2, _3));
 
     // start sending one message to each:
     for (int l = 0; l < repeat_sends; ++l)
@@ -104,6 +102,7 @@ struct Tester
       for (int i = 0; i < commLayer.getCommSize(); ++i)
       {
         int msg = generate_message(my_rank, i);
+        DEBUG("Sending " << msg << " to " << i);
         commLayer.sendMessage(&msg, sizeof(int), i, FIRST_TAG);
       }
     }
@@ -122,17 +121,13 @@ struct Tester
 
     /* phase 2 communication */
 
-
-    commLayer.addReceiveCallback(LOOKUP_TAG, std::bind(&Tester::lookup_callback, this, _1, _2, _3));
-    commLayer.addReceiveCallback(ANSWER_TAG, std::bind(&Tester::answer_callback, this, _1, _2, _3));
-
     // sending one message to each:
     for (int l = 0; l < repeat_sends; ++l)
     {
       for (int i = 0; i < commLayer.getCommSize(); ++i)
       {
         int msg = (my_rank+1)*(i+1);
-        commLayer.sendMessage(&msg, sizeof(int), i, FIRST_TAG);
+        commLayer.sendMessage(&msg, sizeof(int), i, LOOKUP_TAG);
       }
     }
 
@@ -155,6 +150,10 @@ struct Tester
   }
 
   Tester(MPI_Comm comm, int comm_size) : commLayer(comm, comm_size) {
+    using namespace std::placeholders;
+    commLayer.addReceiveCallback(FIRST_TAG, std::bind(&Tester::receivedCallback, this, _1, _2, _3));
+    commLayer.addReceiveCallback(LOOKUP_TAG, std::bind(&Tester::lookup_callback, this, _1, _2, _3));
+    commLayer.addReceiveCallback(ANSWER_TAG, std::bind(&Tester::answer_callback, this, _1, _2, _3));
     commLayer.startThreads();
   }
 
@@ -174,7 +173,7 @@ int main(int argc, char *argv[])
 
   /* code */
   Tester tester(comm, p);
-  tester.test_comm_layer(10000);
+  tester.test_comm_layer(10);
 
   // finalize MPI
   MPI_Finalize();
