@@ -319,25 +319,28 @@ public:
     void callbackThread()
     {
       // TODO: add termination condition
+      ReceivedMessage msg;
       while ((recvRemaining.size() > 0) || (recvInProgress.size() > 0) || (recvQueue.size() > 0))
       {
         // get next element from the queue, wait if none is available
-        ReceivedMessage msg;
-        recvQueue.waitAndPop(msg);
-
         // TODO: check if the tag exists as callback function
 
-        if (msg.data == nullptr && msg.count == 0 && flushing == msg.tag) {
-          std::unique_lock<std::mutex> lock(mutex);
-          flushing = -1;
-          lock.unlock();
-          cond_var.notify_one();
+        if (recvQueue.tryPop(msg)) {
+          if (msg.data == nullptr && msg.count == 0) {
+            if (flushing == msg.tag) {
+              std::unique_lock<std::mutex> lock(mutex);
+              flushing = -1;
+              lock.unlock();
+              cond_var.notify_one();
+            } else {
+              printf("WARNING: empty message with flushing=%d, but looking for %d\n", flushing, msg.tag);
+            }
+          }
+
+          // call the matching callback function
+          (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
+          delete [] msg.data;
         }
-
-
-        // call the matching callback function
-        (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
-        delete [] msg.data;
       }
       printf("recv thread finished on %d\n", commRank);
 
