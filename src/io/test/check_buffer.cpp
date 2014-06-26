@@ -15,6 +15,7 @@
 #include "omp.h"
 #include <cassert>
 #include <chrono>
+#include <algorithm>
 
 int main(int argc, char** argv) {
 
@@ -135,13 +136,14 @@ int main(int argc, char** argv) {
 
 
   // check clear
-  bliss::io::Buffer<bliss::concurrent::THREAD_SAFE> tsBuffer4(32768);
+  int bufferSize = 32768;
+  bliss::io::Buffer<bliss::concurrent::THREAD_SAFE> tsBuffer4(bufferSize);
 
 
   // check insertion.
   i = 0;
   int fail = 0;
-#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i, val) reduction(+:fail)
+#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i, val) reduction(+: fail)
   for (i = 0; i < 9000; ++i) {
     val = static_cast<valType>(i);
 
@@ -150,6 +152,25 @@ int main(int argc, char** argv) {
     }
   }
 
+
+  temp = reinterpret_cast<const valType*>(tsBuffer4.getData());
+
+  std::vector<valType> content;
+
+  for (int j = 0; j < (bufferSize/typeSize); ++j) {
+    content.push_back(temp[j]);
+    printf("[%d %d], ", j, temp[j]);
+    if ((j % 8) == 7) printf("\n");
+  }
+  printf("\n\n");
+  std::sort(content.begin(), content.end());
+  for (int j = 0; j < (bufferSize/typeSize); ++j) {
+    printf("%d, ", content[j]);
+    if ((j % 8 ) == 7) printf("\n");
+  }
+  printf("\n\n");
+
+  printf("concurrent insert failed %d times \n", fail);
 
 //  temp = reinterpret_cast<const valType*>(tsBuffer4.getData());
 //  for (int j = 0; j < (8192/typeSize); ++j) {
@@ -189,14 +210,6 @@ int main(int argc, char** argv) {
       }
     }
   }
-
-  temp = reinterpret_cast<const valType*>(tsBuffer4.getData());
-  for (int j = 0; j < (8192/typeSize); ++j) {
-    printf("[%d %d], ", j, temp[j]);
-    if ((j % 8) == 7) printf("\n");
-  }
-  printf("\n\n");
-
 
   printf("isFULL for %d iterations\n", fail);
 

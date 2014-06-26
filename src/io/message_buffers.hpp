@@ -59,11 +59,13 @@
 #include <vector>
 #include <type_traits>
 #include <typeinfo>
-
+#include <iostream>
 #include "config.hpp"
 #include "io/buffer.hpp"
 #include "io/buffer_pool.hpp"
 
+
+#include <iterator> // for ostream_iterator
 
 namespace bliss
 {
@@ -168,24 +170,45 @@ namespace bliss
           MessageBuffers<ThreadSafety>(buffer_capacity, pool_capacity),
           bufferIds(numDests) {
           /// initialize the bufferIds by acquiring them from the pool.
-
           this->reset();
+
+          //printf("!!!INFO: SendMessageBuffers ctor 3 called\n");
+
+//          std::ostream_iterator<IdType> ost(std::cout, ",");
+//          std::copy(bufferIds.begin(), bufferIds.end(), ost);
+//          printf("\n");
+
         };
 
         SendMessageBuffers(const int & numDests, const int & buffer_capacity) :
           SendMessageBuffers<ThreadSafety>(numDests, buffer_capacity, 3 * numDests)
-        {};
+        {
+          //printf("!!!INFO: SendMessageBuffers ctor 2 called\n");
+        };
 
         SendMessageBuffers() :  MessageBuffers<ThreadSafety>() {};
 //        SendMessageBuffers() = delete;
         SendMessageBuffers(const SendMessageBuffers<ThreadSafety> &other) = delete;
         SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) : MessageBuffers<ThreadSafety>(std::move(other)),
-          bufferIds(std::move(other.bufferIds)) {};
+          bufferIds(std::move(other.bufferIds)) {
+
+//          printf("!!!INFO: SendMessageBuffers move ctor called\n");
+//          std::ostream_iterator<IdType> ost(std::cout, ",");
+//          std::copy(bufferIds.begin(), bufferIds.end(), ost);
+//          printf("\n");
+
+        };
         SendMessageBuffers<ThreadSafety>& operator=(const SendMessageBuffers<ThreadSafety> &other) = delete;
         SendMessageBuffers<ThreadSafety>& operator=(SendMessageBuffers<ThreadSafety> && other) {
           bufferIds = std::move(other.bufferIds);
           this->bufferCapacity = other.bufferCapacity; other.bufferCapacity = 0;
           this->pool = std::move(other.pool);
+
+//          printf("!!!INFO: SendMessageBuffers move assignment called\n");
+//          std::ostream_iterator<IdType> ost(std::cout, ",");
+//          std::copy(bufferIds.begin(), bufferIds.end(), ost);
+//          printf("\n");
+
           return *this;
         }
 
@@ -206,6 +229,14 @@ namespace bliss
 
         const std::vector< IdType >& getActiveIds() {
           return bufferIds;
+        }
+
+        const std::string activeIdsToString() const {
+          std::stringstream ss;
+          std::ostream_iterator<IdType> ost(ss, ",");
+          std::copy(bufferIds.begin(), bufferIds.end(), ost);
+          ss << std::endl;
+          return ss.str();
         }
 
         virtual void reset() {
@@ -247,7 +278,7 @@ namespace bliss
           BufferIdType fullBufferId = -1;
 
           /// get the current Buffer's Id
-          BufferIdType targetBufferId = bufferIds[dest].load(std::memory_order_consume);
+          BufferIdType targetBufferId = bufferIds[dest].load(std::memory_order_relaxed);
 
           /// need to replace bufferIds[dest], if it's -1, or if new data can't fit
           if ((targetBufferId == -1) ||
@@ -259,6 +290,10 @@ namespace bliss
             bool hasNewBuffer = this->pool.tryAcquireBuffer(newBufferId);
             // if acquire fails, we have -1 for newBufferId.
 
+//            std::cout << std::this_thread::get_id();
+//            printf(" targetBuffer %d, full Buffer %d, new Buffer %d\n", targetBufferId, fullBufferId, newBufferId);
+//            BufferIdType debugBufferId = targetBufferId;
+
             /// now try to set the bufferIds[dest] to the new buffer id (valid, or -1 if can't get a new one)
             // again, targetBufferId is -1 or pointing to a full buffer.
 
@@ -266,22 +301,28 @@ namespace bliss
             if (bufferIds[dest].compare_exchange_strong(targetBufferId, newBufferId, std::memory_order_acq_rel)) {
               // successful exchange.  bufferIds[dest] now has newBufferId value. targetBufferId has old value.
 
+
               // only a success exchange should return targetBufferId as fullBufferId.
               fullBufferId = targetBufferId;  // value could be full buffer, or could be -1.
 
               targetBufferId = newBufferId;   // set targetBufferId to the new buffer, prep for append.
 
+              //std::cout << std::this_thread::get_id();
+              //printf("successful exchange: old %d, targetBufferId %d, newBufferId %d, fullBufferId %d\n", debugBufferId, targetBufferId, newBufferId, fullBufferId);
+
             } else {
               // failed exchange, then another thread had already updated bufferIds[dest].
-
+//              std::cout << std::this_thread::get_id();
+//              printf(" failed exchagne: old %d targetBufferId %d, newBufferId %d\n", debugBufferId, targetBufferId, newBufferId);
               // leave fullBufferId as -1.
 
               // targetBufferId on failed exchange will contain the up-to-date bufferIds[dest], which could be -1.
 
               // return the unused buffer id to pool.
-              if (hasNewBuffer)
+              if (hasNewBuffer) {
                 this->pool.releaseBuffer(newBufferId);
-
+//                printf(" failed exchange.  released buffer %d\n", newBufferId);
+              }
             }
           }
 
