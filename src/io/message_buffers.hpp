@@ -114,13 +114,13 @@ namespace bliss
          * @param numDests          number of destinations.  e.g. mpi comm size.
          * @param buffer_capacity   individual buffer's size in bytes
          */
-        MessageBuffers(const int & _buffer_capacity, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
+        explicit MessageBuffers(const int & _buffer_capacity, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
           pool(pool_capacity, _buffer_capacity), bufferCapacity(_buffer_capacity) {};
         MessageBuffers() = delete;
 
-        MessageBuffers(const MessageBuffers<ThreadSafety>& other) = delete;
+        explicit MessageBuffers(const MessageBuffers<ThreadSafety>& other) = delete;
         MessageBuffers<ThreadSafety>& operator=(const MessageBuffers<ThreadSafety>& other) = delete;
-        MessageBuffers(MessageBuffers<ThreadSafety>&& other) : pool(std::move(other.pool)), bufferCapacity(other.bufferCapacity) {};
+        explicit MessageBuffers(MessageBuffers<ThreadSafety>&& other) : pool(std::move(other.pool)), bufferCapacity(other.bufferCapacity) {};
         MessageBuffers<ThreadSafety>& operator=(MessageBuffers<ThreadSafety>&& other) {
           pool = std::move(other.pool);
           bufferCapacity = other.bufferCapacity; other.bufferCapacity = 0;
@@ -188,8 +188,8 @@ namespace bliss
 
         SendMessageBuffers() :  MessageBuffers<ThreadSafety>() {};
 //        SendMessageBuffers() = delete;
-        SendMessageBuffers(const SendMessageBuffers<ThreadSafety> &other) = delete;
-        SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) : MessageBuffers<ThreadSafety>(std::move(other)),
+        explicit SendMessageBuffers(const SendMessageBuffers<ThreadSafety> &other) = delete;
+        explicit SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) : MessageBuffers<ThreadSafety>(std::move(other)),
           bufferIds(std::move(other.bufferIds)) {
 
 //          printf("!!!INFO: SendMessageBuffers move ctor called\n");

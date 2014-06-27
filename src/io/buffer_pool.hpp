@@ -110,8 +110,8 @@ namespace bliss
         explicit BufferPool(const size_t _buffer_capacity) :
             BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>(std::numeric_limits<IdType>::max(), _buffer_capacity) {};
 
-        BufferPool(const BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& other) = delete;
-        BufferPool(BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>&& other) :
+        explicit BufferPool(const BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& other) = delete;
+        explicit BufferPool(BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>&& other) :
           BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
         BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& operator=(const BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& other) = delete;
         BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& operator=(BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>&& other) {
@@ -298,8 +298,8 @@ namespace bliss
         explicit BufferPool(const size_t _buffer_capacity) :
             BufferPool<bliss::concurrent::THREAD_UNSAFE>(std::numeric_limits<IdType>::max(), _buffer_capacity) {};
 
-        BufferPool(const BufferPool<bliss::concurrent::THREAD_UNSAFE>& other) = delete;
-        BufferPool(BufferPool<bliss::concurrent::THREAD_UNSAFE>&& other) :
+        explicit BufferPool(const BufferPool<bliss::concurrent::THREAD_UNSAFE>& other) = delete;
+        explicit BufferPool(BufferPool<bliss::concurrent::THREAD_UNSAFE>&& other) :
           capacity(other.capacity), buffer_capacity(other.buffer_capacity), available(std::move(other.available)),
           buffers(std::move(other.buffers)), fixedSize(other.fixedSize) {
           other.capacity = 0;

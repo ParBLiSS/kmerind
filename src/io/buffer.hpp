@@ -80,7 +80,7 @@ namespace bliss
          * Constructor.  allocation of memory array is automatic.
          * @param _capacity   The number of bytes to store.
          */
-        Buffer(const size_t _capacity) : capacity(_capacity), size(0), data(new uint8_t[_capacity]) {
+        explicit Buffer(const size_t _capacity) : capacity(_capacity), size(0), data(new uint8_t[_capacity]) {
           memset(data.get(), 0, _capacity * sizeof(uint8_t));
           assert(_capacity > 0);
         };
@@ -103,7 +103,7 @@ namespace bliss
          *
          * @param other
          */
-        Buffer(Buffer<bliss::concurrent::THREAD_SAFE>&& other) : Buffer<bliss::concurrent::THREAD_SAFE>(std::move(other), std::lock_guard<std::mutex>(other.mutex) ) {};
+        explicit Buffer(Buffer<bliss::concurrent::THREAD_SAFE>&& other) : Buffer<bliss::concurrent::THREAD_SAFE>(std::move(other), std::lock_guard<std::mutex>(other.mutex) ) {};
 
         /**
          * Move assignment operator.  internal data memory moved by std::unique_ptr semantics.
@@ -134,7 +134,7 @@ namespace bliss
          * move constructor from none-threadsafe buffer
          * @param other
          */
-        Buffer(Buffer<bliss::concurrent::THREAD_UNSAFE>&& other);
+        explicit Buffer(Buffer<bliss::concurrent::THREAD_UNSAFE>&& other);
 
         /**
          * move assignment operator
@@ -143,7 +143,7 @@ namespace bliss
          */
         Buffer<bliss::concurrent::THREAD_SAFE>& operator=(Buffer<bliss::concurrent::THREAD_UNSAFE>&& other);
 
-        Buffer(const Buffer<bliss::concurrent::THREAD_SAFE>& other) = delete;
+        explicit Buffer(const Buffer<bliss::concurrent::THREAD_SAFE>& other) = delete;
         Buffer<bliss::concurrent::THREAD_SAFE>& operator=(const Buffer<bliss::concurrent::THREAD_SAFE>& other) = delete;
 
 
@@ -292,7 +292,7 @@ namespace bliss
          * Constructor.  allocation of memory array is automatic.
          * @param _capacity   The number of bytes to store.
          */
-        Buffer(const size_t _capacity) : capacity(_capacity), size(0), data(new uint8_t[_capacity]) {
+        explicit Buffer(const size_t _capacity) : capacity(_capacity), size(0), data(new uint8_t[_capacity]) {
           memset(data.get(), 0, _capacity * sizeof(uint8_t));
           assert(_capacity > 0);
         };
@@ -315,7 +315,7 @@ namespace bliss
          *
          * @param other
          */
-        Buffer(Buffer<bliss::concurrent::THREAD_SAFE>&& other) : Buffer<bliss::concurrent::THREAD_UNSAFE>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
+        explicit Buffer(Buffer<bliss::concurrent::THREAD_SAFE>&& other) : Buffer<bliss::concurrent::THREAD_UNSAFE>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
         /**
          * Move assignment operator.  internal data memory moved by std::unique_ptr semantics.
          * need to be thread safe.  use lock_guard.
@@ -328,7 +328,7 @@ namespace bliss
          * move constructor from none-threadsafe buffer
          * @param other
          */
-        Buffer(Buffer<bliss::concurrent::THREAD_UNSAFE>&& other) : capacity(other.capacity), size(other.size), data(std::move(other.data)) {
+        explicit Buffer(Buffer<bliss::concurrent::THREAD_UNSAFE>&& other) : capacity(other.capacity), size(other.size), data(std::move(other.data)) {
           other.size = 0;
           other.capacity = 0;
           other.data = nullptr;
@@ -355,7 +355,7 @@ namespace bliss
           return *this;
         }
 
-        Buffer(const Buffer<bliss::concurrent::THREAD_UNSAFE>& other) = delete;
+        explicit Buffer(const Buffer<bliss::concurrent::THREAD_UNSAFE>& other) = delete;
         Buffer<bliss::concurrent::THREAD_UNSAFE>& operator=(const Buffer<bliss::concurrent::THREAD_UNSAFE>& other) = delete;
 
         /// copy ctor/assign are automatically NOT generated because of available destructor and move ctor/assign.

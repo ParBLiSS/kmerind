@@ -54,11 +54,11 @@ namespace bliss
 
 
       public:
+        static constexpr size_t MAX_SIZE = std::numeric_limits<size_t>::max();
+        explicit ThreadSafeQueue(const size_t &_capacity = MAX_SIZE) : capacity(_capacity) {};
 
-        ThreadSafeQueue(const size_t &_capacity = std::numeric_limits<size_t>::max()) : capacity(_capacity) {};
-
-        ThreadSafeQueue(const ThreadSafeQueue<T>& other) = delete;
-        ThreadSafeQueue(ThreadSafeQueue<T>&& other) : ThreadSafeQueue<T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
+        explicit ThreadSafeQueue(const ThreadSafeQueue<T>& other) = delete;
+        explicit ThreadSafeQueue(ThreadSafeQueue<T>&& other) : ThreadSafeQueue<T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
         ThreadSafeQueue<T>& operator=(ThreadSafeQueue<T>&& other) {
           capacity = other.capacity; other.capacity = 0;
           std::unique_lock<std::mutex> mylock(mutex, std::defer_lock), otherlock(other.mutex, std::defer_lock);
@@ -69,12 +69,12 @@ namespace bliss
         ThreadSafeQueue<T>& operator=(const ThreadSafeQueue<T>& other) = delete;
 
 
-        const size_t& getMaxSize() const {
+        const size_t& getCapacity() const {
           return capacity;
         }
 
         bool full() const {
-        	if (capacity == std::numeric_limits<size_t>::max()) return false;
+        	if (capacity == MAX_SIZE) return false;
         
           std::unique_lock<std::mutex> lock(mutex);
           return q.size() >= capacity;
