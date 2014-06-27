@@ -182,6 +182,8 @@ public:
    */
   void sendMessage(const void* data, std::size_t count, int dst_rank, int tag=default_tag)
   {
+
+
     // check to see if the target tag is still accepting
     if (sendAccept.find(tag) == sendAccept.end()) {
       // TODO:  change to using FATAL on logger.
@@ -239,8 +241,14 @@ public:
       return;
     }
 
+
+    /// mark as no more coming in for this tag.
+    sendAccept.erase(tag);
+    /// leave the MessageBuffers. - have to wait until all's sent.
+
+
     // flush out all the send buffers matching a particular tag.
-    printf("Flushing %d.  Active Buffer Ids in message buffer: %s\n", tag, buffers.at(tag).activeIdsToString().c_str());
+    printf("FLUSHing %d.  Active Buffer Ids in message buffer: %s\n", tag, buffers.at(tag).activeIdsToString().c_str());
 
     int idCount = buffers.at(tag).getActiveIds().size();
     for (int i = 0; i < idCount; ++i) {
@@ -256,9 +264,56 @@ public:
       sendQueue.waitAndPush(std::move(SendQueueElement(-1, tag, i)));
     }
     
+    // waiting for all messages of this tag to flush.
+    std::unique_lock<std::mutex> lock(mutex);
+    flushing = tag;
+
+    while (flushing == tag) {
+      cond_var.wait(lock);
+    }
+
+    // re-enable.  also reset the recvRemaining (cond_var.wait returns only after local receive callback has processed all incoming messages)
+    sendAccept.insert(tag);
+    recvRemaining[tag] = commSize;
+  }
+
+  /**
+   * flushes the message buffers asscoiated with a particular tag.  should be called by a single thread only.
+   * @param tag
+   */
+  void finishTag(int tag)
+  {
+
+    // no MessageBuffers with the associated tag.  end.
+    if (buffers.find(tag) == buffers.end())  return;
+
+    if (sendAccept.find(tag) == sendAccept.end()) {
+      // already flushed.
+      return;
+    }
+
     /// mark as no more coming in for this tag.
     sendAccept.erase(tag);
     /// leave the MessageBuffers. - have to wait until all's sent.
+
+
+    // flush out all the send buffers matching a particular tag.
+    printf("FINISHing %d.  Active Buffer Ids in message buffer: %s\n", tag, buffers.at(tag).activeIdsToString().c_str());
+
+    int idCount = buffers.at(tag).getActiveIds().size();
+    for (int i = 0; i < idCount; ++i) {
+      auto id = buffers.at(tag).getActiveId(i);
+      if ((id != -1) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
+//        SendQueueElement v(id, tag, i);
+//        while (!sendQueue.tryPush(std::move(v))) {
+//          usleep(20);
+//        }
+        sendQueue.waitAndPush(std::move(SendQueueElement(id, tag, i)));
+      }
+      // send the end message for this tag.
+      sendQueue.waitAndPush(std::move(SendQueueElement(-1, tag, i)));
+    }
+
 
     // waiting for all messages of this tag to flush.
     std::unique_lock<std::mutex> lock(mutex);
@@ -268,7 +323,6 @@ public:
       cond_var.wait(lock);
     }
   }
-
 
 
 
