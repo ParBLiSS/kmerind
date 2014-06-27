@@ -150,6 +150,11 @@ struct Tester
       exit(EXIT_FAILURE);
     }
 
+    commLayer.finishTag(FIRST_TAG);
+    commLayer.finishTag(LOOKUP_TAG);
+    commLayer.finishTag(ANSWER_TAG);
+
+
     DEBUG("This was a triumph.");
     sleep(1);
     DEBUG("I'm making a note here: HUGE SUCCESS.");
