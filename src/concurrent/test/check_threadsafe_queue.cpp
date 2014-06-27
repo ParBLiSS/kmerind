@@ -445,10 +445,15 @@ int main(int argc, char** argv) {
   omp_set_nested(1);
   omp_set_dynamic(0);
 
+  typedef bliss::concurrent::ThreadSafeQueue<int> QueueType;
 
 
+  testTSQueueSingleThread("TSQ 1 thread growable", std::move(QueueType()));
+  testTSQueueSingleThread("TSQ 1 thread 10 element", std::move(QueueType(10)));
 
-  typedef QueueTest<int> QTestType;
+  testTSQueue()
+
+
   for (int i = 1; i <=4; ++i) {
     QTestType qt(i);
     qt.run(elements, qt.getQueue());
