@@ -479,7 +479,10 @@ public:
               // received all end messages.  there may still be message in progress and in recvQueue from this and other sources.
               recvRemaining.erase(front.second.tag);
 
+              printf("ALL END received, pushing to recv queue");
+              fflush(stdout);
               recvQueue.waitAndPush(std::move(front.second));
+
             } else if (recvRemaining[front.second.tag] == 0) {
               printf("ERROR: number of remaining receivers for tag %d is now NEGATIVE\n", front.second.tag);
             }

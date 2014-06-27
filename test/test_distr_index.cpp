@@ -108,6 +108,7 @@ struct Tester
       for (int i = 0; i < commLayer.getCommSize(); ++i)
       {
         int msg = generate_message(my_rank, i);
+        DEBUG("Sending " << msg << " to " << i);
         commLayer.sendMessage(&msg, sizeof(int), i, FIRST_TAG);
       }
     }
@@ -176,7 +177,7 @@ int main(int argc, char *argv[])
 
   /* code */
   Tester tester(comm, p);
-  tester.test_comm_layer(10000);
+  tester.test_comm_layer(10);
 
   MPI_Barrier(comm);
 
