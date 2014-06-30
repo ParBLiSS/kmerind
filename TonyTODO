@@ -429,5 +429,6 @@ TODO:
 		there may be other issues.
 		instead, have the value type define default constructor as well as move assignment operator and do map[key] = std::move(ValType())
 		
+TODO:
 	ERROR: check_threadsafe_queue have intermittant error.
-	
+	Merge code with trunk.
