@@ -415,3 +415,19 @@ TODO:
 		
 	updating message buffer class.
 		messagebuffer class coded.  testing.
+		
+		
+		
+	messgae buffer tested
+	created Comm Layer and tested (via testCommLayer, for threading and for MPI)
+	
+	changed "tryPop" and similar functionality to return std::pair<bool, val> instead of using pattern bool tryPop(val).  (this includes MessagBuffers' append function).  
+		rationale - this enforces that no shared variable is passed to threadsafe queue or messagebuffer as storage for return value - the shared variable may be written to at different times
+		and is generally not threadsafe.    returning the pair allows the individual threads to have separate copies of the return values.
+		
+	NOTE:  unordered_map insert and emplace return std::pair<iterator, bool>, where the iterator may be const.  the value being held has to have copy constructor for the const_iterator to work
+		there may be other issues.
+		instead, have the value type define default constructor as well as move assignment operator and do map[key] = std::move(ValType())
+		
+	ERROR: check_threadsafe_queue have intermittant error.
+	

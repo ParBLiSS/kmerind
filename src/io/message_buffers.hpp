@@ -114,9 +114,8 @@ namespace bliss
          * @param numDests          number of destinations.  e.g. mpi comm size.
          * @param buffer_capacity   individual buffer's size in bytes
          */
-        explicit MessageBuffers(const int & _buffer_capacity, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
+        explicit MessageBuffers(const int & _buffer_capacity = 8192, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
           pool(pool_capacity, _buffer_capacity), bufferCapacity(_buffer_capacity) {};
-        MessageBuffers() = delete;
 
         explicit MessageBuffers(const MessageBuffers<ThreadSafety>& other) = delete;
         MessageBuffers<ThreadSafety>& operator=(const MessageBuffers<ThreadSafety>& other) = delete;
@@ -242,11 +241,9 @@ namespace bliss
         virtual void reset() {
           MessageBuffers<ThreadSafety>::reset();
 
-          BufferIdType t = -1;
+
           for (int i = 0; i < this->bufferIds.size(); ++i) {
-            t= -1;
-            this->pool.tryAcquireBuffer(t);
-            bufferIds[i] = t;
+            bufferIds[i] = this->pool.tryAcquireBuffer().second;
           }
         }
 
@@ -287,11 +284,10 @@ namespace bliss
             // at this point, targetBufferId may be -1 or some value, and the local variables may be out of date already.
 
             /// get a new buffer and try to replace the existing.
-            BufferIdType newBufferId = -1;
-            std::pair<bool, BufferIdType> newBuffer = this->pool.tryAcquireBuffer();
+            auto newBuffer = this->pool.tryAcquireBuffer();
 
-            bool hasNewBuffer = newBufferId.first;
-            newBufferId = newBuffer.second;
+            bool hasNewBuffer = newBuffer.first;
+            BufferIdType newBufferId = newBuffer.second;
             // if acquire fails, we have -1 for newBufferId.
 
 //            std::cout << std::this_thread::get_id();
@@ -378,7 +374,7 @@ namespace bliss
             // save the old buffer/full buffer to return
             fullBufferId = targetBufferId;
 
-            /// get a new buffer and try to replace the existing.
+            /// get a new buffer and try to replace the existing.  set it whether tryAcquire succeeds or fails
             targetBufferId = this->pool.tryAcquireBuffer().second;
 
             /// now try to set the bufferIds[dest] to the new buffer id (valid, or -1 if can't get a new one)

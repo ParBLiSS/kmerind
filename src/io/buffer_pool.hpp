@@ -110,6 +110,7 @@ namespace bliss
         explicit BufferPool(const size_t _buffer_capacity) :
             BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>(std::numeric_limits<IdType>::max(), _buffer_capacity) {};
 
+        BufferPool() = delete;
         explicit BufferPool(const BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>& other) = delete;
         explicit BufferPool(BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>&& other) :
           BufferPool<bliss::concurrent::THREAD_SAFE, BufferThreadSafety>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
@@ -157,7 +158,7 @@ namespace bliss
          * @return
          */
         std::pair<bool, IdType> tryAcquireBuffer() {
-          std::pair<bool, IdType> output = available.tryPop();
+          std::pair<bool, IdType> output = std::move(available.tryPop());
           if (!output.first && !fixedSize) {
             // can grow
             // non available.  so allocate a new one and return.
@@ -169,26 +170,29 @@ namespace bliss
           return output;
         }
 
-        /**
-         *
-         * @param bufferId
-         */
-        IdType waitAndAcquireBuffer() {
-          IdType bufferId;
-          if (fixedSize) {
-            // have to wait for available
-            available.waitAndPop(bufferId);
-
-          } else {  // can grow, but first see if we can reuse one.
-
-            // check if there are some available.
-            if (!available.tryPop(bufferId)) {
-              std::lock_guard<std::mutex> lock(mutex);
-              bufferId = createNewBuffer();
-            }
-          }
-          return IdType;
-        }
+//        /**
+//         *
+//         * @param bufferId
+//         */
+//        IdType waitAndAcquireBuffer() {
+//          IdType bufferId;
+//          if (fixedSize) {
+//            // have to wait for available
+//            bufferId = available.waitAndPop();
+//
+//          } else {  // can grow, but first see if we can reuse one.
+//
+//            // check if there are some available.
+//            auto newBuf = available.tryPop();
+//            if (!newBuf.first) {
+//              std::lock_guard<std::mutex> lock(mutex);
+//              bufferId = createNewBuffer();
+//            } else {
+//              bufferId = newBuf.second;
+//            }
+//          }
+//          return bufferId;
+//        }
 
         /**
          * release a buffer back to pool, by id.  if id is incorrect, throw exception.  clears buffer before release.
@@ -289,6 +293,8 @@ namespace bliss
             available.push_back(i);
           }
         };
+
+        BufferPool() = delete;
 
         /**
          * construct a Buffer pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is unbounded.

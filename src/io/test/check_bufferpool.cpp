@@ -30,7 +30,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   int count = 0;
 #pragma omp parallel for num_threads(pool_threads) default(none) private(i, id) shared(pool) reduction(+ : count)
   for (i = 0; i < 100; ++i) {
-    if (!pool.tryAcquireBuffer(id)) {
+    if (!pool.tryAcquireBuffer().first) {
       ++count;
     }
   }
@@ -45,7 +45,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   count = 0;
 #pragma omp parallel for num_threads(pool_threads) default(none) private(i, id) shared(pool) reduction(+ : count)
   for (i = 0; i < 150; ++i) {
-    if (!pool.tryAcquireBuffer(id)) {
+    if (!pool.tryAcquireBuffer().first) {
       ++count;
     }
   }
@@ -146,10 +146,11 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
     int j = 0;
     for (int i = 0; i < 100; ++i) {
       // acquire
-      while (!pool.tryAcquireBuffer(id)) usleep(50);
+      auto newBuf = pool.tryAcquireBuffer();
+      while (!newBuf.first) usleep(50);
       //if (i % 25 == 0)
 //      printf("thread %d acquired buffer %d\n", omp_get_thread_num(), id);
-
+      id = newBuf.second;
       // access
       iter = rand() % 100;
 #pragma omp parallel for num_threads(buffer_threads) default(none) shared(pool, id, iter) private(j)

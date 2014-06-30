@@ -37,6 +37,7 @@
 #include <unordered_set>
 #include <thread>
 
+#include <utility>
 
 
 // system includes
@@ -193,20 +194,26 @@ public:
 
     /// if there isn't already a tag listed, add the MessageBuffers for that tag.
     // multiple threads may call this.
-    std::unique_lock<std::mutex> lock(mutex);
     if (buffers.find(tag) == buffers.end()) {
-      std::cout << std::this_thread::get_id() << " create buffers for tag " << tag << std::endl;
-      buffers.insert(std::pair<int, BuffersType>(tag, BuffersType(commSize, 8192)));
+      std::unique_lock<std::mutex> lock(mutex);
+      if (buffers.find(tag) == buffers.end()) {
+        std::cout << std::this_thread::get_id() << " create buffers for tag " << tag << std::endl;
+        int t2 = tag;
+        buffers[tag] = std::move(BuffersType(commSize, 8192));
+//        buffers.insert(std::move(std::make_pair<int, BuffersType>(std::move(t2), std::move(BuffersType(commSize, 8192)))));
+      }
     }
-    lock.unlock();
-
  //   printf("%lu ", count);
 
     /// try to append the new data - repeat until successful.
     /// along the way, if a full buffer's id is returned, queue it for sendQueue.
     BufferIdType fullId = -1;
+    std::pair<bool, BufferIdType> result;
     //bool success = false;
-    while (!buffers.at(tag).append(data, count, dst_rank, fullId)) {
+    do {
+      result = buffers.at(tag).append(data, count, dst_rank);
+
+      fullId = result.second;
 
       // repeat until success;
       if (fullId != -1) {
@@ -222,7 +229,7 @@ public:
       }
       fullId = -1;
       usleep(20);
-    }
+    } while (!result.first);
 
   }
 
@@ -377,8 +384,9 @@ public:
       {
         // get next element from the queue, wait if none is available
         // TODO: check if the tag exists as callback function
-
-        if (recvQueue.tryPop(msg)) {
+        auto result = std::move(recvQueue.tryPop());
+        if (result.first) {
+          msg = result.second;
           if (msg.data == nullptr && msg.count == 0) {
             if (flushing == msg.tag) {
               std::unique_lock<std::mutex> lock(mutex);
@@ -409,8 +417,9 @@ public:
     {
       // try to get the send element
       SendQueueElement se;
-      if (sendQueue.tryPop(se)) {
-
+      auto el = std::move(sendQueue.tryPop());
+      if (el.first) {
+        se = el.second;
         if (se.bufferId == -1) {
           // termination message for this tag and destination
 

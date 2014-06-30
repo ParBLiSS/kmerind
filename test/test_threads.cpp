@@ -480,10 +480,12 @@ void computeP2P(FileLoaderType &loader,
         /// process the inbound messages until MPI comm thread indicates no more messages.
         while (mpi_senders > 0) {
           /// check for messages
-          if (recvQueue.tryPop(re)) {
+          auto result = std::move(recvQueue.tryPop());
+          if (result.first) {
+            re = result.second;
             //printf("%d received %d. rec queue %lu\n", rank, re.first, recvQueue.size());
 
-            RecvQueueElementType lre(std::move(re));
+            RecvQueueElementType lre(std::move(result.second));
 
             /// process messages;
             rp(lre, index);
@@ -501,11 +503,12 @@ void computeP2P(FileLoaderType &loader,
         }
 
         /// received done message.  now flush the remainder
-        bool gotNext = recvQueue.tryPop(re);
-        while (gotNext) {
+        auto result = std::move(recvQueue.tryPop());
+        while (result.first) {
+
 //          printf("flushing recv queue. %lu\n", recvQueue.size());
 
-          RecvQueueElementType lre(std::move(re));
+          RecvQueueElementType lre(std::move(result.second));
 
           /// process messages;
           rp(lre, index);
@@ -514,7 +517,7 @@ void computeP2P(FileLoaderType &loader,
           delete [] lre.second;
 
           /// check for next.
-          gotNext = recvQueue.tryPop(re);
+          result = std::move(recvQueue.tryPop());
         }
 
         printf("finally: %lu -> %lu\n", sendQueue.size(), recvQueue.size());
@@ -660,7 +663,9 @@ void computeP2P(FileLoaderType &loader,
          }
        } else {
          /// try dequeue and iSend.
-         if (sendQueue.tryPop(se)) {
+         auto result = std::move(sendQueue.tryPop());
+         if (result.first) {
+           se = result.second;
 
            /// iSend.  put request into a vector..
 
