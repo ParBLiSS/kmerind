@@ -26,11 +26,10 @@
 // TODO LIST:
 //  - [x] split up distributed index into multimap and counting map
 //  - [x] populate(Iterator)
-//  - [ ] WAIT FOR COMM_LAYER: flush()
+//  - [x] WAIT FOR COMM_LAYER: flush()
 //  - [x] expose local iterators
 //  - [x] finish the count Histrogram
 //  - [x] filter() function -> (maybe with broadcast??)
-//  - [ ] take apart commlayer into one-way and two-way comm with proper destruction
 
 
 template<typename K, typename T, typename CommunicationLayer, typename LocalContainer>
@@ -164,7 +163,14 @@ public:
         std::function<std::size_t(K)> hashFunction = std::hash<K>())
       : _base_class(commLayer, mpi_comm, hashFunction)
   {
-    // TODO: add callback function for commLayer receive
+    // add comm layer receive callbacks
+    using namespace std::placeholders;
+    commLayer.addReceiveCallback(INSERT_MPI_TAG, std::bind(&distributed_multimap::receivedCountCallback, this, _1, _2, _3));
+    commLayer.addReceiveCallback(LOOKUP_MPI_TAG, std::bind(&distributed_multimap::receivedLookupCallback, this, _1, _2, _3));
+    commLayer.addReceiveCallback(LOOKUP_ANSWER_MPI_TAG, std::bind(&distributed_multimap::receivedLookupAnswerCallback, this, _1, _2, _3));
+
+    // start the threads in the comm layer (if not already running)
+    commLayer.startThreads();
   }
 
   virtual ~distributed_multimap () {}
@@ -378,7 +384,14 @@ public:
           std::function<std::size_t(K)> hashFunction = std::hash<K>())
       : _base_class(commLayer, mpi_comm, hashFunction)
   {
-    // TODO: add callback function for commLayer receive
+    // add comm layer receive callbacks
+    using namespace std::placeholders;
+    commLayer.addReceiveCallback(INSERT_MPI_TAG, std::bind(&distributed_counting_map::receivedCountCallback, this, _1, _2, _3));
+    commLayer.addReceiveCallback(LOOKUP_MPI_TAG, std::bind(&distributed_counting_map::receivedLookupCallback, this, _1, _2, _3));
+    commLayer.addReceiveCallback(LOOKUP_ANSWER_MPI_TAG, std::bind(&distributed_counting_map::receivedLookupAnswerCallback, this, _1, _2, _3));
+
+    // start the threads in the comm layer (if not already running)
+    commLayer.startThreads();
   }
 
   virtual ~distributed_counting_map () {}
