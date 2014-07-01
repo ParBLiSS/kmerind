@@ -32,18 +32,18 @@ void testWaitAndPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int ent
   int count = 0;
 #pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+:count)
   for (int i = 0; i < entries; ++i) {
-    queue.waitAndPush(T(i));
+    if (queue.waitAndPush(T(i)))
 //    if (i % 1000 == 0) usleep(5);
-    ++count;
+      ++count;
     usleep(5);
   }
-  queue.finish();
+  queue.disablePush();
 
-  if (count > queue.getCapacity()) printf("TSQueue capacity %lu, finished waitAndPush with %d entries.\n", queue.getCapacity(), count);
+  if (count != entries) printf("TSQueue capacity %lu, finished waitAndPush with %d entries.\n", queue.getCapacity(), count);
 };
 
 template<typename T>
-void testTryPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int entries, const int nProducer, bool& done) {
+void testTryPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int entries, const int nProducer) {
   usleep(1000);
   int count = 0, count2 = 0;
 #pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+: count, count2)
@@ -55,24 +55,22 @@ void testTryPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int entries
 //    if (i % 1000 == 0) usleep(20);
     usleep(5);
   }
-  done = true;
-#pragma omp flush(done)
+  queue.disablePush();
 
-  if (count != std::min(queue.getCapacity(), static_cast<size_t>(entries))) printf("TSQueue capacity %lu, finished tryPush. %d successful, %d failed\n", queue.getCapacity(), count, count2);
+  if (count + count2 != entries || count == 0)
+    printf("TSQueue capacity %lu, finished tryPush. %d successful, %d failed\n", queue.getCapacity(), count, count2);
 
 };
 
 template<typename T>
-void testWaitAndPop1(bliss::concurrent::ThreadSafeQueue<T> &queue, bool &done) {
+void testWaitAndPop1(bliss::concurrent::ThreadSafeQueue<T> &queue) {
   int count = 0, count3 = 0;
 
-#pragma omp flush(done)
-  while (!done) {
-    queue.waitAndPop();
-    ++count;
+  while (queue.canPop()) {
+    if (queue.waitAndPop().first)
+      ++count;
 
     //if (count %1000) usleep(20);
-#pragma omp flush(done)
   }
   // now empty it
   while (queue.tryPop().first) {
@@ -82,29 +80,27 @@ void testWaitAndPop1(bliss::concurrent::ThreadSafeQueue<T> &queue, bool &done) {
 };
 
 template<typename T>
-void testTryPop1(bliss::concurrent::ThreadSafeQueue<T> &queue, bool &done) {
+void testTryPop1(bliss::concurrent::ThreadSafeQueue<T> &queue) {
   int count = 0, count2 = 0, count3 = 0;
 
-#pragma omp flush(done)
-  while (!done) {
+  while (queue.canPop()) {
     if (queue.tryPop().first)
       ++count;
     else
       ++count2;
 
     //if (count %1000) usleep(20);
-#pragma omp flush(done)
   }
   // now empty it
   while (queue.tryPop().first) {
     ++count3;
   }
-  if (!queue.empty() || count == 0) printf("TSQueue capacity %lu, finished tryPop 1 thread. %d successful, %d failed, %d flushed.  empty? %s\n", queue.getCapacity(), count, count2, count3, (queue.empty() ? "yes" : "no"));
+  if (!queue.empty() || (count == 0 && count3 == 0)) printf("TSQueue capacity %lu, finished tryPop 1 thread. %d successful, %d failed, %d flushed.  empty? %s\n", queue.getCapacity(), count, count2, count3, (queue.empty() ? "yes" : "no"));
 
 };
 
 template<typename T>
-void testTryPop(bliss::concurrent::ThreadSafeQueue<T> &queue, const int nConsumer, bool &done ) {
+void testTryPop(bliss::concurrent::ThreadSafeQueue<T> &queue, const int nConsumer) {
 
 
   int counts[nConsumer];
@@ -112,7 +108,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T> &queue, const int nConsume
   int counts3[nConsumer];
 
   // while producer is producing, don't know the size.  spawn tasks.
-#pragma omp parallel num_threads(nConsumer) default(none) shared(queue, done, counts, counts2, counts3)
+#pragma omp parallel num_threads(nConsumer) default(none) shared(queue, counts, counts2, counts3)
   {
     counts[omp_get_thread_num()] = 0;
     counts2[omp_get_thread_num()] = 0;
@@ -120,7 +116,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T> &queue, const int nConsume
 
 #pragma omp single nowait
     {
-      do {
+      while(queue.canPop()) {
 
         // deferred task to pop.
 #pragma omp task default(none) shared(queue, counts, counts2)
@@ -133,9 +129,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T> &queue, const int nConsume
           //if ((counts[omp_get_thread_num()] % 1000) == 0) usleep(20);
         }
 
-
-#pragma omp flush(done)
-      } while (!done);
+      };
     }
 
   }  // implicit barrier.  won't have issue with reporting too early.
@@ -164,7 +158,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T> &queue, const int nConsume
     count2 = counts2[omp_get_thread_num()];
     count3 = counts3[omp_get_thread_num()];
   }
-  if (!queue.empty() || count == 0) printf("TSQueue capacity %lu, finished tryPop. %d successful, %d failed, %d flushed.  empty? %s\n", queue.getCapacity(), count, count2, count3, (queue.empty() ? "yes" : "no"));
+  if (!queue.empty() || (count == 0 && count3 == 0)) printf("TSQueue capacity %lu, finished tryPop. %d successful, %d failed, %d flushed.  empty? %s\n", queue.getCapacity(), count, count2, count3, (queue.empty() ? "yes" : "no"));
 
 };
 
@@ -205,7 +199,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     else
       ++count2;
   }
-  if (count != std::min(queue.getCapacity(), 2UL + entries))  printf("TSQueue capacity %lu, finished tryPush until full at iteration %d, success %d, fail %d. \n", queue.getCapacity(), i, count, count2);
+  if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2)))  printf("TSQueue capacity %lu, finished tryPush until full at iteration %d, success %d, fail %d. \n", queue.getCapacity(), i, count, count2);
 
   printf("  CHECK tryPop too much\n");
   count = 0;
@@ -217,25 +211,26 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     else
       ++count2;
   }
-  if (count != std::min(queue.getCapacity(), 2UL + entries)) printf("TSQueue capacity %lu, finished tryPop from full at iteration %d, success %d, fail %d\n",queue.getCapacity(),  i, count, count2);
+  if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2))) printf("TSQueue capacity %lu, finished tryPop from full at iteration %d, success %d, fail %d\n",queue.getCapacity(),  i, count, count2);
 
 
 
   printf("  CHECK  waitAndPush then do waitAndPop in parallel\n");
   queue.clear();
+  queue.enablePush();
   count = 0;
 #pragma omp parallel for num_threads(nProducer) private(i) shared(queue, entries) default(none) reduction(+: count, count2)
   for (i = 0; i < entries; ++i) {
-    queue.waitAndPush(T(i));
-    ++count;
+    if (queue.waitAndPush(T(i)))
+      ++count;
   }
-  if (count > queue.getCapacity()) printf("TSQueue capacity %lu, finished waitAndPush with %d entries\n", queue.getCapacity(), count);
+  if (count != entries) printf("TSQueue capacity %lu, finished waitAndPush with %d entries\n", queue.getCapacity(), count);
 
   count2 = 0;
 #pragma omp parallel for num_threads(nConsumer) private(i) shared(queue, count) default(none) reduction(+: count2)
   for (i = 0; i < count; ++i) {
-    queue.waitAndPop();
-    ++count2;
+    if (queue.waitAndPop().first)
+      ++count2;
   }
   if (count2 != count) printf("TSQueue capacity %lu, finished waitAndPop with, %d entries.  should be %d\n", queue.getCapacity(), count2, entries);
 
@@ -243,84 +238,86 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
 
   printf("  CHECK tryPush, and tryPop.\n");
-  bool done = false;
-#pragma omp parallel sections num_threads(2) shared(queue, entries, done) default(none)
+  queue.clear();
+  queue.enablePush();
+#pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
   {
 #pragma omp section
     {
-      testTryPush(queue, entries, nProducer, done);
+      testTryPush(queue, entries, nProducer);
+      //printf("tryPush done correctly.  final queue size (with consumer): %lu\n", queue.size());
     }
 
 #pragma omp section
     {
       if (nConsumer > 1)
-        testTryPop(queue, nConsumer, done);
+        testTryPop(queue, nConsumer);
       else
-        testTryPop1(queue, done);
+        testTryPop1(queue);
     }
   }
 
 
-
   printf("  CHECK waitAndPush, and tryPop.\n");
-  done = false;
-#pragma omp parallel sections num_threads(2) shared(queue, entries, done) default(none)
+  queue.clear();
+  queue.enablePush();
+#pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
   {
 #pragma omp section
     {
-      testWaitAndPush(queue, entries, nProducer, done);
+      testWaitAndPush(queue, entries, nProducer);
     }
 
 #pragma omp section
     {
       if (nConsumer > 1)
-        testTryPop(queue, nConsumer, done);
+        testTryPop(queue, nConsumer);
       else
-        testTryPop1(queue, done);
+        testTryPop1(queue);
     }
   }
 
   //TODO: can have !done, waitAndPop, and done=true in other thread, so pop thread never gets to check "done" ->  deadlock.
-//  if (nConsumer == 1) {
-//
-//    // not testing this with more than 1 consumer thread.  there could be a lot more consumer tasks generated than
-//    //   there are elements because the produce thread is generating slower than consume threads.  the excess threads result in wait forever.
-//    // this could still happen if we slow down producer and speed up consumers
-//
-//
-//
-//    printf("  CHECK tryPush, and waitAndPop.\n");
-//    done = false;
-//  #pragma omp parallel sections num_threads(2) shared(queue, entries, done) default(none)
-//    {
-//  #pragma omp section
-//      {
-//        testTryPush(queue, entries, nProducer, done);
-//      }
-//
-//  #pragma omp section
-//      {
-//        testWaitAndPop1(queue, done);
-//      }
-//    }
-//
-//
-//
-//    printf("  CHECK waitAndPush, and waitAndPop.\n");
-//    done = false;
-//  #pragma omp parallel sections num_threads(2) shared(queue, entries, done) default(none)
-//    {
-//  #pragma omp section
-//      {
-//        testWaitAndPush(queue, entries, nProducer, done);
-//      }
-//
-//  #pragma omp section
-//      {
-//        testWaitAndPop1(queue, done);
-//      }
-//    }
-//  }
+
+    // not testing this with more than 1 consumer thread.  there could be a lot more consumer tasks generated than
+    //   there are elements because the produce thread is generating slower than consume threads.  the excess threads result in wait forever.
+    // this could still happen if we slow down producer and speed up consumers
+
+
+
+    printf("  CHECK tryPush, and waitAndPop.\n");
+    queue.clear();
+    queue.enablePush();
+  #pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
+    {
+  #pragma omp section
+      {
+        testTryPush(queue, entries, nProducer);
+      }
+
+  #pragma omp section
+      {
+        testWaitAndPop1(queue);
+      }
+    }
+
+
+
+    printf("  CHECK waitAndPush, and waitAndPop.\n");
+    queue.clear();
+    queue.enablePush();
+  #pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
+    {
+  #pragma omp section
+      {
+        testWaitAndPush(queue, entries, nProducer);
+      }
+
+  #pragma omp section
+      {
+        testWaitAndPop1(queue);
+      }
+    }
 };
 
 
@@ -372,7 +369,7 @@ void timeSTDQueueThreaded(const std::string &message, std::queue<T>&& q, const i
           if (count <= 0) break;
 
           omp_set_lock(&lock);
-          q.push(T(count));
+          q.push(std::move(T(count)));
           omp_unset_lock(&lock);
         }
       }
@@ -435,7 +432,7 @@ void timeTSQueueSingleThread(const std::string &message, bliss::concurrent::Thre
       if (r2.first) {
         result ^= r2.second;
 
-        printf("%d %d\n", r2.second, result);
+        //printf("%d %d\n", r2.second, result);
       }
     }
   }
@@ -460,38 +457,40 @@ void timeTSQueueThreaded(const std::string &message, bliss::concurrent::ThreadSa
         q.tryPush(std::move(T(i)));
         ++count;
       }
-      q.pauseEnqueue();
+      q.disablePush();
     }
 
 #pragma omp section
     {
-      T result[nConsumer];
+      T results[nConsumer];
       // insert
-#pragma omp parallel num_threads(nConsumer) default(none) shared(q, result) reduction(+: count2)
+#pragma omp parallel num_threads(nConsumer) default(none) shared(q, results) reduction(+: count2)
       {
-        result[omp_get_thread_num()] = 0;
+        results[omp_get_thread_num()] = 0;
 
-        auto r2 = q.tryPop();
-        while () {
+        while (q.canPop()) {
+          auto r2 = q.tryPop();
 
-          result[omp_get_thread_num()] ^= output;
+          if (r2.first) {
+            results[omp_get_thread_num()] ^= r2.second;
+            ++count2;
+          }
         }
       }
-      printf("%d\n", result);
 
+
+      T result = 0;
+    #pragma omp parallel for default(none) num_threads(nConsumer) shared(results) reduction(^:result)
+      for (int i = 0; i < nConsumer; ++i) {
+          result = results[omp_get_thread_num()];
+      }
+      printf("entries %d, pushed %d, popped %d, xor result: %d\n", entries, count, count2, result);
 
     }
   }
 
 
 
-  T result = 0;
-#pragma omp parallel for default(none) num_threads(nConsumer) shared(q, count) reduction(^:result)
-  for (int i = 0; i < count; ++i) {
-      if (r2.first)
-         result ^= r2.second;
-  }
-  printf("entries %d, count %d, xor result: %d\n", entries, count, result);
 };
 
 

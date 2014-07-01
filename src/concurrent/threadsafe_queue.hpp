@@ -50,21 +50,19 @@ namespace bliss
         std::atomic<size_t> qsize;
         std::atomic<bool> pushEnabled;
         std::atomic<bool> popEnabled;
-        std::atomic<bool> finished;
 
         ThreadSafeQueue(ThreadSafeQueue<T>&& other, const std::lock_guard<std::mutex>&) : q(std::move(other.q)),
-            capacity(other.capacity), qsize(0), pushEnabled(false), popEnabled(false), finished(false) {
+            capacity(other.capacity), qsize(0), pushEnabled(false), popEnabled(false) {
           other.capacity = 0;
           qsize.exchange(other.qsize.load(std::memory_order_relaxed), std::memory_order_relaxed);              // relaxed, since we have a lock.
           pushEnabled.exchange(other.pushEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed);
           popEnabled.exchange(other.popEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed);
-          finished.exchange(other.finished.load(std::memory_order_relaxed), std::memory_order_relaxed);
         };
 
 
       public:
         static constexpr size_t MAX_SIZE  = std::numeric_limits<size_t>::max();
-        explicit ThreadSafeQueue(const size_t &_capacity = MAX_SIZE) : capacity(_capacity), qsize(0), pushEnabled(true), pushEnabled(true) {};
+        explicit ThreadSafeQueue(const size_t &_capacity = MAX_SIZE) : capacity(_capacity), qsize(0), pushEnabled(true), popEnabled(true) {};
 
         explicit ThreadSafeQueue(const ThreadSafeQueue<T>& other) = delete;
         explicit ThreadSafeQueue(ThreadSafeQueue<T>&& other) : ThreadSafeQueue<T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
@@ -76,7 +74,6 @@ namespace bliss
           qsize.exchange(other.qsize.load(std::memory_order_relaxed), std::memory_order_relaxed);             // relaxed, since we have a lock.
           pushEnabled.exchange(other.pushEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed);
           popEnabled.exchange(other.popEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed);
-          finished.exchange(other.finished.load(std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;
         }
         ThreadSafeQueue<T>& operator=(const ThreadSafeQueue<T>& other) = delete;
@@ -110,38 +107,34 @@ namespace bliss
           qsize.store(0, std::memory_order_relaxed);        // have lock.  relaxed.
         }
 
-        void finish() {
-          finished.store(true, std::memory_order_release);
-          canPushCV.notify_all();   /// have all threads that are waiting check the conditions.
-          canPopCV.notify_all();
-        }
-
-
         void enablePush() {
-          if (finished.load(std::memory_order_acquire)) {
-            disablePush();
-            return;
-          }
           pushEnabled.store(true, std::memory_order_release);
-          canPushCV.notify_all();
+//          printf("push enabled\n");
+          canPushCV.notify_all();   // notify, so waitAndPush can check if it can push now.
         }
         void disablePush() {
           pushEnabled.store(false, std::memory_order_release);
+//          printf("push disabled\n");
+          canPopCV.notify_all();   // notify, so waitAndPop can exit because there is no more data coming in.
         }
         bool canPush() {
-          return !finished.load(std::memory_order_acquire) && pushEnabled.load(std::memory_order_acquire) && !full();
+          return pushEnabled.load(std::memory_order_acquire);
         }
 
 
-        void enablePop() {
-          popEnabled.store(true, std::memory_order_release);
-          canPopCV.notify_all();
-        }
-        void disablePop() {
-          popEnabled.store(false, std::memory_order_release);
-        }
+//        void enablePop() {
+//          popEnabled.store(true, std::memory_order_release);
+//          printf("pop enabled\n");
+//          canPopCV.notify_all();
+//        }
+//        void disablePop() {
+//          popEnabled.store(false, std::memory_order_release);
+//          printf("pop disabled\n");
+//          canPopCV.notify_all();
+//        }
         bool canPop() {
-          return popEnabled.load(std::memory_order_acquire) && !empty();
+          //return popEnabled.load(std::memory_order_acquire);
+          return canPush() || !empty();
         }
 
 
@@ -150,7 +143,7 @@ namespace bliss
         bool tryPush (T const& data) {
           std::unique_lock<std::mutex> lock(mutex);
 
-          if (!canPush()) return false;
+          if (!canPush() || full()) return false;
 
           qsize.fetch_add(1, std::memory_order_acq_rel);
           q.push_back(data);   // move using predefined copy refernece version of push
@@ -162,7 +155,7 @@ namespace bliss
 
         bool tryPush (T && data) {
           std::unique_lock<std::mutex> lock(mutex);
-          if (!canPush()) return false;
+          if (!canPush() || full()) return false;
 
           qsize.fetch_add(1, std::memory_order_acq_rel);
           q.push_back(std::move(data));    // move using predefined move reference version of push
@@ -174,15 +167,15 @@ namespace bliss
 
         bool waitAndPush (T const& data) {
 
-          if (finished.load(std::memory_order_acquire)) return false;   // if finished, then no more pushing.  return.
+          if (!canPush()) return false;   // if finished, then no more pushing.  return.
 
           std::unique_lock<std::mutex> lock(mutex);
-          while (!canPush()) {
+          while (!canPush() || full()) {
             // full q.  wait for someone to signal.
             canPushCV.wait(lock);
 
             // to get here, have to have one of these conditions changed:  !finished, pushEnabled, !full
-            if (finished.load(std::memory_order_acquire)) return false;  // if finished, then no more pushing.  return.
+            if (!canPush()) return false;  // if finished, then no more pushing.  return.
           }
           qsize.fetch_add(1, std::memory_order_acq_rel);
           q.push_back(data);   // move using predefined copy refernece version of push
@@ -193,17 +186,17 @@ namespace bliss
         }
 
         bool waitAndPush (T && data) {
-          if (finished.load(std::memory_order_acquire)) return false;  // if finished, then no more pushing.  return.
+          if (!canPush()) return false;  // if finished, then no more pushing.  return.
 
           std::unique_lock<std::mutex> lock(mutex);
 
 
-          while (!canPush()) {
+          while (!canPush() || full()) {
             // full q.  wait for someone to signal.
             canPushCV.wait(lock);
 
             // to get here, have to have one of these conditions changed:  !finished, pushEnabled, !full
-            if (finished.load(std::memory_order_acquire)) return false;  // if finished, then no more pushing.  return.
+            if (!canPush()) return false;  // if finished, then no more pushing.  return.
           }
 
           qsize.fetch_add(1, std::memory_order_acq_rel);
@@ -221,7 +214,7 @@ namespace bliss
           output.first = false;
 
           std::unique_lock<std::mutex> lock(mutex);
-          if (!canPop()) return output;
+          if (empty()) return output;
 
           qsize.fetch_sub(1, std::memory_order_acq_rel);
           output.second = std::move(q.front());  // convert to movable reference and move-assign.
@@ -240,16 +233,16 @@ namespace bliss
           output.first = false;
 
           // if finished and queue is empty, then return false.
-          if (finished.load(std::memory_order_acquire) && empty()) return output;  // if finished, then no more pushing.  return.
+          if (!canPop()) return output;  // if finished, then no more pushing.  return.
 
           // else either not finished (queue empty or not), or finished and queue is not empty.
 
           std::unique_lock<std::mutex> lock(mutex);
-          while (!canPop()) {
+          while (empty()) {
             // empty q.  wait for someone to signal.
             canPopCV.wait(lock);
 
-            if (finished.load(std::memory_order_acquire) && empty()) return output;  // if finished, then no more pushing.  return.
+            if (!canPop()) return output;  // if finished, then no more pushing.  return.
           }
           // when cond_var is notified, then lock will be acquired and q will be examined.
 
