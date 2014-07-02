@@ -28,6 +28,7 @@
 
 // C stdlib includes
 #include <assert.h>
+#include <cstdio>  // fflush
 
 // STL includes
 #include <vector>
@@ -119,7 +120,14 @@ protected:
 
   typedef typename BuffersType::BufferIdType BufferIdType;
 
+
+  /// condition variable to wake up callbackThread
+  //std::condition_variable waitForRecvQueue;
+
+
+  /// condition variable to make "flush" and "finish" blocking.
   mutable std::mutex mutex;
+  mutable std::mutex flushMutex;
   std::condition_variable flushBarrier;
   /// additional check after flushBarrier wakes up, to make sure we are flushing the target tag.
   std::atomic<int> flushing;
@@ -153,6 +161,7 @@ public:
     sendDone.store(false);
     recvDone.store(false);
     flushing.store(-1);
+    recvRemaining[0] = commSize;
     comm_thread = std::thread(&CommunicationLayer::commThread, this);
     callback_thread = std::thread(&CommunicationLayer::callbackThread, this);
   }
@@ -161,6 +170,8 @@ public:
   // void(uint8_t* msg, std::size_t count, int fromRank)
   void addReceiveCallback(int tag, std::function<void(uint8_t*, std::size_t, int)> callbackFunction)
   {
+    assert(tag != 0);
+
     if (callbackFunctions.find(tag) != callbackFunctions.end()) {
       printf("function already registered for tag %d\n", tag);
       return;
@@ -269,10 +280,14 @@ public:
 
     // set the tag that is being flushed, this is being reseted in the
     // callback function
-    flushing.store(tag);
 
     // flush all buffers
     flushBuffers(tag);
+
+    int t = -1;
+    if (!flushing.compare_exchange_strong(t, tag)) {
+      printf("ERROR:  another tag is being flushed. %d.  target is %d\n", t, tag);
+    }
     // send the END tags
     sendEndTags(tag);
     // wait till all END tags have been received
@@ -301,14 +316,28 @@ public:
 
     // set the tag that is being flushed, this is being reseted in the
     // callback function
-    flushing.store(tag);
 
     // flush all buffers
     flushBuffers(tag);
+
+    int t = -1;
+    if (!flushing.compare_exchange_strong(t, tag)) {
+      printf("ERROR:  another tag is being flushed. %d.  target is %d\n", t, tag);
+    }
     // send the END tags
     sendEndTags(tag);
     // wait till all END tags have been received
     waitForEndTags(tag);
+
+
+    t = -1;
+    if (!flushing.compare_exchange_strong(t, 0)) {
+      printf("ERROR:  another tag is being flushed. %d.  target is %d\n", t, 0);
+    }
+    if (sendAccept.empty()) {
+      sendEndTags(0);
+    }
+    waitForEndTags(0);
   }
 
 
@@ -328,9 +357,10 @@ public:
   // TODO: make private
   void waitForEndTags(int tag)
   {
+    printf("flushing : %d, tag %d\n", flushing.load(), tag);
     assert(flushing.load() == tag);
     // waiting for all messages of this tag to flush.
-    std::unique_lock<std::mutex> lock(mutex);
+    std::unique_lock<std::mutex> lock(flushMutex);
     while (flushing.load() == tag) {
       flushBarrier.wait(lock);
     }
@@ -410,27 +440,35 @@ public:
     {
       // TODO: add termination condition
       ReceivedMessage msg;
-      while (!recvDone.load() || (recvQueue.size() > 0))
+      while (!recvDone.load() || !recvQueue.empty() )
       {
+
+
         // get next element from the queue, wait if none is available
         // TODO: check if the tag exists as callback function
-        auto result = std::move(recvQueue.tryPop());
-        if (result.first) {
-          msg = result.second;
-          if (msg.data == nullptr && msg.count == 0) {
-            // end message.
-            int tag = msg.tag;
-            if (flushing.compare_exchange_strong(tag, -1)) {
-              flushBarrier.notify_all();
-            } else {
-              printf("WARNING: empty message with tag=%d, but flushing contained %d\n", msg.tag, tag);
-            }
-          }
-
-          // call the matching callback function
-          (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
-          delete [] msg.data;
+        auto result = std::move(recvQueue.waitAndPop());
+//        auto result = std::move(recvQueue.tryPop());
+        if (! result.first) {
+          // no valid result.
+          continue;
         }
+
+        // else have a valid result.
+        msg = result.second;
+        if (msg.data == nullptr && msg.count == 0) {
+          // end message.  - once this message is reached, barrier in producer thread (one that called flush or finish) can be breached.
+          int tag = msg.tag;
+          if (flushing.compare_exchange_strong(tag, -1)) {
+            flushBarrier.notify_all();
+          } else {
+            printf("WARNING: empty message with tag=%d, but flushing contained %d\n", msg.tag, tag); fflush(stdout);
+          }
+        }
+
+        // call the matching callback function
+        (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
+        delete [] msg.data;
+
       }
       printf("recv thread finished on %d\n", commRank);
 
@@ -444,59 +482,69 @@ public:
 
     void tryStartSend() throw (bliss::io::IOException)
     {
+      if (sendDone.load()) return;
+
+
       // try to get the send element
       SendQueueElement se;
       auto el = std::move(sendQueue.tryPop());
-      if (el.first) {
-        se = el.second;
-        if (se.bufferId == -1) {
-          // termination message for this tag and destination
+//      auto el = std::move(sendQueue.waitAndPop());
+      if (!el.first) {
+        return;   // sendQueue disabled.
+      }
+
+      // else there is a valid entry from sendQueue
+      se = el.second;
+      if (se.bufferId == -1) {
+        // termination message for this tag and destination
 
 
-          if (se.dst == commRank) {
-            // local, directly handle by creating an output object and directly
-            // insert into the recvInProgress (need to use the receiver decrement logic in "finishReceive")
-            MPI_Request req = MPI_REQUEST_NULL;
-            recvInProgress.push(std::move(std::pair<MPI_Request, ReceivedMessage>(std::move(req), std::move(ReceivedMessage(nullptr, 0, se.tag, commRank)))));
+        if (se.dst == commRank) {
+          // local, directly handle by creating an output object and directly
+          // insert into the recvInProgress (need to use the receiver decrement logic in "finishReceive")
+          MPI_Request req = MPI_REQUEST_NULL;
+          recvInProgress.push(std::move(std::pair<MPI_Request, ReceivedMessage>(std::move(req), std::move(ReceivedMessage(nullptr, 0, se.tag, commRank)))));
 
-          } else {
-            // remote.  send a terminating message. with the same tag to ensure message ordering.
-            MPI_Request req;
-            MPI_Isend(nullptr, 0, MPI_UINT8_T, se.dst, se.tag, comm, &req);
-            sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElement>(std::move(req), std::move(se))));
-          }
+        } else {
+          // remote.  send a terminating message. with the same tag to ensure message ordering.
+          MPI_Request req;
+          MPI_Isend(nullptr, 0, MPI_UINT8_T, se.dst, se.tag, comm, &req);
+          sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElement>(std::move(req), std::move(se))));
+        }
 
-        } else {  // real data.
-          void* data = const_cast<void*>(buffers.at(se.tag).getBackBuffer(se.bufferId).getData());
-          auto count = buffers.at(se.tag).getBackBuffer(se.bufferId).getSize();
+      } else {  // real data.
+        void* data = const_cast<void*>(buffers.at(se.tag).getBackBuffer(se.bufferId).getData());
+        auto count = buffers.at(se.tag).getBackBuffer(se.bufferId).getSize();
 
 //          printf ("sending %d\n", se.bufferId);
-          if (se.dst == commRank) {
-            // local, directly handle by creating an output object and directly
-            // insert into the recv queue (thread safe)
-            uint8_t* array = new uint8_t[count];
-            memcpy(array, data, count);
+        if (se.dst == commRank) {
+          // local, directly handle by creating an output object and directly
+          // insert into the recv queue (thread safe)
+          uint8_t* array = new uint8_t[count];
+          memcpy(array, data, count);
 
-            if (!recvQueue.waitAndPush(std::move(ReceivedMessage(array, count, se.tag, commRank)))) {
-              throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
-            }
+          if (!recvQueue.waitAndPush(std::move(ReceivedMessage(array, count, se.tag, commRank)))) {
+            throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
+          }
 
-            // finished inserting directly to local RecvQueue.  release the buffer
-            buffers.at(se.tag).releaseBuffer(se.bufferId);
+          // finished inserting directly to local RecvQueue.  release the buffer
+          buffers.at(se.tag).releaseBuffer(se.bufferId);
 //            printf("released %d.  recvQueue size is %lu\n", se.bufferId, recvQueue.size());
 
-          } else {
+        } else {
 
-            MPI_Request req;
-            MPI_Isend(data, count, MPI_UINT8_T, se.dst, se.tag, comm, &req);
-            sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElement>(std::move(req), std::move(se))));
-          }
+          MPI_Request req;
+          MPI_Isend(data, count, MPI_UINT8_T, se.dst, se.tag, comm, &req);
+          sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElement>(std::move(req), std::move(se))));
         }
       }
+
     }
 
     void finishSends()
     {
+      if (sendDone.load()) return;
+
       int finished = 0;
       while(!sendInProgress.empty())
       {
@@ -521,12 +569,17 @@ public:
         }
       }
 
-      if ((sendAccept.size() == 0) && (sendQueue.size() == 0) && (sendInProgress.size() == 0))
+      if (sendAccept.empty() && sendQueue.empty() && sendInProgress.empty()) {
         sendDone.store(true);
+        printf("sendDone!\n");
+//        sendQueue.disablePush();
+      }
     }
 
     void tryStartReceive()
     {
+      if (recvDone.load()) return;
+
       /// probe for messages
       int hasMessage = 0;
       MPI_Status status;
@@ -556,6 +609,8 @@ public:
     // Not thread safe
     void finishReceives() throw (bliss::io::IOException)
     {
+      if (recvDone.load()) return;
+
       int finished = 0;
       //MPI_Status status;
       while(!recvInProgress.empty())
@@ -573,7 +628,7 @@ public:
           if (front.second.count == 0) {  // terminating message.
             // end of messaging.
             --recvRemaining[front.second.tag];
-            printf("RECV rank %d receiving END signal %d from %d, num senders remaining is %d\n", commRank, front.second.tag, front.second.src, recvRemaining[front.second.tag]);
+            //printf("RECV rank %d receiving END signal %d from %d, num senders remaining is %d\n", commRank, front.second.tag, front.second.src, recvRemaining[front.second.tag]);
 
             if (recvRemaining[front.second.tag] == 0) {
               // received all end messages.  there may still be message in progress and in recvQueue from this and other sources.
@@ -614,9 +669,11 @@ public:
       }
 
       // see if we are done with receiving and everything is in the recvQueue
-      if ((recvRemaining.size() == 0) && (recvInProgress.size() == 0))
+      if ((recvRemaining.find(0) == recvRemaining.end()) && recvInProgress.empty()) {
         recvDone.store(true);
-
+        printf("recvDone!\n");
+        recvQueue.disablePush();
+      }
     }
 
 
