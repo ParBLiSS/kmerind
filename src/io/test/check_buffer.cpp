@@ -15,13 +15,16 @@
 #include "omp.h"
 #include <cassert>
 #include <chrono>
-#include <algorithm>
+#include <iterator>  // for ostream_iterator
+#include <iostream>   // for cout
+#include <algorithm>  // for sort
 
 int main(int argc, char** argv) {
 
   typedef int valType;
   int typeSize = sizeof(valType);
   valType val;
+
 
   printf(" check thread local buffer.\n");
 
@@ -141,53 +144,50 @@ int main(int argc, char** argv) {
 
 
   // check insertion.
+  std::vector<int> failed;
+
   i = 0;
   int fail = 0;
-#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i, val) reduction(+: fail)
+#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4, failed) private(i, val) reduction(+: fail)
   for (i = 0; i < 9000; ++i) {
     val = static_cast<valType>(i);
 
     if (! tsBuffer4.append(&val, sizeof(valType))) {
       ++fail;
+#pragma omp critical
+      failed.push_back(i);
     }
   }
 
 
-  temp = reinterpret_cast<const valType*>(tsBuffer4.getData());
-
-  std::vector<valType> content;
-
-  for (int j = 0; j < (bufferSize/typeSize); ++j) {
-    content.push_back(temp[j]);
-    printf("[%d %d], ", j, temp[j]);
-    if ((j % 8) == 7) printf("\n");
-  }
-  printf("\n\n");
-  std::sort(content.begin(), content.end());
-  for (int j = 0; j < (bufferSize/typeSize); ++j) {
-    printf("%d, ", content[j]);
-    if ((j % 8 ) == 7) printf("\n");
-  }
-  printf("\n\n");
-
-  printf("concurrent insert failed %d times \n", fail);
-
 //  temp = reinterpret_cast<const valType*>(tsBuffer4.getData());
-//  for (int j = 0; j < (8192/typeSize); ++j) {
+//
+//  std::vector<valType> content;
+//
+//  for (int j = 0; j < (bufferSize/typeSize); ++j) {
+//    content.push_back(temp[j]);
 //    printf("[%d %d], ", j, temp[j]);
 //    if ((j % 8) == 7) printf("\n");
 //  }
 //  printf("\n\n");
-
-
-
-  //
-//  temp = reinterpret_cast<const int*>(tsBuffer4.getData());
-//  for (unsigned int j = 0; j < (8192/typeSize); ++j) {
-//    printf("%d %d\n", j, temp[j]);
+//  std::sort(content.begin(), content.end());
+//  for (int j = 0; j < (bufferSize/typeSize); ++j) {
+//    printf("%d, ", content[j]);
+//    if ((j % 8 ) == 7) printf("\n");
 //  }
 //  printf("\n\n");
-//
+
+  std::sort(failed.begin(), failed.end());
+
+  printf("FAILED insertion ids:");
+
+  std::ostream_iterator<int> oit(std::cout, ",");
+  std::copy(failed.begin(), failed.end(), oit);
+  std::cout << std::endl;
+
+  printf("concurrent insert failed %d times \n", fail);
+
+
 
   // check clear
   tsBuffer4.clear();
