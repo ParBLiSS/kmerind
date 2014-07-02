@@ -30,6 +30,7 @@
 //  - [x] expose local iterators
 //  - [x] finish the count Histrogram
 //  - [x] filter() function -> (maybe with broadcast??)
+//  - [ ] proper flushing of stages
 
 
 template<typename K, typename T, typename CommunicationLayer, typename LocalContainer>
@@ -85,8 +86,8 @@ public:
 
 
 protected:
-  _distributed_map_base(CommunicationLayer& commLayer, MPI_Comm mpi_comm, std::function<std::size_t(K)> hashFunction = std::hash<K>())
-      : commLayer(commLayer), comm(mpi_comm), hashFunct(hashFunction)
+  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, std::function<std::size_t(K)> hashFunction = std::hash<K>())
+      : commLayer(mpi_comm, comm_size), comm(mpi_comm), hashFunct(hashFunction)
   {
   }
 
@@ -96,7 +97,7 @@ protected:
   void sendKey(const K& key, const int dstRank, const int tag)
   {
     // cast key into pointer and get byte size
-    const uint8_t* msg = reinterpret_cast<uint8_t*>(&key);
+    const uint8_t* msg = reinterpret_cast<const uint8_t*>(&key);
     const std::size_t count = sizeof(key);
 
     // send the key as a message with the approriate tag
@@ -108,14 +109,14 @@ protected:
   {
     // create the pair and call the overloaded function
     std::pair<K, T> keyElement(key, value);
-    sendPair(keyElement, dstRank, tag);
+    this->sendPair(keyElement, dstRank, tag);
   }
 
   // sends key-value pair
   void sendPair(const std::pair<K, T>& keyValue, const int dstRank, const int tag)
   {
     // create key-value pair and serialize as pointer
-    const uint8_t* msg = reinterpret_cast<uint8_t*>(&keyValue);
+    const uint8_t* msg = reinterpret_cast<const uint8_t*>(&keyValue);
     const std::size_t count = sizeof(keyValue);
 
     // send the message
@@ -136,9 +137,9 @@ protected:
    ******************/
 
   CommunicationLayer commLayer;
+  MPI_Comm comm;
   std::function<std::size_t(K)> hashFunct;
 
-  MPI_Comm comm;
   LocalContainer local_map;
 
 };
@@ -155,36 +156,43 @@ public:
   /// The constant iterator type of the local container type
   typedef typename _base_class::local_const_iterator local_const_iterator;
 
+
   static constexpr int INSERT_MPI_TAG = 13;
   static constexpr int LOOKUP_MPI_TAG = 14;
   static constexpr int LOOKUP_ANSWER_MPI_TAG = 15;
 
-  distributed_multimap (CommunicationLayer& commLayer, MPI_Comm mpi_comm,
+  distributed_multimap (MPI_Comm mpi_comm, int comm_size,
         std::function<std::size_t(K)> hashFunction = std::hash<K>())
-      : _base_class(commLayer, mpi_comm, hashFunction)
+      : _base_class(mpi_comm, comm_size, hashFunction)
   {
     // add comm layer receive callbacks
     using namespace std::placeholders;
-    commLayer.addReceiveCallback(INSERT_MPI_TAG, std::bind(&distributed_multimap::receivedCountCallback, this, _1, _2, _3));
-    commLayer.addReceiveCallback(LOOKUP_MPI_TAG, std::bind(&distributed_multimap::receivedLookupCallback, this, _1, _2, _3));
-    commLayer.addReceiveCallback(LOOKUP_ANSWER_MPI_TAG, std::bind(&distributed_multimap::receivedLookupAnswerCallback, this, _1, _2, _3));
+    this->commLayer.addReceiveCallback(INSERT_MPI_TAG, std::bind(&distributed_multimap::receivedCountCallback, this, _1, _2, _3));
+    this->commLayer.addReceiveCallback(LOOKUP_MPI_TAG, std::bind(&distributed_multimap::receivedLookupCallback, this, _1, _2, _3));
+    this->commLayer.addReceiveCallback(LOOKUP_ANSWER_MPI_TAG, std::bind(&distributed_multimap::receivedLookupAnswerCallback, this, _1, _2, _3));
 
     // start the threads in the comm layer (if not already running)
-    commLayer.startThreads();
+    this->commLayer.startThreads();
   }
 
-  virtual ~distributed_multimap () {}
+  virtual ~distributed_multimap() {
+    this->commLayer.finishTag(INSERT_MPI_TAG);
+    this->commLayer.finishTag(LOOKUP_MPI_TAG);
+    this->commLayer.finishTag(LOOKUP_ANSWER_MPI_TAG);
+  }
 
   void remoteInsert(const std::pair<K, T>& keyvalue)
   {
-    int targetRank = getTargetRank(keyvalue.first);
-    sendPair(keyvalue, targetRank, INSERT_MPI_TAG);
+    int targetRank = this->getTargetRank(keyvalue.first);
+    this->sendPair(keyvalue, targetRank, INSERT_MPI_TAG);
+    has_pending_inserts = true;
   }
 
   void remoteInsert(const K& key, const T& value)
   {
-    int targetRank = getTargetRank(key);
-    sendPair(key, value, targetRank, INSERT_MPI_TAG);
+    int targetRank = this->getTargetRank(key);
+    this->sendPair(key, value, targetRank, INSERT_MPI_TAG);
+    has_pending_inserts = true;
   }
 
   template<typename Iterator>
@@ -199,31 +207,41 @@ public:
     // iterate through all elements and insert them
     for (Iterator it = begin; it != end; ++it)
     {
-      int targetRank = getTargetRank(it->first);
-      sendPair(*it, targetRank, INSERT_MPI_TAG);
+      int targetRank = this->getTargetRank(it->first);
+      this->sendPair(*it, targetRank, INSERT_MPI_TAG);
     }
+    // flush the insert mesages
+    this->commLayer.flush(INSERT_MPI_TAG);
   }
 
   /// Flushes all buffered elements to be inserted at the target processor.
   /// Blocks till all elements have been received at their destination.
   void flush()
   {
-    this->commLayer.flush();
+    if (has_pending_inserts)
+    {
+      this->commLayer.flush(INSERT_MPI_TAG);
+      has_pending_inserts = false;
+    }
+    if (has_pending_lookups)
+    {
+      this->commLayer.flush(LOOKUP_MPI_TAG);
+      this->commLayer.flush(LOOKUP_ANSWER_MPI_TAG);
+      has_pending_lookups = false;
+    }
   }
 
   void asyncLookup(const K& key)
   {
-    const int targetRank = getTargetRank(key);
-    sendKey(key, targetRank, LOOKUP_MPI_TAG);
+    // check that there is a valid callback function
+    if (lookupAnswerCallbackFunc == nullptr)
+    {
+      throw std::runtime_error("ERROR: Callback function not set!");
+    }
+    const int targetRank = this->getTargetRank(key);
+    this->sendKey(key, targetRank, LOOKUP_MPI_TAG);
+    has_pending_lookups = true;
   }
-
-  void syncLookup(const K& key)
-  {
-    const int targetRank = getTargetRank(key);
-    sendKey(key, targetRank, LOOKUP_MPI_TAG);
-    // TODO: wait for answer somehow
-  }
-
 
   /**
    * @brief Removes all (key,value) pairs with a key count of less than `count`.
@@ -252,6 +270,11 @@ public:
       // advance loop iterator
       iter = cur_end_iter;
     }
+  }
+
+  void setLookupAnswerCallback(const std::function<void(std::pair<K, T>&)>& callbackFunction)
+  {
+    lookupAnswerCallbackFunc = callbackFunction;
   }
 
 protected:
@@ -283,7 +306,7 @@ protected:
       for (auto it = range.first; it != range.second; ++it)
       {
         // send the results to the requesting processor
-        sendPair(*it, fromRank, LOOKUP_ANSWER_MPI_TAG);
+        this->sendPair(*it, fromRank, LOOKUP_ANSWER_MPI_TAG);
       }
     }
   }
@@ -297,7 +320,7 @@ protected:
     // insert all elements into the hash table
     for (int i = 0; i < element_count; ++i)
     {
-      // TODO: call some external callback function, or queue this
+      lookupAnswerCallbackFunc(elements[i]);
     }
   }
 
@@ -355,6 +378,9 @@ protected:
 
 private:
   /* data */
+  volatile bool has_pending_inserts = false;
+  volatile bool has_pending_lookups = false;
+  std::function<void(std::pair<K, T>&)> lookupAnswerCallbackFunc;
 };
 
 
@@ -380,26 +406,32 @@ public:
   static constexpr int LOOKUP_MPI_TAG = 14;
   static constexpr int LOOKUP_ANSWER_MPI_TAG = 15;
 
-  distributed_counting_map (CommunicationLayer& commLayer, MPI_Comm mpi_comm,
+  distributed_counting_map (MPI_Comm mpi_comm, int comm_size,
           std::function<std::size_t(K)> hashFunction = std::hash<K>())
-      : _base_class(commLayer, mpi_comm, hashFunction)
+      : _base_class(mpi_comm, comm_size, hashFunction)
   {
     // add comm layer receive callbacks
     using namespace std::placeholders;
-    commLayer.addReceiveCallback(INSERT_MPI_TAG, std::bind(&distributed_counting_map::receivedCountCallback, this, _1, _2, _3));
-    commLayer.addReceiveCallback(LOOKUP_MPI_TAG, std::bind(&distributed_counting_map::receivedLookupCallback, this, _1, _2, _3));
-    commLayer.addReceiveCallback(LOOKUP_ANSWER_MPI_TAG, std::bind(&distributed_counting_map::receivedLookupAnswerCallback, this, _1, _2, _3));
+    this->commLayer.addReceiveCallback(INSERT_MPI_TAG, std::bind(&distributed_counting_map::receivedCountCallback, this, _1, _2, _3));
+    this->commLayer.addReceiveCallback(LOOKUP_MPI_TAG, std::bind(&distributed_counting_map::receivedLookupCallback, this, _1, _2, _3));
+    this->commLayer.addReceiveCallback(LOOKUP_ANSWER_MPI_TAG, std::bind(&distributed_counting_map::receivedLookupAnswerCallback, this, _1, _2, _3));
 
     // start the threads in the comm layer (if not already running)
-    commLayer.startThreads();
+    this->commLayer.startThreads();
   }
 
-  virtual ~distributed_counting_map () {}
+  virtual ~distributed_counting_map()
+  {
+    this->commLayer.finishTag(INSERT_MPI_TAG);
+    this->commLayer.finishTag(LOOKUP_MPI_TAG);
+    this->commLayer.finishTag(LOOKUP_ANSWER_MPI_TAG);
+  }
 
   void remoteInsert(const K& key)
   {
-    int targetRank = getTargetRank(key);
-    sendKey(key, targetRank, INSERT_MPI_TAG);
+    int targetRank = this->getTargetRank(key);
+    this->sendKey(key, targetRank, INSERT_MPI_TAG);
+    has_pending_inserts = true;
   }
 
   template<typename Iterator>
@@ -415,22 +447,40 @@ public:
     // iterate through all elements and insert them
     for (Iterator it = begin; it != end; ++it)
     {
-      int targetRank = getTargetRank(*it);
-      sendKey(*it, targetRank, INSERT_MPI_TAG);
+      int targetRank = this->getTargetRank(*it);
+      this->sendKey(*it, targetRank, INSERT_MPI_TAG);
     }
+    this->commLayer.flush(INSERT_MPI_TAG);
   }
 
   /// Flushes all buffered elements to be inserted at the target processor.
   /// Blocks till all elements have been received at their destination.
   void flush()
   {
-    this->commLayer.flush();
+    if (has_pending_inserts)
+    {
+      this->commLayer.flush(INSERT_MPI_TAG);
+      has_pending_inserts = false;
+    }
+    if (has_pending_lookups)
+    {
+      this->commLayer.flush(LOOKUP_MPI_TAG);
+      this->commLayer.flush(LOOKUP_ANSWER_MPI_TAG);
+      has_pending_lookups = false;
+    }
   }
 
   void asyncLookup(const K& key)
   {
-    const int targetRank = getTargetRank(key);
-    sendKey(key, targetRank, LOOKUP_MPI_TAG);
+    // check that there is a valid callback function
+    if (lookupAnswerCallbackFunc == nullptr)
+    {
+      throw std::runtime_error("ERROR: Callback function not set!");
+    }
+
+    const int targetRank = this->getTargetRank(key);
+    this->sendKey(key, targetRank, LOOKUP_MPI_TAG);
+    has_pending_lookups = true;
   }
 
 
@@ -461,6 +511,11 @@ public:
       // advance loop iterator
       iter = cur_end_iter;
     }
+  }
+
+  void setLookupAnswerCallback(const std::function<void(std::pair<K, T>&)>& callbackFunction)
+  {
+    lookupAnswerCallbackFunc = callbackFunction;
   }
 
 
@@ -495,7 +550,7 @@ protected:
       for (auto it = range.first; it != range.second; ++it)
       {
         // send the results to the requesting processor
-        sendPair(*it, fromRank, LOOKUP_ANSWER_MPI_TAG);
+        this->sendPair(*it, fromRank, LOOKUP_ANSWER_MPI_TAG);
       }
     }
   }
@@ -509,7 +564,8 @@ protected:
     // insert all elements into the hash table
     for (int i = 0; i < element_count; ++i)
     {
-      // TODO: call some external callback function, or queue this
+      // call the external callback function
+      lookupAnswerCallbackFunc(elements[i]);
     }
   }
 
@@ -548,6 +604,9 @@ protected:
 
 private:
   /* data */
+  volatile bool has_pending_inserts = false;
+  volatile bool has_pending_lookups = false;
+  std::function<void(std::pair<K, T>&)> lookupAnswerCallbackFunc;
 };
 
 #endif // BLISS_DISTRIBUTED_MAP_HPP
