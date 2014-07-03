@@ -132,6 +132,7 @@ protected:
   /// additional check after flushBarrier wakes up, to make sure we are flushing the target tag.
   std::atomic<int> flushing;
 
+  std::atomic<bool> finishing;
   std::atomic<bool> sendDone;
   std::atomic<bool> recvDone;
 
@@ -141,7 +142,7 @@ protected:
 public:
 
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
-    : sendQueue(2 * omp_get_num_threads()), recvQueue(2 * comm_size), flushing(-1), sendDone(false), recvDone(false),
+    : sendQueue(2 * omp_get_num_threads()), recvQueue(2 * comm_size), flushing(-1), finishing(false), sendDone(false), recvDone(false),
       comm(communicator)
   {
     // init communicator rank and size
@@ -160,6 +161,7 @@ public:
   {
     sendDone.store(false);
     recvDone.store(false);
+    finishing.store(false);
     flushing.store(-1);
     recvRemaining[0] = commSize;
     comm_thread = std::thread(&CommunicationLayer::commThread, this);
@@ -276,6 +278,11 @@ public:
       return;
     }
 
+    if (flushing.load() != -1) {
+      printf("ERROR:  Another tag is being flushed: %d.  target is %d\n", flushing.load(), tag);
+      return;
+    }
+
     printf("FLUSHing tag %d.\n", tag);
 
     // set the tag that is being flushed, this is being reseted in the
@@ -287,14 +294,15 @@ public:
     int t = -1;
     if (!flushing.compare_exchange_strong(t, tag)) {
       printf("ERROR:  another tag is being flushed. %d.  target is %d\n", t, tag);
-    }
-    // send the END tags
-    sendEndTags(tag);
-    // wait till all END tags have been received
-    waitForEndTags(tag);
+    } else {
+      // send the END tags
+      sendEndTags(tag);
+      // wait till all END tags have been received
+      waitForEndTags(tag);
 
-    // reset the count of number of processes active on this tag
-    recvRemaining[tag] = commSize;
+      // reset the count of number of processes active on this tag  ONLY AFTER  waitForEngTags returns
+      recvRemaining[tag] = commSize;
+    }
   }
 
   /**
@@ -304,8 +312,13 @@ public:
   void finishTag(int tag)
   {
     if (sendAccept.find(tag) == sendAccept.end()) {
-      printf("NO FINISHing: already finished tag: %d\n", tag);
+      printf("ERROR:  NO FINISHing: already finished tag: %d\n", tag);
       // already finished.
+      return;
+    }
+
+    if (flushing.load() != -1) {
+      printf("ERROR:  Another tag is being flushed: %d.  target is %d\n", flushing.load(), tag);
       return;
     }
 
@@ -314,30 +327,36 @@ public:
     /// mark as no more coming in for this tag.  ONE THREAD ONLY modifies this.
     sendAccept.erase(tag);
 
-    // set the tag that is being flushed, this is being reseted in the
-    // callback function
 
     // flush all buffers
     flushBuffers(tag);
 
     int t = -1;
+    // set the tag that is being flushed, this is being reseted in the
+    // callback function
     if (!flushing.compare_exchange_strong(t, tag)) {
       printf("ERROR:  another tag is being flushed. %d.  target is %d\n", t, tag);
+    } else {
+      // send the END tags
+      sendEndTags(tag);
+      // wait till all END tags have been received
+      waitForEndTags(tag);
     }
-    // send the END tags
-    sendEndTags(tag);
-    // wait till all END tags have been received
-    waitForEndTags(tag);
 
 
-    t = -1;
-    if (!flushing.compare_exchange_strong(t, 0)) {
-      printf("ERROR:  another tag is being flushed. %d.  target is %d\n", t, 0);
-    }
+    /// if no more, then send the application termination signal.
     if (sendAccept.empty()) {
-      sendEndTags(0);
+
+      t = -1;
+      if (!flushing.compare_exchange_strong(t, 0)) {
+        printf("ERROR:  another tag is being flushed. %d.  target is %d\n", t, 0);
+      } else {
+        sendEndTags(0);
+        finishing.store(true);
+
+        waitForEndTags(0);
+      }
     }
-    waitForEndTags(0);
   }
 
 
@@ -347,6 +366,9 @@ public:
     for (int i = 0; i < getCommSize(); ++i) {
       // send end tags in circular fashion, send tag to self last
       int target_rank = (i + getCommRank() + 1) % getCommSize();
+
+      printf("sendEndTags target_rank = %d \n", target_rank );
+
       // send the end message for this tag.
       if (!sendQueue.waitAndPush(std::move(SendQueueElement(-1, tag, target_rank)))) {
         throw bliss::io::IOException("ERROR: sendQueue is not accepting new SendQueueElement due to disablePush");
@@ -357,7 +379,7 @@ public:
   // TODO: make private
   void waitForEndTags(int tag)
   {
-    printf("flushing : %d, tag %d\n", flushing.load(), tag);
+    printf("wait for end tag.  flushing= %d, tag= %d\n", flushing.load(), tag);
     assert(flushing.load() == tag);
     // waiting for all messages of this tag to flush.
     std::unique_lock<std::mutex> lock(flushMutex);
@@ -382,6 +404,8 @@ public:
     assert(idCount == commSize);
     for (int i = 0; i < idCount; ++i) {
       int target_rank = (i + getCommRank()) % getCommSize();
+      printf("flushBuffers : target_rank = %d \n", target_rank );
+
       auto id = buffers.at(tag).getActiveId(target_rank);
       // flush/send all remaining non-empty buffers
       if ((id != -1) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
@@ -422,15 +446,13 @@ public:
       while (!sendDone.load() || !recvDone.load())
       {
         // first clean up finished operations
-        finishReceives();
         finishSends();
+        finishReceives();
 
         // start pending receives
         tryStartReceive();
         // start pending sends
         tryStartSend();
-
-
       }
 
       printf("comm thread finished on %d\n", commRank);
@@ -455,7 +477,7 @@ public:
 
         // else have a valid result.
         msg = result.second;
-        if (msg.data == nullptr && msg.count == 0) {
+        if (msg.data == nullptr && msg.count == 0) {   // handles all end messages, including app end message with tag 0 (for which there is no callback)
           // end message.  - once this message is reached, barrier in producer thread (one that called flush or finish) can be breached.
           int tag = msg.tag;
           if (flushing.compare_exchange_strong(tag, -1)) {
@@ -463,11 +485,11 @@ public:
           } else {
             printf("WARNING: empty message with tag=%d, but flushing contained %d\n", msg.tag, tag); fflush(stdout);
           }
+        } else {  // only call callback Function if not an end message.
+          // call the matching callback function
+          (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
+          delete [] msg.data;
         }
-
-        // call the matching callback function
-        (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
-        delete [] msg.data;
 
       }
       printf("recv thread finished on %d\n", commRank);
@@ -569,9 +591,11 @@ public:
         }
       }
 
-      if (sendAccept.empty() && sendQueue.empty() && sendInProgress.empty()) {
+      if (finishing.load() && sendQueue.empty() && sendInProgress.empty()) {
+        // not using sendAccept as check - sendAccept is cleared BEFORE the last tag end messages starts to be sent, and definitely before the app end message starts to be sent
+        // so sendDone may be set to true too early, and elements for the last tag, or tag 0 (termination) may be added to the sendQueue or sendInProfess queue after the empty check here.
         sendDone.store(true);
-        printf("sendDone!\n");
+        printf("send Done!\n");
 //        sendQueue.disablePush();
       }
     }
@@ -634,13 +658,13 @@ public:
               // received all end messages.  there may still be message in progress and in recvQueue from this and other sources.
               recvRemaining.erase(front.second.tag);
 
-              printf("ALL END received, pushing to recv queue\n");
+              printf("ALL END received for tag %d, pushing to recv queue\n", front.second.tag);
               fflush(stdout);
               if (!recvQueue.waitAndPush(std::move(front.second))) {
                 throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
               }
 
-            } else if (recvRemaining[front.second.tag] == 0) {
+            } else if (recvRemaining[front.second.tag] < 0) {
               printf("ERROR: number of remaining receivers for tag %d is now NEGATIVE\n", front.second.tag);
             }
 
@@ -671,7 +695,7 @@ public:
       // see if we are done with receiving and everything is in the recvQueue
       if ((recvRemaining.find(0) == recvRemaining.end()) && recvInProgress.empty()) {
         recvDone.store(true);
-        printf("recvDone!\n");
+        printf("recv Done!\n");
         recvQueue.disablePush();
       }
     }
