@@ -160,6 +160,8 @@ struct Tester
     DEBUG("I'm making a note here: HUGE SUCCESS.");
     sleep(1);
     DEBUG("It's hard to overstate my satisfaction.");
+
+    fflush(stdout);
   }
 
   Tester(MPI_Comm comm, int comm_size) : commLayer(comm, comm_size) {
