@@ -380,11 +380,16 @@ public:
   void waitForEndTags(int tag)
   {
     printf("wait for end tag.  flushing= %d, tag= %d\n", flushing.load(), tag);
-    assert(flushing.load() == tag);
+    //sleep(1);  // this is here to force callbackThread to complete its updat of "flushing", thus forcing the following assert to fail
+    //    assert(flushing.load() == tag);   // commented out as it's not a real thing to.
+
+
     // waiting for all messages of this tag to flush.
-    std::unique_lock<std::mutex> lock(flushMutex);
-    while (flushing.load() == tag) {
-      flushBarrier.wait(lock);
+    if (flushing.load() == tag) {
+      std::unique_lock<std::mutex> lock(flushMutex);
+      do {
+        flushBarrier.wait(lock);
+      } while (flushing.load() == tag);
     }
   }
 
@@ -472,7 +477,8 @@ public:
 //        auto result = std::move(recvQueue.tryPop());
         if (! result.first) {
           // no valid result.
-          continue;
+          assert(recvDone.load());
+          break;
         }
 
         // else have a valid result.
