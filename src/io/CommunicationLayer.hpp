@@ -166,20 +166,6 @@ public:
       return;
     }
 
-    /*
-    if (recvRemaining[tag] == 0) {
-      printf("function already had finished processing for tag %d.\n", tag);
-      return;
-    }
-    */
-
-
-    if (callbackFunctions.empty())
-    {
-      // this is the first registered callback, thus spawn the callback
-      // executer thread
-      // TODO
-    }
     // add the callback function to a lookup table
     callbackFunctions[tag] = callbackFunction;
 
@@ -187,7 +173,6 @@ public:
     recvRemaining[tag] = commSize;
     sendAccept.insert(tag);
   }
-
 
 
   /**
