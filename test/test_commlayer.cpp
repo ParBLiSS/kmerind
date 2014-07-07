@@ -7,7 +7,7 @@
 
 #include <io/CommunicationLayer.hpp>
 
-#define DEBUG(msg) std::cerr << msg << std::endl;
+//#define DEBUG(msg) std::cerr << msg << std::endl;
 
 int my_rank;
 volatile int msgs_received = 0;
@@ -168,7 +168,7 @@ struct Tester
     //commLayer.startThreads();
   }
 
-  CommunicationLayer commLayer;
+  bliss::io::CommunicationLayer commLayer;
 };
 
 int main(int argc, char *argv[])

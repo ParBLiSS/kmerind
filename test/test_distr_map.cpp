@@ -5,7 +5,7 @@
 #include <io/CommunicationLayer.hpp>
 #include <index/distributed_map.hpp>
 
-#define DEBUG(msg) std::cerr << msg << std::endl;
+//#define DEBUG(msg) std::cerr << msg << std::endl;
 
 int glCommSize;
 
@@ -28,7 +28,7 @@ void test_map(MPI_Comm& comm, int repeat=1000)
   MPI_Comm_size(comm, &p);
   MPI_Comm_rank(comm, &rank);
   glCommSize = p;
-  distributed_counting_map<int, CommunicationLayer> counting_map(comm, p);
+  distributed_counting_map<int, bliss::io::CommunicationLayer> counting_map(comm, p);
   counting_map.setLookupAnswerCallback(std::function<void(std::pair<int, count_t>&)>(&receiveAnswer));
 
   for (int i = 0; i < p; ++i)

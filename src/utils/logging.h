@@ -83,12 +83,12 @@
 
 #include <iostream>
 
-#define FATAL(MSG)      std::cerr << "[fatal]    " << MSG << std::endl;
-#define ERROR(MSG)      std::cerr << "[error]    " << MSG << std::endl;
-#define WARNING(MSG)    std::cerr << "[warning]  " << MSG << std::endl;
-#define INFO(MSG)       std::cerr << "[info]     " << MSG << std::endl;
-#define DEBUG(MSG)      std::cerr << "[debug]    " << MSG << std::endl;
-#define TRACE(MSG)      std::cerr << "[trace]    " << MSG << std::endl;
+#define FATAL(MSG)      std::cerr << "[fatal] " << MSG << std::endl;
+#define ERROR(MSG)      std::cerr << "[error] " << MSG << std::endl;
+#define WARNING(MSG)    std::cerr << "[warning] " << MSG << std::endl;
+#define INFO(MSG)       std::cerr << "[info] " << MSG << std::endl;
+#define DEBUG(MSG)      std::cerr << "[debug] " << MSG << std::endl;
+#define TRACE(MSG)      std::cerr << "[trace] " << MSG << std::endl;
 
 
 
@@ -181,14 +181,67 @@ void init();
 
 #define LOG_INIT() bliss::log::init()
 
+
+
 } // namespace log
 
 } // namespace bliss
 
-
-
 #else
 #error "Invalid value of USE_LOGGER: logger not found."
+#endif
+
+/*******************************
+ *  printf style debug macros  *
+ *******************************/
+#if USE_LOGGER == BLISS_LOGGING_NO_LOG
+
+// empty logging macros (no overhead)
+#define FATALF(MSG, ...)
+#define ERRORF(MSG, ...)
+#define WARNINGF(MSG, ...)
+#define INFOF(MSG, ...)
+#define DEBUGF(MSG, ...)
+#define TRACEF(MSG, ...)
+
+#else
+#define BLISS_SPRINTF_BUFFER_SIZE 256
+
+#define FATALF(msg, ...) {\
+        char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
+        snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
+        FATAL(buffer);\
+        }
+
+#define ERRORF(msg, ...) {\
+        char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
+        snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
+        ERROR(buffer);\
+        }
+
+#define WARNINGF(msg, ...) {\
+        char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
+        snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
+        WARNING(buffer);\
+        }
+
+#define INFOF(msg, ...) {\
+        char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
+        snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
+        INFO(buffer);\
+        }
+
+#define DEBUGF(msg, ...) {\
+        char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
+        snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
+        DEBUG(buffer);\
+        }
+
+#define TRACEF(msg, ...) {\
+        char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
+        snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
+        TRACE(buffer);\
+        }
 #endif
 
 // in case a logger doesn't define an init() function, supply an empty one
