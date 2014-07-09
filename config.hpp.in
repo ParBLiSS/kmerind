@@ -21,4 +21,11 @@ file comment
 // binary location
 #define PROJ_BIN_DIR "@PROJECT_BINARY_DIR@"
 
+// OpenMP pragma "default(none)" clause, for debugging use.
+#ifdef OMP_DEBUG
+#define OMP_SHARE_DEFAULT default(none)
+#else
+#define OMP_SHARE_DEFAULT
+#endif
+
 #endif /* CONFIG_H */

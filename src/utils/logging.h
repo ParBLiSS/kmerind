@@ -46,13 +46,15 @@
 #define BLISS_LOGGING_BOOST_TRIVIAL  3
 /// Use BLISS's customized boost logging wrapper for logging
 #define BLISS_LOGGING_BOOST_CUSTOM   4
+/// using printf
+#define BLISS_LOGGING_PRINTF        5
 
 #include "logger_config.hpp"
 
 // set default logger (in case none is specified via compiler flags)
 #ifndef USE_LOGGER
 // set the default logger to the std::cerr logger
-#define USE_LOGGER BLISS_LOGGING_CERR
+#define USE_LOGGER BLISS_LOGGING_PRINTF
 #endif
 
 
@@ -85,10 +87,29 @@
 
 #define FATAL(MSG)      std::cerr << "[fatal] " << MSG << std::endl;
 #define ERROR(MSG)      std::cerr << "[error] " << MSG << std::endl;
-#define WARNING(MSG)    std::cerr << "[warning] " << MSG << std::endl;
-#define INFO(MSG)       std::cerr << "[info] " << MSG << std::endl;
+#define WARNING(MSG)    std::cerr << "[warn ] " << MSG << std::endl;
+#define INFO(MSG)       std::cerr << "[info ] " << MSG << std::endl;
 #define DEBUG(MSG)      std::cerr << "[debug] " << MSG << std::endl;
 #define TRACE(MSG)      std::cerr << "[trace] " << MSG << std::endl;
+
+
+/*********************************************************************
+ *                     use printf for logging                     *
+ *********************************************************************/
+
+#elif USE_LOGGER == BLISS_LOGGING_PRINTF
+
+// simple output via std::cerr
+// NOTE: this is not thread safe
+#include <sstream>
+
+#define FATAL(MSG)    { std::stringstream ss; ss << MSG; printf("[fatal] %s\n", ss.str().c_str()); }
+#define ERROR(MSG)    { std::stringstream ss; ss << MSG; printf("[error] %s\n", ss.str().c_str()); }
+#define WARNING(MSG)  { std::stringstream ss; ss << MSG; printf("[warn ] %s\n", ss.str().c_str()); }
+#define INFO(MSG)     { std::stringstream ss; ss << MSG; printf("[info ] %s\n", ss.str().c_str()); }
+#define DEBUG(MSG)    { std::stringstream ss; ss << MSG; printf("[debug] %s\n", ss.str().c_str()); }
+#define TRACE(MSG)    { std::stringstream ss; ss << MSG; printf("[trace] %s\n", ss.str().c_str()); }
+
 
 
 
@@ -96,7 +117,7 @@
  *                      use boost::log::trivial                      *
  *********************************************************************/
 
-#elif (USE_LOGGER == BLISS_LOGGING_BOOST_TRIVIAL) && defined(USE_BOOST_LOG)
+#elif USE_LOGGER == BLISS_LOGGING_BOOST_TRIVIAL
 
 // using boost trival logging
 #include <boost/log/trivial.hpp>
@@ -113,7 +134,7 @@
  *             use a customized boost::log based logger              *
  *********************************************************************/
 
-#elif (USE_LOGGER == BLISS_LOGGING_BOOST_CUSTOM) && defined(USE_BOOST_LOG)
+#elif USE_LOGGER == BLISS_LOGGING_BOOST_CUSTOM
 
 #include <iostream>
 
@@ -137,7 +158,14 @@ namespace bliss
 namespace log
 {
 
+  // namespace aliases for boost::log
+  namespace logging = boost::log;
   namespace src = boost::log::sources;
+  namespace expr = boost::log::expressions;
+  namespace sinks = boost::log::sinks;
+  namespace attrs = boost::log::attributes;
+  namespace keywords = boost::log::keywords;
+
 
 
 // We define our own severity levels
@@ -155,16 +183,79 @@ BOOST_LOG_ATTRIBUTE_KEYWORD(severity, "Severity", severity_level)
 extern src::severity_logger<severity_level> global_logger;
 
 
+//// The operator puts a human-friendly representation of the severity level to
+//// the stream
+//std::ostream& operator<< (std::ostream& strm, severity_level level);
+//
+//
+//void log_init_text_sink();
+//
+//
+//// init boost logging
+//void init();
+
 // The operator puts a human-friendly representation of the severity level to
 // the stream
-std::ostream& operator<< (std::ostream& strm, severity_level level);
+std::ostream& operator<< (std::ostream& strm, severity_level level)
+{
+    static const char* strings[] =
+    {
+        "trace",
+        "debug",
+        "info ",
+        "warn ",
+        "error",
+        "fatal"
+    };
+
+    if (static_cast< std::size_t >(level) < sizeof(strings) / sizeof(*strings))
+        strm << strings[level];
+    else
+        strm << static_cast< int >(level);
+
+    return strm;
+}
 
 
-void log_init_text_sink();
+void log_init_text_sink()
+{
+    boost::shared_ptr< logging::core > core = logging::core::get();
+
+    // Create a backend and attach a couple of streams to it
+    boost::shared_ptr< sinks::text_ostream_backend > backend =
+        boost::make_shared< sinks::text_ostream_backend >();
+    backend->add_stream(
+        boost::shared_ptr< std::ostream >(&std::clog, logging::empty_deleter()));
+    //backend->add_stream(
+    //  boost::shared_ptr< std::ostream >(new std::ofstream("sample.log")));
+
+    // Enable auto-flushing after each log record written
+    backend->auto_flush(true);
+
+    // Wrap it into the frontend and register in the core.
+    // The backend requires synchronization in the frontend.
+    typedef sinks::synchronous_sink< sinks::text_ostream_backend > sink_t;
+    boost::shared_ptr< sink_t > sink(new sink_t(backend));
+
+    // Setup the common formatter for all sinks
+    boost::log::formatter fmt = boost::log::expressions::stream
+        << expr::format_date_time< boost::posix_time::ptime >("TimeStamp", "%Y-%m-%d %H:%M:%S.%f")
+        << ": <" << severity << ">\t"
+        // the message includes the file, line and function information
+        << boost::log::expressions::smessage;
+    sink->set_formatter(fmt);
+
+    core->add_sink(sink);
+}
 
 
 // init boost logging
-void init();
+void init()
+{
+    log_init_text_sink();
+    logging::add_common_attributes();
+    printf("USING BOOST_LOG_CUSTOM_LOGGER\n");
+}
 
 
 // macro to add file and line

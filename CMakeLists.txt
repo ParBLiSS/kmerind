@@ -12,7 +12,7 @@ set (bliss_VERSION_MINOR 1)
 ### REQUIRE C++11
 # Initialize CXXFLAGS.
 set(CMAKE_CXX_FLAGS                "-Wall -std=c++11")
-set(CMAKE_CXX_FLAGS_DEBUG          "-O0 -g")
+set(CMAKE_CXX_FLAGS_DEBUG          "-O0 -g -DOMP_DEBUG")
 set(CMAKE_CXX_FLAGS_MINSIZEREL     "-Os")
 set(CMAKE_CXX_FLAGS_RELEASE        "-O3")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
@@ -61,6 +61,7 @@ endif()
 # --------------------------------------------------------------
 if(COMMAND cmake_policy)
   cmake_policy(SET CMP0003 NEW)
+  cmake_policy(SET CMP0012 NEW)
 endif()
 
 # ----------------------------------------------------------------------------
@@ -87,28 +88,108 @@ endif()
 
 
 
-set(ENABLE_BOOST_LOGGING OFF CACHE BOOL "Enable logging using Boost Log (requires Boost ver 1.54+)")
+# LOGGING ENGINE configuration
+function(update_logging_engine varname cacheaccess varval) 
+#       message("${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
 
-# LOGGING config
-if(NOT LOG_ENGINE)
-    if (ENABLE_BOOST_LOGGING)
-      set(LOG_ENGINE "CERR" CACHE STRING
-          "choose a logging engine.  options are NO_LOG CERR BOOST_TRIVIAL BOOST_CUSTOM."
-          FORCE)
-    else()
-      set(LOG_ENGINE "CERR" CACHE STRING
-          "choose a logging engine.  options are NO_LOG CERR."
-          FORCE)    
-    endif()          
-          
-endif(NOT LOG_ENGINE)
-set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
+
+    if (${cacheaccess} STREQUAL READ_ACCESS AND
+        ${varname} STREQUAL ENABLE_OMP_DEBUGGING)
+
+            
+        if (ENABLE_OMP_DEBUGGING)
+
+            # restrict log engine to no_log or printf
+            if (LOG_ENGINE STREQUAL "NO_LOG" OR
+                LOG_ENGINE STREQUAL "PRINTF")
+                
+                set(LOG_ENGINE ${LOG_ENGINE} CACHE STRING
+                "choose a logging engine.  options are NO_LOG PRINTF." FORCE)
+                
+            else (LOG_ENGINE STREQUAL "NO_LOG" OR
+                LOG_ENGINE STREQUAL "PRINTF")
+
+                message("OMP Debugging ENABLED.  Default Log Engine set to NO_LOG")
+                
+                set(LOG_ENGINE "NO_LOG" CACHE STRING
+                "choose a logging engine.  options are NO_LOG PRINTF." FORCE)
+                
+            endif (LOG_ENGINE STREQUAL "NO_LOG" OR
+                LOG_ENGINE STREQUAL "PRINTF")
+            
+        else (ENABLE_OMP_DEBUGGING)
+            # OMP debugging is not on.  so log engine choice depends on whether boost logging is enabled.
+        
+          if (LOG_ENGINE STREQUAL "NO_LOG" OR
+                LOG_ENGINE STREQUAL "CERR" OR
+                LOG_ENGINE STREQUAL "PRINTF" OR
+                LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+                
+                
+            set(LOG_ENGINE ${LOG_ENGINE} CACHE STRING
+            "choose a logging engine.  options are NO_LOG PRINTF CERR BOOST_TRIVIAL BOOST_CUSTOM." FORCE)
+          else (LOG_ENGINE STREQUAL "NO_LOG" OR
+                LOG_ENGINE STREQUAL "CERR" OR
+                LOG_ENGINE STREQUAL "PRINTF" OR
+                LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+                
+                message("OMP Debugging DISABLED.  Default Log Engine set to NO_LOG")
+                
+            set(LOG_ENGINE "NO_LOG" CACHE STRING
+            "choose a logging engine.  options are NO_LOG PRINTF CERR BOOST_TRIVIAL BOOST_CUSTOM." FORCE)
+          endif (LOG_ENGINE STREQUAL "NO_LOG" OR
+                LOG_ENGINE STREQUAL "CERR" OR
+                LOG_ENGINE STREQUAL "PRINTF" OR
+                LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+
+        
+        
+        
+        endif(ENABLE_OMP_DEBUGGING)
+
+
+
+
+    else(${cacheaccess} STREQUAL READ_ACCESS AND
+        ${varname} STREQUAL ENABLE_OMP_DEBUGGING)
+        
+       message("${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
+        
+    endif(${cacheaccess} STREQUAL READ_ACCESS AND
+        ${varname} STREQUAL ENABLE_OMP_DEBUGGING)
+        
+        
+    # set the log engine in the logger_config.hpp file.
+    set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+        "${PROJECT_BINARY_DIR}/logger_config.hpp"
+        @ONLY
+        )
+        
+endfunction(update_logging_engine varname cacheaccess varval)
+
+
+# if OMP_DEBUGGING is enabled, default(none) is set in the omp pragmas.   this means that only NO_LOG and PRINTF logging are compatible.
+set(ENABLE_OMP_DEBUGGING OFF CACHE BOOL "Enable OpenMP debugging (turns on default(none) in omp pragma, requiring NO_LOG or PRINTF logging)")
+variable_watch(ENABLE_OMP_DEBUGGING update_logging_engine)
+if (ENABLE_OMP_DEBUGGING)
+    add_definitions(-DOMP_DEBUG)
+endif(ENABLE_OMP_DEBUGGING)
+    
+
+
+
+
 
 ###### External Library Settings
 #### Boost Library
 #set(EXTRA_LIBS pthread)
-if (ENABLE_BOOST_LOGGING)
-    set(BOOST_LOG_DEFINE "#define USE_BOOST_LOG")
+if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
     set(Boost_USE_MULTITHREADED ON)
     set(Boost_ADDITIONAL_VERSIONS "1.54" "1.54.0")
     set(Boost_DETAILED_FAILURE_MSG ON)
@@ -116,17 +197,50 @@ if (ENABLE_BOOST_LOGGING)
       HINTS /usr /usr/local /usr/local/share /opt/local ENV BOOST_HOME
       DOC "path to Boost root directory")
     # must specify the components otherwise it's a header only usage
-    find_package( Boost REQUIRED COMPONENTS log system program_options)
+    find_package(Boost REQUIRED COMPONENTS system program_options log)
     if (Boost_FOUND)
       include_directories( ${Boost_INCLUDE_DIRS} )
       link_directories( ${Boost_LIBRARY_DIRS} )
+      set(EXTRA_LIBS ${EXTRA_LIBS} ${Boost_LIBRARIES})
+      add_definitions(-DBOOST_LOG_DYN_LINK)
+    else(Boost_FOUND)
+        unset(Boost_USE_MULTITHREADED)
+        unset(Boost_ADDITIONAL_VERSIONS)
+        unset(Boost_DETAILED_FAILURE_MSG)
+        unset(BOOST_ROOT CACHE)
+        
+        set(LOG_ENGINE "NO_LOG" CACHE STRING
+            "choose a logging engine.  options are NO_LOG PRINTF CERR BOOST_TRIVIAL BOOST_CUSTOM." FORCE)
+        message("Did not find boost.  Default Log Engine set to NO_LOG")
+        
+        set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
+        configure_file(
+            "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+            "${PROJECT_BINARY_DIR}/logger_config.hpp"
+            @ONLY
+            )
     endif(Boost_FOUND)
-    set(EXTRA_LIBS ${EXTRA_LIBS} ${Boost_LIBRARIES})
     
     # need this flag for boost log
-    add_definitions(-DBOOST_LOG_DYN_LINK)
-    
-endif()
+else(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+    unset(Boost_USE_MULTITHREADED)
+    unset(Boost_ADDITIONAL_VERSIONS)
+    unset(Boost_DETAILED_FAILURE_MSG)
+    unset(Boost_FOUND)
+    unset(BOOST_ROOT CACHE)
+    unset(Boost_DIR CACHE)
+    unset(Boost_INCLUDE_DIR CACHE)
+    unset(Boost_LIBRARY_DIR CACHE)
+    unset(Boost_LOG_LIBRARY_DEBUG CACHE)
+    unset(Boost_LOG_LIBRARY_RELEASE CACHE)
+    unset(Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG CACHE)
+    unset(Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE CACHE)
+    unset(Boost_SYSTEM_LIBRARY_DEBUG CACHE)
+    unset(Boost_SYSTEM_LIBRARY_RELEASE CACHE)
+
+endif(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
 
 
 #### MPI
@@ -331,11 +445,6 @@ option (BUILD_EXAMPLE_APPLICATIONS "Inform whether sample applications should be
 configure_file(
     "${PROJECT_SOURCE_DIR}/config.hpp.in"
     "${PROJECT_BINARY_DIR}/config.hpp"
-    @ONLY
-    )
-configure_file(
-    "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
-    "${PROJECT_BINARY_DIR}/logger_config.hpp"
     @ONLY
     )
 
