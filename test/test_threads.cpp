@@ -232,7 +232,7 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
 
     //printf("senders = %d\n", senders);
 
-#pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, index, nthreads, loader, senders) default(none)
+#pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, index, nthreads, loader, senders, std::cerr) default(none)
     {
 
 
@@ -287,7 +287,7 @@ void compute_MPI_OMP_P2P(FileLoaderType &loader,
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(loader, buffers, nprocs, nthreads, rank) default(none)
+#pragma omp parallel num_threads(nthreads) shared(loader, buffers, nprocs, nthreads, rank, std::cerr) default(none)
       {
         ParserType parser;
 
@@ -468,7 +468,7 @@ void computeP2P(FileLoaderType &loader,
 
 
 
-#pragma omp parallel sections num_threads(3) shared(comm, nprocs, rank, index, nthreads, loader, mpi_senders, computes, sendQueue, recvQueue, ompi_mpi_unsigned_char, ompi_mpi_int, ompi_request_null) default(none)
+#pragma omp parallel sections num_threads(3) shared(comm, nprocs, rank, index, nthreads, loader, mpi_senders, computes, sendQueue, recvQueue, ompi_mpi_unsigned_char, ompi_mpi_int, ompi_request_null, std::cerr) default(none)
     {
 
 #pragma omp section
@@ -734,7 +734,7 @@ void computeP2P(FileLoaderType &loader,
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(loader, nprocs, nthreads, rank, sendQueue, computes, buffers) default(none) reduction(+:tcount)
+#pragma omp parallel num_threads(nthreads) shared(loader, nprocs, nthreads, rank, sendQueue, computes, buffers, std::cerr) default(none) reduction(+:tcount)
       {
         /// initialize variables.
         ParserType parser;

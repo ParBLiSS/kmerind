@@ -100,7 +100,7 @@ struct Tester
     commLayer.addReceiveCallback(LOOKUP_TAG, std::bind(&Tester::lookup_callback, this, _1, _2, _3));
     commLayer.addReceiveCallback(ANSWER_TAG, std::bind(&Tester::answer_callback, this, _1, _2, _3));
 
-    commLayer.startThreads();
+    commLayer.initCommunication();
 
     // start sending one message to each:
     for (int l = 0; l < repeat_sends; ++l)

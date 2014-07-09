@@ -417,7 +417,7 @@ public:
     this->commLayer.addReceiveCallback(LOOKUP_ANSWER_MPI_TAG, std::bind(&distributed_counting_map::receivedLookupAnswerCallback, this, _1, _2, _3));
 
     // start the threads in the comm layer (if not already running)
-    this->commLayer.startThreads();
+    this->commLayer.initCommunication();
   }
 
   virtual ~distributed_counting_map()
