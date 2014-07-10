@@ -2,11 +2,8 @@
  * @file		Buffer.hpp
  * @ingroup
  * @author	tpan
- * @brief   a thread safe memory buffer.
- * @details provides a reusable, thread safe memory buffer.  uses atomic structure if "THREAD_SAFE" is turned on.
- *          using atomic instead of mutex (which are release acquire operations
- *
- *          default memory model is seq_cst.  we can avoid that sync.
+ * @brief   fixed sized memory buffer declaration and implementations.
+ * @details templated memory buffer classes with fixed sized byte array for storage, including thread safe and thread unsafe declarations and implementations.
  *
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -16,41 +13,52 @@
 #ifndef BUFFER_HPP_
 #define BUFFER_HPP_
 
-#include <cstring>
-#include <cassert>
+#include <cstring>   // memset
+//#include <cstdlib>
 
-#include <memory>
 #include <atomic>
-#include <cstdlib>
-#include <utility>
 #include <mutex>
 
-#include "concurrent/concurrent.hpp"
+#include <memory>     // unique_ptr
+#include <utility>    // move, forward, swap, make_pair
+#include <stdexcept>
+
+#include "concurrent/concurrent.hpp"   // ThreadSafety boolean constants
 
 namespace bliss
 {
   namespace io
   {
 
-
+    /**
+     * Base Buffer template, forward declared with no definition.
+     */
     template<bliss::concurrent::ThreadSafety THREAD_SAFE>
     class Buffer;
 
 
     /**
-     * Thread_safe version of buffer
+     * Thread safe Memory Buffer, which is a fixed size allocated block of memory where data
+     * can be appended to, and read from via pointer.
      *
-     * uses capacity to enforce that we can write.
+     * It uses unique_ptr internally to manage the memory, and supports only MOVE semantics.
+     *
+     * Thread Safety is enforced usign atomic variables - writing to offsets that are atomically computed.
+     * Memory ordering uses acquire/consume and release, and avoids seq_cst.  Only when necessary, mutex lock is used.
      */
     template<>
     class Buffer<bliss::concurrent::THREAD_SAFE>
     {
-        /*
-         * Friend the Buffer<bliss::concurrent::THREAD_UNSAFE> class, because we cannot reference the member function of the Buffer<bliss::concurrent::THREAD_UNSAFE> class
-         * without first declarining it - would create circular reference.
-         *
-         * alternative is to use inheritance, which would require virtual functions that are potentially expensive.
-         */
+
+       // WIP.
+
+
+      /*
+       * Friend the Buffer<bliss::concurrent::THREAD_UNSAFE> class, because we cannot reference the member function of the Buffer<bliss::concurrent::THREAD_UNSAFE> class
+       * without first declarining it - would create circular reference.
+       *
+       * alternative is to use inheritance, which would require virtual functions that are potentially expensive.
+       */
       friend class Buffer<bliss::concurrent::THREAD_UNSAFE>;
 
       protected:
@@ -80,13 +88,19 @@ namespace bliss
          * Constructor.  allocation of memory array is automatic.
          * @param _capacity   The number of bytes to store.
          */
-        explicit Buffer(const size_t _capacity) : capacity(_capacity), size(0), data(new uint8_t[_capacity]) {
+        explicit Buffer(const size_t _capacity) : capacity(_capacity), size(0), data(new uint8_t[_capacity])
+        {
+          if (_capacity == 0)
+            throw std::invalid_argument("Buffer constructor parameter capacity is given as 0");
+
           memset(data.get(), 0, _capacity * sizeof(uint8_t));
-          assert(_capacity > 0);
         };
 
         Buffer(void* _data, const size_t count) : capacity(count), size(count), data(static_cast<uint8_t*>(_data)) {
-          assert(count > 0);
+          if (count == 0)
+            throw std::invalid_argument("Buffer constructor parameter count is given as 0");
+          if (_data == nullptr)
+            throw std::invalid_argument("Buffer constructor parameter _data is given as nullptr");
         }
 
         /**

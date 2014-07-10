@@ -68,7 +68,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
     if (result.second != -1)
       fullBuffers.waitAndPush(result.second);
   }
-  printf("Number of failed attempt to append to buffer is %d, success %d. full buffers size: %lu.  numFullBuffers = %d.  num failed append due to no buffer = %d\n", count2, count, fullBuffers.size(), count3, count4);
+  printf("Number of failed attempt to append to buffer is %d, success %d. full buffers size: %lu.  numFullBuffers = %d.  num failed append due to no buffer = %d\n", count2, count, fullBuffers.getSize(), count3, count4);
 
   printf("TEST release\n");
   count = 0;
@@ -90,7 +90,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   }
 //;  printf("\n");
   int expected = 0;
-  if (count != expected) printf("ERROR: number of failed attempt to release buffer should be %d, actual %d. buffers size: %lu \n", expected, count, fullBuffers.size());
+  if (count != expected) printf("ERROR: number of failed attempt to release buffer should be %d, actual %d. buffers size: %lu \n", expected, count, fullBuffers.getSize());
 
   buffers.reset();
 
@@ -118,7 +118,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
     }
   }
   //printf("\n");
-  printf("Number of failed attempt to append to buffer is %d, success %d. full buffers size: %lu, released %d\n", count, count2, fullBuffers.size(), count3);
+  printf("Number of failed attempt to append to buffer is %d, success %d. full buffers size: %lu, released %d\n", count, count2, fullBuffers.getSize(), count3);
 
 };
 

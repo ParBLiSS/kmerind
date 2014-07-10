@@ -76,7 +76,7 @@ void testWaitAndPop1(bliss::concurrent::ThreadSafeQueue<T> &queue) {
   while (queue.tryPop().first) {
     ++count3;
   }
-  if (!queue.empty() || count3 != 0) printf("TSQueue capacity %lu, finished waitAndPop 1 thread. %d successful, %d flushed.  empty? %s\n", queue.getCapacity(), count, count3, (queue.empty() ? "yes" : "no"));
+  if (!queue.isEmpty() || count3 != 0) printf("TSQueue capacity %lu, finished waitAndPop 1 thread. %d successful, %d flushed.  empty? %s\n", queue.getCapacity(), count, count3, (queue.isEmpty() ? "yes" : "no"));
 };
 
 template<typename T>
@@ -95,7 +95,7 @@ void testTryPop1(bliss::concurrent::ThreadSafeQueue<T> &queue) {
   while (queue.tryPop().first) {
     ++count3;
   }
-  if (!queue.empty() || (count == 0 && count3 == 0)) printf("TSQueue capacity %lu, finished tryPop 1 thread. %d successful, %d failed, %d flushed.  empty? %s\n", queue.getCapacity(), count, count2, count3, (queue.empty() ? "yes" : "no"));
+  if (!queue.isEmpty() || (count == 0 && count3 == 0)) printf("TSQueue capacity %lu, finished tryPop 1 thread. %d successful, %d failed, %d flushed.  empty? %s\n", queue.getCapacity(), count, count2, count3, (queue.isEmpty() ? "yes" : "no"));
 
 };
 
@@ -140,7 +140,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T> &queue, const int nConsume
   // or tasks fast and task create slow, then task queue short, and data queue not empty
 
   // now use parallel for to flush the data queue
-  size_t size = queue.size();
+  size_t size = queue.getSize();
 #pragma omp parallel for num_threads(nConsumer) default(none) shared(queue, size, counts2, counts3)
   for (int i = 0; i < size; ++i) {
     if (queue.tryPop().first)
@@ -158,7 +158,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T> &queue, const int nConsume
     count2 = counts2[omp_get_thread_num()];
     count3 = counts3[omp_get_thread_num()];
   }
-  if (!queue.empty() || (count == 0 && count3 == 0)) printf("TSQueue capacity %lu, finished tryPop. %d successful, %d failed, %d flushed.  empty? %s\n", queue.getCapacity(), count, count2, count3, (queue.empty() ? "yes" : "no"));
+  if (!queue.isEmpty() || (count == 0 && count3 == 0)) printf("TSQueue capacity %lu, finished tryPop. %d successful, %d failed, %d flushed.  empty? %s\n", queue.getCapacity(), count, count2, count3, (queue.isEmpty() ? "yes" : "no"));
 
 };
 

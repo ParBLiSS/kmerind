@@ -411,7 +411,7 @@ public:
   {
     ReceivedMessage msg;
     // while there is still work to be done:
-    while (!recvDone.load() || !recvQueue.empty() )
+    while (!recvDone.load() || !recvQueue.isEmpty() )
     {
       // get next element from the queue, wait if none is available
       auto result = std::move(recvQueue.waitAndPop());
@@ -627,7 +627,7 @@ protected:
       }
     }
 
-    if (finishing.load() && sendQueue.empty() && sendInProgress.empty()) {
+    if (finishing.load() && sendQueue.isEmpty() && sendInProgress.empty()) {
       // not using sendAccept as check - sendAccept is cleared BEFORE the last
       // tag end messages starts to be sent, and definitely before the app end
       // message starts to be sent so sendDone may be set to true too early,
