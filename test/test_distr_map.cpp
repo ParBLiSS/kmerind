@@ -9,7 +9,7 @@
 
 int glCommSize;
 
-void receiveAnswer(std::pair<int, count_t>& answer)
+void receiveAnswer(std::pair<int, bliss::index::count_t>& answer)
 {
   if (answer.second != 1000u * glCommSize * answer.first)
   {
@@ -28,19 +28,18 @@ void test_map(MPI_Comm& comm, int repeat=1000)
   MPI_Comm_size(comm, &p);
   MPI_Comm_rank(comm, &rank);
   glCommSize = p;
-  distributed_counting_map<int, bliss::io::CommunicationLayer> counting_map(comm, p);
-  counting_map.setLookupAnswerCallback(std::function<void(std::pair<int, count_t>&)>(&receiveAnswer));
+  bliss::index::distributed_counting_map<int, bliss::io::CommunicationLayer> counting_map(comm, p);
+  counting_map.setLookupAnswerCallback(std::function<void(std::pair<int, bliss::index::count_t>&)>(&receiveAnswer));
 
   for (int i = 0; i < p; ++i)
   {
     for (int j = 0; j < i*repeat; ++j)
     {
-      counting_map.remoteInsert(i);
+      counting_map.insert(i);
     }
   }
 
   counting_map.flush();
-
 
   for (int i = 0; i < p; ++i)
   {
