@@ -23,15 +23,6 @@
 // include MPI
 #include <mpi.h>
 
-// TODO LIST:
-//  - [x] split up distributed index into multimap and counting map
-//  - [x] populate(Iterator)
-//  - [x] WAIT FOR COMM_LAYER: flush()
-//  - [x] expose local iterators
-//  - [x] finish the count Histrogram
-//  - [x] filter() function -> (maybe with broadcast??)
-//  - [ ] proper flushing of stages
-
 
 template<typename K, typename T, typename CommunicationLayer, typename LocalContainer>
 class _distributed_map_base
