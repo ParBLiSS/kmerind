@@ -32,7 +32,18 @@ namespace index
 /// Type for the counting map
 typedef uint32_t count_t;
 
-template<typename K, typename T, typename CommunicationLayer, typename LocalContainer>
+/**
+ * @brief A shared base class for the distributed_multimap and
+ *        distributed_counting_map implementations.
+ *
+ * @tparam K                    The key type.
+ * @tparam T                    The value type.
+ * @tparam CommunicationLayer   The CommunicationLayer class type.
+ * @tparam LocalContainer       The local container type (unordered_map or
+ *                              unodered_multimap)
+ */
+template<typename K, typename T, typename CommunicationLayer,
+         typename LocalContainer>
 class _distributed_map_base
 {
 public:
@@ -90,6 +101,13 @@ public:
     return local_map.end();
   }
 
+  /**
+   * @brief Flushes all pending operations.
+   *
+   * Since all insert and lookup operations are executed asynchronosly,
+   * calling this function ensures that all pending operations have been
+   * executed, including that all pending lookups have returned an answer.
+   */
   void flush()
   {
     if (has_pending_inserts)
@@ -105,6 +123,14 @@ public:
     }
   }
 
+  /**
+   * @brief Posts an asynchronous lookup for the given key.
+   *
+   * This function returns immediately, the answer to the lookup will be
+   * returned by the callback function set by `setLookupAnswerCallback()`.
+   *
+   * @param key The key to look-up.
+   */
   void asyncLookup(const K& key)
   {
     // check that there is a valid callback function
@@ -118,71 +144,16 @@ public:
     has_pending_lookups = true;
   }
 
+  /**
+   * @brief Sets the callback function for received answers to asynchronously
+   *        posted lookups.
+   *
+   * @param callbackFunction    The function to call with all received answers
+   *                            to lookups.
+   */
   void setLookupAnswerCallback(const std::function<void(std::pair<K, T>&)>& callbackFunction)
   {
     lookupAnswerCallbackFunc = callbackFunction;
-  }
-
-protected:
-  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, std::function<std::size_t(K)> hashFunction = std::hash<K>())
-      : commLayer(mpi_comm, comm_size), comm(mpi_comm), hashFunct(hashFunction),
-        has_pending_inserts(false), has_pending_lookups(false)
-  {
-  }
-
-  virtual ~_distributed_map_base() {}
-
-  // sends key only
-  void sendKey(const K& key, const int dstRank, const int tag)
-  {
-    // cast key into pointer and get byte size
-    const uint8_t* msg = reinterpret_cast<const uint8_t*>(&key);
-    const std::size_t count = sizeof(key);
-
-    // send the key as a message with the approriate tag
-    commLayer.sendMessage(msg, count, dstRank, tag);
-  }
-
-  // sends key and value
-  void sendPair(const K& key, const T& value, const int dstRank, const int tag)
-  {
-    // create the pair and call the overloaded function
-    std::pair<K, T> keyElement(key, value);
-    this->sendPair(keyElement, dstRank, tag);
-  }
-
-  // sends key-value pair
-  void sendPair(const std::pair<K, T>& keyValue, const int dstRank, const int tag)
-  {
-    // create key-value pair and serialize as pointer
-    const uint8_t* msg = reinterpret_cast<const uint8_t*>(&keyValue);
-    const std::size_t count = sizeof(keyValue);
-
-    // send the message
-    commLayer.sendMessage(msg, count, dstRank, tag);
-  }
-
-  // returns the target rank for a given key (uses the distribution function)
-  int getTargetRank(const K& key)
-  {
-    // get the target rank for the processor
-    int size = commLayer.getCommSize();
-    return hashFunct(key) % size;
-  }
-
-
-  // get the count per local element for different local containers
-  inline std::size_t getLocalCount(const std::unordered_multimap<K, T>& localMap, const std::pair<K, T>& item)
-  {
-    // use the maps count() function
-    return localMap.count(item.first);
-  }
-
-  inline std::size_t getLocalCount(const std::unordered_map<K, T>& localMap, const std::pair<K, T>& item)
-  {
-    // this is a counting map: i.e. the value of (key,value) is the count
-    assert(localMap.find(item.first) != localMap.end());
-    return static_cast<std::size_t>(item.second);
   }
 
   /**
@@ -214,13 +185,20 @@ protected:
     }
   }
 
-  // TODO: - granularity/resolution of histogram (i.e., bin size)
-  //       - sampling rather than full histogram (estimation)
+  /**
+   * @brief Returns a histrogram of counts for all elements in the distributed
+   *        hash table.
+   *
+   * The valid histrogram is returned on ALL MPI processes. This function has
+   * to be called by ALL MPI processes of the given MPI communicator.
+   *
+   * TODO: [ ] granularity/resolution of histogram (i.e., bin sizes as param)
+   *       [ ] sampling rather than full histogram (estimation)
+   *
+   * @return The histrogram of counts as std::vector<int>.
+   */
   std::vector<int> countHistrogram()
   {
-    // determine some granuarity?
-    // TODO
-
     // first determine the maximum count
     uint64_t local_max_count = 0; // use uint64_t for all systems!
     for (auto iter=this->local_map.begin(); iter!=this->local_map.end();
@@ -257,6 +235,126 @@ protected:
 
     return count_hist;
   }
+
+protected:
+  /**
+   * @brief Constructs the shared base class.
+   *
+   * @param mpi_comm        The MPI communicator to pass onto the communication
+   *                        layer.
+   * @param comm_size       The size of the MPI communicator, needed for
+   *                        initialization.
+   * @param hashFunction    The hash function to use for distributing elements
+   *                        accross processors. Defaults to std::hash<K>().
+   */
+  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, std::function<std::size_t(K)> hashFunction = std::hash<K>())
+      : commLayer(mpi_comm, comm_size), comm(mpi_comm), hashFunct(hashFunction),
+        has_pending_inserts(false), has_pending_lookups(false)
+  {
+  }
+
+  /**
+   * @brief
+   */
+  virtual ~_distributed_map_base() {}
+
+  /**
+   * @brief Helper function to send the given key to the given rank.
+   *
+   * @param key     The key to send.
+   * @param dstRank The destination rank.
+   * @param tag     The message tag used for sending.
+   */
+  void sendKey(const K& key, const int dstRank, const int tag)
+  {
+    // cast key into pointer and get byte size
+    const uint8_t* msg = reinterpret_cast<const uint8_t*>(&key);
+    const std::size_t count = sizeof(key);
+
+    // send the key as a message with the approriate tag
+    commLayer.sendMessage(msg, count, dstRank, tag);
+  }
+
+  /**
+   * @brief Helper function to send the given (key,value) pair to the given rank.
+   *
+   * @param key     The key to send.
+   * @param value   The value to send.
+   * @param dstRank The destination rank.
+   * @param tag     The message tag used for sending.
+   */
+  void sendPair(const K& key, const T& value, const int dstRank, const int tag)
+  {
+    // create the pair and call the overloaded function
+    std::pair<K, T> keyElement(key, value);
+    this->sendPair(keyElement, dstRank, tag);
+  }
+
+  /**
+   * @brief Helper function to send the given (key,value) pair to the given rank.
+   *
+   * @param keyValue    The std::pair of (key,value) to send.
+   * @param dstRank     The destination rank.
+   * @param tag         The message tag used for sending.
+   */
+  void sendPair(const std::pair<K, T>& keyValue, const int dstRank, const int tag)
+  {
+    // create key-value pair and serialize as pointer
+    const uint8_t* msg = reinterpret_cast<const uint8_t*>(&keyValue);
+    const std::size_t count = sizeof(keyValue);
+
+    // send the message
+    commLayer.sendMessage(msg, count, dstRank, tag);
+  }
+
+  // returns the target rank for a given key (uses the distribution function)
+  /**
+   * @brief Returns the target rank for a given key.
+   *
+   * Uses the given hash function to determine where an element with the given
+   * key has to be send to or retrieved from.
+   *
+   * @param key     The key for which to determine the target rank.
+   *
+   * @return        The target rank of the processor to which the given key
+   *                belongs.
+   */
+  int getTargetRank(const K& key)
+  {
+    // get the target rank for the processor
+    int size = commLayer.getCommSize();
+    return hashFunct(key) % size;
+  }
+
+  /**
+   * @brief Returns the local count of a given key.
+   *
+   * @param localMap    The local map data structure.
+   * @param item        The item to lookup the count for.
+   *
+   * @return    The count of elements with the given item's key.
+   */
+  inline std::size_t getLocalCount(const std::unordered_multimap<K, T>& localMap, const std::pair<K, T>& item)
+  {
+    // use the maps count() function
+    return localMap.count(item.first);
+  }
+
+  /**
+   * @brief Returns the local count of a given key.
+   *
+   * @param localMap    The local map data structure.
+   * @param item        The item to lookup the count for.
+   *
+   * @return    The count of elements with the given item's key.
+   */
+  inline std::size_t getLocalCount(const std::unordered_map<K, T>& localMap, const std::pair<K, T>& item)
+  {
+    // this is a counting map: i.e. the value of (key,value) is the count
+    assert(localMap.find(item.first) != localMap.end());
+    return static_cast<std::size_t>(item.second);
+  }
+
 
   void receivedLookupCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
