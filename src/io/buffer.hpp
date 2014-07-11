@@ -306,7 +306,8 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<TS, bool>::type append(const void* _data, const size_t count) const {
 
-          if (capacity == 0) return false;
+          if (capacity == 0)
+            throw std::length_error("Buffer capacity is 0");
 
           std::unique_lock<std::mutex> lock(mutex);
           size_t s = size.fetch_add(count, std::memory_order_relaxed);  // no memory ordering needed within mutex lock
@@ -337,7 +338,8 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, bool>::type append(const void* typed_data, const size_t count) const {     // const method because the user will have const reference to Buffers.
                                                                          // because of the const-ness, we have mutable data and size.
-          if (capacity == 0) return false;
+          if (capacity == 0)
+            throw std::length_error("Buffer capacity is 0");
 
           if ((size + count) > capacity) return false;
 
@@ -375,7 +377,8 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<TS, bool>::type append_lockfree(const void* typed_data, const size_t count) const {
 
-          if (capacity == 0) return false;
+          if (capacity == 0)
+            throw std::length_error("Buffer capacity is 0");
 
           // try with compare and exchange weak.
           size_t s = size.load(std::memory_order_consume);
