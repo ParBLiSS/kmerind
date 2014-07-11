@@ -218,7 +218,7 @@ int main(int argc, char** argv) {
 
 
   ////////////// timing.  the insert before this is to warm up.
-  int cap = 10000;
+  int cap = 1000000;
 
   bliss::io::Buffer<bliss::concurrent::THREAD_SAFE> tsBuffer5(cap);
 

@@ -261,8 +261,10 @@ namespace bliss
          * @param[out] fullBufferId   id of the full buffer, if full.  if not full, -1.  if -1, guaranteed to return false as well.
          * @return                    true if insert is successful (guarantee -1 fullBufferId.  false if insert fails, or if a full buffer is returned.
          */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety, typename std::enable_if<TS>::type* = nullptr >
-        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
+        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+        typename std::enable_if<TS, std::pair<bool, BufferIdType> >::type append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
+//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety, typename std::enable_if<TS>::type* = nullptr >
+//        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
 
 
           /// if there is not enough room for the new data in even a new buffer, LOGIC ERROR IN CODE: throw exception
@@ -350,8 +352,10 @@ namespace bliss
          * @param[out] fullBufferId   id of the full buffer, if full.  if not full, -1.
          * @return
          */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety, typename std::enable_if<!TS>::type* = nullptr >
-        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
+        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+        typename std::enable_if<!TS, std::pair<bool, BufferIdType> >::type append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
+//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety, typename std::enable_if<!TS>::type* = nullptr >
+//        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
 
           /// if there is not enough room for the new data in even a new buffer, throw exception
           if (count > this->bufferCapacity) {
