@@ -2,7 +2,8 @@
  * @file    distributed_map.hpp
  * @ingroup index
  * @author  Patrick Flick <patrick.flick@gmail.com>
- * @brief   descr
+ * @brief   Implements the distributed_multimap and distributed_counting_map
+ *          data structures.
  *
  * Copyright (c) TODO
  *
@@ -356,6 +357,16 @@ protected:
   }
 
 
+  /**
+   * @brief Callback function for received lookup messages.
+   *
+   * Performs the actual lookup in the local data structure and sends a message
+   * as reply.
+   *
+   * @param msg         The message data received.
+   * @param count       The number of bytes received.
+   * @param fromRank    The source rank of the message.
+   */
   void receivedLookupCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
     // deserialize
@@ -375,6 +386,16 @@ protected:
     }
   }
 
+  /**
+   * @brief Callback function for received lookup answers.
+   *
+   * Deserializes the answer to lookup queries and calls the
+   * given callback function.
+   *
+   * @param msg         The message data received.
+   * @param count       The number of bytes received.
+   * @param fromRank    The source rank of the message.
+   */
   void receivedLookupAnswerCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
     // deserialize
@@ -418,6 +439,15 @@ protected:
 };
 
 
+/**
+ * @brief   A distributed, asynchronous multimap.
+ *
+ * This can hold multiple elements with identical key.
+ *
+ * @tparam K                    The key type.
+ * @tparam T                    The value type.
+ * @tparam CommunicationLayer   The CommunicationLayer class type.
+ */
 template<typename K, typename T, typename CommunicationLayer>
 class distributed_multimap
   : public _distributed_map_base<K, T,
@@ -435,6 +465,16 @@ public:
   typedef std::pair<K, T> value_type;
 
 
+  /**
+   * @brief Constructs the distributed multimap
+   *
+   * @param mpi_comm        The MPI communicator to pass onto the communication
+   *                        layer.
+   * @param comm_size       The size of the MPI communicator, needed for
+   *                        initialization.
+   * @param hashFunction    The hash function to use for distributing elements
+   *                        accross processors. Defaults to std::hash<K>().
+   */
   distributed_multimap (MPI_Comm mpi_comm, int comm_size,
         std::function<std::size_t(K)> hashFunction = std::hash<K>())
       : _base_class(mpi_comm, comm_size, hashFunction)
@@ -455,6 +495,9 @@ public:
     this->commLayer.initCommunication();
   }
 
+  /**
+   * @brief Destructor.
+   */
   virtual ~distributed_multimap() {
     // finish all three tags in order
     this->commLayer.finishTag(_base_class::INSERT_MPI_TAG);
@@ -462,6 +505,14 @@ public:
     this->commLayer.finishTag(_base_class::LOOKUP_ANSWER_MPI_TAG);
   }
 
+  /**
+   * @brief Inserts the given (key,value) pair into this distributed map.
+   *
+   * The pair might be inserted on a remote processor based on the hashing
+   * function.
+   *
+   * @param keyvalue    The (key,value) pair (std::pair) to insert.
+   */
   void insert(const std::pair<K, T>& keyvalue)
   {
     int targetRank = this->getTargetRank(keyvalue.first);
@@ -469,6 +520,15 @@ public:
     this->has_pending_inserts = true;
   }
 
+  /**
+   * @brief Inserts the given (key,value) pair into this distributed map.
+   *
+   * The pair might be inserted on a remote processor based on the hashing
+   * function.
+   *
+   * @param key     The key to insert.
+   * @param value   The value to insert.
+   */
   void insert(const K& key, const T& value)
   {
     int targetRank = this->getTargetRank(key);
@@ -476,6 +536,17 @@ public:
     this->has_pending_inserts = true;
   }
 
+  /**
+   * @brief Populates the distributed map by bulk-inserting elements from the
+   *        given iterators.
+   *
+   * This function blocks until all elements haven been inserted from all
+   * processors.
+   *
+   * @tparam Iterator   An input iterator with value_type std::pair<K,T>.
+   * @param begin       Iterator to the first element which will be inserted.
+   * @param end         Iterator to one element past the last element to insert.
+   */
   template<typename Iterator>
   void populate(const Iterator& begin, const Iterator& end)
   {
@@ -497,7 +568,15 @@ public:
   }
 
 protected:
-  // for positional index
+  /**
+   * @brief Callback function for received inserts.
+   *
+   * Deserializes the message data and performs the local insertions.
+   *
+   * @param msg         The message data received.
+   * @param count       The number of bytes received.
+   * @param fromRank    The source rank of the message.
+   */
   void receivedInsertCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
     // deserialize
@@ -514,6 +593,16 @@ protected:
 };
 
 
+/**
+ * @brief   A distributed, asynchronous map which counts how many times an
+ *          element with identical key is inserted.
+ *
+ * This is a map with (key->count). Each time an element with key `k` is
+ * inserted, the count of that element is increased: `map[k]++`.
+ *
+ * @tparam K                    The key type.
+ * @tparam CommunicationLayer   The CommunicationLayer class type.
+ */
 template<typename K, typename CommunicationLayer>
 class distributed_counting_map
  : public _distributed_map_base<K, count_t, CommunicationLayer,
@@ -533,6 +622,16 @@ public:
   // the value type of the (key,value) pairs in the hash table
   typedef count_t T;
 
+  /**
+   * @brief Constructs the distributed counting map.
+   *
+   * @param mpi_comm        The MPI communicator to pass onto the communication
+   *                        layer.
+   * @param comm_size       The size of the MPI communicator, needed for
+   *                        initialization.
+   * @param hashFunction    The hash function to use for distributing elements
+   *                        accross processors. Defaults to std::hash<K>().
+   */
   distributed_counting_map (MPI_Comm mpi_comm, int comm_size,
           std::function<std::size_t(K)> hashFunction = std::hash<K>())
       : _base_class(mpi_comm, comm_size, hashFunction)
@@ -553,6 +652,9 @@ public:
     this->commLayer.initCommunication();
   }
 
+  /**
+   * @brief Destructor.
+   */
   virtual ~distributed_counting_map()
   {
     this->commLayer.finishTag(_base_class::INSERT_MPI_TAG);
@@ -560,6 +662,14 @@ public:
     this->commLayer.finishTag(_base_class::LOOKUP_ANSWER_MPI_TAG);
   }
 
+  /**
+   * @brief Inserts the given key into the distributed counting map.
+   *
+   * If this key has been previously inserted, this increases its count by 1.
+   * Otherwise the key is newly inserted and its count set to 1.
+   *
+   * @param key     The key to insert.
+   */
   void insert(const K& key)
   {
     int targetRank = this->getTargetRank(key);
@@ -567,6 +677,17 @@ public:
     this->has_pending_inserts = true;
   }
 
+  /**
+   * @brief Populates the distributed map by bulk-inserting elements from the
+   *        given iterators.
+   *
+   * This function blocks until all elements haven been inserted from all
+   * processors.
+   *
+   * @tparam Iterator   An input iterator with value_type std::pair<K,T>.
+   * @param begin       Iterator to the first element which will be inserted.
+   * @param end         Iterator to one element past the last element to insert.
+   */
   template<typename Iterator>
   void populate(const Iterator& begin, const Iterator& end)
   {
@@ -587,7 +708,16 @@ public:
   }
 
 protected:
-  // for counting index
+  /**
+   * @brief Callback function for received inserts.
+   *
+   * Deserializes the message data and sets or increases the local count of the
+   * received keys.
+   *
+   * @param msg         The message data received.
+   * @param count       The number of bytes received.
+   * @param fromRank    The source rank of the message.
+   */
   void receivedCountCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
     // deserialize
