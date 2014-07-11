@@ -64,6 +64,8 @@
 #include "io/buffer.hpp"
 #include "io/buffer_pool.hpp"
 
+// TODO:  document, add stdexcept.
+
 
 #include <iterator> // for ostream_iterator
 
