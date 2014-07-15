@@ -21,7 +21,7 @@
 template<typename PoolType>
 void testPool(PoolType && pool, const std::string &name, int pool_threads, int buffer_threads) {
 
-  printf("TESTING %s: pool threads %d, buffer threads %d\n", name.c_str(), pool_threads, buffer_threads);
+  printf("TESTING %s %s: pool threads %d, buffer threads %d\n", name.c_str(), (pool.isFixedSize() ? "FIXED" : "GROW"),  pool_threads, buffer_threads);
 
   printf("TEST acquire\n");
   int expected;
@@ -36,7 +36,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   }
   expected = pool.getCapacity();
   expected = std::max(0, 100 - expected);
-  if (count != expected) printf("ERROR: number of failed attempt to acquire buffer should be %d, actual %d.  pool capacity %lu, size: %lu \n", expected, count, pool.getCapacity(), pool.getSize());
+  if (count != expected) printf("ERROR: number of failed attempt to acquire buffer should be %d, actual %d.  pool capacity %d, size: %d \n", expected, count, pool.getCapacity(), pool.getSize());
   pool.reset();
 
   printf("TEST acquire with growth\n");
@@ -51,7 +51,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   }
   expected = pool.getCapacity();
   expected = std::max(0, 150 - expected);
-  if (count != expected) printf("ERROR: number of failed attempt to acquire buffer should be %d, actual %d.  pool size: %lu \n", expected, count, pool.getSize());
+  if (count != expected) printf("ERROR: number of failed attempt to acquire buffer should be %d, actual %d.  pool size: %d \n", expected, count, pool.getSize());
 
 
 
@@ -62,14 +62,13 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   for (id = 0; id < 350; ++id) {
     try {
       pool.releaseBuffer(id);
-    } catch(const bliss::io::IOException & e)
+    } catch (const std::out_of_range & e)
     {
       ++count;
     }
   }
-  expected = pool.getCapacity();
-  expected = std::max(0, 350 - expected);
-  if (count != expected) printf("ERROR: number of failed attempt to release buffer should be %d, actual %d. pool size: %lu \n", expected, count, pool.getSize());
+  expected = 350 - pool.getSize();
+  if (count != expected) printf("ERROR: number of failed attempt to release buffer should be %d, actual %d. pool size: %d \n", expected, count, pool.getSize());
 
   printf("TEST access by multiple threads, each a separate buffer.\n");
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool)
@@ -96,43 +95,6 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
     printf(", %d", u);
   }
   printf("\n");
-
-  pool.reset();
-
-  printf("TEST access with growth from each thread\n");
-  if (pool.isFixedSize()) {
-    expected = pool.getSize();
-#pragma omp parallel num_threads(pool_threads) default(none) shared(pool)
-    {
-      try {
-        pool[155 + omp_get_thread_num()];
-        printf("ERROR: %d accessing buffer beyond originally allocated in fixed size pool: %lu \n", omp_get_thread_num(), pool.getSize());
-      } catch (const bliss::io::IOException & e) {
-        //printf("%d incorrectly thrown exception when accessing wrong buffer - reallocation failed. pool size: %lu \n", omp_get_thread_num(), pool.getSize());
-      }
-    }
-    if (pool.getSize() != expected) printf("ERROR: accessing buffer beyond originally allocated.  reallocated. pool size: %lu, expected %d\n", pool.getSize(), expected);
-
-
-  } else {
-#pragma omp parallel num_threads(pool_threads) default(none) shared(pool)
-    {
-      try {
-        pool[155 + omp_get_thread_num()];
-        //printf("%d accessing buffer beyond originally allocated.  reallocated. pool size: %lu \n", omp_get_thread_num(), pool.getSize());
-      } catch (const bliss::io::IOException & e) {
-        printf("ERROR: %d incorrectly thrown exception when accessing wrong buffer - reallocation failed. pool size: %lu \n", omp_get_thread_num(), pool.getSize());
-      }
-
-      int v = 128;
-      pool[155 + omp_get_thread_num()].append(&v, sizeof(int));
-      int u = reinterpret_cast<const int*>(pool[155 + omp_get_thread_num()].getData())[0];
-      if (v != u) printf("ERROR: %d value inserted was %d, getting %d\n", omp_get_thread_num(), v, u);
-
-    }
-    expected = pool_threads + 155;
-    if (pool.getSize() != expected) printf("ERROR: accessing buffer beyond originally allocated.  reallocated. pool size: %lu, expected %d\n", pool.getSize(), expected);
-  }
 
   pool.reset();
   omp_set_nested(1);
@@ -236,36 +198,36 @@ int main(int argc, char** argv) {
   /// testing buffer_pool. thread unsafe
 
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_UNSAFE>(8, 8192), "FIXEDSIZE thread unsafe pool", 1, 1);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_UNSAFE>(8, 8192), "thread unsafe pool", 1, 1);
 
 
 
 
   /// testing buffer_pool. thread safe
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 1, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 1, 2);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 1, 3);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 1, 4);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 1, 8);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 1, 1);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 1, 2);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 1, 3);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 1, 4);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 1, 8);
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 2, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 2, 2);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 2, 3);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 2, 4);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 2, 1);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 2, 2);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 2, 3);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 2, 4);
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 3, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 3, 2);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread safe buffer", 3, 3);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 3, 1);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 3, 2);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 3, 3);
 
 
 
   /// testing buffer_pool, thread safe pool, unsafe buffers.
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread unsafe buffer", 1, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread unsafe buffer", 2, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread unsafe buffer", 3, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "FIXEDSIZE thread safe pool, thread unsafe buffer", 4, 1);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "thread safe pool, thread unsafe buffer", 1, 1);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "thread safe pool, thread unsafe buffer", 2, 1);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "thread safe pool, thread unsafe buffer", 3, 1);
+  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "thread safe pool, thread unsafe buffer", 4, 1);
 
 
   // this one is not defined because it's not logical.  not compilable.

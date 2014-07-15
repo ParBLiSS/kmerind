@@ -60,9 +60,12 @@
 #include <type_traits>
 #include <typeinfo>
 #include <iostream>
+#include <sstream>
+
 #include "config.hpp"
 #include "io/buffer.hpp"
 #include "io/buffer_pool.hpp"
+#include "io/io_exception.hpp"
 
 // TODO:  document, add stdexcept.
 
@@ -138,7 +141,7 @@ namespace bliss
          * after the buffer has been consumed, release it back to the pool
          * @param id
          */
-        void releaseBuffer(const BufferIdType &id) throw (bliss::io::IOException) {
+        void releaseBuffer(const BufferIdType &id) {
           pool.releaseBuffer(id);
         }
 
