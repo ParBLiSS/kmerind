@@ -1,49 +1,32 @@
+
+
+
 /**
  * @file		MessageBuffers.hpp
  * @ingroup
  * @author	tpan
- * @brief   buffering data for MPI send/receive
- * @details MessageBuffers provides buffering for MPI Send/Receive messages.
- *          Terminology:  Message is an MPI compatible message, serialized from buffer, including the appropriate metadata.
- *                        Element is a single piece of data from the application code.
- *                        Buffer is a collection of elements.
+ * @brief   MessageBuffers base class and SendMessageBuffers subclass for buffering data for MPI send/receive
+ * @details SendMessageBuffers is a collection of in-memory Buffers that containing data that
+ *            1. will be sent to remote destinations, such as a MPI process
+ *            2. was received from remote destinations, such as a MPI process
  *
+ *          In contrast to BufferPool, whose purpose is to prevent local process from blocking waiting for a buffer to clear,
+ *          MessageBuffer's purpose is to batch the data to be transmitted, using BufferPool to prevent local process from blocking.
  *
- *          provides functions for storing single and collection of elements into the buffer, and function to serialize
- *          the buffer into a message.
+ *          As there may be several different patterns of interactions between MessageBuffers and other MessageBuffers, MessageBuffers and
+ *          local thread/process, there is a base class MessageBuffers that acts as proxy to the underlying BufferPool (memory management).
+ *          Two subclasses are planned:  SendMessageBuffers and RecvMessageBuffers, but only SendMessageBuffers has been implemented.
  *
- *          2 modes:  send:  application code populates the buffer either 1 element at a time or multiple elements at a time
- *                            then application code will request the message
- *                    recv:  application code gets a buffer region and receive from comm channel
- *                            application code will request the entire buffer.
+ *          Envisioned patterns of interaction:
+ *            Send:     MessageBuffers -> mpi send
+ *            Recv:     mpi recv -> MessageBuffers
+ *            Forward:  mpi recv -> mpi send
+ *            Local:    MessageBuffers -> MessageBuffers
  *
- *          each element is destined for a particular mpi target rank, along with a tag that denotes its type.  The add method uses a byte array along with size.
- *          buffer has a limited size.
+ *          The SendMessageBuffers accumulates data in its internal buffer, and notifies the caller when a buffer is full.
  *
- *          This class contains a vector of buffers, each with a different id.  The tag is set as template parameter, since we need to know type corresponding to the
- *          tag at compile time anyways.
- *
- *          The class allows sharing between thread but it can certainly be used within a single thread.
- *
- *          send/recv have different semantics?  single class would be nice - easier to support different patterns
- *            buffer -> send = send
- *            recv -> buffer = recv
- *            recv -> send   = forward
- *            buffer -> buffer = local, same rank send.
- *
- *          event driven with observer pattern on full/receive with CommLayer as handler? - avoids looping to check if full, before enqueue.
- *            comm layer can do this work without being an observer since it has to have a send method - can check for full and send.
- *
- *
- *
- *
- *          buffer's lifetime is from the first call to the buffer function to the completion of the MPI send, or
- *              from the start of the MPI recv to the consumption of the buffer.
- *
- *          QUESTIONS: reuse buffer?  std::move or copy content?
- *          MAY NEED A BUFFER OF THESE.  Do that later.
- *
- *
+ *          The (unimplemented) RecvMessageBuffers requires an event notification mechanism that works with callbacks to handle the received messages.
+ *          This is currently implemented in CommunicationLayer.
  *
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -52,8 +35,6 @@
  */
 #ifndef MESSAGEBUFFERS_HPP_
 #define MESSAGEBUFFERS_HPP_
-
-#include <cassert>
 
 #include <mutex>
 #include <vector>
@@ -65,10 +46,6 @@
 #include "config.hpp"
 #include "io/buffer.hpp"
 #include "io/buffer_pool.hpp"
-#include "io/io_exception.hpp"
-
-// TODO:  document, add stdexcept.
-
 
 #include <iterator> // for ostream_iterator
 
@@ -80,51 +57,92 @@ namespace bliss
     /**
      * @class			bliss::io::MessageBuffers
      * @brief     a data structure to buffering/batching messages for communication
-     * @details   THREAD_SAFE enables std::mutex for thread safety.  this may introduce contention
-     *            this class uses Buffer class for the actual in memory storage.
-     *            this class also uses BufferPool to reuse memory.
+     * @details   Templated base class for a collection of buffers that are used for communication.
      *
-     *            this class's purpose is to manage the actual buffering of the data for a set of message targets.
-     *              there is no need to have the MessageBuffers be aware of the tags - user can manage that.
-     *            when a Buffer is full, we swap in an empty Buffer from BufferPool.  The  full Buffer
-     *              is added to a processing queue by Buffer Id (used to get access the buffer from BufferPool).
+     *            Templated to support thread safe and unsafe operations
      *
-     *            CommLayer manages the "inProgress" queues, although the actual memory used in the inProgress queues are
-     *              retrieved from the Buffers used here.
-     *            Inter-thread communication is handled by the ThreadSafeQueues
-     *
-     *
-     *            2 potential subclasses: send and receive, because they have different flow of control.
-     *              RecvMessageBuffers is not needed at the moment so not implemented.
+     *            The class contains a BufferPool, which contains an array of Buffer objects for in-memory storage.
      *
      */
     template<bliss::concurrent::ThreadSafety ThreadSafety>
     class MessageBuffers
     {
+        // TODO: move consturctor and assignment operator to copy between thread safety levels.
+
       protected:
+        /**
+         * IdType of a Buffer, aliased from BufferPool
+         */
         typedef typename bliss::io::BufferPool<ThreadSafety>::IdType    BufferIdType;
 
+        /**
+         * a pool of in-memory Buffers for storage.
+         */
         bliss::io::BufferPool<ThreadSafety> pool;
+
+        /**
+         * Each buffer's capacity.  stored here for use during Buffer construction.
+         */
         int bufferCapacity;
 
-
-
+        /**
+         * Gets the capacity of the Buffer instances.
+         * @return    capacity of each buffer.
+         */
         const int getBufferCapacity() {
           return bufferCapacity;
         }
 
         /**
-         * default, internal pool has unlimited capacity.
+         * Protected so base class function is not called directly.
          *
-         * @param numDests          number of destinations.  e.g. mpi comm size.
-         * @param buffer_capacity   individual buffer's size in bytes
+         * Constructor.  creates a buffer given a specified per-buffer capacity, and the BufferPool capacity.
+         *
+         * @param buffer_capacity   the Buffer's maximum capacity.  default to 8192.
+         * @param pool_capacity     the BufferPool's capacity.  default to unlimited.
          */
-        explicit MessageBuffers(const int & _buffer_capacity = 8192, const int & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
-          pool(pool_capacity, _buffer_capacity), bufferCapacity(_buffer_capacity) {};
+        explicit MessageBuffers(const size_t & _buffer_capacity = 8192, const BufferIdType & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
+          pool(pool_capacity, _buffer_capacity), bufferCapacity(_buffer_capacity) {
 
+          if (pool_capacity < 0) {
+            throw std::range_error("ERROR: pool_capacity set to less than 0");
+          }
+        };
+
+        /**
+         * Protected so base class function is not called directly.
+         *
+         * default copy constructor.  deleted.  since internal BufferPool does not allow copy construction/assignment.
+         * @param other     source MessageBuffers to copy from
+         */
         explicit MessageBuffers(const MessageBuffers<ThreadSafety>& other) = delete;
+
+        /**
+         * Protected so base class function is not called directly.
+         *
+         * default copy assignment operator.  deleted.   since internal BufferPool does not allow copy construction/assignment.
+         * @param other     source MessageBuffers to copy from
+         * @return          self.
+         */
         MessageBuffers<ThreadSafety>& operator=(const MessageBuffers<ThreadSafety>& other) = delete;
+
+
+        /**
+         * Protected so base class function is not called directly.
+         *
+         * default move constructor.
+         * @param other     source MessageBuffers to move from
+         */
         explicit MessageBuffers(MessageBuffers<ThreadSafety>&& other) : pool(std::move(other.pool)), bufferCapacity(other.bufferCapacity) {};
+
+
+        /**
+         * Protected so base class function is not called directly.
+         *
+         * default move assignment operator.
+         * @param other     source MessageBuffers to move from
+         * @return          self.
+         */
         MessageBuffers<ThreadSafety>& operator=(MessageBuffers<ThreadSafety>&& other) {
           pool = std::move(other.pool);
           bufferCapacity = other.bufferCapacity; other.bufferCapacity = 0;
@@ -133,86 +151,112 @@ namespace bliss
 
 
       public:
-
+        /**
+         * default destructor
+         */
         virtual ~MessageBuffers() {};
 
-//        virtual bool acquireBuffer(size_t &id);
         /**
-         * after the buffer has been consumed, release it back to the pool
-         * @param id
+         * Accesses the Buffer object inside the BufferPool by BufferPool assigned Id
+         * @param id      Id of the Buffer to be accessed.
+         * @return        const reference to the Buffer object.
+         */
+        const Buffer<ThreadSafety> & getBackBuffer(const BufferIdType& id) const {
+          return this->pool[id];
+        }
+
+
+        /**
+         * Releases a Buffer by it's BufferPool id, after the buffer is no longer needed.
+         *
+         * This to be called after the communication logic is done with the Send or Recv buffer.
+         *
+         * @param id    Buffer's id (assigned from BufferPool)
          */
         void releaseBuffer(const BufferIdType &id) {
           pool.releaseBuffer(id);
         }
 
+        /**
+         * Convenience method to release and clear all current Buffers in the pool.
+         */
         virtual void reset() {
           pool.reset();
         }
-      private:
-
     };
 
+
+
     /**
-     * each SendMessageBuffers class contains an vector of Buffer Ids (reference buffers in BufferPool), one for each target id
+     * SendMessageBuffers is a subclass of MessageBuffers designed to manage the actual buffering of data for a set of messaging targets.
      *
-     * for ones that are full and are not in the vector, the user of this class will need to track the Id and use this class to
-     * access the internal BufferPool by id.
+     * The class is designed with the following requirements in mind:
+     *  1. data is destined for some remote process identifiable by a process id (e.g. rank)
+     *  2. data is appended to buffer incrementally and with minimal blocking
+     *  3. calling thread has a mechanism to process a full buffer.
+     *  4. data is typed, but all data in a SendMessageBuffers are homogeneously typed.
+     *
+     *  The class is implemented to support the requirement:
+     *  1. SendMessageBuffers is not aware of its data type or metadata specifying its type.
+     *  2. SendMessageBuffers uses the base MessageBuffers class' internal BufferPool to reuse memory
+     *  3. SendMessageBuffers stores a vector of Buffer Ids (as assigned from BufferPool), thus mapping from process Rank to BufferId.
+     *  4. SendMessageBuffers provides an Append function to incrementally add data to the Buffer object for the targt process rank.
+     *  5. When a particular buffer is full, return the Buffer Id to the calling thread for it to process (send), and swap in an empty
+     *      Buffer from BufferPool.
+     *
+     *
+     *  For Buffers that are full, the calling thread will need to track the Ids as this class evicts a full Buffer's id from it's
+     *    vector of Buffer Ids.  This can be done via a queue, as in the case of CommunicationLayer.
+     *  Note that a Buffer is "in use" from the first call to the Buffer's append function to the completion of the send (e.g. via MPI Isend)
      *
      */
     template<bliss::concurrent::ThreadSafety ThreadSafety>
     class SendMessageBuffers : public MessageBuffers<ThreadSafety>
     {
       public:
-        typedef typename bliss::io::BufferPool<ThreadSafety>::IdType    BufferIdType;
+        /**
+         * Id type of the Buffers
+         */
+        typedef typename MessageBuffers<ThreadSafety>::BufferIdType    BufferIdType;
 
       protected:
+        /**
+         * Id type of the Buffers, but here depending on the specified ThreadSafety template parameter,
+         * either BufferIdType or atomic version of BufferIdType
+         */
         typedef typename std::conditional<ThreadSafety, std::atomic<BufferIdType>, BufferIdType>::type   IdType;
-        std::vector< IdType > bufferIds;  // mapping from process id (0 to vector size), to buffer Ids (from BufferPool)
+
+        /**
+         * Vector of IdType (atomic or not).  Provides a mapping from process id (0 to vector size), to buffer Ids (from BufferPool)
+         */
+        std::vector< IdType > bufferIds;
 
       public:
-        SendMessageBuffers(const int & numDests, const int & buffer_capacity, const int pool_capacity) :
-          MessageBuffers<ThreadSafety>(buffer_capacity, pool_capacity),
-          bufferIds(numDests) {
-          /// initialize the bufferIds by acquiring them from the pool.
-          this->reset();
-
-          //printf("!!!INFO: SendMessageBuffers ctor 3 called\n");
-
-//          std::ostream_iterator<IdType> ost(std::cout, ",");
-//          std::copy(bufferIds.begin(), bufferIds.end(), ost);
-//          printf("\n");
-
-        };
-
-        SendMessageBuffers(const int & numDests, const int & buffer_capacity) :
-          SendMessageBuffers<ThreadSafety>(numDests, buffer_capacity, 3 * numDests)
+        /**
+         * Constructor.
+         * @param numDests         The number of messaging targets/destinations
+         * @param bufferCapacity   The capacity of the individual buffers.  default 8192.
+         * @param poolCapacity     The capacity of the pool.  default unbounded.
+         */
+        explicit SendMessageBuffers(const int & numDests, const size_t & bufferCapacity = 8192, const BufferIdType & poolCapacity = std::numeric_limits<BufferIdType>::max()) :
+          MessageBuffers<ThreadSafety>(bufferCapacity, poolCapacity), bufferIds(numDests)
         {
-          //printf("!!!INFO: SendMessageBuffers ctor 2 called\n");
+          /// initialize the bufferIds, acquiring them from the pool by calling reset.
+          this->reset();
         };
+
+        // TODO:  stdexcept and documentation.
+
 
         SendMessageBuffers() :  MessageBuffers<ThreadSafety>() {};
-//        SendMessageBuffers() = delete;
         explicit SendMessageBuffers(const SendMessageBuffers<ThreadSafety> &other) = delete;
-        explicit SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) : MessageBuffers<ThreadSafety>(std::move(other)),
-          bufferIds(std::move(other.bufferIds)) {
-
-//          printf("!!!INFO: SendMessageBuffers move ctor called\n");
-//          std::ostream_iterator<IdType> ost(std::cout, ",");
-//          std::copy(bufferIds.begin(), bufferIds.end(), ost);
-//          printf("\n");
-
-        };
+        explicit SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) :
+            MessageBuffers<ThreadSafety>(std::move(other)), bufferIds(std::move(other.bufferIds)) {};
         SendMessageBuffers<ThreadSafety>& operator=(const SendMessageBuffers<ThreadSafety> &other) = delete;
         SendMessageBuffers<ThreadSafety>& operator=(SendMessageBuffers<ThreadSafety> && other) {
           bufferIds = std::move(other.bufferIds);
           this->bufferCapacity = other.bufferCapacity; other.bufferCapacity = 0;
           this->pool = std::move(other.pool);
-
-//          printf("!!!INFO: SendMessageBuffers move assignment called\n");
-//          std::ostream_iterator<IdType> ost(std::cout, ",");
-//          std::copy(bufferIds.begin(), bufferIds.end(), ost);
-//          printf("\n");
-
           return *this;
         }
 
@@ -221,10 +265,6 @@ namespace bliss
 
         size_t getSize() {
           return bufferIds.size();
-        }
-
-        const Buffer<ThreadSafety> & getBackBuffer(const BufferIdType& id) {
-          return this->pool[id];
         }
 
         const BufferIdType getActiveId(const int idx) {
@@ -245,8 +285,6 @@ namespace bliss
 
         virtual void reset() {
           MessageBuffers<ThreadSafety>::reset();
-
-
           for (int i = 0; i < this->bufferIds.size(); ++i) {
             bufferIds[i] = this->pool.tryAcquireBuffer().second;
           }
@@ -406,17 +444,6 @@ namespace bliss
 
 
     };
-
-
-
-    /**
-     * each RecvMessageBuffers contains a collection of Buffers, one for each received buffer to be processed.
-     *
-     * not implemented.
-     */
-//    template<int TAG, bliss::concurrent::ThreadSafety ThreadSafety>
-//    class RecvMessageBuffers;
-
 
   } /* namespace io */
 } /* namespace bliss */

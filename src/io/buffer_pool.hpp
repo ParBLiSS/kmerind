@@ -2,7 +2,7 @@
  * @file		buffer_pool.hpp
  * @ingroup
  * @author	tpan
- * @brief   this file defines a pool of memory buffers.
+ * @brief   this file defines in-memory Buffer Pool.
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
