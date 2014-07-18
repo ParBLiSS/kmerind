@@ -215,7 +215,7 @@ namespace bliss
          * @return    current size
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, size_t>::type getSize() const {
+        typename std::enable_if<TS, const size_t>::type getSize() const {
           return size.load(std::memory_order_consume);
         }
         /**
@@ -223,7 +223,7 @@ namespace bliss
          * @return    current size
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, size_t>::type getSize() const {
+        typename std::enable_if<!TS, const size_t>::type getSize() const {
           return size;
         }
 
@@ -248,6 +248,8 @@ namespace bliss
 
         /**
          * Clears the buffer. (set the size to 0, leaving the capacity and the memory allocation intact)
+         *
+         * const because the caller will have a const reference to the buffer.
          */
         void clear() const {
           size = 0UL;
@@ -260,7 +262,7 @@ namespace bliss
          *
          * @return    true if the buffer is full, false otherwise.
          */
-        bool isFull() const {
+        const bool isFull() const {
           return getSize<ThreadSafety>() >= capacity;
         }
         /**
@@ -270,7 +272,7 @@ namespace bliss
          *
          * @return    true if the buffer is empty, false otherwise.
          */
-        bool isEmpty() const {
+        const bool isEmpty() const {
           return getSize<ThreadSafety>() == 0;
         }
 
@@ -304,7 +306,7 @@ namespace bliss
          * @return            bool indicated whether operation succeeded.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, bool>::type append(const void* _data, const size_t count) const {
+        typename std::enable_if<TS, const bool>::type append(const void* _data, const size_t count) const {
 
           if (capacity == 0)
             throw std::length_error("Buffer capacity is 0");
@@ -336,7 +338,7 @@ namespace bliss
          * @return            bool indicated whether operation succeeded.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, bool>::type append(const void* typed_data, const size_t count) const {     // const method because the user will have const reference to Buffers.
+        typename std::enable_if<!TS, const bool>::type append(const void* typed_data, const size_t count) const {     // const method because the user will have const reference to Buffers.
                                                                          // because of the const-ness, we have mutable data and size.
           if (capacity == 0)
             throw std::length_error("Buffer capacity is 0");
@@ -375,7 +377,7 @@ namespace bliss
          * @return            bool indicated whether operation succeeded.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, bool>::type append_lockfree(const void* typed_data, const size_t count) const {
+        typename std::enable_if<TS, const bool>::type append_lockfree(const void* typed_data, const size_t count) const {
 
           if (capacity == 0)
             throw std::length_error("Buffer capacity is 0");

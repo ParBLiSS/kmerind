@@ -84,7 +84,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
         if (result.second != -1)
           buffers.releaseBuffer(result.second);
       }
-    } catch(const bliss::io::IOException & e)
+    } catch(const std::invalid_argument & e)
     {
       ++count;
     }

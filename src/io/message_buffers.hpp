@@ -81,16 +81,11 @@ namespace bliss
         bliss::io::BufferPool<ThreadSafety> pool;
 
         /**
-         * Each buffer's capacity.  stored here for use during Buffer construction.
-         */
-        int bufferCapacity;
-
-        /**
          * Gets the capacity of the Buffer instances.
          * @return    capacity of each buffer.
          */
-        const int getBufferCapacity() {
-          return bufferCapacity;
+        const size_t getBufferCapacity() const {
+          return pool.getBufferCapacity();
         }
 
         /**
@@ -102,10 +97,10 @@ namespace bliss
          * @param pool_capacity     the BufferPool's capacity.  default to unlimited.
          */
         explicit MessageBuffers(const size_t & _buffer_capacity = 8192, const BufferIdType & pool_capacity = std::numeric_limits<BufferIdType>::max()) :
-          pool(pool_capacity, _buffer_capacity), bufferCapacity(_buffer_capacity) {
+          pool(pool_capacity, _buffer_capacity) {
 
           if (pool_capacity < 0) {
-            throw std::range_error("ERROR: pool_capacity set to less than 0");
+            throw std::invalid_argument("ERROR: pool_capacity set to less than 0");
           }
         };
 
@@ -133,7 +128,7 @@ namespace bliss
          * default move constructor.
          * @param other     source MessageBuffers to move from
          */
-        explicit MessageBuffers(MessageBuffers<ThreadSafety>&& other) : pool(std::move(other.pool)), bufferCapacity(other.bufferCapacity) {};
+        explicit MessageBuffers(MessageBuffers<ThreadSafety>&& other) : pool(std::move(other.pool)) {};
 
 
         /**
@@ -145,7 +140,6 @@ namespace bliss
          */
         MessageBuffers<ThreadSafety>& operator=(MessageBuffers<ThreadSafety>&& other) {
           pool = std::move(other.pool);
-          bufferCapacity = other.bufferCapacity; other.bufferCapacity = 0;
           return *this;
         }
 
@@ -245,37 +239,80 @@ namespace bliss
           this->reset();
         };
 
-        // TODO:  stdexcept and documentation.
-
-
+        /**
+         * Default constructor, deleted
+         */
         SendMessageBuffers() :  MessageBuffers<ThreadSafety>() {};
+
+        /**
+         * default copy constructor.  deleted.
+         * @param other   source SendMessageBuffers to copy from.
+         */
         explicit SendMessageBuffers(const SendMessageBuffers<ThreadSafety> &other) = delete;
+
+        /**
+         * default move constructor.  calls superclass move constructor first.
+         * @param other   source SendMessageBuffers to move from.
+         */
         explicit SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) :
             MessageBuffers<ThreadSafety>(std::move(other)), bufferIds(std::move(other.bufferIds)) {};
+
+        /**
+         * default copy assignment operator, deleted.
+         * @param other   source SendMessageBuffers to copy from.
+         * @return        self
+         */
         SendMessageBuffers<ThreadSafety>& operator=(const SendMessageBuffers<ThreadSafety> &other) = delete;
+
+
+        /**
+         * default move assignment operator.
+         * @param other   source SendMessageBuffers to move from.
+         * @return        self
+         */
         SendMessageBuffers<ThreadSafety>& operator=(SendMessageBuffers<ThreadSafety> && other) {
           bufferIds = std::move(other.bufferIds);
-          this->bufferCapacity = other.bufferCapacity; other.bufferCapacity = 0;
           this->pool = std::move(other.pool);
           return *this;
         }
 
-
+        /**
+         * default destructor
+         */
         virtual ~SendMessageBuffers() {};
 
-        size_t getSize() {
+        /**
+         * get the number of buffers.  should be same as number of targets for messages
+         * @return    number of buffers
+         */
+        const size_t getSize() const {
           return bufferIds.size();
         }
 
-        const BufferIdType getActiveId(const int idx) {
+        /**
+         * get the BufferId that a messaging target max to.
+         * for simplicity, not distinguishing between thread safe and unsafe versions
+         *
+         * @param idx   the target id for the messages.
+         * @return      the buffer id that the target id maps to.
+         */
+        const BufferIdType getBufferId(const int idx) const {
           return BufferIdType(bufferIds[idx]);
         }
 
-        const std::vector< IdType >& getActiveIds() {
+        /**
+         * get the list of active Buffer ids.  (for debugging)
+         * @return  vector containing the active Buffer ids.
+         */
+        const std::vector<IdType>& getBufferIds() const {
           return bufferIds;
         }
 
-        const std::string activeIdsToString() const {
+        /**
+         * convenience method to convert the list of Active Buffer Ids to string.  (for debugging)
+         * @return   string with list of active Buffer Ids
+         */
+        const std::string bufferIdsToString() const {
           std::stringstream ss;
           std::ostream_iterator<IdType> ost(ss, ",");
           std::copy(bufferIds.begin(), bufferIds.end(), ost);
@@ -283,6 +320,10 @@ namespace bliss
           return ss.str();
         }
 
+        /**
+         * Reset the current MessageBuffers instance by first clearing its list of Buffer Ids, then repopulate it from
+         * the pool.
+         */
         virtual void reset() {
           MessageBuffers<ThreadSafety>::reset();
           for (int i = 0; i < this->bufferIds.size(); ++i) {
@@ -291,156 +332,136 @@ namespace bliss
         }
 
         /**
-         * function appends data to the target message buffer.   internally will try to swap in a new buffer when full, and notify the caller of the full buffer's id.
-         * need to return 3 things:
-         *  status of current insert
-         *  indicator that there is a full buffer ( the full buffer's id).
+         * Appends data to the target message buffer.   internally will try to swap in a new buffer when full, and notify the caller of the full buffer's id.
+         * need to return 2 things:
+         *  success/failure of current insert
+         *  indicator that there is a full buffer (the full buffer's id).
          *
          *  TODO:  show a table for compare exchange values and behavior
+         *  bufferIds[dest],    targetBufferId,     fullBufferId,     newBufferId (from pool)
+         *  ....
          *
-         * @param[in] data
-         * @param[in] count
-         * @param[in] dest
-         * @param[out] fullBufferId   id of the full buffer, if full.  if not full, -1.  if -1, guaranteed to return false as well.
-         * @return                    true if insert is successful (guarantee -1 fullBufferId.  false if insert fails, or if a full buffer is returned.
+         *
+         * @param[in] data    data to be inserted, as byteArray
+         * @param[in] count   number of bytes to be inserted in the the Buffer
+         * @param[in] dest    messaging target for the data, decides which buffer to append into.
+         * @return            std::pair containing the status of the append (boolean success/fail), and the id of a full buffer if there is one.
          */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, std::pair<bool, BufferIdType> >::type append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
-//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety, typename std::enable_if<TS>::type* = nullptr >
-//        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
-
+        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &targetProc) {
+          /// if count is 0, no write and this succeeds right away.
+          if (count == 0)
+            return std::pair<bool, BufferIdType>(true, -1);
 
           /// if there is not enough room for the new data in even a new buffer, LOGIC ERROR IN CODE: throw exception
-          if (count > this->bufferCapacity) {
-            std::stringstream ss;
-            ss << "ERROR: MessageBuffer append with count " << count << " larger than buffer capacity " << this->bufferCapacity;
-            throw (bliss::io::IOException(ss.str()));
+          if (count > this->getBufferCapacity()) {
+            throw (std::invalid_argument("ERROR: messageBuffer append with count exceeding Buffer capacity"));
+          }
+
+          /// if targetProc is outside the valid range, throw an error
+          if (targetProc < 0 || targetProc > getSize()) {
+            throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
+          }
+
+          /// if data being set is null, throw error
+          if (data == nullptr) {
+            throw (std::invalid_argument("ERROR: calling MessageBuffer append with nullptr"));
           }
 
           /// default fullBufferId return value.
           BufferIdType fullBufferId = -1;
 
           /// get the current Buffer's Id
-          BufferIdType targetBufferId = bufferIds[dest].load(std::memory_order_relaxed);
+          BufferIdType targetBufferId = getBufferId(targetProc);
 
-          /// need to replace bufferIds[dest], if it's -1, or if new data can't fit
+          /// if targetBufferId is an invalid buffer, or if new data can't fit, need to replace bufferIds[dest]
           if ((targetBufferId == -1) ||
-              ((this->bufferCapacity - this->pool[targetBufferId].getSize()) < count)) {
-            // at this point, targetBufferId may be -1 or some value, and the local variables may be out of date already.
+              ((this->getBufferCapacity() - this->pool[targetBufferId].getSize()) < count)) {
+            // at this point, the local variables may be out of date already.
 
-            /// get a new buffer and try to replace the existing.
-            auto newBuffer = this->pool.tryAcquireBuffer();
-
-            bool hasNewBuffer = newBuffer.first;
-            BufferIdType newBufferId = newBuffer.second;
-            // if acquire fails, we have -1 for newBufferId.
-
-//            std::cout << std::this_thread::get_id();
-//            printf(" targetBuffer %d, full Buffer %d, new Buffer %d\n", targetBufferId, fullBufferId, newBufferId);
-//            BufferIdType debugBufferId = targetBufferId;
-
-            /// now try to set the bufferIds[dest] to the new buffer id (valid, or -1 if can't get a new one)
-            // again, targetBufferId is -1 or pointing to a full buffer.
-
-            // use compare_exchange to ensure we only replace if targetBufferId hasn't changed.
-            if (bufferIds[dest].compare_exchange_strong(targetBufferId, newBufferId, std::memory_order_acq_rel)) {
-              // successful exchange.  bufferIds[dest] now has newBufferId value. targetBufferId has old value.
-
-
-              // only a success exchange should return targetBufferId as fullBufferId.
-              fullBufferId = targetBufferId;  // value could be full buffer, or could be -1.
-
-              targetBufferId = newBufferId;   // set targetBufferId to the new buffer, prep for append.
-
-              //std::cout << std::this_thread::get_id();
-              //printf("successful exchange: old %d, targetBufferId %d, newBufferId %d, fullBufferId %d\n", debugBufferId, targetBufferId, newBufferId, fullBufferId);
-
-            } else {
-              // failed exchange, then another thread had already updated bufferIds[dest].
-//              std::cout << std::this_thread::get_id();
-//              printf(" failed exchagne: old %d targetBufferId %d, newBufferId %d\n", debugBufferId, targetBufferId, newBufferId);
-              // leave fullBufferId as -1.
-
-              // targetBufferId on failed exchange will contain the up-to-date bufferIds[dest], which could be -1.
-
-              // return the unused buffer id to pool.
-              if (hasNewBuffer) {
-                this->pool.releaseBuffer(newBufferId);
-//                printf(" failed exchange.  released buffer %d\n", newBufferId);
-              }
-            }
+            fullBufferId = swapInEmptyBuffer<ThreadSafety>(targetProc, targetBufferId);    // swap in an empty buffer
+            targetBufferId = getBufferId(targetProc);               // and get the updated targetBuffer id
           }
 
-          if (fullBufferId != -1 || targetBufferId == -1)
-            // returning a full buffer.  don't insert.
-            // or  some other thread may have set this to -1 because it could not get a buffer from pool.  try again.
-            return std::pair<bool, BufferIdType>(false, fullBufferId);
-
-          // did not return a fullBuffer, and there is a place to insert into, so do it.
-          return std::pair<bool, BufferIdType>(this->pool[targetBufferId].append(data, count), fullBufferId);
-
-        }
-
-
-
-        /**
-         * function appends data to the target message buffer.   internally will try to swap in a new buffer when full, and notify the caller of the full buffer's id.
-         * need to return 3 things:
-         *  status of current insert (in case the bufferpool is fixed size, and there is no available place to buffer)
-         *  indicator that there is a full buffer, and the full buffer's id.
-         *
-         * @param[in] data
-         * @param[in] count
-         * @param[in] dest
-         * @param[out] fullBufferId   id of the full buffer, if full.  if not full, -1.
-         * @return
-         */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, std::pair<bool, BufferIdType> >::type append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
-//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety, typename std::enable_if<!TS>::type* = nullptr >
-//        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &dest) throw (bliss::io::IOException) {
-
-          /// if there is not enough room for the new data in even a new buffer, throw exception
-          if (count > this->bufferCapacity) {
-            std::stringstream ss;
-            ss << "ERROR: MessageBuffer append with count " << count << " larger than buffer capacity " << this->bufferCapacity;
-            throw (bliss::io::IOException(ss.str()));
-          }
-
-
-          /// initialize fullBufferId to no buffer returned.
-          BufferIdType fullBufferId = -1;
-
-          /// save the current Buffer's Id
-          BufferIdType targetBufferId = bufferIds[dest];
-
-          /// need to replace bufferIds[dest], if it's -1, or if new data can't fit
-          if ((targetBufferId == -1) ||
-              ((this->bufferCapacity - this->pool[targetBufferId].getSize()) < count)) {
-
-            // save the old buffer/full buffer to return
-            fullBufferId = targetBufferId;
-
-            /// get a new buffer and try to replace the existing.  set it whether tryAcquire succeeds or fails
-            targetBufferId = this->pool.tryAcquireBuffer().second;
-
-            /// now try to set the bufferIds[dest] to the new buffer id (valid, or -1 if can't get a new one)
-            bufferIds[dest] = targetBufferId;
-
-          }
-
-
-          // now try insert using the new targetBufferId.
           if (fullBufferId != -1 || targetBufferId == -1) {
-            // we got a full buffer - don't insert
+            // we got a full buffer                                     // conservative strategy.  if multiple threads concurrently swapped in empty buffer, this is a safer thing to do.
             // or  we don't have a buffer to insert into
+            // then don't insert
             return std::pair<bool, BufferIdType>(false, fullBufferId);
           }
 
           // else we are not returning a full buffer and have a buffer to insert into, so try insert
+          // targetBufferId is not -1, and fullBufferId is -1.
           return std::pair<bool, BufferIdType>(this->pool[targetBufferId].append(data, count), fullBufferId);
 
         }
+
+      protected:
+        /**
+         * Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
+         * The new buffer may be -1 (invalid buffer, when there is no available Buffer from pool)
+         *
+         * effect:  bufferIds[dest] gets a new Buffer Id.
+         *
+         * THREAD SAFE.   Uses std::compare_exchange_strong to ensure that another thread hasn't swapped in a new Empty one already.
+         *
+         * @param dest    position in BufferIds array to swap out
+         * @return        the BufferId that was swapped out.
+         */
+        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+        typename std::enable_if<TS, BufferIdType>::type swapInEmptyBuffer(const int& dest, const BufferIdType& old) {
+
+          /// get a new buffer and try to replace the existing.
+          auto newBuffer = this->pool.tryAcquireBuffer();
+
+          bool hasNewBuffer = newBuffer.first;
+          BufferIdType newBufferId = newBuffer.second;               // if acquire fails, we have -1 here.
+          BufferIdType targetBufferId = old;
+
+          /// now try to set the bufferIds[dest] to the new buffer id (valid, or -1 if can't get a new one)
+          // again, targetBufferId is -1 or pointing to a full buffer.
+          // use compare_exchange to ensure we only replace if bufferIds[dest] is still targetBufferId (no other thread has changed it)
+          if (bufferIds[dest].compare_exchange_strong(targetBufferId, newBufferId, std::memory_order_acq_rel)) {
+            // successful exchange.  bufferIds[dest] now has newBufferId value (will be accessed by caller). targetBufferId still has old value (full buffer, to be returned)
+
+            //std::cout << std::this_thread::get_id();
+            //printf("successful exchange: old %d, targetBufferId %d, newBufferId %d, fullBufferId %d\n", debugBufferId, targetBufferId, newBufferId, fullBufferId);
+
+            return old;   // value could be full buffer, or could be -1.
+          } else {
+            // failed exchange, another thread had already updated bufferIds[dest].
+            // bufferIds[dest] will be accessed by caller later, should return -1 as the replaced buffer id.
+
+            // return the unused buffer id to pool.
+            if (hasNewBuffer) {
+              this->pool.releaseBuffer(newBufferId);
+            }
+
+            return -1;
+          }
+
+        }
+
+
+        /**
+         * Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
+         * The new buffer may be -1 (invalid buffer, when there is no available Buffer from pool)
+         *
+         * effect:  bufferIds[dest] gets a new Buffer Id.
+         *
+         * THREAD UNSAFE.
+         *
+         * @param dest    position in BufferIds array to swap out
+         * @return        the BufferId that was swapped out.
+         */
+        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+        typename std::enable_if<!TS, BufferIdType>::type swapInEmptyBuffer(const int& dest, const BufferIdType& old) {
+
+          /// get a new buffer to replace the existing.  set it whether tryAcquire succeeds or fails (id = -1)
+          bufferIds[dest] = this->pool.tryAcquireBuffer().second;
+
+          return old;
+        }
+
 
 
     };

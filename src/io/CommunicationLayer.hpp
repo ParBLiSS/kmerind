@@ -52,7 +52,7 @@
 #include <concurrent/threadsafe_queue.hpp>
 #include <concurrent/concurrent.hpp>
 #include <io/message_buffers.hpp>
-
+#include <io/io_exception.hpp>
 
 
 namespace bliss
@@ -508,16 +508,16 @@ protected:
       return;
     }
     // flush out all the send buffers matching a particular tag.
-    DEBUGF("Active Buffer Ids in message buffer: %s", buffers.at(tag).activeIdsToString().c_str());
+    DEBUGF("Active Buffer Ids in message buffer: %s", buffers.at(tag).bufferIdsToString().c_str());
 
-    int idCount = buffers.at(tag).getActiveIds().size();
+    int idCount = buffers.at(tag).getBufferIds().size();
     assert(idCount == commSize);
     for (int i = 0; i < idCount; ++i) {
       // flush buffers in a circular fashion, starting with the next neighbor
       int target_rank = (i + getCommRank()) % getCommSize();
       DEBUGF("flushBuffers : target_rank = %d ", target_rank );
 
-      auto id = buffers.at(tag).getActiveId(target_rank);
+      auto id = buffers.at(tag).getBufferId(target_rank);
       // flush/send all remaining non-empty buffers
       if ((id != -1) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
         if (!sendQueue.waitAndPush(std::move(SendQueueElement(id, tag, target_rank)))) {

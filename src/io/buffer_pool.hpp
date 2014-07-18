@@ -249,7 +249,7 @@ namespace bliss
          * Current size of the BufferPool
          * @return  size, type IdType (aka int).
          */
-        IdType getSize() const  {
+        const IdType getSize() const  {
           return buffers.size();
         }
 
@@ -257,15 +257,23 @@ namespace bliss
          * Current capacity of the BufferPool
          * @return    capacity, type IdTyype (aka int)
          */
-        IdType getCapacity() const {
+        const IdType getCapacity() const {
           return capacity;
+        }
+
+        /**
+         * Each buffer's maximum capacity.
+         * @return  each buffer's maximum capacity.
+         */
+        const size_t getBufferCapacity() const {
+          return buffer_capacity;
         }
 
         /**
          * whether the BufferPool is growable
          * @return    bool indicating if BufferPool is growable.
          */
-        bool isFixedSize() const {
+        const bool isFixedSize() const {
           return fixedSize;
         }
 
