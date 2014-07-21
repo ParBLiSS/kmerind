@@ -235,8 +235,6 @@ public:
         }
       }
       fullId = -1;
-      /// TODO: is this busy waiting really necessary?
-      usleep(10);
     } while (!result.first);
   }
 

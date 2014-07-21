@@ -340,7 +340,7 @@ int main(int argc, char** argv) {
   // replace with MPIRunner
 
 
-
+          {
         IndexType index(comm, groupSize);
           //index.setLooupAnswerCallback(std::function<void(std::pair<KmerType, std::vector<KmerIndexType> >&)>(&callback));
 
@@ -356,7 +356,7 @@ int main(int argc, char** argv) {
 
         //// query:  use the same file as input.  walk through and generate kmers as before.  send query
 
-
+          }
 
 
 
