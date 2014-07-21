@@ -395,8 +395,10 @@ void timeSTDQueueThreaded(const std::string &message, std::queue<T>&& q, const i
           if (count <= 0) break;
 
           omp_set_lock(&lock);
-          output = q.front();
-          q.pop();
+          if (!q.empty()) {
+            output = q.front();
+            q.pop();
+          }
           omp_unset_lock(&lock);
 
 #pragma omp atomic
@@ -416,11 +418,10 @@ void timeSTDQueueThreaded(const std::string &message, std::queue<T>&& q, const i
 
 
 template<typename T>
-void timeTSQueueSingleThread(const std::string &message, bliss::concurrent::ThreadSafeQueue<T>&& q) {
+void timeTSQueueSingleThread(const std::string &message, bliss::concurrent::ThreadSafeQueue<T>&& q, const int entries) {
   printf("=== %s, capacity %lu, ", message.c_str(), q.getCapacity());
 
   T result = 0;
-  int entries = (q.getCapacity() == bliss::concurrent::ThreadSafeQueue<T>::MAX_SIZE) ? 128 : q.getCapacity();
 
   for (int i = 0; i < entries - 1; ++i) {
 
@@ -441,18 +442,16 @@ void timeTSQueueSingleThread(const std::string &message, bliss::concurrent::Thre
 
 
 template<typename T>
-void timeTSQueueThreaded(const std::string &message, bliss::concurrent::ThreadSafeQueue<T>&& q, const int nProducer, const int nConsumer) {
+void timeTSQueueThreaded(const std::string &message, bliss::concurrent::ThreadSafeQueue<T>&& q, const int entries, const int nProducer, const int nConsumer) {
   printf("=== %s, capacity %lu, ", message.c_str(), q.getCapacity());
-
-  int entries = (q.getCapacity() == bliss::concurrent::ThreadSafeQueue<T>::MAX_SIZE) ? 128 : q.getCapacity();
 
   int count = 0, count2 = 0;
 
-#pragma omp parallel sections num_threads(2) shared(q, count, count2, entries)
+#pragma omp parallel sections num_threads(2) shared(q, count, count2)
   {
 #pragma omp section
     {
-#pragma omp parallel for default(none) num_threads(nProducer) shared(q, entries) reduction(+:count)
+#pragma omp parallel for default(none) num_threads(nProducer) shared(q) reduction(+:count)
       for (int i = 0; i < entries - 1; ++i) {
         q.tryPush(std::move(T(i)));
         ++count;
@@ -507,8 +506,8 @@ int main(int argc, char** argv) {
   typedef bliss::concurrent::ThreadSafeQueue<int> QueueType;
 
 
-  timeTSQueueSingleThread("TSQ 1 thread growable", std::move(QueueType()));
-  timeTSQueueSingleThread("TSQ 1 thread 10 element", std::move(QueueType(10)));
+  timeTSQueueSingleThread("TSQ 1 thread growable", std::move(QueueType()),1000);
+  timeTSQueueSingleThread("TSQ 1 thread 10 element", std::move(QueueType(10)), 1000);
 
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 1);
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 1);
@@ -532,28 +531,29 @@ int main(int argc, char** argv) {
   testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 3);
   testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 2);
 
+  int count = 10000000;
 
   t1 = std::chrono::high_resolution_clock::now();
-  timeTSQueueSingleThread("TIME TSQ 1 thread 128 max", std::move(QueueType()));
+  timeTSQueueSingleThread("TIME TSQ 1 thread ", std::move(QueueType()), count);
   t2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   printf("  time: entries %d nthread %d time %f\n", 128, 1, time_span.count());
 
   t1 = std::chrono::high_resolution_clock::now();
-  timeSTDQueueSerial("TIME STD 1 thread", std::move(std::queue<int>()), 128);
+  timeSTDQueueSerial("TIME STD 1 thread", std::move(std::queue<int>()), count);
   t2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   printf("  time: entries %d nthread %d time %f\n", 128, 1, time_span.count());
 
 
   t1 = std::chrono::high_resolution_clock::now();
-  timeTSQueueThreaded("TIME TSQ 4 threads 128 max", std::move(QueueType()), 4, 1);
+  timeTSQueueThreaded("TIME TSQ 4 threads ", std::move(QueueType()), count, 4, 1);
   t2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   printf("  time: entries %d nthread %d time %f\n", 128, 4, time_span.count());
 
   t1 = std::chrono::high_resolution_clock::now();
-  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), 128, 4, 1);
+  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), count, 4, 1);
   t2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   printf("  time: entries %d nthread %d time %f\n", 128, 4, time_span.count());
