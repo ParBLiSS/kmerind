@@ -337,9 +337,22 @@ namespace bliss
          *  success/failure of current insert
          *  indicator that there is a full buffer (the full buffer's id).
          *
-         *  TODO:  show a table for compare exchange values and behavior
-         *  bufferIds[dest],    targetBufferId,     fullBufferId,     newBufferId (from pool)
-         *  ....
+         *  table of values and compare exchange behavior (called when a buffer if full and an empty buffer is swapped in.)
+         *  targetBufferId is obtained outside of CAS, so when CAS is called, bufferIds[dest] may be different already  (on left side)
+         *  fullBufferId and bufferId[dest] are set atomically, but newTargetBufferId is obtained outside of CAS, so the id of the TargetBufferId
+         *  may be more up to date than the CAS function results, which is okay.  Note that a fullBuffer will be marked as blocked to prevent further append.
+         *
+         *  targetBufferId,     bufferIds[dest],    newBufferId (from pool) ->  fullBufferId,     bufferId[dest],   newTargetBufferId
+         *  x                   x                   y                           x                 y                 y
+         *  x                   x                   -1                          x                 -1                -1
+         *  x                   z                   y                           -1                z                 z
+         *  x                   z                   -1                          -1                z                 z
+         *  x                   -1                  y                           -1                -1                -1
+         *  x                   -1                  -1                          -1                -1                -1
+         *  -1                  -1                  y                           -1                y                 y
+         *  -1                  -1                  -1                          -1                -1                -1
+         *  -1                  z                   y                           -1                -1                -1
+         *  -1                  z                   -1                          -1                -1                -1
          *
          *
          * @param[in] data    data to be inserted, as byteArray
@@ -375,24 +388,30 @@ namespace bliss
 
           /// if targetBufferId is an invalid buffer, or if new data can't fit, need to replace bufferIds[dest]
           if ((targetBufferId == -1) ||
-              ((this->getBufferCapacity() - this->pool[targetBufferId].getSize()) < count)) {
-            // at this point, the local variables may be out of date already.
+              this->pool[targetBufferId].getSize() > (this->getBufferCapacity() - count)) {
+            // at this point, the local variables may be out of date already, and targetBufferId may already marked as full.
 
+            // this call will mark the fullBuffer as blocked to prevent multiple write attempts while flushing the buffer
             fullBufferId = swapInEmptyBuffer<ThreadSafety>(targetProc, targetBufferId);    // swap in an empty buffer
             targetBufferId = getBufferId(targetProc);               // and get the updated targetBuffer id
           }
 
-          if (fullBufferId != -1 || targetBufferId == -1) {
-            // we got a full buffer                                     // conservative strategy.  if multiple threads concurrently swapped in empty buffer, this is a safer thing to do.
-            // or  we don't have a buffer to insert into
+          /*if (fullBufferId != -1 || targetBufferId == -1) {
+           *  // we got a full buffer  (meaning swap happened.  targetBufferId may be -1 or not.)  or
+           */
+          if (targetBufferId == -1) {
+            // we don't have a buffer to insert into
             // then don't insert
             return std::pair<bool, BufferIdType>(false, fullBufferId);
+          } else {
+
+          /*  // else we are not returning a full buffer and have a buffer to insert into, so try insert
+           *  // targetBufferId is not -1, and fullBufferId is -1.
+           */
+            // else we have a buffer to insert into, so try insert.
+            // if targetBufferId buffer is now full, or marked as full, will get a false.  the next thread to call this function will swap the buffer out.
+            return std::pair<bool, BufferIdType>(this->pool[targetBufferId].append(data, count), fullBufferId);
           }
-
-          // else we are not returning a full buffer and have a buffer to insert into, so try insert
-          // targetBufferId is not -1, and fullBufferId is -1.
-          return std::pair<bool, BufferIdType>(this->pool[targetBufferId].append(data, count), fullBufferId);
-
         }
 
       protected:
@@ -400,9 +419,13 @@ namespace bliss
          * Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
          * The new buffer may be -1 (invalid buffer, when there is no available Buffer from pool)
          *
-         * effect:  bufferIds[dest] gets a new Buffer Id.
+         * effect:  bufferIds[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
          *
          * THREAD SAFE.   Uses std::compare_exchange_strong to ensure that another thread hasn't swapped in a new Empty one already.
+         *
+         * NOTE: we make the caller get the new BufferIds[dest] directly instead of returning by reference in the method parameter variable
+         *  because this way there is less of a chance of race condition if a shared "old" variable was accidentally used.
+         *    and the caller will likely prefer the most up to date bufferIds[dest] anyway.
          *
          * @param dest    position in BufferIds array to swap out
          * @return        the BufferId that was swapped out.
@@ -423,8 +446,8 @@ namespace bliss
           if (bufferIds[dest].compare_exchange_strong(targetBufferId, newBufferId, std::memory_order_acq_rel)) {
             // successful exchange.  bufferIds[dest] now has newBufferId value (will be accessed by caller). targetBufferId still has old value (full buffer, to be returned)
 
-            //std::cout << std::this_thread::get_id();
-            //printf("successful exchange: old %d, targetBufferId %d, newBufferId %d, fullBufferId %d\n", debugBufferId, targetBufferId, newBufferId, fullBufferId);
+            /// block the old buffer.
+            if (old != -1) this->pool[old].block();
 
             return old;   // value could be full buffer, or could be -1.
           } else {
@@ -446,9 +469,13 @@ namespace bliss
          * Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
          * The new buffer may be -1 (invalid buffer, when there is no available Buffer from pool)
          *
-         * effect:  bufferIds[dest] gets a new Buffer Id.
+         * effect:  bufferIds[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
          *
          * THREAD UNSAFE.
+
+         * NOTE: we make the caller get the new BufferIds[dest] directly instead of returning by reference in the method parameter variable
+         *  because this way there is less of a chance of race condition if a shared "old" variable was accidentally used.
+         *    and the caller will likely prefer the most up to date bufferIds[dest] anyway.
          *
          * @param dest    position in BufferIds array to swap out
          * @return        the BufferId that was swapped out.
@@ -456,8 +483,12 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, BufferIdType>::type swapInEmptyBuffer(const int& dest, const BufferIdType& old) {
 
+
           /// get a new buffer to replace the existing.  set it whether tryAcquire succeeds or fails (id = -1)
           bufferIds[dest] = this->pool.tryAcquireBuffer().second;
+
+          /// blocks the old buffer
+          if (old != -1) this->pool[old].block();
 
           return old;
         }

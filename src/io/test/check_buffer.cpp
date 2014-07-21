@@ -26,11 +26,11 @@ int main(int argc, char** argv) {
   valType val;
 
 
-  printf(" check thread local buffer.\n");
+  printf("THREAD LOCAL BUFFERS\n");
 
   bliss::io::Buffer<bliss::concurrent::THREAD_UNSAFE> tlBuffer(8192);
 
-  // check insertion.
+  printf("TEST insert\n");
   int start = -1, end = -1;
   int i = 0;
   for (i = 0; i < 9000; ++i) {
@@ -40,15 +40,14 @@ int main(int argc, char** argv) {
     }
   }
   end = i;
-  printf("can't insert (full) from %d to %d!\n", start, end);
+  if (start != 8192/sizeof(valType)) printf("\tFAILED can't insert (full) from %d to %d!\n", start, end);
 
-  // check clear
+  printf("TEST clear\n");
   tlBuffer.clear();
-  if (tlBuffer.getSize() == 0) printf("empty\n");
-  else printf("not empty\n");
+  if (tlBuffer.getSize() != 0) printf("\tERROR: NOT empty\n");
 
 
-  // check isFull
+  printf("TEST isFull\n");
   start = -1;
   end = -1;
   i = 0;
@@ -60,7 +59,8 @@ int main(int argc, char** argv) {
     tlBuffer.append(&val, sizeof(valType));
   }
   end = i;
-  printf("isFULL from %d to %d!\n", start, end);
+  if (start != 8192/sizeof(valType)) printf("\tERROR: isFULL from %d to %d!\n", start, end);
+
 
   const valType* temp = reinterpret_cast<const valType*>(tlBuffer.getData());
   for (int j = 0; j < (8192/typeSize); ++j) {
@@ -69,14 +69,35 @@ int main(int argc, char** argv) {
   printf("CONTENT Passes check after insert\n");
 
 
-  printf("check move ctor from thread unsafe to thread unsafe.\n");
+  size_t bufferCapBefore = tlBuffer.getCapacity();
+  size_t bufferCapAfter = 0;
+
+  size_t bufferSizeBefore = tlBuffer.getSize();
+  size_t bufferSizeAfter = 0;
+
+  const void* bufferPtrBefore = tlBuffer.getData();
+  const void* bufferPtrAfter = nullptr;
+
+  printf("TEST move ctor from thread unsafe to thread unsafe.\n");
   bliss::io::Buffer<bliss::concurrent::THREAD_UNSAFE> tlBuffer2(std::move(tlBuffer));
+  if (tlBuffer.getCapacity()  !=  bufferCapAfter  ||
+      tlBuffer.getSize()      != bufferSizeAfter ||
+      tlBuffer.getData()      !=  bufferPtrAfter  ||
+      tlBuffer2.getCapacity() !=  bufferCapBefore  ||
+      tlBuffer2.getSize()     != bufferSizeBefore ||
+      tlBuffer2.getData()     !=  bufferPtrBefore)
   printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
          tlBuffer.getSize(), tlBuffer.getCapacity(), tlBuffer.getData(),
          tlBuffer2.getSize(), tlBuffer2.getCapacity(), tlBuffer2.getData());
 
-  printf(" check move = from thread unsafe to thread unsafe.\n");
+  printf("TEST move = from thread unsafe to thread unsafe.\n");
   tlBuffer = std::move(tlBuffer2);
+  if (tlBuffer2.getCapacity()  !=  bufferCapAfter  ||
+      tlBuffer2.getSize()      != bufferSizeAfter ||
+      tlBuffer2.getData()      !=  bufferPtrAfter  ||
+      tlBuffer.getCapacity() !=  bufferCapBefore  ||
+      tlBuffer.getSize()     != bufferSizeBefore ||
+      tlBuffer.getData()     !=  bufferPtrBefore)
   printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
          tlBuffer2.getSize(), tlBuffer2.getCapacity(), tlBuffer2.getData(),
          tlBuffer.getSize(), tlBuffer.getCapacity(), tlBuffer.getData());
@@ -84,41 +105,77 @@ int main(int argc, char** argv) {
 
 
 
-  printf(" check move ctor from thread unsafe to thread safe.\n");
+  printf("TEST move ctor from thread unsafe to thread safe.\n");
   bliss::io::Buffer<bliss::concurrent::THREAD_SAFE> tsBuffer(std::move(tlBuffer));
+  if (tlBuffer.getCapacity()  !=  bufferCapAfter  ||
+      tlBuffer.getSize()      != bufferSizeAfter ||
+      tlBuffer.getData()      !=  bufferPtrAfter  ||
+      tsBuffer.getCapacity() !=  bufferCapBefore  ||
+      tsBuffer.getSize()     != bufferSizeBefore ||
+      tsBuffer.getData()     !=  bufferPtrBefore)
   printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
          tlBuffer.getSize(), tlBuffer.getCapacity(), tlBuffer.getData(),
          tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData());
 
 
-  printf(" check move ctor from thread safe to thread safe.\n");
+  printf("TEST move ctor from thread safe to thread safe.\n");
   bliss::io::Buffer<bliss::concurrent::THREAD_SAFE> tsBuffer2(std::move(tsBuffer));
+  if (tsBuffer.getCapacity()  !=  bufferCapAfter  ||
+      tsBuffer.getSize()      != bufferSizeAfter ||
+      tsBuffer.getData()      !=  bufferPtrAfter  ||
+      tsBuffer2.getCapacity() !=  bufferCapBefore  ||
+      tsBuffer2.getSize()     != bufferSizeBefore ||
+      tsBuffer2.getData()     !=  bufferPtrBefore)
   printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
          tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData(),
          tsBuffer2.getSize(), tsBuffer2.getCapacity(), tsBuffer2.getData());
 
-  printf(" check move = from thread safe to thread safe.\n");
+  printf("TEST move = from thread safe to thread safe.\n");
   tsBuffer = std::move(tsBuffer2);
+  if (tsBuffer2.getCapacity()  !=  bufferCapAfter  ||
+      tsBuffer2.getSize()      != bufferSizeAfter ||
+      tsBuffer2.getData()      !=  bufferPtrAfter  ||
+      tsBuffer.getCapacity() !=  bufferCapBefore  ||
+      tsBuffer.getSize()     != bufferSizeBefore ||
+      tsBuffer.getData()     !=  bufferPtrBefore)
   printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
          tsBuffer2.getSize(), tsBuffer2.getCapacity(), tsBuffer2.getData(),
          tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData());
 
 
-  printf(" check move ctor from thread safe to thread unsafe.\n");
+  printf("TEST move ctor from thread safe to thread unsafe.\n");
   bliss::io::Buffer<bliss::concurrent::THREAD_UNSAFE> tlBuffer3(std::move(tsBuffer));
+  if (tsBuffer.getCapacity()  !=  bufferCapAfter  ||
+      tsBuffer.getSize()      != bufferSizeAfter ||
+      tsBuffer.getData()      !=  bufferPtrAfter  ||
+      tlBuffer3.getCapacity() !=  bufferCapBefore  ||
+      tlBuffer3.getSize()     != bufferSizeBefore ||
+      tlBuffer3.getData()     !=  bufferPtrBefore)
   printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
          tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData(),
          tlBuffer3.getSize(), tlBuffer3.getCapacity(), tlBuffer3.getData());
 
 
-  printf(" check move = from thread unsafe to thread safe.\n");
+  printf("TEST move = from thread unsafe to thread safe.\n");
   tsBuffer = std::move(tlBuffer3);
+  if (tlBuffer3.getCapacity()  !=  bufferCapAfter  ||
+      tlBuffer3.getSize()      != bufferSizeAfter ||
+      tlBuffer3.getData()      !=  bufferPtrAfter  ||
+      tsBuffer.getCapacity() !=  bufferCapBefore  ||
+      tsBuffer.getSize()     != bufferSizeBefore ||
+      tsBuffer.getData()     !=  bufferPtrBefore)
   printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
          tlBuffer3.getSize(), tlBuffer3.getCapacity(), tlBuffer3.getData(),
          tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData());
 
-  printf(" check move = from thread unsafe to thread safe.\n");
+  printf("TEST move = from thread unsafe to thread safe.\n");
   tlBuffer = std::move(tsBuffer);
+  if (tsBuffer.getCapacity()  !=  bufferCapAfter  ||
+      tsBuffer.getSize()      != bufferSizeAfter ||
+      tsBuffer.getData()      !=  bufferPtrAfter  ||
+      tlBuffer.getCapacity() !=  bufferCapBefore  ||
+      tlBuffer.getSize()     != bufferSizeBefore ||
+      tlBuffer.getData()     !=  bufferPtrBefore)
   printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
          tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData(),
          tlBuffer.getSize(), tlBuffer.getCapacity(), tlBuffer.getData());
@@ -135,7 +192,7 @@ int main(int argc, char** argv) {
 
 
   // check concurrent insert
-  printf(" check thread safe buffer.\n");
+  printf("THREAD SAFE BUFFERS\n");
 
 
   // check clear
@@ -159,6 +216,7 @@ int main(int argc, char** argv) {
     }
   }
 
+  if (fail != 9000-(bufferSize/sizeof(valType))) {
 
 //  temp = reinterpret_cast<const valType*>(tsBuffer4.getData());
 //
@@ -185,23 +243,26 @@ int main(int argc, char** argv) {
   std::copy(failed.begin(), failed.end(), oit);
   std::cout << std::endl;
 
-  printf("concurrent insert failed %d times \n", fail);
+  printf("ERROR: concurrent insert failed %d times \n", fail);
+  }
 
 
-
-  // check clear
+  printf("TEST: clear\n");
   tsBuffer4.clear();
-  if (tsBuffer4.getSize() == 0) printf("empty\n");
-  else printf("not empty\n");
+  if (tsBuffer4.getSize() != 0) printf("\tERROR: NOT empty\n");
 
 
-  // check isFull
+
+  printf("TEST: par blocked\n");
   i = 0;
+  int failedFull = 0;
   fail = 0;
-#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i, val) reduction(+ : fail)
-  for (i = 0; i < 9000; ++i) {
+  tsBuffer4.block();
+#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i, val) reduction(+ : fail, failedFull)
+  for (i = 0; i < 100; ++i) {
+
     if (tsBuffer4.isFull()) {
-      ++fail;
+      ++failedFull;
     } else {
       val = static_cast<valType>(i);
 
@@ -211,7 +272,28 @@ int main(int argc, char** argv) {
     }
   }
 
-  printf("isFULL for %d iterations\n", fail);
+  if (failedFull != 0 || fail != 100) printf("\tERROR: BLOCKED for %d iterations, with fail due to full %d iterations \n", fail, failedFull);
+
+
+  printf("TEST: par Full\n");
+  tsBuffer4.clear();
+  i = 0;
+  fail = 0;
+  failedFull = 0;
+#pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i, val) reduction(+ : fail, failedFull)
+  for (i = 0; i < 9000; ++i) {
+    if (tsBuffer4.isFull()) {
+      ++failedFull;
+    } else {
+      val = static_cast<valType>(i);
+
+      if (!tsBuffer4.append(&val, sizeof(valType))) {
+        ++fail;
+      }
+    }
+  }
+
+  if ((failedFull + fail) != (9000 - (bufferSize/sizeof(valType)))) printf("\tERROR: isFULL for %d iterations, failed append for %d iterations\n", failedFull, fail);
 
 
 
@@ -236,7 +318,7 @@ int main(int argc, char** argv) {
       i = 0;
       fail = 0;
     #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap, typeSize) private(i, val) reduction(+:fail)
-      for (i = 0; i < cap/typeSize; ++i) {
+      for (i = 0; i < cap/typeSize + 1; ++i) {
         val = static_cast<valType>(i);
 
         if (! tsBuffer5.append(&val, sizeof(valType))) {
@@ -246,7 +328,8 @@ int main(int argc, char** argv) {
       t2 = std::chrono::high_resolution_clock::now();
 
       time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-      printf("locking append can't insert (full) %d iterations!  duration = %f\n", fail, time_span.count());
+      int expected = 1;
+      printf("locking append can't insert (full) %d iterations, expected %d iterations.  duration = %f\n", fail, expected, time_span.count());
 
 
       tsBuffer5.clear();
@@ -256,7 +339,7 @@ int main(int argc, char** argv) {
       i = 0;
       fail = 0;
     #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap, typeSize) private(i, val) reduction(+:fail)
-      for (i = 0; i < cap/typeSize; ++i) {
+      for (i = 0; i < cap/typeSize + 1; ++i) {
         val = static_cast<valType>(i);
 
         if (! tsBuffer5.append_lockfree(&val, sizeof(valType))) {
@@ -266,7 +349,8 @@ int main(int argc, char** argv) {
       t2 = std::chrono::high_resolution_clock::now();
 
       time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-      printf("lockfree append can't insert (full) %d iterations!  duration = %f\n", fail, time_span.count());
+      expected = 1;
+      printf("lockfree append can't insert (full) %d iterations, expected %d iterations.  duration = %f\n", fail, expected, time_span.count());
 
     }
 }
