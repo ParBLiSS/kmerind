@@ -34,7 +34,7 @@ namespace bliss
         typedef typename Sequence::AlphabetType     AlphabetType;
         typedef KmerIndex                           KmerIndexType;
         typedef typename KmerIndex::KmerType        KmerValueType;
-        typedef std::pair<KmerIndex, KmerValueType> OutputType;
+        typedef std::pair<KmerValueType, KmerIndex> OutputType;       // key-value pair.
 
         /// Current Kmer buffer
         KmerIndex kmer;
@@ -90,7 +90,7 @@ namespace bliss
         {
           //      KmerValueType xored_recoverable = (xored & ~mask_lower_half) | (_kmer.forward & mask_lower_half);
 
-          return OutputType(kmer, revcomp);   // constructing a new result.
+          return OutputType(revcomp ^ kmer.kmer, kmer);   // constructing a new result.
         }
 
     };
@@ -135,6 +135,8 @@ namespace bliss
                   std::log2(1.0 - std::exp2(static_cast<ValueType>(v) * log2_10DivNeg10));
         }
     };
+
+
     // "define" but not initialize outside class declaration, again.
     // NOTE:  Do it here is fine.  do it in class file or even where it's used is NOT.  probably due to templating.
     template<typename T> constexpr typename SangerToLogProbCorrect<T>::LUTType SangerToLogProbCorrect<T>::lut;

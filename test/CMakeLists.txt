@@ -54,9 +54,14 @@ target_link_libraries(test_iterator_and_function_traits ${EXTRA_LIBS})
 
 
 ## EXECUTABLES
-add_executable(testThreads test_threads.cpp)
-target_link_libraries(testThreads ${EXTRA_LIBS})
-target_link_libraries(testThreads bliss-common)
+#add_executable(testThreads test_threads.cpp)
+#target_link_libraries(testThreads ${EXTRA_LIBS})
+#target_link_libraries(testThreads bliss-common)
+
+add_executable(testKmerIndex TestKmerIndexAndQuery.cpp)
+target_link_libraries(testKmerIndex ${EXTRA_LIBS})
+target_link_libraries(testKmerIndex bliss-common)
+
 
 ## EXECUTABLES
 add_executable(testCommLayer test_commlayer.cpp)
