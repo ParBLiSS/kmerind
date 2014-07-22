@@ -546,6 +546,20 @@ public:
   }
 
   /**
+   * @brief   construct a new element in place, with same semantic as std::unordered_map::emplace.
+   *
+   * construct new element to insert in place.  using variadic template parameters allows
+   * both multimap and counting map to provide the same interface.
+   * Does not return iterator and bool like unordered_map.
+   *
+   * @param args  variable number of arguments.
+   */
+  template <class... Args>
+  void emplace(Args&&... args) {
+      insert(args...);
+  }
+
+  /**
    * @brief Populates the distributed map by bulk-inserting elements from the
    *        given iterators.
    *
@@ -684,6 +698,20 @@ public:
     int targetRank = this->getTargetRank(key);
     this->sendKey(key, targetRank, _base_class::INSERT_MPI_TAG);
     this->has_pending_inserts = true;
+  }
+
+  /**
+   * @brief   construct a new element in place, with same semantic as std::unordered_map::emplace.
+   *
+   * construct new element to insert in place.  using variadic template parameters allows
+   * both multimap and counting map to provide the same interface.
+   * Does not return iterator and bool like unordered_map.
+   *
+   * @param args  variable number of arguments.
+   */
+  template <class... Args>
+  void emplace(Args&&... args) {
+      insert(args...);
   }
 
   /**

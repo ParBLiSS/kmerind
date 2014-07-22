@@ -49,49 +49,57 @@
 /*
  * TYPE DEFINITIONS
  */
+
+////////// COMMON TYPES
+
 /// define kmer index type
-typedef bliss::index::KmerSize<21>                                KmerSize;
-typedef uint64_t                                                  KmerType;
-typedef float                                                     QualityType;
-typedef DNA                                                       Alphabet;
-typedef bliss::io::fastq_sequence_id                              IdType;
-typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, IdType, QualityType>
-                                                                  KmerIndexType;
+typedef bliss::index::KmerSize<21>                                      KmerSize;
+typedef uint64_t                                                        KmerType;
+typedef float                                                           QualityType;
+typedef DNA                                                             Alphabet;
+typedef bliss::io::fastq_sequence_id                                    IdType;
 
 /// define Range type
-typedef bliss::partition::range<size_t>                           RangeType;
+typedef bliss::partition::range<size_t>                                 RangeType;
 
 /// define the input file type
 // raw data type :  use CharType
-typedef bliss::io::FASTQLoader<CharType, true, false>             FileLoaderType;
-typedef typename FileLoaderType::BlockIteratorType                BaseIterType;
-typedef typename std::iterator_traits<BaseIterType>::value_type   BaseValueType;
-/// define the transform iterator type
-typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>
-                                                                  ParserType;
-typedef bliss::io::fastq_iterator<ParserType, BaseIterType>       ReadIteratorType;
+typedef bliss::io::FASTQLoader<CharType, true, false>                   FileLoaderType;
+typedef typename FileLoaderType::BlockIteratorType                      FileBlockIterType;
 
 /// define read type
-typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>
-                                                                  SequenceType;
+typedef bliss::io::fastq_sequence_quality<FileBlockIterType, Alphabet, QualityType>  SeqType;
 
-
-/// define kmer GENERATOR types
-typedef bliss::index::generate_kmer<SequenceType, KmerIndexType>  KmerOpType;
+/// define the transform iterator type
+typedef bliss::io::fastq_parser<FileBlockIterType, Alphabet, QualityType>    ParserType;
+typedef bliss::io::fastq_iterator<ParserType, FileBlockIterType>             SeqIterType;
 
 /// define kmer quality GENERATOR types
-typedef bliss::index::SangerToLogProbCorrect<QualityType>         QualityEncodeType;
-typedef bliss::index::generate_qual<SequenceType, KmerSize, QualityType, QualityEncodeType >
-                                                                  QualOpType;
+typedef bliss::index::SangerToLogProbCorrect<QualityType>               QualityEncoderType;
+typedef bliss::index::generate_qual<SeqType, KmerSize, QualityType, QualityEncoderType > QualOpType;
+
+
+///////////// INDEX TYPES
+/// kmer index element type and corresponding generator type
+typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, IdType, QualityType>   KmerIndexValueType;
+typedef bliss::index::generate_kmer<SeqType, KmerIndexValueType>                                  KmerOpType;
 
 /// define the index storage type
-typedef bliss::index::distributed_multimap<KmerType, KmerIndexType, bliss::io::CommunicationLayer>
-                                                                  IndexType;
+typedef bliss::index::distributed_multimap<KmerType, KmerIndexValueType, bliss::io::CommunicationLayer> IndexType;
 /// define the KmerIndexElement Generator type.
-typedef bliss::index::KmerIndexGeneratorWithQuality<KmerOpType, IndexType, QualOpType>
-                                                                  KmerIndexComputeType;
+typedef bliss::index::KmerIndexGeneratorWithQuality<KmerOpType, IndexType, QualOpType>            KmerIndexComputeType;
 
 
+
+////////////// COUNT TYPES
+/// kmer index element type and corresponding generator type
+typedef bliss::index::KmerIndexElement<KmerSize, KmerType>                                        KmerCountType;
+typedef bliss::index::generate_kmer<SeqType, KmerCountType>                                       KmerCountOpType;
+
+/// count indices
+typedef bliss::index::distributed_counting_map<KmerType, bliss::io::CommunicationLayer>           CountIndexType;
+/// define the KmerIndexElement Generator for counting maptype.
+typedef bliss::index::KmerIndexGenerator<KmerCountOpType, CountIndexType>                         KmerCountComputeType;
 
 
 
@@ -113,148 +121,145 @@ typedef bliss::index::KmerIndexGeneratorWithQuality<KmerOpType, IndexType, QualO
 /*
  * peer to peer
  */
-template <typename Compute>
-void buildIndex(FileLoaderType &loader, IndexType &index, const int &rank,
+template <typename Compute, typename Index>
+void buildIndex(FileLoaderType &loader, Index &index, const int &rank,
                 const int &nthreads, const int &chunkSize)
 {
+  std::chrono::high_resolution_clock::time_point t1, t2;
+  std::chrono::duration<double> time_span;
+  t1 = std::chrono::high_resolution_clock::now();
 
-  ///  get the start and end iterator position.
+  INFO("buildIndex rank.tid = " << rank << "." << omp_get_thread_num());
 
-  // compute threads
-      std::chrono::high_resolution_clock::time_point t1, t2;
-      std::chrono::duration<double> time_span;
+  // local variables for information only.
+  int nReads = 0;    // read count
+  int nChunks = 0;    // chunk count
 
-      INFO("buildIndex rank.tid = " << rank << "." << omp_get_thread_num());
+  // uses the fastq iterator as the queue itself, instead of master/slave.
+  //   at this point, no strong difference.
+#pragma omp parallel num_threads(nthreads) shared(loader, nthreads, index) reduction(+:nReads, nChunks) OMP_SHARE_DEFAULT
+  {
+    /// instantiate a local parser
+    ParserType parser;
 
-      t1 = std::chrono::high_resolution_clock::now();
-
-      // uses the fastq iterator as the queue itself, instead of master/slave.
-      //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(loader, nthreads, index) OMP_SHARE_DEFAULT
-      {
-        ParserType parser;
-
-        int tid = 0;
+    int tid = 0;
 #ifdef USE_OPENMP
-        tid = omp_get_thread_num();
+    tid = omp_get_thread_num();
 #endif
-        Compute op;
 
-        int i = 0;
-        int j = 0;
-        RangeType r = loader.getNextChunkRange(tid);
+    /// instantiate a local kmer generator
+    Compute op;
 
-        while (r.size() > 0) {
+    /// local variables for loop
+    typename FileLoaderType::DataBlockType chunk;
+    SeqType read;
 
-          auto chunk = loader.getChunk(tid, r);
+    /// initialize the loop by getting the first chunk
+    RangeType r = loader.getNextChunkRange(tid);
+    while (r.size() > 0) {
+      /// get the chunk of data
+      chunk = loader.getChunk(tid, r);
 
-          ReadIteratorType fastq_start(parser, chunk.begin(), chunk.end(), r);
-          ReadIteratorType fastq_end(parser, chunk.end(), r);
+      ///  and wrap the chunk inside an iterator that emits Reads.
+      SeqIterType fastq_start(parser, chunk.begin(), chunk.end(), r);
+      SeqIterType fastq_end(parser, chunk.end(), r);
 
-          SequenceType read;
+      /// loop over the reads
+      for (; fastq_start != fastq_end; ++fastq_start)
+      {
+        // first get read
+        read = *fastq_start;
 
-          for (; fastq_start != fastq_end; ++fastq_start)
-          {
-            // get data, and move to next for the other threads
+        // then compute and store into index (this will generate kmers and insert into index)
+        op(read, index);
+        ++nReads;
 
-            // first get read
-            read = *fastq_start;
+        // do a little status print.
+        if (nReads % 20000 == 0)
+          INFO("buildIndex rank.tid=" << rank << "." <<  tid << " nReads=" << nReads);
+      }
 
-            // then compute
-            op(read, index);
-            ++i;
+      /// get read for next loop iteration.
+      r = loader.getNextChunkRange(tid);
+      ++nChunks;
+    }
 
-            if (i % 20000 == 0)
-              INFO("buildIndex rank.tid = " << rank << "." <<  tid << " processed seq " << i);
-          }
+    INFO("buildIndex rank.tid=" << rank << "." << tid << " nChunks=" << nChunks);
 
-          r = loader.getNextChunkRange(tid);
-          ++j;
+  }  // compute threads parallel
 
-        }
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+  INFO("buildIndex rank=" << rank << " nReads=" << nReads << " nChunks=" << nChunks << " elapsed time: " << time_span.count() << "s.");
 
-        INFO("buildIndex rank.tid = " << rank << "." << tid << " processed total of " << j << " chunks");
+  /// this MPI process is done.  now flush the index to all other nodes.
+  t1 = std::chrono::high_resolution_clock::now();
+  index.flush();
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+  INFO("flushIndex rank=" << rank << " elapsed time: " << time_span.count() << "s.");
 
-      }  // compute threads parallel
-
-
-      t2 = std::chrono::high_resolution_clock::now();
-      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-      INFO("buildIndex rank.tid = " << rank << "." << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
-
-
-
-      // send the last part out.
-      t1 = std::chrono::high_resolution_clock::now();
-      index.flush();
-      t2 = std::chrono::high_resolution_clock::now();
-      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-      INFO("buildIndex rank.tid = " << rank << "." << omp_get_thread_num() << " elapsed time: " << time_span.count() << "s.");
-      //printf("flush rank %d thread %d elapsed time %f\n", rank, omp_get_thread_num(), time_span.count());
-
-
-      //printf("rank %d done compute\n", rank);
 }
 
 
 
-template<typename ComputeType>
+template<typename ComputeType, typename Index>
 struct RunTask {
-    void operator()(const std::string &filename, IndexType &index, MPI_Comm &comm, const int &nthreads, const int &chunkSize) {
+    void operator()(const std::string &filename, Index &index, MPI_Comm &comm, const int &nthreads, const int &chunkSize) {
       /////////////// initialize output variables
 
-        int rank;
-        int nprocs;
+      int rank;
+      int nprocs;
 
-        MPI_Comm_size(comm, &nprocs);
-        MPI_Comm_rank(comm, &rank);
-
-
-        std::chrono::high_resolution_clock::time_point t1, t2;
-        std::chrono::duration<double> time_span;
+      MPI_Comm_size(comm, &nprocs);
+      MPI_Comm_rank(comm, &rank);
 
 
-        //////////////// now partition and open the file.
-        // create FASTQ Loader
-        // call get NextPartition Range to block partition,
-        // call "load" with the partition range.
-
-        t1 = std::chrono::high_resolution_clock::now();
-
-        // get the file ready for read
-        FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire execution.
-        RangeType pr = loader.getNextPartitionRange(rank);
-        loader.load(pr);
+      std::chrono::high_resolution_clock::time_point t1, t2;
+      std::chrono::duration<double> time_span;
 
 
-        t2 = std::chrono::high_resolution_clock::now();
-        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-        std::cout << "MMap rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
+      //////////////// now partition and open the file.
+      // create FASTQ Loader
+      // call get NextPartition Range to block partition,
+      // call "load" with the partition range.
 
-        std::cout << rank << " file partition: " << loader.getMMapRange() << std::endl;
+      t1 = std::chrono::high_resolution_clock::now();
+
+      // get the file ready for read
+      FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire execution.
+      RangeType pr = loader.getNextPartitionRange(rank);
+      loader.load(pr);
 
 
+      t2 = std::chrono::high_resolution_clock::now();
+      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+      std::cout << "MMap rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
-        /////////////// now process the file using version with master.
-        // do some work using openmp  // version without master
-        t1 = std::chrono::high_resolution_clock::now();
-        buildIndex<ComputeType>(loader, index, rank, nthreads, chunkSize);
-
-        t2 = std::chrono::high_resolution_clock::now();
-        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-        std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
+      std::cout << rank << " file partition: " << loader.getMMapRange() << std::endl;
 
 
 
-        /////////////// clean up
-        t1 = std::chrono::high_resolution_clock::now();
-        loader.unload();
-        t2 = std::chrono::high_resolution_clock::now();
-        time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-        std::cout << "Unload rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
+      /////////////// now process the file using version with master.
+      // do some work using openmp  // version without master
+      t1 = std::chrono::high_resolution_clock::now();
+      buildIndex<ComputeType, Index>(loader, index, rank, nthreads, chunkSize);
+
+      t2 = std::chrono::high_resolution_clock::now();
+      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+      std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
 
-      }  // scope to ensure file loader is destroyed.
+
+      /////////////// clean up
+      t1 = std::chrono::high_resolution_clock::now();
+      loader.unload();
+      t2 = std::chrono::high_resolution_clock::now();
+      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+      std::cout << "Unload rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
+
+
+    }  // scope to ensure file loader is destroyed.
 
 };
 
@@ -299,7 +304,7 @@ int main(int argc, char** argv) {
   }
 
   std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
-//  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
+  //  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
   if (argc > 3)
   {
     filename.assign(argv[3]);
@@ -311,54 +316,71 @@ int main(int argc, char** argv) {
 #ifdef USE_MPI
 
 
-          if (nthreads > 1) {
+  if (nthreads > 1) {
 
-            int provided;
+    int provided;
 
-            // one thread will be making all MPI calls.
-            MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
+    // one thread will be making all MPI calls.
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
 
-            if (provided < MPI_THREAD_FUNNELED) {
-              printf("ERROR: The MPI Library Does not have thread support.\n");
-              MPI_Abort(MPI_COMM_WORLD, 1);
-            }
-          } else {
-            MPI_Init(&argc, &argv);
-          }
+    if (provided < MPI_THREAD_FUNNELED) {
+      printf("ERROR: The MPI Library Does not have thread support.\n");
+      MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+  } else {
+    MPI_Init(&argc, &argv);
+  }
 
-          MPI_Comm comm = MPI_COMM_WORLD;
+  MPI_Comm comm = MPI_COMM_WORLD;
 
-          MPI_Comm_size(comm, &groupSize);
-          MPI_Comm_rank(comm, &id);
+  MPI_Comm_size(comm, &groupSize);
+  MPI_Comm_rank(comm, &id);
 
 
-          if (id == 0)
-            std::cout << "USE_MPI is set" << std::endl;
+  if (id == 0)
+    std::cout << "USE_MPI is set" << std::endl;
 #else
-          static_assert(false, "MPIRunner Used when compilation is not set to use MPI");
+  static_assert(false, "MPIRunner Used when compilation is not set to use MPI");
 #endif
   // replace with MPIRunner
 
 
-          {
-        IndexType index(comm, groupSize);
-          //index.setLooupAnswerCallback(std::function<void(std::pair<KmerType, std::vector<KmerIndexType> >&)>(&callback));
+  {  // scoped to ensure index is deleted before MPI_Finalize()
+    IndexType index(comm, groupSize);
+    //index.setLooupAnswerCallback(std::function<void(std::pair<KmerType, std::vector<KmerIndexValueType> >&)>(&callback));
 
 
-        /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-        RunTask<KmerIndexComputeType> t;
-        t(filename, index, comm, nthreads, chunkSize);
+    /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+    RunTask<KmerIndexComputeType, IndexType> t;
+    t(filename, index, comm, nthreads, chunkSize);
 
-        printf("MPI number of entries in index for rank %d is %lu\n", id, index.local_size());
-
-        MPI_Barrier(comm);
+    printf("MPI number of entries in index for rank %d is %lu\n", id, index.local_size());
 
 
-        //// query:  use the same file as input.  walk through and generate kmers as before.  send query
 
-          }
+    //// query:  use the same file as input.  walk through and generate kmers as before.  send query
+
+  }
+  MPI_Barrier(comm);
+
+  {  // scoped to ensure index is deleted before MPI_Finalize()
+    CountIndexType index(comm, groupSize);
+    //index.setLooupAnswerCallback(std::function<void(std::pair<KmerType, std::vector<KmerIndexValueType> >&)>(&callback));
 
 
+    /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+    RunTask<KmerCountComputeType, CountIndexType> t;
+    t(filename, index, comm, nthreads, chunkSize);
+
+    printf("MPI number of entries in index for rank %d is %lu\n", id, index.local_size());
+
+
+
+    //// query:  use the same file as input.  walk through and generate kmers as before.  send query
+
+  }
+
+  MPI_Barrier(comm);
 
   //////////////  clean up MPI.
   MPI_Finalize();

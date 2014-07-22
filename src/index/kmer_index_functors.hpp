@@ -2,8 +2,8 @@
  * @file    kmer_index_functors.hpp
  * @ingroup
  * @author  tpan
- * @brief
- * @details
+ * @brief   contains functors for generating kmers and its quality scores.
+ * @details uses a containment strategy for generating kmers w/ or w/o id and quality score.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -12,42 +12,44 @@
 #ifndef KMER_INDEX_FUNCTORS_HPP_
 #define KMER_INDEX_FUNCTORS_HPP_
 
-#include <cmath>
+#include <cmath>  // for quality score computation
 
-#include <array>
+#include <array>  // for quality score lookup table
+#include <type_traits>
+#include <utility>
 
-#include <utils/constexpr_array.hpp>
-#include <common/AlphabetTraits.hpp>
-#include <io/fastq_iterator.hpp>
-#include <index/kmer_index_element.hpp>
+#include <utils/constexpr_array.hpp>      // for precomputing the quality scores
+#include <common/AlphabetTraits.hpp>      // for mapping char to alphabet value
+#include <io/fastq_iterator.hpp>          // for Id.
+#include <index/kmer_index_element.hpp>   // for the basic kmer index element structures.
 
 namespace bliss
 {
   namespace index
   {
-
-    template<typename Sequence, typename KmerIndex>
-    struct generate_kmer
-    {
+    template<typename Sequence, typename KmerIndex, typename has_id = std::false_type>
+    class generate_kmer {
+      public:
         typedef Sequence                            SequenceType;
         typedef typename Sequence::IteratorType     BaseIterType;
-        typedef typename Sequence::AlphabetType     AlphabetType;
         typedef KmerIndex                           KmerIndexType;
-        typedef typename KmerIndex::KmerType        KmerValueType;
-        typedef std::pair<KmerValueType, KmerIndex> OutputType;       // key-value pair.
+        typedef typename KmerIndexType::KmerType    KmerValueType;
+        typedef std::pair<KmerValueType, KmerIndexType> OutputType;       // key-value pair.
 
+      protected:
+        typedef typename Sequence::AlphabetType     AlphabetType;
         /// Current Kmer buffer
-        KmerIndex kmer;
+        KmerIndexType kmer;
         /// Current reverse complement
         KmerValueType revcomp;
 
-        /// current position in the read sequence
-        uint16_t pos;
+      protected:
+
 
         static constexpr BitSizeType nBits =
             bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
         static constexpr BitSizeType shift =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerIndex::SizeType::size - 1);
+            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerIndexType::SizeType::size - 1);
         static constexpr AlphabetSizeType max =
             bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
 
@@ -57,11 +59,9 @@ namespace bliss
         //    static constexpr KmerValueType mask_lower_half = ~(static_cast<KmerValueType>(0))
         //        >> (word_size - nBits * (K + 1) / 2);
 
-        generate_kmer(const bliss::io::fastq_sequence_id &_rid)
-            : kmer(), revcomp(0), pos(0)
-        {
-          kmer.id = _rid;
-        }
+      public:
+        generate_kmer(const bliss::io::fastq_sequence_id &_rid) : kmer(), revcomp(0)
+        {}
 
         size_t operator()(BaseIterType &iter)
         {
@@ -69,7 +69,6 @@ namespace bliss
           char val = AlphabetType::FROM_ASCII[static_cast<size_t>(*iter)];
           kmer.kmer >>= nBits;
           kmer.kmer |= (static_cast<KmerValueType>(val) << shift);
-          kmer.id.components.pos = pos;
 
           // generate the rev complement
           char complement = max - val;
@@ -78,7 +77,7 @@ namespace bliss
           revcomp &= mask_reverse;
 
           ++iter;
-          ++pos;
+
           return 1;
         }
 
@@ -91,6 +90,52 @@ namespace bliss
           //      KmerValueType xored_recoverable = (xored & ~mask_lower_half) | (_kmer.forward & mask_lower_half);
 
           return OutputType(revcomp ^ kmer.kmer, kmer);   // constructing a new result.
+        }
+
+    };
+
+    /**
+     * kmer generator operator type
+     * The third template parameter acts as a member checker to make sure there is an id field and it's of type bliss::io::fastq_sequence_id
+     */
+    template<typename Sequence, typename KmerIndex>
+    class generate_kmer<Sequence, KmerIndex,
+      typename std::enable_if<!std::is_same<decltype(std::declval<KmerIndex>().id), void>::value, std::true_type >::type >
+      : generate_kmer<Sequence, KmerIndex, std::false_type>
+    {
+      public:
+        typedef Sequence                            SequenceType;
+        typedef typename Sequence::IteratorType     BaseIterType;
+        typedef KmerIndex                           KmerIndexType;
+        typedef typename KmerIndexType::KmerType    KmerValueType;
+
+        typedef std::pair<KmerValueType, KmerIndexType> OutputType;       // key-value pair.
+
+
+        /// kmer and rev complement are in the base class.
+        /// current position in the read sequence
+        uint16_t pos;
+
+      protected:
+        typedef typename Sequence::AlphabetType     AlphabetType;
+        typedef generate_kmer<Sequence, KmerIndex, std::false_type> BaseClassType;
+
+      public:
+
+        generate_kmer(const bliss::io::fastq_sequence_id &_rid)
+            : BaseClassType(_rid), pos(0)
+        {
+          this->kmer.id = _rid;
+        }
+
+        size_t operator()(BaseIterType &iter)
+        {
+          size_t count = BaseClassType::operator()(iter);
+
+          this->kmer.id.components.pos = pos;
+          ++pos;
+
+          return count;
         }
 
     };
@@ -288,6 +333,9 @@ namespace bliss
         }
 
     };
+
+
+
 
   } /* namespace io */
 } /* namespace bliss */

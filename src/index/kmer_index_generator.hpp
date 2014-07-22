@@ -26,10 +26,10 @@ namespace bliss
     // given kmer index element type, and fastq sequence type, should be able to specialize kmer generator type.  DONE
     // given the kmer index element type, should be able to define IndexType type.  But won't.  IndexType may be of different types.
     // alignas(64)
-    struct countType
-    {
-        uint64_t c;
-    };
+//    struct countType
+//    {
+//        uint64_t c;
+//    };
 
     // this can become a 1 to n transformer???
     template<typename KmerGenOp, typename IndexType>
@@ -44,11 +44,7 @@ namespace bliss
 
         static constexpr int K = KmerSizeType::size;
 
-        KmerIndexGenerator() {
-          static_assert(std::is_same<typename KmerGenOp::KmerIndexType,
-                                     typename IndexType::value_type::second_type>::value,
-                        "Kmer Generation and Send Buffer should use the same type");
-        }
+        KmerIndexGenerator() {}
 
         void operator()(SequenceType &read, IndexType &index) {
           KmerGenOp kmer_op(read.id);
