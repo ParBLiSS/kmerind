@@ -196,7 +196,7 @@ public:
 
 
   template <typename InputIterator>
-  void fillFromChars(InputIterator& begin)
+  void fillFromChars(InputIterator& begin, bool stop_on_last = false)
   {
     // value type of given iterator
     typedef typename std::iterator_traits<InputIterator>::value_type char_type;
@@ -205,10 +205,10 @@ public:
     do_clear();
 
     // add to lsb iteratively and reverse at the end
-    for (unsigned int i = 0; i < size; ++i)
+    for (unsigned int i = 0; i < size;)
     {
       // get next character as word_type and mask out bits that are not needed
-      char_type c = *(begin++);
+      char_type c = *begin;
       word_type w = static_cast<word_type>(c);
       w &= getBitMask<word_type>(bitsPerChar);
 
@@ -218,6 +218,10 @@ public:
 
       // add character to least significant end (requires least shifting)
       *data |= w;
+
+      // iterate the input iterator one more, but stop on last
+      // iteration if that option is set
+      if (!stop_on_last || (stop_on_last && ++i!=size)) ++begin;
     }
 
     // reverse the k-mer (needed since we added the newest characters to the
@@ -247,8 +251,8 @@ public:
    *                        the currently pointed to value of the input
    *                        sequence.
    */
-  template <typename InputIterator>
-  void nextFromPaddedStream(InputIterator& begin, unsigned int& offset)
+  template <typename InputIterator, typename offset_t>
+  void nextFromPaddedStream(InputIterator& begin, offset_t& offset)
   {
     typedef typename std::iterator_traits<InputIterator>::value_type input_type;
     // shift the kmer by the size of one character
@@ -299,6 +303,11 @@ public:
 
     // increase offset
     offset += bitsPerChar;
+    if (offset >= PaddingTraits<input_type, bitsPerChar>::data_bits)
+    {
+      ++begin;
+      offset -= PaddingTraits<input_type, bitsPerChar>::data_bits;
+    }
   }
 
   /**
