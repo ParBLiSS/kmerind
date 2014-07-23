@@ -103,6 +103,15 @@ public:
   }
 
   /**
+   * @brief   Returns the local map's size.  primarily for debugging.
+   * @return  size of the local map.
+   */
+  const size_t local_size() const
+  {
+    return local_map.size();
+  }
+
+  /**
    * @brief Flushes all pending operations.
    *
    * Since all insert and lookup operations are executed asynchronosly,
@@ -482,7 +491,7 @@ public:
     // add comm layer receive callbacks
     using namespace std::placeholders;
     this->commLayer.addReceiveCallback(_base_class::INSERT_MPI_TAG,
-        std::bind(&distributed_multimap::receivedCountCallback,
+        std::bind(&distributed_multimap::receivedInsertCallback,
                   this, _1, _2, _3));
     this->commLayer.addReceiveCallback(_base_class::LOOKUP_MPI_TAG,
         std::bind(&distributed_multimap::receivedLookupCallback,

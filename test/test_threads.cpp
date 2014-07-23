@@ -520,7 +520,7 @@ void computeP2P(FileLoaderType &loader,
           result = std::move(recvQueue.tryPop());
         }
 
-        printf("finally: %lu -> %lu\n", sendQueue.size(), recvQueue.size());
+        printf("finally: %lu -> %lu\n", sendQueue.getSize(), recvQueue.getSize());
       }  // section for handling the received MPI messages
 
 
@@ -629,7 +629,7 @@ void computeP2P(FileLoaderType &loader,
 
 
 #pragma omp flush(computes)
-       if ((computes == 0) && sendQueue.empty()) {
+       if ((computes == 0) && sendQueue.isEmpty()) {
 
          if (sendInProgress.empty() && (computeDone == false)) {
            /// no more generators.  and queue is empty.

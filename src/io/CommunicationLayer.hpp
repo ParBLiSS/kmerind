@@ -52,7 +52,7 @@
 #include <concurrent/threadsafe_queue.hpp>
 #include <concurrent/concurrent.hpp>
 #include <io/message_buffers.hpp>
-
+#include <io/io_exception.hpp>
 
 
 namespace bliss
@@ -235,8 +235,6 @@ public:
         }
       }
       fullId = -1;
-      /// TODO: is this busy waiting really necessary?
-      usleep(10);
     } while (!result.first);
   }
 
@@ -411,7 +409,7 @@ public:
   {
     ReceivedMessage msg;
     // while there is still work to be done:
-    while (!recvDone.load() || !recvQueue.empty() )
+    while (!recvDone.load() || !recvQueue.isEmpty() )
     {
       // get next element from the queue, wait if none is available
       auto result = std::move(recvQueue.waitAndPop());
@@ -508,16 +506,16 @@ protected:
       return;
     }
     // flush out all the send buffers matching a particular tag.
-    DEBUGF("Active Buffer Ids in message buffer: %s", buffers.at(tag).activeIdsToString().c_str());
+    DEBUGF("Active Buffer Ids in message buffer: %s", buffers.at(tag).bufferIdsToString().c_str());
 
-    int idCount = buffers.at(tag).getActiveIds().size();
+    int idCount = buffers.at(tag).getBufferIds().size();
     assert(idCount == commSize);
     for (int i = 0; i < idCount; ++i) {
       // flush buffers in a circular fashion, starting with the next neighbor
       int target_rank = (i + getCommRank()) % getCommSize();
       DEBUGF("flushBuffers : target_rank = %d ", target_rank );
 
-      auto id = buffers.at(tag).getActiveId(target_rank);
+      auto id = buffers.at(tag).getBufferId(target_rank);
       // flush/send all remaining non-empty buffers
       if ((id != -1) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
         if (!sendQueue.waitAndPush(std::move(SendQueueElement(id, tag, target_rank)))) {
@@ -627,7 +625,7 @@ protected:
       }
     }
 
-    if (finishing.load() && sendQueue.empty() && sendInProgress.empty()) {
+    if (finishing.load() && sendQueue.isEmpty() && sendInProgress.empty()) {
       // not using sendAccept as check - sendAccept is cleared BEFORE the last
       // tag end messages starts to be sent, and definitely before the app end
       // message starts to be sent so sendDone may be set to true too early,

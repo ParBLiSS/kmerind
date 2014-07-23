@@ -432,3 +432,14 @@ TODO:
 TODO:
 	ERROR: check_threadsafe_queue have intermittant error.
 	Merge code with trunk.
+	
+	
+7/21/2014
+	refactored, merged, documented, and tested the following classes:
+		ThreadSafeQueue
+		Buffer
+		BufferPool
+		MessageBuffers
+	updated CommLayer
+		
+	now working on using CommLayer and DistributedMap to implement TestThreads (index building and query). 
