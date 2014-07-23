@@ -133,10 +133,14 @@ namespace bliss
     {
       public:
         typedef DataBlock<BufferedDataBlock<Iterator, Range, Container>, Iterator, Range, typename Container::iterator> SuperType;
-        static_assert(is_container<Container>::value, "Container is not valid.  Should support begin() and end() at the least.");
         static_assert(std::is_same<typename SuperType::ValueType, typename Container::value_type>::value, "Iterator and Container should have the same element types");
 
-        static_assert(has_assign_method<Container, Iterator>(nullptr), "Container needs to be a sequence container with 'assign' method.");
+        //static_assert(bliss::utils::container_traits<Container>::has_assign_method<Iterator>(), "Container needs to be a sequence container with 'assign' method.");
+        static_assert(bliss::utils::container_traits<Container>::hasBeginMethod, "container has Begin returned false");
+        static_assert(!bliss::utils::container_traits<Range>::hasBeginMethod, "Range has Begin returned true");
+
+//                static_assert(bliss::utils::container_traits<Container>::is_const_iterable<Container>(), "Container is not valid.  Should support cbegin() and cend() method.");
+//        static_assert(bliss::utils::container_traits<Container>::is_iterable(), "Container is not valid.  Should support begin() and end() method.");
 
 
         /// constructor is default

@@ -63,6 +63,7 @@ namespace io
 
 // Use the threadsafe version of the SendMessageBuffers as message buffer
 typedef SendMessageBuffers<bliss::concurrent::THREAD_SAFE> BuffersType;
+typedef typename BuffersType::BufferPoolType                BufferPoolType;
 
 
 /**
@@ -131,6 +132,7 @@ struct SendQueueElement
  */
 class CommunicationLayer
 {
+
 public:
 
   /**
@@ -218,7 +220,7 @@ public:
 
     /// try to append the new data - repeat until successful.
     /// along the way, if a full buffer's id is returned, queue it for sendQueue.
-    BufferIdType fullId = -1;
+    BufferIdType fullId = BufferPoolType::INVALID;
     std::pair<bool, BufferIdType> result;
     do {
       result = buffers.at(tag).append(data, count, dst_rank);
@@ -226,7 +228,7 @@ public:
       fullId = result.second;
 
       // repeat until success;
-      if (fullId != -1) {
+      if (fullId != BufferPoolType::INVALID) {
         if (!(buffers.at(tag).getBackBuffer(fullId).isEmpty())) {
           // have a full buffer - put in send queue.
           if (!sendQueue.waitAndPush(std::move(SendQueueElement(fullId, tag, dst_rank)))) {
@@ -234,7 +236,7 @@ public:
           }
         }
       }
-      fullId = -1;
+      fullId = BufferPoolType::INVALID;
     } while (!result.first);
   }
 
@@ -461,7 +463,7 @@ protected:
       DEBUGF("sendEndTags target_rank = %d ", target_rank );
 
       // send the end message for this tag.
-      if (!sendQueue.waitAndPush(std::move(SendQueueElement(-1, tag, target_rank)))) {
+      if (!sendQueue.waitAndPush(std::move(SendQueueElement(BufferPoolType::INVALID, tag, target_rank)))) {
         throw bliss::io::IOException("ERROR: sendQueue is not accepting new SendQueueElement due to disablePush");
       }
     }
@@ -517,7 +519,7 @@ protected:
 
       auto id = buffers.at(tag).getBufferId(target_rank);
       // flush/send all remaining non-empty buffers
-      if ((id != -1) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
+      if ((id != BufferPoolType::INVALID) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
         if (!sendQueue.waitAndPush(std::move(SendQueueElement(id, tag, target_rank)))) {
           throw bliss::io::IOException("ERROR: sendQueue is not accepting new SendQueueElement due to disablePush");
         }
@@ -547,7 +549,7 @@ protected:
     // else there is a valid entry from sendQueue
     se = el.second;
     // Is this an END tag/ empty message?
-    if (se.bufferId == -1) {
+    if (se.bufferId == BufferPoolType::INVALID) {
       // termination message for this tag and destination
       if (se.dst == commRank) {
         // local, directly handle by creating an output object and directly
@@ -613,7 +615,7 @@ protected:
 
       if (finished)
       {
-        if (front.second.bufferId != -1) {
+        if (front.second.bufferId != BufferPoolType::INVALID) {
           // cleanup, i.e., release the buffer back into the pool
           buffers.at(front.second.tag).releaseBuffer(front.second.bufferId);
         }

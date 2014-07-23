@@ -61,6 +61,8 @@ namespace bliss
          */
         typedef int                                       IdType;
 
+        static const IdType INVALID = -1;
+
       protected:
         /**
          * capacity of the BufferPool (in number of Buffers)
@@ -165,6 +167,11 @@ namespace bliss
           other.capacity = 0;
           other.buffer_capacity = 0;
         };
+
+        void checkId(const IdType& id) const {
+          if (id < 0 || id >= static_cast<IdType>(buffers.size()))
+            throw std::out_of_range("Error:  buffer id was specified with out of range value");
+        }
 
 
       public:
@@ -346,8 +353,8 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_SAFE, void>::type releaseBuffer(const IdType& id) {
-          if (id < 0 || id >= static_cast<IdType>(buffers.size()))
-            throw std::out_of_range("Error:  addToAvailable specified with out of range value");
+          checkId(id);
+
           std::lock_guard<std::mutex> lock(mutex);
           buffers[id].clear();
           available.insert(id);
@@ -360,8 +367,7 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_UNSAFE, void>::type releaseBuffer(const IdType& id) {
-          if (id < 0 || id >= static_cast<IdType>(buffers.size()))
-            throw std::out_of_range("Error:  addToAvailable specified with out of range value");
+          checkId(id);
 
           buffers[id].clear();
           available.insert(id);
@@ -375,13 +381,11 @@ namespace bliss
          * @param bufferId    Id of the buffer to be access (get from Acquire)
          * @return            const reference to the Buffer
          */
-        const BufferType& operator[](const IdType& bufferId) const {
+        const BufferType& operator[](const IdType& id) const {
           // can only access what has been allocated.  does not increase size of the pool.
-          if (bufferId < 0 || bufferId >= static_cast<IdType>(buffers.size())) {
-            throw std::out_of_range("ERROR:  Buffer Pool buffer accessor was called with bad buffer id");
-          }
+          checkId(id);
 
-          return buffers[bufferId];               // multiple threads can access the same buffer...
+          return buffers[id];               // multiple threads can access the same buffer...
         }
 
         /**
@@ -397,7 +401,8 @@ namespace bliss
         }
     };
 
-
+    template<bliss::concurrent::ThreadSafety PoolTS, bliss::concurrent::ThreadSafety BufferTS>
+        const typename BufferPool<PoolTS, BufferTS>::IdType BufferPool<PoolTS, BufferTS>::INVALID;
 
   } /* namespace io */
 } /* namespace bliss */

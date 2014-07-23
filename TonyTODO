@@ -443,3 +443,8 @@ TODO:
 	updated CommLayer
 		
 	now working on using CommLayer and DistributedMap to implement TestThreads (index building and query). 
+	
+7/22/2014
+	Doing Count Index exposed several problems - insert interface for the maps are not uniform.
+	root problem is what is the data structure for kmer element to be inserted?
+	next problem is whether kmer should be stored with its metadata (pos and quality).

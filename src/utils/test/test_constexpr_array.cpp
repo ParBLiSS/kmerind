@@ -70,7 +70,7 @@ TYPED_TEST_CASE_P(ConstexprArrayTest);
 
 TYPED_TEST_P(ConstexprArrayTest, compute) {
   constexpr auto N=10;
-  constexpr auto a = make_array<N>(TypeParam());  // OKAY to init one here, but not ahead of time and pass in object.
+  constexpr auto a = bliss::utils::make_array<N>(TypeParam());  // OKAY to init one here, but not ahead of time and pass in object.
 
   constexpr TypeParam f;
   for (int i = 0; i < N; ++i) {

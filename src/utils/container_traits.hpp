@@ -1,12 +1,10 @@
 /**
  * @file		container_traits.hpp
- * @ingroup
+ * @ingroup bliss::utils
  * @author	tpan
- * @brief
- * @details modified from solution here: http://stackoverflow.com/questions/9407367/determine-if-a-type-is-an-stl-container-at-compile-time,
- *            which is in turn from here: http://stackoverflow.com/questions/4850473/pretty-print-c-stl-containers
- *
- *            updated to use C++ 11 stuff.
+ * @brief   helper functions to check if a container has the required methods.
+ * @details  adopted from  http://stackoverflow.com/questions/9530928/checking-a-member-exists-possibly-in-a-base-class-c11-version
+ *            updated to use macro to generate the simple cases.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -15,91 +13,148 @@
 #ifndef CONTAINER_TRAITS_HPP_
 #define CONTAINER_TRAITS_HPP_
 
+#include <utility>
+#include <type_traits>
 
-template<typename T>
-struct has_const_iterator
-{
-private:
-    typedef char                      yes;
-    typedef struct { char array[2]; } no;
-
-    template<typename C> static yes test(typename C::const_iterator*);
-    template<typename C> static no  test(...);
-public:
-    static const bool value = sizeof(test<T>(0)) == sizeof(yes);
-    typedef T type;
-};
-
-template <typename T>
-struct has_begin_end
-{
-    template<typename C> static char (&f(typename std::enable_if<
-      std::is_same<decltype(static_cast<typename C::const_iterator (C::*)() const>(&C::begin)),
-      typename C::const_iterator(C::*)() const>::value, void>::type*))[1];
-
-    template<typename C> static char (&f(...))[2];
-
-    template<typename C> static char (&g(typename std::enable_if<
-      std::is_same<decltype(static_cast<typename C::const_iterator (C::*)() const>(&C::end)),
-      typename C::const_iterator(C::*)() const>::value, void>::type*))[1];
-
-    template<typename C> static char (&g(...))[2];
-
-    static bool const beg_value = sizeof(f<T>(0)) == 1;
-    static bool const end_value = sizeof(g<T>(0)) == 1;
-};
+    // preprocessor directive to save some typing.
+#define BLISS_UTILS_CONTAINER_HAS_METHOD_WITH_NAME(NAME) \
+        template<typename CC = C> \
+        static auto test_##NAME##(CC*) -> decltype(std::declval<CC>().##NAME##(), std::true_type()); \
+        template<typename> \
+        static std::false_type test_##NAME##(...);
 
 
-template<typename T>
-struct is_container : std::integral_constant<bool, has_const_iterator<T>::value && has_begin_end<T>::beg_value && has_begin_end<T>::end_value>
-{ };
+namespace bliss {
+  namespace utils {
+
+    /**
+     * container traits class, templated to container's data type.
+     */
+    template<typename C>
+    class container_traits {
+
+      private:
+        BLISS_UTILS_CONTAINER_HAS_METHOD_WITH_NAME(begin);
 
 
-/////// check if "assign" is available.
-///// adopted from  http://stackoverflow.com/questions/9530928/checking-a-member-exists-possibly-in-a-base-class-c11-version
+      public:
+        /**
+         * @brief   determine if the container has an begin method
+         * @detail  uses declval to get lvalues, and use decltype and SFINAE to do "enable_if".
+         *          decltype evaluates all expressions, but returns type of last.
+         *
+         *          method is defined only if begin exists.
+         *
+         * @tparam  T   type to check, should be a container.
+         * @param       unamed pointer parameter for automatic type deduction for the templates
+         * @return      true if method is defined, for all else return false.
+         */
+        static constexpr bool hasBeginMethod = std::is_same<decltype(has_begin<C>(nullptr)), std::true_type>::value;
 
-template <typename T, typename InputIterator>
-constexpr auto has_assign_method(T*) -> decltype(std::declval<T>().assign(std::declval<InputIterator>(), std::declval<InputIterator>()), bool())
-{
-    return true;
-}
-constexpr bool has_assign_method(...) {return false;}
+        /**
+         * @brief   determine if a type has an end method
+         * @detail  uses declval to get lvalues, and use decltype and SFINAE to do "enable_if".
+         *          decltype evaluates all expressions, but returns type of last.
+         *
+         *          method is defined only if end exists.
+         *
+         * @tparam  T   type to check, should be a container.
+         * @param       unamed pointer parameter for automatic type deduction for the templates
+         * @return      true if end method is defined, for all else return false.
+         */
+        //BLISS_UTILS_CONTAINER_HAS_METHOD_WITH_NAME(end);
+        static constexpr bool hasEndMethod = !std::is_same<decltype(std::declval<C>().end()), void>::value;
 
-//
-//template <typename, typename T>
-//struct has_assign
-//{
-//    static_assert(std::integral_constant<T, false>::value,
-//      "Second template parameter needs to be of function type.");
-//};
-//
-//template<typename C, typename Ret, typename... Args>
-//struct has_assign<C, Ret(Args...)> {
-//  private:
-//      template<typename T>
-//      static constexpr auto check(T*)
-//      -> typename
-//          std::is_same<
-//              decltype( std::declval<T>().assign( std::declval<Args>()... ) ),
-//              Ret    // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-//          >::type;  // attempt to call it and see if the return type is correct
-//
-//      template<typename>
-//      static constexpr std::false_type check(...);
-//
-//      typedef decltype(check<C>(0)) type;
-//
-//  public:
-//      static constexpr bool value = type::value;
-//};
-//
-//template<typename T, typename InputIterator>
-//struct is_sequence_container : std::integral_constant<bool, has_assign<T, void(InputIterator, InputIterator) >::value>
-//{};
+        /**
+         * @brief   determine if a type has an cbegin method
+         * @detail  uses declval to get lvalues, and use decltype and SFINAE to do "enable_if".
+         *          decltype evaluates all expressions, but returns type of last.
+         *
+         *          method is defined only if cbegin exists.
+         *
+         * @tparam  T   type to check, should be a container.
+         * @param       unamed pointer parameter for automatic type deduction for the templates
+         * @return      true if method is defined, for all else return false.
+         */
+        //BLISS_UTILS_CONTAINER_HAS_METHOD_WITH_NAME(cbegin);
+        static constexpr bool hasCBeginMethod = !std::is_same<decltype(std::declval<C>().cbegin()), void>::value;
 
-template<typename T>
-struct get_const_iterator_type {
-    typedef typename std::enable_if<is_container<T>::value, typename T::const_iterator>::type type;
-};
+        /**
+         * @brief   determine if a type has an cend method
+         * @detail  uses declval to get lvalues, and use decltype and SFINAE to do "enable_if".
+         *          decltype evaluates all expressions, but returns type of last.
+         *
+         *          method is defined only if cend exists.
+         *
+         * @tparam  T   type to check, should be a container.
+         * @param       unamed pointer parameter for automatic type deduction for the templates
+         * @return      true if method is defined, for all else return false.
+         */
+        //BLISS_UTILS_CONTAINER_HAS_METHOD_WITH_NAME(cend);
+        static constexpr bool hasCEndMethod = !std::is_same<decltype(std::declval<C>().cend()), void>::value;
+        /**
+         * @brief     check to see if container supports constant iteration.
+         * @tparam T  container type to check
+         * @param       unamed pointer parameter for automatic type deduction for the templates
+         * @return    true if container has cbegin and cend.
+         */
+        template<typename CC = C>
+        static constexpr auto is_const_iterable(CC*) -> decltype(std::declval<CC>().cend(), std::declval<C>().cbegin(), bool())
+        {
+          return true;
+        }
+        template<typename CC = C>
+        static constexpr auto is_const_iterable(CC*) -> typename std::enable_if<std::is_same<decltype(std::declval<CC>().cend()), void>::value, bool>::type
+        {
+          return false;
+        }
+
+        /**
+         * @brief     check to see if container supports iteration.
+         * @tparam T  container type to check
+         * @param       unamed pointer parameter for automatic type deduction for the templates
+         * @return    true if container has begin and end.
+         */
+        static constexpr bool is_iterable() {
+          return hasBeginMethod && hasEndMethod;
+        }
+
+
+        /**
+         * @brief   determine if a type has an assign method that takes start and end iterators
+         * @detail  uses declval to get lvalues, and use decltype and SFINAE to do "enable_if".
+         *          decltype evaluates all expressions, but returns type of last.
+         *
+         *          method is defined only if assign exists.
+         *
+         *          adopted from  http://stackoverflow.com/questions/9530928/checking-a-member-exists-possibly-in-a-base-class-c11-version
+         *
+         * @tparam  T              type to check, should be a container.
+         * @tparam  InputIterator  type of iterator to use with "assign"
+         * @param       unamed container pointer parameter for automatic type deduction for the templates
+         * @param       unamed input iterator pointer parameter for automatic type deduction for the templates
+         * @return  true (if method is defined, which is when T has "assign"
+         */
+        template <typename InputIterator>
+        static constexpr bool is_assignable()
+        {
+          return !std::is_same<decltype(std::declval<C>().assign(std::declval<InputIterator>(), std::declval<InputIterator>())), void>::value;
+        }
+
+
+
+
+    };
+
+    template<typename C>
+    constexpr bool container_traits<C>::hasEndMethod;
+    template<typename C>
+    constexpr bool container_traits<C>::hasCBeginMethod;
+    template<typename C>
+    constexpr bool container_traits<C>::hasCEndMethod;
+
+  } //namespace utils
+} //namespace bliss
+
 
 #endif /* CONTAINER_TRAITS_HPP_ */
