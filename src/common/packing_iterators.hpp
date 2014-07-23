@@ -8,8 +8,8 @@
  *
  * TODO add Licence
  */
-#ifndef BLISS_COMMON_PACKINGITERATOR_H
-#define BLISS_COMMON_PACKINGITERATOR_H
+#ifndef BLISS_COMMON_PACKINGITERATORS_H
+#define BLISS_COMMON_PACKINGITERATORS_H
 
 // C std lib includes:
 #include <cstdlib>
@@ -240,4 +240,4 @@ public:
 
 } // namespace bliss
 
-#endif // BLISS_COMMON_PACKINGITERATOR_H
+#endif // BLISS_COMMON_PACKINGITERATORS_H

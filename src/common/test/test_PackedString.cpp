@@ -5,8 +5,9 @@
 #include <common/PackedString.hpp>
 #include <common/alphabets.hpp>
 #include <common/AlphabetTraits.hpp>
-#include <common/PackingIterator.hpp>
 #include <common/Kmer.hpp>
+#include <common/packing_iterators.hpp>
+#include <common/kmer_iterators.hpp>
 
 class PackingTest : public ::testing::Test
 {

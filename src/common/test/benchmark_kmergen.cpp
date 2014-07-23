@@ -4,7 +4,8 @@
 
 #include <common/alphabets.hpp>
 #include <common/AlphabetTraits.hpp>
-#include <common/PackingIterator.hpp>
+#include <common/packing_iterators.hpp>
+#include <common/kmer_iterators.hpp>
 #include <utils/generator.hpp>
 
 
