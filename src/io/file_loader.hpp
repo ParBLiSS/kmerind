@@ -467,8 +467,11 @@ namespace bliss
           loaded = true;
 
           recordSize = getRecordSize<Derived>(3);   // look through 3 records to see the max sizeof records.
-          chunkPartitioner.configure(mmap_range, nthreads, std::max(chunkSize, 2 * recordSize));   // TODO: copy constructor works?
-                // at least 2 x the record size for a chunk.
+
+          // update the chunkSize to at least 2x record size.  uses move assignment operator
+          chunkSize = std::max(chunkSize, 2 * recordSize);
+          // then configure the partitinoer to use the right number of threads.
+          chunkPartitioner.configure(mmap_range, nthreads, chunkSize);
 
         }
 
@@ -561,7 +564,7 @@ namespace bliss
           dataBlocks = new DataBlockType[nthreads];  // as many as there are threads, to allow delayed access to the datablocks.
 
           // partition the full mmap_range
-          partitioner.configure(fileRange, nprocs, chunkSize);
+          partitioner.configure(fileRange, nprocs);
         }
 
 

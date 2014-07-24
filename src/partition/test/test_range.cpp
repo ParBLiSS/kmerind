@@ -106,6 +106,7 @@ TYPED_TEST_P(RangeTest, align){
     starts.push_back(-1);
   }
 
+  size_t size = 1;
   std::vector<size_t> pageSizes =
   { 1, 64};
 
@@ -118,7 +119,7 @@ TYPED_TEST_P(RangeTest, align){
         continue;
 
       //printf("1 %ld %ld\n", static_cast<int64_t>(s), static_cast<int64_t>(p));
-      r = range<TypeParam>(s, s+1);
+      r = range<TypeParam>(s, s+size);
       r = r.align_to_page(p);
       EXPECT_TRUE(r.is_page_aligned(p));
     }
@@ -173,7 +174,7 @@ TYPED_TEST_P(RangeDeathTest, alignFails){
     starts.push_back(std::numeric_limits<TypeParam>::min());
     starts.push_back(std::numeric_limits<TypeParam>::lowest());
   }
-
+  size_t size= 1;
   std::vector<size_t> pageSizes =
   { 0, std::numeric_limits<size_t>::lowest(), std::numeric_limits<size_t>::min()};
 
@@ -186,14 +187,14 @@ TYPED_TEST_P(RangeDeathTest, alignFails){
       //printf("align fail processing start %ld page size %lud\n", static_cast<int64_t>(s), static_cast<uint64_t>(p));
 
       // align fails because of bad page sizes (0 or negative
-      r = range<TypeParam>(s, s+1);
+      r = range<TypeParam>(s, s+size);
       EXPECT_EXIT(r.align_to_page(p), ::testing::KilledBySignal(SIGABRT), err_regex);
 
     }
 
     // if s is negative, also check to make sure we fail with large p.
     if (s < 0) {
-      r = range<TypeParam>(s, s+1);
+      r = range<TypeParam>(s, s+size);
       EXPECT_EXIT(r.align_to_page(std::numeric_limits<size_t>::max()), ::testing::KilledBySignal(SIGABRT), err_regex);
     }
   }

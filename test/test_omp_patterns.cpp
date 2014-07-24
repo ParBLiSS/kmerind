@@ -82,7 +82,7 @@ int main(int argc, char* argv[])
     iter = atoi(argv[3]);
 
   bliss::partition::BlockPartitioner<RangeType> part;
-  part.configure(RangeType(0, max), nprocs, 1);
+  part.configure(RangeType(0, max), nprocs);
 
   compute<double> op;
   double v = 0.0;

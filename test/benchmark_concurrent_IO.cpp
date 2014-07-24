@@ -66,7 +66,7 @@ struct readMMap {
 
       bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > part;
       RangeType _r(0, file_size);
-      part.configure(_r, nprocs, chunkSize);
+      part.configure(_r, nprocs);
 
 
       // mmap

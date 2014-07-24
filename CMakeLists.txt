@@ -465,7 +465,7 @@ add_subdirectory(src/utils)
 
 set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)
 
-
+add_subdirectory(src/partition)
 add_subdirectory(src/common)
 add_subdirectory(src/concurrent)
 add_subdirectory(src/io)

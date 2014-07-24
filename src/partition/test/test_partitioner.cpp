@@ -66,7 +66,7 @@ TYPED_TEST_P(PartitionTest, partition){
       {
 //        if (len < i)
 //          continue;
-        part.configure(src, p, 1);
+        part.configure(src, p);
 
 
 
@@ -139,6 +139,7 @@ TYPED_TEST_P(PartitionDeathTest, badNumPartitions){
   std::string err_regex = ".*partitioner.hpp.*Partitioner.* Assertion .* failed.*";
 
   // end is before start
+  size_t size = 1;
   std::vector<TypeParam> starts =
   { std::numeric_limits<TypeParam>::min()+1, std::numeric_limits<TypeParam>::lowest()+1, 1, 2, std::numeric_limits<TypeParam>::max(), (std::numeric_limits<TypeParam>::max() >> 1) + 1};
 
@@ -149,13 +150,13 @@ TYPED_TEST_P(PartitionDeathTest, badNumPartitions){
   for (auto start : starts)
   {
 
-    src = RangeType(start-1, start);
+    src = RangeType(start-size, start);
 
     for (auto i : partitionCount)
     {
       ;
       //printf("%ld, %ld\n", static_cast<int64_t>(start), i);
-      EXPECT_EXIT(PartitionType(src, i, 1), ::testing::KilledBySignal(SIGABRT), err_regex);
+      EXPECT_EXIT(PartitionerType().configure(src, i), ::testing::KilledBySignal(SIGABRT), err_regex);
     }
   }
 }
@@ -173,7 +174,7 @@ TYPED_TEST_P(PartitionDeathTest, badChunkSize){
   // end is before start
   std::vector<TypeParam> starts =
   { std::numeric_limits<TypeParam>::min()+1, std::numeric_limits<TypeParam>::lowest()+1, 1, 2, std::numeric_limits<TypeParam>::max(), (std::numeric_limits<TypeParam>::max() >> 1) + 1};
-
+  size_t size = 1;
   std::vector<size_t> chunkSizes =
   { 0, std::numeric_limits<size_t>::lowest(), std::numeric_limits<size_t>::min()};
 
@@ -181,13 +182,12 @@ TYPED_TEST_P(PartitionDeathTest, badChunkSize){
   for (auto start : starts)
   {
 
-    src = RangeType(start-1, start);
+    src = RangeType(start-size, start);
 
     for (auto i : chunkSizes)
     {
-      ;
       //printf("%ld, %ld\n", static_cast<int64_t>(start), i);
-      EXPECT_EXIT(PartitionType part(src, 2, i), ::testing::KilledBySignal(SIGABRT), err_regex);
+      EXPECT_EXIT(PartitionerType().configure(src, 2, i), ::testing::KilledBySignal(SIGABRT), err_regex);
     }
   }
 
@@ -207,7 +207,7 @@ TYPED_TEST_P(PartitionDeathTest, badPartitionId){
   // end is before start
   std::vector<TypeParam> starts =
   { std::numeric_limits<TypeParam>::min()+1, std::numeric_limits<TypeParam>::lowest()+1, 1, 2, std::numeric_limits<TypeParam>::max(), (std::numeric_limits<TypeParam>::max() >> 1) + 1};
-
+  size_t size = 1;
 
   // negative or zero parition sizes
   std::vector<int> partitionIds =
@@ -216,12 +216,13 @@ TYPED_TEST_P(PartitionDeathTest, badPartitionId){
   for (auto start : starts)
   {
 
-    src = RangeType(start-1, start);
+    src = RangeType(start-size, start);
 
     for (auto i : partitionIds)
     {
       //printf("%ld, %ld\n", static_cast<int64_t>(start), i);
-      PartitionType part(src, 4, 1);
+      PartitionerType part;
+      part.configure(src, 4);
 
       EXPECT_EXIT(part.getNext(i), ::testing::KilledBySignal(SIGABRT), err_regex);
     }

@@ -76,7 +76,7 @@ namespace bliss
             : block_start(_start), start(_start), end(_end),
               overlap(_overlap)
         {
-          if (_start > _end) throw std::invalid_argument("ERROR: range constructor: end is less than start");
+          if (_end < _start) throw std::invalid_argument("ERROR: range constructor: end is less than start");
           if (_overlap < 0) throw std::invalid_argument("ERROR: range constructor: overlap is less than 0");
         }
 
@@ -174,7 +174,7 @@ namespace bliss
           return *this;
         }
         /**
-         * @brief intersection of range (as |)
+         * @brief intersection of range (as &)
          * @param other
          * @return
          */

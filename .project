@@ -40,6 +40,11 @@
 			<location>/home/tpan/src/bliss/src/iterators</location>
 		</link>
 		<link>
+			<name>[Subprojects]/bliss-partition</name>
+			<type>2</type>
+			<location>/home/tpan/src/bliss/src/partition</location>
+		</link>
+		<link>
 			<name>[Subprojects]/bliss-utils</name>
 			<type>2</type>
 			<location>/home/tpan/src/bliss/src/utils</location>
