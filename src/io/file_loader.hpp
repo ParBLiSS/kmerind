@@ -246,11 +246,12 @@ public:
     std::size_t file_size = 0;
     if (rank == 0)
     {
+      // get file size
       struct stat filestat;
       int ret = stat(filename.c_str(), &filestat);
 
+      // error while getting file size
       if (ret < 0) {
-
         std::stringstream ss;
         ss << "ERROR in file size detection: ["  << filename << "]";
         throw IOException(ss.str());
@@ -262,15 +263,15 @@ public:
       //std::cerr << " sysconf block size is " << page_size << std::endl;
     }
 
+    // broadcast filesize to all processes
     if (nprocs > 1) {
-      /// broadcast filesize to all
       MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, comm);
     }
 
-//          if (rank == nprocs - 1)
-//          {
-//            INFO("file size for " << filename << " is " << file_size);
-//          }
+    //if (rank == nprocs - 1)
+    //{
+    //  INFO("file size for " << filename << " is " << file_size);
+    //}
 
     init(file_size);
   }
@@ -278,14 +279,15 @@ public:
 
 
   FileLoader(const std::string &_filename,
-                      const int _nProcs = 1, const int _rank = 0,
-                      const int _nThreads = 1, const size_t _chunkSize = 1 ) throw (bliss::io::IOException)
+             const int _nProcs = 1, const int _rank = 0,
+             const int _nThreads = 1, const size_t _chunkSize = 1)
+        throw (bliss::io::IOException)
       : file_handle(-1), filename(_filename), fileRange(), mmap_data(nullptr),
-        mmap_range(), loaded(false), preloaded(false),
-        nthreads(_nThreads), chunkSize(_chunkSize), nprocs(_nProcs), rank(_rank), dataBlocks(nullptr), recordSize(1)
+        mmap_range(), loaded(false), preloaded(false), nthreads(_nThreads),
+        chunkSize(_chunkSize), nprocs(_nProcs), rank(_rank),
+        dataBlocks(nullptr), recordSize(1)
   {
     //DEBUG("CONSTRUCT");
-
     assert(filename.length() > 0);
     assert(_nThreads > 0);
     assert(_chunkSize > 0);
@@ -293,7 +295,7 @@ public:
     assert(_nProcs > _rank);
 
 
-    /// get the file size.
+    // get the file size.
     std::size_t file_size = 0;
     struct stat filestat;
     int ret = stat(filename.c_str(), &filestat);
@@ -306,14 +308,11 @@ public:
     }
 
     file_size = static_cast<std::size_t>(filestat.st_size);
-//            std::cerr << "file size is " << file_size;
-//            std::cerr << " block size is " << filestat.st_blksize;
-//            std::cerr << " sysconf block size is " << page_size << std::endl;
 
-//          if (rank == nprocs - 1)
-//          {
-//            INFO("file size for " << filename << " is " << file_size);
-//          }
+    //if (rank == nprocs - 1)
+    //{
+    //  INFO("file size for " << filename << " is " << file_size);
+    //}
 
     init(file_size);
   }
@@ -375,7 +374,8 @@ public:
    * @return
    */
   template<typename D = Derived>
-  typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextPartitionRange(const int pid = -1) {
+  typename std::enable_if<std::is_void<D>::value, RangeType>::type
+  getNextPartitionRange(const int pid = -1) {
     // if just FileLoader calls this.
     if (pid == -1)
       return partitioner.getNext(rank);
@@ -383,14 +383,14 @@ public:
       return partitioner.getNext(pid);
   }
   template<typename D = Derived>
-  typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextPartitionRange(const int pid = -1) {
+  typename std::enable_if<!std::is_void<D>::value, RangeType>::type
+  getNextPartitionRange(const int pid = -1) {
     // use the derived one.
     if (pid == -1)
       return static_cast<Derived*>(this)->getNextPartitionRangeImpl(rank);
     else
       return static_cast<Derived*>(this)->getNextPartitionRangeImpl(pid);
   }
-
 
 
   void resetChunkRange() {
@@ -406,12 +406,14 @@ public:
    * @return
    */
   template <typename D = Derived>
-  typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextChunkRange(const int tid) {
+  typename std::enable_if<std::is_void<D>::value, RangeType>::type
+  getNextChunkRange(const int tid) {
     assert(loaded);
     return chunkPartitioner.getNext(tid);
   }
   template <typename D = Derived>
-  typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextChunkRange(const int tid) {
+  typename std::enable_if<!std::is_void<D>::value, RangeType>::type
+  getNextChunkRange(const int tid) {
     return static_cast<Derived*>(this)->getNextChunkRangeImpl(tid);
   }
 
@@ -421,12 +423,12 @@ public:
   /**
    *  performs memmap, and optionally preload the data into memory.
    *
-   * @param r   range that will be mapped and loaded into memory (with buffering or without)
+   * @param r   range that will be mapped and loaded into memory
+   *            (with buffering or without)
    */
   void load(const RangeType &range) throw (IOException)
   {
     // clean up any previous runs.
-    //DEBUG("Loading");
     unload();
 
     //DEBUG("loading");
@@ -434,17 +436,19 @@ public:
     mmap_range = range & fileRange;
     mmap_range.align_to_page(page_size);
 
-    /// do the mem map
+    // do the mem map
     mmap_data = map(mmap_range);
 
-//////////////// check to see if there is enough memory for preloading.
-///  since Preloading is a template param, can't choose a srcData type if Preloading is true but there is not enough memory.
-/// so we have to assert it.
+    //////////////// check to see if there is enough memory for preloading.
+    // since Preloading is a template param, can't choose a srcData type if
+    // Preloading is true but there is not enough memory.
+    // so we have to assert it.
 
     if (Preloading) {
-      /// check if can load the region into memory.
+      // check if can load the region into memory.
 
-      /// check if we can preload.  use at most 1/20 of the available memory because of kmer expansion.
+      // check if we can preload.  use at most 1/20 of the available memory
+      // because of kmer expansion.
       struct sysinfo memInfo;
       sysinfo (&memInfo);
 
@@ -565,14 +569,16 @@ protected:
     partitioner.configure(fileRange, nprocs, chunkSize);
   }
 
-
-  // partitioner has chunk size. and current position.  at most as many as number of threads (specified in constructor) calling this function.
+  // partitioner has chunk size. and current position.  at most as many as
+  // number of threads (specified in constructor) calling this function.
   template<typename D = Derived>
-  typename std::enable_if<std::is_void<D>::value, std::size_t>::type getRecordSize(const int iterations = 3) {
+  typename std::enable_if<std::is_void<D>::value, std::size_t>::type
+  getRecordSize(const int iterations = 3) {
     return 1;
   }
   template<typename D = Derived>
-  typename std::enable_if<!std::is_void<D>::value, std::size_t>::type getRecordSize(const int iterations = 3) {
+  typename std::enable_if<!std::is_void<D>::value, std::size_t>::type
+  getRecordSize(const int iterations = 3) {
     return static_cast<Derived*>(this)->getRecordSizeImpl(iterations);
   }
 
@@ -586,15 +592,16 @@ protected:
 
     r.align_to_page(page_size);
 
-    // NOT using MAP_POPULATE.  it slows things done when testing on single node.
-    InputIteratorType result = (InputIteratorType)mmap64(nullptr, (r.end - r.block_start ) * sizeof(T),
-                               PROT_READ,
-                               MAP_PRIVATE, file_handle,
-                               r.block_start * sizeof(T));
+    // NOT using MAP_POPULATE.  it slows things done when testing on single
+    // node.
+    InputIteratorType result = (InputIteratorType)mmap64(nullptr,
+                                          (r.end - r.block_start ) * sizeof(T),
+                                          PROT_READ,
+                                          MAP_PRIVATE, file_handle,
+                                          r.block_start * sizeof(T));
 
     if (result == MAP_FAILED)
     {
-
       if (file_handle != -1)
       {
         close(file_handle);
