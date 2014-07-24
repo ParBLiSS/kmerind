@@ -1,7 +1,7 @@
 /**
- * @file		test_threads.cpp
+ * @file    test_threads.cpp
  * @ingroup
- * @author	tpan
+ * @author  tpan
  * @brief
  * @details
  *
@@ -34,16 +34,16 @@
 //#include <unordered_map>
 //#include <chrono>
 
-#include "common/base_types.hpp"
-#include "common/alphabets.hpp"
-#include "common/AlphabetTraits.hpp"
-#include "partition/range.hpp"
-#include "io/fastq_loader.hpp"
-#include "index/kmer_index_element.hpp"
-#include "index/kmer_index_functors.hpp"
-#include "index/kmer_index_generator.hpp"
-#include "io/CommunicationLayer.hpp"
-#include "index/distributed_map.hpp"
+#include <common/base_types.hpp>
+#include <common/alphabets.hpp>
+#include <common/AlphabetTraits.hpp>
+#include <partition/range.hpp>
+#include <io/fastq_loader.hpp>
+#include <index/kmer_index_element.hpp>
+#include <index/kmer_index_functors.hpp>
+#include <index/kmer_index_generator.hpp>
+#include <io/CommunicationLayer.hpp>
+#include <index/distributed_map.hpp>
 
 
 /*
@@ -335,7 +335,7 @@ int main(int argc, char** argv) {
           if (id == 0)
             std::cout << "USE_MPI is set" << std::endl;
 #else
-          static_assert(false, "MPIRunner Used when compilation is not set to use MPI");
+          static_assert(false, "MPI used although compilation is not set to use MPI");
 #endif
   // replace with MPIRunner
 

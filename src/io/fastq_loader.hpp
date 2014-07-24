@@ -65,7 +65,6 @@ namespace bliss
 
 
         typedef typename SuperType::RangeType                            RangeType;
-        typedef typename SuperType::SizeType                             SizeType;
 
       protected:
         /**
@@ -114,7 +113,7 @@ namespace bliss
          * @return            position of the start of next read sequence (@).  if there is no complete sequence, and is not at end of partition, throw exception.
          */
         template<typename Iterator>
-        const SizeType findStart(const Iterator &_data, const RangeType &partRange, const RangeType &loadedRange, const RangeType &searchRange) const
+        const std::size_t findStart(const Iterator &_data, const RangeType &partRange, const RangeType &loadedRange, const RangeType &searchRange) const
         throw (bliss::io::IOException) {
 
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
@@ -123,7 +122,7 @@ namespace bliss
           RangeType t = searchRange & loadedRange; // intersection to bound target to between parent's ends.
           if (t.start == t.end) return t.start;
 
-          SizeType i = t.start;
+          std::size_t i = t.start;
           Iterator data(_data);
           bool wasEOL;
 
@@ -158,7 +157,7 @@ namespace bliss
           // already has the first line first char..
           ValueType first[4] =
           { 0, 0, 0, 0 };
-          SizeType offsets[4] =
+          std::size_t offsets[4] =
           { t.end, t.end, t.end, t.end };   // units:  offset from beginning of file.
 
           int currLineId = 0;        // current line id in the buffer
@@ -266,7 +265,7 @@ namespace bliss
 
           RangeType hint = this->partitioner.getNext(p);
           hint &= this->fileRange;
-          SizeType length = hint.size();
+          std::size_t length = hint.size();
 
           RangeType next = hint >> length;
           next &= this->fileRange;
@@ -318,7 +317,7 @@ namespace bliss
 
           RangeType hint = this->chunkPartitioner.getNext(tid);    // chunkPartitioner has this as atomic if needed
           hint &= srcRange;
-          SizeType length = hint.size();
+          std::size_t length = hint.size();
 
           // chunk size is already set to at least 2x record size - set during FileLoader::load()
 
@@ -359,15 +358,15 @@ namespace bliss
         }
 
 
-        SizeType getRecordSizeImpl(int iterations = 3) {
+        std::size_t getRecordSizeImpl(int iterations = 3) {
 
           //// TODO: if a different partitioner is used, seqSize may be incorrect.
           ////   seqSize is a property of the partitioner applied to the data.
 
           assert(this->loaded);
 
-          SizeType s, e;
-          SizeType ss = 0;
+          std::size_t s, e;
+          std::size_t ss = 0;
           RangeType parent(this->srcData.getRange());
           RangeType r(this->srcData.getRange());
 

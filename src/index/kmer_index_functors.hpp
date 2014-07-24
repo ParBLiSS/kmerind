@@ -25,7 +25,9 @@ namespace bliss
 {
   namespace index
   {
-
+    // TODO: this is all deprecated, but some parts of it might be useful
+    
+    // KmerIndex = KmerIndexElement or KmerIndexElementWithQuality, ...
     template<typename Sequence, typename KmerIndex>
     struct generate_kmer
     {
@@ -36,9 +38,9 @@ namespace bliss
         typedef typename KmerIndex::KmerType        KmerValueType;
         typedef std::pair<KmerValueType, KmerIndex> OutputType;       // key-value pair.
 
-        /// Current Kmer buffer
+        /// Current Kmer buffer (k-mer + index + quality)
         KmerIndex kmer;
-        /// Current reverse complement
+        /// Current reverse complement (just k-mer)
         KmerValueType revcomp;
 
         /// current position in the read sequence
@@ -57,12 +59,14 @@ namespace bliss
         //    static constexpr KmerValueType mask_lower_half = ~(static_cast<KmerValueType>(0))
         //        >> (word_size - nBits * (K + 1) / 2);
 
+        //.constructor taking the fastq sequence id for a read
         generate_kmer(const bliss::io::fastq_sequence_id &_rid)
             : kmer(), revcomp(0), pos(0)
         {
           kmer.id = _rid;
         }
 
+        /// generates one k-mer per call from the underlying read
         size_t operator()(BaseIterType &iter)
         {
           // store the kmer information.
@@ -90,6 +94,8 @@ namespace bliss
         {
           //      KmerValueType xored_recoverable = (xored & ~mask_lower_half) | (_kmer.forward & mask_lower_half);
 
+          // XOR k-mer key with it's reverse complement and combine with
+          // full index structure
           return OutputType(revcomp ^ kmer.kmer, kmer);   // constructing a new result.
         }
 
