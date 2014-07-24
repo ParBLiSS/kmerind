@@ -164,7 +164,7 @@ namespace bliss
 
         // can't use auto keyword.  declare and initialize in class declaration
         // then "define" but not initialize outside class declaration, again.
-        static constexpr LUTType lut = make_array<size>(SangerToLogProbCorrect<T>());
+        static constexpr LUTType lut = bliss::utils::make_array<size>(SangerToLogProbCorrect<T>());
 
 
         static constexpr T log2_10DivNeg10 = std::log2(10.0) / -10.0;

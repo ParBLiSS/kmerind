@@ -1,8 +1,8 @@
 /**
  * @file    range.hpp
- * @ingroup iterators
+ * @ingroup bliss::partition
  * @author  Tony Pan
- * @brief   Generic representation of an interval.
+ * @brief   Generic representation of an interval on a 1D data structure
  * @details Represents an interval with start, end, and overlap length.
  *   Also contains a block_start to mark beginning of a underlying data block, such as paging size.
  *
@@ -10,16 +10,15 @@
  *
  * TODO add Licence
  *
- * TODO: tests for intersection, union, complement, and shift operators.
  */
 
 #ifndef RANGE_HPP_
 #define RANGE_HPP_
 
-#include <cassert>
-#include <iostream>
-#include <limits>
-#include <algorithm>
+#include <stdexcept>
+#include <iostream>       // for printing to ostream
+#include <limits>         // for numeric limits
+#include <algorithm>      // for min/max
 
 #include <partition/partitioner.hpp>
 
@@ -30,10 +29,11 @@ namespace bliss
    */
   namespace partition
   {
+
     /**
      * @class range
-     * @brief Range specified with offsets and overlap.  specific for 1D.  overlap is on END side only, and is included in the END.
-     * @details
+     * @brief   Generic representation of an interval on a 1D data structure
+     * @details Range specified with offsets and overlap.  specific for 1D.  overlap is on END side only, and is included in the END.
      *
      * @tparam T  data type used for the start and end offsets and overlap.
      */
@@ -76,8 +76,8 @@ namespace bliss
             : block_start(_start), start(_start), end(_end),
               overlap(_overlap)
         {
-          assert(_start <= _end);
-          assert(_overlap >= 0);
+          if (_start > _end) throw std::invalid_argument("ERROR: range constructor: end is less than start");
+          if (_overlap < 0) throw std::invalid_argument("ERROR: range constructor: overlap is less than 0");
         }
 
         /**
@@ -95,7 +95,6 @@ namespace bliss
 
         /**
          * @brief   default constructor.  construct an empty range, with start and end initialized to 0.
-         *
          */
         range()
             : block_start(0), start(0), end(0), overlap(0)
@@ -131,8 +130,6 @@ namespace bliss
           return (start == other.start) && (end == other.end);
         }
 
-        // TODO: when needed: comparators  - what does that mean?
-        // TODO: when needed: +/-
 
         /**
          * @brief union of range (as |=)  NOTE: result could include previously unincluded ranges
@@ -261,9 +258,20 @@ namespace bliss
           return output;
         }
 
+
+        /**
+         * @brief determines if this range contains the other range.
+         * @param other   The range object that may be inside this one.
+         * @return    bool, true if other is inside this range.
+         */
         inline bool contains(const range<T> &other) const {
           return (other.start >= this->start) && (other.end <= this->end);
         }
+        /**
+         * @brief determines if this range overlaps the other range.
+         * @param other   The range object that may be overlapping this one.
+         * @return    bool, true if other overlaps this range.
+         */
         inline bool overlaps(const range<T> &other) const {
           return (other & *this).size() > 0;
         }
@@ -279,10 +287,6 @@ namespace bliss
          */
         range<T>& align_to_page(const size_t &page_size)
         {
-          assert(page_size > 0);
-
-          //printf("page size: %ld\n", static_cast<T>(page_size));
-
           // change start to align by page size.  extend range start.
           // note that if output.start is negative, it will put block_start at a bigger address than the start.
           block_start = (start / page_size) * page_size;
@@ -290,15 +294,12 @@ namespace bliss
           if (block_start > start)  // only enters if start is negative.
           {
 
-//            printf("block start: %ld\n", static_cast<size_t>(block_start));
-
-            // if near lowest possible value, then we can't align further..  assert this situation.
-            assert(
-                (block_start - std::numeric_limits<T>::lowest()) > page_size);
+            // if near lowest possible value, then we can't align further.  assert this situation.
+            if ((block_start - std::numeric_limits<T>::lowest()) < page_size)
+              throw std::range_error("ERROR: range align_to_page: start is within a single page size of a signed data type minimum. cannot align page.");
 
             // deal with negative start position.
             block_start = block_start - page_size;
-
           }
           // leave end as is.
 
@@ -313,11 +314,14 @@ namespace bliss
          */
         bool is_page_aligned(const size_t &page_size) const
         {
-          assert(page_size > 0);
           return (this->block_start % page_size) == 0;
         }
 
 
+        /**
+         * @brief   get the size of the range between [start, end)
+         * @return  length of the range.
+         */
         size_t size() const
         {
           return end - start;
@@ -338,6 +342,6 @@ namespace bliss
       return ost;
     }
 
-  } /* namespace functional */
+  } /* namespace partition */
 } /* namespace bliss */
 #endif /* RANGE_HPP_ */

@@ -26,6 +26,7 @@ namespace bliss
   {
 
     /**
+     * @class integer_sequence
      * @brief     A type that represents a parameter pack of zero or more integer values, each of type T.
      * @tparam T  the type of the values.  can only be integral type.
      * @tparam I  a variadic list of values.
@@ -37,16 +38,19 @@ namespace bliss
         static_assert( std::is_integral<T>::value, "Integral type" );
 
         /**
-         * type for the values in sequence.
+         * @typedef type
+         * @brief type for the values in sequence.
          */
         using type = T;
 
         /**
-         * number of values in the parameter pack.
+         * @var   size
+         * @brief number of values in the parameter pack.
          */
         static constexpr T size = sizeof...(I);
 
         /**
+         *  @typedef    append
          *  @brief      Generate a new integer_sequence with an additional element of value N
          *  @details    Usage:  seq.append<4>
          *  @tparam N   a new value to append to current sequence, with type T.
@@ -56,6 +60,7 @@ namespace bliss
           using append = integer_sequence<T, I..., N>;
 
         /**
+         * @typedef next
          * @brief   get the next sequence by appending the current size
          * @details repeated call creates a sequence with values 1, 2, 3, ...
          */
@@ -69,6 +74,7 @@ namespace bliss
       constexpr T integer_sequence<T, I...>::size;
 
     /**
+     * @class index_sequence
      * @brief define a template specialized type for index sequence, where the value data type is size_t.
      * @tparam I    variadic list of index values of type size_t
      */
@@ -76,11 +82,13 @@ namespace bliss
       using index_sequence = integer_sequence<std::size_t, I...>;
 
     /**
+     * @namespace
      * @brief  namespace detail contains the logic for constructing a integer sequence at compile time.
      */
     namespace detail
     {
       /**
+       *  @class iota
        *  @brief  Metafunction that generates an integer_sequence of T containing [0, N)
        *  @details recursively type substituted to construct the integer sequence.
        *  @tparam T   value's type
@@ -96,7 +104,7 @@ namespace bliss
         };
 
       /**
-       *
+       *  @class iota
        *  @brief  Terminal Case.  Metafunction that generates an integer_sequence of T containing [0, N)
        *  @details Base class constructs an empty integer sequence (not even 0).
        *            from here, each recursions back up the stack adds one more value = size of current sequence.
@@ -112,6 +120,7 @@ namespace bliss
 
 
     /**
+     * @typedef make_integer_sequence
      * @brief   make_integer_sequence<T, N> is an alias for integer_sequence<T, 0,...N-1>
      * @tparam T  value type
      * @tparam N  number of entries
@@ -120,6 +129,7 @@ namespace bliss
       using make_integer_sequence = typename detail::iota<T, N, N>::type;
 
     /**
+     * @typedef make_index_sequence
      * @brief   specialization for index sequence. type is set to size_t
      * @tparam N  number of entries
      */
@@ -128,6 +138,7 @@ namespace bliss
 
 
     /**
+     * @typedef index_sequence_for
      * @brief   create a integer index version of a sequence of types.
      * @details index_sequence_for<A, B, C> is an alias for index_sequence<0, 1, 2>
      * @tparams Args  variadic list of  type template arguments
