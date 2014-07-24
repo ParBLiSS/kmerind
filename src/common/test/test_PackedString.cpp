@@ -5,8 +5,9 @@
 #include <common/PackedString.hpp>
 #include <common/alphabets.hpp>
 #include <common/AlphabetTraits.hpp>
-#include <common/PackingIterator.hpp>
 #include <common/Kmer.hpp>
+#include <common/packing_iterators.hpp>
+#include <common/kmer_iterators.hpp>
 
 class PackingTest : public ::testing::Test
 {
@@ -173,7 +174,7 @@ TEST_F(PackingTest, TestKmerGeneration1) {
 
     // TODO generate Kmers
     typedef bliss::Kmer<21, 2, uint8_t> Kmer;
-    typedef bliss::KmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
+    typedef bliss::PackedKmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
     if (dna.size() >= 21)
     {
       kmer_gen_it_t kmerGenIt(packIt);

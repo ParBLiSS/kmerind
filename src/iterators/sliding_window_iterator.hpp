@@ -2,7 +2,7 @@
  * @file    many2one_iterator.hpp
  * @ingroup interators
  * @author  Patrick Flick <patrick.flick@gmail.com>
- * @brief   Implements the many2one iterator.
+ * @brief   Implements the sliding window iterators.
  *
  * Copyright (c) TODO
  *
@@ -149,6 +149,9 @@ public:
    *  Constructors  *
    ******************/
 
+  /// Default contructor
+  sliding_window_iterator() = default;
+
   /**
    * @brief Constructor, taking the base iterator and the many2one
    *        functor.
@@ -156,9 +159,28 @@ public:
    * @param base_iter   The base iterator that is wrapped via this iterator.
    * @param window      The sliding window structure
    */
-  sliding_window_iterator(const BaseIterator& base_iter, const Window& window)
+  sliding_window_iterator(const BaseIterator& base_iter, const Window& window, bool init_first=true)
       : _base(base_iter), _next(base_iter), _window(window)
   {
+    if (init_first)
+    {
+      do_init();
+    }
+  }
+
+  /**
+   * @brief Constructor, taking the base iterator and the many2one
+   *        functor.
+   *
+   * @param base_iter   The base iterator that is wrapped via this iterator.
+   */
+  sliding_window_iterator(const BaseIterator& base_iter, bool init_first=true)
+      : _base(base_iter), _next(base_iter), _window()
+  {
+    if (init_first)
+    {
+      do_init();
+    }
   }
 
   /**
@@ -188,7 +210,7 @@ public:
    *
    * @return    A reference to this.
    */
-  type& operator++()
+  inline type& operator++()
   {
     // if we have not read the current element (thus iterating one postion
     // ahead with _next), then do it now (this happens of operator*() is not
@@ -214,12 +236,22 @@ public:
    *
    * @return    A copy to the non-incremented iterator.
    */
-  type operator++(int)
+  inline type operator++(int)
   {
     // create a copy
     type tmp(*this);
     this->operator++();
     return tmp;
+  }
+protected:
+  /**
+   * @brief Initializes the first window.
+   */
+  inline void do_init()
+  {
+    this->_window.init(this->_base);
+    this->_next = this->_base;
+    ++this->_next;
   }
 };
 
@@ -365,7 +397,25 @@ public:
    *  Constructors  *
    ******************/
 
-  // TODO: more constructors and integrate kmer generation into this
+  one2many_sliding_window_iterator()
+    :_base(), _next(), _base_offset(0), _next_offset(0), _window()
+  {
+  }
+
+  one2many_sliding_window_iterator(const BaseIterator& base_iter, bool init_first = true)
+    :_base(base_iter), _next(base_iter), _base_offset(0), _next_offset(0), _window()
+  {
+    if (init_first)
+    {
+      do_init();
+    }
+  }
+
+  one2many_sliding_window_iterator(const BaseIterator& base_iter, difference_type offset)
+    :_base(base_iter), _next(base_iter), _base_offset(0), _next_offset(0), _window()
+  {
+    this->advance(offset);
+  }
 
   /**
    * @brief Constructor, taking the base iterator and the many2one
@@ -382,6 +432,13 @@ public:
     {
       do_init();
     }
+  }
+
+  one2many_sliding_window_iterator(const BaseIterator& base_iter, const Window& window, difference_type offset)
+      : _base(base_iter), _next(base_iter),
+        _base_offset(0), _next_offset(0), _window(window)
+  {
+    this->advance(offset);
   }
 
   /**
@@ -411,7 +468,7 @@ public:
    *
    * @return    A reference to this.
    */
-  type& operator++()
+  inline type& operator++()
   {
     // if we have not read the current element (thus iterating one postion
     // ahead with _next), then do it now (this happens of operator*() is not
@@ -438,7 +495,7 @@ public:
    *
    * @return    A copy to the non-incremented iterator.
    */
-  type operator++(int)
+  inline type operator++(int)
   {
     // create a copy
     type tmp(*this);
@@ -450,13 +507,31 @@ protected:
   /**
    * @brief Initializes the first window.
    */
-  void do_init()
+  inline void do_init()
   {
     this->_window.init(this->_base, this->_base_offset);
+    this->_next = this->_base;
+    this->_next_offset = this->_base_offset;
     // make a copy of the current window to get the next iterator and offset
     Window wincpy = this->_window;
     // iterate by one, simply to get the correct `_next` pointers
     wincpy.next(this->_next, this->_next_offset);
+  }
+
+  /**
+   * @brief Advances the iterator by the given number of times.
+   *
+   * Used for initialization, this function skips over all content and
+   * invalidates the iterator for dereferencing or further advancing.
+   * This is purely used to initialize an `end` style iterator that is
+   * used only for comparison.
+   */
+  inline void advance(difference_type by)
+  {
+    this->_window.skip(this->_base, this->_base_offset, by);
+    this->_next = this->_base;
+    this->_next_offset = this->_base_offset;
+    // TODO: set this iterator as non-readable?
   }
 };
 
