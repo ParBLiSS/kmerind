@@ -37,6 +37,9 @@ namespace bliss
      *
      *            uses default constructor, copy constructor, and move constructor.
      *
+     *          Should work for continuous value ranges, but this is not tested.
+     *
+     *
      * @tparam  Range     Range object to be partitioned.
      * @tparam  Derived   Subclass, used to specialize the Base class for deciding the private impl of public api.
      */
@@ -49,6 +52,13 @@ namespace bliss
          * @brief   value type used by the range's start/end/overlap
          */
         using ValueType = typename Range::ValueType;
+
+        /**
+         * @typedef chunkSizeType
+         * @brief   value type used for chunkSize.  if integral ype for valueType, then size_t.  else (floating point) same as ValueType
+         */
+        using ChunkSizeType = typename std::conditional<std::is_integral<ValueType>::value,
+                                                        size_t, ValueType>::type;
 
         /**
          * @var src
@@ -72,7 +82,7 @@ namespace bliss
          * @var chunkSize
          * @brief   size of each partition.  computed for block partitioner, and user specified for cyclic and demand driven.
          */
-        size_t chunkSize;
+        ChunkSizeType chunkSize;
 
       public:
         /**
@@ -86,11 +96,13 @@ namespace bliss
          * @param _nPartitions the number of partitions to divide this range into
          * @param _chunkSize   the number size of each partition.  default is 0, computed later.
          */
-        void configure(const Range &_src, const size_t &_nPartitions, const size_t &_chunkSize) {
+        void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize) {
           src = _src;
           end.start = end.end = _src.end;
           nPartitions = _nPartitions;
           chunkSize = _chunkSize;
+
+          printf("chunkSize in super = %lu\n", chunkSize);
         }
 
         /**
@@ -99,10 +111,9 @@ namespace bliss
          * @param partId    the id of the partition to retrieve
          * @return          range object containing the start and end of the next chunk in the partition.
          */
-        inline Range& getNext(const int partId) {
-          if (partId < 0) throw std::invalid_argument("ERROR: range.getNext called with negative partition id.");
+        inline Range& getNext(const size_t &partId) {
           // both non-negative.
-          if (partId < nPartitions) throw std::invalid_argument("ERROR: range.getNext called with partition id larger than number of partitions.");
+          if (partId >= nPartitions) throw std::invalid_argument("ERROR: partitioner.getNext called with partition id larger than number of partitions.");
 
           return static_cast<Derived*>(this)->getNextImpl(partId);
         }
@@ -134,6 +145,7 @@ namespace bliss
          * @brief the result range.  cached here for speed
          */
         Range curr;
+
         /**
          * @var done
          * @brief boolean indicating that partition has already been done.
@@ -144,6 +156,11 @@ namespace bliss
          * @typedef ValueType
          */
         using ValueType = typename Range::ValueType;
+
+        /**
+         * @typedef ChunkSizeType
+         */
+        using ChunkSizeType = decltype(std::declval<Range>().size());
 
         /**
          * @var rem
@@ -170,12 +187,13 @@ namespace bliss
          * @param _nPartitions the number of partitions to divide this range into
          * @param _chunkSize  size of each chunk.  here it should be 0 so they will be auto computed.
          */
-        void configure(const Range &_src, const int &_nPartitions, const size_t &_chunkSize = 0) {
+        void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize = 0) {
           this->BaseClassType::configure(_src, _nPartitions, _chunkSize);
 
           // compute the size of partitions and number of partitions that have size larger than others by 1.
-          this->chunkSize = this->src.size() / this->nPartitions;
-          rem = this->src.size() % this->nPartitions;
+          // play fpr chhunkSize to be 0 - rem would be more than 0, so the first rem partitions will have size of 1.
+          this->chunkSize = this->src.size() / static_cast<ChunkSizeType>(this->nPartitions);
+          rem = this->src.size() % static_cast<ChunkSizeType>(this->nPartitions);
 
           resetImpl();
         }
@@ -184,10 +202,11 @@ namespace bliss
          * @brief       get the next chunk in the partition.  for BlockPartition, there is only 1 chunk.
          * @details     first call to this function returns the partitioned range.  subsequent calls get the end object (start == end)
          *              to call again and get meaningful result, reset() must be called.
+         *              no need to really store much - everything can be recomputed relatively fast.
          * @param partId   partition id for the sub range.
          * @return      range of the partition
          */
-        inline Range& getNextImpl(const int partId) {
+        inline Range& getNextImpl(const size_t& partId) {
           // param validation already done.
 
           // if previously computed, then return end object, signalling no more chunks.
@@ -200,13 +219,13 @@ namespace bliss
           if (partId < rem)
           {
             // each chunk with partition id < rem gets 1 extra.
-            curr.start += static_cast<ValueType>(partId * (this->chunkSize + 1));
-            curr.end = curr.start + static_cast<ValueType>(this->chunkSize + 1) + this->src.overlap;
+            curr.start += static_cast<ValueType>(partId) * (this->chunkSize + 1);
+            curr.end = curr.start + (this->chunkSize + 1) + this->src.overlap;
           }
           else
           {
             // first rem chunks have 1 extra element than chunkSize.  the rest have chunk size number of elements.
-            curr.start += static_cast<ValueType>(partId *  this->chunkSize + rem);
+            curr.start += static_cast<ValueType>(partId) *  this->chunkSize + rem;
             curr.end = curr.start + static_cast<ValueType>(this->chunkSize) + this->src.overlap;
           }
 
@@ -241,6 +260,18 @@ namespace bliss
 
       protected:
         /**
+         * @typedef BaseClassType
+         * @brief   the superclass type.
+         */
+        using BaseClassType = Partitioner<Range, CyclicPartitioner<Range> >;
+
+        /**
+         * @typedef ChunkSizeType
+         */
+        using ChunkSizeType = typename BaseClassType::ChunkSizeType;
+
+
+        /**
          * @var done
          * @brief An array of "done", one for each partition.
          */
@@ -253,16 +284,19 @@ namespace bliss
         Range *curr;
 
         /**
+         * @var nChunks
+         * @brief   number of chunks in the src range.
+         * @details by comparing nChunks to nPartitions (user specified) we can tell if some partitions will not be receiving a chunk.
+         *          this is a mechanism to deal with nPartition that are too large.
+         */
+        size_t nChunks;
+
+        /**
          * @var stride
          * @brief size of a stride, which is chunkSize *  number of partitions (stride for successive call to getNext)
          */
-        size_t stride;
+        ChunkSizeType stride;
 
-        /**
-         * @typedef BaseClassType
-         * @brief   the superclass type.
-         */
-        using BaseClassType = Partitioner<Range, CyclicPartitioner<Range> >;
 
       public:
 
@@ -281,13 +315,17 @@ namespace bliss
          * @param _chunkSize    Size of the chunks
          *
          */
-        void configure(const Range &_src, const int &_nPartitions, const size_t &_chunkSize) {
+        void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize) {
           this->BaseClassType::configure(_src, _nPartitions, _chunkSize);
-          // stride
-          stride = this->chunkSize * this->nPartitions;
 
-          done = new bool[this->nPartitions];
-          curr = new Range[this->nPartitions];
+          // get the maximum number of chunks in the source range.
+          size_t nChunks = std::floor((this->chunkSize + this->src.size()) / this->chunkSize);
+
+          // stride
+          stride = this->chunkSize * static_cast<ChunkSizeType>(this->nPartitions);
+
+          done = new bool[std::min(nChunks, this->nPartitions)];
+          curr = new Range[std::min(nChunks, this->nPartitions)];
 
           resetImpl();
         }
@@ -299,7 +337,12 @@ namespace bliss
          * @param partId   partition id for the sub range.
          * @return      range of the partition
          */
-        inline Range& getNextImpl(const int partId) {
+        inline Range& getNextImpl(const size_t& partId) {
+
+          // if nChunks < nPartitions, then each partId will only get a chunk once.
+          // in that case, if partId is >= nChunks, then end is returned.
+          if (partId >= nChunks) return this->end;
+
           // if this partition is done, return the last entry (end)
           if (done[partId])  return this->end;
 
@@ -326,9 +369,15 @@ namespace bliss
          */
         void resetImpl()
         {
-          for (size_t i = 0; i < this->nPartitions; ++i) {
+          size_t s = std::min(nChunks, this->nPartitions);
+          printf("number of chunks, partitions: %lu, %lu", nChunks, this->nPartitions);
+          for (size_t i = 0; i < s; ++i) {
             done[i] = false;
-            curr[i] = Range(i * this->chunkSize, (i+1) * this->chunkSize, this->src.overlap) & this->src;
+            printf ("values start-end: %lu %lu\n", static_cast<decltype(this->chunkSize)>(i) * this->chunkSize, static_cast<decltype(this->chunkSize)>(i+1) * this->chunkSize);
+
+            curr[i].start = this->src.start + static_cast<ChunkSizeType>(i) * this->chunkSize;
+            curr[i].end = curr[i].start + this->chunkSize;
+            curr[i] &= this->src;
           }
         }
 
@@ -347,10 +396,35 @@ namespace bliss
 
       protected:
         /**
+         * @typedef BaseClassType
+         * @brief   the superclass type.
+         */
+        using BaseClassType = Partitioner<Range, DemandDrivenPartitioner<Range> >;
+
+        /**
+         * @typedef ChunkSizeType
+         */
+        using ChunkSizeType = typename BaseClassType::ChunkSizeType;
+
+        /**
          * @var chunkOffset
          * @brief the offset for the next chunk to be returned.  TREHAD SAFE
          */
-        std::atomic<size_t> chunkOffset;
+        std::atomic<ChunkSizeType> chunkOffset;
+
+        /**
+         * @var id of current chunk
+         * @brief  used for tracking the chunk begin returned.  useful if nChunk < nPartition
+         */
+        std::atomic<size_t> chunkId;
+
+        /**
+         * @var nChunks
+         * @brief   number of chunks in the src range.
+         * @details by comparing nChunks to nPartitions (user specified) we can tell if some partitions will not be receiving a chunk.
+         *          this is a mechanism to deal with nPartition that are too large.
+         */
+        size_t nChunks;
 
         /**
          * @var curr
@@ -370,12 +444,6 @@ namespace bliss
          */
         using ValueType = typename Range::ValueType;
 
-        /**
-         * @typedef BaseClassType
-         * @brief   the superclass type.
-         */
-        using BaseClassType = Partitioner<Range, DemandDrivenPartitioner<Range> >;
-
 
       public:
         /**
@@ -393,10 +461,13 @@ namespace bliss
          * @param _chunkSize  size of each chunk for the partitioning.
          *
          */
-        void configure(const Range &_src, const int &_nPartitions, const size_t &_chunkSize) {
+        void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize) {
           this->BaseClassType::configure(_src, _nPartitions, _chunkSize);
 
-          curr = new Range[this->nPartitions];
+          // get the maximum number of chunks in the source range.
+          size_t nChunks = std::floor((this->chunkSize + this->src.size()) / this->chunkSize);
+
+          curr = new Range[std::min(nChunks, this->nPartitions)];
 
           resetImpl();
         };
@@ -407,26 +478,31 @@ namespace bliss
          * @details     each call to this function gets the next chunk in the range and assign it to a partition.
          *              the sequence of partition ids depends on call order.
          *
+         *              ASSUMPTION:  no 2 concurrent callers will be requesting the same partition Id.
+         *
          *              THREAD SAFE
          * @param partId   partition id for the sub range.
          * @return      range of the partition
          */
-        inline Range& getNextImpl(const int partId) {
+        inline Range& getNextImpl(const size_t& partId) {
 
           if (done.load(std::memory_order_consume)) return this->end;
 
           ValueType s = chunkOffset.fetch_add(this->chunkSize, std::memory_order_acq_rel);
+          size_t id = chunkId.fetch_add(1, std::memory_order_acq_rel);
+
+          id = (nChunks < this->nPartitions ? id : partId);
 
           if (s >= this->src.end) {
             done.store(true, std::memory_order_release);
             return this->end;
           } else {
 
-            curr[partId].start = s;
-            curr[partId].end = s + this->chunkSize;
-            curr[partId] &= this->src;
+            curr[id].start = s;
+            curr[id].end = s + this->chunkSize;
+            curr[id] &= this->src;
 
-            return curr[partId];
+            return curr[id];
           }
         }
 
@@ -435,11 +511,12 @@ namespace bliss
          * @details this function also serves to initialize the subrange array.
          */
         void resetImpl() {
-
+          // these 2 calls probably should be synchronized together.
           chunkOffset.store(this->src.start, std::memory_order_release);
           done.store(false, std::memory_order_release);
 
-          for (size_t i = 0; i < this->nPartitions; ++i) {
+          size_t s = std::min(this->nPartitions, nChunks);
+          for (size_t i = 0; i < s; ++i) {
             curr[i] = Range(this->src.start, this->src.start, this->src.overlap);
           }
         }

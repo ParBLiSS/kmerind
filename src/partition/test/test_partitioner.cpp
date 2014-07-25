@@ -36,7 +36,7 @@ TYPED_TEST_CASE_P(PartitionTest);
 
 
 // test the block partitioning operation.  Only testing the base function that all other overloaded functions calls
-TYPED_TEST_P(PartitionTest, partition){
+TYPED_TEST_P(PartitionTest, blockPartition){
   typedef bliss::partition::range<TypeParam> RangeType;
   typedef bliss::partition::BlockPartitioner<range<TypeParam> > PartitionerType;
 
@@ -49,11 +49,11 @@ TYPED_TEST_P(PartitionTest, partition){
     0, 1, 2,
     std::numeric_limits<TypeParam>::max()-2, (std::numeric_limits<TypeParam>::max() >> 1) + 1};
 
-  std::vector<TypeParam> lens =
+  std::vector<size_t> lens =
   { 0, 1, 2};
 
-  std::vector<int> partitionCount =
-  { 1, 2, std::numeric_limits<int>::max()};
+  std::vector<size_t> partitionCount =
+  { 1, 2, std::numeric_limits<size_t>::max()};
 
   PartitionerType part;
   for (auto start : starts)
@@ -69,22 +69,27 @@ TYPED_TEST_P(PartitionTest, partition){
         part.configure(src, p);
 
 
-
         auto rem = len % p;
         auto div = len / p;
 
         //      printf("%ld, %d\n", static_cast<size_t>(len), i);
-        int block = 0;
+        size_t block = 0;
 
         // first block
         r = part.getNext(block);
+//        printf("here 1 p = %lu/%lu ", block, p);
+//        std::cout << "src: " << src << " part: " << r << std::endl;
         EXPECT_EQ(start, r.start);
         e = (rem == 0 ? (div) : (div + 1)) + start;
         EXPECT_EQ(e, r.end);
 
+        part.reset();
+
         // middle block
         block = (p-1)/2;
         r = part.getNext(block);
+//        printf("here 2 p = %lu/%lu ", block, p);
+//        std::cout << "src: " << src << " part: " << r << std::endl;
         e = (rem == 0 ? block * div :
             ( block >= rem ? block * div + rem : block * (div + 1))) + start;
         EXPECT_EQ(e, r.start);
@@ -92,117 +97,182 @@ TYPED_TEST_P(PartitionTest, partition){
             ( (block + 1) >= rem ? (block + 1) * div + rem : (block + 1) * (div + 1))) + start;
         EXPECT_EQ(e, r.end);
 
+        part.reset();
+
         // last block
         block = p-1;
         r = part.getNext(block);
+//        printf("here 3 p = %lu/%lu ", block, p);
+//        std::cout << "src: " << src << " part: " << r << std::endl;
         e = (rem == 0 ? block * div :
             ( block >= rem ? block * div + rem : block * (div + 1))) + start;
         EXPECT_EQ(e, r.start);
         EXPECT_EQ(start+len, r.end);
+
       }
     }
   }
 }
 
 
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(PartitionTest, partition);
-
-////////////////////////
-//  DEATH TESTS - test class named BlahDeathTest so gtest will not run these in a threaded context. and will run first
-
-// typedef PartitionTest PartitionDeathTest
-template<typename T>
-class PartitionDeathTest : public ::testing::Test
-{
-  protected:
-    size_t page_size;
-
-    virtual void SetUp()
-    {
-      page_size = sysconf(_SC_PAGE_SIZE);
-    }
-};
-
-// annotate that PartitionDeathTest is typed
-TYPED_TEST_CASE_P(PartitionDeathTest);
-
-
-// failed partitions due to asserts.
-TYPED_TEST_P(PartitionDeathTest, badNumPartitions){
+TYPED_TEST_P(PartitionTest, cyclicPartition){
   typedef bliss::partition::range<TypeParam> RangeType;
-  typedef bliss::partition::BlockPartitioner<range<TypeParam> > PartitionerType;
-
+  typedef bliss::partition::CyclicPartitioner<range<TypeParam> > PartitionerType;
 
   RangeType src, r;
+  TypeParam e;
 
-  std::string err_regex = ".*partitioner.hpp.*Partitioner.* Assertion .* failed.*";
 
-  // end is before start
-  size_t size = 1;
   std::vector<TypeParam> starts =
-  { std::numeric_limits<TypeParam>::min()+1, std::numeric_limits<TypeParam>::lowest()+1, 1, 2, std::numeric_limits<TypeParam>::max(), (std::numeric_limits<TypeParam>::max() >> 1) + 1};
+  { std::numeric_limits<TypeParam>::min(), std::numeric_limits<TypeParam>::lowest(),
+    0, 1, 2,
+    std::numeric_limits<TypeParam>::max()-2, (std::numeric_limits<TypeParam>::max() >> 1) + 1};
 
-  std::vector<int> partitionCount =
-  { 0, std::numeric_limits<int>::lowest(), std::numeric_limits<int>::min()};
+  std::vector<size_t> lens =
+  { 0, 1, 2, 8 };
 
-  // proc id is too big
+  std::vector<size_t> partitionCount =
+  { 1, 2, 4, std::numeric_limits<size_t>::max()};
+
+  PartitionerType part;
   for (auto start : starts)
   {
+    std::cout << "start: " << start << std::endl;
 
-    src = RangeType(start-size, start);
-
-    for (auto i : partitionCount)
+    for (auto len : lens)
     {
-      ;
-      //printf("%ld, %ld\n", static_cast<int64_t>(start), i);
-      EXPECT_EXIT(PartitionerType().configure(src, i), ::testing::KilledBySignal(SIGABRT), err_regex);
+      std::cout << "len: " << len << std::endl;
+
+      src = RangeType(start, start + len);
+
+      for (auto p : partitionCount)
+      {
+        std::cout << "parts: " << p << std::endl;
+
+
+        //        if (len < i)
+//          continue;
+        part.configure(src, p, 1);
+
+
+        auto rem = len % p;
+        auto div = len / p;
+
+        //      printf("%ld, %d\n", static_cast<size_t>(len), i);
+        size_t block = 0;
+
+
+        // middle block
+        block = (p-1)/2;
+        r = part.getNext(block);
+        printf("here 1 p = %lu/%lu ", block, p);
+        std::cout << "src: " << src << " part: " << r << std::endl;
+        e = (rem == 0 ? block * div :
+            ( block >= rem ? block * div + rem : block * (div + 1))) + start;
+        EXPECT_EQ(e, r.start);
+        e = (rem == 0 ? (block + 1) * div :
+            ( (block + 1) >= rem ? (block + 1) * div + rem : (block + 1) * (div + 1))) + start;
+        EXPECT_EQ(e, r.end);
+
+
+        // middle block
+        r = part.getNext(block);
+        printf("here 2 p = %lu/%lu ", block, p);
+        std::cout << "src: " << src << " part: " << r << std::endl;
+        e = (rem == 0 ? block * div :
+            ( block >= rem ? block * div + rem : block * (div + 1))) + start;
+        e += p;
+        e = std::min(e, src.end);
+        EXPECT_EQ(e, r.start);
+        e = (rem == 0 ? (block + 1) * div :
+            ( (block + 1) >= rem ? (block + 1) * div + rem : (block + 1) * (div + 1))) + start;
+        e += p;
+        e = std::min(e, src.end);
+        EXPECT_EQ(e, r.end);
+
+        part.reset();
+
+      }
     }
   }
 }
 
-// failed partitions due to asserts.
-TYPED_TEST_P(PartitionDeathTest, badChunkSize){
-  typedef bliss::partition::range<TypeParam> RangeType;
-  typedef bliss::partition::BlockPartitioner<range<TypeParam> > PartitionerType;
 
+TYPED_TEST_P(PartitionTest, demandPartition){
+  typedef bliss::partition::range<TypeParam> RangeType;
+  typedef bliss::partition::DemandDrivenPartitioner<range<TypeParam> > PartitionerType;
 
   RangeType src, r;
+  TypeParam e;
 
-  std::string err_regex = ".*partitioner.hpp.*Partitioner.* Assertion .* failed.*";
 
-  // end is before start
   std::vector<TypeParam> starts =
-  { std::numeric_limits<TypeParam>::min()+1, std::numeric_limits<TypeParam>::lowest()+1, 1, 2, std::numeric_limits<TypeParam>::max(), (std::numeric_limits<TypeParam>::max() >> 1) + 1};
-  size_t size = 1;
-  std::vector<size_t> chunkSizes =
-  { 0, std::numeric_limits<size_t>::lowest(), std::numeric_limits<size_t>::min()};
+  { std::numeric_limits<TypeParam>::min(), std::numeric_limits<TypeParam>::lowest(),
+    0, 1, 2,
+    std::numeric_limits<TypeParam>::max()-2, (std::numeric_limits<TypeParam>::max() >> 1) + 1};
 
-  // proc id is too big
+  std::vector<size_t> lens =
+  { 0, 1, 2, 8};
+
+  std::vector<size_t> partitionCount =
+  { 1, 2, 4, std::numeric_limits<size_t>::max()};
+
+  PartitionerType part;
   for (auto start : starts)
   {
-
-    src = RangeType(start-size, start);
-
-    for (auto i : chunkSizes)
+    for (auto len : lens)
     {
-      //printf("%ld, %ld\n", static_cast<int64_t>(start), i);
-      EXPECT_EXIT(PartitionerType().configure(src, 2, i), ::testing::KilledBySignal(SIGABRT), err_regex);
+      src = RangeType(start, start + len);
+
+      for (auto p : partitionCount)
+      {
+//        if (len < i)
+//          continue;
+        part.configure(src, p, 1);
+
+
+        auto rem = len % p;
+        auto div = len / p;
+
+        //      printf("%ld, %d\n", static_cast<size_t>(len), i);
+        size_t block = 0;
+
+        // first block
+        r = part.getNext(block);
+//        printf("here 1 p = %lu/%lu ", block, p);
+//        std::cout << "src: " << src << " part: " << r << std::endl;
+        EXPECT_EQ(start, r.start);
+        e = (rem == 0 ? (div) : (div + 1)) + start;
+        EXPECT_EQ(e, r.end);
+
+        // middle block
+        block = (p-1)/2;
+        r = part.getNext(block);
+//        printf("here 2 p = %lu/%lu ", block, p);
+//        std::cout << "src: " << src << " part: " << r << std::endl;
+        EXPECT_EQ(e, r.start);
+        e = r.end;
+
+        // last block
+        block = p-1;
+        r = part.getNext(block);
+//        printf("here 3 p = %lu/%lu ", block, p);
+//        std::cout << "src: " << src << " part: " << r << std::endl;
+        EXPECT_EQ(e, r.start);
+
+      }
     }
   }
-
 }
 
 
 // failed partitions due to asserts.
-TYPED_TEST_P(PartitionDeathTest, badPartitionId){
+TYPED_TEST_P(PartitionTest, badPartitionId){
   typedef bliss::partition::range<TypeParam> RangeType;
   typedef bliss::partition::BlockPartitioner<range<TypeParam> > PartitionerType;
 
 
   RangeType src, r;
-
-  std::string err_regex = ".*partitioner.hpp.*Partitioner.* Assertion .* failed.*";
 
   // end is before start
   std::vector<TypeParam> starts =
@@ -210,8 +280,8 @@ TYPED_TEST_P(PartitionDeathTest, badPartitionId){
   size_t size = 1;
 
   // negative or zero parition sizes
-  std::vector<int> partitionIds =
-  { 0, std::numeric_limits<int>::lowest(), std::numeric_limits<int>::min(), std::numeric_limits<int>::max() };
+  std::vector<size_t> partitionIds =
+  { std::numeric_limits<size_t>::max() };
 
   for (auto start : starts)
   {
@@ -224,18 +294,28 @@ TYPED_TEST_P(PartitionDeathTest, badPartitionId){
       PartitionerType part;
       part.configure(src, 4);
 
-      EXPECT_EXIT(part.getNext(i), ::testing::KilledBySignal(SIGABRT), err_regex);
+      try {
+        part.getNext(i);
+        ADD_FAILURE();
+
+      } catch (const std::invalid_argument &e) {
+        // okay, correct exception thrown.
+      }
     }
   }
 }
 
 
-// register the death test cases
-REGISTER_TYPED_TEST_CASE_P(PartitionDeathTest, badNumPartitions, badPartitionId, badChunkSize);
+
+
+// now register the test cases
+REGISTER_TYPED_TEST_CASE_P(PartitionTest, blockPartition, cyclicPartition, demandPartition, badPartitionId);
+
+
+
 
 //////////////////// RUN the tests with different types.
 
 typedef ::testing::Types<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
     int64_t, uint64_t, size_t> PartitionTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, PartitionTest, PartitionTestTypes);
-INSTANTIATE_TYPED_TEST_CASE_P(Bliss, PartitionDeathTest, PartitionTestTypes);

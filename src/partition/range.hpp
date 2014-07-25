@@ -34,7 +34,7 @@ namespace bliss
      * @class range
      * @brief   Generic representation of an interval on a 1D data structure
      * @details Range specified with offsets and overlap.  specific for 1D.  overlap is on END side only, and is included in the END.
-     *
+     *          Should work for continuous value ranges, but this is not tested.
      * @tparam T  data type used for the start and end offsets and overlap.
      */
     template<typename T>
@@ -278,15 +278,18 @@ namespace bliss
 
 
         /**
-         * @brief   align the range to underlying block boundaries, e.g. disk page size
+         * @brief   align the range to underlying block boundaries, e.g. disk page size.  only for integral types
          * @details range is aligned to underlying block boundaries by moving the block_start variable back towards minimum
          *    if range start is too close to the data type's minimum, then assertion is thrown.
          *
          * @param[in] page_size   the size of the underlying block.
          * @return                updated range
          */
-        range<T>& align_to_page(const size_t &page_size)
+        template<typename TT = T>
+        typename std::enable_if<std::is_integral<TT>::value, range<TT> >::type& align_to_page(const size_t &page_size)
         {
+          if (page_size == 0) throw std::invalid_argument("ERROR: range align_to_page: page size specified as 0.");
+
           // change start to align by page size.  extend range start.
           // note that if output.start is negative, it will put block_start at a bigger address than the start.
           block_start = (start / page_size) * page_size;
@@ -295,7 +298,7 @@ namespace bliss
           {
 
             // if near lowest possible value, then we can't align further.  assert this situation.
-            if ((block_start - std::numeric_limits<T>::lowest()) < page_size)
+            if ((block_start - std::numeric_limits<TT>::lowest()) < page_size)
               throw std::range_error("ERROR: range align_to_page: start is within a single page size of a signed data type minimum. cannot align page.");
 
             // deal with negative start position.
@@ -307,22 +310,34 @@ namespace bliss
         }
 
         /**
-         * @brief     check to see if the range has been aligned to underlying block boundary.
+         * @brief     check to see if the range has been aligned to underlying block boundary.   only for integral types
          *
          * @param[in] page_size   the size of the underlying block.
          * @return    true if range is block aligned, false otherwise.
          */
-        bool is_page_aligned(const size_t &page_size) const
+        template<typename TT = T>
+        typename std::enable_if<std::is_integral<TT>::value, bool >::type is_page_aligned(const size_t &page_size) const
         {
           return (this->block_start % page_size) == 0;
         }
 
 
         /**
-         * @brief   get the size of the range between [start, end)
+         * @brief   get the integral size of the range between [start, end)
+         * @return  unsigned length of the range.
+         */
+        template<typename TT=T>
+        typename std::enable_if<std::is_integral<TT>::value, size_t>::type size() const
+        {
+          return end - start;
+        }
+
+        /**
+         * @brief   get the floating point size of the range between [start, end)
          * @return  length of the range.
          */
-        size_t size() const
+        template<typename TT=T>
+        typename std::enable_if<std::is_floating_point<TT>::value, TT>::type size() const
         {
           return end - start;
         }

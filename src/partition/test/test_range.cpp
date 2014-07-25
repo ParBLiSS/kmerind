@@ -127,43 +127,34 @@ TYPED_TEST_P(RangeTest, align){
 
 }
 
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(RangeTest, equal, assignment, copyConstruct, align);
-
-////////////////////////
-//  DEATH TESTS - test class named BlahDeathTest so gtest will not run these in a threaded context. and will run first
-
-// typedef RangeTest RangeDeathTest
-template<typename T>
-class RangeDeathTest : public ::testing::Test
-{
-  protected:
-    size_t page_size;
-
-    virtual void SetUp()
-    {
-      page_size = sysconf(_SC_PAGE_SIZE);
-    }
-};
-
-// annotate that RangeDeathTest is typed
-TYPED_TEST_CASE_P(RangeDeathTest);
 
 // failed construction due to asserts
-TYPED_TEST_P(RangeDeathTest, constructFails){
-
-  std::string err_regex = ".*range.hpp.* Assertion .* failed.*";
+TYPED_TEST_P(RangeTest, constructFails){
 
   // basically, if start is larger than end.
-  EXPECT_EXIT(range<TypeParam>(std::numeric_limits<TypeParam>::max(), std::numeric_limits<TypeParam>::min(), 0), ::testing::KilledBySignal(SIGABRT), err_regex);
-  EXPECT_EXIT(range<TypeParam>(std::numeric_limits<TypeParam>::max(), std::numeric_limits<TypeParam>::lowest(), 0), ::testing::KilledBySignal(SIGABRT), err_regex);
+  try {
+    range<TypeParam>(std::numeric_limits<TypeParam>::max(), std::numeric_limits<TypeParam>::min(), 0);
+    ADD_FAILURE();
+  } catch (const std::invalid_argument &e) {
+    // did throw exception, so okay.
+  }
+
+  try {
+    range<TypeParam>(std::numeric_limits<TypeParam>::max(), std::numeric_limits<TypeParam>::lowest(), 0);
+    ADD_FAILURE();
+  } catch (const std::invalid_argument &e) {
+    // did throw exception, so okay.
+  }
+
+
+
 }
 
 
 
 
 // failed alignment
-TYPED_TEST_P(RangeDeathTest, alignFails){
+TYPED_TEST_P(RangeTest, alignFails){
   range<TypeParam> r;
 
   std::vector<TypeParam> starts =
@@ -188,25 +179,42 @@ TYPED_TEST_P(RangeDeathTest, alignFails){
 
       // align fails because of bad page sizes (0 or negative
       r = range<TypeParam>(s, s+size);
-      EXPECT_EXIT(r.align_to_page(p), ::testing::KilledBySignal(SIGABRT), err_regex);
+      try {
+        r.align_to_page(p);
+        ADD_FAILURE();
+      } catch (const std::range_error &e) {
+        // okay.  threw the right error
+      } catch (const std::invalid_argument &e) {
+        // okay.  threw the right error
+      }
 
     }
 
     // if s is negative, also check to make sure we fail with large p.
     if (s < 0) {
       r = range<TypeParam>(s, s+size);
-      EXPECT_EXIT(r.align_to_page(std::numeric_limits<size_t>::max()), ::testing::KilledBySignal(SIGABRT), err_regex);
+
+      try {
+        r.align_to_page(std::numeric_limits<size_t>::max());
+        ADD_FAILURE();
+      } catch (const std::range_error &e) {
+        // okay.  threw the right error
+      } catch (const std::invalid_argument &e) {
+        // okay.  threw the right error
+      }
     }
   }
 
 }
 
-// register the death test cases
-REGISTER_TYPED_TEST_CASE_P(RangeDeathTest, constructFails, alignFails);
+
+
+// now register the test cases
+REGISTER_TYPED_TEST_CASE_P(RangeTest, equal, assignment, copyConstruct, align, constructFails, alignFails);
+
 
 //////////////////// RUN the tests with different types.
 
 typedef ::testing::Types<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
     int64_t, uint64_t, size_t> RangeTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, RangeTest, RangeTestTypes);
-INSTANTIATE_TYPED_TEST_CASE_P(Bliss, RangeDeathTest, RangeTestTypes);
