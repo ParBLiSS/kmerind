@@ -50,6 +50,8 @@ namespace bliss
   namespace io
   {
 
+    // TODO: be more specific about meaning of things, e.g. chunk,  and rename functions approriately.
+
 
     /**
      *  real data:  mmap is better for large files and limited memory.
@@ -372,11 +374,13 @@ namespace bliss
          *
          * @param pid
          * @return
+         *
+         * TODO: overload this to avoid "-1"
          */
         template<typename D = Derived>
         typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextPartitionRange(const int pid = -1) {
           // if just FileLoader calls this.
-          if (pid == -1)
+          if (pid < 0)
             return partitioner.getNext(rank);
           else
             return partitioner.getNext(pid);
@@ -384,7 +388,7 @@ namespace bliss
         template<typename D = Derived>
         typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextPartitionRange(const int pid = -1) {
           // use the derived one.
-          if (pid == -1)
+          if (pid < 0)
             return static_cast<Derived*>(this)->getNextPartitionRangeImpl(rank);
           else
             return static_cast<Derived*>(this)->getNextPartitionRangeImpl(pid);

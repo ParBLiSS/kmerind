@@ -76,7 +76,10 @@ namespace bliss
             : block_start(_start), start(_start), end(_end),
               overlap(_overlap)
         {
-          if (_end < _start) throw std::invalid_argument("ERROR: range constructor: end is less than start");
+          if (_end < _start) {
+            //printf("start: %d, end %d\n", _start, _end);
+            throw std::invalid_argument("ERROR: range constructor: end is less than start");
+          }
           if (_overlap < 0) throw std::invalid_argument("ERROR: range constructor: overlap is less than 0");
         }
 
@@ -345,17 +348,47 @@ namespace bliss
     };
 
     /**
-     * @brief << operator to write out range object's fields.
+     * @brief << operator to write out range object's fields.  Signed integral version
+     * @tparam  T           type of values used by Range internally.  This is type deduced by compiler.
      * @param[in/out] ost   output stream to which the content is directed.
      * @param[in]     r     range object to write out
      * @return              output stream object
      */
     template<typename T>
-    std::ostream& operator<<(std::ostream& ost, const range<T>& r)
+    typename std::enable_if<std::is_signed<T>::value and std::is_integral<T>::value, std::ostream>::type& operator<<(std::ostream& ost, const range<T>& r)
     {
-      ost << "range: block@" << r.block_start << " [" << r.start << ":" << r.end << ") overlap " << r.overlap;
+      ost << "range: block@" << static_cast<int64_t>(r.block_start) << " [" << static_cast<int64_t>(r.start) << ":" << static_cast<int64_t>(r.end) << ") overlap " << static_cast<int64_t>(r.overlap);
       return ost;
     }
+
+    /**
+     * @brief << operator to write out range object's fields.  Unsigned integral version
+     * @tparam  T           type of values used by Range internally.  This is type deduced by compiler.
+     * @param[in/out] ost   output stream to which the content is directed.
+     * @param[in]     r     range object to write out
+     * @return              output stream object
+     */
+    template<typename T>
+    typename std::enable_if<!std::is_signed<T>::value and std::is_integral<T>::value, std::ostream>::type& operator<<(std::ostream& ost, const range<T>& r)
+    {
+      ost << "range: block@" << static_cast<uint64_t>(r.block_start) << " [" << static_cast<uint64_t>(r.start) << ":" << static_cast<uint64_t>(r.end) << ") overlap " << static_cast<uint64_t>(r.overlap);
+      return ost;
+    }
+
+    /**
+     * @brief << operator to write out range object's fields.  floating point version
+     * @tparam  T           type of values used by Range internally.  This is type deduced by compiler.
+     * @param[in/out] ost   output stream to which the content is directed.
+     * @param[in]     r     range object to write out
+     * @return              output stream object
+     */
+    template<typename T>
+    typename std::enable_if<std::is_floating_point<T>::value, std::ostream>::type& operator<<(std::ostream& ost, const range<T>& r)
+    {
+      ost << "range: block@" << static_cast<double>(r.block_start) << " [" << static_cast<double>(r.start) << ":" << static_cast<double>(r.end) << ") overlap " << static_cast<double>(r.overlap);
+      return ost;
+    }
+
 
   } /* namespace partition */
 } /* namespace bliss */

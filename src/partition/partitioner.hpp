@@ -84,6 +84,11 @@ namespace bliss
          */
         ChunkSizeType chunkSize;
 
+        static const uint8_t BEFORE = 0;
+        static const uint8_t DURING = 1;
+        static const uint8_t AFTER = 2;
+
+
       public:
         /**
          * @brief default destructor
@@ -98,11 +103,11 @@ namespace bliss
          */
         void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize) {
           src = _src;
-          end.start = end.end = _src.end;
+          end = _src;
+          end.start = end.end;
           nPartitions = _nPartitions;
           chunkSize = _chunkSize;
 
-          printf("chunkSize in super = %lu\n", chunkSize);
         }
 
         /**
@@ -193,7 +198,8 @@ namespace bliss
           // compute the size of partitions and number of partitions that have size larger than others by 1.
           // play fpr chhunkSize to be 0 - rem would be more than 0, so the first rem partitions will have size of 1.
           this->chunkSize = this->src.size() / static_cast<ChunkSizeType>(this->nPartitions);
-          rem = this->src.size() % static_cast<ChunkSizeType>(this->nPartitions);
+          // not using modulus since we ValueType may be float.
+          rem = this->src.size() - this->chunkSize * static_cast<ChunkSizeType>(this->nPartitions);
 
           resetImpl();
         }
@@ -219,18 +225,22 @@ namespace bliss
           if (partId < rem)
           {
             // each chunk with partition id < rem gets 1 extra.
-            curr.start += static_cast<ValueType>(partId) * (this->chunkSize + 1);
-            curr.end = curr.start + (this->chunkSize + 1) + this->src.overlap;
+            curr.start = this->src.start + static_cast<ValueType>(partId) * (this->chunkSize + 1);
+            curr.end = (this->src.end - curr.start > static_cast<ValueType>(this->chunkSize + 1) + this->src.overlap) ?
+                curr.start + static_cast<ValueType>(this->chunkSize + 1) + this->src.overlap :
+                this->src.end;
           }
           else
           {
             // first rem chunks have 1 extra element than chunkSize.  the rest have chunk size number of elements.
-            curr.start += static_cast<ValueType>(partId) *  this->chunkSize + rem;
-            curr.end = curr.start + static_cast<ValueType>(this->chunkSize) + this->src.overlap;
+            curr.start = this->src.start + static_cast<ValueType>(partId) *  this->chunkSize + rem;
+            curr.end = (this->src.end - curr.start > static_cast<ValueType>(this->chunkSize) + this->src.overlap) ?
+                curr.start + static_cast<ValueType>(this->chunkSize) + this->src.overlap :
+                this->src.end;
           }
 
           // last entry.  no overlap.  done via intersection
-          curr &= this->src;
+          //curr &= this->src;
 
           curr.block_start = curr.start;
 
@@ -273,9 +283,9 @@ namespace bliss
 
         /**
          * @var done
-         * @brief An array of "done", one for each partition.
+         * @brief An array of "state", one for each partition.
          */
-        bool *done;
+        uint8_t *state;
 
         /**
          * @var curr
@@ -298,13 +308,14 @@ namespace bliss
         ChunkSizeType stride;
 
 
+
       public:
 
         /**
          * @brief default destructor.  cleans up arrays for callers.
          */
         virtual ~CyclicPartitioner() {
-          if (done) delete [] done;
+          if (state) delete [] state;
           if (curr) delete [] curr;
         }
 
@@ -319,12 +330,12 @@ namespace bliss
           this->BaseClassType::configure(_src, _nPartitions, _chunkSize);
 
           // get the maximum number of chunks in the source range.
-          size_t nChunks = std::floor((this->chunkSize + this->src.size()) / this->chunkSize);
+          nChunks = std::floor((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
 
-          // stride
-          stride = this->chunkSize * static_cast<ChunkSizeType>(this->nPartitions);
+          // stride:  if there are more chunks than partition, then set real stride, else make it src size.
+          stride = (nChunks > this->nPartitions) ? this->chunkSize * static_cast<ChunkSizeType>(this->nPartitions) : this->src.size();
 
-          done = new bool[std::min(nChunks, this->nPartitions)];
+          state = new uint8_t[std::min(nChunks, this->nPartitions)];
           curr = new Range[std::min(nChunks, this->nPartitions)];
 
           resetImpl();
@@ -344,21 +355,36 @@ namespace bliss
           if (partId >= nChunks) return this->end;
 
           // if this partition is done, return the last entry (end)
-          if (done[partId])  return this->end;
+          if (state[partId] == BaseClassType::AFTER)  return this->end;
+
+          /// first iteration, use initialized value
+          if (state[partId] == BaseClassType::BEFORE) {
+            state[partId] = BaseClassType::DURING;
+            return curr[partId];
+          }
+          // else not the first and not last, so increment.
+
+          /// comparing to amount of range available - trying to avoid data type overflow.
 
           // shift starting position by stride length
-          curr[partId].start += stride;
-
-          // check to see if we're done.
-          if (curr[partId].start > this->src.end) {
-            done[partId] = true;         // if outside range, done
+          if (this->src.end - curr[partId].start >= stride) {
+            // has room.  so shift
+            curr[partId].start += stride;
+          } else {
+            state[partId] = BaseClassType::AFTER;         // if outside range, done
             return this->end;
           }
 
-          // if not done, add the chunkSize
-          curr[partId].end = curr[partId].start + this->chunkSize;
-          // and bound it by original range via intersection.
-          curr[partId] &= this->src;
+          // shift end position by stride length - start is NOT outside range.
+          // overlap is already part of curr[partId].end set from resetImpl.
+          if (this->src.end - curr[partId].end > stride) {
+            // end is not outside parent range.
+            curr[partId].end += stride;
+          } else {
+            // end is outside parent range
+            curr[partId].end = this->src.end;
+            state[partId] = BaseClassType::AFTER;
+          }
 
           return curr[partId];
         }
@@ -370,14 +396,20 @@ namespace bliss
         void resetImpl()
         {
           size_t s = std::min(nChunks, this->nPartitions);
-          printf("number of chunks, partitions: %lu, %lu", nChunks, this->nPartitions);
           for (size_t i = 0; i < s; ++i) {
-            done[i] = false;
-            printf ("values start-end: %lu %lu\n", static_cast<decltype(this->chunkSize)>(i) * this->chunkSize, static_cast<decltype(this->chunkSize)>(i+1) * this->chunkSize);
-
+            state[i] = BaseClassType::BEFORE;
             curr[i].start = this->src.start + static_cast<ChunkSizeType>(i) * this->chunkSize;
-            curr[i].end = curr[i].start + this->chunkSize;
-            curr[i] &= this->src;
+            // if it's the last chunk (s-1), and number of chunks is less or equal to number of partitions
+            // so if i = nChunks - 1
+            // do this check to avoid overflow.
+            curr[i].end = (i == nChunks - 1) ?
+                this->src.end :
+                curr[i].start + this->chunkSize + this->src.overlap;
+            curr[i].block_start = curr[i].start;
+            curr[i].overlap = this->src.overlap;
+
+//            printf ("values start-end: %lu %lu\n", curr[i].start, curr[i].end);
+
           }
         }
 
@@ -465,13 +497,25 @@ namespace bliss
           this->BaseClassType::configure(_src, _nPartitions, _chunkSize);
 
           // get the maximum number of chunks in the source range.
-          size_t nChunks = std::floor((this->chunkSize + this->src.size()) / this->chunkSize);
+          nChunks = std::floor((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
 
+          // if there are more partitions than chunks, then the array represents mapping from chunkId to subrange
+          // else if there are more chunks than partitions, then the array represents the most recent chunk assigned to a partition.
           curr = new Range[std::min(nChunks, this->nPartitions)];
 
           resetImpl();
         };
 
+///        TODO:
+
+        template<typename T = ChunkSizeType>
+        typename std::enable_if<std::is_integral<T>, ValueType>::type getNextOffset() {
+
+        }
+        template<typename T = ChunkSizeType>
+        typename std::enable_if<std::is_floating_point<T>, ValueType>::type getNextOffset() {
+
+        }
 
         /**
          * @brief       get the next chunk in the partition.  for DemandDrivenPartition, keep getting until done.
@@ -485,12 +529,16 @@ namespace bliss
          * @return      range of the partition
          */
         inline Range& getNextImpl(const size_t& partId) {
-
+          // all done, so return end
           if (done.load(std::memory_order_consume)) return this->end;
 
           ValueType s = chunkOffset.fetch_add(this->chunkSize, std::memory_order_acq_rel);
-          size_t id = chunkId.fetch_add(1, std::memory_order_acq_rel);
 
+          /// identify the location in array to store the result
+          // first get the id of the chunk we are returning.
+          size_t id = chunkId.fetch_add(1, std::memory_order_acq_rel);
+          // if there are more partitions than chunks, then the array represents mapping from chunkId to subrange
+          // else if there are more chunks than partitions, then the array represents the most recent chunk assigned to a partition.
           id = (nChunks < this->nPartitions ? id : partId);
 
           if (s >= this->src.end) {
@@ -498,9 +546,10 @@ namespace bliss
             return this->end;
           } else {
 
-            curr[id].start = s;
-            curr[id].end = s + this->chunkSize;
-            curr[id] &= this->src;
+            curr[id].block_start =
+                curr[id].start = s;
+            curr[id].end = (this->src.end - s > this->chunkSize + this->src.overlap) ?
+                s + this->chunkSize + this->src.overlap : this->src.end;
 
             return curr[id];
           }
@@ -511,6 +560,9 @@ namespace bliss
          * @details this function also serves to initialize the subrange array.
          */
         void resetImpl() {
+          printf("RESET: number of chunks, partitions: %lu, %lu\n", nChunks, this->nPartitions);
+
+
           // these 2 calls probably should be synchronized together.
           chunkOffset.store(this->src.start, std::memory_order_release);
           done.store(false, std::memory_order_release);
