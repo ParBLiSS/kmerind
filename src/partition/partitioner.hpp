@@ -4,6 +4,7 @@
  * @author	tpan
  * @brief   contains several class that provide different logic for partitioning a range
  * @details contains block, cyclic, and demand driven (THREAD SAFE) partitioners
+						logic implementation uses comparison to avoid overflows and implicit casting where needed.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -84,9 +85,6 @@ namespace bliss
          */
         ChunkSizeType chunkSize;
 
-        static const uint8_t BEFORE = 0;
-        static const uint8_t DURING = 1;
-        static const uint8_t AFTER = 2;
 
 
       public:
@@ -131,6 +129,25 @@ namespace bliss
           static_cast<Derived*>(this)->resetImpl();
         }
 
+
+        /**
+         * @brief   computes the number of chunks in a src range.  for Integral type only.
+         * @tparam  TT  inter type for the templating
+         * @return  number of chunks in a range, based on chunkSize.
+         */
+        template <typename R = Range>
+        typename std::enable_if<std::is_integral<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
+          return std::floor((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
+        }
+        /**
+         * @brief   computes the number of chunks in a src range.  for floating type only.
+         * @tparam  TT  inter type for the templating
+         * @return  number of chunks in a range, based on chunkSize.
+         */
+        template <typename R = Range>
+        typename std::enable_if<std::is_floating_point<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
+          return this->src.size() / this->chunkSize;
+        }
     };
 
 
@@ -205,14 +222,15 @@ namespace bliss
         }
 
         /**
-         * @brief       get the next chunk in the partition.  for BlockPartition, there is only 1 chunk.
+         * @brief       get the next chunk in the partition.  for BlockPartition, there is only 1 chunk.  INTEGRAL Type Only
          * @details     first call to this function returns the partitioned range.  subsequent calls get the end object (start == end)
          *              to call again and get meaningful result, reset() must be called.
          *              no need to really store much - everything can be recomputed relatively fast.
          * @param partId   partition id for the sub range.
          * @return      range of the partition
          */
-        inline Range& getNextImpl(const size_t& partId) {
+        template<typename R = Range>
+        typename std::enable_if<std::is_integral<typename R::ValueType>::value, Range>::type& getNextImpl(const size_t& partId) {
           // param validation already done.
 
           // if previously computed, then return end object, signalling no more chunks.
@@ -225,6 +243,7 @@ namespace bliss
           if (partId < rem)
           {
             // each chunk with partition id < rem gets 1 extra.
+            // using comparison to avoid overflow.
             curr.start = this->src.start + static_cast<ValueType>(partId) * (this->chunkSize + 1);
             curr.end = (this->src.end - curr.start > static_cast<ValueType>(this->chunkSize + 1) + this->src.overlap) ?
                 curr.start + static_cast<ValueType>(this->chunkSize + 1) + this->src.overlap :
@@ -239,14 +258,46 @@ namespace bliss
                 this->src.end;
           }
 
-          // last entry.  no overlap.  done via intersection
-          //curr &= this->src;
 
           curr.block_start = curr.start;
 
           done = true;
           return curr;
         }
+
+
+        /**
+         * @brief       get the next chunk in the partition.  for BlockPartition, there is only 1 chunk.  Floating Point only
+         * @details     first call to this function returns the partitioned range.  subsequent calls get the end object (start == end)
+         *              to call again and get meaningful result, reset() must be called.
+         *              no need to really store much - everything can be recomputed relatively fast.
+         * @param partId   partition id for the sub range.
+         * @return      range of the partition
+         */
+        template<typename R = Range>
+        typename std::enable_if<std::is_floating_point<typename R::ValueType>::value, Range>::type& getNextImpl(const size_t& partId) {
+          // param validation already done.
+
+          // if previously computed, then return end object, signalling no more chunks.
+          if (done) return this->end;  // can only call this once.
+
+          // if just 1 partition, return.
+          if (this->nPartitions == 1) return this->src;
+
+          // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
+
+          // first rem chunks have 1 extra element than chunkSize.  the rest have chunk size number of elements.
+          curr.start = this->src.start + static_cast<ValueType>(partId) *  this->chunkSize + rem;
+          curr.end = (this->src.end - curr.start > static_cast<ValueType>(this->chunkSize) + this->src.overlap) ?
+              curr.start + static_cast<ValueType>(this->chunkSize) + this->src.overlap :
+              this->src.end;
+
+          curr.block_start = curr.start;
+
+          done = true;
+          return curr;
+        }
+
 
         /**
          * @brief reset size to full range, mark the done to false.
@@ -307,7 +358,23 @@ namespace bliss
          */
         ChunkSizeType stride;
 
-
+				/**
+				 * @var BEFORE
+         * @brief	static variable indicating we have not yet called "getNext"
+			   */
+        static const uint8_t BEFORE = 0;
+				
+				/**
+				 * @var DURING
+         * @brief	static variable indicating we have called getNext at least once, but are not at the end yet
+			   */
+        static const uint8_t DURING = 1;
+        
+        /**
+				 * @var BEFORE
+         * @brief	static variable indicating we have reached the end of the range during calls to getNext
+			   */
+        static const uint8_t AFTER = 2;
 
       public:
 
@@ -330,10 +397,13 @@ namespace bliss
           this->BaseClassType::configure(_src, _nPartitions, _chunkSize);
 
           // get the maximum number of chunks in the source range.
-          nChunks = std::floor((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
+          // TODO: make this compatible with floating point.
+          nChunks = BaseClassType::computeNumberOfChunks();
 
           // stride:  if there are more chunks than partition, then set real stride, else make it src size.
-          stride = (nChunks > this->nPartitions) ? this->chunkSize * static_cast<ChunkSizeType>(this->nPartitions) : this->src.size();
+          stride = (nChunks > this->nPartitions) ? 
+          	this->chunkSize * static_cast<ChunkSizeType>(this->nPartitions) : 
+          	this->src.size();
 
           state = new uint8_t[std::min(nChunks, this->nPartitions)];
           curr = new Range[std::min(nChunks, this->nPartitions)];
@@ -350,16 +420,16 @@ namespace bliss
          */
         inline Range& getNextImpl(const size_t& partId) {
 
-          // if nChunks < nPartitions, then each partId will only get a chunk once.
+          /// if nChunks < nPartitions, then each partId will only get a chunk once.
           // in that case, if partId is >= nChunks, then end is returned.
           if (partId >= nChunks) return this->end;
 
           // if this partition is done, return the last entry (end)
-          if (state[partId] == BaseClassType::AFTER)  return this->end;
+          if (state[partId] == AFTER)  return this->end;
 
           /// first iteration, use initialized value
-          if (state[partId] == BaseClassType::BEFORE) {
-            state[partId] = BaseClassType::DURING;
+          if (state[partId] == BEFORE) {
+            state[partId] = DURING;
             return curr[partId];
           }
           // else not the first and not last, so increment.
@@ -367,23 +437,24 @@ namespace bliss
           /// comparing to amount of range available - trying to avoid data type overflow.
 
           // shift starting position by stride length
-          if (this->src.end - curr[partId].start >= stride) {
+          if (this->src.end - curr[partId].start > stride) {
             // has room.  so shift
             curr[partId].start += stride;
           } else {
-            state[partId] = BaseClassType::AFTER;         // if outside range, done
+            state[partId] = AFTER;         // if outside range, done
             return this->end;
           }
 
           // shift end position by stride length - start is NOT outside range.
           // overlap is already part of curr[partId].end set from resetImpl.
+          // use comparison to avoid overflow and implicit conversion.
           if (this->src.end - curr[partId].end > stride) {
             // end is not outside parent range.
             curr[partId].end += stride;
           } else {
             // end is outside parent range
             curr[partId].end = this->src.end;
-            state[partId] = BaseClassType::AFTER;
+            state[partId] = AFTER;
           }
 
           return curr[partId];
@@ -397,11 +468,11 @@ namespace bliss
         {
           size_t s = std::min(nChunks, this->nPartitions);
           for (size_t i = 0; i < s; ++i) {
-            state[i] = BaseClassType::BEFORE;
+            state[i] = BEFORE;
             curr[i].start = this->src.start + static_cast<ChunkSizeType>(i) * this->chunkSize;
             // if it's the last chunk (s-1), and number of chunks is less or equal to number of partitions
             // so if i = nChunks - 1
-            // do this check to avoid overflow.
+            // use comparison to avoid overflow and implicit conversion.
             curr[i].end = (i == nChunks - 1) ?
                 this->src.end :
                 curr[i].start + this->chunkSize + this->src.overlap;
@@ -477,6 +548,29 @@ namespace bliss
         using ValueType = typename Range::ValueType;
 
 
+        /**
+         * @brief     internal method to atomically increment the chunkOffset.  this is the version for integral type
+         * @return    old value.  chunkOffset incremented.
+         */
+        template<typename T = ChunkSizeType>
+        typename std::enable_if<std::is_integral<T>::value, ValueType>::type getNextOffset() {
+          return chunkOffset.fetch_add(this->chunkSize, std::memory_order_acq_rel);
+        }
+        /**
+         * @brief     internal method to atomically increment the chunkOffset for floating point types
+         * @details   std::atomics does not support fetch_add on non-integral types.
+         * @return    old value.  chunkOffset incremented.
+         */
+        template<typename T = ChunkSizeType>
+        typename std::enable_if<std::is_floating_point<T>::value, ValueType>::type getNextOffset() {
+          ValueType origval = chunkOffset.load(std::memory_order_consume);
+          ValueType newval;
+          do {
+            newval = origval + this->chunkSize;
+          } while (!chunkOffset.compare_exchange_weak(origval, newval, std::memory_order_acq_rel, std::memory_order_acquire));
+          return origval;
+        }
+
       public:
         /**
          * @brief default destructor
@@ -497,7 +591,8 @@ namespace bliss
           this->BaseClassType::configure(_src, _nPartitions, _chunkSize);
 
           // get the maximum number of chunks in the source range.
-          nChunks = std::floor((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
+          // TODO: make this compatible with floating point.
+          nChunks = BaseClassType::computeNumberOfChunks();
 
           // if there are more partitions than chunks, then the array represents mapping from chunkId to subrange
           // else if there are more chunks than partitions, then the array represents the most recent chunk assigned to a partition.
@@ -506,16 +601,8 @@ namespace bliss
           resetImpl();
         };
 
-///        TODO:
 
-        template<typename T = ChunkSizeType>
-        typename std::enable_if<std::is_integral<T>, ValueType>::type getNextOffset() {
 
-        }
-        template<typename T = ChunkSizeType>
-        typename std::enable_if<std::is_floating_point<T>, ValueType>::type getNextOffset() {
-
-        }
 
         /**
          * @brief       get the next chunk in the partition.  for DemandDrivenPartition, keep getting until done.
@@ -532,7 +619,8 @@ namespace bliss
           // all done, so return end
           if (done.load(std::memory_order_consume)) return this->end;
 
-          ValueType s = chunkOffset.fetch_add(this->chunkSize, std::memory_order_acq_rel);
+          // call internal function (so integral and floating point types are handled properly)
+          ValueType s = getNextOffset<ChunkSizeType>();  
 
           /// identify the location in array to store the result
           // first get the id of the chunk we are returning.
@@ -548,6 +636,7 @@ namespace bliss
 
             curr[id].block_start =
                 curr[id].start = s;
+                // use comparison to avoid overflow.
             curr[id].end = (this->src.end - s > this->chunkSize + this->src.overlap) ?
                 s + this->chunkSize + this->src.overlap : this->src.end;
 
@@ -556,15 +645,13 @@ namespace bliss
         }
 
         /**
-         * @brief resets the partitioner by resetting the internal subrange arrays.  also reset the offset to the start of the src range.
+         * @brief resets the partitioner by resetting the internal subrange arrays.  also reset the offset to the start of the src range, chunk Id, and "done".
          * @details this function also serves to initialize the subrange array.
          */
         void resetImpl() {
-          printf("RESET: number of chunks, partitions: %lu, %lu\n", nChunks, this->nPartitions);
-
-
-          // these 2 calls probably should be synchronized together.
+          // these 3 calls probably should be synchronized together.
           chunkOffset.store(this->src.start, std::memory_order_release);
+          chunkId.store(0, std::memory_order_release);
           done.store(false, std::memory_order_release);
 
           size_t s = std::min(this->nPartitions, nChunks);

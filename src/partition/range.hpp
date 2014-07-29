@@ -34,7 +34,7 @@ namespace bliss
      * @class range
      * @brief   Generic representation of an interval on a 1D data structure
      * @details Range specified with offsets and overlap.  specific for 1D.  overlap is on END side only, and is included in the END.
-     *          Should work for continuous value ranges, but this is not tested.
+     *          Works for continuous value ranges (floating points).
      * @tparam T  data type used for the start and end offsets and overlap.
      */
     template<typename T>
@@ -76,10 +76,8 @@ namespace bliss
             : block_start(_start), start(_start), end(_end),
               overlap(_overlap)
         {
-          if (_end < _start) {
-            //printf("start: %d, end %d\n", _start, _end);
+          if (_end < _start)
             throw std::invalid_argument("ERROR: range constructor: end is less than start");
-          }
           if (_overlap < 0) throw std::invalid_argument("ERROR: range constructor: overlap is less than 0");
         }
 
@@ -284,7 +282,7 @@ namespace bliss
          * @brief   align the range to underlying block boundaries, e.g. disk page size.  only for integral types
          * @details range is aligned to underlying block boundaries by moving the block_start variable back towards minimum
          *    if range start is too close to the data type's minimum, then assertion is thrown.
-         *
+         * @tparam TT							type of values for start/end.  used to check if type is integral.
          * @param[in] page_size   the size of the underlying block.
          * @return                updated range
          */
@@ -315,6 +313,7 @@ namespace bliss
         /**
          * @brief     check to see if the range has been aligned to underlying block boundary.   only for integral types
          *
+				 * @tparam		TT					type of start/end.  used to check if type is integral
          * @param[in] page_size   the size of the underlying block.
          * @return    true if range is block aligned, false otherwise.
          */

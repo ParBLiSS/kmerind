@@ -51,7 +51,7 @@ TYPED_TEST_P(PartitionTest, blockPartition){
     0, 1, 2,
     std::numeric_limits<TypeParam>::max()-2, (std::numeric_limits<TypeParam>::max() / 2) + 1};
 
-  std::vector<size_t> lens =
+  std::vector<SizeType> lens =
   { 0, 1, 2};
 
   std::vector<size_t> partitionCount =
@@ -71,8 +71,8 @@ TYPED_TEST_P(PartitionTest, blockPartition){
         part.configure(src, p);
 
 
-        auto rem = len % p;
-        auto div = len / p;
+        auto div = len / static_cast<SizeType>(p);
+        auto rem = len - div * static_cast<SizeType>(p);
 
         //      printf("%ld, %d\n", static_cast<size_t>(len), i);
         size_t block = 0;
@@ -131,7 +131,7 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
     0, 1, 2,
     std::numeric_limits<TypeParam>::max()-2, (std::numeric_limits<TypeParam>::max() / 2) + 1};
 
-  std::vector<size_t> lens =
+  std::vector<SizeType> lens =
   { 0, 1, 2, 8 };
 
   std::vector<size_t> partitionCount =
@@ -159,10 +159,10 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
 
 
 
-        size_t div = 1;
+        SizeType div = 1;
 
         //      printf("%ld, %d\n", static_cast<size_t>(len), i);
-        size_t nChunks = src.size() / div;
+        size_t nChunks = std::ceil(src.size() / div);
 
         // middle block
         size_t block = (p-1)/2;
@@ -212,7 +212,7 @@ TYPED_TEST_P(PartitionTest, demandPartition){
     0, 1, 2,
     std::numeric_limits<TypeParam>::max()-2, (std::numeric_limits<TypeParam>::max() / 2) + 1};
 
-  std::vector<size_t> lens =
+  std::vector<SizeType> lens =
   { 0, 1, 2, 8};
 
   std::vector<size_t> partitionCount =
@@ -232,7 +232,7 @@ TYPED_TEST_P(PartitionTest, demandPartition){
         part.configure(src, p, 1);
 
 
-        size_t div = 1;
+        SizeType div = 1;
 
         //      printf("%ld, %d\n", static_cast<size_t>(len), i);
         size_t block = 0;
@@ -240,9 +240,10 @@ TYPED_TEST_P(PartitionTest, demandPartition){
         // first block
         r = part.getNext(block);
 //        printf("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d\n", block, p, len, div, start);
-        std::cout << "src: " << src << " part: " << r << std::endl;
+//        std::cout << "src: " << src << " part: " << r << std::endl;
         EXPECT_EQ(start, r.start);
-        e = std::min(static_cast<SizeType>(src.end),
+        e = (start >= src.end) ? src.end :
+            std::min(static_cast<SizeType>(src.end),
                      static_cast<SizeType>(div + start));
         EXPECT_EQ(e, r.end);
 
@@ -250,9 +251,10 @@ TYPED_TEST_P(PartitionTest, demandPartition){
         block = (p-1)/2;
         r = part.getNext(block);
 //        printf("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d\n", block, p, len, div, start);
-        std::cout << "src: " << src << " part: " << r << std::endl;
+//        std::cout << "src: " << src << " part: " << r << std::endl;
         EXPECT_EQ(e, r.start);
-        e = std::min(static_cast<SizeType>(src.end),
+        e = (e >= src.end) ? src.end :
+            std::min(static_cast<SizeType>(src.end),
                      static_cast<SizeType>(div + e));
         EXPECT_EQ(e, r.end);
 
@@ -260,9 +262,10 @@ TYPED_TEST_P(PartitionTest, demandPartition){
         block = p-1;
         r = part.getNext(block);
 //        printf("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d\n", block, p, len, div, start);
-        std::cout << "src: " << src << " part: " << r << std::endl;
+//        std::cout << "src: " << src << " part: " << r << std::endl;
         EXPECT_EQ(e, r.start);
-        e = std::min(static_cast<SizeType>(src.end),
+        e = (e >= src.end) ? src.end :
+            std::min(static_cast<SizeType>(src.end),
                      static_cast<SizeType>(div + e));
         EXPECT_EQ(e, r.end);
 
@@ -321,7 +324,7 @@ REGISTER_TYPED_TEST_CASE_P(PartitionTest, badPartitionId, blockPartition, cyclic
 
 
 //////////////////// RUN the tests with different types.
-//typedef ::testing::Types<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
-//    int64_t, uint64_t, size_t> PartitionTestTypes;
-typedef ::testing::Types<int8_t, uint8_t, double> PartitionTestTypes;
+typedef ::testing::Types<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
+    int64_t, size_t, float, double> PartitionTestTypes;
+//typedef ::testing::Types<size_t> PartitionTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, PartitionTest, PartitionTestTypes);
