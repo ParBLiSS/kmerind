@@ -20,7 +20,7 @@
 #include <limits>         // for numeric limits
 #include <algorithm>      // for min/max
 
-#include <partition/partitioner.hpp>
+//#include <partition/partitioner.hpp>
 
 namespace bliss
 {
@@ -123,7 +123,21 @@ namespace bliss
          * @param[in] other   The range to compare to
          * @return  true if 2 ranges are same.  false otherwise.
          */
-        bool operator ==(const range<T> &other) const
+        static bool equal(const range<T> &self, const range<T> &other) const
+        {
+          // same if the data range is identical and step is same.
+          // not comparing overlap or block start.
+
+          return (self.start == other.start) && (self.end == other.end);
+        }
+
+        /**
+         * @brief equals operator.  compares 2 ranges' start and end positions only.
+         *
+         * @param[in] other   The range to compare to
+         * @return  true if 2 ranges are same.  false otherwise.
+         */
+        bool equal(const range<T> &other) const
         {
           // same if the data range is identical and step is same.
           // not comparing overlap or block start.
@@ -137,23 +151,24 @@ namespace bliss
          * @param other
          * @return
          */
-        range<T>& operator |=(const range<T>& other) {
-          block_start =
+        range<T>& range_union(const range<T>& other) {
+          block_start = std::min(block_start, other.block_start);
                 start = std::min(start,       other.start);
           end   =       std::max(end,         other.end);
           overlap =     std::max(overlap,     other.overlap);
 
           return *this;
         }
+
         /**
          * @brief union of range (as |)  NOTE: result could include previously unincluded ranges
          * @param other
          * @return
          */
-        range<T> operator |(const range<T>& other) const
+        static range<T> range_union(const range<T>& self, const range<T>& other) const
         {
           range<T> output(*this);
-          output |= other;
+          output.range_union(other);
           return output;
         }
 
@@ -265,15 +280,16 @@ namespace bliss
          * @param other   The range object that may be inside this one.
          * @return    bool, true if other is inside this range.
          */
-        inline bool contains(const range<T> &other) const {
+        bool contains(const range<T> &other) const {
           return (other.start >= this->start) && (other.end <= this->end);
         }
+
         /**
          * @brief determines if this range overlaps the other range.
          * @param other   The range object that may be overlapping this one.
          * @return    bool, true if other overlaps this range.
          */
-        inline bool overlaps(const range<T> &other) const {
+        bool overlaps(const range<T> &other) const {
           return (other & *this).size() > 0;
         }
 

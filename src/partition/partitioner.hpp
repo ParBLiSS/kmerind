@@ -31,9 +31,10 @@ namespace bliss
      * @brief     base class to partition a range.
      * @details   operates without knowledge of the data that the range refers to,  so no "search" type of partitioning
      *
-     *            each partition consists of 1 or more chunks.  chunks in a partition share the same conceptual partition id.
+     *            PARTIONER essentially divide the RANGE into CHUNKS, then assign PARTITION id to the chunks.
+     *            each partition consists of 0 or more chunks.  chunks in a partition share the same (implicit) partition id.
      *
-     *            Simple types (essentially functinoids, use default copy constructor and assignment operator.  no need to move versions.
+     *            Simple types (essentially functinoids), use default copy constructor and assignment operator.  no need to move versions.
      *            uses the Curiously Recursive Template Pattern to enforce consistent API from base to derived classes.
      *
      *            uses default constructor, copy constructor, and move constructor.
@@ -49,17 +50,17 @@ namespace bliss
       protected:
 
         /**
-         * @typedef ValueType
+         * @typedef RangeValueType
          * @brief   value type used by the range's start/end/overlap
          */
-        using ValueType = typename Range::ValueType;
+        using RangeValueType = typename Range::ValueType;
 
         /**
          * @typedef chunkSizeType
-         * @brief   value type used for chunkSize.  if integral ype for valueType, then size_t.  else (floating point) same as ValueType
+         * @brief   value type used for chunkSize.  if integral ype for valueType, then size_t.  else (floating point) same as RangeValueType
          */
-        using ChunkSizeType = typename std::conditional<std::is_integral<ValueType>::value,
-                                                        size_t, ValueType>::type;
+        using ChunkSizeType = typename std::conditional<std::is_integral<RangeValueType>::value,
+                                                        size_t, RangeValueType>::type;
 
         /**
          * @var src
@@ -86,6 +87,25 @@ namespace bliss
         ChunkSizeType chunkSize;
 
 
+
+        /**
+         * @brief   computes the number of chunks in a src range.  for Integral type only.
+         * @tparam  TT  inter type for the templating
+         * @return  number of chunks in a range, based on chunkSize.
+         */
+        template <typename R = Range>
+        typename std::enable_if<std::is_integral<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
+          return std::floor((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
+        }
+        /**
+         * @brief   computes the number of chunks in a src range.  for floating type only.
+         * @tparam  TT  inter type for the templating
+         * @return  number of chunks in a range, based on chunkSize.
+         */
+        template <typename R = Range>
+        typename std::enable_if<std::is_floating_point<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
+          return this->src.size() / this->chunkSize;
+        }
 
       public:
         /**
@@ -130,24 +150,6 @@ namespace bliss
         }
 
 
-        /**
-         * @brief   computes the number of chunks in a src range.  for Integral type only.
-         * @tparam  TT  inter type for the templating
-         * @return  number of chunks in a range, based on chunkSize.
-         */
-        template <typename R = Range>
-        typename std::enable_if<std::is_integral<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
-          return std::floor((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
-        }
-        /**
-         * @brief   computes the number of chunks in a src range.  for floating type only.
-         * @tparam  TT  inter type for the templating
-         * @return  number of chunks in a range, based on chunkSize.
-         */
-        template <typename R = Range>
-        typename std::enable_if<std::is_floating_point<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
-          return this->src.size() / this->chunkSize;
-        }
     };
 
 
@@ -163,6 +165,12 @@ namespace bliss
     {
       protected:
         /**
+         * @typedef BaseClassType
+         * @brief   the superclass type.
+         */
+        using BaseClassType = Partitioner<Range, BlockPartitioner<Range> >;
+
+        /**
          * @var curr
          * @brief the result range.  cached here for speed
          */
@@ -177,7 +185,7 @@ namespace bliss
         /**
          * @typedef ValueType
          */
-        using ValueType = typename Range::ValueType;
+        using RangeValueType = typename BaseClassType::RangeValueType;
 
         /**
          * @typedef ChunkSizeType
@@ -188,13 +196,8 @@ namespace bliss
          * @var rem
          * @brief the left-over that is to be spread out to the first rem partitions.
          */
-        ValueType rem;
+        RangeValueType rem;
 
-        /**
-         * @typedef BaseClassType
-         * @brief   the superclass type.
-         */
-        using BaseClassType = Partitioner<Range, BlockPartitioner<Range> >;
 
       public:
 
@@ -215,7 +218,7 @@ namespace bliss
           // compute the size of partitions and number of partitions that have size larger than others by 1.
           // play fpr chhunkSize to be 0 - rem would be more than 0, so the first rem partitions will have size of 1.
           this->chunkSize = this->src.size() / static_cast<ChunkSizeType>(this->nPartitions);
-          // not using modulus since we ValueType may be float.
+          // not using modulus since we RangeValueType may be float.
           rem = this->src.size() - this->chunkSize * static_cast<ChunkSizeType>(this->nPartitions);
 
           resetImpl();
@@ -244,17 +247,17 @@ namespace bliss
           {
             // each chunk with partition id < rem gets 1 extra.
             // using comparison to avoid overflow.
-            curr.start = this->src.start + static_cast<ValueType>(partId) * (this->chunkSize + 1);
-            curr.end = (this->src.end - curr.start > static_cast<ValueType>(this->chunkSize + 1) + this->src.overlap) ?
-                curr.start + static_cast<ValueType>(this->chunkSize + 1) + this->src.overlap :
+            curr.start = this->src.start + static_cast<RangeValueType>(partId) * (this->chunkSize + 1);
+            curr.end = (this->src.end - curr.start > static_cast<RangeValueType>(this->chunkSize + 1) + this->src.overlap) ?
+                curr.start + static_cast<RangeValueType>(this->chunkSize + 1) + this->src.overlap :
                 this->src.end;
           }
           else
           {
             // first rem chunks have 1 extra element than chunkSize.  the rest have chunk size number of elements.
-            curr.start = this->src.start + static_cast<ValueType>(partId) *  this->chunkSize + rem;
-            curr.end = (this->src.end - curr.start > static_cast<ValueType>(this->chunkSize) + this->src.overlap) ?
-                curr.start + static_cast<ValueType>(this->chunkSize) + this->src.overlap :
+            curr.start = this->src.start + static_cast<RangeValueType>(partId) *  this->chunkSize + rem;
+            curr.end = (this->src.end - curr.start > static_cast<RangeValueType>(this->chunkSize) + this->src.overlap) ?
+                curr.start + static_cast<RangeValueType>(this->chunkSize) + this->src.overlap :
                 this->src.end;
           }
 
@@ -287,9 +290,9 @@ namespace bliss
           // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
 
           // first rem chunks have 1 extra element than chunkSize.  the rest have chunk size number of elements.
-          curr.start = this->src.start + static_cast<ValueType>(partId) *  this->chunkSize + rem;
-          curr.end = (this->src.end - curr.start > static_cast<ValueType>(this->chunkSize) + this->src.overlap) ?
-              curr.start + static_cast<ValueType>(this->chunkSize) + this->src.overlap :
+          curr.start = this->src.start + static_cast<RangeValueType>(partId) *  this->chunkSize + rem;
+          curr.end = (this->src.end - curr.start > static_cast<RangeValueType>(this->chunkSize) + this->src.overlap) ?
+              curr.start + static_cast<RangeValueType>(this->chunkSize) + this->src.overlap :
               this->src.end;
 
           curr.block_start = curr.start;
@@ -542,10 +545,10 @@ namespace bliss
         std::atomic<bool> done;
 
         /**
-         * @typedef ValueType
+         * @typedef RangeValueType
          * @brief   type for the start/end/overlap
          */
-        using ValueType = typename Range::ValueType;
+        using RangeValueType = typename BaseClassType::RangeValueType;
 
 
         /**
@@ -553,7 +556,7 @@ namespace bliss
          * @return    old value.  chunkOffset incremented.
          */
         template<typename T = ChunkSizeType>
-        typename std::enable_if<std::is_integral<T>::value, ValueType>::type getNextOffset() {
+        typename std::enable_if<std::is_integral<T>::value, RangeValueType>::type getNextOffset() {
           return chunkOffset.fetch_add(this->chunkSize, std::memory_order_acq_rel);
         }
         /**
@@ -562,9 +565,9 @@ namespace bliss
          * @return    old value.  chunkOffset incremented.
          */
         template<typename T = ChunkSizeType>
-        typename std::enable_if<std::is_floating_point<T>::value, ValueType>::type getNextOffset() {
-          ValueType origval = chunkOffset.load(std::memory_order_consume);
-          ValueType newval;
+        typename std::enable_if<std::is_floating_point<T>::value, RangeValueType>::type getNextOffset() {
+          RangeValueType origval = chunkOffset.load(std::memory_order_consume);
+          RangeValueType newval;
           do {
             newval = origval + this->chunkSize;
           } while (!chunkOffset.compare_exchange_weak(origval, newval, std::memory_order_acq_rel, std::memory_order_acquire));
@@ -620,7 +623,7 @@ namespace bliss
           if (done.load(std::memory_order_consume)) return this->end;
 
           // call internal function (so integral and floating point types are handled properly)
-          ValueType s = getNextOffset<ChunkSizeType>();  
+          RangeValueType s = getNextOffset<ChunkSizeType>();
 
           /// identify the location in array to store the result
           // first get the id of the chunk we are returning.

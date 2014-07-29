@@ -1,8 +1,8 @@
 /**
  * @file		io_exception.hpp
- * @ingroup
+ * @ingroup bliss::io
  * @author	tpan
- * @brief
+ * @brief   derived from std exception to represent an IO exception
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -18,31 +18,48 @@ namespace bliss
   {
 
     /**
-     * @class			bliss::io::IOException
-     * @brief
+     * @class			IOException
+     * @brief     derived from std exception to represent an IO exception
      * @details
-     *            Note: have move constructor and assignment operators.
      */
     class IOException : public std::exception
     {
       protected:
+        /// internal error message string
         std::string message;
 
       public:
+        /**
+         * @brief constructor
+         * @param _msg    const char* error message for the exception
+         */
         IOException(const char* _msg)
         {
           message = _msg;
         }
 
+        /**
+         * @brief constructor
+         * @param _msg    const string error message for the exception
+         */
         IOException(const std::string &_msg)
         {
           message = _msg;
         }
 
+        /**
+         * @brief move constructor. takes ownership of the error message content.
+         * @param other   the exception to move from.  empty after the move
+         */
         IOException(IOException&& other) {
           message.swap(other.message);
         }
 
+        /**
+         * @brief move assignment operator..  swaps the internal error messages.
+         * @param other   the exception to move from.   empty after the move
+         * @return        updated io exception object with internal data of the other exception
+         */
         IOException& operator=(IOException&& other) {
           if (this != &other) {
             std::string().swap(message);
@@ -51,8 +68,15 @@ namespace bliss
           return *this;
         }
 
+        /**
+         * @brief destructor
+         */
         virtual ~IOException() {};
 
+        /**
+         * @brief   overridden method to retrieve the content of the error message.
+         * @return  actual error message.
+         */
         virtual const char* what() const throw ()
         {
           return message.c_str();
