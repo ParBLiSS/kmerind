@@ -19,21 +19,22 @@
  *              problem:  would require iterator accessors to take a parameter to enable overloading (for the different return types)
  *                  logic would be complicated
  *              benefit:  runtime choice of overloading.
-*           2. a single DataBlock class with template specialization to choose the iterator accessor return types.
-*               problem:  use enable_if - needs a boolean value that is based on a user choice
-*                   either a boolean template paramter will be needed, or the container type of void means no buffering
-*                   a large percentage of functions (first 4 sets above) will need to be specialized with enable_if, thus replicating declarations
-*           3. template specialization with an empty default, and 2 specialized classes
-*               problem:  same requirement that there is some way to distinguish between buffering and not buffering
-*                   replicated functions in different specializations
-*               benefit:  fewer enable_if.
-*                   easily specialize for new container types (e.g. raw arrays)
-*           4. template specialization with default being the UnbufferedDataBlock type
-*               problem and benefits :  same as 3
-*               problem:  new parameter types (e.g. container type) may be incorrectly handled by default.
-*           5. CRTP with DataBlock being the base and Buffered and Unbuffered as derived classes
-*               problem: replicated APIs and some code.  more complex hierarchy.  harder to read and understand.
-*               benefit: common member and methods are in the base class.
+ *          2. a single DataBlock class with template specialization to choose the iterator accessor return types.
+ *              problem:  use enable_if - needs a boolean value that is based on a user choice
+ *                  either a boolean template paramter will be needed, or the container type of void means no buffering
+ *                  a large percentage of functions (first 4 sets above) will need to be specialized with enable_if, thus replicating declarations
+ *          3. template specialization with an empty default, and 2 specialized classes
+ *              problem:  same requirement that there is some way to distinguish between buffering and not buffering
+ *                  replicated functions in different specializations
+ *              benefit:  fewer enable_if.
+ *                  easily specialize for new container types (e.g. raw arrays)
+ *          4. template specialization with default being the UnbufferedDataBlock type
+ *              problem and benefits :  same as 3
+ *              problem:  new parameter types (e.g. container type) may be incorrectly handled by default.
+ *          5. CRTP with DataBlock being the base and Buffered and Unbuffered as derived classes
+ *              problem: replicated APIs and some code.  more complex hierarchy.  harder to read and understand.
+ *              benefit: common member and methods are in the base class.
+ *
  *
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.

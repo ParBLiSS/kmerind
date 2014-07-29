@@ -177,7 +177,7 @@ namespace bliss
          * @param other
          * @return
          */
-        range<T>& operator &=(const range<T>& other)
+        range<T>& range_intersect(const range<T>& other)
         {
           start =       std::max(start,       other.start);
           end   =       std::min(end,         other.end);
