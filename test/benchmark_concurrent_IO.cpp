@@ -71,19 +71,19 @@ struct readMMap {
 
       // mmap
       r = part.getNext(rank);
-      r = r.align_to_page(page_size);
-      mapped_data = (unsigned char*)mmap(nullptr, r.end - r.block_start,
+      typename RangeType::ValueType block_start = r.align_to_page(page_size);
+      mapped_data = (unsigned char*)mmap(nullptr, r.end - block_start,
                                            PROT_READ,
                                            MAP_PRIVATE, file_handle,
-                                           r.block_start);
-      data = mapped_data + (r.start - r.block_start);
+                                           block_start);
+      data = mapped_data + (r.start - block_start);
 
       if (preloading)
       {
         data = new unsigned char[r.size()];
-        memcpy(data, mapped_data + (r.start - r.block_start), r.size());
+        memcpy(data, mapped_data + (r.start - block_start), r.size());
 
-        munmap(mapped_data, r.end - r.block_start);
+        munmap(mapped_data, r.end - block_start);
         mapped_data = data;
       }
 
@@ -91,11 +91,13 @@ struct readMMap {
     }
 
     ~readMMap() {
+      typename RangeType::ValueType block_start = r.align_to_page(page_size);
+
       // unmap
       if (preloading) {
         delete [] data;
       } else {
-        munmap(mapped_data, r.end - r.block_start);
+        munmap(mapped_data, r.end - block_start);
       }
 
       // close the file handle
@@ -132,8 +134,8 @@ struct readMMap {
 
       RangeType r1(s, s+chunkSize);
       RangeType r2(s, s+2*chunkSize);
-      r1 &= r;
-      r2 &= r;
+      r1.intersect(r);
+      r2.intersect(r);
 
       if (r2.size() == 0) {
         //printf("%d empty at %lu - %lu, in range %lu - %lu! chunkSize %lu\n", tid, r2.start, r2.end, r.start, r.end, chunkSize);
@@ -234,8 +236,8 @@ struct readFileLoader {
       RangeType r1 = loader.getNextChunkRange(tid);
       RangeType r2(r1.start, r1.end + loader.getChunkSize());
 
-      r1 &= r;
-      r2 &= r;
+      r1.intersect(r);
+      r2.intersect(r);
       // try copying the data.
 
       if (r2.size() == 0)

@@ -120,8 +120,8 @@ TYPED_TEST_P(RangeTest, align){
 
       //printf("1 %ld %ld\n", static_cast<int64_t>(s), static_cast<int64_t>(p));
       r = range<TypeParam>(s, s+size);
-      r = r.align_to_page(p);
-      EXPECT_TRUE(r.is_page_aligned(p));
+      TypeParam val = r.align_to_page(p);
+      EXPECT_TRUE(range<TypeParam>::is_page_aligned(val, p));
     }
   }
 

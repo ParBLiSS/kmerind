@@ -161,19 +161,12 @@ TYPED_TEST_P(FileLoaderTest, OpenWithAlignedRange)
   RangeType r = loader.getNextPartitionRange(rank);
 
 
-  RangeType ra = r.align_to_page(sysconf(_SC_PAGE_SIZE));
+  loader.load(r);
 
-  loader.load(ra);
-
-  size_t len = ra.end - ra.start;
+  size_t len = r.size();
   TypeParam* gold = new TypeParam[len + 1];
-  FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, ra.start, len, gold);
-  int comp = memcmp(gold, loader.getData().begin(), len * sizeof(TypeParam));
-  ASSERT_EQ(0, comp);
-
-  len = r.end - r.start;
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
-  comp = memcmp(gold, loader.getData().begin(), len * sizeof(TypeParam));
+  int comp = memcmp(gold, loader.getData().begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
 
 

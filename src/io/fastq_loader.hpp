@@ -120,7 +120,7 @@ namespace bliss
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
 
           assert(partRange.contains(loadedRange));
-          RangeType t = searchRange & loadedRange; // intersection to bound target to between parent's ends.
+          RangeType t = RangeType::intersect(searchRange, loadedRange); // intersection to bound target to between parent's ends.
           if (t.start == t.end) return t.start;
 
           SizeType i = t.start;
@@ -265,19 +265,19 @@ namespace bliss
           if (p == -1) p = this->rank;
 
           RangeType hint = this->partitioner.getNext(p);
-          hint &= this->fileRange;
+          hint.intersect(this->fileRange);
           SizeType length = hint.size();
 
-          RangeType next = hint >> length;
-          next &= this->fileRange;
+          RangeType next = hint + length;
+          next.intersect(this->fileRange);
 
           // concatenate current and next ranges
-          RangeType loadRange = hint | next;
-          loadRange.align_to_page(this->page_size);
+          RangeType loadRange = RangeType::merge(hint, next);
+          typename RangeType::ValueType block_start = loadRange.align_to_page(this->page_size);
 
           // map the content
           typename SuperType::InputIteratorType mappedData = this->map(loadRange);
-          typename SuperType::InputIteratorType searchData = mappedData + (loadRange.start - loadRange.block_start);
+          typename SuperType::InputIteratorType searchData = mappedData + (loadRange.start - block_start);
 
           // NOTE: assume that the range is large enough that we would not run into trouble with partition search not finding a starting position.
 
@@ -317,7 +317,7 @@ namespace bliss
           RangeType srcRange = this->srcData.getRange();
 
           RangeType hint = this->chunkPartitioner.getNext(tid);    // chunkPartitioner has this as atomic if needed
-          hint &= srcRange;
+          hint.intersect(srcRange);
           SizeType length = hint.size();
 
           // chunk size is already set to at least 2x record size - set during FileLoader::load()
@@ -329,8 +329,8 @@ namespace bliss
             //printf("WARNING: search range for next chunk is empty.  should not be here often\n");
           } else {
             /// search for start position.
-            RangeType next = hint >> length;
-            next &= srcRange;
+            RangeType next = hint + length;
+            next.intersect(srcRange);
 
 
             try {
@@ -375,7 +375,7 @@ namespace bliss
 
           for (int i = 0; i < iterations; ++i) {
             r.start = s + 1;   // advance by 1, in order to search for next entry.
-            r &= parent;
+            r.intersect(parent);
             e = findStart(this->srcData.begin(), this->fileRange, parent, r);
             ss = std::max(ss, (e - s));
             s = e;

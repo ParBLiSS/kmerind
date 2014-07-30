@@ -5,12 +5,15 @@
  *      Author: tpan
  */
 
-#include "partition/range.hpp"
-
 #include <gtest/gtest.h>
 #include <cstdint>  // for uint64_t, etc.
 #include <vector>
 #include <limits>
+
+#include "partition/range.hpp"
+#include "partition/partitioner.hpp"
+
+
 
 using namespace bliss::partition;
 

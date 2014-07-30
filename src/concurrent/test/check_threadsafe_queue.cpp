@@ -384,7 +384,7 @@ void timeSTDQueueThreaded(const std::string &message, std::queue<T>&& q, const i
 #pragma omp parallel num_threads(nConsumer) shared(q, localCount, result)
       {
         int count;
-        T output;
+        T output = T();
         while (true) {
 #pragma omp atomic capture
           {

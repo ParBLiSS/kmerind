@@ -40,6 +40,7 @@
 #include "sys/sysinfo.h"  // for meminfo
 
 #include "partition/range.hpp"
+#include "partition/partitioner.hpp"
 #include "io/data_block.hpp"
 #include "io/io_exception.hpp"
 #include "utils/logging.h"
@@ -434,8 +435,8 @@ namespace bliss
 
           //DEBUG("loading");
 
-          mmap_range = range & fileRange;
-          mmap_range.align_to_page(page_size);
+          mmap_range = RangeType::intersect(range, fileRange);
+          SizeType block_start = mmap_range.align_to_page(page_size);
 
           /// do the mem map
           mmap_data = map(mmap_range);
@@ -461,7 +462,7 @@ namespace bliss
 
           //DEBUG("mapped");
           // okay to use + since mmap_data is a pointer so it's a random access iterator.
-          srcData.assign(mmap_data + (mmap_range.start - mmap_range.block_start), mmap_data + (mmap_range.end - mmap_range.block_start), mmap_range);
+          srcData.assign(mmap_data + (mmap_range.start - block_start), mmap_data + (mmap_range.end - block_start), mmap_range);
 
           if (Preloading)
           {
@@ -525,7 +526,7 @@ namespace bliss
         DataBlockType& getChunk(const int tid, const RangeType &chunkRange) {
           assert(loaded);
 //          printf("chunkSize = %lu\n", chunkSize);
-          RangeType r = chunkRange & mmap_range;
+          RangeType r = RangeType::intersect(chunkRange, mmap_range);
 
           auto s = srcData.begin();
           std::advance(s, (r.start - mmap_range.start));
@@ -590,13 +591,13 @@ namespace bliss
          */
         InputIteratorType map(RangeType &r) throw (IOException) {
 
-          r.align_to_page(page_size);
+          SizeType block_start = r.align_to_page(page_size);
 
           // NOT using MAP_POPULATE.  it slows things done when testing on single node.
-          InputIteratorType result = (InputIteratorType)mmap64(nullptr, (r.end - r.block_start ) * sizeof(T),
+          InputIteratorType result = (InputIteratorType)mmap64(nullptr, (r.end - block_start ) * sizeof(T),
                                      PROT_READ,
                                      MAP_PRIVATE, file_handle,
-                                     r.block_start * sizeof(T));
+                                     block_start * sizeof(T));
 
           if (result == MAP_FAILED)
           {
@@ -622,8 +623,9 @@ namespace bliss
         }
 
         void unmap(InputIteratorType &d, RangeType &r) {
+          SizeType block_start = r.align_to_page(page_size);
 
-          munmap(d, (r.end - r.block_start) * sizeof(T));
+          munmap(d, (r.end - block_start) * sizeof(T));
           //DEBUG("unmapped");
 
         }

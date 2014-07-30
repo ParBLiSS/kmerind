@@ -12,6 +12,7 @@
 #include <algorithm>  // for std::min
 
 #include "omp_patterns.hpp"
+#include "partition/partitioner.hpp"
 
 template <typename OT>
 struct compute {
