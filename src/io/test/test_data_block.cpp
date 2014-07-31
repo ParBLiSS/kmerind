@@ -67,7 +67,7 @@ TYPED_TEST_P(DataBlockTest, NoBuffer){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockTest, BufferList){
-  typedef bliss::io::BufferedDataBlock<typename std::vector<TypeParam>::iterator, bliss::partition::range<size_t>, std::list<TypeParam> > DB_Type;
+  typedef bliss::io::DataBlock<typename std::vector<TypeParam>::iterator, bliss::partition::range<size_t>, std::list<TypeParam> > DB_Type;
 
   bliss::partition::range<size_t> r(10, 10 + this->dlen);
   DB_Type db;
@@ -205,7 +205,7 @@ TYPED_TEST_P(DataBlockPtrTest, NoBuffer){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockPtrTest, BufferVector){
-  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::partition::range<size_t>, std::vector<TypeParam> > DB_Type;
+  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::partition::range<size_t> > DB_Type;
 
   bliss::partition::range<size_t> r(10, 10 + this->dlen);
   DB_Type db;
@@ -240,7 +240,7 @@ TYPED_TEST_P(DataBlockPtrTest, BufferVector){
 
 // testing the equal function
 TYPED_TEST_P(DataBlockPtrTest, BufferList){
-  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::partition::range<size_t>, std::list<TypeParam> > DB_Type;
+  typedef bliss::io::BufferedDataBlock<TypeParam*, bliss::partition::range<size_t> > DB_Type;
 
   bliss::partition::range<size_t> r(10, 10 + this->dlen);
   DB_Type db;

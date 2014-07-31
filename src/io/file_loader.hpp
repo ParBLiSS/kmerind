@@ -25,6 +25,7 @@
 #include "omp.h"
 #endif
 
+#include <cassert>
 
 #include <string>
 #include <cstring>      // memcpy, strerror
