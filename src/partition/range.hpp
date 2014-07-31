@@ -3,7 +3,7 @@
  * @ingroup bliss::partition
  * @author  Tony Pan
  * @brief   Generic representation of an interval on a 1D data structure
- * @details Represents an interval with start, end, and ghost length.
+ * @details Represents an interval with start, end, and overlap length.
  *   Convenience functions are provided to compute an page aligned starting position that is
  *      suitable for the underlying data storage device, such as disk. however, page aligned start value
  *      is not stored here.
@@ -34,13 +34,13 @@ namespace bliss
     /**
      * @class range
      * @brief   Generic representation of an interval on a 1D data structure
-     * @details Range specified with offsets and ghost.  specific for 1D.  ghost is on END side only, and is included in the END.
+     * @details Range specified with offsets and overlap.  specific for 1D.  overlap is on END side only, and is included in the END.
      *          Works for continuous value ranges (floating points).
      *
-     * @note    All calculations include the ghost regions, as data in ghost region should undergo the same computation as the non-ghost regions.
-     *          ghost region length is included as metadata for the application.
+     * @note    All calculations include the overlap regions, as data in overlap region should undergo the same computation as the non-overlap regions.
+     *          overlap region length is included as metadata for the application.
      *
-     * @tparam T  data type used for the start and end offsets and ghost.
+     * @tparam T  data type used for the start and end offsets and overlap.
      */
     template<typename T>
     struct range
@@ -55,35 +55,35 @@ namespace bliss
 
         /**
          * @var     end
-         * @brief   end position of a range in absolute coordinates.  DOES include ghost.
+         * @brief   end position of a range in absolute coordinates.  DOES include overlap.
          * @details End points to 1 position past the last element in the range
          */
         T end;
 
         /**
-         * @var   ghost
+         * @var   overlap
          * @brief number of elements at the "end" side of a range that is also part of the next range (at the "start" side)
-         * @note  "ghost" is the term used to describe a replicated region that is often used to minimize communication between processes.
-         *        The term is borrowed from parallel and distributed image analysis.
-         *        also note that each time the range is partitioned, a new ghost region should be specified for the sub
+         * @note  "overlap" is the term used to describe a replicated region that is often used to minimize communication between processes.
+         *        In parallel and distributed image analysis, this is often called "ghost region"
+         *        also note that each time the range is partitioned, a new overlap region should be specified for the subrange
          */
-        T ghost;
+        T overlap;
 
         /**
-         * @brief   construct directly from start and end offsets and ghost
+         * @brief   construct directly from start and end offsets and overlap
          * @details _start should be less than or equal to _end
          *
          * @param[in] _start    starting position of range in absolute coordinates
          * @param[in] _end      ending position of range in absoluate coordinates.
-         * @param[in] _ghost    amount of overlap between adjacent ranges.  optional
+         * @param[in] _overlap    amount of overlap between adjacent ranges.  optional
          */
-        range(const T &_start, const T &_end, const T &_ghost = 0)
-            : start(_start), end(_end), ghost(_ghost)
+        range(const T &_start, const T &_end, const T &_overlap = 0)
+            : start(_start), end(_end), overlap(_overlap)
         {
           if (_end < _start)
             throw std::invalid_argument("ERROR: range constructor: end is less than start");
-          if (_ghost < 0)
-            throw std::invalid_argument("ERROR: range constructor: ghost is less than 0");
+          if (_overlap < 0)
+            throw std::invalid_argument("ERROR: range constructor: overlap is less than 0");
         }
 
         /**
@@ -91,7 +91,7 @@ namespace bliss
          * @param[in] other   the range object to copy from
          */
         range(const range<T> &other)
-            : start(other.start), end(other.end), ghost(other.ghost)
+            : start(other.start), end(other.end), overlap(other.overlap)
         {}
 
         ////// move constructor and move assignment operator
@@ -101,7 +101,7 @@ namespace bliss
         /**
          * @brief   default constructor.  construct an empty range, with start and end initialized to 0.
          */
-        range() : start(0), end(0), ghost(0) {}
+        range() : start(0), end(0), overlap(0) {}
 
 
         /**
@@ -114,7 +114,7 @@ namespace bliss
         {
           start = other.start;
           end = other.end;
-          ghost = other.ghost;
+          overlap = other.overlap;
           return *this;
         }
 
@@ -132,7 +132,7 @@ namespace bliss
         }
 
         /**
-         * @brief equals function.  compares this range's start and end positions to the "other" range. (excluding ghost region)
+         * @brief equals function.  compares this range's start and end positions to the "other" range. (excluding overlap region)
          *
          * @param[in] other   The range to compare to
          * @return            true if 2 ranges are same.  false otherwise.
@@ -145,7 +145,7 @@ namespace bliss
         }
 
         /**
-         * @brief equals operator.  compares 2 ranges' start and end positions only. (excluding ghost region)
+         * @brief equals operator.  compares 2 ranges' start and end positions only. (excluding overlap region)
          *
          * @param[in] other   The range to compare to
          * @return            true if 2 ranges are same.  false otherwise.
@@ -163,7 +163,7 @@ namespace bliss
          * @brief Union of "this" range with "other" range, updates "this" range in place.
          * @details   Given 2 ranges R1 and R2, each with start s, and end e,
          *            then union is defined as R = [min(R1.s, R2.s), max(R1.e, R2.e))
-         *            choice of end also chooses the ghost.
+         *            choice of end also chooses the overlap.
          * @note      this call requires that the ranges not to be disjoint.
          *            this is a subset of the set-union definition.
          *
@@ -173,7 +173,7 @@ namespace bliss
           if (this->isDisjoint(other))
              throw std::invalid_argument("ERROR: Range merge() with disjoint range");
 
-          ghost = (end < other.end) ? other.ghost : ghost;
+          overlap = (end < other.end) ? other.overlap : overlap;
           start = std::min(start,       other.start);
           end   = std::max(end,         other.end);
         }
@@ -182,7 +182,7 @@ namespace bliss
          * @brief Static function for merging of 2 range, creating a new range object along the way..
          * @details   Given 2 ranges R1 and R2, each with start s, and end e,
          *            then union is defined as R = [min(R1.s, R2.s), max(R1.e, R2.e))
-         *            choice of end also chooses the ghost.
+         *            choice of end also chooses the overlap.
          * @note      this call requires that the ranges not to be disjoint.
          *            this is a subset of the set-union definition.
          *
@@ -201,14 +201,14 @@ namespace bliss
          * @brief Intersection of "this" range with "other" range, updates "this" range in place.
          * @details   Given 2 ranges R1 and R2, each with start s, and end e,
          *            then intersection is defined as R = [max(R1.s, R2.s), min(R1.e, R2.e))
-         *            choice of end also chooses the ghost.
+         *            choice of end also chooses the overlap.
          * @note      result may be an empty range, which will contain start = end = min(R1.e, R2.e)
          *
          * @param other   the range to form the intersection with
          */
         void intersect(const range<T>& other)
         {
-          ghost =     (end > other.end) ? other.ghost : ghost;
+          overlap =     (end > other.end) ? other.overlap : overlap;
           start =       std::max(start,       other.start);
           end   =       std::min(end,         other.end);
 
@@ -220,7 +220,7 @@ namespace bliss
          * @brief Static function for Intersection of 2 ranges, return a new Range object..
          * @details   Given 2 ranges R1 and R2, each with start s, and end e,
          *            then intersection is defined as R = [max(R1.s, R2.s), min(R1.e, R2.e))
-         *            choice of end also chooses the ghost.
+         *            choice of end also chooses the overlap.
          * @note      result may be an empty range, which will contain start = end = min(R1.e, R2.e)
          *
          * @param first   the first range to form the intersection with
@@ -363,7 +363,7 @@ namespace bliss
          *                R1 contains R2 if R1.s <= R2.s, and R1.e >= R2.e
          *
          * @note          Note that this is not communicative.
-         *                ghost regions are included in the comparison.
+         *                overlap regions are included in the comparison.
          * @param other   The range object that may be inside this one.
          * @return        bool, true if other is inside this range.
          */
@@ -376,7 +376,7 @@ namespace bliss
          * @details       Given 2 ranges R1 and R2, each with start s, and end e,
          *                R1 overlaps R2 if the intersection of R1 and R2 has non-zero size.
          * @note          this is communicative.
-         *                ghost region is included.
+         *                overlap region is included.
          * @param other   The range object that may be overlapping this one.
          * @return        bool, true if other overlaps this range.
          */
@@ -388,7 +388,7 @@ namespace bliss
          * @brief Determines if this range is adjacent to the other range.
          * @details       Given 2 ranges R1 and R2, each with start s, and end e,
          *                R1 is adjacent to R2 if R1.s == R2.e || R2.s == R1.e.
-         *                This includes the "ghost" within each range.
+         *                This includes the "overlap" within each range.
          * @note          this is communicative.
          *
          * @param other   The range object that may be adjacent to this one.
@@ -402,7 +402,7 @@ namespace bliss
          * @brief Determines if this range is disjoint from the other range.
          * @details       Given 2 ranges R1 and R2, each with start s, and end e,
          *                R1 is joint to R2 if R1.e < R2.s || R2.e < R1.s.
-         *                This includes the "ghost" within each range.
+         *                This includes the "overlap" within each range.
          *                Note that this is communicative.
          *
          * @param other   The range object that may be disjoint from this one.
@@ -519,7 +519,7 @@ namespace bliss
 
 
         /**
-         * @brief   get the integral size of the range between [start, end), including the ghost region
+         * @brief   get the integral size of the range between [start, end), including the overlap region
          * @return  unsigned length of the range.
          */
         template<typename TT=T>
@@ -529,7 +529,7 @@ namespace bliss
         }
 
         /**
-         * @brief   get the floating point size of the range between [start, end), including the ghost region
+         * @brief   get the floating point size of the range between [start, end), including the overlap region
          * @return  length of the range.
          */
         template<typename TT=T>
@@ -551,7 +551,7 @@ namespace bliss
     template<typename T>
     typename std::enable_if<std::is_signed<T>::value and std::is_integral<T>::value, std::ostream>::type& operator<<(std::ostream& ost, const range<T>& r)
     {
-      ost << "range: block [" << static_cast<int64_t>(r.start) << ":" << static_cast<int64_t>(r.end) << ") ghost " << static_cast<int64_t>(r.ghost);
+      ost << "range: block [" << static_cast<int64_t>(r.start) << ":" << static_cast<int64_t>(r.end) << ") overlap " << static_cast<int64_t>(r.overlap);
       return ost;
     }
 
@@ -565,7 +565,7 @@ namespace bliss
     template<typename T>
     typename std::enable_if<!std::is_signed<T>::value and std::is_integral<T>::value, std::ostream>::type& operator<<(std::ostream& ost, const range<T>& r)
     {
-      ost << "range: block [" << static_cast<uint64_t>(r.start) << ":" << static_cast<uint64_t>(r.end) << ") ghost " << static_cast<uint64_t>(r.ghost);
+      ost << "range: block [" << static_cast<uint64_t>(r.start) << ":" << static_cast<uint64_t>(r.end) << ") overlap " << static_cast<uint64_t>(r.overlap);
       return ost;
     }
 
@@ -579,7 +579,7 @@ namespace bliss
     template<typename T>
     typename std::enable_if<std::is_floating_point<T>::value, std::ostream>::type& operator<<(std::ostream& ost, const range<T>& r)
     {
-      ost << "range: block [" << static_cast<double>(r.start) << ":" << static_cast<double>(r.end) << ") ghost " << static_cast<double>(r.ghost);
+      ost << "range: block [" << static_cast<double>(r.start) << ":" << static_cast<double>(r.end) << ") overlap " << static_cast<double>(r.overlap);
       return ost;
     }
 

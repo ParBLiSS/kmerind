@@ -1,6 +1,3 @@
-
-
-
 /**
  * @file		MessageBuffers.hpp
  * @ingroup
@@ -405,18 +402,12 @@ namespace bliss
             targetBufferId = getBufferId(targetProc);               // and get the updated targetBuffer id
           }
 
-          /*if (fullBufferId != BufferPoolType::INVALID || targetBufferId == BufferPoolType::INVALID) {
-           *  // we got a full buffer  (meaning swap happened.  targetBufferId may be BufferPoolType::INVALID or not.)  or
-           */
+
           if (targetBufferId == BufferPoolType::INVALID) {
             // we don't have a buffer to insert into
             // then don't insert
             return std::pair<bool, BufferIdType>(false, fullBufferId);
           } else {
-
-          /*  // else we are not returning a full buffer and have a buffer to insert into, so try insert
-           *  // targetBufferId is not BufferPoolType::INVALID, and fullBufferId is BufferPoolType::INVALID.
-           */
             // else we have a buffer to insert into, so try insert.
             // if targetBufferId buffer is now full, or marked as full, will get a false.  the next thread to call this function will swap the buffer out.
             return std::pair<bool, BufferIdType>(this->pool[targetBufferId].append(data, count), fullBufferId);
