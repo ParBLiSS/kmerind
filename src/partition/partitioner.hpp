@@ -120,16 +120,19 @@ namespace bliss
         }
 
         /**
-         * @brief   internal function to compute the range for a chunk of the parent range.
-         * @param[in/out] r     the range to modify.  should be initialized with pr.start or pr.start+rem (for block partitioner)
-         * @param[in]     pr    the parent range
-         * @param chunkId       the chunk to get the range for
+         * @brief   internal function to compute the range for a chunk of the parent range.  start position will be offset by parent start + specified offset.
+         * @param pr    		the parent range
+         * @param start_offset	offset for the chunk starting position, in addition to pr.start
+         * @param chunkId       the chunk to get the range for.  need to be less than maximum number of chunks.  no check inside this function
          * @param chunk_size    the size of the chunk        (precomputed or user specified)
          * @param ghost_size    the size of the ghost region (user specified)
+         * @param[out] r     	the range to modify.  done this way to avoid new allocations each time
          */
-        void computeRangeForChunkId(Range & r, const Range & pr, const size_t& chunkId, const ChunkSizeType& chunk_size, const RangeValueType& ghost_size) {
+        void computeRangeForChunkId(const Range & pr, const RangeValueType& start_offset, const size_t& chunkId,
+        		const ChunkSizeType& chunk_size, const RangeValueType& ghost_size, Range & r) {
+
           // compute start
-          r.start += static_cast<RangeValueType>(chunkId) *  chunk_size;
+          r.start = start_offset + pr.start + static_cast<RangeValueType>(chunkId) *  chunk_size;
 
           if (pr.end - r.start > static_cast<RangeValueType>(chunk_size) + ghost_size) {
             // far away from parent range's end
@@ -174,7 +177,6 @@ namespace bliss
           chunkSize = _chunkSize;
 
           src = _src;
-          src.ghost = 0;  // partitioning, so there is no ghost region (overlap)
           end = src;
           end.start = end.end;
 
@@ -305,20 +307,20 @@ namespace bliss
 
           // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
           ChunkSizeType cs = this->chunkSize;
+          RangeValueType offset = 0;
           if (partId < rem)
           {
             // each chunk with partition id < rem gets 1 extra.
             cs += 1;
-            curr.start = this->src.start;
           }
           else
           {
             // first rem chunks have 1 extra element than chunkSize.  the rest have chunk size number of elements.
-            curr.start = this->src.start + rem;
+            offset = rem;
           }
 
           // compute the new range
-          computeRangeForChunkId(curr, this->src, partId, cs, this->ghostSize);
+          computeRangeForChunkId(this->src, offset, partId, cs, this->ghostSize, curr);
 
           // block partitioning only allows calling this once.
           done = true;
@@ -345,7 +347,7 @@ namespace bliss
           if (this->nPartitions == 1) return this->src;
 
           // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
-          computeRangeForChunkId(curr, this->src, partId, this->chunkSize, this->ghostSize);
+          computeRangeForChunkId(this->src, 0, partId, this->chunkSize, this->ghostSize, curr);
 
           done = true;
           return curr;
@@ -487,28 +489,27 @@ namespace bliss
           }
           // else not the first and not last, so increment.
 
-          /// comparing to amount of range available - trying to avoid data type overflow.
+          /// comparing to amount of remaining range to how much we need to move - trying to avoid data type overflow.
 
-          // shift starting position by stride length
-          if (this->src.end - curr[partId].start > stride) {
-            // has room.  so shift
-            curr[partId].start += stride;
-          } else {
-            state[partId] = AFTER;         // if outside range, done
-            return this->end;
-          }
-
-          // shift end position by stride length - start is NOT outside range.
-          // overlap is already part of curr[partId].end set from resetImpl.
-          // use comparison to avoid overflow and implicit conversion.
           if (this->src.end - curr[partId].end > stride) {
-            // end is not outside parent range.
+            // has room.  so shift starting and ending position by stride length
+            curr[partId].start += stride;
             curr[partId].end += stride;
-          } else {
-            // end is outside parent range
-            curr[partId].ghost = std::min(this->)
-            curr[partId].end = this->src.end;
+            // ghost region size does not change.
+          } else if (this->src.end - curr[partId].start <= stride) {
+        	  // stride brings the subrange to end, done
             state[partId] = AFTER;
+            return this->end;
+          } else {
+			  // end of src range falls between the next subrange's start and end.
+			  // move src, set end to end
+			  curr[partId].start += stride;
+			  curr[partId].end = this->src.end;
+
+			  // now figure out what the ghost region size is.
+			  curr[partId].ghost = (this->src.end - curr[partId].start <= this->chunkSize) ?
+					  0 : this->src.end - curr[partId].start - this->chunkSize;
+			  state[partId] = AFTER;
           }
 
           return curr[partId];
@@ -523,21 +524,9 @@ namespace bliss
           size_t s = std::min(nChunks, this->nPartitions);
           for (size_t i = 0; i < s; ++i) {
             state[i] = BEFORE;
-            curr[i].start = this->src.start + static_cast<ChunkSizeType>(i) * this->chunkSize;
-            // if it's the last chunk (s-1), and number of chunks is less or equal to number of partitions
-            // so if i = nChunks - 1
-            // use comparison to avoid overflow and implicit conversion.
-            if (i == nChunks -1) {
-              curr[i].end = this->src.end;
-              curr[i].ghost = 0;
-            } else {
-              curr[i].end = (curr[i].start > this->src.end - this->chunkSize) ? this->src.end :
 
-            }
-            curr[i].end = (i == nChunks - 1) ?
-                this->src.end :
-                curr[i].start + this->chunkSize + this->src.ghost;
-            curr[i].ghost = this->src.ghost;
+            // init to src start
+            BaseClassType::computeRangeForChunkId(this->src, 0, i, this->chunkSize, this->ghostSize, curr[i]);
 
 //            printf ("values start-end: %lu %lu\n", curr[i].start, curr[i].end);
 
@@ -715,7 +704,7 @@ namespace bliss
 
           size_t s = std::min(this->nPartitions, nChunks);
           for (size_t i = 0; i < s; ++i) {
-            curr[i] = Range(this->src.start, this->src.start, this->src.ghost);
+            curr[i] = Range(this->src.start, this->src.start, this->ghostSize);
           }
         }
 
