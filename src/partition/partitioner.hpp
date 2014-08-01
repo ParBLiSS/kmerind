@@ -316,7 +316,7 @@ namespace bliss
 
           // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
           ChunkSizeType cs = this->chunkSize;
-          RangeValueType startOffset = 0;
+         RangeValueType startOffset = 0;
           if (partId < rem)
           {
             // each chunk with partition id < rem gets 1 extra.
@@ -325,7 +325,7 @@ namespace bliss
           else
           {
             // first rem chunks have 1 extra element than chunkSize.  the rest have chunk size number of elements.
-            startOffset = rem;
+           startOffset = rem;
           }
 
           // compute the new range
@@ -504,7 +504,7 @@ namespace bliss
           }
           // else not the first and not last, so increment.
 
-          /// comparing to amount of available range and set the start, end, overlap - trying to avoid data type overflow.
+         /// comparing to amount of available range and set the start, end, overlap - trying to avoid data type overflow.
 
           if (this->src.end - curr[partId].end > stride) {
             // has room.  so shift  starting and end position by stride length
@@ -522,7 +522,8 @@ namespace bliss
             // end is definitely at parent ranges' end
             curr[partId].end = this->src.end;
             // overlap needs to be computed
-            curr[partId].overlap = this->src.end - curr[partId].start - this->chunkSize;
+       	  curr[partId].overlap = (this->src.end - curr[partId].start <= this->chunkSize) ?
+					  0 : this->src.end - curr[partId].start - this->chunkSize;
             // may have more for this partition id - if nPartition is 1, so not at end yet.
           }
 
@@ -538,7 +539,6 @@ namespace bliss
           size_t s = std::min(nChunks, this->nPartitions);
           for (size_t i = 0; i < s; ++i) {
             state[i] = BEFORE;
-
             BaseClassType::computeRangeForChunkId(curr[i], this->src, 0, i, this->chunkSize, this->overlapSize);
 //            printf ("values start-end: %lu %lu\n", curr[i].start, curr[i].end);
           }
