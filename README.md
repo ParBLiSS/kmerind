@@ -26,9 +26,9 @@ git submodule update
 ### Building
 
 ```sh
-mkdir build
-cd build
-cmake ../
+mkdir bliss-build
+cd bliss-build
+cmake bliss-src
 make
 ```
 
@@ -54,4 +54,3 @@ Cmake typically uses a out-of-source build.  to generate eclipse compatible `.pr
 to cmake.
 
 install ptp, egit, cmake ed.
-

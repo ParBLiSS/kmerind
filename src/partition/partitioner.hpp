@@ -43,10 +43,10 @@ namespace bliss
      *            Works for continuous value ranges.
      *
      * @note      The purpose of partitioning is to divide the data for computation.  Partitioner will therefore divide the source range,
-     *            including the ghost region (see range class documentation), into equal parts.
-     *            A new ghost region length can be specified during partitioning.  When ghost region length is specified, all subranges
-     *            from the partitioner, except the last subrange, will have its "ghost" variable set to the ghost region size.  The last
-     *            subrange has ghost region of size 0.
+     *            including the overlap region (see range class documentation), into equal parts.
+     *            A new overlap region length can be specified during partitioning.  When overlap region length is specified, all subranges
+     *            from the partitioner, except the last subrange, will have its "overlap" variable set to the overlap region size.  The last
+     *            subrange has overlap region of size 0.
      *
      * @tparam  Range     Range object to be partitioned.
      * @tparam  Derived   Subclass, used to specialize the Base class for deciding the private impl of public api.
@@ -89,15 +89,15 @@ namespace bliss
         /**
          * @var chunkSize
          * @brief   size of each partition.  computed for block partitioner, and user specified for cyclic and demand driven.
-         * @note    this value excludes ghost region size.
+         * @note    this value excludes overlap region size.
          */
         ChunkSizeType chunkSize;
 
         /**
-         * @var     ghostSize
-         * @brief   the ghostSize that each subrange should contain.  Parameter of this partitioning.
+         * @var     overlapSize
+         * @brief   the overlapSize that each subrange should contain.  Parameter of this partitioning.
          */
-        RangeValueType ghostSize;
+        RangeValueType overlapSize;
 
         /**
          * @brief   computes the number of chunks in a src range.  for Integral type only.
@@ -110,7 +110,7 @@ namespace bliss
           return std::floor((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
         }
         /**
-         * @brief   computes the number of chunks in a src range, excluding the ghost region.  for floating type only.
+         * @brief   computes the number of chunks in a src range, excluding the overlap region.  for floating type only.
          * @tparam  R  range type.  used for enable_if.
          * @return  number of chunks in a range, based on chunkSize.
          */
@@ -120,36 +120,45 @@ namespace bliss
         }
 
         /**
-         * @brief   internal function to compute the range for a chunk of the parent range.  start position will be offset by parent start + specified offset.
-         * @param pr    		the parent range
-         * @param start_offset	offset for the chunk starting position, in addition to pr.start
-         * @param chunkId       the chunk to get the range for.  need to be less than maximum number of chunks.  no check inside this function
-         * @param chunk_size    the size of the chunk        (precomputed or user specified)
-         * @param ghost_size    the size of the ghost region (user specified)
-         * @param[out] r     	the range to modify.  done this way to avoid new allocations each time
+         * @brief   internal function to compute the range for a chunk of the parent range.
+         * @details The chunk range is computed by first setting the start to parent range start + start offset (e.g. rem from BlockPartitioner)
+         * @note    chunkId must not exceed maximum number of chunks - enforced outside of this function.
+         *
+         * @param[out] r            the range to compute.  initialized in the function to pr.start + start_offset
+         * @param[in] pr            the parent range
+         * @param[in] start_offset  offset to add to the start position
+         * @param[in] chunkId       the chunkId of the current range.
+         * @param[in] chunk_size    the size of the chunk        (precomputed or user specified)
+         * @param[in] overlap_size    the size of the overlap region (user specified)
          */
-        void computeRangeForChunkId(const Range & pr, const RangeValueType& start_offset, const size_t& chunkId,
-        		const ChunkSizeType& chunk_size, const RangeValueType& ghost_size, Range & r) {
-
+        void computeRangeForChunkId(Range & r, const Range & pr, const RangeValueType& start_offset,
+                                    const size_t& chunkId, const ChunkSizeType& chunk_size, const RangeValueType& overlap_size) {
           // compute start
-          r.start = start_offset + pr.start + static_cast<RangeValueType>(chunkId) *  chunk_size;
+          r.start = pr.start + start_offset;
+          if (pr.end - r.start > static_cast<RangeValueType>(chunkId) *  chunk_size) {
+            r.start += static_cast<RangeValueType>(chunkId) *  chunk_size;
+          } else {
+            r.start = pr.end;
+          }
 
-          if (pr.end - r.start > static_cast<RangeValueType>(chunk_size) + ghost_size) {
+          if (pr.end - r.start > static_cast<RangeValueType>(chunk_size) + overlap_size) {
             // far away from parent range's end
-            r.end = r.start + static_cast<RangeValueType>(chunk_size) + ghost_size;
-            r.ghost = ghost_size;
+            r.end = r.start + static_cast<RangeValueType>(chunk_size) + overlap_size;
+            r.overlap = overlap_size;
           } else if (pr.end - r.start <= static_cast<RangeValueType>(chunk_size)) {
             // parent range's end is within the target subrange's chunk region
             r.end = pr.end;
-            r.ghost = 0;
+            r.overlap = 0;
           } else {
-            // parent range's end is within the target subrange's ghost region
+            // parent range's end is within the target subrange's overlap region
             r.end = pr.end;
-            r.ghost = pr.end - r.start - static_cast<RangeValueType>(chunk_size);
+            r.overlap = pr.end - r.start - static_cast<RangeValueType>(chunk_size);
           }
         }
 
       public:
+        Partitioner() : src(), end(), nPartitions(0), chunkSize(0), overlapSize(0) {};
+
         /**
          * @brief default destructor
          */
@@ -160,27 +169,24 @@ namespace bliss
          * @param _src          range object to be partitioned.
          * @param _nPartitions the number of partitions to divide this range into
          * @param _chunkSize   the size of each partition.  default is 0 (in subclasses), computed later.
-         * @param _ghostSize   the size of the overlap ghost region.
+         * @param _overlapSize   the size of the overlap overlap region.
          */
-        void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize, const RangeValueType &_ghostSize) {
+        void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize, const RangeValueType &_overlapSize) {
 
           if (_nPartitions == 0)
             throw std::invalid_argument("ERROR: partitioner c'tor: nPartitions is 0");
           nPartitions = _nPartitions;
 
-          if (_ghostSize < 0)
-            throw std::invalid_argument("ERROR: partitioner c'tor: ghostSize is < 0");
-          ghostSize = _ghostSize;
+          if (_overlapSize < 0)
+            throw std::invalid_argument("ERROR: partitioner c'tor: overlapSize is < 0");
+          overlapSize = _overlapSize;
 
           if (_chunkSize < 0)
             throw std::invalid_argument("ERROR: partitioner c'tor: chunkSize is < 0");
           chunkSize = _chunkSize;
 
-          src = _src;
-          end = src;
-          end.start = end.end;
-
-
+          src = _src;  // leaving the overlap region size values same as before for src.
+          end = Range(src.end, src.end, 0);
         }
 
         /**
@@ -227,6 +233,16 @@ namespace bliss
         using BaseClassType = Partitioner<Range, BlockPartitioner<Range> >;
 
         /**
+         * @typedef ChunkSizeType
+         */
+        using ChunkSizeType = decltype(std::declval<Range>().size());
+
+        /**
+         * @typedef ValueType
+         */
+        using RangeValueType = typename BaseClassType::RangeValueType;
+
+        /**
          * @var curr
          * @brief the result range.  cached here for speed
          */
@@ -239,16 +255,6 @@ namespace bliss
         bool done;
 
         /**
-         * @typedef ValueType
-         */
-        using RangeValueType = typename BaseClassType::RangeValueType;
-
-        /**
-         * @typedef ChunkSizeType
-         */
-        using ChunkSizeType = decltype(std::declval<Range>().size());
-
-        /**
          * @var rem
          * @brief the left-over that is to be spread out to the first rem partitions.
          */
@@ -256,6 +262,9 @@ namespace bliss
 
 
       public:
+
+        BlockPartitioner() : BaseClassType(), curr(), done(false), rem(0) {};
+
 
         /**
          * @brief default destructor
@@ -267,20 +276,20 @@ namespace bliss
          * @param _src          range object to be partitioned.
          * @param _nPartitions the number of partitions to divide this range into
          * @param _chunkSize  size of each chunk.  here it should be 0 so they will be auto computed.
-         * @param _ghostSize   the size of the overlap ghost region.
+         * @param _overlapSize   the size of the overlap overlap region.
          *
          */
         void configure(const Range &_src, const size_t &_nPartitions,
-                       const ChunkSizeType &_chunkSize = 0, const RangeValueType &_ghostSize = 0) {
-          this->BaseClassType::configure(_src, _nPartitions, _chunkSize, _ghostSize);
+                       const ChunkSizeType &_chunkSize = 0, const RangeValueType &_overlapSize = 0) {
+          this->BaseClassType::configure(_src, _nPartitions, _chunkSize, _overlapSize);
 
           // compute the size of partitions and number of partitions that have size larger than others by 1.
           // if chunkSize to be 0 - rem would be more than 0, so the first rem partitions will have size of 1.
 
-          // first compute the chunkSize excluding the ghost region
+          // first compute the chunkSize excluding the overlap region
           this->chunkSize = this->src.size() / static_cast<ChunkSizeType>(this->nPartitions);
 
-          // next figure out the remainder using chunkSize that excludes ghost region size.
+          // next figure out the remainder using chunkSize that excludes overlap region size.
           // not using modulus since we RangeValueType may be float.
           rem = this->src.size() - this->chunkSize * static_cast<ChunkSizeType>(this->nPartitions);
 
@@ -307,7 +316,7 @@ namespace bliss
 
           // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
           ChunkSizeType cs = this->chunkSize;
-          RangeValueType offset = 0;
+         RangeValueType startOffset = 0;
           if (partId < rem)
           {
             // each chunk with partition id < rem gets 1 extra.
@@ -316,11 +325,11 @@ namespace bliss
           else
           {
             // first rem chunks have 1 extra element than chunkSize.  the rest have chunk size number of elements.
-            offset = rem;
+           startOffset = rem;
           }
 
           // compute the new range
-          computeRangeForChunkId(this->src, offset, partId, cs, this->ghostSize, curr);
+          BaseClassType::computeRangeForChunkId(curr, this->src, startOffset, partId, cs, this->overlapSize);
 
           // block partitioning only allows calling this once.
           done = true;
@@ -347,7 +356,7 @@ namespace bliss
           if (this->nPartitions == 1) return this->src;
 
           // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
-          computeRangeForChunkId(this->src, 0, partId, this->chunkSize, this->ghostSize, curr);
+          BaseClassType::computeRangeForChunkId(curr, this->src, 0, partId, this->chunkSize, this->overlapSize);
 
           done = true;
           return curr;
@@ -386,6 +395,10 @@ namespace bliss
          */
         using ChunkSizeType = typename BaseClassType::ChunkSizeType;
 
+        /**
+         * @typedef RangeValueType
+         */
+        using RangeValueType = typename BaseClassType::RangeValueType;
 
         /**
          * @var done
@@ -433,6 +446,8 @@ namespace bliss
 
       public:
 
+        CyclicPartitioner() : BaseClassType(), state(nullptr), curr(nullptr), nChunks(0), stride(0) {};
+
         /**
          * @brief default destructor.  cleans up arrays for callers.
          */
@@ -448,8 +463,8 @@ namespace bliss
          * @param _chunkSize    Size of the chunks
          *
          */
-        void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize) {
-          this->BaseClassType::configure(_src, _nPartitions, _chunkSize);
+        void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize, const RangeValueType &_overlapSize = 0) {
+          this->BaseClassType::configure(_src, _nPartitions, _chunkSize, _overlapSize);
 
           // get the maximum number of chunks in the source range.
           // TODO: make this compatible with floating point.
@@ -489,27 +504,27 @@ namespace bliss
           }
           // else not the first and not last, so increment.
 
-          /// comparing to amount of remaining range to how much we need to move - trying to avoid data type overflow.
+         /// comparing to amount of available range and set the start, end, overlap - trying to avoid data type overflow.
 
           if (this->src.end - curr[partId].end > stride) {
-            // has room.  so shift starting and ending position by stride length
+            // has room.  so shift  starting and end position by stride length
             curr[partId].start += stride;
             curr[partId].end += stride;
-            // ghost region size does not change.
+            // overlap doesn't need to change
           } else if (this->src.end - curr[partId].start <= stride) {
-        	  // stride brings the subrange to end, done
+            // adding stride would make subrange start after parent range's end.
             state[partId] = AFTER;
             return this->end;
           } else {
-			  // end of src range falls between the next subrange's start and end.
-			  // move src, set end to end
-			  curr[partId].start += stride;
-			  curr[partId].end = this->src.end;
-
-			  // now figure out what the ghost region size is.
-			  curr[partId].ghost = (this->src.end - curr[partId].start <= this->chunkSize) ?
+            // parent range's end falls in the overlap (overlap) region
+            // start can be moved.
+            curr[partId].start += stride;
+            // end is definitely at parent ranges' end
+            curr[partId].end = this->src.end;
+            // overlap needs to be computed
+       	  curr[partId].overlap = (this->src.end - curr[partId].start <= this->chunkSize) ?
 					  0 : this->src.end - curr[partId].start - this->chunkSize;
-			  state[partId] = AFTER;
+            // may have more for this partition id - if nPartition is 1, so not at end yet.
           }
 
           return curr[partId];
@@ -524,12 +539,8 @@ namespace bliss
           size_t s = std::min(nChunks, this->nPartitions);
           for (size_t i = 0; i < s; ++i) {
             state[i] = BEFORE;
-
-            // init to src start
-            BaseClassType::computeRangeForChunkId(this->src, 0, i, this->chunkSize, this->ghostSize, curr[i]);
-
+            BaseClassType::computeRangeForChunkId(curr[i], this->src, 0, i, this->chunkSize, this->overlapSize);
 //            printf ("values start-end: %lu %lu\n", curr[i].start, curr[i].end);
-
           }
         }
 
@@ -557,6 +568,12 @@ namespace bliss
          * @typedef ChunkSizeType
          */
         using ChunkSizeType = typename BaseClassType::ChunkSizeType;
+
+        /**
+         * @typedef RangeValueType
+         * @brief   type for the start/end/overlap
+         */
+        using RangeValueType = typename BaseClassType::RangeValueType;
 
         /**
          * @var chunkOffset
@@ -590,12 +607,6 @@ namespace bliss
          */
         std::atomic<bool> done;
 
-        /**
-         * @typedef RangeValueType
-         * @brief   type for the start/end/overlap
-         */
-        using RangeValueType = typename BaseClassType::RangeValueType;
-
 
         /**
          * @brief     internal method to atomically increment the chunkOffset.  this is the version for integral type
@@ -621,6 +632,8 @@ namespace bliss
         }
 
       public:
+        DemandDrivenPartitioner() : BaseClassType(), chunkOffset(0), chunkId(0), nChunks(0), curr(nullptr), done(false) {};
+
         /**
          * @brief default destructor
          */
@@ -636,8 +649,8 @@ namespace bliss
          * @param _chunkSize  size of each chunk for the partitioning.
          *
          */
-        void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize) {
-          this->BaseClassType::configure(_src, _nPartitions, _chunkSize);
+        void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize, const RangeValueType &_overlapSize = 0) {
+          this->BaseClassType::configure(_src, _nPartitions, _chunkSize, _overlapSize);
 
           // get the maximum number of chunks in the source range.
           // TODO: make this compatible with floating point.
@@ -685,8 +698,19 @@ namespace bliss
 
             curr[id].start = s;
                 // use comparison to avoid overflow.
-            curr[id].end = (this->src.end - s > this->chunkSize + this->src.ghost) ?
-                s + this->chunkSize + this->src.ghost : this->src.end;
+            if (this->src.end - s > this->chunkSize + this->overlapSize) {
+              // enough room for overlapSize
+              curr[id].end = s + this->chunkSize + this->overlapSize;
+              // range's overlap is left as default
+            } else {
+              // not enough room for even the chunk
+              curr[id].end = this->src.end;
+              if (this->src.end - s <= this->chunkSize) {
+                curr[id].overlap = 0;
+              } else {
+                curr[id].overlap = this->src.end - s - this->chunkSize;
+              }
+            }
 
             return curr[id];
           }
@@ -694,7 +718,9 @@ namespace bliss
 
         /**
          * @brief resets the partitioner by resetting the internal subrange arrays.  also reset the offset to the start of the src range, chunk Id, and "done".
-         * @details this function also serves to initialize the subrange array.
+         * @details this function also serves to initialize the subrange array.          chunkOffset.store(this->src.start, std::memory_order_release);
+          chunkId.store(0, )
+         *
          */
         void resetImpl() {
           // these 3 calls probably should be synchronized together.
@@ -704,7 +730,7 @@ namespace bliss
 
           size_t s = std::min(this->nPartitions, nChunks);
           for (size_t i = 0; i < s; ++i) {
-            curr[i] = Range(this->src.start, this->src.start, this->ghostSize);
+            curr[i] = Range(this->src.start, this->src.start, this->overlapSize);
           }
         }
 

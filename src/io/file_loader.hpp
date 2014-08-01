@@ -1,15 +1,12 @@
 /**
- * file_loader.hpp
+ * @file    file_loader.hpp
+ * @ingroup bliss::io
+ * @author  tpan
+ * @brief   contains a generic FileLoader class to perform distributed and concurrent file access.
  *
- *  Created on: Feb 18, 2014
- *      Author: tpan
+ * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
- *
- *      opens a file via mmap, and optionally loads the entire content to memory.
- *      similar to a container, can return size, begin iterator and end iterator.
- *
- *
- *  this class should do the partitioning across multiple processors using MPI.
+ * TODO add License
  */
 
 #ifndef FILE_LOADER_HPP_
@@ -25,6 +22,7 @@
 #include "omp.h"
 #endif
 
+#include <cassert>
 
 #include <string>
 #include <cstring>      // memcpy, strerror
@@ -53,151 +51,186 @@ namespace bliss
 
     // TODO: be more specific about meaning of things, e.g. chunk,  and rename functions approriately.
 
-
     /**
-     *  real data:  mmap is better for large files and limited memory.
-     *              preloading is better for smaller files and/or large amount of memory.
-     *  stream processing means data does not need to be buffered in memory - more efficient.
+     * @class FileLoader
+     * @brief Opens a file (or a portion of it) via memmap, and optionally copies into memory.
+     * @details FileLoader is similar to a container: can return size, begin iterator and end iterator.
      *
+     *          Memmap maps a file to a memory address range, and allows direct, random access to the
+     *          file.  it utilizes the same mechanism as virtual memory paging, so it's efficient.
+     *          Performance of mmap is good generally compared to traditional open-read-close-process
      *
-     *  file access:  better to work with a few pages at a time, or to work with large block?
+     *          Using iterators allows streaming processing, which may be more efficient.
      *
+     *          File loading happens with a 2 level partitioning, in order to support multiprocess (mpi)
+     *          and multithreaded (openmp) concurrent file access.
      *
-     *  To reuse chunk and range, we'd want to limit to only a fixed number of entries.
-     *  however, this means we it's most convenient to say that the max number of entires is the number of threads.
-     *  else we don't have a good way of matching the tid to threads.
+     *          The first level partitioning generates "L1 BLOCKSs".
+     *          When loading the file, a L1Block is loaded with its own mmap operation
+     *          The L1Blockss are consumed by distinct reading processes, e.g. MPI processes
+     *
+     *          The second level partitioning generates "L2 BLOCKSs".
+     *          When loading access a L2Block, the L2Block is generated from the parent L1Block, and therefore
+     *            does not have its own mmap call.
+     *          The L2Blocks in the a L1Block are consumed by distinct computing processes, e.g. openmp threads.
+     *
+     *          Both L1 and L2 Blocks are specified using Range, and the data is accessed through DataBlocks,
+     *          which optionally provides buffering at the L1 and/or L2 Block level.
+     *
+     *          Having a 2 level partitioning provides flexibility and encourages sequential file access (for L2Blocks)
+     *          It is not necessary that L2Block be used, however, as L1 Blocks can be used to traverse the data as well.
+     *
+     *          Any finer grain partitioning, such as partitioning by record, should be done by subclasses of FileLoader.
      *
      *  Usage:
-     *    instantiate file_loader()  - default partitions the file equally
-     *    call adjustPartition()  (optionally)
-     *    then call load()
+     *    instantiate file_loader() - // default partitioning is based on number of MPI processes.
+     *                                // but user can also specify the number of partitions.
+     *    get range for a L1Block     // allows iteration over partition ids, mapping of process to partition other than 1 to 1.
+     *    load using the range        // actually open the file and memmap
      *
-     *    do some work.  e.g. via begin(), end(),
-     *      or via getNextChunk()
+     *    get the iterators (begin(),end()) and do some work.  (L1 Block traversal)
+     *    or
+     *    get a L2Block  via getNextChunk(), then get the iterators (begin(),end()) and do some work.  (L2 Block traversal)
      *
-     *    call unload()
-     *    destroy file_loader
+     *    unload                       // mem unmap
+     *    destroy file_loader          // close the file.
+     *
+     *
+     * @note:   For real data,  mmap is better for large files and limited memory, while
+     *              preloading is better for smaller files and/or large amount of memory.
+     *          FileLoader is the base class in a CRTP static polymorphism pattern.
+     *
+     *          Memmap require page aligned addresses.  internally, this class has pointers to the
+     *          start of the range of interest, not to the page aligned starting position.
+     *          DataBlocks therefore has at the "begin" iterator the first element OF INTEREST in the mmapped range,
+     *            not the first element mapped.
      *
      */
     template <typename T, bool Buffering = true, bool Preloading = false,
-          typename ChunkPartitioner = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
+          typename L2Partitioner = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
           typename Derived = void >
     class FileLoader
     {
 
-        /////// type defintions.
 
       public:
-        typedef size_t                             SizeType;
-        typedef bliss::partition::range<SizeType>  RangeType;
-        typedef T*                                 InputIteratorType;
+        /////// type defintions.
+        typedef bliss::partition::range<size_t>     RangeType;
+        typedef T*                                  PointerType;
 
         // internal DataBlock type.  uses T* as iterator type.
         typedef typename std::conditional<Preloading,
-                                          bliss::io::BufferedDataBlock<InputIteratorType, RangeType>,
-                                          bliss::io::UnbufferedDataBlock<InputIteratorType, RangeType> >::type              DataType;
+                                          bliss::io::BufferedDataBlock<  PointerType, RangeType>,
+                                          bliss::io::UnbufferedDataBlock<PointerType, RangeType> >::type                        L1BlockType;
 
         typedef typename std::conditional<Buffering,
-                                          bliss::io::BufferedDataBlock<typename DataType::iterator, RangeType>,
-                                          bliss::io::UnbufferedDataBlock<typename DataType::iterator, RangeType> >::type     DataBlockType;
+                                          bliss::io::BufferedDataBlock<  typename L1BlockType::iterator, RangeType>,
+                                          bliss::io::UnbufferedDataBlock<typename L1BlockType::iterator, RangeType> >::type     L2BlockType;
 
-        typedef typename DataType::iterator               IteratorType;               // this is for use with the Preloaded datablock
-        typedef typename DataBlockType::iterator          BlockIteratorType;     // this is for use with the buffered data chunk
 
-        ////// member variables
       protected:
-        SizeType page_size;
-        int file_handle;      // file handle
-        std::string filename;
+        ////// member variables
 
-        RangeType fileRange;  // offset in file from where to read
-        T* mmap_data;      // mem-mapped data, page aligned.  strictly internal
-        RangeType mmap_range;      // offset in file from where to read
+        /// "constants"
+        mutable size_t pageSize;
+        mutable size_t recordSize;
 
-        DataType srcData;
-
+        /// status
         bool loaded;
         bool preloaded;
 
-//        SizeType chunkPos;    // for chunked iteration.  size since "data".
+        /// file loading
+        mutable std::string filename;
+        mutable int fileHandle;      // file handle
+        mutable RangeType fileRange;  // offset in file from where to read
 
-        int nthreads;
-        size_t chunkSize;
-        int nprocs;           // for partitioning.
-        int rank;             // for partitioning.
+
+        /// L1 partitioner
 #if defined(USE_MPI)
         MPI_Comm comm;
 #endif
+        int nprocs;           // for partitioning.
+        int rank;             // for partitioning.
+        bliss::partition::BlockPartitioner<RangeType > L1partitioner;   // block partitioning is the default.
 
-        DataBlockType *dataBlocks;
+        /// memory mapping
+        RangeType mmapRange;      // offset in file from where to read
+        T* mmapData;      // mem-mapped data, page aligned.  strictly internal
 
-        bliss::partition::BlockPartitioner<RangeType > partitioner;   // block partitioning is the default.
-        ChunkPartitioner chunkPartitioner;                          // construct when mmap_range change, on load.
+        /// L1 Block
+        L1BlockType L1Block;
 
 
-        SizeType recordSize;
+        /// L2 Blocks and partitioner
+        int nthreads;
+        size_t L2BlockSize;
+        L2Partitioner L2partitioner;                          // construct when mmapRange change, on load.
+        L2BlockType *L2Blocks;
+
+
+
 
         /////////////// Constructor and Destructor
       public:
 
         /// defining move constructor will disallow automatic copy constructor.
         //  this is to prevent copying the buffers, to keep a single handle on the input file.
-        FileLoader(FileLoader<T, Buffering, Preloading, ChunkPartitioner, Derived>&& other) {
-          page_size   = other.page_size;                         other.page_size = 1;
-          file_handle = other.file_handle;                       other.file_handle = -1;
+        FileLoader(FileLoader<T, Buffering, Preloading, L2Partitioner, Derived>&& other) {
+          pageSize   = other.pageSize;                         other.pageSize = 1;
+          fileHandle = other.fileHandle;                       other.fileHandle = -1;
           filename.swap(other.filename);
           fileRange   = other.fileRange;                         other.fileRange = RangeType();
-          mmap_data   = other.mmap_data;                         other.mmap_data = nullptr;
-          mmap_range  = other.mmap_range;                        other.mmap_range = RangeType();
-          srcData     = std::move(other.srcData);
+          mmapData   = other.mmapData;                         other.mmapData = nullptr;
+          mmapRange  = other.mmapRange;                        other.mmapRange = RangeType();
+          L1Block     = std::move(other.L1Block);
           loaded      = other.loaded;                            other.loaded = false;
           preloaded   = other.preloaded;                         other.preloaded = false;
           nthreads    = other.nthreads;                          other.nthreads = 1;
-          chunkSize   = other.chunkSize;                         other.chunkSize = 1;
+          L2BlockSize   = other.L2BlockSize;                         other.L2BlockSize = 1;
           nprocs      = other.nprocs;                            other.nprocs = 1;
           rank        = other.rank;                              other.rank = 0;
 #if defined(USE_MPI)
           comm        = other.comm;                              other.comm = MPI_COMM_NULL;
 #endif
-          dataBlocks  = other.dataBlocks;                        other.dataBlocks = nullptr;
-          partitioner = other.partitioner;                       other.partitioner = bliss::partition::BlockPartitioner<RangeType>();
-          chunkPartitioner = other.chunkPartitioner;             other.chunkPartitioner = ChunkPartitioner();
+          L2Blocks  = other.L2Blocks;                        other.L2Blocks = nullptr;
+          L1partitioner = other.L1partitioner;                       other.L1partitioner = bliss::partition::BlockPartitioner<RangeType>();
+          L2partitioner = other.L2partitioner;             other.L2partitioner = L2Partitioner();
           recordSize  = other.recordSize;                        other.recordSize = 1;
         }
 
         /// defining move assignment will disallow automatic copy assignment operator
-        FileLoader& operator=(FileLoader<T, Buffering, Preloading, ChunkPartitioner, Derived>&& other) {
+        FileLoader& operator=(FileLoader<T, Buffering, Preloading, L2Partitioner, Derived>&& other) {
           if (this != &other) {
             //DEBUG("DESTROY");
-            if (dataBlocks != nullptr) delete [] dataBlocks;
+            if (L2Blocks != nullptr) delete [] L2Blocks;
 
             unload();
 
             //printf("unloading complete.\n");
-            if (file_handle != -1) {
-              close(file_handle);
-              file_handle = -1;
+            if (fileHandle != -1) {
+              close(fileHandle);
+              fileHandle = -1;
             }
 
-            page_size   = other.page_size;                         other.page_size = 1;
-            file_handle = other.file_handle;                       other.file_handle = -1;
+            pageSize   = other.pageSize;                         other.pageSize = 1;
+            fileHandle = other.fileHandle;                       other.fileHandle = -1;
             filename.swap(other.filename);
             fileRange   = other.fileRange;                         other.fileRange = RangeType();
-            mmap_data   = other.mmap_data;                         other.mmap_data = nullptr;
-            mmap_range  = other.mmap_range;                        other.mmap_range = RangeType();
-            srcData     = std::move(other.srcData);
+            mmapData   = other.mmapData;                         other.mmapData = nullptr;
+            mmapRange  = other.mmapRange;                        other.mmapRange = RangeType();
+            L1Block     = std::move(other.L1Block);
             loaded      = other.loaded;                            other.loaded = false;
             preloaded   = other.preloaded;                         other.preloaded = false;
             nthreads    = other.nthreads;                          other.nthreads = 1;
-            chunkSize   = other.chunkSize;                         other.chunkSize = 1;
+            L2BlockSize   = other.L2BlockSize;                         other.L2BlockSize = 1;
             nprocs      = other.nprocs;                            other.nprocs = 1;
             rank        = other.rank;                              other.rank = 0;
   #if defined(USE_MPI)
             comm        = other.comm;                              other.comm = MPI_COMM_NULL;
   #endif
-            dataBlocks  = other.dataBlocks;                        other.dataBlocks = nullptr;
-            partitioner = other.partitioner;                       other.partitioner = bliss::partition::BlockPartitioner<RangeType>();
-            chunkPartitioner = other.chunkPartitioner;             other.chunkPartitioner = ChunkPartitioner();
+            L2Blocks  = other.L2Blocks;                        other.L2Blocks = nullptr;
+            L1partitioner = other.L1partitioner;                       other.L1partitioner = bliss::partition::BlockPartitioner<RangeType>();
+            L2partitioner = other.L2partitioner;             other.L2partitioner = L2Partitioner();
             recordSize  = other.recordSize;                        other.recordSize = 1;
           }
           return *this;
@@ -229,14 +262,14 @@ namespace bliss
          *                        to get just the calling node, use MPI_COMM_SELF (gives the right nprocs).
          */
 #if defined(USE_MPI)
-        FileLoader(const std::string &_filename, const MPI_Comm& _comm, const int _nThreads = 1, const size_t _chunkSize = 1) throw (bliss::io::IOException)
-            : file_handle(-1), filename(_filename), fileRange(), mmap_data(nullptr),
-              mmap_range(), loaded(false), preloaded(false),
-              nthreads(_nThreads), chunkSize(_chunkSize), comm(_comm), dataBlocks(nullptr), recordSize(1)
+        FileLoader(const std::string &_filename, const MPI_Comm& _comm, const int _nThreads = 1, const size_t _L2BlockSize = 1) throw (bliss::io::IOException)
+            : fileHandle(-1), filename(_filename), fileRange(), mmapData(nullptr),
+              mmapRange(), loaded(false), preloaded(false),
+              nthreads(_nThreads), L2BlockSize(_L2BlockSize), comm(_comm), L2Blocks(nullptr), recordSize(1)
         {
           assert(filename.length() > 0);
           assert(_nThreads > 0);
-          assert(_chunkSize > 0);
+          assert(_L2BlockSize > 0);
 
           // get the processor rank and nprocessors.
           MPI_Comm_rank(comm, &rank);
@@ -245,7 +278,7 @@ namespace bliss
           //DEBUG("CONSTRUCT");
 
           /// get the file size.
-          SizeType file_size = 0;
+          size_t file_size = 0;
           if (rank == 0)
           {
             struct stat filestat;
@@ -258,10 +291,10 @@ namespace bliss
               throw IOException(ss.str());
             }
 
-            file_size = static_cast<SizeType>(filestat.st_size);
+            file_size = static_cast<size_t>(filestat.st_size);
 //            std::cerr << "file size is " << file_size;
 //            std::cerr << " block size is " << filestat.st_blksize;
-//            std::cerr << " sysconf block size is " << page_size << std::endl;
+//            std::cerr << " sysconf block size is " << pageSize << std::endl;
           }
 
           if (nprocs > 1) {
@@ -281,22 +314,22 @@ namespace bliss
 
         FileLoader(const std::string &_filename,
                             const int _nProcs = 1, const int _rank = 0,
-                            const int _nThreads = 1, const size_t _chunkSize = 1 ) throw (bliss::io::IOException)
-            : file_handle(-1), filename(_filename), fileRange(), mmap_data(nullptr),
-              mmap_range(), loaded(false), preloaded(false),
-              nthreads(_nThreads), chunkSize(_chunkSize), nprocs(_nProcs), rank(_rank), dataBlocks(nullptr), recordSize(1)
+                            const int _nThreads = 1, const size_t _L2BlockSize = 1 ) throw (bliss::io::IOException)
+            : fileHandle(-1), filename(_filename), fileRange(), mmapData(nullptr),
+              mmapRange(), loaded(false), preloaded(false),
+              nthreads(_nThreads), L2BlockSize(_L2BlockSize), nprocs(_nProcs), rank(_rank), L2Blocks(nullptr), recordSize(1)
         {
           //DEBUG("CONSTRUCT");
 
           assert(filename.length() > 0);
           assert(_nThreads > 0);
-          assert(_chunkSize > 0);
+          assert(_L2BlockSize > 0);
           assert(_rank >= 0);
           assert(_nProcs > _rank);
 
 
           /// get the file size.
-          SizeType file_size = 0;
+          size_t file_size = 0;
           struct stat filestat;
           int ret = stat(filename.c_str(), &filestat);
 
@@ -307,10 +340,10 @@ namespace bliss
             throw IOException(ss.str());
           }
 
-          file_size = static_cast<SizeType>(filestat.st_size);
+          file_size = static_cast<size_t>(filestat.st_size);
 //            std::cerr << "file size is " << file_size;
 //            std::cerr << " block size is " << filestat.st_blksize;
-//            std::cerr << " sysconf block size is " << page_size << std::endl;
+//            std::cerr << " sysconf block size is " << pageSize << std::endl;
 
 //          if (rank == nprocs - 1)
 //          {
@@ -327,14 +360,14 @@ namespace bliss
         virtual ~FileLoader()
         {
           //DEBUG("DESTROY");
-          if (dataBlocks != nullptr) delete [] dataBlocks;
+          if (L2Blocks != nullptr) delete [] L2Blocks;
 
           unload();
 
           //printf("unloading complete.\n");
-          if (file_handle != -1) {
-            close(file_handle);
-            file_handle = -1;
+          if (fileHandle != -1) {
+            close(fileHandle);
+            fileHandle = -1;
           }
         }
 
@@ -343,7 +376,7 @@ namespace bliss
         ////// PUBLIC METHODS
 
         const size_t& getChunkSize() const {
-          return chunkSize;
+          return L2BlockSize;
         }
 
         /**
@@ -361,12 +394,12 @@ namespace bliss
          */
         const RangeType& getMMapRange() const {
           assert(loaded);
-          return mmap_range;
+          return mmapRange;
         }
 
 
         void resetPartitionRange() {
-          partitioner.reset();
+          L1partitioner.reset();
         }
 
         /**
@@ -382,9 +415,9 @@ namespace bliss
         typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextPartitionRange(const int pid = -1) {
           // if just FileLoader calls this.
           if (pid < 0)
-            return partitioner.getNext(rank);
+            return L1partitioner.getNext(rank);
           else
-            return partitioner.getNext(pid);
+            return L1partitioner.getNext(pid);
         }
         template<typename D = Derived>
         typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextPartitionRange(const int pid = -1) {
@@ -399,10 +432,10 @@ namespace bliss
 
         void resetChunkRange() {
           assert(loaded);
-          chunkPartitioner.reset();
+          L2partitioner.reset();
         }
 
-        // partitioner has chunk size. and current position.  at most as many as number of threads (specified in constructor) calling this function.
+        // L1partitioner has chunk size. and current position.  at most as many as number of threads (specified in constructor) calling this function.
         // not using a default tid because this function could be called a lot.
         /**
          *
@@ -412,7 +445,7 @@ namespace bliss
         template <typename D = Derived>
         typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextChunkRange(const int tid) {
           assert(loaded);
-          return chunkPartitioner.getNext(tid);
+          return L2partitioner.getNext(tid);
         }
         template <typename D = Derived>
         typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextChunkRange(const int tid) {
@@ -435,14 +468,14 @@ namespace bliss
 
           //DEBUG("loading");
 
-          mmap_range = RangeType::intersect(range, fileRange);
-          SizeType block_start = mmap_range.align_to_page(page_size);
+          mmapRange = RangeType::intersect(range, fileRange);
+          size_t block_start = mmapRange.align_to_page(pageSize);
 
           /// do the mem map
-          mmap_data = map(mmap_range);
+          mmapData = map(mmapRange);
 
 //////////////// check to see if there is enough memory for preloading.
-///  since Preloading is a template param, can't choose a srcData type if Preloading is true but there is not enough memory.
+///  since Preloading is a template param, can't choose a L1Block type if Preloading is true but there is not enough memory.
 /// so we have to assert it.
 
           if (Preloading) {
@@ -452,95 +485,91 @@ namespace bliss
             struct sysinfo memInfo;
             sysinfo (&memInfo);
 
-            if ((mmap_range.size() * sizeof(T)) > (memInfo.freeram * memInfo.mem_unit / 2)) { // use too much mem.  throw exception.  linux freeram is limited to 10 to 15 % of physical.
+            if ((mmapRange.size() * sizeof(T)) > (memInfo.freeram * memInfo.mem_unit / 2)) { // use too much mem.  throw exception.  linux freeram is limited to 10 to 15 % of physical.
               std::stringstream ss;
-              ss << "ERROR in file preloading: ["  << filename << "] mem required " << (mmap_range.size() * sizeof(T)) << " bytes; (1/20th) available: " << (memInfo.freeram * memInfo.mem_unit / 2) << " free: " << memInfo.freeram << " unit " << memInfo.mem_unit;
+              ss << "ERROR in file preloading: ["  << filename << "] mem required " << (mmapRange.size() * sizeof(T)) << " bytes; (1/20th) available: " << (memInfo.freeram * memInfo.mem_unit / 2) << " free: " << memInfo.freeram << " unit " << memInfo.mem_unit;
               throw IOException(ss.str());
             }
           }
 
 
           //DEBUG("mapped");
-          // okay to use + since mmap_data is a pointer so it's a random access iterator.
-          srcData.assign(mmap_data + (mmap_range.start - block_start), mmap_data + (mmap_range.end - block_start), mmap_range);
+          // okay to use + since mmapData is a pointer so it's a random access iterator.
+          L1Block.assign(mmapData + (mmapRange.start - block_start), mmapData + (mmapRange.end - block_start), mmapRange);
 
           if (Preloading)
           {
-            unmap(mmap_data, mmap_range);
+            unmap(mmapData, mmapRange);
           }
           //DEBUG("loaded");
           loaded = true;
 
           recordSize = getRecordSize<Derived>(3);   // look through 3 records to see the max sizeof records.
 
-          // update the chunkSize to at least 2x record size.  uses move assignment operator
-          chunkSize = std::max(chunkSize, 2 * recordSize);
+          // update the L2BlockSize to at least 2x record size.  uses move assignment operator
+          L2BlockSize = std::max(L2BlockSize, 2 * recordSize);
           // then configure the partitinoer to use the right number of threads.
-          chunkPartitioner.configure(mmap_range, nthreads, chunkSize);
+          L2partitioner.configure(mmapRange, nthreads, L2BlockSize);
 
         }
 
         /**
-         * unmap the file
+         * @brief   unloads the memmap of (a partition of) the file from memory
+         * @details if preloaded, clear the data
+         *          if not preloaded, then unmemmap the file region from memory
          */
         void unload()
         {
-          //DEBUG("Unloading");
-
+          // if the partition was not preloaded,
           if (!Preloading)
           {
-            if (mmap_data != nullptr && mmap_data != MAP_FAILED)
-              unmap(mmap_data, mmap_range);
-          }
+            // and mmap did not fail
+            if (mmapData != nullptr && mmapData != MAP_FAILED)
+              unmap(mmapData, mmapRange);
+            // then we unmap
 
-          srcData.clear();
-          mmap_data = nullptr;
-          //DEBUG("unloaded");
+          } // else the partition was preloaded, so already unmapped
+
+          // clean up variables.
+          L1Block.clear();
+          mmapData = nullptr;
           loaded = false;
-          mmap_range = RangeType();
+          mmapRange = RangeType();
+        }
+
+        /**
+         * @brief   get the Partition that's been memmapped/loaded.
+         * @details the data can then be used directly, using the iterator accessors of DataBlock
+         * @return  DataBlock (buffered or unbuffered) wrapping the data mapped/read from the file.
+         */
+        L1BlockType& getL1Data() {
+
+          assert(loaded);
+
+          return L1Block;
         }
 
 
-
         /**
-         * get the loaded source data.
+         * @brief   get the DataBlock from the Partition
+         * @param tid
+         * @param chunkRange
          * @return
          */
-        DataType& getData() {
+        L2BlockType& getL2DataForRange(const int tid, const RangeType &L2BlockRange) {
+
           assert(loaded);
 
-          return srcData;
-        }
+          RangeType r = RangeType::intersect(L2BlockRange, mmapRange);
 
-        /**
-         * search at the start and end of the block partition for some matching condition,
-         * and set as new partition positions.
-         *
-         * @param[in]  partitioner       to find the partition boundaries
-         * @param[out] start        output start pointer. at least "begin".  if copying, then caller needs to manage "start"
-         * @param[out] end          output end pointer.  at most "end"
-         * @param[in]  chunkSize    suggested partition size.  default to 0, which is translated to system page size.
-         * @param[in]  copying      if copying, then start and end point to a memory block that is a copy of the underlying file mmap.
-         * @return                  actual chunk size created
-         */
-        DataBlockType& getChunk(const int tid, const RangeType &chunkRange) {
-          assert(loaded);
-//          printf("chunkSize = %lu\n", chunkSize);
-          RangeType r = RangeType::intersect(chunkRange, mmap_range);
-
-          auto s = srcData.begin();
-          std::advance(s, (r.start - mmap_range.start));
-          auto e = srcData.begin();
-          std::advance(e, (r.end - mmap_range.start));
+          auto s = L1Block.begin();
+          std::advance(s, (r.start - mmapRange.start));
+          auto e = s;
+          std::advance(e, (r.size()));
 
 
-          dataBlocks[tid].assign(s, e, r);
-//         DEBUG("read " << readLen << " elements, start at " << s << " [" << *startPtr << "] end at "<< e << " [" << *endPtr << "]");
-
-//          if (startPtr == nullptr || endPtr == nullptr) {
-//            std::cerr << "ERROR: file loader get chunk returning null ptrs. readlen = " << readLen << " start and end are " << s << "-" << e << " range is " << range << std::endl;
-//          }
-        return dataBlocks[tid];
+          L2Blocks[tid].assign(s, e, r);
+          return L2Blocks[tid];
       }
 
 
@@ -548,86 +577,117 @@ namespace bliss
 
       protected:
 
+        /**
+         * @brief   initializes the FileLoader
+         * @details This function does the following:
+         *            get the page size
+         *            construct the fileRange from file size
+         *            opening the file
+         *            allocating the internal cache of DataBlocks
+         *            configure the L1partitioner.
+         * @param file_size   size of the entire file being read.
+         */
         void init(const size_t &file_size) {
-          page_size = sysconf(_SC_PAGE_SIZE);
+          // get the page size
+          pageSize = sysconf(_SC_PAGE_SIZE);
 
-          // compute the full mmap_range
+          // compute the full range of the file
           fileRange = RangeType(0, file_size / sizeof(T));   // range is in units of T
 
-          /// open the file and get a handle.
-          file_handle = open64(filename.c_str(), O_RDONLY);
-          if (file_handle == -1)
+          // open the file and get a handle.
+          fileHandle = open64(filename.c_str(), O_RDONLY);
+          if (fileHandle == -1)
           {
+            // if open failed, throw exception.
             std::stringstream ss;
             int myerr = errno;
             ss << "ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr);
             throw IOException(ss.str());
           }
 
-          //DEBUG("file_loader initialized for " << filename);
+          // allocate cache for DataBlocks, for persistent access by threads, so we only need as many as there are threads.
+          L2Blocks = new L2BlockType[nthreads];
 
-          dataBlocks = new DataBlockType[nthreads];  // as many as there are threads, to allow delayed access to the datablocks.
-
-          // partition the full mmap_range
-          partitioner.configure(fileRange, nprocs);
+          // Set up the partitioner to block partition the full file range.  Overlap is 0.
+          L1partitioner.configure(fileRange, nprocs);
         }
 
-
-        // partitioner has chunk size. and current position.  at most as many as number of threads (specified in constructor) calling this function.
+        /**
+         * @brief   compute the approximate size of a data record in the file by reading a few records.
+         * @details For FileLoader, which does not treat the file as a collection of records, size returned is 1.
+         *          This function delegates to the subclass' implementation, as subclass will have knowledge of how to
+         *          parse a record.
+         *          This method provides a hint of the size of a record, which is useful for caching
+         *          and determining size of a DataBlock.
+         *
+         * @param count    number of records to read to compute the approximation. default = 3
+         * @return  approximate size of a record.
+         */
         template<typename D = Derived>
-        typename std::enable_if<std::is_void<D>::value, SizeType>::type getRecordSize(const int iterations = 3) {
+        typename std::enable_if<std::is_void<D>::value, size_t>::type getRecordSize(const int count = 3) {
+          // this method is enabled if Derived is void, which indicates self.
           return 1;
         }
+
+        /**
+         * @brief   compute the approximate size of a data record in the file by reading a few records.
+         * @details For subclasses of FileLoader, this function delegates to the subclass' implementation,
+         *          as subclass will have knowledge of how to parse a record.
+         *          This method provides a hint of the size of a record, which is useful for caching
+         *          and determining size of a DataBlock.
+         * @note    at most as many threads as specified in the c'tor will call this function.
+         * @param count    number of records to read to compute the approximation.  default = 3.
+         * @return  approximate size of a record.
+         */
         template<typename D = Derived>
-        typename std::enable_if<!std::is_void<D>::value, SizeType>::type getRecordSize(const int iterations = 3) {
-          return static_cast<Derived*>(this)->getRecordSizeImpl(iterations);
+        typename std::enable_if<!std::is_void<D>::value, size_t>::type getRecordSize(const int count = 3) {
+          return static_cast<Derived*>(this)->getRecordSizeImpl(count);
         }
 
 
         /**
-         * map a region of the file to memory.
-         * @param r
-         * @return
+         * @brief     map the specified portion of the file to memory.
+         * @param r   range specifying the portion of the file to map
+         * @return    memory address (pointer) to where the data is mapped.
          */
-        InputIteratorType map(RangeType &r) throw (IOException) {
+        PointerType map(RangeType &r) throw (IOException) {
 
-          SizeType block_start = r.align_to_page(page_size);
+          /// memory map.  requires that the starting position is block aligned.
+          size_t block_start = r.align_to_page(pageSize);
 
           // NOT using MAP_POPULATE.  it slows things done when testing on single node.
-          InputIteratorType result = (InputIteratorType)mmap64(nullptr, (r.end - block_start ) * sizeof(T),
+          PointerType result = (PointerType)mmap64(nullptr, (r.end - block_start ) * sizeof(T),
                                      PROT_READ,
-                                     MAP_PRIVATE, file_handle,
+                                     MAP_PRIVATE, fileHandle,
                                      block_start * sizeof(T));
 
+          // if mmap failed,
           if (result == MAP_FAILED)
           {
-
-            if (file_handle != -1)
+            // clean up.
+            if (fileHandle != -1)
             {
-              close(file_handle);
-              file_handle = -1;
+              close(fileHandle);
+              fileHandle = -1;
             }
-            //DEBUG("Range: " << r);
-            //DEBUG("file handle: " << file_handle);
 
-
+            // print error through exception.
             std::stringstream ss;
             int myerr = errno;
             ss << "ERROR in mmap: " << myerr << ": " << strerror(myerr);
             throw IOException(ss.str());
           }
 
-          //DEBUG("mapped");
-
           return result;
         }
 
-        void unmap(InputIteratorType &d, RangeType &r) {
-          SizeType block_start = r.align_to_page(page_size);
-
-          munmap(d, (r.end - block_start) * sizeof(T));
-          //DEBUG("unmapped");
-
+        /**
+         * @brief unmaps a file region from memory
+         * @param d   The pointer to the memory address
+         * @param r   The range that was mapped.
+         */
+        void unmap(PointerType &d, RangeType &r) {
+          munmap(d, (r.end - r.align_to_page(pageSize)) * sizeof(T));
         }
 
     };
