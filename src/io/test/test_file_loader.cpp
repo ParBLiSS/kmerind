@@ -92,7 +92,7 @@ TYPED_TEST_P(FileLoaderTest, OpenWithFullRange)
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
   loader.load(r);
-  int comp = memcmp(gold, loader.getData().begin(), len * sizeof(TypeParam));
+  int comp = memcmp(gold, loader.getL1Data().begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
   delete [] gold;
   loader.unload();
@@ -114,7 +114,7 @@ TYPED_TEST_P(FileLoaderTest, PreloadWithFullRange)
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
   loader.load(r);
-  ASSERT_TRUE(equal(gold, loader.getData().begin(), len));
+  ASSERT_TRUE(equal(gold, loader.getL1Data().begin(), len));
   delete [] gold;
   loader.unload();
 
@@ -140,7 +140,7 @@ TYPED_TEST_P(FileLoaderTest, OpenWithRange)
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
   loader.load(r);
-  int comp = memcmp(gold, loader.getData().begin(), len * sizeof(TypeParam));
+  int comp = memcmp(gold, loader.getL1Data().begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
   delete [] gold;
   loader.unload();
@@ -166,7 +166,7 @@ TYPED_TEST_P(FileLoaderTest, OpenWithAlignedRange)
   size_t len = r.size();
   TypeParam* gold = new TypeParam[len + 1];
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
-  int comp = memcmp(gold, loader.getData().begin(), len * sizeof(TypeParam));
+  int comp = memcmp(gold, loader.getL1Data().begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
 
 
@@ -194,7 +194,7 @@ TYPED_TEST_P(FileLoaderTest, PreloadWithRange)
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
   loader.load(r);
-  ASSERT_TRUE(equal(gold, loader.getData().begin(), len));
+  ASSERT_TRUE(equal(gold, loader.getL1Data().begin(), len));
   delete [] gold;
   loader.unload();
 }
@@ -224,7 +224,7 @@ TYPED_TEST_P(FileLoaderTest, OpenConsecutiveRanges)
     FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
     loader.load(r);
-    int comp = memcmp(gold, loader.getData().begin(), len * sizeof(TypeParam));
+    int comp = memcmp(gold, loader.getL1Data().begin(), len * sizeof(TypeParam));
     ASSERT_EQ(0, comp);
     delete [] gold;
     loader.unload();

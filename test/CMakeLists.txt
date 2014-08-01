@@ -78,3 +78,9 @@ target_link_libraries(profile_mem_usage ${EXTRA_LIBS})
 #target_link_libraries(testThreads bliss-io)
 target_link_libraries(profile_mem_usage bliss-common)
 #target_link_libraries(testThreads bliss-index)
+
+
+
+
+
+add_executable(quicktest quicktest.cpp)

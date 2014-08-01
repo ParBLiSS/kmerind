@@ -461,19 +461,19 @@ namespace bliss
           return range<T>::align_to_page(r.start, page_size);
         }
 
-        /**
-         * @brief   Member function.  align the range to underlying block boundaries, e.g. disk page size.  only for integral types
-         * @details range is aligned to underlying block boundaries by moving the block_start variable back towards minimum
-         *    if range start is too close to the data type's minimum, then assertion is thrown.
-         * @tparam TT             type of values for start/end.  used to check if type is integral.
-         * @param[in] page_size   the size of the underlying block.
-         * @return                the page aligned start position of the range.
-         */
-        template<typename TT = T>
-        typename std::enable_if<std::is_integral<TT>::value, TT >::type align_to_page(const size_t &page_size) const
-        {
-          return range<T>::align_to_page(this->start, page_size);
-        }
+//        /**
+//         * @brief   Member function.  align the range to underlying block boundaries, e.g. disk page size.  only for integral types
+//         * @details range is aligned to underlying block boundaries by moving the block_start variable back towards minimum
+//         *    if range start is too close to the data type's minimum, then assertion is thrown.
+//         * @tparam TT             type of values for start/end.  used to check if type is integral.
+//         * @param[in] page_size   the size of the underlying block.
+//         * @return                the page aligned start position of the range.
+//         */
+//        template<typename TT = T>
+//        typename std::enable_if<std::is_integral<TT>::value, TT >::type align_to_page(const size_t &page_size) const
+//        {
+//          return range<T>::align_to_page(this->start, page_size);
+//        }
 
         /**
          * @brief     Static function. check to see if the start position has been aligned to underlying block boundary.   only for integral types
@@ -503,19 +503,19 @@ namespace bliss
           return range<T>::is_page_aligned(r.start, page_size);
         }
 
-        /**
-         * @brief     Member function. check to see if the start position has been aligned to underlying block boundary.   only for integral types
-         *
-         * @tparam    TT          type of start/end.  used to check if type is integral
-         * @param[in] r           the range to be checked for alignment.
-         * @param[in] page_size   the size of the underlying block.
-         * @return                true if range is block aligned, false otherwise.
-         */
-        template<typename TT = T>
-        typename std::enable_if<std::is_integral<TT>::value, bool >::type is_page_aligned(const size_t &page_size)
-        {
-          return range<T>::is_page_aligned(this->start, page_size);
-        }
+//        /**
+//         * @brief     Member function. check to see if the start position has been aligned to underlying block boundary.   only for integral types
+//         *
+//         * @tparam    TT          type of start/end.  used to check if type is integral
+//         * @param[in] r           the range to be checked for alignment.
+//         * @param[in] page_size   the size of the underlying block.
+//         * @return                true if range is block aligned, false otherwise.
+//         */
+//        template<typename TT = T>
+//        typename std::enable_if<std::is_integral<TT>::value, bool >::type is_page_aligned(const size_t &page_size)
+//        {
+//          return range<T>::is_page_aligned(this->start, page_size);
+//        }
 
 
         /**
