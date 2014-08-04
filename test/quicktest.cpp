@@ -12,8 +12,10 @@
 
 
 #include "mpi.h"
+
 #include <sys/stat.h>   // block size.
 #include <iostream>
+#include "io/io_exception.hpp"
 
 size_t getFileSize(const std::string& filename) throw (bliss::io::IOException) {
   struct stat64 filestat;

@@ -71,7 +71,7 @@ struct readMMap {
 
       // mmap
       r = part.getNext(rank);
-      typename RangeType::ValueType block_start = r.align_to_page(page_size);
+      typename RangeType::ValueType block_start = RangeType::align_to_page(r, page_size);
       mapped_data = (unsigned char*)mmap(nullptr, r.end - block_start,
                                            PROT_READ,
                                            MAP_PRIVATE, file_handle,
@@ -91,7 +91,7 @@ struct readMMap {
     }
 
     ~readMMap() {
-      typename RangeType::ValueType block_start = r.align_to_page(page_size);
+      typename RangeType::ValueType block_start = RangeType::align_to_page(r, page_size);
 
       // unmap
       if (preloading) {
@@ -188,38 +188,38 @@ struct readMMap {
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFileLoader {
 
-    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, preloading, buffering> LoaderType;
 
     size_t page_size;
-    typename LoaderType::DataType data;
+    typename LoaderType::L1BlockType data;
 
     LoaderType loader;
 
     readFileLoader(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextPartitionRange(rank);
+      RangeType r = loader.getNextL1BlockRange(rank);
 
-      loader.load(r);
+      loader.loadL1DataForRange(r);
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
 
 //      printf("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
-      data = loader.getData();
+      data = loader.getCurrentL1Block();
     }
 
     ~readFileLoader() {
       // unmap
-      loader.unload();
+      loader.unloadL1Data();
     }
 
     RangeType getRange() {
       return data.getRange();
     }
     size_t getChunkSize() {
-      return loader.getChunkSize();
+      return loader.getL2BlockSize();
     }
 
 
@@ -228,13 +228,13 @@ struct readFileLoader {
     }
 
     void reset() {
-      loader.resetChunkRange();
+      loader.resetL2Partitioner();
     }
 
     bool operator()(int tid, size_t &count, OT &v) {
       RangeType r = data.getRange();
-      RangeType r1 = loader.getNextChunkRange(tid);
-      RangeType r2(r1.start, r1.end + loader.getChunkSize());
+      RangeType r1 = loader.getNextL2BlockRange(tid);
+      RangeType r2(r1.start, r1.end + loader.getL2BlockSize());
 
       r1.intersect(r);
       r2.intersect(r);
@@ -281,7 +281,7 @@ struct readFileLoader {
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFileLoaderAtomic {
 
-    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, preloading, buffering> LoaderType;
 
 
     size_t page_size;
@@ -291,9 +291,9 @@ struct readFileLoaderAtomic {
     readFileLoaderAtomic(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextPartitionRange(rank);
+      RangeType r = loader.getNextL1BlockRange(rank);
 
-      loader.load(r);
+      loader.loadL1DataForRange(r);
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -305,14 +305,14 @@ struct readFileLoaderAtomic {
 
     ~readFileLoaderAtomic() {
       // unmap
-      loader.unload();
+      loader.unloadL1Data();
     }
 
     RangeType getRange() {
-      return loader.getData().getRange();
+      return loader.getCurrentL1Block().getRange();
     }
     size_t getChunkSize() {
-      return loader.getChunkSize();
+      return loader.getL2BlockSize();
     }
 
     std::string getName() {
@@ -320,14 +320,14 @@ struct readFileLoaderAtomic {
     }
 
     void reset() {
-      loader.resetChunkRange();
+      loader.resetL2Partitioner();
     }
 
     bool operator()(int tid, size_t &count, OT &v) {
 
       // try copying the data.
-      RangeType r = loader.getNextChunkRange(tid);
-      typename LoaderType::DataBlockType data = loader.getChunk(tid, r);
+      RangeType r = loader.getNextL2BlockRange(tid);
+      typename LoaderType::L2BlockType data = loader.loadL2DataForRange(tid, r);
 
       if (data.begin() == data.end())
         return true;
@@ -370,7 +370,7 @@ struct readFileLoaderAtomic {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFASTQ {
-    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, preloading, buffering> LoaderType;
 
 
     size_t page_size;
@@ -380,9 +380,9 @@ struct readFASTQ {
     readFASTQ(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextPartitionRange(rank);
+      RangeType r = loader.getNextL1BlockRange(rank);
 
-      loader.load(r);
+      loader.loadL1DataForRange(r);
 
 //      printf("reading: %lu - %lu, values '%c' '%c'\n", r.start, r.end, *(loader.getData().begin()), *(loader.getData().end()));
 
@@ -398,14 +398,14 @@ struct readFASTQ {
 
     ~readFASTQ() {
       // unmap
-      loader.unload();
+      loader.unloadL1Data();
     }
 
     RangeType getRange() {
-      return loader.getData().getRange();
+      return loader.getCurrentL1Block().getRange();
     }
     size_t getChunkSize() {
-      return loader.getChunkSize();
+      return loader.getL2BlockSize();
     }
 
     std::string getName() {
@@ -413,14 +413,14 @@ struct readFASTQ {
     }
 
     void reset() {
-      loader.resetChunkRange();
+      loader.resetL2Partitioner();
     }
 
     bool operator()(int tid, size_t &count, OT &v) {
 
       // try copying the data.
-      RangeType r = loader.getNextChunkRange(tid);
-      typename LoaderType::DataBlockType data = loader.getChunk(tid, r);
+      RangeType r = loader.getNextL2BlockRange(tid);
+      typename LoaderType::L2BlockType data = loader.loadL2DataForRange(tid, r);
 
       if (data.begin() == data.end() )
         return true;
@@ -460,7 +460,7 @@ struct readFASTQ {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIterator {
-    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, preloading, buffering> LoaderType;
 
     size_t page_size;
 
@@ -469,7 +469,7 @@ struct FASTQIterator {
 
     typedef float QualityType;
     typedef DNA Alphabet;
-    typedef typename LoaderType::BlockIteratorType BaseIterType;
+    typedef typename LoaderType::L2BlockType::iterator BaseIterType;
     typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
     typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
@@ -478,8 +478,8 @@ struct FASTQIterator {
     FASTQIterator(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextPartitionRange(rank);
-      loader.load(r);
+      RangeType r = loader.getNextL1BlockRange(rank);
+      loader.loadL1DataForRange(r);
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -491,14 +491,14 @@ struct FASTQIterator {
 
     ~FASTQIterator() {
       // unmap
-      loader.unload();
+      loader.unloadL1Data();
     }
 
     RangeType getRange() {
-      return loader.getData().getRange();
+      return loader.getCurrentL1Block().getRange();
     }
     size_t getChunkSize() {
-      return loader.getChunkSize();
+      return loader.getL2BlockSize();
     }
 
     std::string getName() {
@@ -507,14 +507,14 @@ struct FASTQIterator {
 
 
     void reset() {
-      loader.resetChunkRange();
+      loader.resetL2Partitioner();
     }
 
     bool operator()(int tid, size_t &count, OT &v) {
 
       // try copying the data.
-      RangeType r = loader.getNextChunkRange(tid);
-      typename LoaderType::DataBlockType data = loader.getChunk(tid, r);
+      RangeType r = loader.getNextL2BlockRange(tid);
+      typename LoaderType::L2BlockType data = loader.loadL2DataForRange(tid, r);
 
       if (data.begin() ==  data.end())
         return true;
@@ -583,7 +583,7 @@ struct FASTQIterator {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIterator2 {
-    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, preloading, buffering> LoaderType;
 
     size_t page_size;
 
@@ -592,7 +592,7 @@ struct FASTQIterator2 {
 
     typedef float QualityType;
     typedef DNA Alphabet;
-    typedef typename LoaderType::BlockIteratorType BaseIterType;
+    typedef typename LoaderType::L2BlockType::iterator BaseIterType;
     typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
     typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
@@ -601,8 +601,8 @@ struct FASTQIterator2 {
     FASTQIterator2(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextPartitionRange(rank);
-      loader.load(r);
+      RangeType r = loader.getNextL1BlockRange(rank);
+      loader.loadL1DataForRange(r);
 //      printf("loader from thread %d loaded range = %lu %lu\n", omp_get_thread_num(), loader.getData().getRange().start, loader.getData().getRange().end);
 //      printf("loader from thread %d file range = %lu %lu\n", omp_get_thread_num(), loader.getFileRange().start, loader.getFileRange().end);
 
@@ -613,14 +613,14 @@ struct FASTQIterator2 {
 
     ~FASTQIterator2() {
       // unmap
-      loader.unload();
+      loader.unloadL1Data();
     }
 
     RangeType getRange() {
-      return loader.getData().getRange();
+      return loader.getCurrentL1Block().getRange();
     }
     size_t getChunkSize() {
-      return loader.getChunkSize();
+      return loader.getL2BlockSize();
     }
 
     std::string getName() {
@@ -628,14 +628,14 @@ struct FASTQIterator2 {
     }
 
     void reset() {
-      loader.resetChunkRange();
+      loader.resetL2Partitioner();
     }
 
     bool operator()(int tid, size_t &count, OT &v) {
 
       // try copying the data.
-      RangeType r = loader.getNextChunkRange(tid);
-      typename LoaderType::DataBlockType data = loader.getChunk(tid, r);
+      RangeType r = loader.getNextL2BlockRange(tid);
+      typename LoaderType::L2BlockType data = loader.loadL2DataForRange(tid, r);
 
       if (data.begin() ==  data.end())
         return true;
@@ -695,7 +695,7 @@ struct FASTQIterator2 {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIteratorNoQual {
-    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, preloading, buffering> LoaderType;
 
     size_t page_size;
 
@@ -704,7 +704,7 @@ struct FASTQIteratorNoQual {
 
     typedef float QualityType;
     typedef DNA Alphabet;
-    typedef typename LoaderType::BlockIteratorType BaseIterType;
+    typedef typename LoaderType::L2BlockType::iterator BaseIterType;
     typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
     typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
@@ -713,8 +713,8 @@ struct FASTQIteratorNoQual {
     FASTQIteratorNoQual(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextPartitionRange(rank);
-      loader.load(r);
+      RangeType r = loader.getNextL1BlockRange(rank);
+      loader.loadL1DataForRange(r);
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -726,28 +726,28 @@ struct FASTQIteratorNoQual {
 
     ~FASTQIteratorNoQual() {
       // unmap
-      loader.unload();
+      loader.unloadL1Data();
     }
 
     RangeType getRange() {
-      return loader.getData().getRange();
+      return loader.getCurrentL1Block().getRange();
     }
     size_t getChunkSize() {
-      return loader.getChunkSize();
+      return loader.getL2BlockSize();
     }
 
     std::string getName() {
       return "FASTQIteratorNoQual";
     }
     void reset() {
-      loader.resetChunkRange();
+      loader.resetL2Partitioner();
     }
 
     bool operator()(int tid, size_t &count, OT &v) {
 
       // try copying the data.
-      RangeType r = loader.getNextChunkRange(tid);
-      typename LoaderType::DataBlockType data = loader.getChunk(tid, r);
+      RangeType r = loader.getNextL2BlockRange(tid);
+      typename LoaderType::L2BlockType data = loader.loadL2DataForRange(tid, r);
 //      printf("thread %d getting block %lu-%lu, got block of length %ld\n", omp_get_thread_num(), start, end, (data.end() - data.begin()));
 
 

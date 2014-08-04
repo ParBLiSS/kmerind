@@ -64,8 +64,8 @@ typedef bliss::partition::range<size_t>                                 RangeTyp
 
 /// define the input file type
 // raw data type :  use CharType
-typedef bliss::io::FASTQLoader<CharType, true, false>                   FileLoaderType;
-typedef typename FileLoaderType::BlockIteratorType                      FileBlockIterType;
+typedef bliss::io::FASTQLoader<CharType, false, true>                   FileLoaderType;
+typedef typename FileLoaderType::L2BlockType::iterator                      FileBlockIterType;
 
 /// define read type
 typedef bliss::io::fastq_sequence_quality<FileBlockIterType, Alphabet, QualityType>  SeqType;
@@ -151,14 +151,14 @@ void buildIndex(FileLoaderType &loader, Index &index, const int &rank,
     Compute op;
 
     /// local variables for loop
-    typename FileLoaderType::DataBlockType chunk;
+    typename FileLoaderType::L2BlockType chunk;
     SeqType read;
 
     /// initialize the loop by getting the first chunk
-    RangeType r = loader.getNextChunkRange(tid);
+    RangeType r = loader.getNextL2BlockRange(tid);
     while (r.size() > 0) {
       /// get the chunk of data
-      chunk = loader.getChunk(tid, r);
+      chunk = loader.loadL2DataForRange(tid, r);
 
       ///  and wrap the chunk inside an iterator that emits Reads.
       SeqIterType fastq_start(parser, chunk.begin(), chunk.end(), r);
@@ -180,7 +180,7 @@ void buildIndex(FileLoaderType &loader, Index &index, const int &rank,
       }
 
       /// get read for next loop iteration.
-      r = loader.getNextChunkRange(tid);
+      r = loader.getNextL2BlockRange(tid);
       ++nChunks;
     }
 
@@ -228,15 +228,15 @@ struct RunTask {
 
       // get the file ready for read
       FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire execution.
-      RangeType pr = loader.getNextPartitionRange(rank);
-      loader.load(pr);
+      RangeType pr = loader.getNextL1BlockRange(rank);
+      loader.loadL1DataForRange(pr);
 
 
       t2 = std::chrono::high_resolution_clock::now();
       time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
       std::cout << "MMap rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
-      std::cout << rank << " file partition: " << loader.getMMapRange() << std::endl;
+      std::cout << rank << " file partition: " << loader.getCurrentL1Block().getRange() << std::endl;
 
 
 
@@ -253,7 +253,7 @@ struct RunTask {
 
       /////////////// clean up
       t1 = std::chrono::high_resolution_clock::now();
-      loader.unload();
+      loader.unloadL1Data();
       t2 = std::chrono::high_resolution_clock::now();
       time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
       std::cout << "Unload rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;

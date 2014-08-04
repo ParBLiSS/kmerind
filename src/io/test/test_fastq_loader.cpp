@@ -188,7 +188,7 @@ TYPED_TEST_P(FASTQLoaderBufferTest, BufferingChunks)
   typedef typename std::iterator_traits<InputIterType>::value_type ValueType;
 
   typedef typename FASTQLoaderType::RangeType RangeType;
-  typedef typename FASTQLoaderType::DataBlockType blockType;
+  typedef typename FASTQLoaderType::L2BlockType blockType;
 
   // get this->fileName
   int rank = 3;
@@ -199,7 +199,7 @@ TYPED_TEST_P(FASTQLoaderBufferTest, BufferingChunks)
 
   FASTQLoaderType loader(this->fileName, nprocs, rank, nThreads, 2048);
 
-  RangeType r = loader.getNextPartitionRange(rank);
+  RangeType r = loader.getNextL1BlockRange(rank);
   loader.load(r);
 
   typename RangeType::ValueType lastEnd = r.start;
@@ -208,7 +208,7 @@ TYPED_TEST_P(FASTQLoaderBufferTest, BufferingChunks)
   ValueType* gold;
   int i = 0;
 
-  RangeType r2 = loader.getNextChunkRange(0);
+  RangeType r2 = loader.getNextL2BlockRange(0);
   blockType data = loader.getChunk(i, r2);
   size_t len = r2.size();
 

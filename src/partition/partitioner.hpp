@@ -41,12 +41,31 @@ namespace bliss
      *            uses default constructor, copy constructor, and move constructor.
      *
      *            Works for continuous value ranges.
+
+     *            Partitioners are designed for multithreaded usage.  For Block and Cyclic partitioners, the chunks are computed
+     *            independent of other threads.  For DemandDriven partitioner, the chunks are computed using atomc operation to provide
+     *            memory fence/synchronization.
      *
      * @note      The purpose of partitioning is to divide the data for computation.  Partitioner will therefore divide the source range,
      *            including the overlap region (see range class documentation), into equal parts.
      *            A new overlap region length can be specified during partitioning.  When overlap region length is specified, all subranges
      *            from the partitioner, except the last subrange, will have its "overlap" variable set to the overlap region size.  The last
      *            subrange has overlap region of size 0.
+     *
+     *            Rationale for NOT implementing Iterator interface:
+     *              Partitioners support multi-threaded access.  For Block and Cyclic, no interthread communication is required.
+     *              ThreadId is needed for caching but we can instantiate one partitioner per thread with the appropriate threadId
+     *
+     *              For DemandDriven, interthread communication is needed via memory fence/synchronization.  We therefore need a
+     *              single instance that is shared between all threads, else coordination is not possible.  While computing and returning nextChunk
+     *              is not a problem, threadId will need to be provided per iterator call to allow caching, which significantly
+     *              deviates from std iterator interface.  Alternatively, the partitioner will need to use the thread library's call
+     *              to get thread id, per call to the increment function in the iterator interface.
+     *
+     *              it MAY be possible to use std::bind to avoid this, but it probably will be complicated.
+     *
+     *              For consistency, simplicity of interface, and performance, Partitioner interface therefore does NOT follow std::iterator convention.
+     *
      *
      * @tparam  Range     Range object to be partitioned.
      * @tparam  Derived   Subclass, used to specialize the Base class for deciding the private impl of public api.
@@ -145,15 +164,16 @@ namespace bliss
             // far away from parent range's end
             r.end = r.start + static_cast<RangeValueType>(chunk_size) + overlap_size;
             r.overlap = overlap_size;
-          } else if (pr.end - r.start <= static_cast<RangeValueType>(chunk_size)) {
-            // parent range's end is within the target subrange's chunk region
+          } else
             r.end = pr.end;
-            r.overlap = 0;
-          } else {
-            // parent range's end is within the target subrange's overlap region
-            r.end = pr.end;
-            r.overlap = pr.end - r.start - static_cast<RangeValueType>(chunk_size);
-          }
+
+            if (pr.end - r.start <= static_cast<RangeValueType>(chunk_size)) {
+              // parent range's end is within the target subrange's chunk region
+              r.overlap = 0;
+            } else {
+              // parent range's end is within the target subrange's overlap region
+              r.overlap = pr.end - r.start - static_cast<RangeValueType>(chunk_size);
+            }
         }
 
       public:
@@ -522,8 +542,8 @@ namespace bliss
             // end is definitely at parent ranges' end
             curr[partId].end = this->src.end;
             // overlap needs to be computed
-       	  curr[partId].overlap = (this->src.end - curr[partId].start <= this->chunkSize) ?
-					  0 : this->src.end - curr[partId].start - this->chunkSize;
+       	    curr[partId].overlap = (this->src.end - curr[partId].start <= this->chunkSize) ?
+					    0 : this->src.end - curr[partId].start - this->chunkSize;
             // may have more for this partition id - if nPartition is 1, so not at end yet.
           }
 
@@ -728,10 +748,7 @@ namespace bliss
           chunkId.store(0, std::memory_order_release);
           done.store(false, std::memory_order_release);
 
-          size_t s = std::min(this->nPartitions, nChunks);
-          for (size_t i = 0; i < s; ++i) {
-            curr[i] = Range(this->src.start, this->src.start, this->overlapSize);
-          }
+          // range will be completely recomputed, so don't have to do much here.
         }
 
 

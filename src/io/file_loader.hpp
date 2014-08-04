@@ -54,15 +54,15 @@ namespace bliss
     /**
      * @class FileLoader
      * @brief Opens a file (or a portion of it) via memmap, and optionally copies into memory.
-     * @details FileLoader is similar to a container: can return size, begin iterator and end iterator.
+     * @details FileLoader is similar to an iterator but does not use the same API.  It has a set of getNext functions
+     *            The decision not to follow iterator API is due to thread support:  the thread id would need to be
+     *            passed in to the iterator operators, thus would already be a departure.  Also, the increment
+     *            and dereference operations need to be bundled together to support atomicity.
      *
-     *          Memmap maps a file to a memory address range, and allows direct, random access to the
-     *          file.  it utilizes the same mechanism as virtual memory paging, so it's efficient.
-     *          Performance of mmap is good generally compared to traditional open-read-close-process
+     *            FileLoader "getNext" returns a DataBlock, which has begin and end iterators for traversing the data.
      *
-     *          Using iterators allows streaming processing, which may be more efficient.
-     *
-     *          File loading happens with a 2 level partitioning, in order to support multiprocess (mpi)
+     *        - 2 Level Partitioning:
+     *          FileLoader uses a 2 level partitioning, in order to support multiprocess (mpi)
      *          and multithreaded (openmp) concurrent file access.
      *
      *          The first level partitioning generates "L1 BLOCKSs".
@@ -80,17 +80,43 @@ namespace bliss
      *          Having a 2 level partitioning provides flexibility and encourages sequential file access (for L2Blocks)
      *          It is not necessary that L2Block be used, however, as L1 Blocks can be used to traverse the data as well.
      *
-     *          Any finer grain partitioning, such as partitioning by record, should be done by subclasses of FileLoader.
+     *        - MemMap
+     *          Memmap maps a file to a memory address range, and allows direct, random access to the
+     *          file.  it utilizes the same mechanism as virtual memory paging, so it's efficient.
+     *          Performance of mmap is good generally compared to traditional open-read-close-process
      *
-     *  Usage:
-     *    instantiate file_loader() - // default partitioning is based on number of MPI processes.
-     *                                // but user can also specify the number of partitions.
-     *    get range for a L1Block     // allows iteration over partition ids, mapping of process to partition other than 1 to 1.
-     *    load using the range        // actually open the file and memmap
+     *          Any modification to the L1 and L2 partitioning, or additional partitioning,
+     *          such as partitioning by record, should be done by subclasses of FileLoader.
      *
-     *    get the iterators (begin(),end()) and do some work.  (L1 Block traversal)
+     *  Simple Usage:
+     *    instantiate file_loader - // default partitioning is based on MPI communicator
+     *                                // but user can also specify the number of partitions and partition id directly
+     *    getNextL1Block()            // get the next L1 DataBlock for the current partition id (e.g. rank)
+     *
+     *    [get the iterators (begin(),end()) and do some work.  (L1 Block traversal)]
      *    or
-     *    get a L2Block  via getNextChunk(), then get the iterators (begin(),end()) and do some work.  (L2 Block traversal)
+     *    loop
+     *        getNextL2Block(),
+     *        [then get the iterators (begin(),end()) and do some work.  (L2 Block traversal)]
+     *
+     *    destroy file_loader          // close the file.
+     *
+     *
+     *  Advanced Usage.  This should be used in subclasses, as these methods are protected.
+     *    instantiate file_loader - // default partitioning is based on number of MPI processes.
+     *                                // but user can also specify the number of partitions.
+     *    getNextL1BlockRange()       // allows iteration over partition ids, mapping of process to partition other than 1 to 1.
+     *    ...                         // modify range
+     *    getL1DataForRange(range)    // actually open the file and memmap
+     *
+     *
+     *    [get the iterators (begin(),end()) and do some work.  (L1 Block traversal)]
+     *    or
+     *    loop
+     *        getNextL2BlockRange(),
+     *        ...                      // modify range
+     *        getL2DataForRange(range) // get the data. and optionally buffering
+     *        [then get the iterators (begin(),end()) and do some work.  (L2 Block traversal)]
      *
      *    unload                       // mem unmap
      *    destroy file_loader          // close the file.
@@ -105,16 +131,18 @@ namespace bliss
      *          DataBlocks therefore has at the "begin" iterator the first element OF INTEREST in the mmapped range,
      *            not the first element mapped.
      *
-     *          L1Partitioner is hard coded to BlockPartitioner at the moment
-     *
      * @tparam  T                 type of each element read from file
      * @tparam  L1Buffering       bool indicating if L1 partition blocks should be buffered.  default to false
      * @tparam  L2Buffering       bool indicating if L2 partition blocks should be buffered.  default to true (to avoid contention between threads)
+     * @tparam  L1PartitionerT    Type of the Level 1 Partitioner to generate the range of the file to load from disk
      * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
      * @tparam  Derived           Derived (sub) class name.  For FileLoader, this is void.
      */
-    template <typename T, bool L1Buffering = false, bool L2Buffering = true,
+    template <typename T,
+          bool L2Buffering = true,
           typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
+          bool L1Buffering = false,
+          typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >,
           typename Derived = void >
     class FileLoader
     {
@@ -151,11 +179,6 @@ namespace bliss
                                           bliss::io::UnbufferedDataBlock<typename L1BlockType::iterator, RangeType> >::type     L2BlockType;
 
       protected:
-        /**
-         * @typedef L1PartitionerT
-         * @brief   Type of the Level 1 Partitioner to generate the range of the file to load from disk
-         */
-        typedef bliss::partition::BlockPartitioner<RangeType >  L1PartitionerT;
 
         //========== member variables
 
@@ -213,12 +236,9 @@ namespace bliss
          * @brief Level 1 Partitioner, default to BlockPartitioner.
          * @details  produces L1 Block ranges that will be used to memmap the file.
          */
-        bliss::partition::BlockPartitioner<RangeType > L1Partitioner;
+        L1PartitionerT L1Partitioner;
 
         //==== memory mapping
-
-        /// range in the file to be memmapped and read.  produced by L1Partitioner
-        RangeType mmapRange;
 
         /**
          * @brief  memmapped data as raw pointer.  loaded from file using mmapRange as specification.
@@ -245,10 +265,10 @@ namespace bliss
         const size_t nConsumingThreads;
 
         /**
-         * @brief   The size ofteh L2 Blocks.  User tunable.
-         * @note    Constant for teh lifetime of the File Loader.
+         * @brief   The size ofteh L2 Blocks.  User tunable.  Also autoadjust to at least 2x record size.
+         * @note    Constant for the lifetime of the File Loader.
          */
-        const size_t L2BlockSize;
+        mutable size_t L2BlockSize;
 
         /**
          * @brief Level 2 Partitioner, default to DemandDrivenPartitioner.
@@ -270,8 +290,6 @@ namespace bliss
       public:
         //================== Constructor and Destructor
 
-        /// Removed default constructor
-        FileLoader() = delete;
 
 #if defined(USE_MPI)
         /**
@@ -303,7 +321,7 @@ namespace bliss
          */
         FileLoader(const std::string &_filename, const MPI_Comm& _comm, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (bliss::io::IOException)
             : pageSize(sysconf(_SC_PAGE_SIZE)), recordSize(1), loaded(false), fileHandle(-1), fileRange(), comm(_comm),
-              L1Partitioner(), mmapRange(), mmapData(nullptr), L1Block(),
+              L1Partitioner(), mmapData(nullptr), L1Block(),
               nConsumingThreads(_nThreads), L2BlockSize(_L2BlockSize), L2Partitioner(), L2Blocks(nullptr)
         {
           // TODO: remove asserts.
@@ -332,11 +350,12 @@ namespace bliss
 //          }
 
           // get the file size.  all processes do this, since all have to open the file and read from it anyways.
-          // configure the L1 partitioner
-          configL1(getFileSize(fileHandle), nConcurrentLoaders);
+          // compute the full range of the file
+          fileRange = RangeType(0, getFileSize(fileHandle) / sizeof(T));   // range is in units of T
 
-          // init the L2 block cache.
-          initL2();
+          // configure the L1 partitioner
+          configL1Partitioner(L1Partitioner, fileRange, nConcurrentLoaders);
+
         }
 #endif
 
@@ -369,7 +388,7 @@ namespace bliss
                             const int _nConcurrentLoaders = 1, const int _loaderId = 0,
                             const size_t _nThreads = 1, const size_t _L2BlockSize = 1 ) throw (bliss::io::IOException)
             : pageSize(sysconf(_SC_PAGE_SIZE)), recordSize(1), loaded(false), fileHandle(-1), fileRange(),
-              loaderId(_loaderId), L1Partitioner(), mmapRange(), mmapData(nullptr), L1Block(),
+              loaderId(_loaderId), L1Partitioner(), mmapData(nullptr), L1Block(),
               nConsumingThreads(_nThreads), L2BlockSize(_L2BlockSize), L2Partitioner(), L2Blocks(nullptr)
         {
           assert(_filename.length() > 0);
@@ -381,11 +400,12 @@ namespace bliss
           // open the file
           fileHandle = openFile(_filename);
 
-          // get the file size and configure L1 partitioner
-          configL1(getFileSize(fileHandle), _nConcurrentLoaders);
+          // get the file size.  all processes do this, since all have to open the file and read from it anyways.
+          // compute the full range of the file
+          fileRange = RangeType(0, getFileSize(fileHandle) / sizeof(T));   // range is in units of T
 
-          // initialize L2 block cache.
-          initL2();
+          // configure the L1 partitioner
+          configL1Partitioner(L1Partitioner, fileRange, _nConcurrentLoaders);
         }
 
 
@@ -403,7 +423,7 @@ namespace bliss
         FileLoader(FileLoader<T, L1Buffering, L2Buffering, L2PartitionerT, Derived>&& other) :
           pageSize(other.pageSize), recordSize(other.recordSize), loaded(other.loaded),
           fileHandle(other.fileHandle), fileRange(other.fileRange),
-          loaderId(other.loaderId), L1Partitioner(other.L1Partitioner), mmapRange(other.mmapRange), mmapData(other.mmapData),
+          loaderId(other.loaderId), L1Partitioner(other.L1Partitioner), mmapData(other.mmapData),
           L1Block(std::move(other.L1Block)), nConsumingThreads(other.nConsumingThreads), L2BlockSize(other.L2BlockSize),
           L2Partitioner(other.L2Partitioner), L2Blocks(other.L2Blocks)
 
@@ -413,7 +433,6 @@ namespace bliss
           other.fileHandle = -1;
           other.fileRange = RangeType();
           other.mmapData = nullptr;
-          other.mmapRange = RangeType();
 
           other.loaded = false;
           other.nConsumingThreads = 1;
@@ -441,7 +460,7 @@ namespace bliss
             // remove the old
             if (L2Blocks != nullptr) delete [] L2Blocks;
             // unload and close my file before copying in the other one.
-            unload();
+            unloadL1Data();
             // close my file
             closeFile(fileHandle);
 
@@ -449,7 +468,6 @@ namespace bliss
             fileHandle = other.fileHandle;                       other.fileHandle = -1;
             fileRange   = other.fileRange;                         other.fileRange = RangeType();
             mmapData   = other.mmapData;                         other.mmapData = nullptr;
-            mmapRange  = other.mmapRange;                        other.mmapRange = RangeType();
             L1Block     = std::move(other.L1Block);
             loaded      = other.loaded;                            other.loaded = false;
             nConsumingThreads    = other.nConsumingThreads;                          other.nConsumingThreads = 1;
@@ -474,7 +492,7 @@ namespace bliss
         {
           if (L2Blocks != nullptr) delete [] L2Blocks;
 
-          unload();
+          unloadL1Data();
 
           closeFile(fileHandle);
         }
@@ -495,37 +513,167 @@ namespace bliss
           return fileRange;
         }
 
+
+
         /**
-         * @brief  return the range for this file loader's memory map.  (in units of data type T).  valid only after loading.
-         * @return  the range object spanning the entire memory mapped region.
+         * @brief   get the DataBlock that represents the current L1 partition block for this process.
+         * @details the data can then be used directly, using the iterator accessors of DataBlock
+         *          The data may be buffered depending on L1BlockType (DataBlock)
+         * @param pid           L1 Partition Id from which to get the Block
+         * @return  DataBlock (buffered or unbuffered) wrapping the data mapped/read from the file.
          */
-        const RangeType& getMMappedRange() const {
-          //TODO: remove assert.
+        L1BlockType& getCurrentL1Block() {
+          // TODO: remove assert.
           assert(loaded);
-          return mmapRange;
+
+          return L1Block;
+        }
+
+        /**
+         * @brief   get the DataBlock that represents the current L2 partition block for this process.
+         * @details the data can then be used directly, using the iterator accessors of DataBlock
+         *          The data may be buffered depending on L2BlockType (DataBlock)
+         * @param tid           L2 Partition Id from which to get the Block (thread id)
+         * @return  DataBlock (buffered or unbuffered) wrapping the data mapped/read from the file.
+         */
+        L2BlockType& getCurrentL2Block(const size_t &tid) {
+          // TODO: remove assert.
+          assert(loaded);
+
+          return L2Blocks[tid];
+        }
+
+        /**
+         * @brief   get the next DataBlock from the L1 partition block for this process.
+         * @details the data can then be used directly, using the iterator accessors of DataBlock
+         *          The data may be buffered depending on L1BlockType (DataBlock)
+         *
+         *          This method is a convenience method that gets the next L1BlockRange, and then load the specified data from disk.
+         *          it does not allow modification of the range before data loading
+         *
+         *          this method defaults to the loaderId specified at FileLoader construction.
+         *
+         * @return  DataBlock (buffered or unbuffered) wrapping the data mapped/read from the file.
+         */
+        L1BlockType& getNextL1Block() {
+          // first get the Range
+          RangeType r = getNextL1BlockRange<Derived>();
+
+          loadL1DataForRange(r);
+
+          return L1Block;
         }
 
 
 
+        /**
+         * @brief   get the DataBlock that represents the current L2 partition block for this process.
+         * @details the data can then be used directly, using the iterator accessors of DataBlock
+         *          The data may be buffered depending on L2BlockType (DataBlock)
+         *
+         *          This method is a convenience method that gets the next L2BlockRange, and then gets the DataBlock with that range
+         *          it does not allow modification of the range before data loading
+         *
+         * @param tid           L2 Partition Id from which to get the Block (thread id)
+         * @return  DataBlock (buffered or unbuffered) wrapping the data mapped/read from the file.
+         */
+        L2BlockType& getNextL2Block(const size_t &tid) {
+
+          RangeType r = getNextL2BlockRange<Derived>(tid);
+
+          loadL2DataForRange(tid, r);
+
+          return L2Blocks[tid];
+        }
+
+
 
         /**
-         * @brief memory maps the specified region for reading,
-         * @details  The input range SHOULD come from the call to getNextL1BlockRange
-         *           optionally buffer the data into memory.
+         * @brief reset the L1 partitioner so it can be reused.
+         */
+        void resetL1Partitioner() {
+          L1Partitioner.reset();
+        }
+
+
+        /**
+         * @brief Reset the L2 partitioner so we can reuse it.
+         */
+        void resetL2Partitioner() {
+          L2Partitioner.reset();
+        }
+
+
+      public:
+        /**
+         * @brief get the next available range for the L1 partition block, given the L1 partition id
+         * @details   This method uses CRTP to allow calling Derived class' implementation, which can further refine the partitioned range.
+         * @note      If the default BlockPartitioner were used, then there is only 1 NextL1Block.  else there may be more than 1.
+         *
+         * @param pid   The L1 partition id.
+         * @return      The range of the next L1 partition block.
+         */
+        template<typename D = Derived>
+        typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextL1BlockRange(const size_t pid) {
+          // just FileLoader calls this.
+          return L1Partitioner.getNext(pid);
+        }
+        /**
+         * @brief get the next available range for the L1 partition block, given the L1 partition id
+         * @details   This method uses CRTP to allow calling Derived class' implementation, which can further refine the partitioned range.
+         * @note      If the default BlockPartitioner were used, then there is only 1 NextL1Block.  else there may be more than 1.
+         *
+         * @param pid   The L1 partition id.
+         * @return      The range of the next L1 partition block.
+         */
+        template<typename D = Derived>
+        typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextL1BlockRange(const size_t pid) {
+          // use the derived one.
+          return static_cast<Derived*>(this)->getNextL1BlockRangeImpl(pid);
+        }
+        /**
+         * @brief get the next available range for the L1 partition block, given the L1 partition id
+         * @details   This method uses CRTP to allow calling Derived class' implementation, which can further refine the partitioned range.
+         *            The loaderId is set at initialization, possibly as MPI comm rank (if the comm version of the constructor were called)
+         * @note      If the default BlockPartitioner were used, then there is only 1 NextL1Block.  else there may be more than 1.
+         *
+         * @return      The range of the next L1 partition block.
+         */
+        template<typename D = Derived>
+        typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextL1BlockRange() {
+          // just FileLoader calls this.
+          return L1Partitioner.getNext(loaderId);
+        }
+        /**
+         * @brief get the next available range for the L1 partition block, using the loaderID
+         * @details   This method uses CRTP to allow calling Derived class' implementation, which can further refine the partitioned range.
+         *            The loaderId is set at initialization, possibly as MPI comm rank.  (if the comm version of the constructor were called)
+         * @note      If the default BlockPartitioner were used, then there is only 1 NextL1Block.  else there may be more than 1.
+         *
+         * @return      The range of the next L1 partition block.
+         */
+        template<typename D = Derived>
+        typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextL1BlockRange() {
+          // use the derived one.
+          return static_cast<Derived*>(this)->getNextL1BlockRangeImpl(loaderId);
+        }
+
+        /**
+         * @brief Loads the file by memory maps the specified range for reading,
+         * @details  Optionally buffers the data into memory
+         *           The input range SHOULD come from the call to getNextL1BlockRange
          *
          * @param r   range that will be mapped and loaded into memory (with buffering or without)
+         * @return    loaded L1 DataBlock for the specified Range
          */
-        void load(const RangeType &range) throw (bliss::io::IOException)
+        L1BlockType& loadL1DataForRange(const RangeType &range) throw (bliss::io::IOException)
         {
           // clean up any previous runs.
-          unload();
+          unloadL1Data();
 
           // make sure the mmapRange is within the file range, and page align it.
-          mmapRange = RangeType::intersect(range, fileRange);
+          RangeType mmapRange = RangeType::intersect(range, fileRange);
           size_t block_start = RangeType::align_to_page(mmapRange.start, pageSize);
-
-          // map the region of file to memory
-          mmapData = map(mmapRange);
 
           // check to see if there is enough memory for preloading.
           // if not, then we can't use Buffering even if L1Block chooses Buffering, so throw exception
@@ -545,6 +693,9 @@ namespace bliss
             }
           }
 
+          // map the region of file to memory
+          mmapData = map(mmapRange);
+
           // now assign the data to the L1Block object. (if buffering, will copy).
           // use "+" since mmapData is a pointer so it's a random access iterator.
           L1Block.assign(mmapData + (mmapRange.start - block_start), mmapData + (mmapRange.end - block_start), mmapRange);
@@ -559,7 +710,9 @@ namespace bliss
           loaded = true;
 
           // now configure L2 partitioner to traverse this data.
-          configL2();
+          configL2Partitioner(L2Partitioner, L2Blocks, mmapRange, nConsumingThreads, L2BlockSize);
+
+          return L1Block;
         }
 
         /**
@@ -567,7 +720,7 @@ namespace bliss
          * @details if buffering, clear the data
          *          if not buffering, then unmemmap the file region from memory
          */
-        void unload()
+        void unloadL1Data()
         {
           // if the partition was not buffered,
           if (!L1Buffering)
@@ -575,7 +728,7 @@ namespace bliss
             // and data has been memmapped,
             if (mmapData != nullptr && mmapData != MAP_FAILED)
               // then we unmap
-              unmap(mmapData, mmapRange);
+              this->unmap(mmapData, L1Block.getRange());
           } // else the partition was preloading, so already unmapped
 
           // clean up L1Block
@@ -584,112 +737,88 @@ namespace bliss
           // reset the data pointer, loaded flag, and the variable storing the memmapped range.
           mmapData = nullptr;
           loaded = false;
-          mmapRange = RangeType();
-        }
 
-
-        /**
-         * @brief reset the L1 partitioner so it can be reused.
-         */
-        void resetL1Partitioner() {
-          L1Partitioner.reset();
-        }
-
-
-HERE!!!
-
-
-        /**
-         * get the Partitioned Range.  this method allows calling Derived class' version, to further refine the partitioned range.
-         * have a default.  if default is -1, then use loaderId.  not in inner loop so okay to check param value each call
-         *
-         * @param pid
-         * @return
-         *
-         * TODO: overload this to avoid "-1"
-         */
-        template<typename D = Derived>
-        typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextPartitionRange(const int pid = -1) {
-          // if just FileLoader calls this.
-          if (pid < 0)
-            return L1Partitioner.getNext(loaderId);
-          else
-            return L1Partitioner.getNext(pid);
-        }
-        template<typename D = Derived>
-        typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextPartitionRange(const int pid = -1) {
-          // use the derived one.
-          if (pid < 0)
-            return static_cast<Derived*>(this)->getNextPartitionRangeImpl(loaderId);
-          else
-            return static_cast<Derived*>(this)->getNextPartitionRangeImpl(pid);
+          resetL2Partitioner();
         }
 
 
 
         /**
-         * @brief   get the Partition that's been memmapped/loaded.
-         * @details the data can then be used directly, using the iterator accessors of DataBlock
-         * @return  DataBlock (buffered or unbuffered) wrapping the data mapped/read from the file.
-         */
-        L1BlockType& getL1Data() {
-
-          assert(loaded);
-
-          return L1Block;
-        }
-
-
-        void resetChunkRange() {
-          assert(loaded);
-          L2Partitioner.reset();
-        }
-
-        // L1Partitioner has chunk size. and current position.  at most as many as number of threads (specified in constructor) calling this function.
-        // not using a default tid because this function could be called a lot.
-        /**
-         *
-         * @param tid
-         * @return
+         * @brief get the next L2 Partition Block given a thread id.
+         * @details  for derived File Loader classes, their implementation methods are called.
+         *            This call needs to properly support concurrent range computation.
+         * @note  not providing a default call because the threading may be different between construction and when this function is called,
+         *        and we do not want to get the id in this method from the threading library.
+         * @param tid   Thread Id.  L2 Partition is between threads within a group
+         * @return  The range of the next L2 Partition Block.
          */
         template <typename D = Derived>
-        typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextChunkRange(const int tid) {
+        typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextL2BlockRange(const size_t tid) {
+          // TODO: remove assert
           assert(loaded);
           return L2Partitioner.getNext(tid);
         }
+
+
         template <typename D = Derived>
-        typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextChunkRange(const int tid) {
-          return static_cast<Derived*>(this)->getNextChunkRangeImpl(tid);
+        typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextL2BlockRange(const size_t tid) {
+          // TODO: remove assert
+          assert(loaded);
+          return static_cast<Derived*>(this)->getNextL2BlockRangeImpl(tid);
         }
 
 
-
         /**
-         * @brief   get the DataBlock from the Partition
-         * @param tid
-         * @param chunkRange
-         * @return
+         * @brief   get the DataBlock from L2 Partitioner for the given thread Id.
+         * @note    Depending on data type of L2Block, the data may be buffered (copied to) memory.
+         * @param tid         id of thread calling this function.
+         * @param L2BlockRange   The range of the L2Block to retrieve. computed by getNextL2BlockRange.
+         * @return    reference to loaded L2Block for the specified thread id and range.
          */
-        L2BlockType& getL2DataForRange(const int tid, const RangeType &L2BlockRange) {
-
+        L2BlockType& loadL2DataForRange(const int tid, const RangeType &L2BlockRange) {
+          // TODO: remove assert
           assert(loaded);
 
-          RangeType r = RangeType::intersect(L2BlockRange, mmapRange);
+          // make sure the range is within the mmaped region.
+          RangeType r = RangeType::intersect(L2BlockRange, L1Block.getRange());
 
+          // now compute the start and end iterators of this range.  use std::advance in case the iterator is not a random access iterator.
           auto s = L1Block.begin();
-          std::advance(s, (r.start - mmapRange.start));
+          std::advance(s, (r.start - L1Block.getRange().start));
           auto e = s;
-          std::advance(e, (r.size()));
+          std::advance(e, r.size());
 
-
+          // get (optionally buffer) the data into a L2Block, and cache it for repeated access
           L2Blocks[tid].assign(s, e, r);
+
           return L2Blocks[tid];
-      }
+        }
+
+
 
 
 
 
       protected:
+
+
+
+
+        // these methods are used by subclasses, possibly overridden by subclasses.
+
+
+        /**
+         * @brief  return the range for this file loader's memory map.  (in units of data type T).  valid only after loading.
+         * @return  the range object spanning the entire memory mapped region.
+         *
+         * TODO: possibly remove.
+         */
+//        const RangeType& getMMappedRange() const {
+//          //TODO: remove assert.
+//          assert(loaded);
+//          return mmapRange;
+//        }
+
 
         /**
          * @brief   configure the L1 Partitioning
@@ -698,44 +827,80 @@ HERE!!!
          *            configure the L1Partitioner.
          *
          *          file_size is passed in because for the MPI version of c'tor, the file_size was broadcast first
-         * @param file_size   size of the entire file being read.
+         * @param[in/out] partitioner L1 Partitioner to configure
+         * @param[in] fileRange   portion of file to be partitioned by partitioner (0 to file size by defautl).
+         * @param[in] nPartitions  number of partitions to create.
+         * @param[in] chunkSize   the size of each partitioned chunk (== L1Block size).  default to 0, which means computed.
          */
-        void configL1(const size_t &file_size, const int& nConcurrentLoaders) {
+        void configL1Partitioner(L1PartitionerT& partitioner, const RangeType& fileRange, const size_t& nPartitions, const size_t& chunkSize = 0) {
 
-          // compute the full range of the file
-          fileRange = RangeType(0, file_size / sizeof(T));   // range is in units of T
-
-          // Set up the partitioner to block partition the full file range.  Overlap is 0.
-          L1Partitioner.configure(fileRange, nConcurrentLoaders);
+          // Set up the partitioner to partition the full file range with nPartitions.  Overlap is 0.
+          partitioner.configure(fileRange, nPartitions, chunkSize);
         }
 
-        /**
-         * @brief   initializes the L2 Block caching
-         * @details This function does the following:
-         *            allocating the internal cache of DataBlocks
-         */
-        void initL2() {
-          // allocate cache for DataBlocks, for persistent access by threads, so we only need as many as there are threads.
-          L2Blocks = new L2BlockType[nConsumingThreads];
-        }
+
+
 
         /**
          * @brief configure the L2 Partitioning
          * @details: This function does the following
-         *            get the approximate record size
+         *            get the approximate record size and update the chunkSize for the L2Partitioner
          *            configure L2 partitioner for the memmapped range, number of threads, and L2Block Size.
+         *            initialize the L2Block cache, one per thread.
+         * @param[in/out] partitioner L2 Partitioner to configure
+         * @param[in/out] cache   L2 Block cache, 1 per thread.
+         * @param[in] mmapRange   memory mapped region's range, to be partitioned by partitioner.
+         * @param[in] nThreads    number of threads to create.
+         * @param[in/out] chunkSize   the size of each partitioned chunk (== L1Block size).
          */
-        void configL2() {
+        void configL2Partitioner(L2PartitionerT& partitioner, L2BlockType* &cache, const RangeType& mmapRange, const size_t& nThreads, size_t& chunkSize) {
+          //=====  adjust the L2BlockSize adaptively.
           // look through 3 records to see the approximate size of records.
-          recordSize = getRecordSize<Derived>(3);
-
-          // update the L2BlockSize to at least 2x record size.
-          L2BlockSize = std::max(L2BlockSize, 2 * recordSize);
+          // update the chunkSize  to at least 2x record size, (passes back to called).
+          chunkSize = std::max(chunkSize, 2 * getRecordSize<Derived>(3));
 
           // then configure the partitinoer to use the right number of threads.
-          L2Partitioner.configure(mmapRange, nConsumingThreads, L2BlockSize);
+          partitioner.configure(L1Block.getRange(), nThreads, chunkSize);
+
+          // also configure the cache.
+          if (cache != nullptr) delete [] cache;
+          cache = new L2BlockType[nThreads];
         }
 
+        /**
+         * @brief   compute the approximate size of a data record in the file by reading a few records.
+         * @details For FileLoader, which does not treat the file as a collection of records, size returned is 1.
+         *          This function delegates to the subclass' implementation, as subclass will have knowledge of how to
+         *          parse a record.
+         *          This method provides a hint of the size of a record, which is useful for caching
+         *          and determining size of a DataBlock.
+         *
+         * @param count    number of records to read to compute the approximation. default = 3
+         * @return  approximate size of a record.
+         */
+        template<typename D = Derived>
+        typename std::enable_if<std::is_void<D>::value, size_t>::type getRecordSize(const int count = 3) {
+          // this method is enabled if Derived is void, which indicates self.
+          return 1;
+        }
+
+        /**
+         * @brief   compute the approximate size of a data record in the file by reading a few records.
+         * @details For subclasses of FileLoader, this function delegates to the subclass' implementation,
+         *          as subclass will have knowledge of how to parse a record.
+         *          This method provides a hint of the size of a record, which is useful for caching
+         *          and determining size of a DataBlock.
+         * @note    at most as many threads as specified in the c'tor will call this function.
+         * @param count    number of records to read to compute the approximation.  default = 3.
+         * @return  approximate size of a record.
+         */
+        template<typename D = Derived>
+        typename std::enable_if<!std::is_void<D>::value, size_t>::type getRecordSize(const int count = 3) {
+          return static_cast<Derived*>(this)->getRecordSizeImpl(count);
+        }
+
+      private:
+        // these methods are not meant to be overridden by subclasses.
 
         /**
          * @brief  opens a file and return the file handle.  Throws IOException if can't open.
@@ -790,48 +955,17 @@ HERE!!!
         }
 
 
-        /**
-         * @brief   compute the approximate size of a data record in the file by reading a few records.
-         * @details For FileLoader, which does not treat the file as a collection of records, size returned is 1.
-         *          This function delegates to the subclass' implementation, as subclass will have knowledge of how to
-         *          parse a record.
-         *          This method provides a hint of the size of a record, which is useful for caching
-         *          and determining size of a DataBlock.
-         *
-         * @param count    number of records to read to compute the approximation. default = 3
-         * @return  approximate size of a record.
-         */
-        template<typename D = Derived>
-        typename std::enable_if<std::is_void<D>::value, size_t>::type getRecordSize(const int count = 3) {
-          // this method is enabled if Derived is void, which indicates self.
-          return 1;
-        }
-
-        /**
-         * @brief   compute the approximate size of a data record in the file by reading a few records.
-         * @details For subclasses of FileLoader, this function delegates to the subclass' implementation,
-         *          as subclass will have knowledge of how to parse a record.
-         *          This method provides a hint of the size of a record, which is useful for caching
-         *          and determining size of a DataBlock.
-         * @note    at most as many threads as specified in the c'tor will call this function.
-         * @param count    number of records to read to compute the approximation.  default = 3.
-         * @return  approximate size of a record.
-         */
-        template<typename D = Derived>
-        typename std::enable_if<!std::is_void<D>::value, size_t>::type getRecordSize(const int count = 3) {
-          return static_cast<Derived*>(this)->getRecordSizeImpl(count);
-        }
-
+      protected:
 
         /**
          * @brief     map the specified portion of the file to memory.
          * @param r   range specifying the portion of the file to map
          * @return    memory address (pointer) to where the data is mapped.
          */
-        PointerType map(RangeType &r) throw (IOException) {
+        PointerType map(const RangeType &r) throw (IOException) {
 
           /// memory map.  requires that the starting position is block aligned.
-          size_t block_start = r.align_to_page(pageSize);
+          size_t block_start = RangeType::align_to_page(r, pageSize);
 
           // NOT using MAP_POPULATE.  it slows things done when testing on single node.
           PointerType result = (PointerType)mmap64(nullptr, (r.end - block_start ) * sizeof(T),
@@ -864,8 +998,9 @@ HERE!!!
          * @param d   The pointer to the memory address
          * @param r   The range that was mapped.
          */
-        void unmap(PointerType &d, RangeType &r) {
-          munmap(d, (r.end - r.align_to_page(pageSize)) * sizeof(T));
+        void unmap(PointerType &d, const RangeType &r) {
+
+          munmap(d, (r.end - RangeType::align_to_page(r, pageSize)) * sizeof(T));
         }
 
     };

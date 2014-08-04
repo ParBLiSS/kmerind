@@ -84,3 +84,4 @@ target_link_libraries(profile_mem_usage bliss-common)
 
 
 add_executable(quicktest quicktest.cpp)
+target_link_libraries(quicktest ${EXTRA_LIBS})

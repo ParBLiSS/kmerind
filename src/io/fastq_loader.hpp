@@ -48,24 +48,22 @@ namespace bliss
      *  1 pass algorithm: we can use offset as ids.
      *
      */
-    template<typename T, bool Buffering = true, bool Preloading = false,
-        typename ChunkPartitioner = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
-    class FASTQLoader : public FileLoader<T, Buffering, Preloading, ChunkPartitioner,
-                                          FASTQLoader<T, Buffering, Preloading, ChunkPartitioner> >
+    template<typename T, bool Preloading = false, bool Buffering = true,
+        typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >,
+        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
+    class FASTQLoader : public FileLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT,
+                                          FASTQLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT> >
     {
       protected:
-        typedef FileLoader<T, Buffering, Preloading, ChunkPartitioner,
-            FASTQLoader<T, Buffering, Preloading, ChunkPartitioner> >    SuperType;
+        typedef FileLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT,
+            FASTQLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT> >    SuperType;
 
       public:
         /// exposing types from super
         typedef typename SuperType::InputIteratorType                   InputIteratorType;
-        typedef typename SuperType::IteratorType                        IteratorType;
-        typedef typename SuperType::BlockIteratorType                   BlockIteratorType;
 
 
         typedef typename SuperType::RangeType                            RangeType;
-        typedef typename SuperType::SizeType                             SizeType;
 
       protected:
         /**
@@ -114,7 +112,7 @@ namespace bliss
          * @return            position of the start of next read sequence (@).  if there is no complete sequence, and is not at end of partition, throw exception.
          */
         template<typename Iterator>
-        const SizeType findStart(const Iterator &_data, const RangeType &partRange, const RangeType &loadedRange, const RangeType &searchRange) const
+        const size_t findStart(const Iterator &_data, const RangeType &partRange, const RangeType &loadedRange, const RangeType &searchRange) const
         throw (bliss::io::IOException) {
 
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
@@ -123,7 +121,7 @@ namespace bliss
           RangeType t = RangeType::intersect(searchRange, loadedRange); // intersection to bound target to between parent's ends.
           if (t.start == t.end) return t.start;
 
-          SizeType i = t.start;
+          size_t i = t.start;
           Iterator data(_data);
           bool wasEOL;
 
@@ -158,7 +156,7 @@ namespace bliss
           // already has the first line first char..
           ValueType first[4] =
           { 0, 0, 0, 0 };
-          SizeType offsets[4] =
+          size_t offsets[4] =
           { t.end, t.end, t.end, t.end };   // units:  offset from beginning of file.
 
           int currLineId = 0;        // current line id in the buffer
@@ -246,9 +244,9 @@ namespace bliss
 
         /// defining move constructor will disallow automatic copy constructor.
         /// move constructor and move assign operator
-        FASTQLoader(FASTQLoader<T, Buffering, Preloading, ChunkPartitioner>&& other) : SuperType(std::forward(other)) {};
+        FASTQLoader(FASTQLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT>&& other) : SuperType(std::forward(other)) {};
 
-        FASTQLoader<T, Buffering, Preloading, ChunkPartitioner>& operator=(FASTQLoader<T, Buffering, Preloading, ChunkPartitioner>&& other) {
+        FASTQLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT>& operator=(FASTQLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT>&& other) {
           if (this != &other) {
             this->SuperType::operator =(other);
           }
@@ -260,20 +258,21 @@ namespace bliss
          * search at the start and end of the block partition for some matching condition,
          * and set as new partition positions.
          */
-        RangeType getNextPartitionRangeImpl(const int pid = -1) {
-          int p = pid;
-          if (p == -1) p = this->rank;
+        RangeType getNextL1BlockRangeImpl(const size_t pid) {
 
-          RangeType hint = this->partitioner.getNext(p);
+          // get basic range
+          RangeType hint = this->L1Partitioner.getNext(pid);
+
+          // modify it.
           hint.intersect(this->fileRange);
-          SizeType length = hint.size();
+          size_t length = hint.size();
 
           RangeType next = hint + length;
           next.intersect(this->fileRange);
 
           // concatenate current and next ranges
           RangeType loadRange = RangeType::merge(hint, next);
-          typename RangeType::ValueType block_start = loadRange.align_to_page(this->page_size);
+          typename RangeType::ValueType block_start = RangeType::align_to_page(loadRange, this->pageSize);
 
           // map the content
           typename SuperType::InputIteratorType mappedData = this->map(loadRange);
@@ -312,13 +311,12 @@ namespace bliss
         }
 
 
-        RangeType getNextChunkRangeImpl(const int tid) {
+        RangeType getNextL2BlockRangeImpl(const size_t tid) {
           assert(this->loaded);
-          RangeType srcRange = this->srcData.getRange();
+          RangeType srcRange = this->L1Block.getRange();
 
-          RangeType hint = this->chunkPartitioner.getNext(tid);    // chunkPartitioner has this as atomic if needed
-          hint.intersect(srcRange);
-          SizeType length = hint.size();
+          RangeType hint = this->L2Partitioner.getNext(tid);    // chunkPartitioner has this as atomic if needed
+          size_t length = hint.size();
 
           // chunk size is already set to at least 2x record size - set during FileLoader::load()
 
@@ -335,15 +333,15 @@ namespace bliss
 
             try {
               // search for start.
-              output.start = findStart(this->srcData.begin(), srcRange, srcRange, hint);
-              output.end = findStart(this->srcData.begin(), srcRange, srcRange, next);
+              output.start = findStart(this->L1Block.begin(), srcRange, srcRange, hint);
+              output.end = findStart(this->L1Block.begin(), srcRange, srcRange, next);
             } catch (IOException& ex) {
               // did not find the end, so set e to next.end.
               // TODO: need to handle this scenario better - should keep search until end.
               WARNING(ex.what());
 
               printf("curr range: chunk %lu, hint %lu-%lu, next %lu-%lu, srcData range %lu-%lu, mmap_range %lu-%lu\n",
-                     this->chunkSize, hint.start, hint.end, next.start, next.end, srcRange.start, srcRange.end, this->mmap_range.start, this->mmap_range.end);
+                     this->L2BlockSize, hint.start, hint.end, next.start, next.end, srcRange.start, srcRange.end, this->L1Block.getRange().start, this->L1Block.getRange().end);
               printf("got an exception search:  %s \n", ex.what());
 
               // either start or end are not found, so return nothing.
@@ -359,24 +357,24 @@ namespace bliss
         }
 
 
-        SizeType getRecordSizeImpl(int iterations = 3) {
+        size_t getRecordSizeImpl(int iterations = 3) {
 
           //// TODO: if a different partitioner is used, seqSize may be incorrect.
           ////   seqSize is a property of the partitioner applied to the data.
 
           assert(this->loaded);
 
-          SizeType s, e;
-          SizeType ss = 0;
-          RangeType parent(this->srcData.getRange());
-          RangeType r(this->srcData.getRange());
+          size_t s, e;
+          size_t ss = 0;
+          RangeType parent(this->L1Block.getRange());
+          RangeType r(this->L1Block.getRange());
 
-          s = findStart(this->srcData.begin(), this->fileRange, parent, r);
+          s = findStart(this->L1Block.begin(), this->fileRange, parent, r);
 
           for (int i = 0; i < iterations; ++i) {
             r.start = s + 1;   // advance by 1, in order to search for next entry.
             r.intersect(parent);
-            e = findStart(this->srcData.begin(), this->fileRange, parent, r);
+            e = findStart(this->L1Block.begin(), this->fileRange, parent, r);
             ss = std::max(ss, (e - s));
             s = e;
           }

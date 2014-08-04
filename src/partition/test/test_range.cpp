@@ -120,7 +120,7 @@ TYPED_TEST_P(RangeTest, align){
 
       //printf("1 %ld %ld\n", static_cast<int64_t>(s), static_cast<int64_t>(p));
       r = range<TypeParam>(s, s+size);
-      TypeParam val = r.align_to_page(p);
+      TypeParam val = range<TypeParam>::align_to_page(r, p);
       EXPECT_TRUE(range<TypeParam>::is_page_aligned(val, p));
     }
   }
@@ -180,7 +180,7 @@ TYPED_TEST_P(RangeTest, alignFails){
       // align fails because of bad page sizes (0 or negative
       r = range<TypeParam>(s, s+size);
       try {
-        r.align_to_page(p);
+        range<TypeParam>::align_to_page(r, p);
         ADD_FAILURE();
       } catch (const std::range_error &e) {
         // okay.  threw the right error
@@ -195,7 +195,7 @@ TYPED_TEST_P(RangeTest, alignFails){
       r = range<TypeParam>(s, s+size);
 
       try {
-        r.align_to_page(std::numeric_limits<size_t>::max());
+        range<TypeParam>::align_to_page(r, std::numeric_limits<size_t>::max());
         ADD_FAILURE();
       } catch (const std::range_error &e) {
         // okay.  threw the right error
