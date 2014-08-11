@@ -137,7 +137,7 @@ void buildIndex(FileLoaderType &loader, Index &index, const int &rank,
 
   // uses the fastq iterator as the queue itself, instead of master/slave.
   //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(loader, nthreads, index) reduction(+:nReads, nChunks) OMP_SHARE_DEFAULT
+#pragma omp parallel num_threads(nthreads) shared(loader, nthreads, index, rank) reduction(+:nReads, nChunks) OMP_SHARE_DEFAULT
   {
     /// instantiate a local parser
     ParserType parser;
@@ -158,7 +158,7 @@ void buildIndex(FileLoaderType &loader, Index &index, const int &rank,
     RangeType r = loader.getNextL2BlockRange(tid);
     while (r.size() > 0) {
       /// get the chunk of data
-      chunk = loader.loadL2DataForRange(tid, r);
+      chunk = loader.getL2DataForRange(tid, r);
 
       ///  and wrap the chunk inside an iterator that emits Reads.
       SeqIterType fastq_start(parser, chunk.begin(), chunk.end(), r);

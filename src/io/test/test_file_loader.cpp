@@ -22,6 +22,50 @@
 
 using namespace bliss::io;
 
+template <typename T,
+  bool L2Buffering = true,
+  bool L1Buffering = false,
+  typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
+  typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >
+class TestableFileLoader :
+    public bliss::io::FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
+    TestableFileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> > {
+      public:
+        using MyType = TestableFileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>;
+        using SuperType = bliss::io::FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
+            MyType >;
+
+
+        using L1BlockType = typename SuperType::L1BlockType;
+        using L2BlockType = typename SuperType::L2BlockType;
+        using RangeType   = typename SuperType::RangeType;
+
+        TestableFileLoader(const MyType& other) = delete;
+        /// Removed default copy assignment operator
+        TestableFileLoader& operator=(const MyType& other) = delete;
+        TestableFileLoader(const std::string &_filename,
+                                    const int _nConcurrentLoaders = 1, const int _loaderId = 0,
+                                    const size_t _nThreads = 1, const size_t _L2BlockSize = 1 ) throw (bliss::io::IOException) :
+                                    SuperType(_filename, _nConcurrentLoaders, _loaderId, _nThreads, _L2BlockSize) {};
+#if defined(USE_MPI)
+        TestableFileLoader(const std::string &_filename, const MPI_Comm& _comm, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (bliss::io::IOException)
+            : SuperType(_filename, _comm, _nThreads, _L2BlockSize) {};
+#endif
+        TestableFileLoader(MyType&& other) : SuperType(std::forward(other)) {}
+        TestableFileLoader& operator=(MyType&& other) {
+          return this->SuperType::operator=(std::forward(other));
+        }
+        virtual ~TestableFileLoader() {};
+
+        RangeType getNextL1BlockRange(const size_t pid) { return SuperType::getNextL1BlockRange(pid); }
+        L1BlockType& loadL1DataForRange(const RangeType &r) { return SuperType::loadL1DataForRange(r); }
+        void unloadL1Data() { SuperType::unloadL1Data(); }
+        RangeType getNextL2BlockRange(const size_t tid) { return SuperType::getNextL2BlockRange(tid); }
+        L2BlockType& getL2DataForRange(const size_t tid, const RangeType &r) { return SuperType::getL2DataForRange(tid, r); }
+    };
+
+
+
 
 template<typename Iter1, typename Iter2>
 bool equal(const Iter1 &i1, const Iter2 &i2, size_t len, bool print = false) {
@@ -79,7 +123,7 @@ TYPED_TEST_CASE_P(FileLoaderTest);
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, OpenWithFullRange)
 {
-  typedef FileLoader<TypeParam, false, false> FileLoaderType;
+  typedef TestableFileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get fileName
@@ -91,17 +135,17 @@ TYPED_TEST_P(FileLoaderTest, OpenWithFullRange)
   TypeParam* gold = new TypeParam[len + 1];
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
-  loader.load(r);
-  int comp = memcmp(gold, loader.getL1Data().begin(), len * sizeof(TypeParam));
+  typename FileLoaderType::L1BlockType l1data = loader.loadL1DataForRange(r);
+  int comp = memcmp(gold, loader.getCurrentL1Block().begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
   delete [] gold;
-  loader.unload();
+  loader.unloadL1Data();
 }
 
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, PreloadWithFullRange)
 {
-  typedef FileLoader<TypeParam, false, true> FileLoaderType;
+  typedef TestableFileLoader<TypeParam, false, true> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get fileName
@@ -113,17 +157,17 @@ TYPED_TEST_P(FileLoaderTest, PreloadWithFullRange)
   TypeParam* gold = new TypeParam[len + 1];
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
-  loader.load(r);
-  ASSERT_TRUE(equal(gold, loader.getL1Data().begin(), len));
+  loader.loadL1DataForRange(r);
+  ASSERT_TRUE(equal(gold, loader.getCurrentL1Block().begin(), len));
   delete [] gold;
-  loader.unload();
+  loader.unloadL1Data();
 
 }
 
 
 TYPED_TEST_P(FileLoaderTest, OpenWithRange)
 {
-  typedef FileLoader<TypeParam, false, false> FileLoaderType;
+  typedef TestableFileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -132,23 +176,23 @@ TYPED_TEST_P(FileLoaderTest, OpenWithRange)
 
   FileLoaderType loader(this->fileName, nprocs, rank);
 
-  RangeType r = loader.getNextPartitionRange(rank);
+  RangeType r = loader.getNextL1BlockRange(rank);
 
 
   size_t len = r.end - r.start;
   TypeParam* gold = new TypeParam[len + 1];
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
-  loader.load(r);
-  int comp = memcmp(gold, loader.getL1Data().begin(), len * sizeof(TypeParam));
+  loader.loadL1DataForRange(r);
+  int comp = memcmp(gold, loader.getCurrentL1Block().begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
   delete [] gold;
-  loader.unload();
+  loader.unloadL1Data();
 }
 
 TYPED_TEST_P(FileLoaderTest, OpenWithAlignedRange)
 {
-  typedef FileLoader<TypeParam, false, false> FileLoaderType;
+  typedef TestableFileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -158,27 +202,27 @@ TYPED_TEST_P(FileLoaderTest, OpenWithAlignedRange)
 
   FileLoaderType loader(this->fileName, nprocs, rank);
 
-  RangeType r = loader.getNextPartitionRange(rank);
+  RangeType r = loader.getNextL1BlockRange(rank);
 
 
-  loader.load(r);
+  loader.loadL1DataForRange(r);
 
   size_t len = r.size();
   TypeParam* gold = new TypeParam[len + 1];
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
-  int comp = memcmp(gold, loader.getL1Data().begin(), len * sizeof(TypeParam));
+  int comp = memcmp(gold, loader.getCurrentL1Block().begin(), len * sizeof(TypeParam));
   ASSERT_EQ(0, comp);
 
 
   delete [] gold;
-  loader.unload();
+  loader.unloadL1Data();
 }
 
 
 // normal test cases
 TYPED_TEST_P(FileLoaderTest, PreloadWithRange)
 {
-  typedef FileLoader<TypeParam, false, true> FileLoaderType;
+  typedef TestableFileLoader<TypeParam, false, true> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -187,22 +231,22 @@ TYPED_TEST_P(FileLoaderTest, PreloadWithRange)
 
   FileLoaderType loader(this->fileName, nprocs, rank);
 
-  RangeType r = loader.getNextPartitionRange(rank);
+  RangeType r = loader.getNextL1BlockRange(rank);
 
   size_t len = r.end - r.start;
   TypeParam* gold = new TypeParam[len + 1];
   FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
-  loader.load(r);
-  ASSERT_TRUE(equal(gold, loader.getL1Data().begin(), len));
+  typename FileLoaderType::L1BlockType l1data = loader.loadL1DataForRange(r);
+  ASSERT_TRUE(equal(gold, l1data.begin(), len));
   delete [] gold;
-  loader.unload();
+  loader.unloadL1Data();
 }
 
 
 TYPED_TEST_P(FileLoaderTest, OpenConsecutiveRanges)
 {
-  typedef FileLoader<TypeParam, false, false> FileLoaderType;
+  typedef TestableFileLoader<TypeParam, false, false> FileLoaderType;
   typedef typename FileLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -214,20 +258,20 @@ TYPED_TEST_P(FileLoaderTest, OpenConsecutiveRanges)
 
   for (int rank = 0; rank < nprocs; ++rank) {
 
-    loader.resetPartitionRange();
+    loader.resetL1Partitioner();
 
-    r = loader.getNextPartitionRange(rank);
+    r = loader.getNextL1BlockRange(rank);
     //std::cout << "partition for rank " << rank << ": " << r << std::endl;
 
     size_t len = r.end - r.start;
     TypeParam* gold = new TypeParam[len + 1];
     FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r.start, len, gold);
 
-    loader.load(r);
-    int comp = memcmp(gold, loader.getL1Data().begin(), len * sizeof(TypeParam));
+    typename FileLoaderType::L1BlockType l1data = loader.loadL1DataForRange(r);
+    int comp = memcmp(gold, l1data.begin(), len * sizeof(TypeParam));
     ASSERT_EQ(0, comp);
     delete [] gold;
-    loader.unload();
+    loader.unloadL1Data();
   }
 }
 
@@ -285,7 +329,6 @@ TYPED_TEST_P(FileLoaderBufferTest, BufferingChunks)
   typedef typename std::iterator_traits<InputIterType>::value_type ValueType;
 
   typedef typename FileLoaderType::RangeType RangeType;
-  typedef typename FileLoaderType::DataBlockType blockType;
 
   // get this->fileName
   int rank = 3;
@@ -295,16 +338,16 @@ TYPED_TEST_P(FileLoaderBufferTest, BufferingChunks)
 
   FileLoaderType loader(this->fileName, nprocs, rank, nThreads, 2048);
 
-  RangeType r = loader.getNextPartitionRange(rank);
+  RangeType r = loader.getNextL1BlockRange(rank);
 
 
-  loader.load(r);
+  loader.loadL1DataForRange(r);
   typename RangeType::ValueType lastEnd = r.start;
 
   ValueType* gold;
 
-  RangeType r2 = loader.getNextChunkRange(0);
-  blockType data = loader.getChunk(0, r2);
+  RangeType r2 = loader.getNextL2BlockRange(0);
+  typename FileLoaderType::L2BlockType data = loader.getL2DataForRange(0, r2);
   size_t len = r2.size();
 
   while (len  > 0) {
@@ -318,12 +361,12 @@ TYPED_TEST_P(FileLoaderBufferTest, BufferingChunks)
     ASSERT_TRUE(equal(gold, data.begin(), len));
     delete [] gold;
 
-    r2 = loader.getNextChunkRange(0 ^ 1);
-    data = loader.getChunk(0 ^ 1, r2);
+    r2 = loader.getNextL2BlockRange(0 ^ 1);
+    data = loader.getL2DataForRange(0 ^ 1, r2);
     len = r2.size();
   }
 
-  loader.unload();
+  loader.unloadL1Data();
 }
 
 
@@ -349,7 +392,7 @@ TYPED_TEST_CASE_P(FileLoaderDeathTest);
 // TODO negative test cases
 TYPED_TEST_P(FileLoaderDeathTest, NoFilename)
 {
-  typedef FileLoader<TypeParam> FileLoaderType;
+  typedef TestableFileLoader<TypeParam> FileLoaderType;
 
   std::string fileName;
 
@@ -360,7 +403,7 @@ TYPED_TEST_P(FileLoaderDeathTest, NoFilename)
 
 TYPED_TEST_P(FileLoaderDeathTest, BadFilename)
 {
-  typedef FileLoader<TypeParam> FileLoaderType;
+  typedef TestableFileLoader<TypeParam> FileLoaderType;
 
   std::string fileName;
   fileName.assign("bad");
@@ -371,7 +414,7 @@ TYPED_TEST_P(FileLoaderDeathTest, BadFilename)
 
 TYPED_TEST_P(FileLoaderDeathTest, BadNProcs)
 {
-  typedef FileLoader<TypeParam> FileLoaderType;
+  typedef TestableFileLoader<TypeParam> FileLoaderType;
 
   std::string fileName;
   fileName.append("/test/data/test.fastq");
@@ -383,7 +426,7 @@ TYPED_TEST_P(FileLoaderDeathTest, BadNProcs)
 
 TYPED_TEST_P(FileLoaderDeathTest, BadRank)
 {
-  typedef FileLoader<TypeParam> FileLoaderType;
+  typedef TestableFileLoader<TypeParam> FileLoaderType;
 
   std::string fileName;
   fileName.append("/test/data/test.fastq");
@@ -394,7 +437,7 @@ TYPED_TEST_P(FileLoaderDeathTest, BadRank)
 
 TYPED_TEST_P(FileLoaderDeathTest, BadNThreads)
 {
-  typedef FileLoader<TypeParam> FileLoaderType;
+  typedef TestableFileLoader<TypeParam> FileLoaderType;
 
   std::string fileName;
   fileName.append("/test/data/test.fastq");
@@ -405,7 +448,7 @@ TYPED_TEST_P(FileLoaderDeathTest, BadNThreads)
 
 TYPED_TEST_P(FileLoaderDeathTest, BadChunkSize)
 {
-  typedef FileLoader<TypeParam> FileLoaderType;
+  typedef TestableFileLoader<TypeParam> FileLoaderType;
 
   std::string fileName;
   fileName.append("/test/data/test.fastq");
@@ -428,10 +471,10 @@ INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderTest, FileLoaderTestTypes);
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderDeathTest, FileLoaderTestTypes);
 
 
-typedef ::testing::Types<bliss::io::FileLoader<unsigned char, false, false>,
-    bliss::io::FileLoader<unsigned char, false, true>,
-    bliss::io::FileLoader<unsigned char, true, false>,
-    bliss::io::FileLoader<unsigned char, true, true> >
+typedef ::testing::Types<TestableFileLoader<unsigned char, false, false>,
+    TestableFileLoader<unsigned char, false, true>,
+    TestableFileLoader<unsigned char, true, false>,
+    TestableFileLoader<unsigned char, true, true> >
     FileLoaderBufferTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderBufferTest, FileLoaderBufferTestTypes);
 

@@ -188,7 +188,7 @@ struct readMMap {
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFileLoader {
 
-    typedef bliss::io::FileLoader<unsigned char, preloading, buffering> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
     typename LoaderType::L1BlockType data;
@@ -281,7 +281,7 @@ struct readFileLoader {
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFileLoaderAtomic {
 
-    typedef bliss::io::FileLoader<unsigned char, preloading, buffering> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
 
 
     size_t page_size;
@@ -327,7 +327,7 @@ struct readFileLoaderAtomic {
 
       // try copying the data.
       RangeType r = loader.getNextL2BlockRange(tid);
-      typename LoaderType::L2BlockType data = loader.loadL2DataForRange(tid, r);
+      typename LoaderType::L2BlockType data = loader.getL2DataForRange(tid, r);
 
       if (data.begin() == data.end())
         return true;
@@ -370,7 +370,7 @@ struct readFileLoaderAtomic {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFASTQ {
-    typedef bliss::io::FASTQLoader<unsigned char, preloading, buffering> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
 
 
     size_t page_size;
@@ -420,7 +420,7 @@ struct readFASTQ {
 
       // try copying the data.
       RangeType r = loader.getNextL2BlockRange(tid);
-      typename LoaderType::L2BlockType data = loader.loadL2DataForRange(tid, r);
+      typename LoaderType::L2BlockType data = loader.getL2DataForRange(tid, r);
 
       if (data.begin() == data.end() )
         return true;
@@ -460,7 +460,7 @@ struct readFASTQ {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIterator {
-    typedef bliss::io::FASTQLoader<unsigned char, preloading, buffering> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
 
@@ -514,7 +514,7 @@ struct FASTQIterator {
 
       // try copying the data.
       RangeType r = loader.getNextL2BlockRange(tid);
-      typename LoaderType::L2BlockType data = loader.loadL2DataForRange(tid, r);
+      typename LoaderType::L2BlockType data = loader.getL2DataForRange(tid, r);
 
       if (data.begin() ==  data.end())
         return true;
@@ -583,7 +583,7 @@ struct FASTQIterator {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIterator2 {
-    typedef bliss::io::FASTQLoader<unsigned char, preloading, buffering> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
 
@@ -635,7 +635,7 @@ struct FASTQIterator2 {
 
       // try copying the data.
       RangeType r = loader.getNextL2BlockRange(tid);
-      typename LoaderType::L2BlockType data = loader.loadL2DataForRange(tid, r);
+      typename LoaderType::L2BlockType data = loader.getL2DataForRange(tid, r);
 
       if (data.begin() ==  data.end())
         return true;
@@ -695,7 +695,7 @@ struct FASTQIterator2 {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct FASTQIteratorNoQual {
-    typedef bliss::io::FASTQLoader<unsigned char, preloading, buffering> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
 
@@ -747,7 +747,7 @@ struct FASTQIteratorNoQual {
 
       // try copying the data.
       RangeType r = loader.getNextL2BlockRange(tid);
-      typename LoaderType::L2BlockType data = loader.loadL2DataForRange(tid, r);
+      typename LoaderType::L2BlockType data = loader.getL2DataForRange(tid, r);
 //      printf("thread %d getting block %lu-%lu, got block of length %ld\n", omp_get_thread_num(), start, end, (data.end() - data.begin()));
 
 

@@ -48,15 +48,17 @@ namespace bliss
      *  1 pass algorithm: we can use offset as ids.
      *
      */
-    template<typename T, bool Preloading = false, bool Buffering = true,
-        typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >,
-        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
-    class FASTQLoader : public FileLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT,
-                                          FASTQLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT> >
+    template<typename T,
+        bool Buffering = true,
+        bool Preloading = false,
+        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
+        typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >
+    class FASTQLoader : public FileLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT,
+                                          FASTQLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT> >
     {
       protected:
-        typedef FileLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT,
-            FASTQLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT> >    SuperType;
+        typedef FileLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT,
+            FASTQLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT> >    SuperType;
 
       public:
         /// exposing types from super
@@ -244,9 +246,9 @@ namespace bliss
 
         /// defining move constructor will disallow automatic copy constructor.
         /// move constructor and move assign operator
-        FASTQLoader(FASTQLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT>&& other) : SuperType(std::forward(other)) {};
+        FASTQLoader(FASTQLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT>&& other) : SuperType(std::forward(other)) {};
 
-        FASTQLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT>& operator=(FASTQLoader<T, Preloading, Buffering, L1PartitionerT, L2PartitionerT>&& other) {
+        FASTQLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT>& operator=(FASTQLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT>&& other) {
           if (this != &other) {
             this->SuperType::operator =(other);
           }

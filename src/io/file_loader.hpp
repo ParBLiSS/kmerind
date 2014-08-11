@@ -102,7 +102,7 @@ namespace bliss
      *    destroy file_loader          // close the file.
      *
      *
-     *  Advanced Usage.  This should be used in subclasses, as these methods are protected.
+     *  Advanced Usage:  This should be relevant to subclasses only, as most of these methods are protected.
      *    instantiate file_loader - // default partitioning is based on number of MPI processes.
      *                                // but user can also specify the number of partitions.
      *    getNextL1BlockRange()       // allows iteration over partition ids, mapping of process to partition other than 1 to 1.
@@ -140,8 +140,8 @@ namespace bliss
      */
     template <typename T,
           bool L2Buffering = true,
-          typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
           bool L1Buffering = false,
+          typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
           typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >,
           typename Derived = void >
     class FileLoader
@@ -411,23 +411,21 @@ namespace bliss
 
 
         /// Removed default copy constructor
-        FileLoader(const FileLoader<T, L1Buffering, L2Buffering, L2PartitionerT, Derived>& other) = delete;
+        FileLoader(const FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT, Derived>& other) = delete;
         /// Removed default copy assignment operator
-        FileLoader& operator=(const FileLoader<T, L1Buffering, L2Buffering, L2PartitionerT, Derived>& other) = delete;
+        FileLoader& operator=(const FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT, Derived>& other) = delete;
 
 
         /**
          * @brief move constructor.  here to ensure that the DataBlocks are moved.
          * @param other FileLoader to move
          */
-        FileLoader(FileLoader<T, L1Buffering, L2Buffering, L2PartitionerT, Derived>&& other) :
+        FileLoader(FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT, Derived>&& other) :
           pageSize(other.pageSize), recordSize(other.recordSize), loaded(other.loaded),
           fileHandle(other.fileHandle), fileRange(other.fileRange),
           loaderId(other.loaderId), L1Partitioner(other.L1Partitioner), mmapData(other.mmapData),
           L1Block(std::move(other.L1Block)), nConsumingThreads(other.nConsumingThreads), L2BlockSize(other.L2BlockSize),
           L2Partitioner(other.L2Partitioner), L2Blocks(other.L2Blocks)
-
-
         {
           other.pageSize = 1;
           other.fileHandle = -1;
@@ -450,12 +448,12 @@ namespace bliss
         }
 
         /**
-         * @brief move assignement operator.  here to ensure that the DataBlocks are moved.
+         * @brief move assignment operator.  here to ensure that the DataBlocks are moved.
          *
          * @param other   FileLoader to move
          * @return        updated object with moved data
          */
-        FileLoader& operator=(FileLoader<T, L1Buffering, L2Buffering, L2PartitionerT, Derived>&& other) {
+        FileLoader& operator=(FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT, Derived>&& other) {
           if (this != &other) {
             // remove the old
             if (L2Blocks != nullptr) delete [] L2Blocks;
@@ -581,7 +579,7 @@ namespace bliss
 
           RangeType r = getNextL2BlockRange<Derived>(tid);
 
-          loadL2DataForRange(tid, r);
+          getL2DataForRange(tid, r);
 
           return L2Blocks[tid];
         }
@@ -604,7 +602,7 @@ namespace bliss
         }
 
 
-      public:
+      protected:
         /**
          * @brief get the next available range for the L1 partition block, given the L1 partition id
          * @details   This method uses CRTP to allow calling Derived class' implementation, which can further refine the partitioned range.
@@ -775,7 +773,7 @@ namespace bliss
          * @param L2BlockRange   The range of the L2Block to retrieve. computed by getNextL2BlockRange.
          * @return    reference to loaded L2Block for the specified thread id and range.
          */
-        L2BlockType& loadL2DataForRange(const int tid, const RangeType &L2BlockRange) {
+        L2BlockType& getL2DataForRange(const size_t tid, const RangeType &L2BlockRange) {
           // TODO: remove assert
           assert(loaded);
 
@@ -793,15 +791,6 @@ namespace bliss
 
           return L2Blocks[tid];
         }
-
-
-
-
-
-
-      protected:
-
-
 
 
         // these methods are used by subclasses, possibly overridden by subclasses.
@@ -899,6 +888,53 @@ namespace bliss
           return static_cast<Derived*>(this)->getRecordSizeImpl(count);
         }
 
+        /**
+         * @brief     map the specified portion of the file to memory.
+         * @param r   range specifying the portion of the file to map
+         * @return    memory address (pointer) to where the data is mapped.
+         */
+        PointerType map(const RangeType &r) throw (IOException) {
+
+          /// memory map.  requires that the starting position is block aligned.
+          size_t block_start = RangeType::align_to_page(r, pageSize);
+
+          // NOT using MAP_POPULATE.  it slows things done when testing on single node.
+          PointerType result = (PointerType)mmap64(nullptr, (r.end - block_start ) * sizeof(T),
+                                     PROT_READ,
+                                     MAP_PRIVATE, fileHandle,
+                                     block_start * sizeof(T));
+
+          // if mmap failed,
+          if (result == MAP_FAILED)
+          {
+            // clean up.
+            if (fileHandle != -1)
+            {
+              close(fileHandle);
+              fileHandle = -1;
+            }
+
+            // print error through exception.
+            std::stringstream ss;
+            int myerr = errno;
+            ss << "ERROR in mmap: " << myerr << ": " << strerror(myerr);
+            throw IOException(ss.str());
+          }
+
+          return result;
+        }
+
+        /**
+         * @brief unmaps a file region from memory
+         * @param d   The pointer to the memory address
+         * @param r   The range that was mapped.
+         */
+        void unmap(PointerType &d, const RangeType &r) {
+
+          munmap(d, (r.end - RangeType::align_to_page(r, pageSize)) * sizeof(T));
+        }
+
+
       private:
         // these methods are not meant to be overridden by subclasses.
 
@@ -955,53 +991,6 @@ namespace bliss
         }
 
 
-      protected:
-
-        /**
-         * @brief     map the specified portion of the file to memory.
-         * @param r   range specifying the portion of the file to map
-         * @return    memory address (pointer) to where the data is mapped.
-         */
-        PointerType map(const RangeType &r) throw (IOException) {
-
-          /// memory map.  requires that the starting position is block aligned.
-          size_t block_start = RangeType::align_to_page(r, pageSize);
-
-          // NOT using MAP_POPULATE.  it slows things done when testing on single node.
-          PointerType result = (PointerType)mmap64(nullptr, (r.end - block_start ) * sizeof(T),
-                                     PROT_READ,
-                                     MAP_PRIVATE, fileHandle,
-                                     block_start * sizeof(T));
-
-          // if mmap failed,
-          if (result == MAP_FAILED)
-          {
-            // clean up.
-            if (fileHandle != -1)
-            {
-              close(fileHandle);
-              fileHandle = -1;
-            }
-
-            // print error through exception.
-            std::stringstream ss;
-            int myerr = errno;
-            ss << "ERROR in mmap: " << myerr << ": " << strerror(myerr);
-            throw IOException(ss.str());
-          }
-
-          return result;
-        }
-
-        /**
-         * @brief unmaps a file region from memory
-         * @param d   The pointer to the memory address
-         * @param r   The range that was mapped.
-         */
-        void unmap(PointerType &d, const RangeType &r) {
-
-          munmap(d, (r.end - RangeType::align_to_page(r, pageSize)) * sizeof(T));
-        }
 
     };
 
