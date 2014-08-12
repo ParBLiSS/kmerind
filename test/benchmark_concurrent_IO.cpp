@@ -137,7 +137,7 @@ struct readMMap {
       r1.intersect(r);
       r2.intersect(r);
 
-      if (r2.size() == 0) {
+      if (r1.size() == 0) {
         //printf("%d empty at %lu - %lu, in range %lu - %lu! chunkSize %lu\n", tid, r2.start, r2.end, r.start, r.end, chunkSize);
         return true;
       }
@@ -198,9 +198,8 @@ struct readFileLoader {
     readFileLoader(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextL1BlockRange(rank);
+      loader.getNextL1Block();
 
-      loader.loadL1DataForRange(r);
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -212,7 +211,6 @@ struct readFileLoader {
 
     ~readFileLoader() {
       // unmap
-      loader.unloadL1Data();
     }
 
     RangeType getRange() {
@@ -233,15 +231,13 @@ struct readFileLoader {
 
     bool operator()(int tid, size_t &count, OT &v) {
       RangeType r = data.getRange();
-      RangeType r1 = loader.getNextL2BlockRange(tid);
-      RangeType r2(r1.start, r1.end + loader.getL2BlockSize());
+      RangeType r1 = loader.getNextL2Block(tid).getRange();
 
       r1.intersect(r);
-      r2.intersect(r);
       // try copying the data.
 
-      if (r2.size() == 0)
-        return true;
+      if (r1.size() == 0)
+        return true;   // finished
 
       auto ld = data.begin() + (r1.start - r.start);
 
@@ -291,9 +287,7 @@ struct readFileLoaderAtomic {
     readFileLoaderAtomic(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextL1BlockRange(rank);
-
-      loader.loadL1DataForRange(r);
+      loader.getNextL1Block();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -305,7 +299,6 @@ struct readFileLoaderAtomic {
 
     ~readFileLoaderAtomic() {
       // unmap
-      loader.unloadL1Data();
     }
 
     RangeType getRange() {
@@ -326,8 +319,7 @@ struct readFileLoaderAtomic {
     bool operator()(int tid, size_t &count, OT &v) {
 
       // try copying the data.
-      RangeType r = loader.getNextL2BlockRange(tid);
-      typename LoaderType::L2BlockType data = loader.getL2DataForRange(tid, r);
+      typename LoaderType::L2BlockType data = loader.getNextL2Block(tid);
 
       if (data.begin() == data.end())
         return true;
@@ -380,9 +372,7 @@ struct readFASTQ {
     readFASTQ(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextL1BlockRange(rank);
-
-      loader.loadL1DataForRange(r);
+      loader.getNextL1Block();
 
 //      printf("reading: %lu - %lu, values '%c' '%c'\n", r.start, r.end, *(loader.getData().begin()), *(loader.getData().end()));
 
@@ -397,8 +387,6 @@ struct readFASTQ {
     }
 
     ~readFASTQ() {
-      // unmap
-      loader.unloadL1Data();
     }
 
     RangeType getRange() {
@@ -419,8 +407,7 @@ struct readFASTQ {
     bool operator()(int tid, size_t &count, OT &v) {
 
       // try copying the data.
-      RangeType r = loader.getNextL2BlockRange(tid);
-      typename LoaderType::L2BlockType data = loader.getL2DataForRange(tid, r);
+      typename LoaderType::L2BlockType data = loader.getNextL2Block(tid);
 
       if (data.begin() == data.end() )
         return true;
@@ -478,8 +465,7 @@ struct FASTQIterator {
     FASTQIterator(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextL1BlockRange(rank);
-      loader.loadL1DataForRange(r);
+      loader.getNextL1Block();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -491,7 +477,6 @@ struct FASTQIterator {
 
     ~FASTQIterator() {
       // unmap
-      loader.unloadL1Data();
     }
 
     RangeType getRange() {
@@ -513,8 +498,7 @@ struct FASTQIterator {
     bool operator()(int tid, size_t &count, OT &v) {
 
       // try copying the data.
-      RangeType r = loader.getNextL2BlockRange(tid);
-      typename LoaderType::L2BlockType data = loader.getL2DataForRange(tid, r);
+      typename LoaderType::L2BlockType data = loader.getNextL2Block(tid);
 
       if (data.begin() ==  data.end())
         return true;
@@ -601,8 +585,8 @@ struct FASTQIterator2 {
     FASTQIterator2(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextL1BlockRange(rank);
-      loader.loadL1DataForRange(r);
+      loader.getNextL1Block();
+
 //      printf("loader from thread %d loaded range = %lu %lu\n", omp_get_thread_num(), loader.getData().getRange().start, loader.getData().getRange().end);
 //      printf("loader from thread %d file range = %lu %lu\n", omp_get_thread_num(), loader.getFileRange().start, loader.getFileRange().end);
 
@@ -613,7 +597,7 @@ struct FASTQIterator2 {
 
     ~FASTQIterator2() {
       // unmap
-      loader.unloadL1Data();
+
     }
 
     RangeType getRange() {
@@ -634,8 +618,7 @@ struct FASTQIterator2 {
     bool operator()(int tid, size_t &count, OT &v) {
 
       // try copying the data.
-      RangeType r = loader.getNextL2BlockRange(tid);
-      typename LoaderType::L2BlockType data = loader.getL2DataForRange(tid, r);
+      typename LoaderType::L2BlockType data = loader.getNextL2Block(tid);
 
       if (data.begin() ==  data.end())
         return true;
@@ -713,8 +696,7 @@ struct FASTQIteratorNoQual {
     FASTQIteratorNoQual(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
-      RangeType r = loader.getNextL1BlockRange(rank);
-      loader.loadL1DataForRange(r);
+      loader.getNextL1Block();
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -726,7 +708,6 @@ struct FASTQIteratorNoQual {
 
     ~FASTQIteratorNoQual() {
       // unmap
-      loader.unloadL1Data();
     }
 
     RangeType getRange() {
@@ -746,8 +727,7 @@ struct FASTQIteratorNoQual {
     bool operator()(int tid, size_t &count, OT &v) {
 
       // try copying the data.
-      RangeType r = loader.getNextL2BlockRange(tid);
-      typename LoaderType::L2BlockType data = loader.getL2DataForRange(tid, r);
+      typename LoaderType::L2BlockType data = loader.getNextL2Block(tid);
 //      printf("thread %d getting block %lu-%lu, got block of length %ld\n", omp_get_thread_num(), start, end, (data.end() - data.begin()));
 
 

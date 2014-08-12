@@ -29,11 +29,11 @@ template <typename T,
   typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >
 class TestableFileLoader :
     public bliss::io::FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
-    TestableFileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> > {
+    void > {
       public:
         using MyType = TestableFileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>;
         using SuperType = bliss::io::FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
-            MyType >;
+            void >;
 
 
         using L1BlockType = typename SuperType::L1BlockType;

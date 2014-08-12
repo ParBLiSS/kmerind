@@ -155,14 +155,13 @@ void buildIndex(FileLoaderType &loader, Index &index, const int &rank,
     SeqType read;
 
     /// initialize the loop by getting the first chunk
-    RangeType r = loader.getNextL2BlockRange(tid);
-    while (r.size() > 0) {
+    chunk = loader.getNextL2Block(tid);
+    while (chunk.getRange().size() > 0) {
       /// get the chunk of data
-      chunk = loader.getL2DataForRange(tid, r);
 
       ///  and wrap the chunk inside an iterator that emits Reads.
-      SeqIterType fastq_start(parser, chunk.begin(), chunk.end(), r);
-      SeqIterType fastq_end(parser, chunk.end(), r);
+      SeqIterType fastq_start(parser, chunk.begin(), chunk.end(), chunk.getRange());
+      SeqIterType fastq_end(parser, chunk.end(), chunk.getRange());
 
       /// loop over the reads
       for (; fastq_start != fastq_end; ++fastq_start)
@@ -180,7 +179,7 @@ void buildIndex(FileLoaderType &loader, Index &index, const int &rank,
       }
 
       /// get read for next loop iteration.
-      r = loader.getNextL2BlockRange(tid);
+      chunk = loader.getNextL2Block(tid);
       ++nChunks;
     }
 
@@ -227,9 +226,10 @@ struct RunTask {
       t1 = std::chrono::high_resolution_clock::now();
 
       // get the file ready for read
+      {
       FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire execution.
-      RangeType pr = loader.getNextL1BlockRange(rank);
-      loader.loadL1DataForRange(pr);
+
+      loader.getNextL1Block();
 
 
       t2 = std::chrono::high_resolution_clock::now();
@@ -251,16 +251,9 @@ struct RunTask {
 
 
 
-      /////////////// clean up
-      t1 = std::chrono::high_resolution_clock::now();
-      loader.unloadL1Data();
-      t2 = std::chrono::high_resolution_clock::now();
-      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-      std::cout << "Unload rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
-
-    }  // scope to ensure file loader is destroyed.
-
+      }  // scope to ensure file loader is destroyed.
+    }
 };
 
 
