@@ -102,22 +102,32 @@ struct Tester
 
     commLayer.initCommunication();
 
-    // start sending one message to each:
-    for (int l = 0; l < repeat_sends; ++l)
-    {
-      for (int i = 0; i < commLayer.getCommSize(); ++i)
+    int iters = 2;
+
+    for (int it = 0; it < iters; ++it) {
+
+      // start sending one message to each:
+      for (int l = 0; l < repeat_sends; ++l)
       {
-        int msg = generate_message(my_rank, i);
-        DEBUG("Sending " << msg << " to " << i);
-        commLayer.sendMessage(&msg, sizeof(int), i, FIRST_TAG);
+        for (int i = 0; i < commLayer.getCommSize(); ++i)
+        {
+          int msg = generate_message(my_rank, i);
+          DEBUG("Sending " << msg << " to " << i);
+          commLayer.sendMessage(&msg, sizeof(int), i, FIRST_TAG);
+        }
       }
+
+      if (commLayer.getCommRank() == 0) {
+        sleep(1);
+      }
+
+      // call the flush function for this tag
+      commLayer.flush(FIRST_TAG);
     }
 
-    // call the flush function for this tag
-    commLayer.flush(FIRST_TAG);
 
     // check that all messages have been received
-    if (msgs_received != repeat_sends * commLayer.getCommSize())
+    if (msgs_received != repeat_sends * commLayer.getCommSize() * iters)
     {
       DEBUG("ERROR: wrong amount of messages received in phase 1");
       DEBUG("received: " << msgs_received << ", should: " << repeat_sends * commLayer.getCommSize());

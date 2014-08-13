@@ -122,8 +122,8 @@ typedef bliss::index::KmerIndexGenerator<KmerCountOpType, CountIndexType>       
  * peer to peer
  */
 template <typename Compute, typename Index>
-void buildIndex(FileLoaderType &loader, Index &index, const int &rank,
-                const int &nthreads, const int &chunkSize)
+void buildIndex(FileLoaderType &loader, Index &index, const int& rank,
+                const int& nthreads, const int& chunkSize)
 {
   std::chrono::high_resolution_clock::time_point t1, t2;
   std::chrono::duration<double> time_span;
@@ -223,13 +223,14 @@ struct RunTask {
       // call get NextPartition Range to block partition,
       // call "load" with the partition range.
 
-      t1 = std::chrono::high_resolution_clock::now();
 
       // get the file ready for read
       {
-      FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire execution.
+        t1 = std::chrono::high_resolution_clock::now();
 
-      loader.getNextL1Block();
+        FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire execution.
+
+        loader.getNextL1Block();
 
 
       t2 = std::chrono::high_resolution_clock::now();
@@ -240,7 +241,7 @@ struct RunTask {
 
 
 
-      /////////////// now process the file using version with master.
+      /////////////// now process the file .
       // do some work using openmp  // version without master
       t1 = std::chrono::high_resolution_clock::now();
       buildIndex<ComputeType, Index>(loader, index, rank, nthreads, chunkSize);
@@ -372,8 +373,8 @@ int main(int argc, char** argv) {
 //    //// query:  use the same file as input.  walk through and generate kmers as before.  send query
 //
 //  }
-
-  MPI_Barrier(comm);
+//
+//  MPI_Barrier(comm);
 
   //////////////  clean up MPI.
   MPI_Finalize();

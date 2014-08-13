@@ -129,11 +129,33 @@ struct SendQueueElement
  * the CommunicationLayer first needs to be initialized by calling the
  *      `initCommunication()`
  * function.
+ *
+ *
+ * Design requirements:
+ *  asynchronous MPI messaging using isend/iprobe/irecv
+ *  message queues for sent and recved message handling
+ *  tag for each message type
+ *  tag = 0 means application termination
+ *  flushTag() inserts zero byte messages with specific tag to indicate that processes need to wait until all messages of that tag type are done.
+ *  finishTag() also sends application termination tag.
+ *
+ *  each process handles the flush and finish independently without barrier synchronization.
+ *  thread calling flush and finish essentially "request" that "barriers" be erected.
+ *    Recv Thread handles the actual within-process barrier to ensure all messages of a particular tag are processed.
+ *    flushTag() resets the counter
+ *
+ *  potential issue with using just counters:  if multiple phases for a particular tag's messages, and one process is particularly slow,
+ *    it may receive flush signal from multiple phases of other processes, e.g. process 0 in phase 1,
+ *    and receives flush signal from process 1 from phase 1 and 2.  Using just counter could cause process 0 to not properly
+ *    barrier each phase.
  */
 class CommunicationLayer
 {
 
 public:
+
+    static const int CONTROL_TAG = 0;
+
 
   /**
    * @brief Constructor for the CommLayer.
@@ -179,7 +201,7 @@ public:
     recvDone.store(false);
     finishing.store(false);
     flushing.store(-1);
-    recvRemaining[0] = commSize;
+    recvRemaining[CONTROL_TAG] = commSize;
     comm_thread = std::thread(&CommunicationLayer::commThread, this);
     callback_thread = std::thread(&CommunicationLayer::callbackThread, this);
   }
@@ -208,6 +230,8 @@ public:
       throw std::invalid_argument("invalid tag: tag has been finished already");
     }
 
+    assert(tag != CONTROL_TAG && tag >= 0);
+
     /// if there isn't already a tag listed, add the MessageBuffers for that tag.
     // multiple threads may call this.
     if (buffers.find(tag) == buffers.end()) {
@@ -218,8 +242,8 @@ public:
       }
     }
 
-    /// try to append the new data - repeat until successful.
-    /// along the way, if a full buffer's id is returned, queue it for sendQueue.
+    // try to append the new data - repeat until successful.
+    // along the way, if a full buffer's id is returned, queue it for sendQueue.
     BufferIdType fullId = BufferPoolType::INVALID;
     std::pair<bool, BufferIdType> result;
     do {
@@ -262,9 +286,8 @@ public:
   void addReceiveCallback(int tag, std::function<void(uint8_t*, std::size_t, int)> callbackFunction) throw (std::invalid_argument)
   {
     // check for valid arguments
-    if (!(tag > 0)) {
-      throw std::invalid_argument("tag has to be > 0");
-    }
+    assert(tag != CONTROL_TAG && tag >= 0);
+
     if (callbackFunctions.find(tag) != callbackFunctions.end()) {
       throw std::invalid_argument("callback function already registered for given tag");
     }
@@ -284,16 +307,18 @@ public:
    */
   void flush(int tag)
   {
+    assert(tag != CONTROL_TAG && tag >= 0);
+
     if (sendAccept.find(tag) == sendAccept.end()) {
       // already finished, no need for further flushing
-      // DEBUGF("NO FLUSHing: already finished tag: %d", tag);
+      DEBUGF("NO FLUSHing: already finished tag: %d", tag);
       return;
     }
 
-    DEBUGF("FLUSHing tag %d.", tag);
+    INFOF("FLUSHing tag %d.", tag);
 
 
-    // flush all buffers
+    // flush all buffers (put them into send queue)
     flushBuffers(tag);
 
     // set the tag that is being flushed, this is being reseted in the
@@ -307,11 +332,12 @@ public:
 
     // send the END tags
     sendEndTags(tag);
-    // wait till all END tags have been received
+    // wait till all END tags have been received (not using Barrier because comm layer still needs to buffer messages locally)
     waitForEndTags(tag);
 
     // reset the count of number of processes active on this tag  ONLY AFTER  waitForEngTags returns
-    recvRemaining[tag] = commSize;
+//    DEBUGF("FLUSHED %d tag.  reseting RecvRemaining to commsize.", commRank);
+//    recvRemaining[tag] = commSize;
   }
 
   /**
@@ -320,6 +346,8 @@ public:
    */
   void finishTag(int tag)
   {
+    assert(tag != CONTROL_TAG && tag >= 0);
+
     if (sendAccept.find(tag) == sendAccept.end()) {
       //DEBUGF("ERROR:  NO FINISHing: already finished tag: %d", tag);
       // already finished.
@@ -327,7 +355,7 @@ public:
     }
 
 
-    DEBUGF("FINISHing tag %d.", tag);
+    INFOF("FINISHing tag %d.", tag);
 
     /// mark as no more coming in for this tag.  ONE THREAD ONLY modifies this.
     sendAccept.erase(tag);
@@ -350,14 +378,14 @@ public:
     /// if no more, then send the application termination signal.
     if (sendAccept.empty()) {
       t = -1;
-      if (!flushing.compare_exchange_strong(t, 0)) {
-        ERRORF("ERROR:  another tag is being flushed. %d.  target is %d", t, 0);
+      if (!flushing.compare_exchange_strong(t, CONTROL_TAG)) {
+        ERRORF("ERROR:  another tag is being flushed. %d.  target is %d", t, CONTROL_TAG);
         return;
       }
-      sendEndTags(0);
+      sendEndTags(CONTROL_TAG);
       finishing.store(true);
 
-      waitForEndTags(0);
+      waitForEndTags(CONTROL_TAG);
     }
   }
 
@@ -388,6 +416,7 @@ public:
    */
   void commThread()
   {
+    DEBUGF("THREAD STARTED:  comm-thread on %d", commRank);
     // while there's still work to be done:
     while (!sendDone.load() || !recvDone.load())
     {
@@ -400,8 +429,8 @@ public:
       // start pending sends
       tryStartSend();
     }
+    DEBUGF("THREAD FINISHED:  comm-thread on %d", commRank);
 
-    DEBUGF("comm thread finished on %d", commRank);
   }
 
   /**
@@ -409,6 +438,7 @@ public:
    */
   void callbackThread()
   {
+    INFOF("THREAD STARTED:  recv-thread on %d", commRank);
     ReceivedMessage msg;
     // while there is still work to be done:
     while (!recvDone.load() || !recvQueue.isEmpty() )
@@ -442,7 +472,7 @@ public:
         delete [] msg.data;
       }
     }
-    DEBUGF("recv thread finished on %d", commRank);
+    INFOF("THREAD FINISHED: recv-thread on %d", commRank);
   }
 
 protected:
@@ -460,7 +490,7 @@ protected:
       // send end tags in circular fashion, send tag to self last
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 
-      DEBUGF("sendEndTags target_rank = %d ", target_rank );
+      DEBUGF("Rank %d sendEndTags target_rank = %d ", commRank, target_rank );
 
       // send the end message for this tag.
       if (!sendQueue.waitAndPush(std::move(SendQueueElement(BufferPoolType::INVALID, tag, target_rank)))) {
@@ -476,17 +506,19 @@ protected:
    *
    * @param tag The tag to wait for.
    */
-  void waitForEndTags(int tag)
+  void waitForEndTags(int tag) throw (bliss::io::IOException)
   {
-    DEBUGF("wait for end tag.  flushing= %d, tag= %d", flushing.load(), tag);
 
     // waiting for all messages of this tag to flush.
-    if (flushing.load() == tag) {
+    if (flushing.load() == tag) {  // precheck before locking.
       std::unique_lock<std::mutex> lock(flushMutex);
       do {
         flushBarrier.wait(lock);
       } while (flushing.load() == tag);
+    } else {
+      throw bliss::io::IOException("ERROR: waitForEndTags called but currently flushing a different tag.");
     }
+    DEBUGF("Rank %d WAITED FOR END TAG.  flushing= %d, tag= %d", commRank, flushing.load(), tag);
   }
 
 
@@ -508,14 +540,14 @@ protected:
       return;
     }
     // flush out all the send buffers matching a particular tag.
-    DEBUGF("Active Buffer Ids in message buffer: %s", buffers.at(tag).bufferIdsToString().c_str());
+    //DEBUGF("Active Buffer Ids in message buffer: %s", buffers.at(tag).bufferIdsToString().c_str());
 
     int idCount = buffers.at(tag).getBufferIds().size();
     assert(idCount == commSize);
     for (int i = 0; i < idCount; ++i) {
       // flush buffers in a circular fashion, starting with the next neighbor
       int target_rank = (i + getCommRank()) % getCommSize();
-      DEBUGF("flushBuffers : target_rank = %d ", target_rank );
+      //DEBUGF("flushBuffers : target_rank = %d ", target_rank );
 
       auto id = buffers.at(tag).getBufferId(target_rank);
       // flush/send all remaining non-empty buffers
@@ -550,6 +582,7 @@ protected:
     se = el.second;
     // Is this an END tag/ empty message?
     if (se.bufferId == BufferPoolType::INVALID) {
+      //DEBUGF("SEND %d -> %d, termination signal for tag %d", commRank, se.dst, se.tag);
       // termination message for this tag and destination
       if (se.dst == commRank) {
         // local, directly handle by creating an output object and directly
@@ -569,9 +602,14 @@ protected:
       }
     // this is an actual message:
     } else {
+
       // get message data and it's size
       void* data = const_cast<void*>(buffers.at(se.tag).getBackBuffer(se.bufferId).getData());
       auto count = buffers.at(se.tag).getBackBuffer(se.bufferId).getSize();
+
+      if (count == 0) {
+        ERRORF("ERROR: SEND %d -> %d, trying to send 0 byte message as data for tag %d.", commRank, se.dst, se.tag);
+      }
 
       if (se.dst == commRank) {
         // local, directly handle by creating an output object and directly
@@ -634,7 +672,7 @@ protected:
       // and elements for the last tag, or tag 0 (termination) may be added to
       // the sendQueue or sendInProfess queue after the empty check here.
       sendDone.store(true);
-      DEBUGF("send Done!");
+      //DEBUGF("send Done!");
       //sendQueue.disablePush();
     }
   }
@@ -690,7 +728,7 @@ protected:
 
       // test if the MPI request for receive has been completed.
       if (front.first == MPI_REQUEST_NULL) {
-        finished = 1;
+        finished = 1;   // this happens with local request.
       } else {
         MPI_Test(&front.first, &finished, MPI_STATUS_IGNORE);
       }
@@ -698,25 +736,26 @@ protected:
       if (finished)
       {
         if (front.second.count == 0) {
-          // end of messaging.
-          --recvRemaining[front.second.tag];
-          DEBUGF("RECV rank %d receiving END signal %d from %d, num senders"
-              "remaining is %d", commRank, front.second.tag, front.second.src,
-              recvRemaining[front.second.tag]);
+          // termination message
+          --recvRemaining.at(front.second.tag);
+          DEBUGF("RECV rank %d receiving END signal %d from %d, num senders remaining is %d",
+                 commRank, front.second.tag, front.second.src,
+              recvRemaining.at(front.second.tag));
 
-          if (recvRemaining[front.second.tag] == 0) {
+          if (recvRemaining.at(front.second.tag) == 0) {
             // received all end messages.  there may still be messages in
             // progress and in recvQueue from this and other sources.
-            recvRemaining.erase(front.second.tag);
+            if (front.second.tag != CONTROL_TAG)  // all other messages: reset recvRemaining for that tag.
+              recvRemaining.at(front.second.tag) = commSize;
+            // else application termination message - leave as 0.
 
-            DEBUGF("ALL END received for tag %d, pushing to recv queue",
-                   front.second.tag);
+            //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
             fflush(stdout);
             if (!recvQueue.waitAndPush(std::move(front.second))) {
               throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
             }
 
-          } else if (recvRemaining[front.second.tag] < 0) {
+          } else if (recvRemaining.at(front.second.tag) < 0) {
             ERRORF("ERROR: number of remaining receivers for tag %d is now NEGATIVE", front.second.tag);
           }
         } else {
@@ -730,15 +769,15 @@ protected:
       }
       else
       {
-        // stop receiving for now
+        // stop receiving for now - wait for requests to finish
         break;
       }
     }
 
     // see if we are done with receiving and everything is in the recvQueue
-    if ((recvRemaining.find(0) == recvRemaining.end()) && recvInProgress.empty()) {
+    if ((recvRemaining.at(0) == 0) && recvInProgress.empty()) {
       recvDone.store(true);
-      DEBUG("recv Done!");
+      //DEBUGF("recv Done!");
       recvQueue.disablePush();
     }
   }
@@ -789,7 +828,7 @@ protected:
   std::unordered_set<int> sendAccept;
 
   /// Per tag: number of processes that haven't sent the END-TAG message yet
-  // comm-thread modify, callback-thread read.
+  // compute thread set during initialization and setting callbacks, callback-thread read and modify.
   std::unordered_map<int, int> recvRemaining;
 
   /// The type of the BufferIDs
@@ -831,6 +870,8 @@ protected:
   /// The MPI Communicator rank
   int commRank;
 };
+
+const int CommunicationLayer::CONTROL_TAG;
 
 } // namespace io
 } // namespace bliss
