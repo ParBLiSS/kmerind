@@ -230,7 +230,7 @@ public:
     recvDone.store(false);
     finishing.store(false);
     flushing.store(-1);
-    recvRemaining[CONTROL_TAG] = commSize;
+    recvRemaining[-1] = commSize;
     comm_thread = std::thread(&CommunicationLayer::commThread, this);
     callback_thread = std::thread(&CommunicationLayer::callbackThread, this);
   }
@@ -325,7 +325,6 @@ public:
     callbackFunctions[tag] = callbackFunction;
 
     // also set the number of potential senders
-    recvRemaining[tag] = commSize;
     // now accepting messages of this type
     sendAccept.insert(tag);
   }
@@ -364,7 +363,6 @@ public:
     // wait till all END tags have been received (not using Barrier because comm layer still needs to buffer messages locally)
     waitForEndTags(tag);
 
-    ++epoch;
     // reset the count of number of processes active on this tag  ONLY AFTER  waitForEngTags returns
 //    DEBUGF("FLUSHED %d tag.  reseting RecvRemaining to commsize.", commRank);
 //    recvRemaining[tag] = commSize;
@@ -404,7 +402,6 @@ public:
     sendEndTags(tag);
     // wait till all END tags have been received
     waitForEndTags(tag);
-    ++epoch;
 
     /// if no more, then send the application termination signal.
     if (sendAccept.empty()) {
@@ -417,7 +414,6 @@ public:
       finishing.store(true);
 
       waitForEndTags(CONTROL_TAG);
-      ++epoch;
 
     }
   }
@@ -552,6 +548,7 @@ protected:
       throw bliss::io::IOException("ERROR: waitForEndTags called but currently flushing a different tag.");
     }
     DEBUGF("Rank %d WAITED FOR END TAG.  flushing= %d, tag= %d", commRank, flushing.load(), tag);
+    ++epoch;
   }
 
 
@@ -778,19 +775,27 @@ protected:
           // control message
 
           int tag = front.second.getTag();
+          int epoch = front.second.getEpoch();
+
+          if (tag == CONTROL_TAG) {
+            epoch = -1;  // already set at construction
+          } else {
+            // if we haven't seen this epoch, add a new entry.
+            if (recvRemaining.find(epoch) == recvRemaining.end())
+              recvRemaining[epoch] = commSize;  // insert new.
+          }
 
           // termination message
-          --recvRemaining.at(tag);
+          --recvRemaining.at(epoch);
           DEBUGF("RECV rank %d receiving END signal %d from %d, num senders remaining is %d",
                  commRank, tag, front.second.src,
-              recvRemaining.at(tag));
+              recvRemaining.at(epoch));
 
-          if (recvRemaining.at(tag) == 0) {
+          if (recvRemaining.at(epoch) == 0) {
             // received all end messages.  there may still be messages in
             // progress and in recvQueue from this and other sources.
-            if (tag != CONTROL_TAG)  // all other messages: reset recvRemaining for that tag.
-              recvRemaining.at(tag) = commSize;
-            // else application termination message - leave as 0.
+
+            recvRemaining.erase(epoch);
 
             //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
             fflush(stdout);
@@ -798,7 +803,7 @@ protected:
               throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
             }
 
-          } else if (recvRemaining.at(tag) < 0) {
+          } else if (recvRemaining.at(epoch) < 0) {
             ERRORF("ERROR: number of remaining receivers for tag %d is now NEGATIVE", tag);
           }
         } else {
@@ -818,7 +823,8 @@ protected:
     }
 
     // see if we are done with receiving and everything is in the recvQueue
-    if ((recvRemaining.at(0) == 0) && recvInProgress.empty()) {
+    if ((recvRemaining.size() == 0) && recvInProgress.empty()) {
+      // if completely done, epoch=-1 would have been erased from recvRemaining.
       recvDone.store(true);
       //DEBUGF("recv Done!");
       recvQueue.disablePush();
@@ -913,9 +919,9 @@ protected:
   /// The MPI Communicator rank
   int commRank;
 
-  /// id of the epochs.  aka the periods between barrier/synchronization.
+  /// id of the epochs.  aka the periods between barrier/synchronization.  each epoch is associated with a single flush/finish, thus to 1 tag.
   int epoch;
-
+  //int finalEpoch;
 };
 
 const int CommunicationLayer::CONTROL_TAG;
