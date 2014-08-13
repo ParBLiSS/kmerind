@@ -46,8 +46,8 @@
 
 namespace bliss
 {
-  namespace io
-  {
+namespace io
+{
 
     // TODO: be more specific about meaning of things, e.g. chunk,  and rename functions approriately.
 
@@ -793,6 +793,15 @@ namespace bliss
         }
 
 
+
+
+
+
+      protected:
+
+
+
+
         // these methods are used by subclasses, possibly overridden by subclasses.
 
 
@@ -888,53 +897,6 @@ namespace bliss
           return static_cast<Derived*>(this)->getRecordSizeImpl(count);
         }
 
-        /**
-         * @brief     map the specified portion of the file to memory.
-         * @param r   range specifying the portion of the file to map
-         * @return    memory address (pointer) to where the data is mapped.
-         */
-        PointerType map(const RangeType &r) throw (IOException) {
-
-          /// memory map.  requires that the starting position is block aligned.
-          size_t block_start = RangeType::align_to_page(r, pageSize);
-
-          // NOT using MAP_POPULATE.  it slows things done when testing on single node.
-          PointerType result = (PointerType)mmap64(nullptr, (r.end - block_start ) * sizeof(T),
-                                     PROT_READ,
-                                     MAP_PRIVATE, fileHandle,
-                                     block_start * sizeof(T));
-
-          // if mmap failed,
-          if (result == MAP_FAILED)
-          {
-            // clean up.
-            if (fileHandle != -1)
-            {
-              close(fileHandle);
-              fileHandle = -1;
-            }
-
-            // print error through exception.
-            std::stringstream ss;
-            int myerr = errno;
-            ss << "ERROR in mmap: " << myerr << ": " << strerror(myerr);
-            throw IOException(ss.str());
-          }
-
-          return result;
-        }
-
-        /**
-         * @brief unmaps a file region from memory
-         * @param d   The pointer to the memory address
-         * @param r   The range that was mapped.
-         */
-        void unmap(PointerType &d, const RangeType &r) {
-
-          munmap(d, (r.end - RangeType::align_to_page(r, pageSize)) * sizeof(T));
-        }
-
-
       private:
         // these methods are not meant to be overridden by subclasses.
 
@@ -991,6 +953,53 @@ namespace bliss
         }
 
 
+      protected:
+
+        /**
+         * @brief     map the specified portion of the file to memory.
+         * @param r   range specifying the portion of the file to map
+         * @return    memory address (pointer) to where the data is mapped.
+         */
+        PointerType map(const RangeType &r) throw (IOException) {
+
+          /// memory map.  requires that the starting position is block aligned.
+          size_t block_start = RangeType::align_to_page(r, pageSize);
+
+          // NOT using MAP_POPULATE.  it slows things done when testing on single node.
+          PointerType result = (PointerType)mmap64(nullptr, (r.end - block_start ) * sizeof(T),
+                                     PROT_READ,
+                                     MAP_PRIVATE, fileHandle,
+                                     block_start * sizeof(T));
+
+          // if mmap failed,
+          if (result == MAP_FAILED)
+          {
+            // clean up.
+            if (fileHandle != -1)
+            {
+              close(fileHandle);
+              fileHandle = -1;
+            }
+
+            // print error through exception.
+            std::stringstream ss;
+            int myerr = errno;
+            ss << "ERROR in mmap: " << myerr << ": " << strerror(myerr);
+            throw IOException(ss.str());
+          }
+
+          return result;
+        }
+
+        /**
+         * @brief unmaps a file region from memory
+         * @param d   The pointer to the memory address
+         * @param r   The range that was mapped.
+         */
+        void unmap(PointerType &d, const RangeType &r) {
+
+          munmap(d, (r.end - RangeType::align_to_page(r, pageSize)) * sizeof(T));
+        }
 
     };
 

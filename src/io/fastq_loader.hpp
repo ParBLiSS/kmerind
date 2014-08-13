@@ -114,7 +114,7 @@ namespace bliss
          * @return            position of the start of next read sequence (@).  if there is no complete sequence, and is not at end of partition, throw exception.
          */
         template<typename Iterator>
-        const size_t findStart(const Iterator &_data, const RangeType &partRange, const RangeType &loadedRange, const RangeType &searchRange) const
+        const std::size_t findStart(const Iterator &_data, const RangeType &partRange, const RangeType &loadedRange, const RangeType &searchRange) const
         throw (bliss::io::IOException) {
 
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
@@ -123,7 +123,7 @@ namespace bliss
           RangeType t = RangeType::intersect(searchRange, loadedRange); // intersection to bound target to between parent's ends.
           if (t.start == t.end) return t.start;
 
-          size_t i = t.start;
+          std::size_t i = t.start;
           Iterator data(_data);
           bool wasEOL;
 
@@ -158,7 +158,7 @@ namespace bliss
           // already has the first line first char..
           ValueType first[4] =
           { 0, 0, 0, 0 };
-          size_t offsets[4] =
+          std::size_t offsets[4] =
           { t.end, t.end, t.end, t.end };   // units:  offset from beginning of file.
 
           int currLineId = 0;        // current line id in the buffer
@@ -366,8 +366,8 @@ namespace bliss
 
           assert(this->loaded);
 
-          size_t s, e;
-          size_t ss = 0;
+          std::size_t s, e;
+          std::size_t ss = 0;
           RangeType parent(this->L1Block.getRange());
           RangeType r(this->L1Block.getRange());
 

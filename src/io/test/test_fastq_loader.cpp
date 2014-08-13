@@ -76,7 +76,6 @@ TYPED_TEST_CASE_P(FASTQLoaderTest);
 TYPED_TEST_P(FASTQLoaderTest, OpenWithRange)
 {
   typedef FASTQLoader<TypeParam, false, false> FASTQLoaderType;
-  typedef typename FASTQLoaderType::RangeType RangeType;
 
   // get this->fileName
   int rank = 3;
@@ -84,16 +83,14 @@ TYPED_TEST_P(FASTQLoaderTest, OpenWithRange)
 
   FASTQLoaderType loader(this->fileName, nprocs, rank);
 
-  RangeType r = loader.getNextPartitionRange(rank);
+  loader.getNextL1Block();
 
-  loader.load(r);
 
 //  std::cout << "range: " << r2 << std::endl;
-  ASSERT_EQ('@', loader.getData().begin()[0]);
-  ASSERT_EQ('@', loader.getData().end()[0]);
+  ASSERT_EQ('@', loader.getCurrentL1Block().begin()[0]);
+  ASSERT_EQ('@', loader.getCurrentL1Block().end()[0]);
 //  std::cout << " characters = '" << loader.getData().begin()[0]  << "'" << std::endl;
 //  std::cout << " characters = '" << loader.getData().end()[0]  << "'" << std::endl;
-  loader.unload();
 }
 
 
@@ -106,27 +103,28 @@ TYPED_TEST_P(FASTQLoaderTest, OpenConsecutiveRanges)
   int nprocs = 7;
   typename RangeType::ValueType lastEnd = 0;
 
-  FASTQLoaderType loader(this->fileName, nprocs);
   RangeType r;
+  typename FASTQLoaderType::L1BlockType d;
 
   for (int rank = 0; rank < nprocs; ++rank) {
-    loader.resetPartitionRange();
+    {
+      FASTQLoaderType loader(this->fileName, nprocs, rank);
 
-    r = loader.getNextPartitionRange(rank);
-    loader.load(r);
+      d = loader.getNextL1Block();
+      r = d.getRange();
 
-    ASSERT_EQ(lastEnd, r.start);
-    lastEnd = r.end;
+      ASSERT_EQ(lastEnd, r.start);
+      lastEnd = r.end;
 
-    //  std::cout << "range: " << r2 << std::endl;
-      ASSERT_EQ('@', loader.getData().begin()[0]);
-      if (r.end == loader.getFileRange().end)
-        ASSERT_EQ(0, loader.getData().end()[0]);
-      else
-        ASSERT_EQ('@', loader.getData().end()[0]);
-    //  std::cout << " characters = '" << loader.getData().begin()[0]  << "'" << std::endl;
-    //  std::cout << " characters = '" << loader.getData().end()[0]  << "'" << std::endl;
-      loader.unload();
+      //  std::cout << "range: " << r2 << std::endl;
+        ASSERT_EQ('@', d.begin()[0]);
+        if (r.end == loader.getFileRange().end)
+          ASSERT_EQ(0, d.end()[0]);
+        else
+          ASSERT_EQ('@', d.end()[0]);
+      //  std::cout << " characters = '" << loader.getData().begin()[0]  << "'" << std::endl;
+      //  std::cout << " characters = '" << loader.getData().end()[0]  << "'" << std::endl;
+    }
   }
 }
 
@@ -199,17 +197,16 @@ TYPED_TEST_P(FASTQLoaderBufferTest, BufferingChunks)
 
   FASTQLoaderType loader(this->fileName, nprocs, rank, nThreads, 2048);
 
-  RangeType r = loader.getNextL1BlockRange(rank);
-  loader.load(r);
+  typename FASTQLoaderType::L1BlockType d = loader.getNextL1Block();
 
-  typename RangeType::ValueType lastEnd = r.start;
+  typename RangeType::ValueType lastEnd = d.getRange().start;
 
 
   ValueType* gold;
   int i = 0;
 
-  RangeType r2 = loader.getNextL2BlockRange(0);
-  blockType data = loader.getChunk(i, r2);
+  blockType data = loader.getNextL2Block(0);
+  RangeType r2 = data.getRange();
   size_t len = r2.size();
 
   while (len  > 0) {
@@ -226,14 +223,12 @@ TYPED_TEST_P(FASTQLoaderBufferTest, BufferingChunks)
     delete [] gold;
 
     i ^= 1;
-    r2 = loader.getNextChunkRange(i);
-    data = loader.getChunk(i, r2);
+    data = loader.getNextL2Block(i);
+    r2 = data.getRange();
     len = r2.size();
 
   }
 
-
-  loader.unload();
 }
 
 

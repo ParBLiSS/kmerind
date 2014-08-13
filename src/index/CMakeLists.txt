@@ -7,8 +7,9 @@ project(bliss-index)
 #    kmer_index_functors.cpp)
 #target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS})
 
-
-## EXECUTABLES
-add_executable(testIndex indexing.cpp)
-target_link_libraries(testIndex ${EXTRA_LIBS})
-#target_link_libraries(test testlib)
+# load the testing:
+if (IS_DIRECTORY ./test)
+    # get all files from ./test
+    FILE(GLOB TEST_FILES test/test_*.cpp test/benchmark_*.cpp)
+    bliss_add_test(${PROJECT_NAME} FALSE ${TEST_FILES})
+endif()
