@@ -91,6 +91,20 @@ struct ReceivedMessage
 
   // Enable default construction
   ReceivedMessage() = default;
+
+  int getTag() const {
+    if (tag == 0)
+      return ((int*)data)[0];
+    else
+      return tag;
+  }
+
+  int getEpoch() const {
+    if (tag == 0)
+      return ((int*)data)[1];
+    else
+      return -1;
+  }
 };
 
 // TODO: rename (either this or the ReceivedMessage) for identical naming scheme
@@ -167,12 +181,21 @@ public:
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
     : sendQueue(2 * omp_get_num_threads()), recvQueue(2 * comm_size),
       flushing(-1), finishing(false), sendDone(false), recvDone(false),
-      comm(communicator)
+      comm(communicator), epoch(0)
   {
     // init communicator rank and size
     MPI_Comm_size(comm, &commSize);
     assert(comm_size == commSize);
     MPI_Comm_rank(comm, &commRank);
+
+    // initialize the mpi buffer for control messaging
+
+    int mpiBufSize = 0;
+    // arbitrary, 4X commSize, each has 2 ints, one for tag, one for epoch id,.
+    MPI_Pack_size(commSize * 4 * 2, MPI_INT, comm, &mpiBufSize);
+    mpiBufSize += commSize * 4 * MPI_BSEND_OVERHEAD;
+    char* mpiBuf = (char*)malloc(mpiBufSize);
+    MPI_Buffer_attach(mpiBuf, mpiBufSize);
   }
 
   /**
@@ -186,6 +209,12 @@ public:
     // wait for both threads to quit
     callback_thread.join();
     comm_thread.join();
+
+    // detach the buffer
+    int mpiBufSize;
+    char* mpiBuf;
+    MPI_Buffer_detach(&mpiBuf, &mpiBufSize);
+    free(mpiBuf);
   };
 
 
@@ -335,6 +364,7 @@ public:
     // wait till all END tags have been received (not using Barrier because comm layer still needs to buffer messages locally)
     waitForEndTags(tag);
 
+    ++epoch;
     // reset the count of number of processes active on this tag  ONLY AFTER  waitForEngTags returns
 //    DEBUGF("FLUSHED %d tag.  reseting RecvRemaining to commsize.", commRank);
 //    recvRemaining[tag] = commSize;
@@ -374,6 +404,7 @@ public:
     sendEndTags(tag);
     // wait till all END tags have been received
     waitForEndTags(tag);
+    ++epoch;
 
     /// if no more, then send the application termination signal.
     if (sendAccept.empty()) {
@@ -386,6 +417,8 @@ public:
       finishing.store(true);
 
       waitForEndTags(CONTROL_TAG);
+      ++epoch;
+
     }
   }
 
@@ -454,10 +487,10 @@ public:
       // get the message
       msg = result.second;
       // if the message is emtpy -> END-TAG
-      if (msg.data == nullptr && msg.count == 0) {
+      if (msg.tag == CONTROL_TAG) {
         // handles all end messages, including app end message with tag 0 (for
         // which there is no callback)
-        int tag = msg.tag;
+        int tag = msg.getTag();
         // expectation: the received message tag is the current tag that is
         // being flushed or finished
         if (flushing.compare_exchange_strong(tag, -1)) {
@@ -589,16 +622,17 @@ protected:
         // insert into the recvInProgress (need to use the receiver decrement
         // logic in "finishReceive")
         MPI_Request req = MPI_REQUEST_NULL;
+        uint8_t *array = new uint8_t[2 * sizeof(int)];
+        memcpy(array, &(se.tag), sizeof(int));
+        memcpy(array + sizeof(int), &(epoch), sizeof(int));
         recvInProgress.push(std::move(std::pair<MPI_Request,
               ReceivedMessage>(std::move(req),
-                std::move(ReceivedMessage(nullptr, 0, se.tag, commRank)))));
+                std::move(ReceivedMessage(array, 2 * sizeof(int), CONTROL_TAG, commRank)))));
       } else {
         // remote.  send a terminating message. with the same tag to ensure
         // message ordering.
-        MPI_Request req;
-        MPI_Isend(nullptr, 0, MPI_UINT8_T, se.dst, se.tag, comm, &req);
-        sendInProgress.push(std::move(std::pair<MPI_Request,
-              SendQueueElement>(std::move(req), std::move(se))));
+        int stat[2] = {se.tag, epoch};
+        MPI_Bsend(stat, 2, MPI_INT, se.dst, CONTROL_TAG, comm);
       }
     // this is an actual message:
     } else {
@@ -700,11 +734,16 @@ protected:
       // receive whether it's empty or not.  use finishReceive to handle the
       // termination message and count decrement
 
-      // receive the message data bytes into a vector of bytes
       uint8_t* msg_data = (received_count == 0) ? nullptr : new uint8_t[received_count];
       MPI_Request req;
-      MPI_Irecv(msg_data, received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
 
+      // receive the message data bytes into a vector of bytes
+      if (tag == CONTROL_TAG) {
+        MPI_Irecv(msg_data, received_count / sizeof(int), MPI_INT, src, tag, comm, &req);
+
+      } else {
+        MPI_Irecv(msg_data, received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
+      }
       // insert into the in-progress queue
       recvInProgress.push(std::pair<MPI_Request, ReceivedMessage>(req,
             ReceivedMessage(msg_data, received_count, tag, src)));
@@ -735,18 +774,22 @@ protected:
 
       if (finished)
       {
-        if (front.second.count == 0) {
-          // termination message
-          --recvRemaining.at(front.second.tag);
-          DEBUGF("RECV rank %d receiving END signal %d from %d, num senders remaining is %d",
-                 commRank, front.second.tag, front.second.src,
-              recvRemaining.at(front.second.tag));
+        if (front.second.tag == CONTROL_TAG)  {
+          // control message
 
-          if (recvRemaining.at(front.second.tag) == 0) {
+          int tag = front.second.getTag();
+
+          // termination message
+          --recvRemaining.at(tag);
+          DEBUGF("RECV rank %d receiving END signal %d from %d, num senders remaining is %d",
+                 commRank, tag, front.second.src,
+              recvRemaining.at(tag));
+
+          if (recvRemaining.at(tag) == 0) {
             // received all end messages.  there may still be messages in
             // progress and in recvQueue from this and other sources.
-            if (front.second.tag != CONTROL_TAG)  // all other messages: reset recvRemaining for that tag.
-              recvRemaining.at(front.second.tag) = commSize;
+            if (tag != CONTROL_TAG)  // all other messages: reset recvRemaining for that tag.
+              recvRemaining.at(tag) = commSize;
             // else application termination message - leave as 0.
 
             //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
@@ -755,8 +798,8 @@ protected:
               throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
             }
 
-          } else if (recvRemaining.at(front.second.tag) < 0) {
-            ERRORF("ERROR: number of remaining receivers for tag %d is now NEGATIVE", front.second.tag);
+          } else if (recvRemaining.at(tag) < 0) {
+            ERRORF("ERROR: number of remaining receivers for tag %d is now NEGATIVE", tag);
           }
         } else {
         // add the received messages into the recvQueue
@@ -785,7 +828,7 @@ protected:
 
 protected:
 /******************************************************************************
- *                           Private member fields                            *
+ *                           Protected member fields                            *
  ******************************************************************************/
 
   /* Queues of pending MPI operations (MPI_Requests)
@@ -869,6 +912,10 @@ protected:
 
   /// The MPI Communicator rank
   int commRank;
+
+  /// id of the epochs.  aka the periods between barrier/synchronization.
+  int epoch;
+
 };
 
 const int CommunicationLayer::CONTROL_TAG;

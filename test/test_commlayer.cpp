@@ -193,11 +193,12 @@ int main(int argc, char *argv[])
   MPI_Comm_rank(comm, &rank);
 
   /* code */
+  {
   Tester tester(comm, p);
   tester.test_comm_layer(10);
 
   MPI_Barrier(comm);
-
+  }
   // finalize MPI
   MPI_Finalize();
   return 0;
