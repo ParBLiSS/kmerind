@@ -94,8 +94,8 @@ namespace bliss
             : start(other.start), end(other.end), overlap(other.overlap)
         {}
 
-        ////// move constructor and move assignment operator
-        ///  NOTE: these are NOT defined because they would take more ops than the copy constructor/assignment operator.
+        //============= move constructor and move assignment operator
+        //  NOTE: these are NOT defined because they would take more ops than the copy constructor/assignment operator.
 
 
         /**

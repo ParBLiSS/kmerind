@@ -343,7 +343,7 @@ public:
       return;
     }
 
-    INFOF("FLUSHing tag %d.", tag);
+    INFOF("FLUSHing tag %d, epoch %d", tag, epoch);
 
 
     // flush all buffers (put them into send queue)
@@ -383,7 +383,7 @@ public:
     }
 
 
-    INFOF("FINISHing tag %d.", tag);
+    INFOF("FINISHing tag %d, epoch %d", tag, epoch);
 
     /// mark as no more coming in for this tag.  ONE THREAD ONLY modifies this.
     sendAccept.erase(tag);
@@ -519,7 +519,7 @@ protected:
       // send end tags in circular fashion, send tag to self last
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 
-      DEBUGF("Rank %d sendEndTags target_rank = %d ", commRank, target_rank );
+      DEBUGF("Rank %d sendEndTags %d epoch %d target_rank = %d ", commRank, tag, epoch, target_rank );
 
       // send the end message for this tag.
       if (!sendQueue.waitAndPush(std::move(SendQueueElement(BufferPoolType::INVALID, tag, target_rank)))) {
@@ -547,7 +547,7 @@ protected:
     } else {
       throw bliss::io::IOException("ERROR: waitForEndTags called but currently flushing a different tag.");
     }
-    DEBUGF("Rank %d WAITED FOR END TAG.  flushing= %d, tag= %d", commRank, flushing.load(), tag);
+    DEBUGF("Rank %d WAITED FOR END TAG.  flushing= %d, tag= %d, epoch = %d", commRank, flushing.load(), tag, epoch);
     ++epoch;
   }
 
@@ -787,9 +787,8 @@ protected:
 
           // termination message
           --recvRemaining.at(epoch);
-          DEBUGF("RECV rank %d receiving END signal %d from %d, num senders remaining is %d",
-                 commRank, tag, front.second.src,
-              recvRemaining.at(epoch));
+          DEBUGF("RECV rank %d receiving END signal tag %d epoch %d from %d, num senders remaining is %d",
+                 commRank, tag, epoch, front.second.src, recvRemaining.at(epoch));
 
           if (recvRemaining.at(epoch) == 0) {
             // received all end messages.  there may still be messages in
@@ -804,7 +803,7 @@ protected:
             }
 
           } else if (recvRemaining.at(epoch) < 0) {
-            ERRORF("ERROR: number of remaining receivers for tag %d is now NEGATIVE", tag);
+            ERRORF("ERROR: number of remaining receivers for tag %d epoch %d is now NEGATIVE", tag, epoch);
           }
         } else {
         // add the received messages into the recvQueue

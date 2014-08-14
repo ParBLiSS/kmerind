@@ -54,7 +54,7 @@ namespace bliss
           KmerIndexPairType kmer;
 //          int kmerCount = 0;
 
-          int tid = omp_get_thread_num();
+//          int tid = omp_get_thread_num();
 
           // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
           int i = 0;
@@ -63,8 +63,8 @@ namespace bliss
 
           for (; start != end; ++start, ++i)
           {
-
-            index.insert(*start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
+            kmer = *start;
+            index.insert(kmer.);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
                                   // then copy assign
 
             // some debugging output

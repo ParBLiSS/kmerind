@@ -1,8 +1,8 @@
 /**
  * @file		concurrent.hpp
- * @ingroup
+ * @ingroup bliss::concurrent
  * @author	tpan
- * @brief
+ * @brief   this file contains predefined constants for concurrency and thread safety
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -15,10 +15,14 @@
 namespace bliss {
   namespace concurrent {
 
+    /// Type for indicating Thread Safety.
     typedef bool ThreadSafety;
-    constexpr bool THREAD_SAFE = true;
-    constexpr bool THREAD_UNSAFE = false;
 
+    /// Constant indicating Thread Safe
+    constexpr bool THREAD_SAFE = true;
+
+    /// Constant indicating Thread Unsafe
+    constexpr bool THREAD_UNSAFE = false;
 
   }
 }

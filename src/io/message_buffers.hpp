@@ -1,6 +1,6 @@
 /**
  * @file		MessageBuffers.hpp
- * @ingroup
+ * @ingroup bliss::io
  * @author	tpan
  * @brief   MessageBuffers base class and SendMessageBuffers subclass for buffering data for MPI send/receive
  * @details SendMessageBuffers is a collection of in-memory Buffers that containing data that
@@ -52,33 +52,28 @@ namespace bliss
   {
 
     /**
-     * @class			bliss::io::MessageBuffers
+     * @class			MessageBuffers
      * @brief     a data structure to buffering/batching messages for communication
      * @details   Templated base class for a collection of buffers that are used for communication.
      *
-     *            Templated to support thread safe and unsafe operations
      *
-     *            The class contains a BufferPool, which contains an array of Buffer objects for in-memory storage.
+     *            The class contains a BufferPool, which contains an array of reusable Buffer objects for in-memory storage.
      *
+     * @tparam ThreadSafety   Indicates whether the class should be thread safe or not.
      */
     template<bliss::concurrent::ThreadSafety ThreadSafety>
     class MessageBuffers
     {
         // TODO: move consturctor and assignment operator to copy between thread safety levels.
       protected:
-        /**
-         * Internal BufferPool Type.  typedefed only to shorten the usage.
-         */
+
+        /// Internal BufferPool Type.  typedefed only to shorten the usage.
         typedef typename bliss::io::BufferPool<ThreadSafety>  BufferPoolType;
 
-        /**
-         * IdType of a Buffer, aliased from BufferPool
-         */
+        /// IdType of a Buffer, aliased from BufferPool
         typedef typename BufferPoolType::IdType    BufferIdType;
 
-        /**
-         * a pool of in-memory Buffers for storage.
-         */
+        /// a pool of in-memory Buffers for storage.
         BufferPoolType pool;
 
         /**
@@ -90,9 +85,8 @@ namespace bliss
         }
 
         /**
-         * Protected so base class function is not called directly.
-         *
-         * Constructor.  creates a buffer given a specified per-buffer capacity, and the BufferPool capacity.
+         * @brief Constructor.  creates a buffer given a specified per-buffer capacity, and the BufferPool capacity.
+         * @note  Protected so base class function is not called directly.
          *
          * @param buffer_capacity   the Buffer's maximum capacity.  default to 8192.
          * @param pool_capacity     the BufferPool's capacity.  default to unlimited.
@@ -106,17 +100,17 @@ namespace bliss
         };
 
         /**
-         * Protected so base class function is not called directly.
+         * @brief default copy constructor.  deleted.  since internal BufferPool does not allow copy construction/assignment.
+         * @note Protected so base class function is not called directly.
          *
-         * default copy constructor.  deleted.  since internal BufferPool does not allow copy construction/assignment.
          * @param other     source MessageBuffers to copy from
          */
         explicit MessageBuffers(const MessageBuffers<ThreadSafety>& other) = delete;
 
         /**
-         * Protected so base class function is not called directly.
+         * @brief default copy assignment operator.  deleted.   since internal BufferPool does not allow copy construction/assignment.
+         * @note Protected so base class function is not called directly.
          *
-         * default copy assignment operator.  deleted.   since internal BufferPool does not allow copy construction/assignment.
          * @param other     source MessageBuffers to copy from
          * @return          self.
          */
@@ -124,18 +118,18 @@ namespace bliss
 
 
         /**
-         * Protected so base class function is not called directly.
+         * @brief default move constructor.
+         * @note Protected so base class function is not called directly.
          *
-         * default move constructor.
          * @param other     source MessageBuffers to move from
          */
         explicit MessageBuffers(MessageBuffers<ThreadSafety>&& other) : pool(std::move(other.pool)) {};
 
 
         /**
-         * Protected so base class function is not called directly.
+         * @brief default move assignment operator.
+         * @note Protected so base class function is not called directly.
          *
-         * default move assignment operator.
          * @param other     source MessageBuffers to move from
          * @return          self.
          */
@@ -147,12 +141,12 @@ namespace bliss
 
       public:
         /**
-         * default destructor
+         * @brief default destructor
          */
         virtual ~MessageBuffers() {};
 
         /**
-         * Accesses the Buffer object inside the BufferPool by BufferPool assigned Id
+         * @brief Accesses the Buffer object inside the BufferPool by BufferPool assigned Id
          * @param id      Id of the Buffer to be accessed.
          * @return        const reference to the Buffer object.
          */
@@ -162,9 +156,9 @@ namespace bliss
 
 
         /**
-         * Releases a Buffer by it's BufferPool id, after the buffer is no longer needed.
+         * @brief Releases a Buffer by it's BufferPool id, after the buffer is no longer needed.
          *
-         * This to be called after the communication logic is done with the Send or Recv buffer.
+         * @note  This to be called after the communication logic is done with the Send or Recv buffer.
          *
          * @param id    Buffer's id (assigned from BufferPool)
          */
@@ -173,7 +167,7 @@ namespace bliss
         }
 
         /**
-         * Convenience method to release and clear all current Buffers in the pool.
+         * @brief Convenience method to release and clear all current Buffers in the pool.
          */
         virtual void reset() {
           pool.reset();
@@ -183,57 +177,51 @@ namespace bliss
 
 
     /**
-     * SendMessageBuffers is a subclass of MessageBuffers designed to manage the actual buffering of data for a set of messaging targets.
+     * @class SendMessageBuffers
+     * @brief SendMessageBuffers is a subclass of MessageBuffers designed to manage the actual buffering of data for a set of messaging targets.
+     * @details
      *
-     * The class is designed with the following requirements in mind:
+     *  The class is designed with the following requirements in mind:
      *  1. data is destined for some remote process identifiable by a process id (e.g. rank)
      *  2. data is appended to buffer incrementally and with minimal blocking
-     *  3. calling thread has a mechanism to process a full buffer.
-     *  4. data is typed, but all data in a SendMessageBuffers are homogeneously typed.
+     *  3. calling thread has a mechanism to process a full buffer. e.g. send it
+     *  4. all data in a SendMessageBuffers are homogeneously typed.
      *
      *  The class is implemented to support the requirement:
-     *  1. SendMessageBuffers is not aware of its data type or metadata specifying its type.
+     *  1. SendMessageBuffers is not aware of its data's type or metadata specifying its type.
      *  2. SendMessageBuffers uses the base MessageBuffers class' internal BufferPool to reuse memory
      *  3. SendMessageBuffers stores a vector of Buffer Ids (as assigned from BufferPool), thus mapping from process Rank to BufferId.
      *  4. SendMessageBuffers provides an Append function to incrementally add data to the Buffer object for the targt process rank.
      *  5. When a particular buffer is full, return the Buffer Id to the calling thread for it to process (send), and swap in an empty
      *      Buffer from BufferPool.
      *
-     *
-     *  For Buffers that are full, the calling thread will need to track the Ids as this class evicts a full Buffer's id from it's
-     *    vector of Buffer Ids.  This can be done via a queue, as in the case of CommunicationLayer.
+     * @note
+     *  For Buffers that are full, the calling thread will need to track the full buffers' Ids as this class evicts a full Buffer's id from it's
+     *    vector of Buffer Ids.  The Calling Thread can do t his via a queue, as in the case of CommunicationLayer.
      *  Note that a Buffer is "in use" from the first call to the Buffer's append function to the completion of the send (e.g. via MPI Isend)
      *
+     *  @tparam ThreadSafety    determines if this class should be thread safe
      */
     template<bliss::concurrent::ThreadSafety ThreadSafety>
     class SendMessageBuffers : public MessageBuffers<ThreadSafety>
     {
       public:
-        /**
-         * Id type of the Buffers
-         */
+        /// Id type of the Buffers
         using BufferIdType = typename MessageBuffers<ThreadSafety>::BufferIdType;
 
-        /**
-         * the BufferPoolType from parent class
-         */
+        /// the BufferPoolType from parent class
         using BufferPoolType = typename MessageBuffers<ThreadSafety>::BufferPoolType;
 
       protected:
-        /**
-         * Id type of the Buffers, but here depending on the specified ThreadSafety template parameter,
-         * either BufferIdType or atomic version of BufferIdType
-         */
+        /// Id type of the Buffers, but here depending on the specified ThreadSafety template parameter, either BufferIdType or atomic version of BufferIdType
         typedef typename std::conditional<ThreadSafety, std::atomic<BufferIdType>, BufferIdType>::type   IdType;
 
-        /**
-         * Vector of IdType (atomic or not).  Provides a mapping from process id (0 to vector size), to buffer Ids (from BufferPool)
-         */
+        /// Vector of IdType (atomic or not).  Provides a mapping from process id (0 to vector size), to buffer Ids (from BufferPool)
         std::vector< IdType > bufferIds;
 
       public:
         /**
-         * Constructor.
+         * @brief Constructor.
          * @param numDests         The number of messaging targets/destinations
          * @param bufferCapacity   The capacity of the individual buffers.  default 8192.
          * @param poolCapacity     The capacity of the pool.  default unbounded.
@@ -241,17 +229,17 @@ namespace bliss
         explicit SendMessageBuffers(const int & numDests, const size_t & bufferCapacity = 8192, const BufferIdType & poolCapacity = std::numeric_limits<BufferIdType>::max()) :
           MessageBuffers<ThreadSafety>(bufferCapacity, poolCapacity), bufferIds(numDests)
         {
-          /// initialize the bufferIds, acquiring them from the pool by calling reset.
+          //== initialize the bufferIds, acquiring them from the pool by calling reset.
           this->reset();
         };
 
         /**
-         * Default constructor, deleted
+         * @brief Default constructor, deleted
          */
         SendMessageBuffers() :  MessageBuffers<ThreadSafety>() {};
 
         /**
-         * default copy constructor.  deleted.
+         * @brief default copy constructor.  deleted.
          * @param other   source SendMessageBuffers to copy from.
          */
         explicit SendMessageBuffers(const SendMessageBuffers<ThreadSafety> &other) = delete;
@@ -264,7 +252,7 @@ namespace bliss
             MessageBuffers<ThreadSafety>(std::move(other)), bufferIds(std::move(other.bufferIds)) {};
 
         /**
-         * default copy assignment operator, deleted.
+         * @brief default copy assignment operator, deleted.
          * @param other   source SendMessageBuffers to copy from.
          * @return        self
          */
@@ -272,7 +260,7 @@ namespace bliss
 
 
         /**
-         * default move assignment operator.
+         * @brief default move assignment operator.
          * @param other   source SendMessageBuffers to move from.
          * @return        self
          */
@@ -283,12 +271,12 @@ namespace bliss
         }
 
         /**
-         * default destructor
+         * @brief default destructor
          */
         virtual ~SendMessageBuffers() {};
 
         /**
-         * get the number of buffers.  should be same as number of targets for messages
+         * @brief get the number of buffers.  should be same as number of targets for messages
          * @return    number of buffers
          */
         const size_t getSize() const {
@@ -296,8 +284,8 @@ namespace bliss
         }
 
         /**
-         * get the BufferId that a messaging target max to.
-         * for simplicity, not distinguishing between thread safe and unsafe versions
+         * @brief get the BufferId that a messaging target max to.
+         * @details for simplicity, not distinguishing between thread safe and unsafe versions
          *
          * @param idx   the target id for the messages.
          * @return      the buffer id that the target id maps to.
@@ -307,7 +295,7 @@ namespace bliss
         }
 
         /**
-         * get the list of active Buffer ids.  (for debugging)
+         * @brief get the list of active Buffer ids.  (for debugging)
          * @return  vector containing the active Buffer ids.
          */
         const std::vector<IdType>& getBufferIds() const {
@@ -315,7 +303,7 @@ namespace bliss
         }
 
         /**
-         * convenience method to convert the list of Active Buffer Ids to string.  (for debugging)
+         * @brief convenience method to convert the list of Active Buffer Ids to string.  (for debugging)
          * @return   string with list of active Buffer Ids
          */
         const std::string bufferIdsToString() const {
@@ -327,8 +315,7 @@ namespace bliss
         }
 
         /**
-         * Reset the current MessageBuffers instance by first clearing its list of Buffer Ids, then repopulate it from
-         * the pool.
+         * @brief Reset the current MessageBuffers instance by first clearing its list of Buffer Ids, then repopulate it from the pool.
          */
         virtual void reset() {
           MessageBuffers<ThreadSafety>::reset();
@@ -338,16 +325,20 @@ namespace bliss
         }
 
         /**
-         * Appends data to the target message buffer.   internally will try to swap in a new buffer when full, and notify the caller of the full buffer's id.
+         * @brief Appends data to the target message buffer.
+         * @details   internally will try to swap in a new buffer when full, and notify the caller of the full buffer's id.
          * need to return 2 things:
-         *  success/failure of current insert
-         *  indicator that there is a full buffer (the full buffer's id).
+         *  1. success/failure of current insert
+         *  2. indicator that there is a full buffer (the full buffer's id).
          *
-         *  table of values and compare exchange behavior (called when a buffer if full and an empty buffer is swapped in.)
-         *  targetBufferId is obtained outside of CAS, so when CAS is called, bufferIds[dest] may be different already  (on left side)
+         * Notes:
+         *  on left side -
+         *    targetBufferId is obtained outside of CAS, so when CAS is called to update bufferIds[dest], it may be different already  (on left side)
+         *  on right side -
          *  fullBufferId and bufferId[dest] are set atomically, but newTargetBufferId is obtained outside of CAS, so the id of the TargetBufferId
          *  may be more up to date than the CAS function results, which is okay.  Note that a fullBuffer will be marked as blocked to prevent further append.
          *
+         * Table of values and compare exchange behavior (called when a buffer if full and an empty buffer is swapped in.)
          *  targetBufferId,     bufferIds[dest],    newBufferId (from pool) ->  fullBufferId,     bufferId[dest],   newTargetBufferId
          *  x                   x                   y                           x                 y                 y
          *  x                   x                   -1                          x                 -1                -1
@@ -367,32 +358,32 @@ namespace bliss
          * @return            std::pair containing the status of the append (boolean success/fail), and the id of a full buffer if there is one.
          */
         std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &targetProc) {
-          /// if count is 0, no write and this succeeds right away.
+          //== if count is 0, no write and this succeeds right away.
           if (count == 0)
             return std::pair<bool, BufferIdType>(true, BufferPoolType::INVALID);
 
-          /// if there is not enough room for the new data in even a new buffer, LOGIC ERROR IN CODE: throw exception
+          //== if there is not enough room for the new data in even a new buffer, LOGIC ERROR IN CODE: throw exception
           if (count > this->getBufferCapacity()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with count exceeding Buffer capacity"));
           }
 
-          /// if targetProc is outside the valid range, throw an error
+          //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
 
-          /// if data being set is null, throw error
+          //== if data being set is null, throw error
           if (data == nullptr) {
             throw (std::invalid_argument("ERROR: calling MessageBuffer append with nullptr"));
           }
 
-          /// default fullBufferId return value.
+          //== default fullBufferId return value.
           BufferIdType fullBufferId = BufferPoolType::INVALID;
 
-          /// get the current Buffer's Id
+          //== get the current Buffer's Id
           BufferIdType targetBufferId = getBufferId(targetProc);
 
-          /// if targetBufferId is an invalid buffer, or if new data can't fit, need to replace bufferIds[dest]
+          //== if targetBufferId is an invalid buffer, or if new data can't fit, need to replace bufferIds[dest]
           if ((targetBufferId == BufferPoolType::INVALID) ||
               this->pool[targetBufferId].getSize() > (this->getBufferCapacity() - count)) {
             // at this point, the local variables may be out of date already, and targetBufferId may already marked as full.
@@ -416,37 +407,38 @@ namespace bliss
 
       protected:
         /**
-         * Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
-         * The new buffer may be BufferPoolType::INVALID (invalid buffer, when there is no available Buffer from pool)
+         * @brief  Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
+         * @details The new buffer may be BufferPoolType::INVALID (invalid buffer, when there is no available Buffer from pool)
          *
-         * effect:  bufferIds[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
+         * Effect:  bufferIds[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
          *
-         * THREAD SAFE.   Uses std::compare_exchange_strong to ensure that another thread hasn't swapped in a new Empty one already.
+         * This is the THREAD SAFE version.   Uses std::compare_exchange_strong to ensure that another thread hasn't swapped in a new Empty one already.
          *
-         * NOTE: we make the caller get the new BufferIds[dest] directly instead of returning by reference in the method parameter variable
+         * @note we make the caller get the new BufferIds[dest] directly instead of returning by reference in the method parameter variable
          *  because this way there is less of a chance of race condition if a shared "old" variable was accidentally used.
          *    and the caller will likely prefer the most up to date bufferIds[dest] anyway.
          *
+         * @tparam        used to choose thread safe vs not verfsion of the method.
          * @param dest    position in BufferIds array to swap out
          * @return        the BufferId that was swapped out.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<TS, BufferIdType>::type swapInEmptyBuffer(const int& dest, const BufferIdType& old) {
 
-          /// get a new buffer and try to replace the existing.
+          //== get a new buffer and try to replace the existing.
           auto newBuffer = this->pool.tryAcquireBuffer();
 
           bool hasNewBuffer = newBuffer.first;
           BufferIdType newBufferId = newBuffer.second;               // if acquire fails, we have BufferPoolType::INVALID here.
           BufferIdType targetBufferId = old;
 
-          /// now try to set the bufferIds[dest] to the new buffer id (valid, or BufferPoolType::INVALID if can't get a new one)
+          //== now try to set the bufferIds[dest] to the new buffer id (valid, or BufferPoolType::INVALID if can't get a new one)
           // again, targetBufferId is BufferPoolType::INVALID or pointing to a full buffer.
           // use compare_exchange to ensure we only replace if bufferIds[dest] is still targetBufferId (no other thread has changed it)
           if (bufferIds[dest].compare_exchange_strong(targetBufferId, newBufferId, std::memory_order_acq_rel)) {
             // successful exchange.  bufferIds[dest] now has newBufferId value (will be accessed by caller). targetBufferId still has old value (full buffer, to be returned)
 
-            /// block the old buffer.
+            //== block the old buffer.
             if (old != BufferPoolType::INVALID) this->pool[old].block();
 
             return old;   // value could be full buffer, or could be BufferPoolType::INVALID.
@@ -466,17 +458,18 @@ namespace bliss
 
 
         /**
-         * Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
-         * The new buffer may be BufferPoolType::INVALID (invalid buffer, when there is no available Buffer from pool)
+         * @brief Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
+         * @details The new buffer may be BufferPoolType::INVALID (invalid buffer, when there is no available Buffer from pool)
          *
          * effect:  bufferIds[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
          *
-         * THREAD UNSAFE.
+         * this is the THREAD UNSAFE version
 
-         * NOTE: we make the caller get the new BufferIds[dest] directly instead of returning by reference in the method parameter variable
+         * @note we make the caller get the new BufferIds[dest] directly instead of returning by reference in the method parameter variable
          *  because this way there is less of a chance of race condition if a shared "old" variable was accidentally used.
          *    and the caller will likely prefer the most up to date bufferIds[dest] anyway.
          *
+         * @tparam TS     used to choose thread safe vs not verfsion of the method.
          * @param dest    position in BufferIds array to swap out
          * @return        the BufferId that was swapped out.
          */
@@ -484,10 +477,10 @@ namespace bliss
         typename std::enable_if<!TS, BufferIdType>::type swapInEmptyBuffer(const int& dest, const BufferIdType& old) {
 
 
-          /// get a new buffer to replace the existing.  set it whether tryAcquire succeeds or fails (id = BufferPoolType::INVALID)
+          //== get a new buffer to replace the existing.  set it whether tryAcquire succeeds or fails (id = BufferPoolType::INVALID)
           bufferIds[dest] = this->pool.tryAcquireBuffer().second;
 
-          /// blocks the old buffer
+          //== blocks the old buffer
           if (old != BufferPoolType::INVALID) this->pool[old].block();
 
           return old;

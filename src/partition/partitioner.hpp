@@ -37,11 +37,11 @@ namespace bliss
      *            Simple types (essentially functinoids), use default copy constructor and assignment operator.  no need to move versions.
      *            uses the Curiously Recursive Template Pattern to enforce consistent API from base to derived classes and to provide a path
      *            for deriving new classes
-
+     *
      *            uses default constructor, copy constructor, and move constructor.
      *
      *            Works for continuous value ranges.
-
+     *
      *            Partitioners are designed for multithreaded usage.  For Block and Cyclic partitioners, the chunks are computed
      *            independent of other threads.  For DemandDriven partitioner, the chunks are computed using atomc operation to provide
      *            memory fence/synchronization.
@@ -505,27 +505,27 @@ namespace bliss
          * @brief       get the next chunk in the partition.  for CyclickPartition, keep getting until done.
          * @details     each call to this function gets the next chunk belonging to this partition.
          *              for cyclicPartitioner, the chunks are separated by chunkSize * nPartitions
+         * @note        if nChunks < nPartitions, then each partId will only get a chunk once.
+         *                in that case, if partId is >= nChunks, then end is returned.
          * @param partId   partition id for the sub range.
-         * @return      range of the partition
+         * @return      range of the partition.  if no more, return "end", which has start and end position set to end.
          */
         inline Range& getNextImpl(const size_t& partId) {
 
-          /// if nChunks < nPartitions, then each partId will only get a chunk once.
-          // in that case, if partId is >= nChunks, then end is returned.
+          // if nChunks < nPartitions, then each partId will only get a chunk once.
           if (partId >= nChunks) return this->end;
 
           // if this partition is done, return the last entry (end)
           if (state[partId] == AFTER)  return this->end;
 
-          /// first iteration, use initialized value
+          //== first iteration, use initialized value
           if (state[partId] == BEFORE) {
             state[partId] = DURING;
             return curr[partId];
           }
           // else not the first and not last, so increment.
 
-         /// comparing to amount of available range and set the start, end, overlap - trying to avoid data type overflow.
-
+         //== comparing to amount of available range and set the start, end, overlap - trying to avoid data type overflow.
           if (this->src.end - curr[partId].end > stride) {
             // has room.  so shift  starting and end position by stride length
             curr[partId].start += stride;
@@ -704,7 +704,7 @@ namespace bliss
           // call internal function (so integral and floating point types are handled properly)
           RangeValueType s = getNextOffset<ChunkSizeType>();
 
-          /// identify the location in array to store the result
+          //== identify the location in array to store the result
           // first get the id of the chunk we are returning.
           size_t id = chunkId.fetch_add(1, std::memory_order_acq_rel);
           // if there are more partitions than chunks, then the array represents mapping from chunkId to subrange

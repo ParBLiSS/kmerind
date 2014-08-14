@@ -1,6 +1,6 @@
 /**
  * @file		Buffer.hpp
- * @ingroup
+ * @ingroup bliss::io
  * @author	tpan
  * @brief   fixed sized memory buffer declaration and implementations.
  * @details templated memory buffer classes with fixed sized byte array for storage, including thread safe and thread unsafe declarations and implementations.
@@ -31,10 +31,8 @@ namespace bliss
   {
 
     /**
-     * Thread safe/unsafe Memory Buffer, which is a fixed size allocated block of memory where data
-     * can be appended to, and read from via pointer.
-     *
-     * It uses unique_ptr internally to manage the memory, and supports only MOVE semantics.
+     * @brief Thread safe/unsafe Memory Buffer, which is a fixed size allocated block of memory where data can be appended to, and read from via pointer.
+     * @details this class uses unique_ptr internally to manage the memory, and supports only MOVE semantics.
      *
      * Thread Safety is enforced using atomic variables - writing to offsets that are atomically computed.
      * Memory ordering uses acquire/consume and release, and avoids seq_cst.
@@ -43,7 +41,7 @@ namespace bliss
      * See append function for information about why mutex lock is needed.
      *
      * thread-safe and thread-unsafe versions can be move constructed/assigned from each other.
-     *
+     * @tparam  ThreadSafety  controls whether this class is thread safe or not
      */
     template<bliss::concurrent::ThreadSafety ThreadSafety>
     class Buffer
@@ -57,43 +55,43 @@ namespace bliss
       friend class Buffer<!ThreadSafety>;
 
       public:
-        /**
-         * type of internal data pointer.
-         */
+        /// type of internal data pointer.
         typedef std::unique_ptr<uint8_t[], std::default_delete<uint8_t[]> >  DataType;
 
 
       protected:
 
-        /**
-         * maximum capacity
-         */
+        /// maximum capacity
         size_t capacity;
 
         /**
-         * current occupied size of the buffer
+         * @brief current occupied size of the buffer
+         * @details depending on thread safety, either an atomic or a raw data type.
          *
-         * depending on thread safety, either an atomic or a raw data type.
-         *
-         * mutable so a const Buffer object can still call append and modify the internal. (conceptually, size and data are constant members of the Buffer)
+         * @note mutable so a const Buffer object can still call append and modify the internal. (conceptually, size and data are constant members of the Buffer)
          */
         mutable typename std::conditional<ThreadSafety, std::atomic<size_t>, size_t>::type size;
+
+        /**
+         * @brief indicating whether the buffer is accepting data or not.
+         * @details depending on thread safety, either an atomic or a raw data type.
+         *          this is useful when swapping buffers in bufferPool or in MessageBuffers classes.
+         *
+         * @note mutable so a const Buffer object can still call append and modify the internal. (conceptually, size and data are constant members of the Buffer)
+         */
         mutable typename std::conditional<ThreadSafety, std::atomic<bool>, bool>::type blocked;
 
-        /**
-         * internal data storage
-         */
+        /// internal data storage
         DataType data;
 
-        /**
-         * mutex for locking access to the buffer.  available in thread safe and unsafe versions.
-         */
+        /// mutex for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
         mutable std::mutex mutex;
 
       private:
         /**
-         * Move constructor with a mutex lock on the move source object.  This constructor is private and only use as constructor delegation target.
-         * the source object is locked before this function is called and data moved to the newly constructed object.
+         * @brief Move constructor with a mutex lock on the source object.
+         * @details This constructor is private and only use as constructor delegation target.
+         *  the source object is locked before this function is called and data moved to the newly constructed object.
          * This version copies between 2 objects with the SAME thread safety.
          *
          * @param other   the source Buffer
@@ -109,7 +107,8 @@ namespace bliss
         };
 
         /**
-         * Move constructor with a mutex lock on the move source object.  This constructor is private and only use as constructor delegation target.
+         * @brief Move constructor with a mutex lock on the move source object.
+         * @details  This constructor is private and only use as constructor delegation target.
          * the source object is locked before this function is called and data moved to the newly constructed object.
          * This version copies between 2 objects with the DIFFERENT thread safety.
          *
@@ -120,7 +119,7 @@ namespace bliss
 
       public:
         /**
-         * Normal constructor.  Allocate and initialize memory with size specified as parameter.
+         * @brief Normal constructor.  Allocate and initialize memory with size specified as parameter.
          * @param _capacity   The maximum capacity of the Buffer in bytes
          */
         explicit Buffer(const size_t _capacity) : capacity(_capacity), size(0), blocked(false), data(new uint8_t[_capacity])
@@ -132,7 +131,7 @@ namespace bliss
         };
 
         /**
-         * Create a new Buffer using the memory specified along with allocated memory's size.
+         * @brief reate a new Buffer using the memory specified along with allocated memory's size.
          * @param _data   The pointer/address of preallocated memory block
          * @param count   The size of preallocated memory block
          */
@@ -144,36 +143,37 @@ namespace bliss
         }
 
         /**
-         * Destructor.  deallocation of memory is automatic.
+         * @brief Destructor.  deallocation of memory is automatic.
          */
         virtual ~Buffer() {};
 
         /**
-         * Move constructor.  internal data memory moved by std::unique_ptr semantics.
+         * @brief Move constructs from a Buffer with the SAME ThreadSafety property
+         * @details  internal data memory moved by std::unique_ptr semantics.
          * Thread Safe always, using approach from http://www.justsoftwaresolutions.co.uk/threading/thread-safe-copy-constructors.html
          *
          * Constructs a mutex lock and then delegates to another constructor.
-         * Move constructs from a Buffer with the SAME ThreadSafety property
+         *
          *
          * @param other   Source object to move
          */
         explicit Buffer(Buffer<ThreadSafety>&& other) : Buffer<ThreadSafety>(std::move(other), std::lock_guard<std::mutex>(other.mutex) ) {};
+
         /**
-         * Move constructor.  internal data memory moved by std::unique_ptr semantics.
+         * @brief Move constructs from a Buffer with the DIFFERENT ThreadSafety property
+         * @details internal data memory moved by std::unique_ptr semantics.
          * Thread Safe always, using approach from http://www.justsoftwaresolutions.co.uk/threading/thread-safe-copy-constructors.html
          *
          * Constructs a mutex lock and then delegates to another constructor.
-         * Move constructs from a Buffer with the DIFFERENT ThreadSafety property
          *
          * @param other   Source object to move
          */
         explicit Buffer(Buffer<!ThreadSafety>&& other) : Buffer<ThreadSafety>(std::move(other), std::lock_guard<std::mutex>(other.mutex) ) {};
 
         /**
-         * Move assignment operator.  Internal data memory moved by std::unique_ptr semantics.
+         * @brief Move assignment operator, between Buffers of the SAME ThreadSafety property.
+         * @details  Internal data memory moved by std::unique_ptr semantics.
          * The move is done in a thread safe way always.
-         *
-         * This version moves between Buffers of the SAME ThreadSafety property
          *
          * @param other     Source Buffer to move
          * @return          target Buffer reference
@@ -200,10 +200,9 @@ namespace bliss
         }
 
         /**
-         * Move assignment operator.  Internal data memory moved by std::unique_ptr semantics.
+         * @brief Move assignment operator between Buffers of the DIFFERENT ThreadSafety property.
+         * @details  Internal data memory moved by std::unique_ptr semantics.
          * The move is done in a thread safe way always.
-         *
-         * This version moves between Buffers of the DIFFERENT ThreadSafety property
          *
          * @param other     Source Buffer to move
          * @return          target Buffer reference
@@ -213,19 +212,23 @@ namespace bliss
 
         /// remove copy constructor and copy assignement operators.
         explicit Buffer(const Buffer<ThreadSafety>& other) = delete;
+        /// remove copy constructor and copy assignement operators.
         Buffer<ThreadSafety>& operator=(const Buffer<ThreadSafety>& other) = delete;
 
 
         /**
-         * get the current size of the Buffer.
+         * @brief get the current size of the Buffer.
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          * @return    current size
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<TS, const size_t>::type getSize() const {
           return size.load(std::memory_order_consume);
         }
+
         /**
-         * get the current size of the Buffer.
+         * @brief get the current size of the Buffer.
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          * @return    current size
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
@@ -234,7 +237,8 @@ namespace bliss
         }
 
         /**
-         * get the status of whether buffer is accepting new appends
+         * @brief get the status of whether buffer is accepting new appends
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          * @return    true if buffer is NOT accepting more data
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
@@ -242,7 +246,8 @@ namespace bliss
           return blocked.load(std::memory_order_consume);
         }
         /**
-         * get the status of whether buffer is accepting new appends
+         * @brief get the status of whether buffer is accepting new appends
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          * @return    true if buffer is NOT accepting more data
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
@@ -250,14 +255,16 @@ namespace bliss
           return blocked;
         }
         /**
-         * block the buffer from accepting more data.
+         * @brief block the buffer from accepting more data.
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<TS, void>::type block() const {
           blocked.store(true, std::memory_order_release);
         }
         /**
-         * block the buffer from accepting more data.
+         * @brief block the buffer from accepting more data.
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, void>::type block() const {
@@ -266,14 +273,16 @@ namespace bliss
 
       protected:
         /**
-         * unblock the buffer to accept more data.
+         * @brief unblock the buffer to accept more data.
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<TS, void>::type unblock() const {
           blocked.store(false, std::memory_order_release);
         }
         /**
-         * unblock the buffer to accept more data.
+         * @brief unblock the buffer to accept more data.
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, void>::type unblock() const {
@@ -282,7 +291,7 @@ namespace bliss
 
       public:
         /**
-         * get the capacity of the buffer.
+         * @brief get the capacity of the buffer.
          * @return    maximum capacity of buffer.
          */
         const size_t & getCapacity() const {
@@ -290,10 +299,12 @@ namespace bliss
         }
 
         /**
-         * Get a pointer to the buffer data memory block.
+         * @brief Get a pointer to the buffer data memory block.
          *
-         * Note that the data should not be deleted by a calling function/thread.
+         * @note the data should not be deleted by a calling function/thread.
          * The access is read only.  There is no reason to return the unique_ptr.
+         *
+         * const because the caller will have a const reference to the buffer
          */
         const void* getData() const {
           return data.get();
@@ -301,8 +312,8 @@ namespace bliss
 
 
         /**
-         * Clears the buffer. (set the size to 0, leaving the capacity and the memory allocation intact)
-         *
+         * @brief Clears the buffer. (set the size to 0, leaving the capacity and the memory allocation intact)
+         * @note
          * const because the caller will have a const reference to the buffer.
          */
         void clear() const {
@@ -311,9 +322,9 @@ namespace bliss
         }
 
         /**
-         * Checks if a buffer is full.
-         * The return value is not precise - between getSize and return, other threads may have modified the size.
-         * For "isFull" error is infrequent.
+         * @brief Checks if a buffer is full.
+         * @note The return value is not precise - between getSize and return, other threads may have modified the size.
+         *  For "isFull" error is infrequent.
          *
          * @return    true if the buffer is full, false otherwise.
          */
@@ -322,8 +333,8 @@ namespace bliss
         }
 
         /**
-         * Checks if a buffer is empty.
-         * The return value is not precise - between getSize and return, other threads may have modified the size.
+         * @brief Checks if a buffer is empty.
+         * @note The return value is not precise - between getSize and return, other threads may have modified the size.
          * For "isEmpty" error is infrequent.
          *
          * @return    true if the buffer is empty, false otherwise.
@@ -334,8 +345,9 @@ namespace bliss
 
 
         /**
-         * Append data to the buffer.  The function updates the current occupied size of the Buffer
-         * and memcopies the supplied data into the internal memory block.
+         * @brief Append data to the buffer, THREAD SAFE.
+         * @details The function updates the current occupied size of the Buffer
+         *  and memcopies the supplied data into the internal memory block.
          *
          *  This is the THREAD SAFE version using MUTEX LOCK.
          *
@@ -357,6 +369,7 @@ namespace bliss
          * To avoid this situation, this set of calls has to be locked with mutex (else we need to use CAS in a loop)
          *
          *
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          * @param[in] _data   pointer to data to be copied into the Buffer
          * @param[in] count   number of bytes to be copied into the Buffer
          * @return            bool indicated whether operation succeeded.
@@ -382,7 +395,8 @@ namespace bliss
         }
 
         /**
-         * Append data to the buffer.  The function updates the current occupied size of the Buffer
+         * @brief Append data to the buffer, THREAD UNSAFE.
+         * @details  The function updates the current occupied size of the Buffer
          * and memcopies the supplied data into the internal memory block.
          *
          *  This is the THREAD UNSAFE version.
@@ -391,6 +405,7 @@ namespace bliss
          *
          * method is const because the caller will have const reference to the Buffer.
          *
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          * @param[in] _data   pointer to data to be copied into the Buffer
          * @param[in] count   number of bytes to be copied into the Buffer
          * @return            bool indicated whether operation succeeded.
@@ -410,7 +425,8 @@ namespace bliss
         }
 
         /**
-         * Append data to the buffer.  The function updates the current occupied size of the Buffer
+         * @brief Append data to the buffer, THREAD SAFE.
+         * @details  The function updates the current occupied size of the Buffer
          * and memcopies the supplied data into the internal memory block.
          *
          * This is the THREAD SAFE version using Compare And Swap operation in a loop, lookfree.
@@ -424,6 +440,7 @@ namespace bliss
          * NOTE: we can't use memory ordering alone.  WE have to lock with a mutex or use CAS in a loop
          * See Thread Safe "append" method documentation for rationale.
          *
+         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          * @param[in] _data   pointer to data to be copied into the Buffer
          * @param[in] count   number of bytes to be copied into the Buffer
          * @return            bool indicated whether operation succeeded.
@@ -463,6 +480,7 @@ namespace bliss
       other.capacity = 0;
       other.data = nullptr;
     };
+
     /*
      * move constructor, safe buffer to unsafe buffer
      */
@@ -499,6 +517,7 @@ namespace bliss
       }
       return *this;
     }
+
     /*
      * move constructor, safe buffer to unsafe buffer
      */

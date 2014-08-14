@@ -357,24 +357,25 @@ int main(int argc, char** argv) {
   }
   MPI_Barrier(comm);
 
-//  {  // scoped to ensure index is deleted before MPI_Finalize()
-//    CountIndexType index(comm, groupSize);
-//    //index.setLooupAnswerCallback(std::function<void(std::pair<KmerType, std::vector<KmerIndexValueType> >&)>(&callback));
-//
-//
-//    /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-//    RunTask<KmerCountComputeType, CountIndexType> t;
-//    t(filename, index, comm, nthreads, chunkSize);
-//
-//    printf("MPI number of entries in index for rank %d is %lu\n", id, index.local_size());
-//
-//
-//
-//    //// query:  use the same file as input.  walk through and generate kmers as before.  send query
-//
-//  }
-//
-//  MPI_Barrier(comm);
+  {  // scoped to ensure index is deleted before MPI_Finalize()
+    CountIndexType index(comm, groupSize);
+    //index.setLooupAnswerCallback(std::function<void(std::pair<KmerType, std::vector<sKmerIndexValueType> >&)>(&callback));
+
+
+    /////////////// start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+    RunTask<KmerCountComputeType, CountIndexType> t;
+    t(filename, index, comm, nthreads, chunkSize);
+
+    printf("MPI number of entries in index for rank %d is %lu\n", id, index.local_size());
+
+    // TODO:  need to change how kmer indices returned from iterator.  do NOT compute the key as revcomp ^ kmer - let map do it.
+    // TODO:  need consistent interface for returning from iterator when there are additional information besides kmer.
+
+    //// query:  use the same file as input.  walk through and generate kmers as before.  send query
+
+  }
+
+  MPI_Barrier(comm);
 
   //////////////  clean up MPI.
   MPI_Finalize();

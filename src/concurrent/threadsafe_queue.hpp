@@ -45,37 +45,30 @@ namespace bliss
     class ThreadSafeQueue
     {
       protected:
-        /**
-         * mutex for locking access to the queue
-         */
+
+        /// mutex for locking access to the queue
         mutable std::mutex mutex;
-        /**
-         * condition variable for event notification.  specifically, for unblocking the waitAndPop calls (queue transitions from empty to not-empty)
-         */
+
+        /// condition variable for event notification.  specifically, for unblocking the waitAndPop calls (queue transitions from empty to not-empty)
         std::condition_variable canPopCV;
-        /**
-         * condition variable for event notification.  specifically, for unblocking the waitAndPush calls (queue transitions from full to not-full)
-         */
+
+        /// condition variable for event notification.  specifically, for unblocking the waitAndPush calls (queue transitions from full to not-full)
         std::condition_variable canPushCV;
 
-        /**
-         * underlying queue that is not thread safe.
-         */
+
+        /// underlying queue that is not thread safe.
         std::deque<T> q;
 
-        /**
-         * capacity of the queue.  if set to std::numeric_limits<size_t>::max() indicates unlimited size queue
-         */
+
+        /// capacity of the queue.  if set to std::numeric_limits<size_t>::max() indicates unlimited size queue
         size_t capacity;
 
-        /**
-         * the current size of the underlying queue.  using atomic data type avoids having to lock the queue prior to checking its size.
-         */
+
+        /// the current size of the underlying queue.  using atomic data type avoids having to lock the queue prior to checking its size.
         std::atomic<size_t> qsize;
 
-        /**
-         * atomic boolean variable to indicate whether a calling thread can push into this queue.  use when suspending or terminating a queue.
-         */
+
+        /// atomic boolean variable to indicate whether a calling thread can push into this queue.  use when suspending or terminating a queue.
         std::atomic<bool> pushEnabled;
 
       private:
@@ -93,9 +86,7 @@ namespace bliss
 
 
       public:
-        /**
-         * maximum possible size of a thread safe queue.  initialized to maximum size_t value.
-         */
+        /// maximum possible size of a thread safe queue.  initialized to maximum size_t value.
         static constexpr size_t MAX_SIZE  = std::numeric_limits<size_t>::max();
 
         /**

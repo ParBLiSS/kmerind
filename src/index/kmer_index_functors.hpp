@@ -66,9 +66,7 @@ namespace bliss
       public:
         generate_kmer(const bliss::io::fastq_sequence_id &_rid)
           : kmer(), revcomp(0)
-        {
-          kmer.id = _rid;
-        }
+        {}  // not setting kmer.id here because this class does not have kmer id.
 
         /// generates one k-mer per call from the underlying read
         size_t operator()(BaseIterType &iter)
@@ -110,7 +108,7 @@ namespace bliss
      */
     template<typename Sequence, typename KmerIndex>
     class generate_kmer<Sequence, KmerIndex,
-      typename std::enable_if<!std::is_same<decltype(std::declval<KmerIndex>().id), void>::value, std::true_type >::type >
+      typename std::enable_if<!std::is_void<decltype(std::declval<KmerIndex>().id)>::value, std::true_type >::type >
       : generate_kmer<Sequence, KmerIndex, std::false_type>
     {
       public:

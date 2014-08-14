@@ -2,16 +2,13 @@
  * @file		data_block.hpp
  * @ingroup bliss::io
  * @author	tpan
- * @brief   contains classes for managing an in memory 1D address range, with or without buffering
+ * @brief   contains classes for managing an in-memory 1D address range, along with iterators pointing to the actual data.  with or without buffering
  * @details Presents a standardized interface for buffered and unbuffered data blocks.
  *
  *          Given a range and the corresponding raw data, the goal of DataBlock is to
  *          present a consistent iterator-based interface for traversing the data,
  *          with or without buffering.  The challenge is when buffering, data is copied into a
  *          container, which will have a different data type than the source data's iterator type.
- *
- *          An example usage is to represent portions of a memory mapped file.  When buffered, the iterator
- *          type is no longer pointer, but rather std::vector::iterator.
  *
  *          DataBlock's design requirements are listed below:
  *           1. stores iterators (pointer, normal iterators) for input and output traversal of the data
@@ -22,7 +19,10 @@
  *                b. reuse the buffer memory when a BufferedBlock is remapped to another range.
  *           4. store the conceptual "range" of the data, e.g. offsets within the entire available data sequence.
  *
- *           All derived/specialized classes for buffering and unbuffering DataBlock need to support the following functions
+ *          An example usage is to represent portions of a memory mapped file.  When buffered, the iterator
+ *          type is no longer pointer, but rather std::vector::iterator.
+ *
+ *          All derived/specialized classes for buffering and unbuffering DataBlock need to support the following functions
  *            begin/end
  *            cbegin/cend
  *            assign/clear
@@ -53,7 +53,7 @@
  *              benefit: common member and methods are in the base class, enforcing consistent method naming, etc.
  *
  *  CHOSE: 4, with buffering indicated by the type of buffer container, and default buffer container is std::vector (using alias to make this clear)
- *    Also use type aliasing to make semantically easy-to-understand DataBlock class names: BufferedDataBlock and UnBufferedDataBlock
+ *    Use type aliasing to make semantically easy-to-understand DataBlock class names: BufferedDataBlock and UnBufferedDataBlock
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -115,6 +115,7 @@ namespace bliss
          */
         typedef decltype(std::declval<Container>().cbegin())            const_iterator;
 
+        // assert that the template parameter's iterator (input) and the local iterator (output) have same value type.
         static_assert(std::is_same<typename std::iterator_traits<Iterator>::value_type,
                       typename std::iterator_traits<iterator>::value_type>::value,
                       "Iterator and Container use different value types.");
@@ -272,22 +273,13 @@ namespace bliss
 
 
       protected:
-        /**
-         * @var range
-         * @brief   range object describing the start and end of the data block, in 1D coordinates (i.e. offsets)
-         */
+        /// range object describing the start and end of the data block, in 1D coordinates (i.e. offsets)
         Range range;
 
-        /**
-         * @var empty
-         * @brief   boolean flag indicating that the datablock does not contain valid data.
-         */
+        /// boolean flag indicating that the datablock does not contain valid data.
         bool empty;
 
-        /**
-         * @var buffer
-         * @brief container used as buffer to hold a copy of the input data
-         */
+        /// container used as buffer to hold a copy of the input data
         Container buffer;
 
     };
