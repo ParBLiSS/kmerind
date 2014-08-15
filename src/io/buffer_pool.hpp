@@ -1,6 +1,6 @@
 /**
  * @file		buffer_pool.hpp
- * @ingroup
+ * @ingroup bliss::io
  * @author	tpan
  * @brief   this file defines in-memory Buffer Pool.
  * @details
@@ -28,75 +28,78 @@ namespace bliss
     // TODO: move constructor and assignment operators between BufferPools of different thread safeties.
 
     /**
-     * @class     bliss::io::BufferPool
-     * @brief     thread-safe or unsafe version of BufferPool, managing thread-safe or unsafe Buffers
-     * @details   provides a reusable pool of buffers.  Each buffer is a block of preallocated memory that can be appended into.
+     * @class     BufferPool
+     * @brief     BufferPool manages a set of reusable, in-memory buffers.  In particular, it can limit the amount of memory usage.
+     * @details   The class is templated to provide thread-safe or unsafe BufferPools, managing thread-safe or unsafe Buffers
+     *
+     *            Each buffer is a block of preallocated memory that can be appended into.
      *            Each Buffer instance is referenced by id using the [] or at() accessor functions
      *
      *            The caller can acquire a new buffer from the pool and release an old buffer back into the pool, by Id.
      *            Released buffers are marked as empty and available.
      *
      *            When the pool is exhausted, Acquire function returns false.
-     *
-     *            The pool can be threadsafe using mutex lock, or can be thread unsafe.  The managed buffer can be thread safe or unsafe.
-     *
-     *            Each buffer should be acquired by a single thread and released by a single thread.
-     *            Note that Buffer does not actualy clear the memory, just resets the size object.
-     *            While the release method handles duplicate releases, there will likely be race conditions when multithreading, including
-     *              likely loss of data.
+     *     *
+     * @note      Each buffer should be acquired by a single thread and released by a single thread.
+     *            Note that Buffer does not actualy clear the memory, just resets the size, which is also the pointer for insertion.
+     *            While the release method handles duplicate releases, there may be race conditions when multithreading, including
+     *              likely loss of data (thread 1 appends data and thread 2 releases  it.
      *
      *            the pools RETAINS OWNERSHIP of the buffers.
-     *
+     *  @tparam PoolTS    The thread safety property for the pool
+     *  @tparam BufferTS  The thread safety property of each Buffer.
      */
     template<bliss::concurrent::ThreadSafety PoolTS, bliss::concurrent::ThreadSafety BufferTS = PoolTS>
     class BufferPool
     {
       public:
         /**
-         * Type of Buffer in the BufferPool (thread safe or not)
+         * @brief     Type of Buffer in the BufferPool (thread safe or not)
          */
         typedef bliss::io::Buffer<BufferTS>               BufferType;
         /**
-         * Index Type used to reference the Buffers in the BufferPool.
+         * @brief     Index Type used to reference the Buffers in the BufferPool.
          */
         typedef int                                       IdType;
 
-        static const IdType INVALID = -1;
+        /// constant, represent when a pool element or Buffer is not present.
+        static const IdType ABSENT = -1;
 
       protected:
         /**
-         * capacity of the BufferPool (in number of Buffers)
+         * @brief     capacity of the BufferPool (in number of Buffers)
          */
         IdType capacity;
         /**
-         * capacity of the individual Buffers (in bytes)
+         * @brief     capacity of the individual Buffers (in bytes)
          */
         size_t buffer_capacity;
 
         /**
-         * Internal Set of available Buffers for immediate use.
-         * Using set instead of ThreadSafeQueue to ensure uniqueness of Buffer Ids.
+         * @brief     Internal Set of available Buffers for immediate use.
+         * @details   Using set instead of ThreadSafeQueue to ensure uniqueness of Buffer Ids.
          */
         std::unordered_set<IdType>                          available;
 
         /**
-         * Internal Vector of all Buffers.  May be growable if the Pool was specified as such.
+         * @brief     Internal Vector of all Buffers.  May be growable if the Pool was specified as such.
          */
         std::vector<BufferType> buffers;
 
         /**
-         * boolean flag indicating whether the Pool is fixed size or growable.
+         * @brief     boolean flag indicating whether the Pool is fixed size or growable.
          */
         bool fixedSize;
 
         /**
-         * mutex to control access.
+         * @brief     mutex to control access.
          */
         mutable std::mutex mutex;
 
 
         /**
-         * Thread Safe.  Create a new Buffer object and put into the BufferPool internal vector.
+         * @brief     Create a new Buffer object and put into the BufferPool internal vector.
+         * @note      THREAD SAFE
          * @return    Id of the newly created Buffer.
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
@@ -110,7 +113,8 @@ namespace bliss
           return bufferId;
         }
         /**
-         * Thread Safe.  Get the Id of the next available Buffer.
+         * @brief     Get the Id of the next available Buffer.
+         * @note      THREAD SAFE
          * @return    Id of the next available Buffer.
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
@@ -128,7 +132,8 @@ namespace bliss
         }
 
         /**
-         * Thread Unsafe.  Create a new Buffer object and put into the BufferPool internal vector.
+         * @brief     Create a new Buffer object and put into the BufferPool internal vector.
+         * @note      THREAD UNSAFE
          * @return    Id of the newly created Buffer.
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
@@ -140,7 +145,8 @@ namespace bliss
           return bufferId;
         }
         /**
-         * Thread Unsafe.  Get the Id of the next available Buffer.
+         * @brief     Get the Id of the next available Buffer.
+         * @note      THREAD UNSAFE
          * @return    Id of the next available Buffer.
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
@@ -157,7 +163,7 @@ namespace bliss
 
 
         /**
-         * Private move constructor with mutex lock.
+         * @brief     Private move constructor with mutex lock.
          * @param other   Source BufferPool object to move
          * @param l       Mutex lock on the Source BufferPool object
          */
@@ -168,6 +174,10 @@ namespace bliss
           other.buffer_capacity = 0;
         };
 
+        /**
+         * @brief verifies that the id is valid - throws exception.
+         * @param id    Id of the buffer to check.
+         */
         void checkId(const IdType& id) const {
           if (id < 0 || id >= static_cast<IdType>(buffers.size()))
             throw std::out_of_range("Error:  buffer id was specified with out of range value");
@@ -176,7 +186,7 @@ namespace bliss
 
       public:
         /**
-         *  construct a Buffer Pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is set to _pool_capacity.
+         * @brief     construct a Buffer Pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is set to _pool_capacity.
          *
          * @param _pool_capacity       number of buffers in the pool
          * @param _buffer_capacity     size of the individual buffers
@@ -197,12 +207,12 @@ namespace bliss
         };
 
         /**
-         * default constructor is deleted.
+         * @brief     default constructor is deleted.
          */
         BufferPool() = delete;
 
         /**
-         * construct a Buffer pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is unbounded.
+         * @brief     construct a Buffer pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is unbounded.
          *
          * @param _buffer_capacity    size of the individual buffers
          */
@@ -210,27 +220,27 @@ namespace bliss
             BufferPool<PoolTS, BufferTS>(std::numeric_limits<IdType>::max(), _buffer_capacity) {};
 
         /**
-         * default copy constructor is deleted.
+         * @brief     default copy constructor is deleted.
          * @param other   source BufferPool object to copy from.
          */
         explicit BufferPool(const BufferPool<PoolTS, BufferTS>& other) = delete;
 
         /**
-         *  Move constructor.  Delegates to the Move constructor that locks access on the source.
+         * @brief      Move constructor.  Delegates to the Move constructor that locks access on the source.
          * @param other    source BufferPool object to move.
          */
         explicit BufferPool(BufferPool<PoolTS, BufferTS>&& other) :
           BufferPool<PoolTS, BufferTS>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
 
         /**
-         * default copy assignment operator is deleted.
+         * @brief     default copy assignment operator is deleted.
          * @param other   source BufferPool object to copy from.
-         * return         self, with member variables copied from other.
+         * @return        self, with member variables copied from other.
          */
         BufferPool<PoolTS, BufferTS>& operator=(const BufferPool<PoolTS, BufferTS>& other) = delete;
 
         /**
-         * move assignment operator.
+         * @brief     move assignment operator.
          * @param other   source BufferPool object to move from.
          * @return        self, with member variables moved from other.
          */
@@ -248,12 +258,12 @@ namespace bliss
 
 
         /**
-         * default destructor
+         * @brief     default destructor
          */
         virtual ~BufferPool() {};
 
         /**
-         * Current size of the BufferPool
+         * @brief     Current size of the BufferPool
          * @return  size, type IdType (aka int).
          */
         const IdType getSize() const  {
@@ -261,7 +271,7 @@ namespace bliss
         }
 
         /**
-         * Current capacity of the BufferPool
+         * @brief     Current capacity of the BufferPool
          * @return    capacity, type IdTyype (aka int)
          */
         const IdType getCapacity() const {
@@ -269,7 +279,7 @@ namespace bliss
         }
 
         /**
-         * Each buffer's maximum capacity.
+         * @brief     Each buffer's maximum capacity.
          * @return  each buffer's maximum capacity.
          */
         const size_t getBufferCapacity() const {
@@ -277,7 +287,7 @@ namespace bliss
         }
 
         /**
-         * whether the BufferPool is growable
+         * @brief     whether the BufferPool is growable
          * @return    bool indicating if BufferPool is growable.
          */
         const bool isFixedSize() const {
@@ -285,13 +295,13 @@ namespace bliss
         }
 
         /**
-         * Resets the entire BufferPool: all Buffers in pool are  marked as released and available.
+         * @brief     Resets the entire BufferPool: all Buffers in pool are  marked as released and available.
          *
-         * This is not entirely thread safe.  the available set is cleared by a single thread, but other
-         * threads may be acquiring buffers while they are being released.
+         * @note      This is not entirely thread safe.  the available set is cleared by a single thread, but other
+         *            threads may be acquiring buffers while they are being released.
          *
-         * It is envisioned that this function should be called from a single thread.
-         * however, care must be taken to ensure that all other threads have completed their work, else data loss is likely.
+         *            It is envisioned that this function should be called from a single thread.
+         *            however, care must be taken to ensure that all other threads have completed their work, else data loss is likely.
          */
         void reset() {
           std::unique_lock<std::mutex> lock(mutex);
@@ -303,7 +313,7 @@ namespace bliss
         }
 
         /**
-         *  Get the next available Buffer by id.  if none available, return false in the first argument of the pair.
+         * @brief     Get the next available Buffer by id.  if none available, return false in the first argument of the pair.
          * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the BufferId if successful.
          */
         std::pair<bool, IdType> tryAcquireBuffer() {
@@ -348,7 +358,8 @@ namespace bliss
 //        }
 
         /**
-         * Thread Safe.  Release a buffer back to pool, by id.  if id is incorrect, throw std exception.  clears buffer before release back into available.
+         * @brief     Release a buffer back to pool, by id.  if id is incorrect, throw std exception.  clears buffer before release back into available.
+         * @note      THREAD SAFE
          * @param bufferId    The id of the Buffer to be released.
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
@@ -362,7 +373,8 @@ namespace bliss
 
 
         /**
-         * Thread Unsafe.  Release a buffer back to pool, by id.  if id is incorrect, throw std exception.  clears buffer before release back into available.
+         * @brief     Release a buffer back to pool, by id.  if id is incorrect, throw std exception.  clears buffer before release back into available.
+         * @note      THREAD UNSAFE
          * @param bufferId    The id of the Buffer to be released.
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
@@ -374,9 +386,9 @@ namespace bliss
         }
 
         /**
-         * Access the Buffer by id.  if Id is outside the range of the current BufferPool size, throw exception.
+         * @brief     Access the Buffer by id.  if Id is outside the range of the current BufferPool size, throw exception.
          *
-         * Note that multiple threads can access the same id, and one thread can access multiple Ids.
+         * @note  multiple threads can access the same id, and one thread can access multiple Ids.
          *
          * @param bufferId    Id of the buffer to be access (get from Acquire)
          * @return            const reference to the Buffer
@@ -389,9 +401,9 @@ namespace bliss
         }
 
         /**
-         * Access the Buffer by id.  if Id is incorrect, throw exception.
+         * @brief     Access the Buffer by id.  if Id is incorrect, throw exception.
          *
-         * Note that multiple threads can access the same id, and one thread can access multiple ids.
+         * @note      multiple threads can access the same id, and one thread can access multiple ids.
          *
          * @param bufferId    Id of the buffer to be access (get from Acquire)
          * @return            const reference to the Buffer
@@ -402,7 +414,7 @@ namespace bliss
     };
 
     template<bliss::concurrent::ThreadSafety PoolTS, bliss::concurrent::ThreadSafety BufferTS>
-        const typename BufferPool<PoolTS, BufferTS>::IdType BufferPool<PoolTS, BufferTS>::INVALID;
+        const typename BufferPool<PoolTS, BufferTS>::IdType BufferPool<PoolTS, BufferTS>::ABSENT;
 
   } /* namespace io */
 } /* namespace bliss */

@@ -273,7 +273,7 @@ public:
 
     // try to append the new data - repeat until successful.
     // along the way, if a full buffer's id is returned, queue it for sendQueue.
-    BufferIdType fullId = BufferPoolType::INVALID;
+    BufferIdType fullId = BufferPoolType::ABSENT;
     std::pair<bool, BufferIdType> result;
     do {
       result = buffers.at(tag).append(data, count, dst_rank);
@@ -281,7 +281,7 @@ public:
       fullId = result.second;
 
       // repeat until success;
-      if (fullId != BufferPoolType::INVALID) {
+      if (fullId != BufferPoolType::ABSENT) {
         if (!(buffers.at(tag).getBackBuffer(fullId).isEmpty())) {
           // have a full buffer - put in send queue.
           if (!sendQueue.waitAndPush(std::move(SendQueueElement(fullId, tag, dst_rank)))) {
@@ -289,7 +289,7 @@ public:
           }
         }
       }
-      fullId = BufferPoolType::INVALID;
+      fullId = BufferPoolType::ABSENT;
     } while (!result.first);
   }
 
@@ -522,7 +522,7 @@ protected:
       DEBUGF("Rank %d sendEndTags %d epoch %d target_rank = %d ", commRank, tag, epoch, target_rank );
 
       // send the end message for this tag.
-      if (!sendQueue.waitAndPush(std::move(SendQueueElement(BufferPoolType::INVALID, tag, target_rank)))) {
+      if (!sendQueue.waitAndPush(std::move(SendQueueElement(BufferPoolType::ABSENT, tag, target_rank)))) {
         throw bliss::io::IOException("ERROR: sendQueue is not accepting new SendQueueElement due to disablePush");
       }
     }
@@ -581,7 +581,7 @@ protected:
 
       auto id = buffers.at(tag).getBufferId(target_rank);
       // flush/send all remaining non-empty buffers
-      if ((id != BufferPoolType::INVALID) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
+      if ((id != BufferPoolType::ABSENT) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
         if (!sendQueue.waitAndPush(std::move(SendQueueElement(id, tag, target_rank)))) {
           throw bliss::io::IOException("ERROR: sendQueue is not accepting new SendQueueElement due to disablePush");
         }
@@ -611,7 +611,7 @@ protected:
     // else there is a valid entry from sendQueue
     se = el.second;
     // Is this an END tag/ empty message?
-    if (se.bufferId == BufferPoolType::INVALID) {
+    if (se.bufferId == BufferPoolType::ABSENT) {
       //DEBUGF("SEND %d -> %d, termination signal for tag %d", commRank, se.dst, se.tag);
       // termination message for this tag and destination
       if (se.dst == commRank) {
@@ -684,7 +684,7 @@ protected:
 
       if (finished)
       {
-        if (front.second.bufferId != BufferPoolType::INVALID) {
+        if (front.second.bufferId != BufferPoolType::ABSENT) {
           // cleanup, i.e., release the buffer back into the pool
           buffers.at(front.second.tag).releaseBuffer(front.second.bufferId);
         }

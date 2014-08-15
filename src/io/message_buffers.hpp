@@ -360,7 +360,7 @@ namespace bliss
         std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &targetProc) {
           //== if count is 0, no write and this succeeds right away.
           if (count == 0)
-            return std::pair<bool, BufferIdType>(true, BufferPoolType::INVALID);
+            return std::pair<bool, BufferIdType>(true, BufferPoolType::ABSENT);
 
           //== if there is not enough room for the new data in even a new buffer, LOGIC ERROR IN CODE: throw exception
           if (count > this->getBufferCapacity()) {
@@ -378,13 +378,13 @@ namespace bliss
           }
 
           //== default fullBufferId return value.
-          BufferIdType fullBufferId = BufferPoolType::INVALID;
+          BufferIdType fullBufferId = BufferPoolType::ABSENT;
 
           //== get the current Buffer's Id
           BufferIdType targetBufferId = getBufferId(targetProc);
 
           //== if targetBufferId is an invalid buffer, or if new data can't fit, need to replace bufferIds[dest]
-          if ((targetBufferId == BufferPoolType::INVALID) ||
+          if ((targetBufferId == BufferPoolType::ABSENT) ||
               this->pool[targetBufferId].getSize() > (this->getBufferCapacity() - count)) {
             // at this point, the local variables may be out of date already, and targetBufferId may already marked as full.
 
@@ -394,7 +394,7 @@ namespace bliss
           }
 
 
-          if (targetBufferId == BufferPoolType::INVALID) {
+          if (targetBufferId == BufferPoolType::ABSENT) {
             // we don't have a buffer to insert into
             // then don't insert
             return std::pair<bool, BufferIdType>(false, fullBufferId);
@@ -408,7 +408,7 @@ namespace bliss
       protected:
         /**
          * @brief  Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
-         * @details The new buffer may be BufferPoolType::INVALID (invalid buffer, when there is no available Buffer from pool)
+         * @details The new buffer may be BufferPoolType::ABSENT (invalid buffer, when there is no available Buffer from pool)
          *
          * Effect:  bufferIds[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
          *
@@ -429,29 +429,29 @@ namespace bliss
           auto newBuffer = this->pool.tryAcquireBuffer();
 
           bool hasNewBuffer = newBuffer.first;
-          BufferIdType newBufferId = newBuffer.second;               // if acquire fails, we have BufferPoolType::INVALID here.
+          BufferIdType newBufferId = newBuffer.second;               // if acquire fails, we have BufferPoolType::ABSENT here.
           BufferIdType targetBufferId = old;
 
-          //== now try to set the bufferIds[dest] to the new buffer id (valid, or BufferPoolType::INVALID if can't get a new one)
-          // again, targetBufferId is BufferPoolType::INVALID or pointing to a full buffer.
+          //== now try to set the bufferIds[dest] to the new buffer id (valid, or BufferPoolType::ABSENT if can't get a new one)
+          // again, targetBufferId is BufferPoolType::ABSENT or pointing to a full buffer.
           // use compare_exchange to ensure we only replace if bufferIds[dest] is still targetBufferId (no other thread has changed it)
           if (bufferIds[dest].compare_exchange_strong(targetBufferId, newBufferId, std::memory_order_acq_rel)) {
             // successful exchange.  bufferIds[dest] now has newBufferId value (will be accessed by caller). targetBufferId still has old value (full buffer, to be returned)
 
             //== block the old buffer.
-            if (old != BufferPoolType::INVALID) this->pool[old].block();
+            if (old != BufferPoolType::ABSENT) this->pool[old].block();
 
-            return old;   // value could be full buffer, or could be BufferPoolType::INVALID.
+            return old;   // value could be full buffer, or could be BufferPoolType::ABSENT.
           } else {
             // failed exchange, another thread had already updated bufferIds[dest].
-            // bufferIds[dest] will be accessed by caller later, should return BufferPoolType::INVALID as the replaced buffer id.
+            // bufferIds[dest] will be accessed by caller later, should return BufferPoolType::ABSENT as the replaced buffer id.
 
             // return the unused buffer id to pool.
             if (hasNewBuffer) {
               this->pool.releaseBuffer(newBufferId);
             }
 
-            return BufferPoolType::INVALID;
+            return BufferPoolType::ABSENT;
           }
 
         }
@@ -459,7 +459,7 @@ namespace bliss
 
         /**
          * @brief Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
-         * @details The new buffer may be BufferPoolType::INVALID (invalid buffer, when there is no available Buffer from pool)
+         * @details The new buffer may be BufferPoolType::ABSENT (invalid buffer, when there is no available Buffer from pool)
          *
          * effect:  bufferIds[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
          *
@@ -477,11 +477,11 @@ namespace bliss
         typename std::enable_if<!TS, BufferIdType>::type swapInEmptyBuffer(const int& dest, const BufferIdType& old) {
 
 
-          //== get a new buffer to replace the existing.  set it whether tryAcquire succeeds or fails (id = BufferPoolType::INVALID)
+          //== get a new buffer to replace the existing.  set it whether tryAcquire succeeds or fails (id = BufferPoolType::ABSENT)
           bufferIds[dest] = this->pool.tryAcquireBuffer().second;
 
           //== blocks the old buffer
-          if (old != BufferPoolType::INVALID) this->pool[old].block();
+          if (old != BufferPoolType::ABSENT) this->pool[old].block();
 
           return old;
         }

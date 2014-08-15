@@ -251,8 +251,6 @@ struct RunTask {
       std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
 
-
-
       }  // scope to ensure file loader is destroyed.
     }
 };
