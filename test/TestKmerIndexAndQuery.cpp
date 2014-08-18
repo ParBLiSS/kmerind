@@ -57,7 +57,7 @@ typedef bliss::index::KmerSize<21>                                      KmerSize
 typedef uint64_t                                                        KmerType;
 typedef float                                                           QualityType;
 typedef DNA                                                             Alphabet;
-typedef bliss::io::fastq_sequence_id                                    IdType;
+typedef bliss::io::FASTQSequenceId                                    IdType;
 
 /// define Range type
 typedef bliss::partition::range<size_t>                                 RangeType;
@@ -68,10 +68,10 @@ typedef bliss::io::FASTQLoader<CharType, false, true>                   FileLoad
 typedef typename FileLoaderType::L2BlockType::iterator                      FileBlockIterType;
 
 /// define read type
-typedef bliss::io::fastq_sequence_quality<FileBlockIterType, Alphabet, QualityType>  SeqType;
+typedef bliss::io::SequenceWithQuality<FileBlockIterType, Alphabet, QualityType>  SeqType;
 
 /// define the transform iterator type
-typedef bliss::io::fastq_parser<FileBlockIterType, Alphabet, QualityType>    ParserType;
+typedef bliss::io::FASTQParser<FileBlockIterType, Alphabet, QualityType>    ParserType;
 typedef bliss::io::fastq_iterator<ParserType, FileBlockIterType>             SeqIterType;
 
 /// define kmer quality GENERATOR types

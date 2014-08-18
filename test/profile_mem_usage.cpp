@@ -28,9 +28,9 @@ using namespace bliss::index;
 using namespace bliss::io;
 
 typedef KmerIndexElement<KmerSize<21>, uint64_t > KmerIndexType1;
-typedef KmerIndexElementWithId<KmerSize<21>, uint64_t, fastq_sequence_id > KmerIndexType2;
-typedef KmerIndexElementWithIdAndQuality<KmerSize<21>, uint64_t, fastq_sequence_id, float > KmerIndexType3;
-typedef KmerIndexElementWithIdAndQuality<KmerSize<21>, uint64_t, fastq_sequence_id, double > KmerIndexType4;
+typedef KmerIndexElementWithId<KmerSize<21>, uint64_t, FASTQSequenceId > KmerIndexType2;
+typedef KmerIndexElementWithIdAndQuality<KmerSize<21>, uint64_t, FASTQSequenceId, float > KmerIndexType3;
+typedef KmerIndexElementWithIdAndQuality<KmerSize<21>, uint64_t, FASTQSequenceId, double > KmerIndexType4;
 
 
 void checkMemUsed(long long &phyMemUsed, long long &swapUsed, bool print) {

@@ -242,12 +242,12 @@ typedef bliss::io::fastq_loader<DNA, float> FileLoaderType;
 typedef bliss::index::KmerSize<21> KmerSize;
 typedef uint64_t KmerType;
 typedef float QualityType;
-typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss::io::fastq_sequence_id, QualityType> KmerIndexType;
+typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss::io::FASTQSequenceId, QualityType> KmerIndexType;
 
 typedef CharType* BaseIterType;
 
 typedef DNA Alphabet;
-typedef bliss::io::fastq_sequence<BaseIterType, Alphabet>  SequenceType;
+typedef bliss::io::Sequence<BaseIterType, Alphabet>  SequenceType;
 
 typedef bliss::index::generate_kmer<SequenceType, KmerIndexType> kmer_op_type;
 typedef bliss::index::generate_qual<SequenceType, KmerSize, bliss::index::SangerToLogProbCorrect<double>, QualityType> qual_op_type;

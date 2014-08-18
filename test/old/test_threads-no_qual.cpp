@@ -50,7 +50,7 @@
 typedef bliss::index::KmerSize<21> KmerSize;
 typedef uint64_t KmerType;
 typedef DNA Alphabet;
-typedef bliss::index::KmerIndexElementWithId<KmerSize, KmerType, bliss::io::fastq_sequence_id> KmerIndexType;
+typedef bliss::index::KmerIndexElementWithId<KmerSize, KmerType, bliss::io::FASTQSequenceId> KmerIndexType;
 
 // define buffer where to put the kmers
 constexpr bool thread_safe = false;
@@ -64,14 +64,14 @@ typedef typename std::iterator_traits<BaseIterType>::value_type BaseValueType;
 
 
 // define read type
-typedef bliss::io::fastq_sequence<BaseIterType, Alphabet>  SequenceType;
+typedef bliss::io::Sequence<BaseIterType, Alphabet>  SequenceType;
 
 
 typedef bliss::index::generate_kmer<SequenceType, KmerIndexType> kmer_op_type;
 
 typedef std::unordered_multimap<KmerType, KmerIndexType> IndexType;
 
-typedef bliss::io::fastq_parser<BaseIterType, Alphabet>               ParserType;
+typedef bliss::io::FASTQParser<BaseIterType, Alphabet>               ParserType;
 typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
 typedef bliss::index::KmerIndexGenerator<kmer_op_type, BufferType, bliss::index::XorModulus<KmerType>> ComputeType;
 

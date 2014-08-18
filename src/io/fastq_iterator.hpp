@@ -1,16 +1,16 @@
-
 /**
- * fastq_iterator.hpp
+ * @file    fastq_iterator.hpp
+ * @ingroup bliss::io
+ * @author  Tony Pan <tpan@gatech.edu>
+ * @date    Feb 5, 2014
+ * @brief   Contains an iterator for traversing a FASTQ formatted DataBlock (see bliss::io::DataBlock) sequence record by record, and support classes.
  *
- *  Created on: Feb 5, 2014
- *      Author: tpan
+ * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
- * special iterator to get fastq reads.
+ * TODO add Licence
  *
- *
- *  TODO:
- *  commenting.
  */
+
 
 #ifndef FASTQ_ITERATOR_HPP_
 #define FASTQ_ITERATOR_HPP_
@@ -36,24 +36,33 @@ namespace bliss
   namespace io
   {
     /**
-     * @class     bliss::io::fastq_sequence_id
-     * @brief     data structure to represent a fastq sequence id.
+     * @class     bliss::io::FASTQSequenceId
+     * @brief     represents a fastq sequence's id, also used for id of the FASTQ file, and for position inside a fastq sequence..
      * @detail    this is set up as a union to allow easy serialization
      *            and parsing of the content.
-     *            this keeps a 40 bit sequence ID, a file id, and a position within the file.
+     *            this keeps a 40 bit sequence ID, broken up into a 32 bit id and 8 bit significant bit id
+     *                       an 8 bit file id
+     *                       a 16 bit position within the sequence.
      *
-     *            A separate FASTA version will have a different partitioning.
+     *            A separate FASTA version will have a different fields but keeps the same 64 bit total length.
      *
-     *            file size is at the moment limited to 1TB in number of bytes.
+     *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
      */
-    union fastq_sequence_id
+    union FASTQSequenceId
     {
+        /// the concatenation of the id components as a single unsigned 64 bit field
         uint64_t composite;
+
+        /// the id field components
         struct
         {
+            /// sequence's id, lower 32 of 40 bits (potentially as offset in the containing file)
             uint32_t seq_id;
-            uint8_t seq_msb;   // seq_id and seq_msb: 40 bits allow for 1 trillion entries.
-            uint8_t file_id;   // file id
+            /// sequence's id, upper 8 of 40 bits (potentially as offset in the containing file)
+            uint8_t seq_msb;
+            /// id of fastq file
+            uint8_t file_id;
+            /// offset within the read.  Default 0 refers to the whole sequence
             uint16_t pos;      // position value
         } components;
     };
@@ -63,199 +72,239 @@ namespace bliss
 
 
     /**
-     * @class     bliss::io::fastq_sequence
-     * @brief     represents a fastq read.
-     * @details   Iterator allows walking through the fastq data.
-     *            Alphabet allows interpretation of the sequence
+     * @class     bliss::io::Sequence
+     * @brief     represents a biological sequence, and provides iterators for traversing the sequence.
      *
-     *
-     *            a separate one would be used for FASTA sequence,
-     *            where there is no quality score.
+     * @tparam Iterator   allows walking through the fastq data.
+     * @tparam Alphabet   allows interpretation of the sequence
+     * @tparam IdType     the format and components of the id of a sequence. Differs from FASTA to FASTQ and based on length of reads.
      */
-    template<typename Iterator, typename Alphabet>
-    struct fastq_sequence
+    template<typename Iterator, typename Alphabet, typename IdType=FASTQSequenceId>
+    struct Sequence
     {
-        typedef typename std::remove_pointer<
-            typename std::remove_reference<Iterator>::type>::type ValueType;
+        /// Type of the sequence elements
+        using ValueType = typename std::iterator_traits<Iterator>::value_type;
+        /// The alphabet this sequence uses
         typedef Alphabet AlphabetType;
+        /// Iterator type for traversing the sequence.
         typedef Iterator IteratorType;
 
-//        Iterator name;
-//        Iterator name_end;
-        Iterator seq;
-        Iterator seq_end;
-
-        fastq_sequence_id id;
-
+        /// begin iterator for the sequence
+        Iterator seqBegin;
+        /// end iterator for the sequence.
+        Iterator seqEnd;
+        /// id of the sequence.
+        IdType id;
     };
 
     /**
-     * @class     bliss::io::fastq_sequence
-     * @brief     represents a fastq read without quality score.
-     * @details   Iterator allows walking through the fastq data.
-     *            Alphabet allows interpretation of the sequence
-     *            Quality allows interpretation of the quality score.
+     * @class     bliss::io::SequenceWithQuality
+     * @brief     extension of bliss::io::Sequence to include quality scores for each position.
      *
-     *            has to be derived class because can't conditionally define member variables.
-     *
-     *            a separate one would be used for FASTA sequence,
-     *            where there is no quality score.
+     * @tparam Iterator   allows walking through the fastq data.
+     * @tparam Alphabet   allows interpretation of the sequence
+     * @tparam Quality    data type for quality scores for each base
+     * @tparam IdType     the format and components of the id of a sequence. Differs from FASTA to FASTQ and based on length of reads.
      */
-    template<typename Iterator, typename Alphabet, typename Quality>
-    struct fastq_sequence_quality : public fastq_sequence<Iterator, Alphabet>
+    template<typename Iterator, typename Alphabet, typename Quality, typename IdType=FASTQSequenceId>
+    struct SequenceWithQuality : public Sequence<Iterator, Alphabet, IdType>
     {
-        typedef fastq_sequence<Iterator, Alphabet> base_class_t;
-        typedef typename base_class_t::ValueType ValueType;
+        /// Type of the sequence elements
+        using ValueType = typename std::iterator_traits<Iterator>::value_type;
+        /// The alphabet this sequence uses
         typedef Alphabet AlphabetType;
+        /// Iterator type for traversing the sequence.
         typedef Iterator IteratorType;
+        /// the desired quality score's type, e.g. double
         typedef Quality ScoreType;
 
-        Iterator qual;
-        Iterator qual_end;
-
+        /// begin iterator for the quality scores
+        Iterator qualBegin;
+        /// end iterator for the quality scores
+        Iterator qualEnd;
     };
 
 
 
     /**
-     * Automatically
+     * @class bliss::io::FASTQParser
+     * @brief Functoid encapsulating functionality for increment and dereference in an iterator.
+     * @details   The purpose of this class is to abstract the increment and dereference operations in
+     *    an iterator that transforms a block of data into a collection of FASTQ records.  this allows us to reuse
+     *    a transform iterator.
+     *
+     *    This class assumes that the iterator at start is pointing to the beginning of a FASTQ record already.
+     *    Increment is done by walking through the data and recording the positions of the start and end of each
+     *    of the 4 lines in a FASTQ record.  because we are always searching to the end of a record, successive
+     *    calls to increment always are aligned correctly with record boundaries
+     *
+     *
+     * @tparam Iterator   The underlying iterator to be traversed to generate a Sequence
+     * @tparam Alphabet   allows interpretation of the sequence
+     * @tparam Quality    data type for quality scores for each base.  defaults to void to mean No Quality Score.
      */
     template<typename Iterator, typename Alphabet, typename Quality = void>
-    struct fastq_parser
+    class FASTQParser
     {
         // internal state
+      protected:
 
-        typedef typename std::conditional<std::is_same<Quality, void>::value,
-              fastq_sequence<Iterator, Alphabet>,
-              fastq_sequence_quality<Iterator, Alphabet, Quality> >::type   SeqType;
+        /// Sequence type, conditionally set based on Quality template param to either normal Sequence or SequenceWithQuality.
+        typedef typename std::conditional<std::is_void<Quality>::value,
+              Sequence<Iterator, Alphabet>,
+              SequenceWithQuality<Iterator, Alphabet, Quality> >::type      SeqType;
+        /// The alphabet this sequence uses
         typedef Alphabet                                                    AlphabetType;
-        typedef typename std::enable_if<!std::is_same<Quality, void>::value, Quality>::type
+        /// the desired quality score's type, e.g. double.  conditionally defined only when needed
+        typedef typename std::enable_if<!std::is_void<Quality>::value, Quality>::type
                                                                             QualityType;
+        /// Range Type, set to use unsigned 64 bit for internal range representation
         typedef bliss::partition::range<size_t>                              RangeType;
 
+        /// state of the functoid , which is the current sequence the iterator is pointing to.
         SeqType output;
 
-        fastq_parser() : output()  // having this reduces run time slightly...
-        {
-        }
+      public:
+        /// default constructor.
+        FASTQParser() : output() {};
 
+        /**
+         * @brief function to populate the quality score. defined only when Quality type is not void
+         * @param start   beginning of the quality score character sequence.
+         * @param end     end of the quality score character sequence.
+         */
         template <typename Q = Quality>
         inline typename std::enable_if<!std::is_void<Q>::value>::type
         populateQuality(const Iterator & start, const Iterator & end) {
           output.qual = start;
           output.qual_end = end;
         }
+
+        /**
+         * @brief function to populate the quality score. defined only when Quality type is void
+         * @param start   beginning of the quality score character sequence.
+         * @param end     end of the quality score character sequence.
+         */
         template <typename Q = Quality>
         inline typename std::enable_if<std::is_void<Q>::value>::type
-        populateQuality(const Iterator & start, const Iterator & end) {
-        }
+        populateQuality(const Iterator & start, const Iterator & end) {}
 
         /**
          * TODO:  change to use range coordinates for comparison instead of iterators.  measure performance...
          *
          * parses with an iterator, so as to have complete control over the increment.
          */
+        /**
+         * @brief Called by the containing iterator during iterator increment (++)
+         * @details   Internally, this function parses the data by line, tracking the begin
+         *            and end of the lines, and produces a single sequence record, stored in
+         *            a member variable.
+         *
+         *            The source iterator is not modified.
+         *
+         * @param it            source iterator, pointing to data to traverse
+         * @param end           end of the source iterator - not to go past.
+         * @param coordinates   coordinates in units of source character types (e.g. char) from the beginning of the file.
+         * @return              source iterator, advanced forward by the amount parsed.
+         */
         Iterator increment(const Iterator &it, const Iterator &end, RangeType &coordinates)
         {
-          // first initialize  (on windowed version, will need to have a separate
-          // way of initializing., perhaps with an overloaded operator.
+          // first make a copy of it so we can change it.
           Iterator iter = it;
-//          typename RangeType::ValueType step = 0;
 
-          //parsing = (iter != end);
+          size_t count = 0;
 
           // trim leading \n
-//          while ((*iter == '\n') && parsing)
           while ((*iter == '\n') && (iter != end))
           {
-            ++iter;
-//            parsing = (iter != end);
+            ++iter;  ++count;
           }
 
-//          if (!parsing) // if the range consists of \n only. at end, terminate
+          // if the range consists of \n only, then we'd be at end/ terminate
           if (iter == end)
           {
-            printf("ERROR: nothing was parsed. %lu to %lu.\n", coordinates.start, coordinates.end);
+            ERRORF("ERROR: nothing was parsed. %lu to %lu.\n", coordinates.start, coordinates.end);
             output = SeqType();
             return iter;
-          }
+          }  // else we have some real data.
+
+          //== generate the sequence instance.
 
           // store the "pointers"
           Iterator starts[4];
           Iterator ends[4];
 
           int line_num = 0;  // first line has num 0.
-          bool isEOL;
 
-          // increment after the "end" of a line, so as to allow immediate termination
-//          std::stringstream ss1;
-
+          //== do the first char
           // first char is already known (and not \n).  also, not at end.
-//          ss1 << "line " << line_num;
           starts[line_num] = iter;
-          ++iter;
-          bool found = false;
-          bool wasEOL = false;
+          output.id.composite = coordinates.start + count;
+          bool isEOL = false;  // already trimmed all leading \n
+          bool found = false;  // not yet found
+          ++iter;  ++count;
+          // now wasEOL is set since we've moved position.
+          bool wasEOL = isEOL;
+
+          //TODO:  optimize further.  even grep is faster (below takes about 50ms.  grep is at 30ms to search @
 
 
-          //TODO:  optimize further.  even grep is faster (below takes about 50ms.
-          // grep is at 30ms to search @
-          // walk through the data range
+          //== walk through the data range until the end.
           while ((iter != end))
           {
+            // check if current char is EOL
             isEOL = (*iter == '\n');  // slow
 
-            // early termination of iteration logic.  either 2 \n, or 2 non-\n
+            // we have \nX or X\n.   skip this logic if 2 \n or 2 non-\n.
             if (isEOL != wasEOL)  // kind of slow
             {
-
-              // we have \nX or X\n
-              if (isEOL)  // a new eol.  X\n case
+              // a new EOL.  X\n case
+              if (isEOL)
               {
-//                ss1 << "; ";
+                // found the end of a line
                 ends[line_num] = iter;
                 ++line_num;
 
+                // once reached 4 lines, can stop
                 if (line_num >= 4)
                 {
-//                  ss1 << " got the 4 lines" << std::endl;
                   found = true;
-                  ++iter;
+
+                  // increment past the \n just before break.
+                  ++iter; ++count;
                   break;
                 }
               }
-              else  // first char.  \nX case
+              // first char of a new line.  \nX case
+              else
               {
-//               ss1 << line_num << " ";
                 starts[line_num] = iter;
               }
-              // iter == \n and newline Char.  keep going.
-              // or iter != \n and !newline char.  in the middle.  keep going.
 
               wasEOL = isEOL;  // only toggle if isEOL != wasEOL.
-            }
+            } // else we have \n\n or [^\n][^\n], continue.
 
-            ++iter;   // kind of slow
+            ++iter; ++count;  // kind of slow
           }
 
+
+          //== if reached the end by this time
           if (iter == end) {
 
+            // at end of iterator, but still missing a \n, then marked the last char as end of a line.
             if (!found) {
-  //              ss1 << " at end" << std::endl;
               ends[line_num] = iter;
               ++line_num;
             }
 
-          // check to make sure we finished okay  - if not, don't update the
-          // fastq_sequence object.
+            // check to make sure we finished okay (found 4 lines) - if not, don't update the Sequence object.
             if (line_num < 4) {
-              printf("ERROR: parsing failed. lines %d, %lu to %lu. \n", line_num, coordinates.start, coordinates.end);
+              ERRORF("ERROR: parsing failed. lines %d, %lu to %lu. \n", line_num, coordinates.start, coordinates.end);
               std::stringstream ss;
               std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
 
               std::copy(it, end, oit);
-              printf("  offending string is %s\n", ss.str().c_str());
-  //            printf(" parsing record is %s\n", ss1.str().c_str());
+              ERRORF("  offending string is %s\n", ss.str().c_str());
 
               output = SeqType();
               return iter;
@@ -265,26 +314,27 @@ namespace bliss
           assert(*(starts[0]) == '@');
           assert(*(starts[2]) == '+');
 
-          // now populate the output
-          output.id.composite = coordinates.start + (starts[0] - it);
-//          output.name = starts[0];
-//          output.name_end = ends[0];
+          //== now populate the output (instance variable)
           output.seq = starts[1];
           output.seq_end = ends[1];
-
+          // this part is dependent on whether Quality template param is specified.
           populateQuality(starts[3], ends[3]);
 
-          coordinates.start += iter - it;
+          //== update the coordinates.
+          coordinates.start += count;
+
+          //== return the updated iter.
           return iter;
         }
 
-        SeqType& operator()()
+        /// for dereferencing the parent iterator and return the result, which is stored in the local state variable: output.
+        SeqType& dereference()
         {
           return output;
         }
     };
 
-
+TODO: here.
 
     /**
      * has the following characteristics:

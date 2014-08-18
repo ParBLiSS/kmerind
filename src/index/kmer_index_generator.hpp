@@ -21,7 +21,7 @@ namespace bliss
   {
 
     // TODO:  need to change the templates.
-    // FASTQ_SEQUENCE should be parameterized with base iterator and alphabet - DONE
+    // Sequence should be parameterized with base iterator and alphabet - DONE
     // given those + k, should be able to get kmer index element type  - DONE
     // given kmer index element type, and fastq sequence type, should be able to specialize kmer generator type.  DONE
     // given the kmer index element type, should be able to define IndexType type.  But won't.  IndexType may be of different types.

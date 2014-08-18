@@ -457,9 +457,9 @@ struct FASTQIterator {
     typedef float QualityType;
     typedef DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
-    typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
+    typedef bliss::io::SequenceWithQuality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
-    typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
+    typedef bliss::io::FASTQParser<BaseIterType, Alphabet, QualityType>  ParserType;
     typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
 
     FASTQIterator(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
@@ -577,9 +577,9 @@ struct FASTQIterator2 {
     typedef float QualityType;
     typedef DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
-    typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
+    typedef bliss::io::SequenceWithQuality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
-    typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
+    typedef bliss::io::FASTQParser<BaseIterType, Alphabet, QualityType>  ParserType;
     typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
 
     FASTQIterator2(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
@@ -688,9 +688,9 @@ struct FASTQIteratorNoQual {
     typedef float QualityType;
     typedef DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
-    typedef bliss::io::fastq_sequence_quality<BaseIterType, Alphabet, QualityType>  SequenceType;
+    typedef bliss::io::SequenceWithQuality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
-    typedef bliss::io::fastq_parser<BaseIterType, Alphabet, QualityType>  ParserType;
+    typedef bliss::io::FASTQParser<BaseIterType, Alphabet, QualityType>  ParserType;
     typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
 
     FASTQIteratorNoQual(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :

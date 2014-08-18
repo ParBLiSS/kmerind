@@ -64,7 +64,7 @@ namespace bliss
 
         //.constructor taking the fastq sequence id for a read
       public:
-        generate_kmer(const bliss::io::fastq_sequence_id &_rid)
+        generate_kmer(const bliss::io::FASTQSequenceId &_rid)
           : kmer(), revcomp(0)
         {}  // not setting kmer.id here because this class does not have kmer id.
 
@@ -104,7 +104,7 @@ namespace bliss
 
     /**
      * kmer generator operator type
-     * The third template parameter acts as a member checker to make sure there is an id field and it's of type bliss::io::fastq_sequence_id
+     * The third template parameter acts as a member checker to make sure there is an id field and it's of type bliss::io::FASTQSequenceId
      */
     template<typename Sequence, typename KmerIndex>
     class generate_kmer<Sequence, KmerIndex,
@@ -130,7 +130,7 @@ namespace bliss
 
       public:
 
-        generate_kmer(const bliss::io::fastq_sequence_id &_rid)
+        generate_kmer(const bliss::io::FASTQSequenceId &_rid)
             : BaseClassType(_rid), pos(0)
         {
           this->kmer.id = _rid;
