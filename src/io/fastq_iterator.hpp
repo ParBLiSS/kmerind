@@ -1,5 +1,5 @@
 /**
- * @file    fastq_iterator.hpp
+ * @file    SequencesIterator.hpp
  * @ingroup bliss::io
  * @author  Tony Pan <tpan@gatech.edu>
  * @date    Feb 5, 2014
@@ -12,8 +12,8 @@
  */
 
 
-#ifndef FASTQ_ITERATOR_HPP_
-#define FASTQ_ITERATOR_HPP_
+#ifndef SequencesIterator_HPP_
+#define SequencesIterator_HPP_
 
 // C includes
 #include <cassert>
@@ -138,6 +138,7 @@ namespace bliss
      *    of the 4 lines in a FASTQ record.  because we are always searching to the end of a record, successive
      *    calls to increment always are aligned correctly with record boundaries
      *
+     * @note  NOT THREAD SAFE.
      *
      * @tparam Iterator   The underlying iterator to be traversed to generate a Sequence
      * @tparam Alphabet   allows interpretation of the sequence
@@ -161,89 +162,95 @@ namespace bliss
         /// Range Type, set to use unsigned 64 bit for internal range representation
         typedef bliss::partition::range<size_t>                              RangeType;
 
-        /// state of the functoid , which is the current sequence the iterator is pointing to.
-        SeqType output;
-
       public:
         /// default constructor.
-        FASTQParser() : output() {};
+        FASTQParser() {};
 
         /**
          * @brief function to populate the quality score. defined only when Quality type is not void
-         * @param start   beginning of the quality score character sequence.
-         * @param end     end of the quality score character sequence.
+         * @param[in] start   beginning of the quality score character sequence.
+         * @param[in] end     end of the quality score character sequence.
+         * @param[out] output  The output sequence record type to modify
          */
         template <typename Q = Quality>
-        inline typename std::enable_if<!std::is_void<Q>::value>::type
-        populateQuality(const Iterator & start, const Iterator & end) {
-          output.qual = start;
-          output.qual_end = end;
+        typename std::enable_if<!std::is_void<Q>::value>::type
+        populateQuality(const Iterator & start, const Iterator & end, SeqType& output) {
+          output.qualStart = start;
+          output.qualEnd = end;
         }
 
         /**
          * @brief function to populate the quality score. defined only when Quality type is void
-         * @param start   beginning of the quality score character sequence.
-         * @param end     end of the quality score character sequence.
+         * @param[in] start   beginning of the quality score character sequence.
+         * @param[in] end     end of the quality score character sequence.
+         * @param[out] output  The output sequence record type to modify
          */
         template <typename Q = Quality>
-        inline typename std::enable_if<std::is_void<Q>::value>::type
-        populateQuality(const Iterator & start, const Iterator & end) {}
+        typename std::enable_if<std::is_void<Q>::value>::type
+        populateQuality(const Iterator & start, const Iterator & end, SeqType& output) {}
+
 
         /**
-         * TODO:  change to use range coordinates for comparison instead of iterators.  measure performance...
-         *
-         * parses with an iterator, so as to have complete control over the increment.
+         * @brief function to populate the sequence iterators.
+         * @param[in] start   beginning of the sequence.
+         * @param[in] end     end of the sequence.
+         * @param[out] output  The output sequence record type to modify
          */
+        void populateSequence(const Iterator & start, const Iterator & end, SeqType& output) {
+          output.seqStart = start;
+          output.seqEnd = end;
+        }
+
         /**
          * @brief Called by the containing iterator during iterator increment (++)
          * @details   Internally, this function parses the data by line, tracking the begin
          *            and end of the lines, and produces a single sequence record, stored in
          *            a member variable.
          *
-         *            The source iterator is not modified.
+         *            The source iterator is not modified.  A copy of the iterator is modified.
          *
-         * @param it            source iterator, pointing to data to traverse
-         * @param end           end of the source iterator - not to go past.
-         * @param coordinates   coordinates in units of source character types (e.g. char) from the beginning of the file.
-         * @return              source iterator, advanced forward by the amount parsed.
+         *            Iterator can be a forward iterator or better.
+         *
+         * @param[in/out] iter          source iterator, pointing to data to traverse
+         * @param[in]     end           end of the source iterator - not to go past.
+         * @param[in/out] coordinates   coordinates in units of source character types (e.g. char) from the beginning of the file.
+         * @param[in/out] output        updated sequence type, values updated.
          */
-        Iterator increment(const Iterator &it, const Iterator &end, RangeType &coordinates)
+        void increment(Iterator &iter, const Iterator &end, size_t &offset, SeqType& output)
         {
-          // first make a copy of it so we can change it.
-          Iterator iter = it;
+          //== first make a copy of iter so we can change it.
+          Iterator orig_iter = iter;
+          size_t orig_offset = offset;
 
-          size_t count = 0;
-
-          // trim leading \n
+          //== trim leading \n
           while ((*iter == '\n') && (iter != end))
           {
-            ++iter;  ++count;
+            ++iter;  ++offset;
           }
 
-          // if the range consists of \n only, then we'd be at end/ terminate
+          // if at this point we are at end, then this is an incomplete record.
           if (iter == end)
           {
-            ERRORF("ERROR: nothing was parsed. %lu to %lu.\n", coordinates.start, coordinates.end);
+            ERRORF("ERROR: nothing was parsed. %lu to %lu.\n", orig_offset, offset);
             output = SeqType();
-            return iter;
-          }  // else we have some real data.
+            return;
+          }
+          // else we have some real data.
 
           //== generate the sequence instance.
 
           // store the "pointers"
-          Iterator starts[4];
-          Iterator ends[4];
-
+          Iterator starts = end;
           int line_num = 0;  // first line has num 0.
 
           //== do the first char
-          // first char is already known (and not \n).  also, not at end.
-          starts[line_num] = iter;
-          output.id.composite = coordinates.start + count;
+          // first char is already known (and not \n), so isEOL is false.  also, not at end.
+//          starts[line_num] = iter;
+          output.id.composite = offset;
           bool isEOL = false;  // already trimmed all leading \n
-          bool found = false;  // not yet found
-          ++iter;  ++count;
-          // now wasEOL is set since we've moved position.
+
+          // move to next char, and set wasEOL.
+          ++iter;  ++offset;
           bool wasEOL = isEOL;
 
           //TODO:  optimize further.  even grep is faster (below takes about 50ms.  grep is at 30ms to search @
@@ -252,40 +259,74 @@ namespace bliss
           //== walk through the data range until the end.
           while ((iter != end))
           {
-            // check if current char is EOL
+            //== check if current char is EOL
             isEOL = (*iter == '\n');  // slow
 
-            // we have \nX or X\n.   skip this logic if 2 \n or 2 non-\n.
+            //== check if this is start of a line or end of a line
+            //  where we have \nX or X\n.   skip this logic if 2 \n or 2 non-\n.
             if (isEOL != wasEOL)  // kind of slow
             {
               // a new EOL.  X\n case
               if (isEOL)
               {
                 // found the end of a line
-                ends[line_num] = iter;
+                if (line_num == 1) populateSequence(starts, iter, output);
+                else if (line_num == 3) populateQuality(starts, iter, output);
                 ++line_num;
+                // reset start
+                starts = end;
 
-                // once reached 4 lines, can stop
+                // once reached 4 lines, can stop the loop
                 if (line_num >= 4)
                 {
-                  found = true;
-
                   // increment past the \n just before break.
-                  ++iter; ++count;
+                  ++iter; ++offset;
                   break;
                 }
               }
               // first char of a new line.  \nX case
               else
               {
-                starts[line_num] = iter;
+                starts = iter;  // regardless of the line number, save it.
               }
 
               wasEOL = isEOL;  // only toggle if isEOL != wasEOL.
             } // else we have \n\n or [^\n][^\n], continue.
 
-            ++iter; ++count;  // kind of slow
+            ++iter; ++offset;  // kind of slow
           }
+
+          //== at this point, got 4 lines (iter == end or not), or don't have 4 lines (iter has to be  at end)
+          // if iter reached end with less than 4 lines, then mark the last char as the end of a line
+          if (line_num < 4) {
+            if (line_num == 1) populateSequence(starts, iter, output);
+            else if (line_num == 3) populateQuality(starts, iter, output);
+            ++line_num;
+          }
+
+          TODO:
+
+          //== after completing the last line, check to see if we have the needed number of lines.
+          //== if no quality, need 2 lines, and if quality needed, need 4 lines
+          if (std::is_void<Quality>::value) { // not requiring quality scores, so need at least 2 lines.
+            if (line_num < 2) {
+              // not enough lines, so raise error and change output
+
+              output = SeqType();
+            }
+            // else have enough lines, everything should be updated already.
+
+
+          } else {                            // requiring quality scores, so need 4 lines
+
+            if (line_num < 4) {
+              // not enough lines, so raise error and change output
+              output = SeqType();
+            }
+            // else have enough lines, everything should be updated already.
+
+          }
+
 
 
           //== if reached the end by this time
@@ -293,154 +334,226 @@ namespace bliss
 
             // at end of iterator, but still missing a \n, then marked the last char as end of a line.
             if (!found) {
-              ends[line_num] = iter;
-              ++line_num;
             }
 
             // check to make sure we finished okay (found 4 lines) - if not, don't update the Sequence object.
             if (line_num < 4) {
-              ERRORF("ERROR: parsing failed. lines %d, %lu to %lu. \n", line_num, coordinates.start, coordinates.end);
+              ERRORF("ERROR: parsing failed. lines %d, %lu to %lu. \n", line_num, orig_offset, offset);
+
               std::stringstream ss;
               std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
-
-              std::copy(it, end, oit);
+              std::copy(orig_iter, end, oit);
               ERRORF("  offending string is %s\n", ss.str().c_str());
 
               output = SeqType();
-              return iter;
+              return;
             }
           }
 
-          assert(*(starts[0]) == '@');
-          assert(*(starts[2]) == '+');
+          // else, we have 4 lines.
 
           //== now populate the output (instance variable)
-          output.seq = starts[1];
-          output.seq_end = ends[1];
+          output.seqStart = starts[1];
+          output.seqEnd = ends[1];
           // this part is dependent on whether Quality template param is specified.
-          populateQuality(starts[3], ends[3]);
+          populateQuality(starts[3], ends[3], output);
 
-          //== update the coordinates.
-          coordinates.start += count;
+          // coordinates already updated.
 
-          //== return the updated iter.
-          return iter;
-        }
-
-        /// for dereferencing the parent iterator and return the result, which is stored in the local state variable: output.
-        SeqType& dereference()
-        {
-          return output;
         }
     };
 
-TODO: here.
-
     /**
-     * has the following characteristics:
-     * transform  (changes data type)
-     * delimiter  (trivial search for the end of the "record" / beginning of next record.)   != random access iterator.
-     * finite  (needs to know base iterator's end.)
+     * @class bliss::io::SequencesIterator
+     * @brief Iterator for parsing and traversing a block of data to access individual FASTQ sequence records.
+     * @details The iterator is initialized with start and end iterators pointing to the source data.
+     *    The source data may be of primitive type such as unsigned char.  The input iterators should be aligned
+     *    to record boundaries.
      *
-     * implement forward only for now.  searching backwards is not easy.
+     *    The iterator uses FASTQParser to walk through the data one sequence record at a time
      *
+     *    The iterator has the following characteristics.
+     *      transform  (changes data type)
+     *      delimiter  (trivial search for the end of the "record" / beginning of next record.)
+     *      finite  (needs to know base iterator's end.)
      *
+     *    Design considerations:
+     *      1. repeated calls to operator*() returns the same output, WITHOUT reparsing the underlying data
+     *      2. repeated calls to operator++() moves the current pointer forward each time
+     *      3. comparison of 2 SequencesIterators compares the underlying input iterators at the start positions of the current record
+     *      4. iterators have states:  before, during, after.
+     *          before:  operator* points to the first output, no need to call ++ first.  so this is same case as "during".
+     *          during:  operator* gets the most current output that's a result of calling ++, ++ moves pointer forward
+     *          after:   operator* returns empty result, ++ is same as no-op.
+     *     Based on these, we need to
+     *      1. cache the output
+     *      2. keep a current iterator (for comparison between SequencesIterators)
+     *      3. keep a next iterator (for parsing)
+     *      3. have constructor parse the first entry, so that dereference functions properly
+     *      4. check for end condition (next == end) and return if at end.
+     *
+     *      The functoid then only has 1 simple task:  to increment, as it does not need to store locally.
+     *
+     * @note this iterator is not a forward or bidirectional iterator, as traversing in reverse is not implemented.
+     *       NOT SPECIFIC TO FASTQ FORMAT
+     *
+     * @tparam Parser     Functoid type to supply specific logic for increment and dereference functionalities
+     * @tparam Iterator   Type of the input iterator to parse/traverse
+     * @tparam base_traits  default to std::iterator_traits of Iterator, defined for convenience.
      */
-    template<typename Parser, typename Iterator, typename base_traits = std::iterator_traits<Iterator> >
-    class fastq_iterator :
+    template<typename Parser, typename Iterator >
+    class SequencesIterator :
         public std::iterator<
             typename std::conditional<
-                  std::is_same<typename base_traits::iterator_category, std::random_access_iterator_tag>::value ||
-                  std::is_same<typename base_traits::iterator_category, std::bidirectional_iterator_tag>::value,
+                  std::is_same<typename std::iterator_traits<Iterator>::iterator_category, std::random_access_iterator_tag>::value ||
+                  std::is_same<typename std::iterator_traits<Iterator>::iterator_category, std::bidirectional_iterator_tag>::value,
                   std::forward_iterator_tag,
-                  typename base_traits::iterator_category
+                  typename std::iterator_traits<Iterator>::iterator_category
                 >::type,
             typename std::remove_reference<typename bliss::functional::function_traits<Parser>::return_type>::type,
-            typename base_traits::difference_type
+            typename std::iterator_traits<Iterator>::difference_type
           >
     {
       public:
 
+        /// type of data elements in the input iterator
+        typedef typename std::iterator_traits<Iterator>::value_type BaseValueType;
+
+        /// type of data elements in the input iterator
+        typedef typename std::iterator_traits<SequencesIterator<Parser, Iterator> >::value_type ValueType;
 
       protected:
-        // define first, to avoid -Wreorder error (where the variables are initialized before fastq_iterator::Parser, etc are defined.
-        typedef fastq_iterator<Parser, Iterator> type;
+        /// type of SequencesIterator class
+        typedef SequencesIterator<Parser, Iterator> type;
 
+        /// type traits of SequencesIterator class.
         typedef std::iterator_traits<type> traits;
-        typedef typename Parser::RangeType RangeType;
 
+        /// cache of the current result.
+        ValueType seq;
+
+        /// iterator at the current starting point in the input data from where the current FASTQ record was parsed.
         Iterator _curr;
+
+        /// iterator at the next starting point in the input data from where the next FASTQ record should be parsed.
         Iterator _next;
+
+        /// iterator pointing to the end of the input data, not to go beyond.
         Iterator _end;
-        Iterator _temp;
-        Parser _f;
-        typename traits::value_type empty_output;
-        RangeType range;     // the offsets in the base iterator.  if base iterator is pointer, then units are in bytes.
+
+        /// instance of the parser functoid, used during record parsing.
+        Parser parser;
+
+        /**
+         * @brief  the offset from the start of the file.  This is used as sequenceId.
+         * @details  for each file with file id (fid) between 0 and 255, the seq id starts at (fid << 40).
+         *          if base iterator is pointer, then units are in bytes.
+         */
+        size_t seqId;
+
 
       public:
+        /**
+         * @brief constructor, initializes with a start and end.  this represents the start of the output iterator
+         * @details   at construction, the internal _curr, _next iterators are set to the input start iterator, and _end is set to the input end.
+         *            then immediately the first record is parsed, with output populated with the first entry and next pointer advanced.
+         *
+         *
+         * @param f       parser functoid for parsing the data.
+         * @param start   beginning of the data to be parsed
+         * @param end     end of the data to be parsed.
+         * @param _range  the Range associated with the start and end of the source data.  coordinates relative to the file being processed.
+         */
+        SequencesIterator(const Parser & f, const Iterator& start,
+                       const Iterator& end, const size_t &_offset)
+            : seq(), _curr(start), _next(start), _end(end), parser(f), seqId(_offset)
+        {
+          // parse the first entry, if start != end.
+          // effect: _next incremented to next parse start point.
+          //         seqId updated to next start point,
+          //         output updated with either empty (if _next at end)  or the new output
+          if (_next != _end) parser.increment(_next, _end, seqId, seq);;
+        }
 
-        typedef typename base_traits::value_type BaseValueType;
-
-        // class specific constructor
-        fastq_iterator(const Parser & f, const Iterator& curr,
-                       const Iterator& end, const RangeType &_range)
-            : _curr(curr), _next(curr), _end(end), _f(f), empty_output(), range(_range)
+        /**
+         * @brief constructor, initializes with only the end.  this represents the end of the output iterator.
+         * @details   at construction, the internal _curr, _next, and _end iterators are set to the input end iterator.
+         *          this instance therefore does not traverse and only serves as marker for comparing to the traversing SequencesIterator.
+         * @param end     end of the data to be parsed.
+         */
+        SequencesIterator(const Iterator& end)
+            : seq(), _curr(end), _next(end), _end(end), parser(), seqId(std::numeric_limits<size_t>::max())
         {
         }
 
-        fastq_iterator(const Parser & f, const Iterator& end, const RangeType &_range)
-            : _curr(end), _next(end), _end(end), _f(f), empty_output(), range(_range.end, _range.end)
-        {
-        }
+        /**
+         * @brief default copy constructor
+         * @param Other   The SequencesIterator to copy from
+         */
+        SequencesIterator(const type& Other)
+            : seq(Other.seq), _curr(Other._curr), _next(Other._next), _end(Other._end),
+              parser(Other.parser),  seqId(Other.seqId)
+        {}
 
-        // for all classes
-        fastq_iterator(const type& Other)
-            : _curr(Other._curr), _next(Other._next), _end(Other._end),
-              _f(Other._f), empty_output(), range(Other.range)
+        /**
+         * @brief  default copy assignment operator
+         * @param Other   The SequencesIterator to copy from
+         * @return  modified copy of self.
+         */
+        type& operator =(const type& Other)
         {
-        }
-
-        type& operator=(const type& Other)
-        {
-          _f = Other._f;
+          seq = Other.seq;
           _curr = Other._curr;
           _next = Other._next;
           _end = Other._end;
-          range = Other.range;
+          parser = Other.parser;
+          seqId = Other.seqId;
           return *this;
         }
 
-        type& operator++()
+        /// default constructor deleted.
+        SequencesIterator() = delete;
+
+
+        /**
+         * @brief   iterator's increment operation
+         * @details to increment, the class uses the parser functoid to parse and traverse the input iterator
+         *          At the end of the traversal, a FASTQ sequence record has been made and is kept in the parser functoid
+         *          as state variable, and the input iterator has advanced to where parsing would start for the next record.
+         *          The corresponding starting of the current record is saved as _curr iterator.
+         *
+         *          conversely, to get the starting position of the next record, we need to parse the current record.
+         *
+         * @note    for end iterator, because _curr and _end are both pointing to the input's end, "increment" does not do anything.
+         * @return  self, updated with internal position.
+         */
+        type &operator ++()
         {
-
-          // special case, at end of iter.
-          if (_curr == _end)
+          //== at end of the data block, can't parse any further, no movement.  (also true for end iterator)
+          if (_next == _end)
           {
-            // no movement
-            return *this;
+            //== check if reaching _end for the first time
+            if (_curr != _end) {
+              // advance to end
+              _curr = _next;
+              // and set output to empty.
+              seq = ValueType();
+            }
+          } else {
+            //== else we can parse, so do it.
+
+            //== move the current forward
+            _curr = _next;
+
+            //== then try parsing.  this advances _next and seqId, ready for next ++ call, and updates output cache.
+            parser.increment(_next, _end, seqId, seq);
           }
 
-          // property:  to set _next to the appropriate position, need to parse.
-
-          // ++ parses so that _curr moves.  _next is pushed forward.  if _next
-          //has already been moved (via *), then just move curr there.
-
-          if (_curr == _next) // at beginning.  so need to parse, and right away
-          {
-            // walk the base iterator until function is done with construction or
-            // at end.
-            // doing the construction here because we have to walk anyways.
-            _temp = _next;
-            _next = _f.increment(_temp, _end, range);    // _next is moved.
-          }
-          // else next has already been moved (by * operator)
-
-          _curr = _next;
-
+          //== states updated.  return self.
           return *this;
         }
 
-        type operator++(int)
+        type operator ++(int)
         {
           type output(*this);
           return ++output;
@@ -449,11 +562,11 @@ TODO: here.
         // accessor functions for internal state.
         Parser& getParser()
         {
-          return _f;
+          return parser;
         }
         const Parser& getParser() const
         {
-          return _f;
+          return parser;
         }
         Iterator& getBaseIterator()
         {
@@ -465,51 +578,23 @@ TODO: here.
         }
 
         // input iterator specific
-        inline bool operator==(const type& rhs)
+        bool operator ==(const type& rhs) const
         {
           return _curr == rhs._curr;
         }
 
-        inline bool operator!=(const type& rhs)
+        bool operator !=(const type& rhs) const
         {
           return _curr != rhs._curr;
         }
 
-        inline typename traits::value_type operator*()
+        ValueType &operator *() const
         {
-          // boundary case: at end of iterators
-          if (_curr == _end)
-          {
-            return empty_output;
-          }
-
-          // special case, have not yet parsed the content
-          if (_curr == _next)
-          {
-            // after parse, _next has been moved but curr stays where it is.
-            _temp = _next;
-            _next = _f.increment(_temp, _end, range);
-          }
-          // else result was already computed and stored in the functor.
-
-          return _f();
+          return seq;
         }
 
-        // no -> operator.  -> returns a pointer to the value held in iterator.
-        // however, in transform iterator, we are not holding data, so pointer does not make sense.
-
-        // NO support for output iterator
-
-        // forward iterator
-        template<
-            typename = typename std::enable_if<
-                std::is_same<typename traits::iterator_category, std::forward_iterator_tag>::value ||
-                std::is_same<typename traits::iterator_category, std::bidirectional_iterator_tag>::value ||
-                std::is_same<typename traits::iterator_category, std::random_access_iterator_tag>::value>::type
-               >
-        explicit fastq_iterator()
-            : _f(), _curr(), _next(), empty_output()
-        {
+        ValueType *operator ->() const {
+          return &seq;
         }
 
 
@@ -517,4 +602,4 @@ TODO: here.
 
   } // iterator
 } // bliss
-#endif /* FASTQ_ITERATOR_HPP_ */
+#endif /* SequencesIterator_HPP_ */

@@ -22,7 +22,7 @@
 #include "io/file_loader.hpp"
 #include "io/fastq_loader.hpp"
 #include "common/alphabets.hpp"
-#include "io/fastq_iterator.hpp"
+#include "io/SequencesIterator.hpp"
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readMMap {
@@ -446,7 +446,7 @@ struct readFASTQ {
 };
 
 template <typename OT, bool buffering = false, bool preloading = false>
-struct FASTQIterator {
+struct SequencesIterator {
     typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
@@ -460,9 +460,9 @@ struct FASTQIterator {
     typedef bliss::io::SequenceWithQuality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
     typedef bliss::io::FASTQParser<BaseIterType, Alphabet, QualityType>  ParserType;
-    typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
+    typedef bliss::io::SequencesIterator<ParserType, BaseIterType>           IteratorType;
 
-    FASTQIterator(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
+    SequencesIterator(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
       loader.getNextL1Block();
@@ -475,7 +475,7 @@ struct FASTQIterator {
 
     }
 
-    ~FASTQIterator() {
+    ~SequencesIterator() {
       // unmap
     }
 
@@ -487,7 +487,7 @@ struct FASTQIterator {
     }
 
     std::string getName() {
-      return "FASTQIterator";
+      return "SequencesIterator";
     }
 
 
@@ -566,7 +566,7 @@ struct FASTQIterator {
 
 
 template <typename OT, bool buffering = false, bool preloading = false>
-struct FASTQIterator2 {
+struct SequencesIterator2 {
     typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
@@ -580,9 +580,9 @@ struct FASTQIterator2 {
     typedef bliss::io::SequenceWithQuality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
     typedef bliss::io::FASTQParser<BaseIterType, Alphabet, QualityType>  ParserType;
-    typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
+    typedef bliss::io::SequencesIterator<ParserType, BaseIterType>           IteratorType;
 
-    FASTQIterator2(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
+    SequencesIterator2(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
       loader.getNextL1Block();
@@ -595,7 +595,7 @@ struct FASTQIterator2 {
 
     }
 
-    ~FASTQIterator2() {
+    ~SequencesIterator2() {
       // unmap
 
     }
@@ -608,7 +608,7 @@ struct FASTQIterator2 {
     }
 
     std::string getName() {
-      return "FASTQIterator2";
+      return "SequencesIterator2";
     }
 
     void reset() {
@@ -677,7 +677,7 @@ struct FASTQIterator2 {
 
 
 template <typename OT, bool buffering = false, bool preloading = false>
-struct FASTQIteratorNoQual {
+struct SequencesIteratorNoQual {
     typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
 
     size_t page_size;
@@ -691,9 +691,9 @@ struct FASTQIteratorNoQual {
     typedef bliss::io::SequenceWithQuality<BaseIterType, Alphabet, QualityType>  SequenceType;
 
     typedef bliss::io::FASTQParser<BaseIterType, Alphabet, QualityType>  ParserType;
-    typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
+    typedef bliss::io::SequencesIterator<ParserType, BaseIterType>           IteratorType;
 
-    FASTQIteratorNoQual(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
+    SequencesIteratorNoQual(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(filename, nprocs, rank, nthreads, chunkSize)  {
 
       loader.getNextL1Block();
@@ -706,7 +706,7 @@ struct FASTQIteratorNoQual {
 
     }
 
-    ~FASTQIteratorNoQual() {
+    ~SequencesIteratorNoQual() {
       // unmap
     }
 
@@ -718,7 +718,7 @@ struct FASTQIteratorNoQual {
     }
 
     std::string getName() {
-      return "FASTQIteratorNoQual";
+      return "SequencesIteratorNoQual";
     }
     void reset() {
       loader.resetL2Partitioner();
@@ -853,15 +853,15 @@ int main(int argc, char* argv[])
 #endif
 
 #if defined(TEST_OP_FASTQIter)
-  typedef FASTQIterator<        double, true, false> OpType;
+  typedef SequencesIterator<        double, true, false> OpType;
 #endif
 
 #if defined(TEST_OP_FASTQIter2)
-  typedef FASTQIterator2<       double, true, false> OpType;
+  typedef SequencesIterator2<       double, true, false> OpType;
 #endif
 
 #if defined(TEST_OP_FASTQIterNoQual)
-  typedef FASTQIteratorNoQual<  double, true, false> OpType;
+  typedef SequencesIteratorNoQual<  double, true, false> OpType;
 #endif
 
   OpType op(filename, nprocs, rank, nthreads, step);

@@ -92,7 +92,7 @@ typedef std::unordered_multimap<KmerType, KmerIndexType>          IndexType;
 // define the transform iterator type
 typedef bliss::io::FASTQParser<BaseIterType, Alphabet, QualityType>
                                                                   ParserType;
-typedef bliss::io::fastq_iterator<ParserType, BaseIterType>       IteratorType;
+typedef bliss::io::SequencesIterator<ParserType, BaseIterType>       IteratorType;
 
 
 // define the computation type.

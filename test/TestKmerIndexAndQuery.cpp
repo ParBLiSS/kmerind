@@ -72,7 +72,7 @@ typedef bliss::io::SequenceWithQuality<FileBlockIterType, Alphabet, QualityType>
 
 /// define the transform iterator type
 typedef bliss::io::FASTQParser<FileBlockIterType, Alphabet, QualityType>    ParserType;
-typedef bliss::io::fastq_iterator<ParserType, FileBlockIterType>             SeqIterType;
+typedef bliss::io::SequencesIterator<ParserType, FileBlockIterType>             SeqIterType;
 
 /// define kmer quality GENERATOR types
 typedef bliss::index::SangerToLogProbCorrect<QualityType>               QualityEncoderType;

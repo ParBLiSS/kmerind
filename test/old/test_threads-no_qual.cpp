@@ -72,7 +72,7 @@ typedef bliss::index::generate_kmer<SequenceType, KmerIndexType> kmer_op_type;
 typedef std::unordered_multimap<KmerType, KmerIndexType> IndexType;
 
 typedef bliss::io::FASTQParser<BaseIterType, Alphabet>               ParserType;
-typedef bliss::io::fastq_iterator<ParserType, BaseIterType>           IteratorType;
+typedef bliss::io::SequencesIterator<ParserType, BaseIterType>           IteratorType;
 typedef bliss::index::KmerIndexGenerator<kmer_op_type, BufferType, bliss::index::XorModulus<KmerType>> ComputeType;
 
 
