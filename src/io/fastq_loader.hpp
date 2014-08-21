@@ -65,17 +65,20 @@ namespace bliss
      * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
      */
     template<typename T,
-        bool Buffering = true,
-        bool Preloading = false,
+        bool L2Buffering = true,
+        bool L1Buffering = false,
         typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
         typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >
-    class FASTQLoader : public FileLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT,
-                                          FASTQLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT> >
+    class FASTQLoader : public FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
+                                          FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> >
     {
       protected:
         /// base class type (FileLoader with the specific template parameters)
-        typedef FileLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT,
-            FASTQLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT> >    SuperType;
+        typedef FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
+            FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> >    SuperType;
+
+        friend class FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
+                                FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> >;
 
       public:
         //==== exposing types from base class
@@ -146,7 +149,7 @@ namespace bliss
          * @note    the range should be large enough so that we would not run into trouble with partition search not finding a starting position.
          *
          *
-         * @tparam Iterator   type of iterator for data to traverse.  raw pointer if no Buffering, or vector's iterator if buffering.
+         * @tparam Iterator   type of iterator for data to traverse.  raw pointer if no L2Buffering, or vector's iterator if buffering.
          * @param _data       start of iterator.
          * @param parentRange   the "full" range to which the inMemRange belongs.  used to determine if the target is a "first" block and last block.  has to start and end with valid delimiters (@)
          * @param inMemRange the portion of the "full" range that's loaded in memory (e.g. in DataBlock).  does NOT have to start and end with @
@@ -176,7 +179,7 @@ namespace bliss
           bool wasEOL;
 
           //== if at beginning of parent partition, treat as if previous line was EOL
-          if (t.start == partRange.start) { // at beginning of parent range, treat specially, since there is no preceding \n for the @
+          if (t.start == parentRange.start) { // at beginning of parent range, treat specially, since there is no preceding \n for the @
             // all other partitions will lose the part before the first "\n@" (will be caught by the previous partition)
             // if this is called to generate L1Block, then parentRange is the whole file, with first part start with @ (implicit \n prior).
             // if this is called to generate L2Block, then parentRange is the loaded L1 Block, already aligned to @, so previous is \n.
@@ -271,6 +274,8 @@ namespace bliss
           throw bliss::io::IOException(ss.str());
         }
 
+
+
         /**
          * @brief get the next available range for the L1 partition block, given the L1 partition id
          * @details   This method is the CTRP implementation called by the base class' getNextL1BlockRange method.
@@ -290,7 +295,7 @@ namespace bliss
           // get the right shifted range
           size_t length = hint.size();
 
-          RangeType next = hint.shiftRight(length);
+          RangeType next = RangeType::shiftRight(hint, length);
           next.intersect(this->fileRange);
 
           // get the combined ranges
@@ -313,11 +318,11 @@ namespace bliss
             // either start or end are not found so return an empty range.
 
             // TODO: need to handle this scenario better - should keep search until end.
-            WARNING(ex.what());
+            WARNINGF("%s\n", ex.what());
 
-            WARNF("curr range: partition hint %lu-%lu, next %lu-%lu, file_range %lu-%lu\n",
+            WARNINGF("curr range: partition hint %lu-%lu, next %lu-%lu, file_range %lu-%lu\n",
                    hint.start, hint.end, next.start, next.end, this->fileRange.start, this->fileRange.end);
-            WARNF("got an exception search for partition:  %s \n", ex.what());
+            WARNINGF("got an exception search for partition:  %s \n", ex.what());
 
             output.start = hint.end;
             output.end = hint.end;
@@ -359,7 +364,7 @@ namespace bliss
 
           if (length > 0) {
             // get the RightShifted range for searching at the end.
-            RangeType next = hint.shiftRight(length);
+            RangeType next = RangeType::shiftRight(hint, length);
             next.intersect(parentRange);
 
 
@@ -512,7 +517,7 @@ namespace bliss
          * @brief move constructor.  here to ensure that the DataBlock instances are moved.
          * @param other FASTQLoader to move
          */
-        FASTQLoader(FASTQLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT>&& other) : SuperType(std::forward(other)) {};
+        FASTQLoader(FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>&& other) : SuperType(std::forward(other)) {};
 
         /**
          * @brief move assignment operator.  here to ensure that the DataBlock instances are moved.
@@ -520,7 +525,7 @@ namespace bliss
          * @param other   FASTQLoader to move
          * @return        updated object with moved data
          */
-        FASTQLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT>& operator=(FASTQLoader<T, Buffering, Preloading, L2PartitionerT, L1PartitionerT>&& other) {
+        FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>& operator=(FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>&& other) {
           if (this != &other) {
             this->SuperType::operator =(other);
           }

@@ -20,7 +20,7 @@
 
 
 #include "index/kmer_index_element.hpp"
-#include "io/SequencesIterator.hpp"
+#include "io/fastq_iterator.hpp"
 
 
 using namespace std;

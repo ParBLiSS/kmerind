@@ -63,8 +63,8 @@ namespace bliss
 
           for (; start != end; ++start, ++i)
           {
-            kmer = *start;
-            index.insert(kmer.);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
+            //kmer = *start;
+            index.insert(*start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
                                   // then copy assign
 
             // some debugging output
@@ -117,12 +117,12 @@ namespace bliss
         void operator()(SequenceType &read, IndexType &index) {
 
           KmerGenOp kmer_op(read.id);
-          KmerIter start(read.seq, kmer_op);
-          KmerIter end(read.seq_end, kmer_op);
+          KmerIter start(read.seqBegin, kmer_op);
+          KmerIter end(read.seqEnd, kmer_op);
 
           QualGenOp qual_op;
-          QualIter qstart(read.qual, qual_op);
-          QualIter qend(read.qual_end, qual_op);
+          QualIter qstart(read.qualBegin, qual_op);
+          QualIter qend(read.qualEnd, qual_op);
 
           KmerIndexPairType kmer;
 //          int kmerCount = 0;

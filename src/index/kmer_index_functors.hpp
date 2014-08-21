@@ -20,7 +20,7 @@
 
 #include <utils/constexpr_array.hpp>      // for precomputing the quality scores
 #include <common/AlphabetTraits.hpp>      // for mapping char to alphabet value
-#include <io/SequencesIterator.hpp>          // for Id.
+#include <io/fastq_iterator.hpp>          // for Id.
 #include <index/kmer_index_element.hpp>   // for the basic kmer index element structures.
 
 namespace bliss

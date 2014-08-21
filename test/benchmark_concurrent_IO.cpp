@@ -22,7 +22,7 @@
 #include "io/file_loader.hpp"
 #include "io/fastq_loader.hpp"
 #include "common/alphabets.hpp"
-#include "io/SequencesIterator.hpp"
+#include "io/fastq_iterator.hpp"
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readMMap {
@@ -505,8 +505,8 @@ struct SequencesIterator {
 
       // traverse using fastq iterator.
       ParserType parser;
-      IteratorType fastq_start(parser, data.begin(), data.end(), data.getRange());
-      IteratorType fastq_end(parser, data.end(), data.getRange());
+      IteratorType fastq_start(parser, data.begin(), data.end(), data.getRange().start);
+      IteratorType fastq_end(data.end());
 
       SequenceType read;
       unsigned char c = 0;
@@ -523,36 +523,36 @@ struct SequencesIterator {
 
         // simulate kmer computation
         // simulate multiple traversals.
-        for (BaseIterType iter = read.seq; iter != read.seq_end; ++iter) {
+        for (BaseIterType iter = read.seqBegin; iter != read.seqEnd; ++iter) {
           c = std::max(*iter, c);
         }
-        for (BaseIterType iter = read.qual; iter != read.qual_end; ++iter) {
+        for (BaseIterType iter = read.qualBegin; iter != read.qualEnd; ++iter) {
           c = std::max(*iter, c);
         }
 
-        for (BaseIterType iter = read.seq; iter != read.seq_end; ++iter) {
+        for (BaseIterType iter = read.seqBegin; iter != read.seqEnd; ++iter) {
           d = std::min(*iter, d);
         }
-        for (BaseIterType iter = read.qual; iter != read.qual_end; ++iter) {
+        for (BaseIterType iter = read.qualBegin; iter != read.qualEnd; ++iter) {
           d = std::min(*iter, d);
         }
 
         // simulate kmer computation
-        for (BaseIterType iter = read.seq; iter != read.seq_end; ++iter) {
+        for (BaseIterType iter = read.seqBegin; iter != read.seqEnd; ++iter) {
           km <<= 8;
           km |= static_cast<uint64_t>(*iter);
         }
-        for (BaseIterType iter = read.qual; iter != read.qual_end; ++iter) {
+        for (BaseIterType iter = read.qualBegin; iter != read.qualEnd; ++iter) {
           km <<= 8;
           km |= static_cast<uint64_t>(*iter);
         }
 
         // simulate quality score computation.
         tv += static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-        for (BaseIterType iter = read.seq; iter != read.seq_end; ++iter) {
+        for (BaseIterType iter = read.seqBegin; iter != read.seqEnd; ++iter) {
           tv += log2(*iter);
         }
-        for (BaseIterType iter = read.qual; iter != read.qual_end; ++iter) {
+        for (BaseIterType iter = read.qualBegin; iter != read.qualEnd; ++iter) {
           tv += log2(*iter);
         }
 
@@ -625,8 +625,8 @@ struct SequencesIterator2 {
 
       // traverse using fastq iterator.
       ParserType parser;
-      IteratorType fastq_start(parser, data.begin(), data.end(), data.getRange());
-      IteratorType fastq_end(parser, data.end(), data.getRange());
+      IteratorType fastq_start(parser, data.begin(), data.end(), data.getRange().start);
+      IteratorType fastq_end(data.end());
 
       SequenceType read;
       uint64_t km = 0;
@@ -646,9 +646,9 @@ struct SequencesIterator2 {
         // simulate kmer computation
 
         // simulate kmer computation
-        iter = read.seq;
+        iter = read.seqBegin;
         for (;
-            iter != read.seq_end;
+            iter != read.seqEnd;
             ++iter) {
           km <<= 8;
           km |= static_cast<uint64_t>(*iter);
@@ -657,9 +657,9 @@ struct SequencesIterator2 {
 
         // simulate quality score computation.
         tv += static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-        iter = read.qual;
+        iter = read.qualBegin;
         for (;   // slow because of log2.
-            iter != read.qual_end;
+            iter != read.qualEnd;
             ++iter) {
           tv += log2(*iter);
 //          ++j;
@@ -744,8 +744,8 @@ struct SequencesIteratorNoQual {
 
       // traverse using fastq iterator.
       ParserType parser;
-      IteratorType fastq_start(parser, data.begin(), data.end(), data.getRange());
-      IteratorType fastq_end(parser, data.end(), data.getRange());
+      IteratorType fastq_start(parser, data.begin(), data.end(), data.getRange().start);
+      IteratorType fastq_end(data.end());
 
       SequenceType read;
       uint64_t km = 0;
@@ -761,7 +761,7 @@ struct SequencesIteratorNoQual {
         // simulate kmer computation
 
         // simulate kmer computation
-        for (BaseIterType iter = read.seq; iter != read.seq_end; ++iter) {
+        for (BaseIterType iter = read.seqBegin; iter != read.seqEnd; ++iter) {
           km <<= 8;
           km |= static_cast<uint64_t>(*iter);
         }
