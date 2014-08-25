@@ -160,9 +160,12 @@ struct Tester
       exit(EXIT_FAILURE);
     }
 
-    commLayer.finishTag(FIRST_TAG);
-    commLayer.finishTag(LOOKUP_TAG);
-    commLayer.finishTag(ANSWER_TAG);
+    commLayer.finish(FIRST_TAG);
+
+
+//    commLayer.finishTag(LOOKUP_TAG);
+//    commLayer.finishTag(ANSWER_TAG);
+    commLayer.finishCommunication();
 
 
     DEBUG("This was a triumph.");

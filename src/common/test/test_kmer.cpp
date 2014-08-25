@@ -1,6 +1,6 @@
 // include google test
 #include <gtest/gtest.h>
-#include <boost/concept_check.hpp>
+//#include <boost/concept_check.hpp>
 
 // include classes to test
 #include <common/Kmer.hpp>

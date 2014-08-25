@@ -509,9 +509,10 @@ public:
    */
   virtual ~distributed_multimap() {
     // finish all three tags in order
-    this->commLayer.finishTag(_base_class::INSERT_MPI_TAG);
-    this->commLayer.finishTag(_base_class::LOOKUP_MPI_TAG);
-    this->commLayer.finishTag(_base_class::LOOKUP_ANSWER_MPI_TAG);
+//    this->commLayer.finishTag(_base_class::INSERT_MPI_TAG);
+//    this->commLayer.finishTag(_base_class::LOOKUP_MPI_TAG);
+//    this->commLayer.finishTag(_base_class::LOOKUP_ANSWER_MPI_TAG);
+	  this->commLayer.finishCommunication();
   }
 
   /**
@@ -680,9 +681,10 @@ public:
    */
   virtual ~distributed_counting_map()
   {
-    this->commLayer.finishTag(_base_class::INSERT_MPI_TAG);
-    this->commLayer.finishTag(_base_class::LOOKUP_MPI_TAG);
-    this->commLayer.finishTag(_base_class::LOOKUP_ANSWER_MPI_TAG);
+//    this->commLayer.finishTag(_base_class::INSERT_MPI_TAG);
+//    this->commLayer.finishTag(_base_class::LOOKUP_MPI_TAG);
+//    this->commLayer.finishTag(_base_class::LOOKUP_ANSWER_MPI_TAG);
+	  this->commLayer.finishCommunication();
   }
 
   /**

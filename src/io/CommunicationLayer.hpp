@@ -344,6 +344,7 @@ class CommunicationLayer
      *
      * @tparam  BufferIdType  type of Buffer id.  Obtained from SendMessageBuffer, parameterized by Thread Safety.
      */
+    template<typename BufferIdType>
     struct MessageToSend
     {
       /// The id of the message buffer
@@ -415,6 +416,7 @@ public:
    */
   virtual ~CommunicationLayer () {
     // TODO: check that we are finished??
+	  finishCommunication();
 
     // wait for both threads to quit
     callback_thread.join();
@@ -664,6 +666,10 @@ public:
    */
   void finishCommunication() throw (bliss::io::IOException)
   {
+	  // already finishing.
+	  if (finishing.load() == true) return;
+
+
 
     for (auto tag : sendAccept) {
 
