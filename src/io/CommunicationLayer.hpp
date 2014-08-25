@@ -391,7 +391,7 @@ public:
    * @param comm_size       The size of the MPI Communicator.
    */
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
-    : sendQueue(3 * comm_size), recvQueue(3 * comm_size),
+    : sendQueue(3 * comm_size), recvQueue(3 * comm_size), sendAccept(),
       flushing(-1), finishing(false), sendDone(false), recvDone(false),
       comm(communicator), epoch(0)
   {
@@ -419,8 +419,8 @@ public:
 	  finishCommunication();
 
     // wait for both threads to quit
-    callback_thread.join();
     comm_thread.join();
+    callback_thread.join();
 
     // detach the buffer
     int mpiBufSize;
@@ -670,12 +670,12 @@ public:
 	  if (finishing.load() == true) return;
 
 
+	  std::unordered_set<int> temp(sendAccept);
 
-    for (auto tag : sendAccept) {
 
-      if (tag != CONTROL_TAG) {
-        assert(tag != CONTROL_TAG && tag >= 0);
+	  for (auto tag : temp) {
 
+      if (tag != CONTROL_TAG && tag >= 0) {
         INFOF("FINISHing tag %d, epoch %d", tag, epoch);
 
         // flush all buffers (put them into send queue)
@@ -704,7 +704,6 @@ public:
         waitForControlMessages(tag);
       }
     }
-
 
     // track the tag that is undergoing flush in a thread safe way
     // control thread (calling flush) sets it, while receive thread
