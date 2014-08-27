@@ -216,7 +216,7 @@ struct RunTask {
       {
         t1 = std::chrono::high_resolution_clock::now();
 
-        FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire execution.
+        FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
 
         loader.getNextL1Block();
 

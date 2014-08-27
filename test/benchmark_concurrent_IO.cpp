@@ -196,7 +196,7 @@ struct readFileLoader {
     LoaderType loader;
 
     readFileLoader(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
-      loader(filename, nprocs, rank, nthreads, chunkSize)  {
+      loader(nprocs, rank, filename, nthreads, chunkSize)  {
 
       loader.getNextL1Block();
 
@@ -285,7 +285,7 @@ struct readFileLoaderAtomic {
     LoaderType loader;
 
     readFileLoaderAtomic(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
-      loader(filename, nprocs, rank, nthreads, chunkSize)  {
+      loader(nprocs, rank, filename, nthreads, chunkSize)  {
 
       loader.getNextL1Block();
 
@@ -370,7 +370,7 @@ struct readFASTQ {
     LoaderType loader;
 
     readFASTQ(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
-      loader(filename, nprocs, rank, nthreads, chunkSize)  {
+      loader(nprocs, rank, filename, nthreads, chunkSize)  {
 
       loader.getNextL1Block();
 
@@ -463,7 +463,7 @@ struct SequencesIterator {
     typedef bliss::io::SequencesIterator<ParserType, BaseIterType>           IteratorType;
 
     SequencesIterator(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
-      loader(filename, nprocs, rank, nthreads, chunkSize)  {
+      loader(nprocs, rank, filename, nthreads, chunkSize)  {
 
       loader.getNextL1Block();
 
@@ -583,7 +583,7 @@ struct SequencesIterator2 {
     typedef bliss::io::SequencesIterator<ParserType, BaseIterType>           IteratorType;
 
     SequencesIterator2(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
-      loader(filename, nprocs, rank, nthreads, chunkSize)  {
+      loader(nprocs, rank, filename, nthreads, chunkSize)  {
 
       loader.getNextL1Block();
 
@@ -694,7 +694,7 @@ struct SequencesIteratorNoQual {
     typedef bliss::io::SequencesIterator<ParserType, BaseIterType>           IteratorType;
 
     SequencesIteratorNoQual(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
-      loader(filename, nprocs, rank, nthreads, chunkSize)  {
+      loader(nprocs, rank, filename, nthreads, chunkSize)  {
 
       loader.getNextL1Block();
 

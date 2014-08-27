@@ -318,7 +318,7 @@ namespace io
          * TODO: test on remotely mounted file system.
          *
          */
-        FileLoader(const std::string &_filename, const MPI_Comm& _comm, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (bliss::io::IOException)
+        explicit FileLoader(const MPI_Comm& _comm, const std::string &_filename, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (bliss::io::IOException)
             : pageSize(sysconf(_SC_PAGE_SIZE)), recordSize(1), loaded(false), fileHandle(-1), fileRange(), comm(_comm),
               L1Partitioner(), mmapData(nullptr), L1Block(),
               nConsumingThreads(_nThreads), L2BlockSize(_L2BlockSize), L2Partitioner(), L2Blocks(nullptr)
@@ -382,9 +382,8 @@ namespace io
          * TODO: test on remotely mounted file system.
          *
          */
-        FileLoader(const std::string &_filename,
-                            const size_t _nConcurrentLoaders = 1, const int _loaderId = 0,
-                            const size_t _nThreads = 1, const size_t _L2BlockSize = 1 ) throw (bliss::io::IOException)
+        FileLoader(const size_t _nConcurrentLoaders, const int _loaderId, const std::string &_filename,
+                   const size_t _nThreads = 1, const size_t _L2BlockSize = 1 ) throw (bliss::io::IOException)
             : pageSize(sysconf(_SC_PAGE_SIZE)), recordSize(1), loaded(false), fileHandle(-1), fileRange(),
               loaderId(_loaderId), L1Partitioner(), mmapData(nullptr), L1Block(),
               nConsumingThreads(_nThreads), L2BlockSize(_L2BlockSize), L2Partitioner(), L2Blocks(nullptr)

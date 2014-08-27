@@ -465,8 +465,8 @@ namespace bliss
          * TODO: test on remotely mounted file system.
          *
          */
-        FASTQLoader(const std::string &_filename, const MPI_Comm& _comm, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (IOException)
-                             : SuperType(_filename, _comm, _nThreads, _L2BlockSize)
+        explicit FASTQLoader(const MPI_Comm& _comm, const std::string &_filename, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (IOException)
+                             : SuperType(_comm, _filename, _nThreads, _L2BlockSize)
         {}
 #endif
 
@@ -494,10 +494,9 @@ namespace bliss
          * TODO: test on remotely mounted file system.
          *
          */
-        FASTQLoader(const std::string &_filename,
-                            const size_t _nProcs = 1, const int _rank = 0,
-                            const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (IOException)
-                            : SuperType(_filename, _nProcs, _rank, _nThreads, _L2BlockSize)
+        FASTQLoader(const size_t _nProcs, const int _rank, const std::string &_filename,
+                    const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (IOException)
+                            : SuperType(_nProcs, _rank, _filename, _nThreads, _L2BlockSize)
         {};
 
         /**

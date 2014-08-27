@@ -46,7 +46,7 @@ class TestableFileLoader :
         TestableFileLoader(const std::string &_filename,
                                     const int _nConcurrentLoaders = 1, const int _loaderId = 0,
                                     const size_t _nThreads = 1, const size_t _L2BlockSize = 1 ) throw (bliss::io::IOException) :
-                                    SuperType(_filename, _nConcurrentLoaders, _loaderId, _nThreads, _L2BlockSize) {};
+                                    SuperType(_nConcurrentLoaders, _loaderId, _filename, _nThreads, _L2BlockSize) {};
 #if defined(USE_MPI)
         TestableFileLoader(const std::string &_filename, const MPI_Comm& _comm, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (bliss::io::IOException)
             : SuperType(_filename, _comm, _nThreads, _L2BlockSize) {};

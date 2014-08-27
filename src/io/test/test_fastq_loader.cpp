@@ -81,7 +81,7 @@ TYPED_TEST_P(FASTQLoaderTest, OpenWithRange)
   int rank = 3;
   int nprocs = 7;
 
-  FASTQLoaderType loader(this->fileName, nprocs, rank);
+  FASTQLoaderType loader(nprocs, rank, this->fileName );
 
   loader.getNextL1Block();
 
@@ -108,7 +108,7 @@ TYPED_TEST_P(FASTQLoaderTest, OpenConsecutiveRanges)
 
   for (int rank = 0; rank < nprocs; ++rank) {
     {
-      FASTQLoaderType loader(this->fileName, nprocs, rank);
+      FASTQLoaderType loader(nprocs, rank, this->fileName);
 
       d = loader.getNextL1Block();
       r = d.getRange();
@@ -195,7 +195,7 @@ TYPED_TEST_P(FASTQLoaderBufferTest, BufferingChunks)
   int nThreads = 2;
 
 
-  FASTQLoaderType loader(this->fileName, nprocs, rank, nThreads, 2048);
+  FASTQLoaderType loader(nprocs, rank, this->fileName, nThreads, 2048);
 
   typename FASTQLoaderType::L1BlockType d = loader.getNextL1Block();
 
