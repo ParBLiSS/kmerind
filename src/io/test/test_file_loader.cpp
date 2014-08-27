@@ -43,7 +43,7 @@ class TestableFileLoader :
         TestableFileLoader(const MyType& other) = delete;
         /// Removed default copy assignment operator
         TestableFileLoader& operator=(const MyType& other) = delete;
-        TestableFileLoader(const int _nConcurrentLoaders = 1, const int _loaderId = 0, const std::string &_filename,
+        TestableFileLoader(const size_t _nConcurrentLoaders, const int _loaderId, const std::string &_filename,
                                     const size_t _nThreads = 1, const size_t _L2BlockSize = 1 ) throw (bliss::io::IOException) :
                                     SuperType(_nConcurrentLoaders, _loaderId, _filename, _nThreads, _L2BlockSize) {};
 #if defined(USE_MPI)
@@ -396,7 +396,7 @@ TYPED_TEST_P(FileLoaderDeathTest, NoFilename)
   std::string fileName;
 
   std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  EXPECT_EXIT(new FileLoaderType(fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
+  EXPECT_EXIT(new FileLoaderType(1, 0, fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
 
 }
 
@@ -408,7 +408,7 @@ TYPED_TEST_P(FileLoaderDeathTest, BadFilename)
   fileName.assign("bad");
 
   std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
-  ASSERT_THROW(new FileLoaderType(fileName), bliss::io::IOException);
+  ASSERT_THROW(new FileLoaderType(1, 0, fileName), bliss::io::IOException);
 }
 
 TYPED_TEST_P(FileLoaderDeathTest, BadNProcs)
@@ -420,7 +420,7 @@ TYPED_TEST_P(FileLoaderDeathTest, BadNProcs)
 
 //  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
   std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  ASSERT_EXIT(new FileLoaderType(fileName, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
+  ASSERT_EXIT(new FileLoaderType(0 , 0, fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
 }
 
 TYPED_TEST_P(FileLoaderDeathTest, BadRank)
@@ -431,7 +431,7 @@ TYPED_TEST_P(FileLoaderDeathTest, BadRank)
   fileName.append("/test/data/test.fastq");
 
   std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  ASSERT_EXIT(new FileLoaderType(fileName, 1, -1), ::testing::KilledBySignal(SIGABRT), err_regex);
+  ASSERT_EXIT(new FileLoaderType(1, -1, fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
 }
 
 TYPED_TEST_P(FileLoaderDeathTest, BadNThreads)
@@ -442,7 +442,7 @@ TYPED_TEST_P(FileLoaderDeathTest, BadNThreads)
   fileName.append("/test/data/test.fastq");
 
   std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  ASSERT_EXIT(new FileLoaderType(fileName, 1, 0, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
+  ASSERT_EXIT(new FileLoaderType(1, 0, fileName, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
 }
 
 TYPED_TEST_P(FileLoaderDeathTest, BadChunkSize)
@@ -453,7 +453,7 @@ TYPED_TEST_P(FileLoaderDeathTest, BadChunkSize)
   fileName.append("/test/data/test.fastq");
 
   std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  ASSERT_EXIT(new FileLoaderType(fileName, 1, 0, 0, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
+  ASSERT_EXIT(new FileLoaderType(1, 0, fileName, 0, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
 }
 
 
