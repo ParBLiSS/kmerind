@@ -383,7 +383,7 @@ namespace io
          *
          */
         FileLoader(const std::string &_filename,
-                            const int _nConcurrentLoaders = 1, const int _loaderId = 0,
+                            const size_t _nConcurrentLoaders = 1, const int _loaderId = 0,
                             const size_t _nThreads = 1, const size_t _L2BlockSize = 1 ) throw (bliss::io::IOException)
             : pageSize(sysconf(_SC_PAGE_SIZE)), recordSize(1), loaded(false), fileHandle(-1), fileRange(),
               loaderId(_loaderId), L1Partitioner(), mmapData(nullptr), L1Block(),

@@ -10,6 +10,8 @@
  * TODO add License
  */
 
+#include <iostream>
+
 #include "concurrent/mpi_runner.hpp"
 #include "concurrent/omp_runner.hpp"
 #include "concurrent/mixed_omp_runner.hpp"
