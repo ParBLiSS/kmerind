@@ -127,7 +127,7 @@ TYPED_TEST_P(FileLoaderTest, OpenWithFullRange)
 
   // get fileName
 
-  FileLoaderType loader(this->fileName);
+  FileLoaderType loader(1, 0, this->fileName);
   RangeType r = loader.getFileRange();
 
   size_t len = r.end - r.start;
@@ -149,7 +149,7 @@ TYPED_TEST_P(FileLoaderTest, PreloadWithFullRange)
 
   // get fileName
 
-  FileLoaderType loader(this->fileName);
+  FileLoaderType loader(1, 0, this->fileName);
   RangeType r = loader.getFileRange();
 
   size_t len = r.end - r.start;
@@ -173,7 +173,7 @@ TYPED_TEST_P(FileLoaderTest, OpenWithRange)
   int rank = 3;
   int nprocs = 7;
 
-  FileLoaderType loader(this->fileName, nprocs, rank);
+  FileLoaderType loader(nprocs, rank, this->fileName);
 
   RangeType r = loader.getNextL1BlockRange(rank);
 
@@ -199,7 +199,7 @@ TYPED_TEST_P(FileLoaderTest, OpenWithAlignedRange)
   int nprocs = 7;
 
 
-  FileLoaderType loader(this->fileName, nprocs, rank);
+  FileLoaderType loader(nprocs, rank, this->fileName);
 
   RangeType r = loader.getNextL1BlockRange(rank);
 
@@ -228,7 +228,7 @@ TYPED_TEST_P(FileLoaderTest, PreloadWithRange)
   int rank = 3;
   int nprocs = 7;
 
-  FileLoaderType loader(this->fileName, nprocs, rank);
+  FileLoaderType loader(nprocs, rank, this->fileName);
 
   RangeType r = loader.getNextL1BlockRange(rank);
 
@@ -251,7 +251,7 @@ TYPED_TEST_P(FileLoaderTest, OpenConsecutiveRanges)
   // get this->fileName
   int nprocs = 7;
 
-  FileLoaderType loader(this->fileName, nprocs);
+  FileLoaderType loader(nprocs, 0, this->fileName);
   RangeType r;
 
 
@@ -335,7 +335,7 @@ TYPED_TEST_P(FileLoaderBufferTest, BufferingChunks)
 
   int nThreads = 2;
 
-  FileLoaderType loader(this->fileName, nprocs, rank, nThreads, 2048);
+  FileLoaderType loader(nprocs, rank, this->fileName, nThreads, 2048);
 
   RangeType r = loader.getNextL1BlockRange(rank);
 
