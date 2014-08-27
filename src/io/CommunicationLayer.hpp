@@ -1284,7 +1284,7 @@ protected:
   MPI_Comm comm;
 
   /// Registry of callback functions, mapped to by the associated tags
-  std::map<int,std::function<void(uint8_t*, std::size_t, int)> > callbackFunctions;
+  std::unordered_map<int,std::function<void(uint8_t*, std::size_t, int)> > callbackFunctions;
 
   /// The MPI Communicator size
   int commSize;
