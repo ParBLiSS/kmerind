@@ -43,13 +43,12 @@ class TestableFileLoader :
         TestableFileLoader(const MyType& other) = delete;
         /// Removed default copy assignment operator
         TestableFileLoader& operator=(const MyType& other) = delete;
-        TestableFileLoader(const std::string &_filename,
-                                    const int _nConcurrentLoaders = 1, const int _loaderId = 0,
+        TestableFileLoader(const int _nConcurrentLoaders = 1, const int _loaderId = 0, const std::string &_filename,
                                     const size_t _nThreads = 1, const size_t _L2BlockSize = 1 ) throw (bliss::io::IOException) :
                                     SuperType(_nConcurrentLoaders, _loaderId, _filename, _nThreads, _L2BlockSize) {};
 #if defined(USE_MPI)
-        TestableFileLoader(const std::string &_filename, const MPI_Comm& _comm, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (bliss::io::IOException)
-            : SuperType(_filename, _comm, _nThreads, _L2BlockSize) {};
+        TestableFileLoader(const MPI_Comm& _comm, const std::string &_filename, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (bliss::io::IOException)
+            : SuperType(_comm, _filename, _nThreads, _L2BlockSize) {};
 #endif
         TestableFileLoader(MyType&& other) : SuperType(std::forward(other)) {}
         TestableFileLoader& operator=(MyType&& other) {
