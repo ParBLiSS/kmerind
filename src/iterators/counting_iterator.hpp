@@ -32,7 +32,7 @@ namespace bliss
     class CountingIterator :  public std::iterator<std::random_access_iterator_tag,
                                                    T,
                                                    typename std::conditional<std::is_integral<T>::value,
-                                                     int64_t, T>::type>
+                                                     ptrdiff_t, T>::type>
     {
       protected:
 
@@ -204,12 +204,11 @@ namespace bliss
 
         /**
          * @brief difference between 2 iterators;
-         * @tparam T    value type for the counting iterator
          * @param other         the iterator to subtract by
          * @return              distance between the iterators
          */
         D operator-(const CountingIterator<T>& other) {
-          return (val - other.val);
+          return (val - other.val) / stride;
         }
 
 

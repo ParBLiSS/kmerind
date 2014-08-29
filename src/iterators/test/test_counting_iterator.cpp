@@ -135,7 +135,7 @@ TYPED_TEST_P(CountingIteratorTest, increment){
   iter += 3;                    // 0 + 3 * 3
   ASSERT_EQ(9, *iter);
 
-  ASSERT_EQ(3, iter - iter2);   // 9 - 6
+  ASSERT_EQ(1, iter - iter2);   // (9 - 6) / 3
 }
 
 // failed construction due to asserts
