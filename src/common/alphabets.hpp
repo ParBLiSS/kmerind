@@ -131,6 +131,9 @@ struct DNA5 : BaseAlphabetChar
   };
 };
 
-
+constexpr uint8_t DNA::FROM_ASCII[256];
+constexpr char DNA::TO_ASCII[DNA::SIZE];
+constexpr uint8_t DNA5::FROM_ASCII[256];
+constexpr char DNA5::TO_ASCII[DNA5::SIZE];
 
 #endif // BLISS_COMMON_ALPHABETS_H

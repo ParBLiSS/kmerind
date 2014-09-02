@@ -25,6 +25,9 @@ namespace bliss
 {
   namespace io
   {
+    /// dummy class to indicate FASTQ format.
+    struct FASTQ {};
+
 
     //==== subclass of FileLoader.  using static polymorphism via CRTP.
 

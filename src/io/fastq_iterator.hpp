@@ -74,7 +74,7 @@ namespace bliss
      * @class     bliss::io::Sequence
      * @brief     represents a biological sequence, and provides iterators for traversing the sequence.
      * @details   internally we store 2 iterators, start and end, instead of start + length.
-     *            reason is that using length is best for random access iterators and we don't have guaranty of that.
+     *            reason is that using length is best for random access iterators and we don't have guarantee of that.
      * @tparam Iterator   allows walking through the sequence data.
      * @tparam Alphabet   allows interpretation of the sequence
      * @tparam IdType     the format and components of the id of a sequence. Differs from FASTA to FASTQ and based on length of reads.  defaults to FASTQSequenceId

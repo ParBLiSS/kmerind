@@ -28,6 +28,8 @@ namespace bliss
      * @details  zip iterator simultaneously traverses 2 iterators during increment,
      *           and returns a std::pair of the current elements from the 2 iterators.
      *
+     * @note     This is a forward iterator only.
+     *
      * @tparam FirstIter    Type of first iterator to zip
      * @tparam SecondIter   Type of second iterator to zip
      *
@@ -95,7 +97,7 @@ namespace bliss
         ZipIterator(ZipIterator<FirstIter, SecondIter> && other) : iter1(std::move(other.iter1)), iter2(std::move(other.iter2)), val(std::move(other.val)) {};
 
         /**
-         * default move assignment operator, deleted.
+         * default move assignment operator.
          * @param other  instance of ZipIterator to move from
          * @return reference to self
          */

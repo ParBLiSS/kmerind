@@ -42,7 +42,7 @@ namespace bliss
       public:
 
         /**
-         * constructor, with stride defaults to 1.
+         * constructor
          * @param _val    the constant value that the iterator returns.
          */
         ConstantIterator(const T& _val) : val(_val) {};
