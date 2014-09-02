@@ -12,6 +12,8 @@
 #ifndef COUNTING_ITERATOR_HPP_
 #define COUNTING_ITERATOR_HPP_
 
+#include <cstddef>
+
 #include <type_traits>
 #include <iterator>
 
@@ -29,15 +31,12 @@ namespace bliss
      * @tparam T the type of data to over.
      */
     template<typename T>
-    class CountingIterator :  public std::iterator<std::random_access_iterator_tag,
-                                                   T,
-                                                   typename std::conditional<std::is_integral<T>::value,
-                                                     ptrdiff_t, T>::type>
+    class CountingIterator :  public std::iterator<std::random_access_iterator_tag, T>
     {
       protected:
 
         /// difference type
-        using D = typename std::iterator_traits<CountingIterator<T> >::difference_type;
+        using D = std::ptrdiff_t;
 
         /// the start of the iterator
         mutable T start;
@@ -105,6 +104,7 @@ namespace bliss
           start = other.start;     other.start = 0;
           stride = other.stride;   other.stride = 1;
           val = other.val;         other.val = 0;
+          return *this;
         };
 
         /**

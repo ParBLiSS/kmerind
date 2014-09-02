@@ -23,13 +23,13 @@ class ZipIteratorTest : public ::testing::Test
 {
   protected:
 
-    bliss::iterator::ZipIterator<CountingIterator, ConstantIterator> iter1;
-    bliss::iterator::ZipIterator<CountingIterator, CountingIterator> iter2;
+    bliss::iterator::ZipIterator<CountingIterator<T>, ConstantIterator<T> > iter1;
+    bliss::iterator::ZipIterator<CountingIterator<T>, CountingIterator<T> > iter2;
 
     virtual void SetUp()
     {
-      iter1 = ZipIterator<CountingIterator, ConstantIterator>(CountingIterator<T>(4, 2), ConstantIterator<T>(3));
-      iter2 = ZipIterator<CountingIterator, CountingIterator>(CountingIterator<T>(4, 2), CountingIterator<T>(3, 3));
+      iter1 = ZipIterator<CountingIterator<T>, ConstantIterator<T> >(CountingIterator<T>(4, 2), ConstantIterator<T>(3));
+      iter2 = ZipIterator<CountingIterator<T>, CountingIterator<T> >(CountingIterator<T>(4, 2), CountingIterator<T>(3, 3));
     }
 };
 
@@ -41,7 +41,7 @@ TYPED_TEST_CASE_P(ZipIteratorTest);
 TYPED_TEST_P(ZipIteratorTest, copy){
   // copy construct
   {
-    typename decltype(this->iter1) iter(this->iter1);
+    decltype(this->iter1) iter(this->iter1);
 
     ASSERT_EQ(4, iter->first);
     ASSERT_EQ(3, iter->second);
@@ -49,7 +49,7 @@ TYPED_TEST_P(ZipIteratorTest, copy){
 
   // assignment
   {
-    typename decltype(this->iter1) iter;
+    decltype(this->iter1) iter;
     iter = this->iter1;
 
     ASSERT_EQ(4, iter->first);
@@ -58,14 +58,17 @@ TYPED_TEST_P(ZipIteratorTest, copy){
 
   // multipass
   {
-    typename decltype(this->iter1) iter;
+    decltype(this->iter1) iter;
     iter = this->iter1;
+    decltype(this->iter1) iter3;
+    iter3 = iter;
 
+    ASSERT_EQ(6, (++iter3)->first);   // dereference pre increment
     ASSERT_EQ(4, iter->first);
     ASSERT_EQ(6, (++iter)->first);   // dereference pre increment
     ASSERT_EQ(8, (iter++)->first);     // dereference post increment (creates a copy)
-    ASSERT_EQ(4, this->iter1->first);       // check original hasn't been incremented after the post increment dereference
-    ASSERT_EQ(8, iter->first);      // check copy is still same.
+    ASSERT_EQ(6, iter3->first);       // check original hasn't been incremented after the post increment dereference
+    ASSERT_EQ(6, iter->first);      // check copy is still same.
   }
 
 }
@@ -74,81 +77,49 @@ TYPED_TEST_P(ZipIteratorTest, copy){
 // testing the copy constructor
 TYPED_TEST_P(ZipIteratorTest, increment){
 
+  decltype(this->iter2) iter(this->iter2);
   // increment
-  ++this->iter2;
-  ASSERT_EQ(6, *this->iter2.first);  // pre increment
-  this->iter2++;
-  ASSERT_EQ(6, *this->iter2.first);  // post increment but did not save
-  ASSERT_EQ(9, *this->iter2++.first);  // post increment and use data
-  ASSERT_EQ(6, *this->iter2.first);  // check original still same before post increment.
-
-
-  // decrement
-  ++this->iter2;               // get it to 9.
-  ASSERT_EQ(9, *this->iter2.first);  // pre increment
-
-  --this->iter2;
-  ASSERT_EQ(6, *this->iter2.first);
-
-  this->iter2--;
-  ASSERT_EQ(6, *this->iter2.first);  // post increment but did not save
-  ASSERT_EQ(3, *this->iter2--.first);  // post increment and use data
-  ASSERT_EQ(6, *this->iter2.first);  // check original still same before post increment.
-
-  // arithmetic
-  ASSERT_EQ(15, *(iter + 3));  // 6 + 3 *3
-  ASSERT_EQ(0, *(iter - 2));   // 6 - 3 * 2
-  ASSERT_EQ(15, *(3 + iter));  // 3*3 + 6
-  ASSERT_EQ(0, iter - iter2);  // 6 - 6
-
-  // compound assignment
-  iter -= 2;                   // 6 - 3 *2
-  ASSERT_EQ(0, *iter);
-
-  iter += 3;                    // 0 + 3 * 3
-  ASSERT_EQ(9, *iter);
-
-  ASSERT_EQ(3, iter - iter2);   // 9 - 6
+  ++iter;
+  ASSERT_EQ(6, (*iter).first);  // pre increment
+  iter++;
+  ASSERT_EQ(6, (*iter).first);  // post increment but did not save
+  ASSERT_EQ(8, (*(iter++)).first);  // post increment and use data
+  ASSERT_EQ(6, (*iter).first);  // check original still same before post increment.
 }
 
 // failed construction due to asserts
 TYPED_TEST_P(ZipIteratorTest, dereference){
-  ZipIterator<TypeParam> iter(4, 2);
+  decltype(this->iter2) iter(this->iter2);
+
   // *a
-  ASSERT_EQ(4, *iter);
+  ASSERT_EQ(4, (*iter).first);
   ++iter;
 
-  // a[]
-  ASSERT_EQ(30, iter[12]);
+  // a->
+  ASSERT_EQ(6, iter->first);
+
 }
 
 
 // test page alignment
 TYPED_TEST_P(ZipIteratorTest, compare){
   // equal
-  ZipIterator<TypeParam> iter(4, 2);
-  ZipIterator<TypeParam> iter2(4, 3);
+  decltype(this->iter1) iter(this->iter1);
+  decltype(this->iter1) iter3(this->iter1);
 
-  ASSERT_TRUE(iter == iter2);
-
-  iter += 3;
-  iter2 += 2;
-
-  ASSERT_TRUE(iter == iter2);
+  ASSERT_TRUE(iter == iter3);
 
   // not equal
-  ++iter2;
-  ASSERT_TRUE(iter != iter2);
+  std::ptrdiff_t x;
+  x = 3;
+  std::advance<decltype(this->iter1), std::ptrdiff_t>(iter, x);
+  x = 2;
+  std::advance<decltype(this->iter1), std::ptrdiff_t>(iter3, x);
 
-  // gt, ls, ge, le
-  ASSERT_TRUE(iter < iter2);
-  ASSERT_TRUE(iter2 > iter);
-  ASSERT_TRUE(iter <= iter2);
-  ASSERT_TRUE(iter2 >= iter);
+  ASSERT_TRUE(iter != iter3);
 
-  --iter2;
-  ASSERT_TRUE(iter <= iter2);
-  ASSERT_TRUE(iter2 >= iter);
+  ++iter3;
+  ASSERT_TRUE(iter == iter3);
 
 
 }

@@ -12,6 +12,8 @@
 #ifndef CONSTANT_ITERATOR_HPP_
 #define CONSTANT_ITERATOR_HPP_
 
+#include <cstddef>
+
 #include <type_traits>
 #include <iterator>
 
@@ -27,15 +29,12 @@ namespace bliss
      * @tparam T the type of data to over.
      */
     template<typename T>
-    class ConstantIterator :  public std::iterator<std::random_access_iterator_tag,
-                                                   T,
-                                                   typename std::conditional<std::is_integral<T>::value,
-                                                     ptrdiff_t, T>::type>
+    class ConstantIterator :  public std::iterator<std::random_access_iterator_tag, T >
     {
       protected:
 
         /// difference type
-        using D = typename std::iterator_traits<ConstantIterator<T> >::difference_type;
+        using D = std::ptrdiff_t;
 
         /// current value;
         mutable T val;
@@ -84,6 +83,7 @@ namespace bliss
          */
         ConstantIterator<T>& operator=(ConstantIterator<T> && other) {
           val = other.val;         other.val = 0;
+          return *this;
         };
 
         /**

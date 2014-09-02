@@ -12,6 +12,7 @@
 #ifndef ZIP_ITERATOR_HPP_
 #define ZIP_ITERATOR_HPP_
 
+#include <cstddef>
 #include <type_traits>
 #include <iterator>
 
@@ -33,8 +34,8 @@ namespace bliss
      */
     template<typename FirstIter, typename SecondIter>
     class ZipIterator :  public std::iterator<std::input_iterator_tag,
-                                              std::pair<std::iterator_traits<FirstIter>::value_type,
-                                                        std::iterator_traits<SecondIter>::value_type> >
+                                              std::pair<typename std::iterator_traits<FirstIter>::value_type,
+                                                        typename std::iterator_traits<SecondIter>::value_type > >
     {
       protected:
 
@@ -42,7 +43,7 @@ namespace bliss
         using T = typename std::iterator_traits<ZipIterator<FirstIter, SecondIter> >::value_type;
 
         /// difference type
-        using D = typename std::iterator_traits<ZipIterator<FirstIter, SecondIter> >::difference_type;
+        using D = std::ptrdiff_t;
 
         /// first iterator to zip
         FirstIter iter1;
@@ -51,29 +52,15 @@ namespace bliss
         SecondIter iter2;
 
         /// current value;
-        T val;
-
-        /**
-         * default constructor, sets start to 0, stride to 1, deleted
-         */
-        ZipIterator() = delete;
-
-        /**
-         * default move constructor, deleted
-         * @param other  instance of ZipIterator to move from
-         */
-        ZipIterator(ZipIterator<FirstIter, SecondIter> && other) = delete;
-
-        /**
-         * default move assignment operator, deleted.
-         * @param other  instance of ZipIterator to move from
-         * @return reference to self
-         */
-        ZipIterator<FirstIter, SecondIter>& operator=(ZipIterator<FirstIter, SecondIter> && other) = delete;
-
+        mutable T val;
 
 
       public:
+        /**
+         * default constructor. does nothing.
+         */
+        ZipIterator() : val() {};
+
 
         /**
          * constructor.  constructs from 2 iterators to zip
@@ -100,6 +87,26 @@ namespace bliss
           val = other.val;
           return *this;
         }
+
+        /**
+         * default move constructor
+         * @param other  instance of ZipIterator to move from
+         */
+        ZipIterator(ZipIterator<FirstIter, SecondIter> && other) : iter1(std::move(other.iter1)), iter2(std::move(other.iter2)), val(std::move(other.val)) {};
+
+        /**
+         * default move assignment operator, deleted.
+         * @param other  instance of ZipIterator to move from
+         * @return reference to self
+         */
+        ZipIterator<FirstIter, SecondIter>& operator=(ZipIterator<FirstIter, SecondIter> && other) {
+          iter1 = std::move(other.iter1);
+          iter2 = std::move(other.iter2);
+          val = std::move(other.val);
+          return *this;
+        };
+
+
 
         /**
          * default destructor
