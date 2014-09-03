@@ -38,11 +38,10 @@ namespace bliss
         typedef typename KmerGenOp::SequenceType                    SequenceType;
         typedef typename KmerGenOp::KmerIndexType                   KmerIndexType;
         typedef typename KmerIndexType::KmerType                    KmerType;
-        typedef typename KmerIndexType::SizeType                    KmerSizeType;
         typedef typename KmerGenOp::OutputType                      KmerIndexPairType;
         typedef bliss::iterator::buffered_transform_iterator<KmerGenOp, typename KmerGenOp::BaseIterType> KmerIter;
 
-        static constexpr int K = KmerSizeType::size;
+        static constexpr unsigned int K = KmerType::size;
 
         KmerIndexGenerator() {}
 
@@ -68,7 +67,7 @@ namespace bliss
                                   // then copy assign
 
             // some debugging output
-            // printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.components.pos, kmer.second.qual);
+            // printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
 
             // sending the kmer.
             //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, kmer.first % nprocs + (nprocs * tid) );
@@ -79,7 +78,7 @@ namespace bliss
 //              printf("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, this->_tid, index, buffers.size()); fflush(stdout);
             //printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, tid, index, buffers[index].size());
 //            index.insert(idx, kmer.first);
-            //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.components.pos, kmer.second.qual);
+            //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
 //            ++kmerCount;
 
 
@@ -98,14 +97,13 @@ namespace bliss
         typedef typename KmerGenOp::SequenceType                    SequenceType;
         typedef typename KmerGenOp::KmerIndexType                   KmerIndexType;
         typedef typename KmerIndexType::KmerType                    KmerType;
-        typedef typename KmerIndexType::SizeType                    KmerSizeType;
         typedef typename KmerGenOp::OutputType                      KmerIndexPairType;
         typedef bliss::iterator::buffered_transform_iterator<KmerGenOp, typename KmerGenOp::BaseIterType> KmerIter;
         typedef bliss::iterator::buffered_transform_iterator<QualGenOp,
             typename QualGenOp::BaseIterType>                       QualIter;
         typedef typename QualGenOp::QualityType                     QualityType;
 
-        static constexpr int K = KmerSizeType::size;
+        static constexpr unsigned int K = KmerType::size;
 
         KmerIndexGeneratorWithQuality() {
           static_assert(std::is_same<SequenceType,
@@ -142,7 +140,7 @@ namespace bliss
             kmer.second.qual = *qstart;
 
             // some debugging output
-            // printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.components.pos, kmer.second.qual);
+            // printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
 
             // sending the kmer.
             //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, kmer.first % nprocs + (nprocs * tid) );
@@ -159,12 +157,12 @@ namespace bliss
 //                printf("rank %d thread %d hashing to %lu of %lu kmer\n", this->_rank, tid, index, buffers.size()); fflush(stdout);
               //printf("rank %d thread %d hashing %lu to %lu, fill = %lu\n", this->_rank, tid, kmer.first.kmer, index, buffers[index].size());
           // index.insert(idx, kmer.first);
-              //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.components.pos, kmer.second.qual);
+              //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
 //              ++kmerCount;
             }
             else
             {
-              //      printf("BAD kmer quality.  key %lx, pos %d, qual %f\n", kmer.second.kmer, kmer.second.id.components.pos, kmer.second.qual);
+              //      printf("BAD kmer quality.  key %lx, pos %d, qual %f\n", kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
             }
 
           }

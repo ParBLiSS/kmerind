@@ -448,3 +448,11 @@ TODO:
 	Doing Count Index exposed several problems - insert interface for the maps are not uniform.
 	root problem is what is the data structure for kmer element to be inserted?
 	next problem is whether kmer should be stored with its metadata (pos and quality).
+
+	
+	
+9/2/2014
+	position iterator for the zip iterator
+	keep current File -FASTQLoader-> L1Block -FASTQLoader-> L2Block -FASTQIterator-> Sequence -KmerGenerator-> kmer + id + quality
+		but now make the last part based on zip iterator.
+	top level interfaces for FASTQ with/without quality, FASTQ without id, 

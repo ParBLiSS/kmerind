@@ -74,7 +74,7 @@ typedef typename std::iterator_traits<BaseIterType>::value_type   BaseValueType;
 
 
 // define read type
-typedef bliss::io::SequenceWithQuality<BaseIterType, Alphabet, QualityType>
+typedef bliss::io::SequenceWithQuality<BaseIterType, QualityType>
                                                                   SequenceType;
 
 
@@ -90,7 +90,7 @@ typedef bliss::index::generate_qual<SequenceType, KmerSize, QualityType, EncodeT
 typedef std::unordered_multimap<KmerType, KmerIndexType>          IndexType;
 
 // define the transform iterator type
-typedef bliss::io::FASTQParser<BaseIterType, Alphabet, QualityType>
+typedef bliss::io::FASTQParser<BaseIterType, QualityType>
                                                                   ParserType;
 typedef bliss::io::SequencesIterator<ParserType, BaseIterType>       IteratorType;
 

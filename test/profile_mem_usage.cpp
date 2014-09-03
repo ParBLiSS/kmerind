@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < size; ++i) {
       KmerIndexType2 kmer;
       kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
-      kmer.id.composite = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.id.file_pos = rand() % std::numeric_limits<uint64_t>::max();
 
       test.push_back(std::move(kmer));
     }
@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < size; ++i) {
       KmerIndexType3 kmer;
       kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
-      kmer.id.composite = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.id.file_pos = rand() % std::numeric_limits<uint64_t>::max();
       kmer.qual = float(rand()) / float(RAND_MAX);
 
       test.push_back(std::move(kmer));
@@ -220,7 +220,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < size; ++i) {
       KmerIndexType4 kmer;
       kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
-      kmer.id.composite = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.id.file_pos = rand() % std::numeric_limits<uint64_t>::max();
       kmer.qual = float(rand()) / float(RAND_MAX);
 
       test.push_back(std::move(kmer));

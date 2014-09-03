@@ -140,7 +140,7 @@ namespace bliss
         {
           size_t count = BaseClassType::operator()(iter);
 
-          this->kmer.id.components.pos = pos;
+          this->kmer.id.pos = pos;
           ++pos;
 
           return count;
@@ -232,29 +232,29 @@ namespace bliss
      *
      *  This functor is only available if KmerIndex has Quality Score.
      */
-    template<typename Sequence, typename KmerSize, typename Quality, typename Encoding>
+    template<typename Sequence, unsigned int KmerSize, typename Encoding>
     struct generate_qual
     {
         typedef typename Sequence::IteratorType BaseIterType;
         typedef Sequence                        SequenceType;
-        typedef Quality                         QualityType;
+        typedef typename Encoding::ValueType    QualityType;
 
         int kmer_pos;
         QualityType internal;
-        QualityType terms[KmerSize::size];
+        QualityType terms[KmerSize];
 
 
         int pos;
-        int zeroCount;
+        unsigned int zeroCount;
 
         generate_qual()
             : kmer_pos(0), pos(0)
         {
-          for (int i = 0; i < KmerSize::size; ++i)
+          for (unsigned int i = 0; i < KmerSize; ++i)
           {
             terms[i] = std::numeric_limits<QualityType>::lowest();
           }
-          zeroCount = KmerSize::size;
+          zeroCount = KmerSize;
 
     //      for (int i = 0; i < Encoding::size; ++i)
     //      {
@@ -273,7 +273,7 @@ namespace bliss
           // add the new value,       // update the position  - circular queue
           QualityType newval = Encoding::lut[*iter - Encoding::offset]; // this is for Sanger encoding.
           terms[pos] = newval;
-          pos = (pos + 1) % KmerSize::size;
+          pos = (pos + 1) % KmerSize;
 
           // save the old zero count.
           int oldZeroCount = zeroCount;
@@ -303,7 +303,7 @@ namespace bliss
               //printf("HAD ZEROS!\n");
               // removed a zero.  so recalculate.
               internal = 0.0;
-              for (int i = 0; i < KmerSize::size; ++i)
+              for (unsigned int i = 0; i < KmerSize; ++i)
               {
                 internal += terms[i];
               }
