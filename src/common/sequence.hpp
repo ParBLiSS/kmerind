@@ -52,7 +52,11 @@ namespace bliss
     /**
      * @class     bliss::io::FASTASequenceId
      * @brief     represents a fasta sequence's id, also used for id of the FASTA file, and for position inside a FASTA sequence..
-     * @details   Since we are using the in-file position of the sequence as the sequence id, we need
+     * @details   for FASTA sequences, a processor/thread may be reading a portion of a sequence.
+     *            In order to assign an id to a sequence, communication between processes is necessary.
+     *            therefore, there is no need to use the file position offset as sequence id.
+     *
+     *            however, for consistency of the logic, it may be best to keep it the same way as the FASTQ version.
      *
      *            8 bits for file id
      *            40 bits for sequence id
@@ -83,6 +87,7 @@ namespace bliss
         /// offset within the read.  Default 0 refers to the whole sequence
         uint64_t pos;
     };
+
     /**
      * @class     bliss::io::Sequence
      * @brief     represents a biological sequence, and provides iterators for traversing the sequence.
@@ -114,18 +119,15 @@ namespace bliss
      * @brief     extension of bliss::io::Sequence to include quality scores for each position.
      *
      * @tparam Iterator   allows walking through the sequence data.
-     * @tparam Quality    data type for quality scores for each base
      * @tparam IdType     the format and components of the id of a sequence. Differs from FASTA to FASTQ and based on length of reads.  defaults to FASTQSequenceId
      */
-    template<typename Iterator, typename Quality, typename Id=FASTQSequenceId>
+    template<typename Iterator, typename Id=FASTQSequenceId>
     struct SequenceWithQuality : public Sequence<Iterator, Id>
     {
         /// Iterator type for traversing the sequence.
         typedef Iterator IteratorType;
         /// type for the id struct/union
         typedef Id IdType;
-        /// the desired quality score's type, e.g. double
-        typedef Quality QualityType;
 
         /// begin iterator for the quality scores
         Iterator qualBegin;

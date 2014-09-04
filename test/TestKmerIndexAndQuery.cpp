@@ -98,7 +98,7 @@ int main(int argc, char** argv) {
   // replace with MPIRunner
 
   // initialize index
-  bliss::index::KmerPositionAndQualityIndex<21, DNA> kmer_index(comm, groupSize);
+  bliss::index::KmerPositionIndex<21, DNA> kmer_index(comm, groupSize);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   kmer_index.build(filename, nthreads);

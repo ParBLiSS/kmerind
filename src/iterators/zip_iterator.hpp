@@ -28,6 +28,8 @@ namespace bliss
      * @details  zip iterator simultaneously traverses 2 iterators during increment,
      *           and returns a std::pair of the current elements from the 2 iterators.
      *
+     *           first iterator specified is the "primary", on which equality is tested, e.g. for end condition.
+     *
      * @note     This is a forward iterator only.
      *
      * @tparam FirstIter    Type of first iterator to zip
@@ -47,7 +49,7 @@ namespace bliss
         /// difference type
         using D = std::ptrdiff_t;
 
-        /// first iterator to zip
+        /// first iterator to zip, "primary" iterator that's used for testing stopping criteria.
         FirstIter iter1;
 
         /// second iterator to zip
@@ -143,7 +145,7 @@ namespace bliss
          * @return  bool, true if equal, false otherwise.
          */
         bool operator==(const ZipIterator<FirstIter, SecondIter>& other) {
-          return iter1 == other.iter1 && iter2 == other.iter2;
+          return iter1 == other.iter1;
         }
 
         /**

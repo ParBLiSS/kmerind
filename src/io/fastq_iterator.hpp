@@ -75,7 +75,7 @@ namespace bliss
         /// Sequence type, conditionally set based on Quality template param to either normal Sequence or SequenceWithQuality.
         typedef typename std::conditional<std::is_void<Quality>::value,
               bliss::common::Sequence<Iterator>,
-              bliss::common::SequenceWithQuality<Iterator, Quality> >::type      SequenceType;
+              bliss::common::SequenceWithQuality<Iterator> >::type      SequenceType;
 
 
         /// default constructor.

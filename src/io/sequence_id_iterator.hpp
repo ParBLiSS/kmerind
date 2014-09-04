@@ -1,16 +1,16 @@
 /**
- * @file    counting_iterator.hpp
+ * @file    sequence_id_iterator.hpp
  * @ingroup bliss::iterators
  * @author  tpan
- * @brief   contains a counting iterator
+ * @brief   contains a sequence_id iterator
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
  * TODO add License
  */
-#ifndef COUNTING_ITERATOR_HPP_
-#define COUNTING_ITERATOR_HPP_
+#ifndef SEQUENCE_ID_ITERATOR_HPP_
+#define SEQUENCE_ID_ITERATOR_HPP_
 
 #include <cstddef>
 
@@ -24,25 +24,28 @@ namespace bliss
   {
 
     /**
-     * @class    bliss::iterator::CountingIterator
+     * @class    bliss::iterator::SequenceIdIterator
      * @brief    iterator that iterates from start to end in specified steps size
-     * @details  counting iterator counts from the start to the end in regular steps.
+     * @details  sequence_id iterator counts from the start to the end in regular steps.
      *           this is useful to establish index values for some other array.
-     * @tparam T the type of data to over.
+     * @tparam SequenceIdType the type of data to over.
      */
-    template<typename T>
-    class CountingIterator :  public std::iterator<std::random_access_iterator_tag, T>
+    template<typename SequenceIdType>
+    class SequenceIdIterator :  public std::iterator<std::random_access_iterator_tag, SequenceIdType>
     {
       protected:
 
         /// difference type
         using D = std::ptrdiff_t;
 
+        /// position type
+        using T = decltype(declval<SequenceIdType>().pos);
+
         /// the stride for each iteration.
         mutable T stride;
 
         /// current value;
-        T val;
+        SequenceIdType val;
 
       public:
 
@@ -51,31 +54,31 @@ namespace bliss
          * @param _start      first value
          * @param _stride     the distance traversed during each call to the increment/decrement method.
          */
-        CountingIterator(const T& _start, const T &_stride) : stride(_stride), val(_start) {};
+        SequenceIdIterator(const SequenceIdType& _start, const T &_stride) : stride(_stride), val(_start) {};
 
         /**
          * constructor, with stride defaults to 1.
          * @param _start    first value
          */
-        CountingIterator(const T& _start) : stride(1), val(_start) {};
+        SequenceIdIterator(const SequenceIdType& _start) : stride(1), val(_start) {};
 
         /**
          * default constructor, sets start to 0, stride to 1
          */
-        CountingIterator() : stride(1), val(0) {};
+        SequenceIdIterator() : stride(1), val(0) {};
 
         /**
          * default copy constructor
-         * @param other  instance of CountingIterator to copy from
+         * @param other  instance of SequenceIdIterator to copy from
          */
-        CountingIterator(const CountingIterator<T> & other) : stride(other.stride), val(other.val) {};
+        SequenceIdIterator(const SequenceIdIterator<SequenceIdType> & other) : stride(other.stride), val(other.val) {};
 
         /**
          * default copy assignment operator
-         * @param other  instance of CountingIterator to copy from
+         * @param other  instance of SequenceIdIterator to copy from
          * @return reference to self
          */
-        CountingIterator<T>& operator=(const CountingIterator<T> & other) {
+        SequenceIdIterator<SequenceIdType>& operator=(const SequenceIdIterator<SequenceIdType> & other) {
           stride = other.stride;
           val = other.val;
           return *this;
@@ -83,36 +86,35 @@ namespace bliss
 
         /**
          * default move constructor
-         * @param other  instance of CountingIterator to move from
+         * @param other  instance of SequenceIdIterator to move from
          */
-        CountingIterator(CountingIterator<T> && other) : stride(other.stride), val(other.val) {
+        SequenceIdIterator(SequenceIdIterator<SequenceIdType> && other) : stride(other.stride), val(std::move(other.val)) {
           other.stride = 1;
-          other.val = 0;
         };
 
         /**
          * default move assignment operator
-         * @param other  instance of CountingIterator to move from
+         * @param other  instance of SequenceIdIterator to move from
          * @return reference to self
          */
-        CountingIterator<T>& operator=(CountingIterator<T> && other) {
-          stride = other.stride;   other.stride = 1;
-          val = other.val;         other.val = 0;
+        SequenceIdIterator<SequenceIdType>& operator=(SequenceIdIterator<SequenceIdType> && other) {
+          stride = other.stride; other.stride = 1;
+          val = std::move(other.val);
           return *this;
         };
 
         /**
          * default destructor
          */
-        virtual ~CountingIterator() {};
+        virtual ~SequenceIdIterator() {};
 
 
         /**
          * @brief   pre-increment operator: ++iter
          * @return  reference to incremented iterator
          */
-        CountingIterator<T>& operator++() {
-          val += stride;
+        SequenceIdIterator<SequenceIdType>& operator++() {
+          val.pos += stride;
           return *this;
         }
 
@@ -121,8 +123,8 @@ namespace bliss
          * @param   dummy for c++ to identify this as post increment.
          * @return  incremented copy of iterator
          */
-        CountingIterator<T> operator++(int) {
-          CountingIterator<T> out(*this);
+        SequenceIdIterator<SequenceIdType> operator++(int) {
+          SequenceIdIterator<SequenceIdType> out(*this);
           ++out;
           return out;
         }
@@ -132,7 +134,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if equal, false otherwise.
          */
-        bool operator==(const CountingIterator<T>& other) {
+        bool operator==(const SequenceIdIterator<SequenceIdType>& other) {
           return val == other.val;
         }
 
@@ -141,7 +143,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if not equal, false otherwise.
          */
-        bool operator!=(const CountingIterator<T>& other) {
+        bool operator!=(const SequenceIdIterator<SequenceIdType>& other) {
           return !(this->operator==(other));
         }
 
@@ -149,7 +151,7 @@ namespace bliss
          * @brief dereference function, *iter
          * @return  current value
          */
-        const T operator*() const {
+        const SequenceIdType operator*() const {
           return val;
         }
 
@@ -157,8 +159,8 @@ namespace bliss
          * @brief   pre-decrement operator: --iter
          * @return  reference to decremented iterator
          */
-        CountingIterator<T>& operator--() {
-          val -= stride;
+        SequenceIdIterator<SequenceIdType>& operator--() {
+          val.pos -= stride;
           return *this;
         }
 
@@ -167,8 +169,8 @@ namespace bliss
          * @param   dummy for c++ to identify this as post decrement.
          * @return  decremented copy of iterator
          */
-        CountingIterator<T> operator--(int) {
-          CountingIterator<T> out(*this);
+        SequenceIdIterator<SequenceIdType> operator--(int) {
+          SequenceIdIterator<SequenceIdType> out(*this);
           --out;
           return out;
         }
@@ -178,8 +180,8 @@ namespace bliss
          * @param diff    number of steps to increment by
          * @return  incremented copy of iterator
          */
-        CountingIterator<T> operator+(const D& diff) {
-          CountingIterator<T> out(*this);
+        SequenceIdIterator<SequenceIdType> operator+(const D& diff) {
+          SequenceIdIterator<SequenceIdType> out(*this);
           out += diff;
           return out;
         }
@@ -190,8 +192,8 @@ namespace bliss
          * @param diff    number of steps to decrement by
          * @return  decremented copy of iterator
          */
-        CountingIterator<T> operator-(const D& diff) {
-          CountingIterator<T> out(*this);
+        SequenceIdIterator<SequenceIdType> operator-(const D& diff) {
+          SequenceIdIterator<SequenceIdType> out(*this);
           out -= diff;
           return out;
         }
@@ -201,8 +203,8 @@ namespace bliss
          * @param other         the iterator to subtract by
          * @return              distance between the iterators
          */
-        D operator-(const CountingIterator<T>& other) {
-          return (val - other.val) / stride;
+        D operator-(const SequenceIdIterator<SequenceIdType>& other) {
+          return (val.pos - other.val.pos) / stride;
         }
 
 
@@ -211,7 +213,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if greater than, false otherwise.
          */
-        bool operator>(const CountingIterator<T>& other) {
+        bool operator>(const SequenceIdIterator<SequenceIdType>& other) {
           return val > other.val;
         }
 
@@ -220,7 +222,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if less than, false otherwise.
          */
-        bool operator<(const CountingIterator<T>& other) {
+        bool operator<(const SequenceIdIterator<SequenceIdType>& other) {
           return val < other.val;
         }
 
@@ -229,7 +231,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if greater than or equal to, false otherwise.
          */
-        bool operator>=(const CountingIterator<T>& other) {
+        bool operator>=(const SequenceIdIterator<SequenceIdType>& other) {
           return val >= other.val;
         }
 
@@ -238,7 +240,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if less than or equal to, false otherwise.
          */
-        bool operator<=(const CountingIterator<T>& other) {
+        bool operator<=(const SequenceIdIterator<SequenceIdType>& other) {
           return val <= other.val;
         }
 
@@ -247,8 +249,8 @@ namespace bliss
          * @param diff    number of steps to increment by
          * @return  reference to incremented iterator
          */
-        CountingIterator<T>& operator+=(const D& diff) {
-          val += diff * stride;
+        SequenceIdIterator<SequenceIdType>& operator+=(const D& diff) {
+          val.pos += diff * stride;
           return *this;
         }
 
@@ -257,8 +259,8 @@ namespace bliss
          * @param diff    number of steps to decrement by
          * @return  reference to decremented iterator
          */
-        CountingIterator<T>& operator-=(const D& diff) {
-          val -= diff * stride;
+        SequenceIdIterator<SequenceIdType>& operator-=(const D& diff) {
+          val.pos -= diff * stride;
           return *this;
         }
 
@@ -267,21 +269,21 @@ namespace bliss
          * @param i offset at which the value is retrieved.
          * @return  value for ith offset
          */
-        T operator[](const D& i) {
-          return val + stride * i;
+        SequenceIdType operator[](const D& i) {
+          return val.pos + stride * i;
         }
 
     };
 
     /**
      * @brief increment operator, with first operand being a number and second being an iterator  n + iter;
-     * @tparam T    value type for which to perform the increment operation
+     * @tparam SequenceIdType    value type for which to perform the increment operation
      * @param diff          number of steps to increment by
      * @param self          iterator to increment
      * @return              copy of incremented iterator
      */
-    template<typename T>
-    CountingIterator<T> operator+(const typename std::iterator_traits<CountingIterator<T> >::difference_type& diff, CountingIterator<T>& self) {
+    template<typename SequenceIdType>
+    SequenceIdIterator<SequenceIdType> operator+(const typename std::iterator_traits<SequenceIdIterator<SequenceIdType> >::difference_type& diff, SequenceIdIterator<SequenceIdType>& self) {
       return self + diff;
     }
 
@@ -291,4 +293,4 @@ namespace bliss
   } /* namespace iterator */
 } /* namespace bliss */
 
-#endif /* COUNTING_ITERATOR_HPP_ */
+#endif /* SEQUENCE_ID_ITERATOR_HPP_ */

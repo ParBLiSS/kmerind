@@ -27,6 +27,70 @@ namespace bliss
 {
   namespace index
   {
+
+
+    template<typename Sequence, typename Alphabet, typename KmerType>
+    class generate_kmer_simple {
+      public:
+        typedef Sequence                            SequenceType;
+        typedef typename Sequence::IteratorType     BaseIterType;
+        typedef KmerType    KmerValueType;
+        typedef std::pair<KmerValueType, KmerValueType> OutputType;       // key-value pair.
+
+      protected:
+        typedef Alphabet               AlphabetType;
+        /// Current Kmer buffer (k-mer + index + quality)
+        KmerValueType kmer;
+        /// Current reverse complement (just k-mer)
+        KmerValueType revcomp;
+
+      protected:
+
+
+        static constexpr BitSizeType nBits =
+            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
+        static constexpr BitSizeType shift =
+            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerValueType::size - 1);
+        static constexpr AlphabetSizeType max =
+            bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
+
+        static constexpr int word_size = sizeof(KmerValueType) * 8;
+        static constexpr KmerValueType mask_reverse = ~(static_cast<KmerValueType>(0))
+            >> (word_size - shift - nBits);
+
+        //.constructor taking the fastq sequence id for a read
+      public:
+
+        /// generates one k-mer per call from the underlying read
+        size_t operator()(BaseIterType &iter)
+        {
+          // store the kmer information.
+          char val = AlphabetType::FROM_ASCII[static_cast<size_t>(*iter)];
+          kmer >>= nBits;
+          kmer |= (static_cast<KmerValueType>(val) << shift);
+
+          // generate the rev complement
+          char complement = max - val;
+          revcomp <<= nBits;
+          revcomp |= static_cast<KmerValueType>(complement);
+          revcomp &= mask_reverse;
+
+          ++iter;
+
+          return 1;
+        }
+
+        /**
+         *
+         */
+        OutputType operator()()
+        {
+          return OutputType(kmer, revcomp);   // constructing a new result.
+        }
+
+    };
+
+
     // TODO: this is all deprecated, but some parts of it might be useful
 
     // KmerIndex = KmerIndexElement or KmerIndexElementWithQuality, ...
