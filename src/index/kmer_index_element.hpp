@@ -59,7 +59,7 @@ namespace bliss
      *            inherits from KmerIndexElement, which has a kmer member variable.
      */
     template<typename Kmer, typename Id>
-    struct KmerIndexElementWithId : public KmerIndexElement<K, Kmer>
+    struct KmerIndexElementWithId : public KmerIndexElement<Kmer>
     {
         typedef Kmer KmerType;
         typedef Id PositionType;
@@ -78,7 +78,7 @@ namespace bliss
      *            inherits from KmerIndexElementWithId, which has kmer and id member variables.
      */
     template<typename Kmer, typename Id, typename Qual>
-    struct KmerIndexElementWithIdAndQuality : public KmerIndexElementWithId<K, Kmer, Id>
+    struct KmerIndexElementWithIdAndQuality : public KmerIndexElementWithId<Kmer, Id>
     {
         typedef Kmer KmerType;
         typedef Id PositionType;

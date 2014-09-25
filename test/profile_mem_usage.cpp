@@ -10,6 +10,7 @@
  * TODO add License
  */
 
+
 #include <vector>
 #include <limits>
 #include <cstdlib>
@@ -18,19 +19,27 @@
 #include "sys/types.h"
 #include "sys/sysinfo.h"
 
+#include "common/Kmer.hpp"
+#include "common/alphabets.hpp"
+#include "common/AlphabetTraits.hpp"
 
 #include "index/kmer_index_element.hpp"
 #include "io/fastq_iterator.hpp"
+#include "common/sequence.hpp"
 
 
 using namespace std;
 using namespace bliss::index;
 using namespace bliss::io;
 
-typedef KmerIndexElement<KmerSize<21>, uint64_t > KmerIndexType1;
-typedef KmerIndexElementWithId<KmerSize<21>, uint64_t, FASTQSequenceId > KmerIndexType2;
-typedef KmerIndexElementWithIdAndQuality<KmerSize<21>, uint64_t, FASTQSequenceId, float > KmerIndexType3;
-typedef KmerIndexElementWithIdAndQuality<KmerSize<21>, uint64_t, FASTQSequenceId, double > KmerIndexType4;
+
+typedef bliss::Kmer<21, bliss::AlphabetTraits<DNA>::getBitsPerChar(), uint64_t> KmerType;
+
+
+typedef KmerIndexElement<KmerType > KmerIndexType1;
+typedef KmerIndexElementWithId<KmerType, bliss::common::FASTQSequenceId > KmerIndexType2;
+typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::common::FASTQSequenceId, float > KmerIndexType3;
+typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::common::FASTQSequenceId, double > KmerIndexType4;
 
 
 void checkMemUsed(long long &phyMemUsed, long long &swapUsed, bool print) {
@@ -72,7 +81,8 @@ int main(int argc, char** argv) {
 
     for (int i = 0; i < size; ++i) {
       KmerIndexType1 kmer;
-      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+//      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
       test.push_back(kmer);
     }
     printf("\tpopulated vector %lu\n", test.size());
@@ -99,7 +109,8 @@ int main(int argc, char** argv) {
 
     for (int i = 0; i < size; ++i) {
       KmerIndexType1 kmer;
-      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+//      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
       test.push_back(std::move(kmer));
     }
     printf("\tpopulated vector %lu\n", test.size());
@@ -127,7 +138,8 @@ int main(int argc, char** argv) {
 
     KmerIndexType1 kmer;
     for (int i = 0; i < size; ++i) {
-      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+//      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
       test.push_back(std::move(kmer));
     }
     printf("\tpopulated vector %lu\n", test.size());
@@ -158,7 +170,8 @@ int main(int argc, char** argv) {
 
     for (int i = 0; i < size; ++i) {
       KmerIndexType2 kmer;
-      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+//      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
       kmer.id.file_pos = rand() % std::numeric_limits<uint64_t>::max();
 
       test.push_back(std::move(kmer));
@@ -188,7 +201,8 @@ int main(int argc, char** argv) {
 
     for (int i = 0; i < size; ++i) {
       KmerIndexType3 kmer;
-      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+//      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
       kmer.id.file_pos = rand() % std::numeric_limits<uint64_t>::max();
       kmer.qual = float(rand()) / float(RAND_MAX);
 
@@ -219,7 +233,8 @@ int main(int argc, char** argv) {
 
     for (int i = 0; i < size; ++i) {
       KmerIndexType4 kmer;
-      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+//      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
       kmer.id.file_pos = rand() % std::numeric_limits<uint64_t>::max();
       kmer.qual = float(rand()) / float(RAND_MAX);
 

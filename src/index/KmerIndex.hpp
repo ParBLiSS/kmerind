@@ -23,6 +23,7 @@
 #include <unistd.h>     // sysconf
 #include <sys/stat.h>   // block size.
 
+#include "common/Kmer.hpp"
 #include "common/base_types.hpp"
 #include "common/AlphabetTraits.hpp"
 #include "io/fastq_loader.hpp"
@@ -33,6 +34,7 @@
 #include "index/distributed_map.hpp"
 #include "iterators/zip_iterator.hpp"
 #include "iterators/transform_iterator.hpp"
+#include "iterators/buffered_transform_iterator.hpp"
 #include "io/sequence_id_iterator.hpp"
 
 
@@ -43,7 +45,6 @@ namespace bliss
     template<typename KmerType>
     struct KmoleculeToKmerFunctor {
         typedef std::pair<KmerType, KmerType> KmoleculeType;
-
 
         KmerType operator()(const KmoleculeType& input) {
           return (input.first < input.second ? input.first : input.second);
@@ -79,7 +80,7 @@ namespace bliss
         //==================== COMMON TYPES
 
         /// DEFINE kmer index type, also used for reverse complement
-        using KmerType = bliss::Kmer<KmerSize, bliss::AlphabetTraits<Alphabet>::BITS_PER_CHAR>;
+        using KmerType = bliss::Kmer<Kmer_Size, bliss::AlphabetTraits<Alphabet>::getBitsPerChar()>;
 
         /// DEFINE file loader.  this only provides the L1 and L2 blocks, not reads.
         // raw data type :  use CharType
@@ -109,7 +110,7 @@ namespace bliss
         typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
 
         /// kmer position iterator type
-        using IdIterType = bliss::io::SequenceIdIterator<IdType>;
+        using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
 
         /// kmer index element iterator
         using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, IdIterType>;
@@ -289,7 +290,7 @@ namespace bliss
 
           //== set up the kmer generating iterators.
           KmoleculeOpType kmer_op;
-          KmoleculeToKmerFunctor transform;
+          KmoleculeToKmerFunctor<KmerType> transform;
           KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
           KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
 

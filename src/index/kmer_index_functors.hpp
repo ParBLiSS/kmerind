@@ -22,6 +22,7 @@
 #include <common/AlphabetTraits.hpp>      // for mapping char to alphabet value
 #include <io/fastq_iterator.hpp>          // for Id.
 #include <index/kmer_index_element.hpp>   // for the basic kmer index element structures.
+#include <common/sequence.hpp>
 
 namespace bliss
 {
@@ -55,8 +56,8 @@ namespace bliss
             bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
 
         static constexpr int word_size = sizeof(KmerValueType) * 8;
-        static constexpr KmerValueType mask_reverse = ~(static_cast<KmerValueType>(0))
-            >> (word_size - shift - nBits);
+//        static constexpr KmerValueType mask_reverse = ~(KmerValueType());
+//            >> (word_size - shift - nBits);
 
         //.constructor taking the fastq sequence id for a read
       public:
@@ -66,14 +67,16 @@ namespace bliss
         {
           // store the kmer information.
           char val = AlphabetType::FROM_ASCII[static_cast<size_t>(*iter)];
-          kmer >>= nBits;
-          kmer |= (static_cast<KmerValueType>(val) << shift);
+          kmer.nextFromChar(val);
+//          kmer >>= nBits;
+//          kmer |= (static_cast<KmerValueType>(val) << shift);
 
           // generate the rev complement
           char complement = max - val;
           revcomp <<= nBits;
           revcomp |= static_cast<KmerValueType>(complement);
-          revcomp &= mask_reverse;
+          revcomp.do_
+          //revcomp &= mask_reverse;
 
           ++iter;
 
@@ -128,7 +131,7 @@ namespace bliss
 
         //.constructor taking the fastq sequence id for a read
       public:
-        generate_kmer(const bliss::io::FASTQSequenceId &_rid)
+        generate_kmer(const bliss::common::FASTQSequenceId &_rid)
           : kmer(), revcomp(0)
         {}  // not setting kmer.id here because this class does not have kmer id.
 
@@ -168,7 +171,7 @@ namespace bliss
 
     /**
      * kmer generator operator type
-     * The third template parameter acts as a member checker to make sure there is an id field and it's of type bliss::io::FASTQSequenceId
+     * The third template parameter acts as a member checker to make sure there is an id field and it's of type bliss::common::FASTQSequenceId
      */
     template<typename Sequence, typename KmerIndex>
     class generate_kmer<Sequence, KmerIndex,
@@ -194,7 +197,7 @@ namespace bliss
 
       public:
 
-        generate_kmer(const bliss::io::FASTQSequenceId &_rid)
+        generate_kmer(const bliss::common::FASTQSequenceId &_rid)
             : BaseClassType(_rid), pos(0)
         {
           this->kmer.id = _rid;

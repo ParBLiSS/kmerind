@@ -457,10 +457,12 @@ struct SequencesIterator {
     typedef float QualityType;
     typedef DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
-    typedef bliss::io::SequenceWithQuality<BaseIterType, QualityType>  SequenceType;
 
     typedef bliss::io::FASTQParser<BaseIterType, QualityType>  ParserType;
-    typedef bliss::io::SequencesIterator<ParserType, BaseIterType>           IteratorType;
+
+    typedef typename ParserType::SequenceType  SequenceType;
+
+    typedef bliss::io::SequencesIterator<ParserType>           IteratorType;
 
     SequencesIterator(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(nprocs, rank, filename, nthreads, chunkSize)  {
@@ -577,10 +579,10 @@ struct SequencesIterator2 {
     typedef float QualityType;
     typedef DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
-    typedef bliss::io::SequenceWithQuality<BaseIterType, QualityType>  SequenceType;
 
     typedef bliss::io::FASTQParser<BaseIterType, QualityType>  ParserType;
-    typedef bliss::io::SequencesIterator<ParserType, BaseIterType>           IteratorType;
+    typedef typename ParserType::SequenceType  SequenceType;
+    typedef bliss::io::SequencesIterator<ParserType>           IteratorType;
 
     SequencesIterator2(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(nprocs, rank, filename, nthreads, chunkSize)  {
@@ -688,10 +690,10 @@ struct SequencesIteratorNoQual {
     typedef float QualityType;
     typedef DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
-    typedef bliss::io::SequenceWithQuality<BaseIterType, QualityType>  SequenceType;
 
     typedef bliss::io::FASTQParser<BaseIterType, QualityType>  ParserType;
-    typedef bliss::io::SequencesIterator<ParserType, BaseIterType>           IteratorType;
+    typedef typename ParserType::SequenceType  SequenceType;
+    typedef bliss::io::SequencesIterator<ParserType>           IteratorType;
 
     SequencesIteratorNoQual(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(nprocs, rank, filename, nthreads, chunkSize)  {

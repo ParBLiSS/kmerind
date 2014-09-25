@@ -311,7 +311,7 @@ namespace bliss
       public:
 
         /// type of data elements in the input iterator
-        typedef typename std::iterator_traits<Iterator>::value_type BaseValueType;
+        typedef typename std::iterator_traits<typename Parser::BaseIteratorType>::value_type BaseValueType;
 
         /// type of data elements in the input iterator
         typedef typename std::iterator_traits<SequencesIterator<Parser> >::value_type ValueType;

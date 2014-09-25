@@ -501,6 +501,7 @@ public:
     return result;
   }
 
+
   /**
    * @brief Shifts the k-mer left by the given number of CHARACTERS.
    *

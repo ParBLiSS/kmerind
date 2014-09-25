@@ -16,7 +16,7 @@
 
 #include <type_traits>
 #include <iterator>
-
+#include <utility>
 
 namespace bliss
 {
@@ -39,7 +39,7 @@ namespace bliss
         using D = std::ptrdiff_t;
 
         /// position type
-        using T = decltype(declval<SequenceIdType>().pos);
+        using T = decltype(std::declval<SequenceIdType>().pos);
 
         /// the stride for each iteration.
         mutable T stride;
