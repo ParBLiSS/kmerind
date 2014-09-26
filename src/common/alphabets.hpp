@@ -174,6 +174,5 @@ struct DNA5
 //constexpr uint8_t DNA5::FROM_ASCII[256];
 //constexpr char DNA5::TO_ASCII[DNA5::SIZE];
 
-template<typename ALPHABET>
 
 #endif // BLISS_COMMON_ALPHABETS_H
