@@ -28,44 +28,44 @@
 
 // TODO add function calls for auto generation into documentation
 
-struct BaseAlphabetChar
+//struct BaseAlphabetChar
+//{
+//  // a castable char element for instaces of this struct
+//  CharType data_value;
+//
+//
+//  // TODO: assignment and construction are not directly inhertitable, thus those would need to be implemented in the separate alphabets
+//  //       (for general usage though, this would require virtual functions!????)
+//
+//  // make this struct usable as a char
+//  operator CharType() const {return data_value;}
+//
+//
+//  /// copy assignment operators
+//  BaseAlphabetChar& operator=(const BaseAlphabetChar& c) {if (&c != this) data_value = c.data_value; return *this;}
+//
+//  /// copy constructor
+//  BaseAlphabetChar(const BaseAlphabetChar& c) : data_value(c.data_value) {}
+//
+//  // used by subclasses.
+//  BaseAlphabetChar& operator=(const CharType& c) {data_value = c; return *this;}
+//  BaseAlphabetChar(const CharType& c) : data_value(c) {}
+//
+//
+//  /// default constructor
+//  BaseAlphabetChar() {}
+//
+//
+//};
+
+
+struct DNA
 {
-  // a castable char element for instaces of this struct
-  CharType data_value;
-
-
-  // TODO: assignment and construction are not directly inhertitable, thus those would need to be implemented in the separate alphabets
-  //       (for general usage though, this would require virtual functions!????)
-
-  // make this struct usable as a char
-  operator CharType() const {return data_value;}
-
-
-  /// copy assignment operators
-  BaseAlphabetChar& operator=(const BaseAlphabetChar& c) {if (&c != this) data_value = c.data_value; return *this;}
-
-  /// copy constructor
-  BaseAlphabetChar(const BaseAlphabetChar& c) : data_value(c.data_value) {}
-
-  // used by subclasses.
-  BaseAlphabetChar& operator=(const CharType& c) {data_value = c; return *this;}
-  BaseAlphabetChar(const CharType& c) : data_value(c) {}
-
-
-  /// default constructor
-  BaseAlphabetChar() {}
-
-
-};
-
-
-struct DNA : BaseAlphabetChar
-{
-  // TODO: check whether copying between char and DNA is actually optimized "away" (as it should)
-  // This should make char and DNA useable interchangebly
-  DNA& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
-  DNA(const CharType& c) : BaseAlphabetChar(c) {}
-  DNA() {}
+//  // TODO: check whether copying between char and DNA is actually optimized "away" (as it should)
+//  // This should make char and DNA useable interchangebly
+//  DNA& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
+//  DNA(const CharType& c) : BaseAlphabetChar(c) {}
+//  DNA() {}
 
   static constexpr AlphabetSizeType SIZE = 4;
 
@@ -115,13 +115,13 @@ struct DNA : BaseAlphabetChar
 
 };
 
-struct DNA5 : BaseAlphabetChar
+struct DNA5
 {
     // TODO: check whether copying between char and DNA is actually optimized "away" (as it should)
     // This should make char and DNA useable interchangebly
-    DNA5& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
-    DNA5(const CharType& c) : BaseAlphabetChar(c) {}
-    DNA5() {}
+//    DNA5& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
+//    DNA5(const CharType& c) {}
+//    DNA5() {}
 
   static constexpr AlphabetSizeType SIZE = 5;
   static constexpr uint8_t FROM_ASCII[256] =
@@ -165,7 +165,7 @@ struct DNA5 : BaseAlphabetChar
     2,  // = 1
     1,  // = 2
     0,  // = 3
-    4  // = 4
+    4   // = 4
   };
 };
 

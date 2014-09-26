@@ -44,7 +44,7 @@ struct PackingItFunctor
 {
   /// the properties of potential padding in the storage words, given
   /// the storage type and the bits per character.
-  typedef PaddingTraits<PackedStorageType, BITS_PER_CHAR> padtraits;
+  typedef PackingTraits<PackedStorageType, BITS_PER_CHAR> padtraits;
   /// The number of characters packed into each word
   static constexpr unsigned int m = padtraits::chars_per_word;
 
@@ -116,7 +116,7 @@ class PackingIterator
   /// class
   typedef PackingItFunctor<bits_per_char, PackedStorageType> functor_t;
   /// The padding traits (number of padding bits and data bits, etc)
-  typedef PaddingTraits<PackedStorageType, bits_per_char> padtraits;
+  typedef PackingTraits<PackedStorageType, bits_per_char> padtraits;
 
 public:
   /// Default constructor
@@ -204,7 +204,7 @@ class UnpackingIterator
   /// The type of the functor used for unpacking
   typedef UnpackingFunctor<bits_per_char, UnpackedStorageType> functor_t;
   /// The padding properties (data bits, padding bits, etc)
-  typedef PaddingTraits<base_value_type, bits_per_char> padtraits;
+  typedef PackingTraits<base_value_type, bits_per_char> padtraits;
 
 public:
   /// Default constructor

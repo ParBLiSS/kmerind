@@ -72,11 +72,11 @@ namespace bliss
 //          kmer |= (static_cast<KmerValueType>(val) << shift);
 
           // generate the rev complement
-          char complement = max - val;
-          revcomp <<= nBits;
-          revcomp |= static_cast<KmerValueType>(complement);
-          revcomp.do_
-          //revcomp &= mask_reverse;
+          char complement = AlphabetType::TO_COMPLEMENT[val];
+          kmer.nextFromChar(complement);
+//          revcomp <<= nBits;
+//          revcomp |= static_cast<KmerValueType>(complement);
+//          //revcomp &= mask_reverse;
 
           ++iter;
 

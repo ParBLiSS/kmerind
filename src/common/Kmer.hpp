@@ -24,6 +24,8 @@
 
 // own includes
 #include <common/base_types.hpp>
+#include <common/alphabets.hpp>
+#include <common/AlphabetTraits.hpp>
 #include <common/bit_ops.hpp>
 #include <common/padding.hpp>
 
@@ -38,24 +40,47 @@ namespace bliss
  * k-mer size and the `BITS_PER_CHAR` determine the size of the underlying
  * data array at compile time.
  *
+ * @details  In memory organization of the kmer is described below.
+ *      Kmer is packed bitwise based on the alphabet.  i.e. alphabet defines required
+ *      number of bits per character.  characters in a kmer are packed together,
+ *      with padding occurring at the most significant bits.  In case of multi-word
+ *      kmer, array element 0 has LSB for the kmer, and the highest element has the MSB,
+ *      as well as the padding.  The first character encounter in the sequence is more significant,
+ *      so as to allow sorting by prefix.   For example:
+ *        string:  ATCGGACTTA
+ *        2 bits per DNA character, then we need 3 bytes, with 4 bits padding.
+ *
+ *        byte 2 in array:  00AT
+ *        byte 1 in array:  CGGA
+ *        byte 0 in array:  CTTA
+ *
+ *      shifting the kmer window to the next character in sequence results in overall
+ *      left shift of bits in the array
+ *
+ *        byte 2 in array:  00TC
+ *        byte 1 in array:  GGAC
+ *        byte 0 in array:  TTAX
+ *
+ *      lexicographic comparison then starts with highest order
+ *
  * @todo: implement and refer to the dynamic k-mer (which will be more
  *        inefficient)
  *
  * @tparam  KMER_SIZE   The size (number of characters) of the k-mer.
- * @tparam  BITS_PER_CHAR   The number of bits per character in the k-mer.
- *                          E.g. for DNA this would be 2.
+ * @tparam  ALPHABET    The Alphabet from which the characters in the k-mer are drawn.
+ *                          E.g. DNA
  * @tparam  word_type       The unsigned integer type to be used as the
  *                          storage type. This can be of any size from
  *                          uint8_t up to uint64_t. (default is uint64_t)
  */
-template <unsigned int KMER_SIZE, unsigned int BITS_PER_CHAR, typename word_type=WordType>
+template <unsigned int KMER_SIZE, typename ALPHABET, typename word_type=WordType>
 class Kmer
 {
 private:
   /// The size of the Kmer, i.e. the number of characters
   static constexpr unsigned int size = KMER_SIZE;
   /// The number of bits of each character
-  static constexpr unsigned int bitsPerChar = BITS_PER_CHAR;
+  static constexpr unsigned int bitsPerChar = bliss::AlphabetTraits<ALPHABET>::getBitsPerChar();
   /// The total number of bits
   static constexpr unsigned int nBits = size * bitsPerChar;
 
@@ -100,43 +125,45 @@ public:
     do_clear();
   }
 
-  /**
-   * @brief   Create a new k-mer from the given sequence.
-   *
-   * The iterators base type has to be the same as the k-mers base type.
-   * This function merely initializes the internal data with the values
-   * from the iterator. There is no processing done on these values, which
-   * especially means that there is no padding removed.
-   *
-   * The use of this function is mostly for testing purposes (creating the
-   * expected reference (true) k-mers).
-   *
-   * @tparam InputIterator  An input iterator which is at least a forward
-   *                        iterator.
-   * @param begin           An interator pointing to the beginning of the
-   *                        sequence to be used for initializing the k-mer
-   *                        data structure.
-   */
-  template<typename InputIterator>
-  Kmer(InputIterator begin)
-  {
-    // assert that the iterator's value type is the same as this k-mers base
-    // type
-    static_assert(std::is_same<
-        typename std::iterator_traits<InputIterator>::value_type,
-        word_type>::value,
-        "Input iterator must have same value type as the Kmer storage");
-
-    // copy all the data into this kmer
-    word_type* out = data;
-    for (unsigned int i = 0; i < nWords; ++i)
-    {
-      *(out++) = *(begin++);
-    }
-
-    // set unused bits to zero to make this a valid kmer
-    do_sanitize();
-  }
+//  /**
+//   * COMMENTED OUT BECAUSE INPUTITERATOR's ALPHABET IS NOT CLEAR.
+//   *
+//   * @brief   Create a new k-mer from the given sequence.
+//   *
+//   * The iterators base type has to be the same as the k-mers base type.
+//   * This function merely initializes the internal data with the values
+//   * from the iterator. There is no processing done on these values, which
+//   * especially means that there is no padding removed.
+//   *
+//   * The use of this function is mostly for testing purposes (creating the
+//   * expected reference (true) k-mers).
+//   *
+//   * @tparam InputIterator  An input iterator which is at least a forward
+//   *                        iterator.
+//   * @param begin           An interator pointing to the beginning of the
+//   *                        sequence to be used for initializing the k-mer
+//   *                        data structure.
+//   */
+//  template<typename InputIterator>
+//  Kmer(InputIterator begin)
+//  {
+//    // assert that the iterator's value type is the same as this k-mers base
+//    // type
+//    static_assert(std::is_same<
+//        typename std::iterator_traits<InputIterator>::value_type,
+//        word_type>::value,
+//        "Input iterator must have same value type as the Kmer storage");
+//
+//    // copy all the data into this kmer
+//    word_type* out = data;
+//    for (unsigned int i = 0; i < nWords; ++i)
+//    {
+//      *(out++) = *(begin++);
+//    }
+//
+//    // set unused bits to zero to make this a valid kmer
+//    do_sanitize();
+//  }
 
   /*
    * TODO:
@@ -149,6 +176,11 @@ public:
   /**
    * FIXME: update documentation for `size => (size-1)`
    * @brief   Fills this k-mer from a packed and padded input sequence.
+   * @note    one example of padded input sequence is where the character values are in
+   *          a contiguous range (e.g. DNA 0..3), stored in a char, so 2 bits are used, and 6 bits are padding.
+   *
+   *          another example of packed and padded input sequence is where the character values are in
+   *          a contiguous range DNA5, 0..4), stored in 2 in a char, and 3 bits are used, 2 bits are padding.
    *
    * The k-mer's data is filled from the given input sequence using
    * `KMER_SIZE * BITS_PER_CHAR` bits.
@@ -172,23 +204,95 @@ public:
    *                        to the bits that have to be read in the next
    *                        iteration.
    */
-  template <typename InputIterator>
+  template <typename InputIterator, typename offset_t>
   // TODO: add option for bit offset in input sequence?
-  unsigned int fillFromPaddedStream(InputIterator& begin, bool stop_on_last = false)
+  unsigned int fillFromPackedStream(InputIterator& begin, offset_t& offset, bool stop_on_last = false)
   {
     // remove padding and copy to own data structure
     typedef typename std::iterator_traits<InputIterator>::value_type input_word_type;
-    const unsigned int paddingBits = PaddingTraits<input_word_type, bitsPerChar>::padding_bits;
-    removePadding(begin, data, size*bitsPerChar, paddingBits);
+    const unsigned int paddingBits = PackingTraits<input_word_type, bitsPerChar>::padding_bits;
+//    removePadding(begin, data, size*bitsPerChar, paddingBits);
+
+    const unsigned int chars_per_word = PackingTraits<word_type, bitsPerChar>::chars_per_word;
+
+
+    // iterate to next word if the current one is done
+    while (offset >= PackingTraits<input_word_type, bitsPerChar>::data_bits)
+    {
+      ++begin;
+      offset -= PackingTraits<input_word_type, bitsPerChar>::data_bits;
+    }
+
+    // clear k-mer
+    this->do_clear();
+
+    // add to lsb iteratively, one packed word at a time
+    unsigned int i = 0, j = 0;
+    word_type temp;
+    for (; i < (size - 1) / chars_per_word; i += chars_per_word)
+    {
+      temp = static_cast<word_type>(0);
+      for (j = 0; j < chars_per_word; ++j) {
+        temp <<= bitsPerChar;
+        temp |= static_cast<word_type>(*begin >> offset) & getBitMask<word_type>(bitsPerChar);
+
+        // increase offset
+        offset += bitsPerChar;
+        if (offset >= PackingTraits<input_word_type, bitsPerChar>::data_bits)
+        {
+          ++begin;
+          offset -= PackingTraits<input_word_type, bitsPerChar>::data_bits;
+        }
+      }
+
+      // get next character as word_type and mask out bits that are not needed
+      nextFromWordInternal(temp, PackingTraits<word_type, bitsPerChar>::data_bits);
+    }
+
+    // add to lsb iteratively, one char at a time
+    for (; i < (size - 1); ++i) {
+      nextFromWordInternal(*begin >> offset, bitsPerChar);
+
+      // increase offset
+      offset += bitsPerChar;
+      if (offset >= PackingTraits<input_word_type, bitsPerChar>::data_bits)
+      {
+        ++begin;
+        offset -= PackingTraits<input_word_type, bitsPerChar>::data_bits;
+      }
+
+    }
+
+    // last iteration:  i = size-1.
+    // get next character as word_type and mask out bits that are not needed
+    nextFromWordInternal(*begin >> offset, bitsPerChar);
+
+    // iterate the input iterator one more, but stop on last
+    // iteration if that option is set
+    if (!stop_on_last)
+    {
+      // increase offset
+      offset += bitsPerChar;
+      if (offset >= PackingTraits<input_word_type, bitsPerChar>::data_bits)
+      {
+        ++begin;
+        offset -= PackingTraits<input_word_type, bitsPerChar>::data_bits;
+      }
+
+    }
+
+
+
+
 
     // set unused bits to 0
     do_sanitize();
 
-    // the bit offset in the input sequence
-    // TODO: do this inside the removePadding function!?
-    unsigned int total_bits = stop_on_last ? (size-1)*bitsPerChar : size*bitsPerChar;
-    unsigned int offset = total_bits % PaddingTraits<input_word_type, bitsPerChar>::data_bits;
-    std::advance(begin, total_bits / PaddingTraits<input_word_type, bitsPerChar>::data_bits);
+//    // the bit offset in the input sequence
+//    // TODO: do this inside the removePadding function!?
+//    unsigned int total_bits = stop_on_last ? (size-1)*bitsPerChar : size*bitsPerChar;
+//    unsigned int offset = total_bits % PackingTraits<input_word_type, bitsPerChar>::data_bits;
+//    std::advance(begin, total_bits / PackingTraits<input_word_type, bitsPerChar>::data_bits);
 
     // return the offset
     return offset;
@@ -202,31 +306,41 @@ public:
     typedef typename std::iterator_traits<InputIterator>::value_type char_type;
 
     // clear k-mer
-    do_clear();
+    this->do_clear();
 
-    // add to lsb iteratively and reverse at the end
-    for (unsigned int i = 0; i < size;)
+    const unsigned int chars_per_word = PackingTraits<word_type, bitsPerChar>::chars_per_word;
+
+    // add to lsb iteratively, one packed word at a time
+    unsigned int i = 0, j = 0;
+    word_type temp;
+    for (; i < (size - 1) / chars_per_word; i += chars_per_word)
     {
+      temp = static_cast<word_type>(0);
+      for (j = 0; j < chars_per_word; ++j, ++begin) {
+        temp <<= bitsPerChar;
+        temp |= static_cast<word_type>(*begin) & getBitMask<word_type>(bitsPerChar);
+      }
+
       // get next character as word_type and mask out bits that are not needed
-      char_type c = *begin;
-      word_type w = static_cast<word_type>(c);
-      w &= getBitMask<word_type>(bitsPerChar);
-
-      // left shift k-mer
-      // TODO: replace by single shift operation
-      do_left_shift(bitsPerChar);
-
-      // add character to least significant end (requires least shifting)
-      *data |= w;
-
-      // iterate the input iterator one more, but stop on last
-      // iteration if that option is set
-      if (!stop_on_last || (stop_on_last && ++i!=size)) ++begin;
+      nextFromWordInternal(temp, PackingTraits<word_type, bitsPerChar>::data_bits);
     }
 
-    // reverse the k-mer (needed since we added the newest characters to the
-    // least significant end rather than the most significant end)
-    reversed_kmer();
+    // add to lsb iteratively, one char at a time
+    for (; i < (size - 1); ++i, ++begin) {
+      nextFromWordInternal(*begin, bitsPerChar);
+    }
+
+    // last iteration:  i = size-1.
+    // get next character as word_type and mask out bits that are not needed
+    nextFromWordInternal(*begin, bitsPerChar);
+
+    // iterate the input iterator one more, but stop on last
+    // iteration if that option is set
+    if (!stop_on_last) ++begin;
+
+//    // reverse the k-mer (needed since we added the newest characters to the
+//    // least significant end rather than the most significant end)
+//    this->do_reverse();
   }
 
   /**
@@ -235,13 +349,16 @@ public:
    *
    * Given the packed and padded input sequence via the `begin` iterator
    * and the current bit offset, this function will read the next
-   * `BITS_PER_CHAR` bits, right shift the current k-mer value by that number
-   * of bits and puts the newly read bits into the `BITS_PER_CHAR` most
+   * `BITS_PER_CHAR` bits, left shift the current k-mer value by that number
+   * of bits and puts the newly read bits into the `BITS_PER_CHAR` least
    * significant bits of the k-mer value. Both parameters are passed by
    * reference and internally updated to the next position to read from.
    * Therefore, the user of this function just needs to keep calling this
    * function without updating the parameters to generate all k-mers for a
    * given packed and padded input sequence.
+   *
+   * Note that each element in the InputIterator contains an integral number of
+   * packed characters starting from the lsb position.
    *
    * @tparam InputIterator  An input iterator type that is at least a forward
    *                        iterator.
@@ -252,69 +369,73 @@ public:
    *                        sequence.
    */
   template <typename InputIterator, typename offset_t>
-  void nextFromPaddedStream(InputIterator& begin, offset_t& offset)
+  void nextFromPackedStream(InputIterator& begin, offset_t& offset)
   {
     typedef typename std::iterator_traits<InputIterator>::value_type input_type;
-    // shift the kmer by the size of one character
-    // TODO: replace this by a call that does exactly bitsPerChar right shift
-    // (better compiler optimization)
-    do_right_shift(bitsPerChar);
+//  //     shift the kmer by the size of one character
+//  //     TODO: replace this by a call that does exactly bitsPerChar right shift
+//  //     (better compiler optimization)
+//    do_left_shift(bitsPerChar);
 
     // iterate to next word if the current one is done
-    while (offset >= PaddingTraits<input_type, bitsPerChar>::data_bits)
+    while (offset >= PackingTraits<input_type, bitsPerChar>::data_bits)
     {
       ++begin;
-      offset -= PaddingTraits<input_type, bitsPerChar>::data_bits;
+      offset -= PackingTraits<input_type, bitsPerChar>::data_bits;
     }
 
-    // get the bigger type of the input_type and the kmer word_type
-    typedef typename std::conditional<sizeof(input_type) < sizeof(word_type),
-                                      word_type, input_type>::type bigger_type;
+    nextFromWordInternal(*begin >> offset, bitsPerChar);
 
-    // get the next input as the bigger word type
-    bigger_type curWord = static_cast<bigger_type>(*begin);
-    // shift offset between input offset and the offset for the last character
-    // in the kmer
-    int shift_by = offset - lastCharWordOffset;
-    if (shift_by >= 0)
-    {
-      // positive shift: right shift
-      // (shift_by == 0 is handled in this case as well, because this is the
-      //  faster case, and for = 0 it doesn't make a difference which one is
-      //  used)
-      data[nWords - 1 - lastCharIsSplit] = static_cast<word_type>(curWord >> shift_by);
-    }
-    else
-    {
-      // negative shift: left shift
-      data[nWords - 1 - lastCharIsSplit] |= static_cast<word_type>(curWord << -shift_by);
-    }
+//    // get the bigger type of the input_type and the kmer word_type
+//    typedef typename std::conditional<sizeof(input_type) < sizeof(word_type),
+//                                      word_type, input_type>::type bigger_type;
+//
+//    // get the next input as the bigger word type (since we may have to shift...
+//    bigger_type curWord = static_cast<bigger_type>(*begin);
+//
+//    // shift offset between input offset and the offset for the last character
+//    // in the kmer
+//    int shift_by = offset - lastCharWordOffset;
+//    if (shift_by >= 0)
+//    {
+//      // positive shift: right shift
+//      // (shift_by == 0 is handled in this case as well, because this is the
+//      //  faster case, and for = 0 it doesn't make a difference which one is
+//      //  used)
+//      data[nWords - 1 - lastCharIsSplit] = static_cast<word_type>(curWord >> shift_by);
+//    }
+//    else
+//    {
+//      // negative shift: left shift
+//      data[nWords - 1 - lastCharIsSplit] |= static_cast<word_type>(curWord << -shift_by);
+//    }
+//
+//    // in case the last character is split across words in the kmer
+//    // representation: set last bits to last word
+//    // NOTE: this branch is removed by the compiler (result known at compile time)
+//    if (lastCharIsSplit)
+//    {
+//      data[nWords - 1] = static_cast<word_type>(curWord >> (offset + leftSplitSize));
+//    }
 
-    // in case the last character is split across words in the kmer
-    // representation: set last bits to last word
-    // NOTE: this branch is removed by the compiler (result known at compile time)
-    if (lastCharIsSplit)
-    {
-      data[nWords - 1] = static_cast<word_type>(curWord >> (offset + leftSplitSize));
-    }
 
     // set unused bits to 0
     do_sanitize();
 
     // increase offset
     offset += bitsPerChar;
-    if (offset >= PaddingTraits<input_type, bitsPerChar>::data_bits)
+    if (offset >= PackingTraits<input_type, bitsPerChar>::data_bits)
     {
       ++begin;
-      offset -= PaddingTraits<input_type, bitsPerChar>::data_bits;
+      offset -= PackingTraits<input_type, bitsPerChar>::data_bits;
     }
   }
 
   /**
    * @brief Creates the next k-mer by shifting and adding the given character.
    *
-   * Creates the next k-mer by the sliding window. This first right shifts the
-   * current k-mer and then adds the given character to the most significant
+   * Creates the next k-mer by the sliding window. This first leftt shifts the
+   * current k-mer and then adds the given character to the least significant
    * bits of this k-mer.
    *
    * Note: this is changing this k-mer in-place.
@@ -326,22 +447,8 @@ public:
     // shift the kmer by the size of one character
     // TODO: replace this by a call that does exactly bitsPerChar right shift
     // (better compiler optimization)
-    do_right_shift(bitsPerChar);
 
-    // cast the char into our word size and then AND it with a bitmask
-    word_type new_char = static_cast<word_type>(c);
-    new_char &= getBitMask<word_type>(bitsPerChar);
-
-    // shift it to the right position and OR it into our data
-    int shift_by = lastCharWordOffset;
-    data[nWords - 1 - lastCharIsSplit] |= static_cast<word_type>(new_char << shift_by);
-
-    // the last character might be split between storage words
-    // NOTE: this branch is removed by the compiler (result known at compile time)
-    if (lastCharIsSplit)
-    {
-      data[nWords - 1] = static_cast<word_type>(new_char >> leftSplitSize);
-    }
+    nextFromWordInternal(c, bitsPerChar);
 
     // clean up
     do_sanitize();
@@ -512,7 +619,21 @@ public:
   {
     // shift the given number of _characters_!
     this->do_left_shift(shift_by * bitsPerChar);
+    this->do_sanitize();
     return *this;
+  }
+
+  /**
+   * @brief Shifts the k-mer left by the given number of CHARACTERS.
+   *
+   * @note  This shifts by the number of characters (which is a larger shift
+   *        then bitwise).
+   */
+  inline Kmer operator<<(const std::size_t shift_by)
+  {
+    Kmer result = *this;
+    result <<= shift_by;
+    return result;
   }
 
   /**
@@ -525,10 +646,24 @@ public:
   {
     // shift the given number of **characters** !
     this->do_right_shift(shift_by * bitsPerChar);
+    this->do_sanitize();
     return *this;
   }
 
-  // TODO left shift binary operator>>(shift_by)
+
+  /**
+   * @brief Shifts the k-mer right by the given number of CHARACTERS.
+   *
+   * @note  This shifts by the number of characters (which is a larger shift
+   *        then bitwise).
+   */
+  inline Kmer operator>>(const std::size_t shift_by)
+  {
+    Kmer result = *this;
+    result >>= shift_by;
+    return result;
+  }
+
 
   /**
    * @brief Returns a reversed k-mer.
@@ -574,7 +709,24 @@ public:
 protected:
 
   /**
+   * @brief internal method to add one more character to the kmer
+   * @param c     character to add.
+   */
+  template <typename WType>
+  inline void nextFromWordInternal(WType w, unsigned int left_shift)
+  {
+    // left shift k-mer
+    // TODO: replace by single shift operation
+    do_left_shift(left_shift);
+
+    // add character to least significant end (requires least shifting)
+    *data |= static_cast<WType>(w) &
+        getBitMask<word_type>(left_shift);
+  }
+
+  /**
    * @brief Sets all unused bits of the underlying k-mer data to 0.
+   * @details  highest order bits in highest number element are 0.
    */
   inline void do_sanitize()
   {
@@ -603,6 +755,12 @@ protected:
     const size_t word_shift = shift / (sizeof(word_type)*8);
     const size_t offset = shift % (sizeof(word_type)*8);
 
+    // all shifted away.
+    if (word_shift >= nWords) {
+      do_clear();
+      return;
+    }
+
     if (offset == 0)
     {
       // no bit shifting, just shift words around
@@ -620,6 +778,7 @@ protected:
       }
       data[word_shift] = data[0] << offset;
     }
+
     // set all others to 0
     std::fill(data, data+word_shift, static_cast<word_type>(0));
   }
@@ -636,6 +795,12 @@ protected:
     // inspired by STL bitset implementation
     const size_t word_shift = shift / (sizeof(word_type)*8);
     const size_t offset = shift % (sizeof(word_type)*8);
+
+    // all shifted away.
+    if (word_shift >= nWords) {
+      do_clear();
+      return;
+    }
 
     if (offset == 0)
     {
@@ -678,7 +843,8 @@ protected:
     // of this
     for (unsigned int i = 0; i < size; ++i)
     {
-      this->do_left_shift(bitsPerChar);
+      this->do_left_shift(bitsPerChar);   // shifting the whole thing, inefficient but correct,
+                                          // especially for char that cross word boundaries.
       // copy `bitsperChar` least significant bits
       copyBitsFixed<word_type, bitsPerChar>(this->data[0], tmp_copy.data[0]);
       tmp_copy.do_right_shift(bitsPerChar);

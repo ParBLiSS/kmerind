@@ -13,6 +13,7 @@
 #define BLISS_COMMON_BIT_OPS_H
 
 #include <limits>
+#include <type_traits>
 
 #include <common/base_types.hpp>
 
@@ -39,6 +40,10 @@ constexpr WordType getCharBitMask(const BitSizeType nBits, const BitSizeType off
 template <typename T>
 constexpr T getBitMask(const BitSizeType nBits)
 {
+  // unsigned integer type:  fine.
+  // max for signed integer has sign bit (msb) == 0, but digits does not count sign bit.
+  // this does not make sense for floating or any other type, so assert.
+  static_assert(std::is_integral<T>::value, "getBitMask only accepts primitive, integral type.");
   return static_cast<T>(std::numeric_limits<T>::max() >> (std::numeric_limits<T>::digits - nBits));
   //return static_cast<T>((static_cast<T>(0x1) << nBits) - static_cast<T>(1));
 }
