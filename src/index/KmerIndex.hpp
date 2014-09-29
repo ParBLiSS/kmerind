@@ -80,7 +80,7 @@ namespace bliss
         //==================== COMMON TYPES
 
         /// DEFINE kmer index type, also used for reverse complement
-        using KmerType = bliss::Kmer<Kmer_Size, bliss::AlphabetTraits<Alphabet>::getBitsPerChar()>;
+        using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
 
         /// DEFINE file loader.  this only provides the L1 and L2 blocks, not reads.
         // raw data type :  use CharType

@@ -33,7 +33,7 @@ using namespace bliss::index;
 using namespace bliss::io;
 
 
-typedef bliss::Kmer<21, bliss::AlphabetTraits<DNA>::getBitsPerChar(), uint64_t> KmerType;
+typedef bliss::Kmer<21, DNA, uint64_t> KmerType;
 
 
 typedef KmerIndexElement<KmerType > KmerIndexType1;

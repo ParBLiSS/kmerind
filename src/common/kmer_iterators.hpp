@@ -206,7 +206,7 @@ public:
   /// The value_type of the underlying iterator
   typedef typename std::iterator_traits<BaseIterator>::value_type base_value_type;
   /// The padding traits of the underlying stream
-  typedef PackingTraits<base_value_type, ALPHABET> padtraits;
+  typedef PackingTraits<base_value_type, bliss::AlphabetTraits<ALPHABET>::getBitsPerChar()> padtraits;
 
   /**
    * @brief Initializes the sliding window.
@@ -228,7 +228,7 @@ public:
     // fill kmer from the given packed and padded stream
     // this leaves the iterator and the offset ON the last read position
     // and NOT AFTER this (i.e. NOT on the position to be read NEXT)
-    offset = kmer.fillFromPaddedStream(it, true);
+    offset = kmer.fillFromPackedStream(it, offset, true);
   }
 
   /**
@@ -247,7 +247,7 @@ public:
   template<typename offset_t>
   inline void next(BaseIterator& it, offset_t& offset)
   {
-    kmer.nextFromPaddedStream(it, offset);
+    kmer.nextFromPackedStream(it, offset);
   }
 
   /**

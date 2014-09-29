@@ -4,19 +4,359 @@
 
 // include classes to test
 #include <common/Kmer.hpp>
+#include <common/alphabets.hpp>
+
+
+template<unsigned int KMER_SIZE, typename ALPHABET, typename word_type=WordType>
+class MyKmer : bliss::Kmer<KMER_SIZE, ALPHABET, word_type>
+{
+  public:
+    using SuperType = typename bliss::Kmer<KMER_SIZE, ALPHABET, word_type>;
+
+    explicit MyKmer(const SuperType& other) : SuperType(other) {};
+
+    template<typename InputIterator>
+    explicit MyKmer(InputIterator iter) : SuperType(iter) {};
+    MyKmer() : SuperType() {};
+    template <typename InputIterator, typename offset_t>
+    // TODO: add option for bit offset in input sequence?
+    unsigned int fillFromPackedStream(InputIterator& begin, offset_t& offset, bool stop_on_last = false) {
+      return SuperType::fillFromPackedStream(begin, offset, stop_on_last);
+    }
+    template <typename InputIterator>
+    void fillFromChars(InputIterator& begin, bool stop_on_last = false) {
+      SuperType::fillFromChars(begin, stop_on_last);
+    }
+    template <typename InputIterator, typename offset_t>
+    void nextFromPackedStream(InputIterator& begin, offset_t& offset) {
+      SuperType::nextFromPackedStream(begin, offset);
+    }
+    void nextFromChar(char c) {
+      SuperType::nextFromChar(c);
+    }
+
+    inline bool operator==(const MyKmer& rhs) const
+    {
+      return SuperType::operator==(rhs);
+    }
+    inline bool operator!=(const MyKmer& rhs) const
+    {
+      return SuperType::operator!=(rhs);
+    }
+    inline bool operator<(const MyKmer& rhs) const
+    {
+      return SuperType::operator<(rhs);
+    }
+    inline bool operator<=(const MyKmer& rhs) const
+    {
+      return SuperType::operator<=(rhs);
+    }
+    inline bool operator>(const MyKmer& rhs) const
+    {
+      return SuperType::operator>(rhs);
+    }
+    inline bool operator>=(const MyKmer& rhs) const
+    {
+      return SuperType::operator>=(rhs);
+    }
+    inline MyKmer operator^(const MyKmer& rhs) const
+    {
+      return MyKmer(SuperType::operator^(rhs).data);
+    }
+    inline MyKmer& operator^=(const MyKmer& rhs) const
+    {
+      return SuperType::operator^=(rhs);
+    }
+    inline MyKmer operator&(const MyKmer& rhs) const
+    {
+      return SuperType::operator&(rhs);
+    }
+    inline MyKmer& operator&=(const MyKmer& rhs) const
+    {
+      return SuperType::operator&=(rhs);
+    }
+    inline MyKmer operator|(const MyKmer& rhs) const
+    {
+      return SuperType::operator|(rhs);
+    }
+    inline MyKmer& operator|=(const MyKmer& rhs) const
+    {
+      return SuperType::operator|=(rhs);
+    }
+    inline MyKmer operator<<(const MyKmer& rhs) const
+    {
+      return SuperType::operator<<(rhs);
+    }
+    inline MyKmer& operator<<=(const MyKmer& rhs) const
+    {
+      return SuperType::operator<<=(rhs);
+    }
+    inline MyKmer operator>>(const MyKmer& rhs) const
+    {
+      return SuperType::operator>>(rhs);
+    }
+    inline MyKmer& operator>>=(const MyKmer& rhs) const
+    {
+      return SuperType::operator>>=(rhs);
+    }
+    MyKmer reversed_kmer() const
+    {
+      return MyKmer(SuperType::reversed_kmer());
+    }
+    std::string toString() const
+    {
+      return SuperType::toString();
+    }
+
+};
+
+
+struct Bits4
+{
+  static constexpr AlphabetSizeType SIZE = 15;
+  // lookup table for XYZ
+  static constexpr uint8_t FROM_ASCII[256] =
+  {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+//     'A'     'C'             'G'
+    0,  0,  0,  1,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,
+//                 'T'
+    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+//     'a'     'c'             'g'
+    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
+//                 't'
+    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+  };
+
+  // reverse lookup table for XYZ
+  static constexpr char TO_ASCII[SIZE] =
+  {
+    'A',  // = 0
+    'C',  // = 1
+    'G',  // = 2
+    'T'  // = 3
+  };
+
+  // reverse lookup table for DNA5
+  static constexpr char TO_COMPLEMENT[SIZE] =
+  {
+    3,  // = 0
+    2,  // = 1
+    1,  // = 2
+    0  // = 3
+  };
+};
+struct Bits5
+{
+  static constexpr AlphabetSizeType SIZE = 31;
+  // lookup table for XYZ
+  static constexpr uint8_t FROM_ASCII[256] =
+  {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+//     'A'     'C'             'G'
+    0,  0,  0,  1,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,
+//                 'T'
+    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+//     'a'     'c'             'g'
+    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
+//                 't'
+    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+  };
+
+  // reverse lookup table for XYZ
+  static constexpr char TO_ASCII[SIZE] =
+  {
+    'A',  // = 0
+    'C',  // = 1
+    'G',  // = 2
+    'T'  // = 3
+  };
+
+  // reverse lookup table for DNA5
+  static constexpr char TO_COMPLEMENT[SIZE] =
+  {
+    3,  // = 0
+    2,  // = 1
+    1,  // = 2
+    0  // = 3
+  };
+};
+struct Bits6
+{
+  static constexpr AlphabetSizeType SIZE = 63;
+  // lookup table for XYZ
+  static constexpr uint8_t FROM_ASCII[256] =
+  {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+//     'A'     'C'             'G'
+    0,  0,  0,  1,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,
+//                 'T'
+    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+//     'a'     'c'             'g'
+    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
+//                 't'
+    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+  };
+
+  // reverse lookup table for XYZ
+  static constexpr char TO_ASCII[SIZE] =
+  {
+    'A',  // = 0
+    'C',  // = 1
+    'G',  // = 2
+    'T'  // = 3
+  };
+
+  // reverse lookup table for DNA5
+  static constexpr char TO_COMPLEMENT[SIZE] =
+  {
+    3,  // = 0
+    2,  // = 1
+    1,  // = 2
+    0  // = 3
+  };
+};
+struct Bits7
+{
+  static constexpr AlphabetSizeType SIZE = 127;
+  // lookup table for XYZ
+  static constexpr uint8_t FROM_ASCII[256] =
+  {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+//     'A'     'C'             'G'
+    0,  0,  0,  1,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,
+//                 'T'
+    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+//     'a'     'c'             'g'
+    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
+//                 't'
+    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+  };
+
+  // reverse lookup table for XYZ
+  static constexpr char TO_ASCII[SIZE] =
+  {
+    'A',  // = 0
+    'C',  // = 1
+    'G',  // = 2
+    'T'  // = 3
+  };
+
+  // reverse lookup table for DNA5
+  static constexpr char TO_COMPLEMENT[SIZE] =
+  {
+    3,  // = 0
+    2,  // = 1
+    1,  // = 2
+    0  // = 3
+  };
+};
+struct Bits8
+{
+  static constexpr AlphabetSizeType SIZE = 255;
+  // lookup table for XYZ
+  static constexpr uint8_t FROM_ASCII[256] =
+  {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+//     'A'     'C'             'G'
+    0,  0,  0,  1,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,
+//                 'T'
+    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+//     'a'     'c'             'g'
+    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
+//                 't'
+    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+  };
+
+  // reverse lookup table for XYZ
+  static constexpr char TO_ASCII[SIZE] =
+  {
+    'A',  // = 0
+    'C',  // = 1
+    'G',  // = 2
+    'T'  // = 3
+  };
+
+  // reverse lookup table for DNA5
+  static constexpr char TO_COMPLEMENT[SIZE] =
+  {
+    3,  // = 0
+    2,  // = 1
+    1,  // = 2
+    0  // = 3
+  };
+};
+
+
 
 // templated test function
-template<typename kmer_word_type, typename input_word_type, unsigned int kmer_size=31, unsigned int bits_per_char=2>
+template<typename kmer_word_type, typename input_word_type, unsigned int kmer_size=31, class Alphabet=DNA>
 void test_kmer_with_word_type(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned step=1) {
 
-  typedef typename bliss::Kmer<kmer_size, bits_per_char, kmer_word_type> kmer_type;
+  typedef MyKmer<kmer_size, Alphabet, kmer_word_type> kmer_type;
 
   // create (fill) Kmer
   kmer_type kmer;
 
   input_word_type* kmer_pointer = kmer_data;
   // fill first kmer
-  unsigned int offset = kmer.fillFromPaddedStream(kmer_pointer);
+  unsigned int offset = 0;
+  offset = kmer.fillFromPackedStream(kmer_pointer, offset);
   kmer_type kmer_ex_0(reinterpret_cast<kmer_word_type*>(kmer_ex));
   EXPECT_EQ(kmer, kmer_ex_0) << "Kmer from stream should be equal to kmer from non-stream";
 
@@ -24,38 +364,38 @@ void test_kmer_with_word_type(input_word_type* kmer_data, uint64_t* kmer_ex, uns
   // generate more kmers
   for (unsigned int i = step; i < nkmers; i += step)
   {
-    kmer.nextFromPaddedStream(kmer_pointer, offset);
+    kmer.nextFromPackedStream(kmer_pointer, offset);
     kmer_type kmer_ex_i(reinterpret_cast<kmer_word_type*>(kmer_ex+i));
-    EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(input_word_type) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bits_per_char << " i = " << i;
+    EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(input_word_type) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bliss::AlphabetTraits<Alphabet>::getBitsPerChar() << " i = " << i;
   }
 }
 
 
-template<typename input_word_type, unsigned int kmer_size=31, unsigned int bits_per_char=2>
+template<typename input_word_type, unsigned int kmer_size=31, class Alphabet=DNA>
 void test_kmers_with_input_type(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned int step=1)
 {
   // test with various kmer base types
-  test_kmer_with_word_type<uint8_t,  input_word_type, kmer_size, bits_per_char>(reinterpret_cast<input_word_type*>(kmer_data), kmer_ex, nkmers, step);
-  test_kmer_with_word_type<uint16_t, input_word_type, kmer_size, bits_per_char>(reinterpret_cast<input_word_type*>(kmer_data), kmer_ex, nkmers, step);
-  test_kmer_with_word_type<uint32_t, input_word_type, kmer_size, bits_per_char>(reinterpret_cast<input_word_type*>(kmer_data), kmer_ex, nkmers, step);
-  test_kmer_with_word_type<uint64_t, input_word_type, kmer_size, bits_per_char>(reinterpret_cast<input_word_type*>(kmer_data), kmer_ex, nkmers, step);
+  test_kmer_with_word_type<uint8_t,  input_word_type, kmer_size, DNA>(reinterpret_cast<input_word_type*>(kmer_data), kmer_ex, nkmers, step);
+  test_kmer_with_word_type<uint16_t, input_word_type, kmer_size, DNA>(reinterpret_cast<input_word_type*>(kmer_data), kmer_ex, nkmers, step);
+  test_kmer_with_word_type<uint32_t, input_word_type, kmer_size, DNA>(reinterpret_cast<input_word_type*>(kmer_data), kmer_ex, nkmers, step);
+  test_kmer_with_word_type<uint64_t, input_word_type, kmer_size, DNA>(reinterpret_cast<input_word_type*>(kmer_data), kmer_ex, nkmers, step);
 }
 
 template<typename input_word_type>
 void test_kmers(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // test for bits per character: 2, 4, and 8 (no padding only!)
-  test_kmers_with_input_type<input_word_type, 31, 2>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 28, 2>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 13, 2>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 4, 2>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 1, 2>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 31, DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 28, DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 13, DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 4,  DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 1,  DNA>(kmer_data, kmer_ex, nkmers);
 
-  test_kmers_with_input_type<input_word_type, 10, 4>(kmer_data, kmer_ex, nkmers, 2);
-  test_kmers_with_input_type<input_word_type, 13, 4>(kmer_data, kmer_ex, nkmers, 2);
+  test_kmers_with_input_type<input_word_type, 10, Bits4>(kmer_data, kmer_ex, nkmers, 2);
+  test_kmers_with_input_type<input_word_type, 13, Bits4>(kmer_data, kmer_ex, nkmers, 2);
 
-  test_kmers_with_input_type<input_word_type, 7, 8>(kmer_data, kmer_ex, nkmers, 4);
-  test_kmers_with_input_type<input_word_type, 5, 8>(kmer_data, kmer_ex, nkmers, 4);
+  test_kmers_with_input_type<input_word_type, 7, Bits8>(kmer_data, kmer_ex, nkmers, 4);
+  test_kmers_with_input_type<input_word_type, 5, Bits8>(kmer_data, kmer_ex, nkmers, 4);
 
 }
 
@@ -63,24 +403,24 @@ template<typename input_word_type>
 void test_kmers_3(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // maximum in 64 bits is 21
-  test_kmers_with_input_type<input_word_type, 21, 3>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 20, 3>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 13, 3>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 9, 3>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 1, 3>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 21, DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 20, DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 13, DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 9,  DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 1,  DNA5>(kmer_data, kmer_ex, nkmers);
 }
 
 template<typename input_word_type>
 void test_kmers_5(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // maximum in 64 bits is 12
-  test_kmers_with_input_type<input_word_type, 12, 5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 11, 5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 10, 5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 9, 5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 5, 5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 3, 5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_input_type<input_word_type, 1, 5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 12, Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 11, Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 10, Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 9,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 5,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 3,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_input_type<input_word_type, 1,  Bits5>(kmer_data, kmer_ex, nkmers);
 }
 
 /**
@@ -273,9 +613,9 @@ TEST(KmerComparison, TestKmerComparison1)
   // greater value in 3rd block:
   uint16_t kmer_val_g3[] = {0xffee, 0x1c0, 0xfeef, 0xdead, 0x1234, 0x5678, 0xabba};
 
-  bliss::Kmer<41, 2, uint16_t> kmer(kmer_val);
-  bliss::Kmer<41, 2, uint16_t> kmer_s(kmer_val_s4);
-  bliss::Kmer<41, 2, uint16_t> kmer_g(kmer_val_g3);
+  MyKmer<41, DNA, uint16_t> kmer(kmer_val);
+  MyKmer<41, DNA, uint16_t> kmer_s(kmer_val_s4);
+  MyKmer<41, DNA, uint16_t> kmer_g(kmer_val_g3);
 
   EXPECT_TRUE(kmer > kmer_s);
   EXPECT_TRUE(kmer == kmer);
@@ -330,38 +670,38 @@ TEST(KmerReverse, TestKmerReverse112)
 
 
   /* test for bits_per_char = 2 */
-  bliss::Kmer<7*8, 2, uint16_t> kmer_in(kmer_val);
-  bliss::Kmer<7*8, 2, uint16_t> kmer_ex_rev(kmer_ex);
+  MyKmer<7*8, DNA, uint16_t> kmer_in(kmer_val);
+  MyKmer<7*8, DNA, uint16_t> kmer_ex_rev(kmer_ex);
   // get the reverse
-  bliss::Kmer<7*8, 2, uint16_t> kmer_rev = kmer_in.reversed_kmer();
+  MyKmer<7*8, DNA, uint16_t> kmer_rev = kmer_in.reversed_kmer();
   EXPECT_EQ(kmer_ex_rev, kmer_rev);
 
   /* test for bits_per_char = 3 */
-  bliss::Kmer<37, 3, uint16_t> kmer3_in(kmer_val);
-  bliss::Kmer<37, 3, uint16_t> kmer3_ex_rev(kmer_ex_3);
+  MyKmer<37, DNA5, uint16_t> kmer3_in(kmer_val);
+  MyKmer<37, DNA5, uint16_t> kmer3_ex_rev(kmer_ex_3);
   // get the reverse
-  bliss::Kmer<37, 3, uint16_t> kmer3_rev = kmer3_in.reversed_kmer();
+  MyKmer<37, DNA5, uint16_t> kmer3_rev = kmer3_in.reversed_kmer();
   EXPECT_EQ(kmer3_ex_rev, kmer3_rev);
 
   /* test for bits_per_char = 4 */
-  bliss::Kmer<28, 4, uint16_t> kmer4_in(kmer_val);
-  bliss::Kmer<28, 4, uint16_t> kmer4_ex_rev(kmer_ex_4);
+  MyKmer<28, Bits4, uint16_t> kmer4_in(kmer_val);
+  MyKmer<28, Bits4, uint16_t> kmer4_ex_rev(kmer_ex_4);
   // get the reverse
-  bliss::Kmer<28, 4, uint16_t> kmer4_rev = kmer4_in.reversed_kmer();
+  MyKmer<28, Bits4, uint16_t> kmer4_rev = kmer4_in.reversed_kmer();
   EXPECT_EQ(kmer4_ex_rev, kmer4_rev);
 
   /* test for bits_per_char = 5 */
-  bliss::Kmer<22, 5, uint16_t> kmer5_in(kmer_val);
-  bliss::Kmer<22, 5, uint16_t> kmer5_ex_rev(kmer_ex_5);
+  MyKmer<22, Bits5, uint16_t> kmer5_in(kmer_val);
+  MyKmer<22, Bits5, uint16_t> kmer5_ex_rev(kmer_ex_5);
   // get the reverse
-  bliss::Kmer<22, 5, uint16_t> kmer5_rev = kmer5_in.reversed_kmer();
+  MyKmer<22, Bits5, uint16_t> kmer5_rev = kmer5_in.reversed_kmer();
   EXPECT_EQ(kmer5_ex_rev, kmer5_rev);
 
   /* test for bits_per_char = 7 */
-  bliss::Kmer<16, 7, uint16_t> kmer7_in(kmer_val);
-  bliss::Kmer<16, 7, uint16_t> kmer7_ex_rev(kmer_ex_7);
+  MyKmer<16, Bits7, uint16_t> kmer7_in(kmer_val);
+  MyKmer<16, Bits7, uint16_t> kmer7_ex_rev(kmer_ex_7);
   // get the reverse
-  bliss::Kmer<16, 7, uint16_t> kmer7_rev = kmer7_in.reversed_kmer();
+  MyKmer<16, Bits7, uint16_t> kmer7_rev = kmer7_in.reversed_kmer();
   EXPECT_EQ(kmer7_ex_rev, kmer7_rev);
   // TODO: tests for smaller sizes and bigger bits_per_char
 
