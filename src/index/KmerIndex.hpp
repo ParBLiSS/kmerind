@@ -117,7 +117,7 @@ namespace bliss
 
 
         /// define the index storage type
-        typedef bliss::index::distributed_multimap<KmerType, IdType, bliss::io::CommunicationLayer> IndexType;
+        typedef bliss::index::distributed_multimap<KmerType, IdType, bliss::io::CommunicationLayer, bliss::KmerInfixHasher<KmerType>> IndexType;
 
         /// actual index to store data
         IndexType index;
@@ -134,7 +134,7 @@ namespace bliss
          * @param comm
          * @param comm_size
          */
-        KmerPositionIndex(MPI_Comm _comm, int _comm_size) : index(_comm, _comm_size), comm(_comm) {
+        KmerPositionIndex(MPI_Comm _comm, int _comm_size) : index(_comm, _comm_size, bliss::KmerInfixHasher<KmerType>()), comm(_comm) {
           MPI_Comm_rank(comm, &rank);
         };
         virtual ~KmerPositionIndex() {};
@@ -237,7 +237,7 @@ namespace bliss
             chunk = loader.getNextL2Block(tid);
             while (chunk.getRange().size() > 0) {
 
-              buildForL2Block(chunk, parser);
+              buildForL2Block(chunk, parser, index);
 
               //== get read for next loop iteration.
               chunk = loader.getNextL2Block(tid);

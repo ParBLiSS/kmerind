@@ -132,7 +132,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if equal, false otherwise.
          */
-        bool operator==(const CountingIterator<T>& other) {
+        bool operator==(const CountingIterator<T>& other) const {
           return val == other.val;
         }
 
@@ -141,7 +141,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if not equal, false otherwise.
          */
-        bool operator!=(const CountingIterator<T>& other) {
+        bool operator!=(const CountingIterator<T>& other) const {
           return !(this->operator==(other));
         }
 
@@ -211,7 +211,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if greater than, false otherwise.
          */
-        bool operator>(const CountingIterator<T>& other) {
+        bool operator>(const CountingIterator<T>& other) const {
           return val > other.val;
         }
 
@@ -220,7 +220,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if less than, false otherwise.
          */
-        bool operator<(const CountingIterator<T>& other) {
+        bool operator<(const CountingIterator<T>& other) const {
           return val < other.val;
         }
 
@@ -229,7 +229,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if greater than or equal to, false otherwise.
          */
-        bool operator>=(const CountingIterator<T>& other) {
+        bool operator>=(const CountingIterator<T>& other) const {
           return val >= other.val;
         }
 
@@ -238,7 +238,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if less than or equal to, false otherwise.
          */
-        bool operator<=(const CountingIterator<T>& other) {
+        bool operator<=(const CountingIterator<T>& other) const {
           return val <= other.val;
         }
 
@@ -267,7 +267,7 @@ namespace bliss
          * @param i offset at which the value is retrieved.
          * @return  value for ith offset
          */
-        T operator[](const D& i) {
+        T operator[](const D& i) const {
           return val + stride * i;
         }
 

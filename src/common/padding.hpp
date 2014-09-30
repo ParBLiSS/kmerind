@@ -133,7 +133,7 @@ unsigned int removePaddingSameType(InputIterator& begin,
     // get the number of bits to read in this iteration:
     unsigned int readBits = std::min<unsigned int>(bitsPerWord, bitsToRead);
     // mask the next word with the number of bits to be read
-    base_type nextWord = getBitMask<base_type>(readBits) & *begin;
+    base_type nextWord = getLeastSignificantBitsMask<base_type>(readBits) & *begin;
 
     // write out the masked word
     if (cur_offset == 0)

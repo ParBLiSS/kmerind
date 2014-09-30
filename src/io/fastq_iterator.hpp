@@ -141,6 +141,25 @@ namespace bliss
         inline typename std::enable_if<std::is_void<Q>::value>::type
         setQualityIterators(const Iterator & start, const Iterator & end, SequenceType& output) {}
 
+        /**
+         * @brief check if quality iterator is at end.
+         * @param sequence
+         * @return
+         */
+        template <typename Q = Quality>
+        inline typename std::enable_if<!std::is_void<Q>::value, bool>::type
+        isQualityIteratorAtEnd(SequenceType& seq) {
+          return seq.qualBegin == seq.qualEnd;
+        }
+
+        /**
+         * @brief check if quality iterator is at end.
+         * @param[in] seq
+         */
+        template <typename Q = Quality>
+        inline typename std::enable_if<std::is_void<Q>::value, bool>::type
+        isQualityIteratorAtEnd(SequenceType& seq) { return false; }
+
 
         /**
          * @brief function to populate the sequence iterators.
@@ -241,7 +260,7 @@ namespace bliss
           if (output.seqBegin == output.seqEnd) {
             handleError("sequence", orig_iter, iter, orig_offset, offset);
           }
-          if (!std::is_void<Quality>::value && (output.qualBegin == output.qualEnd)) {
+          if (!std::is_void<Quality>::value && isQualityIteratorAtEnd(output)) {
             output.seqBegin = output.seqEnd;  // force seq data not to be used.
             handleError("required quality score", orig_iter, iter, orig_offset, offset);
           }

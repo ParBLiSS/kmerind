@@ -53,6 +53,8 @@ public:
   /// The constant iterator type of the local container type
   typedef typename LocalContainer::const_iterator local_const_iterator;
 
+  typedef typename LocalContainer::hasher HasherType;
+
   /// MPI message tag for inserts
   static constexpr int INSERT_MPI_TAG = 13;
   /// MPI message tag for lookup queries
@@ -257,7 +259,7 @@ protected:
    * @param hashFunction    The hash function to use for distributing elements
    *                        accross processors. Defaults to std::hash<K>().
    */
-  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, std::function<std::size_t(K)> hashFunction = std::hash<K>())
+  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, HasherType hashFunction = HasherType())
       : commLayer(mpi_comm, comm_size), comm(mpi_comm), hashFunct(hashFunction),
         has_pending_inserts(false), has_pending_lookups(false)
   {
@@ -431,7 +433,7 @@ protected:
   MPI_Comm comm;
 
   /// The hash function used for distributing input accross processors
-  std::function<std::size_t(K)> hashFunct;
+  HasherType hashFunct;
 
   /// The local container data-structure. For most cases this is either
   /// a std::unordered_map or std::unordered_multimap
@@ -457,15 +459,15 @@ protected:
  * @tparam T                    The value type.
  * @tparam CommunicationLayer   The CommunicationLayer class type.
  */
-template<typename K, typename T, typename CommunicationLayer>
+template<typename K, typename T, typename CommunicationLayer, typename HASHER = std::hash<K> >
 class distributed_multimap
   : public _distributed_map_base<K, T,
-              CommunicationLayer,std::unordered_multimap<K, T> >
+              CommunicationLayer, std::unordered_multimap<K, T, HASHER> >
 {
 public:
   /// The baseclass type
   typedef _distributed_map_base<K, T, CommunicationLayer,
-                                std::unordered_multimap<K,T> > _base_class;
+                                std::unordered_multimap<K, T, HASHER> > _base_class;
   /// The iterator type of the local container type
   typedef typename _base_class::local_iterator local_iterator;
   /// The constant iterator type of the local container type
@@ -485,7 +487,7 @@ public:
    *                        accross processors. Defaults to std::hash<K>().
    */
   distributed_multimap (MPI_Comm mpi_comm, int comm_size,
-        std::function<std::size_t(K)> hashFunction = std::hash<K>())
+        HASHER hashFunction = HASHER())
       : _base_class(mpi_comm, comm_size, hashFunction)
   {
     // add comm layer receive callbacks
@@ -627,15 +629,15 @@ protected:
  * @tparam K                    The key type.
  * @tparam CommunicationLayer   The CommunicationLayer class type.
  */
-template<typename K, typename CommunicationLayer>
+template<typename K, typename CommunicationLayer, typename HASHER = std::hash<K>>
 class distributed_counting_map
  : public _distributed_map_base<K, count_t, CommunicationLayer,
-                                std::unordered_map<K, count_t> >
+                                std::unordered_map<K, count_t, HASHER> >
 {
 public:
   /// The baseclass type
   typedef _distributed_map_base<K, count_t, CommunicationLayer,
-                                std::unordered_map<K,count_t> > _base_class;
+                                std::unordered_map<K,count_t, HASHER> > _base_class;
   /// The iterator type of the local container type
   typedef typename _base_class::local_iterator local_iterator;
   /// The constant iterator type of the local container type
@@ -657,7 +659,7 @@ public:
    *                        accross processors. Defaults to std::hash<K>().
    */
   distributed_counting_map (MPI_Comm mpi_comm, int comm_size,
-          std::function<std::size_t(K)> hashFunction = std::hash<K>())
+          HASHER hashFunction = HASHER())
       : _base_class(mpi_comm, comm_size, hashFunction)
   {
     // add comm layer receive callbacks

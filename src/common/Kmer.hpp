@@ -63,6 +63,7 @@ namespace bliss
  *
  *      lexicographic comparison then starts with highest order
  *
+ *
  * @todo: implement and refer to the dynamic k-mer (which will be more
  *        inefficient)
  *
@@ -198,7 +199,7 @@ public:
       temp = static_cast<word_type>(0);
       for (j = 0; j < chars_per_word; ++j) {
         temp <<= bitsPerChar;
-        temp |= static_cast<word_type>(*begin >> offset) & getBitMask<word_type>(bitsPerChar);
+        temp |= static_cast<word_type>(*begin >> offset) & getLeastSignificantBitsMask<word_type>(bitsPerChar);
 
         // increase offset
         offset += bitsPerChar;
@@ -280,7 +281,7 @@ public:
       temp = static_cast<word_type>(0);
       for (j = 0; j < chars_per_word; ++j, ++begin) {
         temp <<= bitsPerChar;
-        temp |= static_cast<word_type>(*begin) & getBitMask<word_type>(bitsPerChar);
+        temp |= static_cast<word_type>(*begin) & getLeastSignificantBitsMask<word_type>(bitsPerChar);
       }
 
       // get next character as word_type and mask out bits that are not needed
@@ -668,6 +669,71 @@ public:
   }
 
 
+  /// get 64 bit prefix.  for hashing.
+  uint64_t getPrefix64() const {
+
+    if (bitstream::padBits + 64 <= bitstream::bitsPerWord) {
+      // need to shift to the right to get rid of extra bits
+      return static_cast<uint64_t>(data[nWords - 1] >>
+                                   (bitstream::bitsPerWord - 64 - bitstream::padBits));
+
+    } else {
+      // padBits + 64 is larger than a word.
+        // more than 1 word, so shift and get suffix
+        Kmer temp = *this;
+        if (bitstream::nBits > 64) {
+          temp.do_right_shift(bitstream::nBits - 64);
+        }
+        return temp.getSuffix64();
+    }
+
+  }
+
+  uint64_t getInfix64(const std::size_t offsetFromMSB) const {
+    if (bitstream::nBits - offsetFromMSB > 64) {
+
+      // more than 64 bits to the right of offsetFromMSB.  so need to shift to right.
+      Kmer temp = *this;
+      temp.do_right_shift(bitstream::nBits - offsetFromMSB - 64);
+      return temp.getSuffix64();
+    } else if (bitstream::nBits - offsetFromMSB == 64) {
+      // exactly 64 bits left.  just use it.
+      return getSuffix64();
+    } else {
+
+      // less than 64 bits left at offset from MSB.  don't need to shift to right.
+      // but do need to clear leading portion.
+      return getSuffix64() & getLeastSignificantBitsMask<uint64_t>(bitstream::nBits - offsetFromMSB);
+
+    }
+
+  }
+
+  uint64_t getSuffix64() const {
+    if (sizeof(word_type) >= sizeof(uint64_t)) {
+      // kmer composes of one or more words that are larger or equal to 64 bits.
+      return static_cast<uint64_t>(data[0]);
+
+    } else if (bitstream::nWords == 1) {
+
+      // word is smaller than 64 bits but there is only 1.
+      return static_cast<uint64_t>(data[0]);
+    } else {
+
+      // kmer has multiple small words. compose it.
+      constexpr size_t nwords = static_cast<size_t>(bitstream::nWords) <= ((sizeof(uint64_t) + sizeof(word_type) - 1) / sizeof(word_type)) ?
+          static_cast<size_t>(bitstream::nWords) :
+          (sizeof(uint64_t) + sizeof(word_type) - 1) / sizeof(word_type);
+      uint64_t result = 0;
+      for (int i = nwords - 1; i >= 0; --i) {
+        result <<= (sizeof(word_type) * 8);
+        result |= data[i];
+      }
+      return result;
+    }
+  }
+
+
 protected:
 
   /**
@@ -683,7 +749,7 @@ protected:
 
     // add character to least significant end (requires least shifting)
     *data |= static_cast<WType>(w) &
-        getBitMask<word_type>(left_shift);
+        getLeastSignificantBitsMask<word_type>(left_shift);
   }
 
   /**
@@ -693,7 +759,7 @@ protected:
   inline void do_sanitize()
   {
     // TODO use templated helper struct for <0> template specialization
-    data[nWords-1] &= getBitMask<word_type>(bitstream::invPadBits);
+    data[nWords-1] &= getLeastSignificantBitsMask<word_type>(bitstream::invPadBits);
   }
 
   /**
@@ -857,6 +923,27 @@ protected:
   }
 
 
+};
+
+template <typename KMER>
+struct KmerPrefixHasher {
+    uint64_t operator()(const KMER & kmer) const {
+      return kmer.getPrefix64();
+    };
+};
+
+template<typename KMER>
+struct KmerInfixHasher {
+    uint64_t operator()(const KMER & kmer) const {
+      return kmer.getInfix64(64);
+    }
+};
+
+template <typename KMER>
+struct KmerSuffixHashser {
+  uint64_t operator()(const KMER & kmer) const {
+    return kmer.getSuffix64();
+  }
 };
 
 } // namespace bliss

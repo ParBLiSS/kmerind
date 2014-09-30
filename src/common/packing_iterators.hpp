@@ -88,7 +88,7 @@ struct PackingItFunctor
       //for (BitSizeType i = 1; i <= numChars; ++i)
     {
       buffer <<= padtraits::bits_per_char;
-      buffer |= getBitMask<PackedStorageType>(padtraits::bits_per_char) & word_cache[i-1];
+      buffer |= getLeastSignificantBitsMask<PackedStorageType>(padtraits::bits_per_char) & word_cache[i-1];
     }
 
     return buffer;
@@ -173,7 +173,7 @@ struct UnpackingFunctor
   unpacked_type operator()(const T& value, const diff_type& offset)
   {
     // directly access the according position, no need to buffer
-    T mask = getBitMask<T>(bits_per_char);
+    T mask = getLeastSignificantBitsMask<T>(bits_per_char);
     // shift and mask to get the value
     T x = mask & (value >> (offset*bits_per_char));
     // cast to target type

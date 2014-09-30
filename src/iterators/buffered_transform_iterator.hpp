@@ -176,12 +176,12 @@ namespace bliss
         }
 
         // input iterator specific
-        inline bool operator==(const type& rhs)
+        inline bool operator==(const type& rhs) const
         {
           return _curr == rhs._curr;
         }
 
-        inline bool operator!=(const type& rhs)
+        inline bool operator!=(const type& rhs) const
         {
           return _curr != rhs._curr;
         }
