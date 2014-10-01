@@ -67,13 +67,13 @@ namespace bliss
         size_t operator()(BaseIterType &iter)
         {
           // store the kmer information.
-          char val = AlphabetType::FROM_ASCII[static_cast<size_t>(*iter)];
+          uint8_t val = AlphabetType::FROM_ASCII[static_cast<size_t>(*iter)];
           kmer.nextFromChar(val);
 //          kmer >>= nBits;
 //          kmer |= (static_cast<KmerValueType>(val) << shift);
 
           // generate the rev complement
-          char complement = AlphabetType::TO_COMPLEMENT[val];
+          uint8_t complement = AlphabetType::TO_COMPLEMENT[val];
           kmer.nextFromChar(complement);
 //          revcomp <<= nBits;
 //          revcomp |= static_cast<KmerValueType>(complement);

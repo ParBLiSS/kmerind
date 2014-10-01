@@ -62,6 +62,7 @@ namespace bliss
  *        byte 0 in array:  TTAX
  *
  *      lexicographic comparison then starts with highest order
+ *      prefix at MSB side.
  *
  *
  * @todo: implement and refer to the dynamic k-mer (which will be more
@@ -147,6 +148,10 @@ public:
    *          another example of packed and padded input sequence is where the character values are in
    *          a contiguous range DNA5, 0..4), stored in 2 in a char, and 3 bits are used, 2 bits are padding.
    *
+   *          packed word has ordering such that higher order bits have characters later in sequence.
+   *            e.g. sequence ACGT may have a packed word representation with TGCA
+   *          i.e. prefix at the LSB side.
+   *
    * The k-mer's data is filled from the given input sequence using
    * `KMER_SIZE * BITS_PER_CHAR` bits.
    *
@@ -173,10 +178,12 @@ public:
   // TODO: add option for bit offset in input sequence?
   unsigned int fillFromPackedStream(InputIterator& begin, offset_t& offset, bool stop_on_last = false)
   {
-    // remove padding and copy to own data structure
+
     typedef typename std::iterator_traits<InputIterator>::value_type input_word_type;
 //    const unsigned int paddingBits = PackingTraits<input_word_type, bitsPerChar>::padding_bits;
 //    removePadding(begin, data, size*bitsPerChar, paddingBits);
+
+    //static_assert(sizeof(input_word_type) == 1, "only support byte as PackStream data type");
 
     const unsigned int chars_per_word = PackingTraits<word_type, bitsPerChar>::chars_per_word;
 
@@ -340,6 +347,9 @@ public:
 //  //     (better compiler optimization)
 //    do_left_shift(bitsPerChar);
 
+    //static_assert(sizeof(input_type) == 1, "only support byte as PackStream data type");
+
+
     // iterate to next word if the current one is done
     while (offset >= PackingTraits<input_type, bitsPerChar>::data_bits)
     {
@@ -405,7 +415,7 @@ public:
    *
    * @param c The character to be added to the k-mer.
    */
-  void nextFromChar(char c)
+  void nextFromChar(unsigned char c)
   {
     // shift the kmer by the size of one character
     // TODO: replace this by a call that does exactly bitsPerChar right shift
@@ -724,13 +734,21 @@ public:
       return static_cast<uint64_t>(data[0]);
     } else {
 
+
       // kmer has multiple small words. compose it.
       constexpr size_t nwords = static_cast<size_t>(bitstream::nWords) <= ((sizeof(uint64_t) + sizeof(word_type) - 1) / sizeof(word_type)) ?
           static_cast<size_t>(bitstream::nWords) :
           (sizeof(uint64_t) + sizeof(word_type) - 1) / sizeof(word_type);
       uint64_t result = 0;
       for (int i = nwords - 1; i >= 0; --i) {
-        result <<= (sizeof(word_type) * 8);
+
+        // this is to avoid GCC compiler warning.  even though the case
+        // sizeof (word_type) >= sizeof(uint64_t) is already caught earlier, compiler
+        // will still check this line and cause a warning to be thrown.
+        // so we artificially insert a conditional that caps word_type size to 7
+        // of word type will never go above 7 (actually 4) at runtime (caught by branch earlier)
+        // and most of this code will be optimized out as well during compilation.
+        result <<= ((sizeof(word_type) > 7 ? 7 : sizeof(word_type)) * 8);
         result |= data[i];
       }
       return result;

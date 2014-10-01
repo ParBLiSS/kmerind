@@ -104,7 +104,7 @@ struct DNA : BaseAlphabetChar
   };
 
   // reverse lookup table for DNA5
-  static constexpr char TO_COMPLEMENT[SIZE] =
+  static constexpr uint8_t TO_COMPLEMENT[SIZE] =
   {
     3,  // = 0
     2,  // = 1
@@ -159,7 +159,7 @@ struct DNA5 : BaseAlphabetChar
   };
 
   // complement lookup table for DNA5
-  static constexpr char TO_COMPLEMENT[SIZE] =
+  static constexpr uint8_t TO_COMPLEMENT[SIZE] =
   {
     3,  // = 0
     2,  // = 1
