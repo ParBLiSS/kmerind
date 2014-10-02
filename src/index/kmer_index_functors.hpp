@@ -73,8 +73,8 @@ namespace bliss
 //          kmer |= (static_cast<KmerValueType>(val) << shift);
 
           // generate the rev complement
-          uint8_t complement = AlphabetType::TO_COMPLEMENT[val];
-          kmer.nextFromChar(complement);
+
+          revcomp.nextReverseFromChar(AlphabetType::TO_COMPLEMENT[val]);
 //          revcomp <<= nBits;
 //          revcomp |= static_cast<KmerValueType>(complement);
 //          //revcomp &= mask_reverse;

@@ -394,10 +394,10 @@ template<typename input_word_type, unsigned int kmer_size=31, class Alphabet=DNA
 void test_kmers_with_packed_input(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned int step=1)
 {
   // test with various kmer base types
-//  test_kmer_with_word_type_packed<uint8_t,  input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
-//  test_kmer_with_word_type_packed<uint16_t, input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
+  test_kmer_with_word_type_packed<uint8_t,  input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
+  test_kmer_with_word_type_packed<uint16_t, input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
   test_kmer_with_word_type_packed<uint32_t, input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
-//  test_kmer_with_word_type_packed<uint64_t, input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
+  test_kmer_with_word_type_packed<uint64_t, input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
 }
 
 template<typename input_word_type>
@@ -434,12 +434,12 @@ void test_kmers_5_packed(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned
 {
   // maximum in 64 bits is 12
   test_kmers_with_packed_input<input_word_type, 12, Bits5>(kmer_data, kmer_ex, nkmers);
-//  test_kmers_with_packed_input<input_word_type, 11, Bits5>(kmer_data, kmer_ex, nkmers);
-//  test_kmers_with_packed_input<input_word_type, 10, Bits5>(kmer_data, kmer_ex, nkmers);
-//  test_kmers_with_packed_input<input_word_type, 9,  Bits5>(kmer_data, kmer_ex, nkmers);
-//  test_kmers_with_packed_input<input_word_type, 5,  Bits5>(kmer_data, kmer_ex, nkmers);
-//  test_kmers_with_packed_input<input_word_type, 3,  Bits5>(kmer_data, kmer_ex, nkmers);
-//  test_kmers_with_packed_input<input_word_type, 1,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 11, Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 10, Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 9,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 5,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 3,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 1,  Bits5>(kmer_data, kmer_ex, nkmers);
 }
 
 /**
@@ -475,7 +475,8 @@ TEST(KmerGeneration, TestKmerGenerationPacked2)
 
   // unpadded stream (bits_per_char is 2 => no padding)
   /* python:
-   * print(",\n".join(hex((((val >> (126 - (i+3) * 2)) & 0x3) << 6) | ((val >> ((126 - (i+2) * 2)) & 0x3) << 4) | (((val >> (126 - (i+1) * 2)) & 0x3) << 2) | ((val >> (126 - i * 2)) & 0x3))[:-1] for i in range(0, 64, 4)))
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*2)) & 0x3) << (j*2) ) for j in range(0,4)], 0) )[:-1] for i in range(0, 64, 4) ) )
    */
   // 8 bit input
   uint8_t kmer_data_8[16] = {
@@ -498,38 +499,50 @@ TEST(KmerGeneration, TestKmerGenerationPacked2)
   };
   test_kmers_packed<uint8_t>(kmer_data_8, kmer_ex, 33);
 
+  // 16 bit input.   128 bits in input.  this covers the initial 64 bits, and 32 2-bit shifts, for total of 33 entries.
+  /* python:
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*2)) & 0x3) << (j*2) ) for j in range(0,8)], 0) )[:-1] for i in range(0, 64, 8) ) )
+    */
+  uint16_t kmer_data_16[8] = {
+                              0xaeea,
+                              0xbfa3,
+                              0xbeae,
+                              0x1c84,
+                              0x7ab7,
+                              0xfbbe,
+                              0x340,
+                              0xbbff
+  };
+  test_kmers_packed<uint16_t>(kmer_data_16, kmer_ex, 33);
 
 
-//  // 16 bit input
-//  /* python:
-//   * print(",\n".join(hex((((val >> (126 - (i+3) * 2)) & 0x3) << 6) | ((val >> ((126 - (i+2) * 2)) & 0x3) << 4) | (((val >> (126 - (i+1) * 2)) & 0x3) << 2) | ((val >> (126 - i * 2)) & 0x3))[:-1] for i in range(0, 64, 4)))
-//   */
-//  uint8_t kmer_data[16] = {
-//                           0xea,
-//                           0xae,
-//                           0xa3,
-//                           0xbf,
-//                           0xae,
-//                           0xbe,
-//                           0x84,
-//                           0x1c,
-//                           0xb7,
-//                           0x7a,
-//                           0xbe,
-//                           0xfb,
-//                           0x40,
-//                           0x03,
-//                           0xff,
-//                           0xbb
-//  };
-//
-//  test_kmers<uint16_t>(reinterpret_cast<uint16_t*>(kmer_data), kmer_ex, 25);
-//
-//  // 32 bit input
-//  test_kmers<uint32_t>(reinterpret_cast<uint32_t*>(kmer_data), kmer_ex, 25);
-//
-//  // 64 bit input
-//  test_kmers<uint64_t>(reinterpret_cast<uint64_t*>(kmer_data), kmer_ex, 25);
+  // 32 bit input.   128 bits in input.  this covers the initial 64 bits, and 32 2-bit shifts, for total of 33 entries.
+  /* python:
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*2)) & 0x3) << (j*2) ) for j in range(0,16)], 0) )[:-1] for i in range(0, 64, 16) ) )
+    */
+  uint32_t kmer_data_32[4] = {
+                              0xbfa3aeea,
+                              0x1c84beae,
+                              0xfbbe7ab7,
+                              0xbbff0340
+  };
+  test_kmers_packed<uint32_t>(kmer_data_32, kmer_ex, 33);
+
+
+  // 64 bit input.   128 bits in input.  this covers the initial 64 bits, and 32 2-bit shifts, for total of 33 entries.
+  /* python:
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*2)) & 0x3) << (j*2) ) for j in range(0,32)], 0) )[:-1] for i in range(0, 64, 32) ) )
+    */
+  uint64_t kmer_data_64[2] = {
+                              0x1c84beaebfa3aeea,
+                              0xbbff0340fbbe7ab7
+  };
+  test_kmers_packed<uint64_t>(kmer_data_64, kmer_ex, 33);
+
+
 }
 
 /**
@@ -571,7 +584,10 @@ TEST(KmerGeneration, TestKmerGenerationPacked3)
   };
   // 8 bit input
   /* python:
-    * print(",\n".join(hex( (((val >> (128 - (i+2) * 3)) & 0x7) << 3) | ((val >> (128 - (i+1) * 3)) & 0x7) )[:-1] for i in range(0, 42, 2)))
+    *  ... print(",\n".join(hex( (((val >> (128 - (i+2) * 3)) & 0x7) << 3) | ((val >> (128 - (i+1) * 3)) & 0x7) )[:-1] for i in range(0, 42, 2)))
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*3)) & 0x7) << (j*3) ) for j in range(0,2)], 0) )[:-1] for i in range(0, 42, 2) ) )
+
     */
  uint8_t kmer_data_8[21] = {
                           0x15,
@@ -605,7 +621,8 @@ TEST(KmerGeneration, TestKmerGenerationPacked3)
 
   // 16 bit input  1 bit pad.   8 entries means only have 120 bits in input.  this covers the initial 63 bits, and 19 3-bit shifts, for total of 20 entries.
   /* python:
-    * print(",\n".join(hex( (((val >> (128 - (i+5) * 3)) & 0x7) << 12) | (((val >> (128 - (i+4) * 3)) & 0x7) << 9) | (((val >> (128 - (i+3) * 3)) & 0x7) << 6) | (((val >> (128 - (i+2) * 3)) & 0x7) << 3) | ((val >> (128 - (i+1) * 3)) & 0x7) )[:-1] for i in range(0, 38, 5)))
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*3)) & 0x7) << (j*3) ) for j in range(0,5)], 0) )[:-1] for i in range(0, 40, 5) ) )
     */
   uint16_t kmer_data_16[8] = {
                               0x57d5,
@@ -624,7 +641,8 @@ TEST(KmerGeneration, TestKmerGenerationPacked3)
 
   // 32 bit input  2 bit pad.   4 entries means only have 120 bits in input.  this covers the initial 63 bits, and 19 3-bit shifts, for total of 20 entries.
   /* python:
-    * print(",\n".join(hex( (((val >> (128 - (i+10) * 3)) & 0x7) << 27) | (((val >> (128 - (i+9) * 3)) & 0x7) << 24) | (((val >> (128 - (i+8) * 3)) & 0x7) << 21) | (((val >> (128 - (i+7) * 3)) & 0x7) << 18) | (((val >> (128 - (i+6) * 3)) & 0x7) << 15) | (((val >> (128 - (i+5) * 3)) & 0x7) << 12) | (((val >> (128 - (i+4) * 3)) & 0x7) << 9) | (((val >> (128 - (i+3) * 3)) & 0x7) << 6) | (((val >> (128 - (i+2) * 3)) & 0x7) << 3) | ((val >> (128 - (i+1) * 3)) & 0x7) )[:-1] for i in range(0, 31, 10)))
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*3)) & 0x7) << (j*3) ) for j in range(0,10)], 0) )[:-1] for i in range(0, 40, 10) ) )
     */
   uint32_t kmer_data_32[4] = {
                               0x3f45d7d5,
@@ -638,7 +656,8 @@ TEST(KmerGeneration, TestKmerGenerationPacked3)
 
   // 64 bit input  1 bit pad.   2 entries means only have 126 bits in input.  this covers the initial 63 bits, and 21 3-bit shifts, for total of 22 entries.
   /* python:
-    * print(",\n".join(hex( (((val >> (128 - (i+21) * 3)) & 0x7) << 60) | (((val >> (128 - (i+20) * 3)) & 0x7) << 57) | (((val >> (128 - (i+19) * 3)) & 0x7) << 54) | (((val >> (128 - (i+18) * 3)) & 0x7) << 51) | (((val >> (128 - (i+17) * 3)) & 0x7) << 48) | (((val >> (128 - (i+16) * 3)) & 0x7) << 45) | (((val >> (128 - (i+15) * 3)) & 0x7) << 42) | (((val >> (128 - (i+14) * 3)) & 0x7) << 39) | (((val >> (128 - (i+13) * 3)) & 0x7) << 36) | (((val >> (128 - (i+12) * 3)) & 0x7) << 33) | (((val >> (128 - (i+11) * 3)) & 0x7) << 30) | (((val >> (128 - (i+10) * 3)) & 0x7) << 27) | (((val >> (128 - (i+9) * 3)) & 0x7) << 24) | (((val >> (128 - (i+8) * 3)) & 0x7) << 21) | (((val >> (128 - (i+7) * 3)) & 0x7) << 18) | (((val >> (128 - (i+6) * 3)) & 0x7) << 15) | (((val >> (128 - (i+5) * 3)) & 0x7) << 12) | (((val >> (128 - (i+4) * 3)) & 0x7) << 9) | (((val >> (128 - (i+3) * 3)) & 0x7) << 6) | (((val >> (128 - (i+2) * 3)) & 0x7) << 3) | ((val >> (128 - (i+1) * 3)) & 0x7) )[:-1] for i in range(0, 22, 21)))
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*3)) & 0x7) << (j*3) ) for j in range(0,21)], 0) )[:-1] for i in range(0, 42, 21) ) )
     */
   uint64_t kmer_data_64[2] = {
                               0x2720dd577f45d7d5,
@@ -684,7 +703,8 @@ TEST(KmerGeneration, TestKmerGenerationPacked5)
 
   // 8 bit input
   /* python:
-    * print(",\n".join(hex( ((val >> (128 - (i+1) * 5)) & 0x1f) )[:-1] for i in range(0, 25)))
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*5)) & 0x1f) << (j*5) ) for j in range(0,1)], 0) )[:-1] for i in range(0, 25) ) )
     */
   uint8_t kmer_data_8[25] = {
                              0x15,
@@ -721,7 +741,8 @@ TEST(KmerGeneration, TestKmerGenerationPacked5)
 
   // 16 bit input  1 bit pad.   8 entries means only have 120 bits in input.  this covers the initial 60 bits, and 12 5-bit shifts, for total of 13 entries.
   /* python:
-    * print(",\n".join(hex( (((val >> (128 - (i+3) * 5)) & 0x1f) << 10) | (((val >> (128 - (i+2) * 5)) & 0x1f) << 5) | ((val >> (128 - (i+1) * 5)) & 0x1f) )[:-1] for i in range(0, 22, 3)))
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*5)) & 0x1f) << (j*5) ) for j in range(0,3)], 0) )[:-1] for i in range(0, 24, 3) ) )
     */
   uint16_t kmer_data_16[8] = {
                               0x75d5,
@@ -740,7 +761,8 @@ TEST(KmerGeneration, TestKmerGenerationPacked5)
 
   // 32 bit input,  2 bit pad.   4 entries means only have 120 bits in input.  this covers the initial 60 bits, and 12 5-bit shifts, for total of 13 entries.
   /* python:
-    * print(",\n".join(hex( (((val >> (128 - (i+6) * 5)) & 0x1f) << 25) | (((val >> (128 - (i+5) * 5)) & 0x1f) << 20) | (((val >> (128 - (i+4) * 5)) & 0x1f) << 15) | (((val >> (128 - (i+3) * 5)) & 0x1f) << 10) | (((val >> (128 - (i+2) * 5)) & 0x1f) << 5) | ((val >> (128 - (i+1) * 5)) & 0x1f) )[:-1] for i in range(0, 19, 6)))
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*5)) & 0x1f) << (j*5) ) for j in range(0,6)], 0) )[:-1] for i in range(0, 24, 6) ) )
     */
   uint32_t kmer_data_32[4] = {
                               0x3f5675d5,
@@ -754,7 +776,8 @@ TEST(KmerGeneration, TestKmerGenerationPacked5)
 
   // 64 bit input,  4 bit pad.   2 entries means only have 120 bits in input.  this covers the initial 60 bits, and 12 5-bit shifts, for total of 13 entries.
   /* python:
-    * print(",\n".join(hex( (((val >> (128 - (i+12) * 5)) & 0x1f) << 55) | (((val >> (128 - (i+11) * 5)) & 0x1f) << 50) | (((val >> (128 - (i+10) * 5)) & 0x1f) << 45) | (((val >> (128 - (i+9) * 5)) & 0x1f) << 40) | (((val >> (128 - (i+8) * 5)) & 0x1f) << 35) | (((val >> (128 - (i+7) * 5)) & 0x1f) <<30) | (((val >> (128 - (i+6) * 5)) & 0x1f) << 25) | (((val >> (128 - (i+5) * 5)) & 0x1f) << 20) | (((val >> (128 - (i+4) * 5)) & 0x1f) << 15) | (((val >> (128 - (i+3) * 5)) & 0x1f) << 10) | (((val >> (128 - (i+2) * 5)) & 0x1f) << 5) | ((val >> (128 - (i+1) * 5)) & 0x1f) )[:-1] for i in range(0, 13, 12)))
+   * import operator
+   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*5)) & 0x1f) << (j*5) ) for j in range(0,12)], 0) )[:-1] for i in range(0, 24, 12) ) )
     */
   uint64_t kmer_data_64[2] = {
                               0x1a717d57f5675d5,
