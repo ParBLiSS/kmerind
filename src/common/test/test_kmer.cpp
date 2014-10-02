@@ -349,8 +349,8 @@ struct Bits8
 
 
 // templated test function
-template<typename kmer_word_type, unsigned int kmer_size=31, class Alphabet=DNA>
-void test_kmer_with_word_type_packed(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned step=1) {
+template<typename kmer_word_type, typename input_word_type, unsigned int kmer_size=31, class Alphabet=DNA>
+void test_kmer_with_word_type_packed(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned step=1) {
 
   typedef MyKmer<kmer_size, Alphabet, kmer_word_type> kmer_type;
 
@@ -359,15 +359,20 @@ void test_kmer_with_word_type_packed(unsigned char* kmer_data, uint64_t* kmer_ex
 
   // the expected value is a 64bit kmer.  we only need the prefix corresponding to the kmer_size.
   constexpr size_t expected_shift = ((64 / bliss::AlphabetTraits<Alphabet>::getBitsPerChar() - kmer_size) * bliss::AlphabetTraits<Alphabet>::getBitsPerChar());
+  //printf("expected_shift: %lu\n", expected_shift);
 
-  unsigned char* kmer_pointer = kmer_data;
+  input_word_type* kmer_pointer = kmer_data;
+  //printf("kmer pointer: %X\n", *kmer_pointer);
+
   // fill first kmer
   unsigned int offset = 0;
   offset = kmer.fillFromPackedStream(kmer_pointer, offset);
 
   uint64_t expected = *kmer_ex >> expected_shift;
   kmer_type kmer_ex_0(reinterpret_cast<kmer_word_type*>(&expected));
-  EXPECT_EQ(kmer, kmer_ex_0) << "Kmer from stream should be equal to kmer from non-stream";
+  //printf("iter i = %d, expected: %016lX, actual %016lX\n", 0, kmer_ex_0.getPrefix64(), kmer.getPrefix64());
+
+  EXPECT_EQ(kmer_ex_0, kmer) << "Kmer from stream should be equal to kmer from non-stream";
 
 
   // generate more kmers
@@ -376,58 +381,65 @@ void test_kmer_with_word_type_packed(unsigned char* kmer_data, uint64_t* kmer_ex
     kmer.nextFromPackedStream(kmer_pointer, offset);
     expected = kmer_ex[i] >> expected_shift;
     kmer_type kmer_ex_i(reinterpret_cast<kmer_word_type*>(&expected));
-    EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(unsigned char) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bliss::AlphabetTraits<Alphabet>::getBitsPerChar() << " i = " << i;
+
+    //printf("iter i = %d, expected: %016lX, actual %016lX\n", i, kmer_ex_i.getPrefix64(), kmer.getPrefix64());
+
+    EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(input_word_type) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bliss::AlphabetTraits<Alphabet>::getBitsPerChar() << " i = " << i;
   }
 }
 
 
-template<unsigned int kmer_size=31, class Alphabet=DNA>
-void test_kmers_with_packed_input(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned int step=1)
+
+template<typename input_word_type, unsigned int kmer_size=31, class Alphabet=DNA>
+void test_kmers_with_packed_input(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned int step=1)
 {
   // test with various kmer base types
-  test_kmer_with_word_type_packed<uint8_t,  kmer_size, DNA>(kmer_data, kmer_ex, nkmers, step);
-  test_kmer_with_word_type_packed<uint16_t, kmer_size, DNA>(kmer_data, kmer_ex, nkmers, step);
-  test_kmer_with_word_type_packed<uint32_t, kmer_size, DNA>(kmer_data, kmer_ex, nkmers, step);
-  test_kmer_with_word_type_packed<uint64_t, kmer_size, DNA>(kmer_data, kmer_ex, nkmers, step);
+//  test_kmer_with_word_type_packed<uint8_t,  input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
+//  test_kmer_with_word_type_packed<uint16_t, input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
+  test_kmer_with_word_type_packed<uint32_t, input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
+//  test_kmer_with_word_type_packed<uint64_t, input_word_type, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
 }
 
-void test_kmers_packed(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
+template<typename input_word_type>
+void test_kmers_packed(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // test for bits per character: 2, 4, and 8 (no padding only!)
-  test_kmers_with_packed_input<31, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<28, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<13, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<4,  DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<1,  DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 31, DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 28, DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 13, DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 4,  DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 1,  DNA>(kmer_data, kmer_ex, nkmers);
 
-//  test_kmers_with_packed_input<10, Bits4>(kmer_data, kmer_ex, nkmers, 2);
-//  test_kmers_with_packed_input<13, Bits4>(kmer_data, kmer_ex, nkmers, 2);
+//  test_kmers_with_packed_input<input_word_type, 10, Bits4>(kmer_data, kmer_ex, nkmers, 2);
+//  test_kmers_with_packed_input<input_word_type, 13, Bits4>(kmer_data, kmer_ex, nkmers, 2);
 //
-//  test_kmers_with_packed_input<7, Bits8>(kmer_data, kmer_ex, nkmers, 4);
-//  test_kmers_with_packed_input<5, Bits8>(kmer_data, kmer_ex, nkmers, 4);
+//  test_kmers_with_packed_input<input_word_type, 7, Bits8>(kmer_data, kmer_ex, nkmers, 4);
+//  test_kmers_with_packed_input<input_word_type, 5, Bits8>(kmer_data, kmer_ex, nkmers, 4);
 //
 }
 
-void test_kmers_3_packed(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
+template<typename input_word_type>
+void test_kmers_3_packed(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // maximum in 64 bits is 21
-  test_kmers_with_packed_input<21, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<20, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<13, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<9,  DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<1,  DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 21, DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 20, DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 13, DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 9,  DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 1,  DNA5>(kmer_data, kmer_ex, nkmers);
 }
 
-void test_kmers_5_packed(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
+template<typename input_word_type>
+void test_kmers_5_packed(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // maximum in 64 bits is 12
-  test_kmers_with_packed_input<12, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<11, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<10, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<9,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<5,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<3,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<1,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 12, Bits5>(kmer_data, kmer_ex, nkmers);
+//  test_kmers_with_packed_input<input_word_type, 11, Bits5>(kmer_data, kmer_ex, nkmers);
+//  test_kmers_with_packed_input<input_word_type, 10, Bits5>(kmer_data, kmer_ex, nkmers);
+//  test_kmers_with_packed_input<input_word_type, 9,  Bits5>(kmer_data, kmer_ex, nkmers);
+//  test_kmers_with_packed_input<input_word_type, 5,  Bits5>(kmer_data, kmer_ex, nkmers);
+//  test_kmers_with_packed_input<input_word_type, 3,  Bits5>(kmer_data, kmer_ex, nkmers);
+//  test_kmers_with_packed_input<input_word_type, 1,  Bits5>(kmer_data, kmer_ex, nkmers);
 }
 
 /**
@@ -465,7 +477,8 @@ TEST(KmerGeneration, TestKmerGenerationPacked2)
   /* python:
    * print(",\n".join(hex((((val >> (126 - (i+3) * 2)) & 0x3) << 6) | ((val >> ((126 - (i+2) * 2)) & 0x3) << 4) | (((val >> (126 - (i+1) * 2)) & 0x3) << 2) | ((val >> (126 - i * 2)) & 0x3))[:-1] for i in range(0, 64, 4)))
    */
-  uint8_t kmer_data[16] = {
+  // 8 bit input
+  uint8_t kmer_data_8[16] = {
                            0xea,
                            0xae,
                            0xa3,
@@ -483,15 +496,33 @@ TEST(KmerGeneration, TestKmerGenerationPacked2)
                            0xff,
                            0xbb
   };
+  test_kmers_packed<uint8_t>(kmer_data_8, kmer_ex, 33);
 
-  // test with this data
 
-  // NO padding, therefore we can test for different input types as well
-
-  // 8 bit input
-  test_kmers_packed(kmer_data, kmer_ex, 33);
 
 //  // 16 bit input
+//  /* python:
+//   * print(",\n".join(hex((((val >> (126 - (i+3) * 2)) & 0x3) << 6) | ((val >> ((126 - (i+2) * 2)) & 0x3) << 4) | (((val >> (126 - (i+1) * 2)) & 0x3) << 2) | ((val >> (126 - i * 2)) & 0x3))[:-1] for i in range(0, 64, 4)))
+//   */
+//  uint8_t kmer_data[16] = {
+//                           0xea,
+//                           0xae,
+//                           0xa3,
+//                           0xbf,
+//                           0xae,
+//                           0xbe,
+//                           0x84,
+//                           0x1c,
+//                           0xb7,
+//                           0x7a,
+//                           0xbe,
+//                           0xfb,
+//                           0x40,
+//                           0x03,
+//                           0xff,
+//                           0xbb
+//  };
+//
 //  test_kmers<uint16_t>(reinterpret_cast<uint16_t*>(kmer_data), kmer_ex, 25);
 //
 //  // 32 bit input
@@ -506,61 +537,118 @@ TEST(KmerGeneration, TestKmerGenerationPacked2)
  */
 TEST(KmerGeneration, TestKmerGenerationPacked3)
 {
-  // test sequence: 0xabba56781234deadbeef01c0ffee
+  // test sequence: 0xabbacafebabe1234deadbeef01c0ffee
 
   // expected kmers:
   // generated by the python commands (thank you python for integrated bigints)
   /*
-   * val = 0xabba56781234deadbeef01c0ffee
-   * print(",\n".join([" "*24 + "0x" + hex(val >> 3*i)[-16:] for i in range(0,17)]))
+   * val = 0xabbacafebabe1234deadbeef01c0ffee
+   * print(",\n".join([" "*24 + hex(val >> (128 - 63 - 3*i) & 0x7fffffffffffffff)[:-1] for i in range(0,22)]))
    */
-  uint64_t kmer_ex[17] = {0xdeadbeef01c0ffee,
-                          0x9bd5b7dde0381ffd,
-                          0xd37ab6fbbc0703ff,
-                          0x1a6f56df7780e07f,
-                          0x234deadbeef01c0f,
-                          0x2469bd5b7dde0381,
-                          0x048d37ab6fbbc070,
-                          0xc091a6f56df7780e,
-                          0x781234deadbeef01,
-                          0xcf02469bd5b7dde0,
-                          0x59e048d37ab6fbbc,
-                          0x2b3c091a6f56df77,
-                          0xa56781234deadbee,
-                          0x74acf02469bd5b7d,
-                          0xee959e048d37ab6f,
-                          0x5dd2b3c091a6f56d,
-                          0xabba56781234dead};
-
-  // unpadded stream (bits_per_char is 3 => 1 bit padding)
+  uint64_t kmer_ex[22] = {
+                           0x55dd657f5d5f091a,
+                           0x2eeb2bfaeaf848d3,
+                           0x77595fd757c2469b,
+                           0x3acafebabe1234de,
+                           0x5657f5d5f091a6f5,
+                           0x32bfaeaf848d37ab,
+                           0x15fd757c2469bd5b,
+                           0x2febabe1234deadb,
+                           0x7f5d5f091a6f56df,
+                           0x7aeaf848d37ab6fb,
+                           0x5757c2469bd5b7dd,
+                           0x3abe1234deadbeef,
+                           0x55f091a6f56df778,
+                           0x2f848d37ab6fbbc0,
+                           0x7c2469bd5b7dde03,
+                           0x61234deadbeef01c,
+                           0x091a6f56df7780e0,
+                           0x48d37ab6fbbc0703,
+                           0x469bd5b7dde0381f,
+                           0x34deadbeef01c0ff,
+                           0x26f56df7780e07ff,
+                           0x37ab6fbbc0703ffb
+  };
+  // 8 bit input
   /* python:
-   * ", ".join(hex((val >> i*15) & 0x7fff) for i in range(0, 9))
-   */
-  uint16_t kmer_data[9] = {0x7fee, 0x381, 0x7bbc, 0x756d, 0x234d, 0x4f02, 0x6e95, 0x55, 0x0};
+    * print(",\n".join(hex( (((val >> (128 - (i+2) * 3)) & 0x7) << 3) | ((val >> (128 - (i+1) * 3)) & 0x7) )[:-1] for i in range(0, 42, 2)))
+    */
+ uint8_t kmer_data_8[21] = {
+                          0x15,
+                          0x1f,
+                          0x1d,
+                          0x11,
+                          0x3f,
+                          0x1d,
+                          0x15,
+                          0x37,
+                          0x20,
+                          0x1c,
+                          0x1a,
+                          0x33,
+                          0x1d,
+                          0x1b,
+                          0x1f,
+                          0x3d,
+                          0x0,
+                          0x23,
+                          0x18,
+                          0x3f,
+                          0x1f
+ };
 
-  // test with this data
-  test_kmers_3<uint16_t>(kmer_data, kmer_ex, 17);
+  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
+  test_kmers_3_packed<uint8_t>(kmer_data_8, kmer_ex, 22);
 
+
+
+
+  // 16 bit input  1 bit pad.   8 entries means only have 120 bits in input.  this covers the initial 63 bits, and 19 3-bit shifts, for total of 20 entries.
   /* python:
-   *  ", ".join(hex((val >> i*6) & 0x3f) for i in range(0, 20))
-   */
-  uint8_t kmer_data_8[20] = {0x2e, 0x3f, 0xf, 0x30, 0x1, 0x3c, 0x2e, 0x2f, 0x2d, 0x3a, 0xd, 0xd, 0x12, 0x20, 0x27, 0x15, 0x3a, 0x2e, 0xa, 0x0};
-  // test with 8 bit (padded by 2 bits)
-  test_kmers_3<uint8_t>(kmer_data_8, kmer_ex, 17);
+    * print(",\n".join(hex( (((val >> (128 - (i+5) * 3)) & 0x7) << 12) | (((val >> (128 - (i+4) * 3)) & 0x7) << 9) | (((val >> (128 - (i+3) * 3)) & 0x7) << 6) | (((val >> (128 - (i+2) * 3)) & 0x7) << 3) | ((val >> (128 - (i+1) * 3)) & 0x7) )[:-1] for i in range(0, 38, 5)))
+    */
+  uint16_t kmer_data_16[8] = {
+                              0x57d5,
+                              0x7e8b,
+                              0x755d,
+                              0x3906,
+                              0x5cda,
+                              0x3edb,
+                              0x303d,
+                              0x7ec4
+  };
 
-  /* python:
-   * ", ".join(hex((val >> i*30) & 0x3fffffff) for i in range(0, 5))
-   */
-  // 32 bits:
-  uint32_t kmer_data_32[5] = {0x1c0ffee, 0x3ab6fbbc, 0x2781234d, 0x2aee95, 0x0};
-  test_kmers_3<uint32_t>(kmer_data_32, kmer_ex, 17);
+  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
+  test_kmers_3_packed<uint16_t>(kmer_data_16, kmer_ex, 20);
 
+
+  // 32 bit input  2 bit pad.   4 entries means only have 120 bits in input.  this covers the initial 63 bits, and 19 3-bit shifts, for total of 20 entries.
   /* python:
-   * ", ".join(hex((val >> i*63) & 0x7fffffffffffffff) for i in range(0, 3))
-   */
-  // 64 bits:
-  uint64_t kmer_data_64[3] = {0x5eadbeef01c0ffee, 0x15774acf02469, 0x0};
-  test_kmers_3<uint64_t>(kmer_data_64, kmer_ex, 17);
+    * print(",\n".join(hex( (((val >> (128 - (i+10) * 3)) & 0x7) << 27) | (((val >> (128 - (i+9) * 3)) & 0x7) << 24) | (((val >> (128 - (i+8) * 3)) & 0x7) << 21) | (((val >> (128 - (i+7) * 3)) & 0x7) << 18) | (((val >> (128 - (i+6) * 3)) & 0x7) << 15) | (((val >> (128 - (i+5) * 3)) & 0x7) << 12) | (((val >> (128 - (i+4) * 3)) & 0x7) << 9) | (((val >> (128 - (i+3) * 3)) & 0x7) << 6) | (((val >> (128 - (i+2) * 3)) & 0x7) << 3) | ((val >> (128 - (i+1) * 3)) & 0x7) )[:-1] for i in range(0, 31, 10)))
+    */
+  uint32_t kmer_data_32[4] = {
+                              0x3f45d7d5,
+                              0x1c83755d,
+                              0x1f6ddcda,
+                              0x3f62303d
+  };
+
+  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
+  test_kmers_3_packed<uint32_t>(kmer_data_32, kmer_ex, 20);
+
+  // 64 bit input  1 bit pad.   2 entries means only have 126 bits in input.  this covers the initial 63 bits, and 21 3-bit shifts, for total of 22 entries.
+  /* python:
+    * print(",\n".join(hex( (((val >> (128 - (i+21) * 3)) & 0x7) << 60) | (((val >> (128 - (i+20) * 3)) & 0x7) << 57) | (((val >> (128 - (i+19) * 3)) & 0x7) << 54) | (((val >> (128 - (i+18) * 3)) & 0x7) << 51) | (((val >> (128 - (i+17) * 3)) & 0x7) << 48) | (((val >> (128 - (i+16) * 3)) & 0x7) << 45) | (((val >> (128 - (i+15) * 3)) & 0x7) << 42) | (((val >> (128 - (i+14) * 3)) & 0x7) << 39) | (((val >> (128 - (i+13) * 3)) & 0x7) << 36) | (((val >> (128 - (i+12) * 3)) & 0x7) << 33) | (((val >> (128 - (i+11) * 3)) & 0x7) << 30) | (((val >> (128 - (i+10) * 3)) & 0x7) << 27) | (((val >> (128 - (i+9) * 3)) & 0x7) << 24) | (((val >> (128 - (i+8) * 3)) & 0x7) << 21) | (((val >> (128 - (i+7) * 3)) & 0x7) << 18) | (((val >> (128 - (i+6) * 3)) & 0x7) << 15) | (((val >> (128 - (i+5) * 3)) & 0x7) << 12) | (((val >> (128 - (i+4) * 3)) & 0x7) << 9) | (((val >> (128 - (i+3) * 3)) & 0x7) << 6) | (((val >> (128 - (i+2) * 3)) & 0x7) << 3) | ((val >> (128 - (i+1) * 3)) & 0x7) )[:-1] for i in range(0, 22, 21)))
+    */
+  uint64_t kmer_data_64[2] = {
+                              0x2720dd577f45d7d5,
+                              0x3ffb1181ebedbb9b
+  };
+
+  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
+  test_kmers_3_packed<uint64_t>(kmer_data_64, kmer_ex, 22);
+
+
 }
 
 /**
@@ -568,62 +656,120 @@ TEST(KmerGeneration, TestKmerGenerationPacked3)
  */
 TEST(KmerGeneration, TestKmerGenerationPacked5)
 {
-  // test sequence: 0xabba56781234deadbeef01c0ffee
+  // test sequence: 0xabbacafebabe1234deadbeef01c0ffee
 
   // expected kmers:
   // generated by the python commands (thank you python for integrated bigints)
   /*
-   * val = 0xabba56781234deadbeef01c0ffee
-   * print(",\n".join([" "*24 + "0x" + hex(val >> 5*i)[-16:] for i in range(0,11)]))
+   * val = 0xabbacafebabe1234deadbeef01c0ffee
+   * print(",\n".join([" "*24 + hex(val >> (128 - 60 - 5*i) & 0x0fffffffffffffff)[:-1] for i in range(0,14)]))
    */
-  uint64_t kmer_ex[11] = {0xdeadbeef01c0ffee,
-                          0xa6f56df7780e07ff,
-                          0x8d37ab6fbbc0703f,
-                          0x2469bd5b7dde0381,
-                          0x81234deadbeef01c,
-                          0x3c091a6f56df7780,
-                          0x59e048d37ab6fbbc,
-                          0x4acf02469bd5b7dd,
-                          0xba56781234deadbe,
-                          0x5dd2b3c091a6f56d,
-                          0x2aee959e048d37ab};
+  uint64_t kmer_ex[14] = {
+                          0xabbacafebabe123,
+                          0x77595fd757c2469,
+                          0xeb2bfaeaf848d37,
+                          0x657f5d5f091a6f5,
+                          0xafebabe1234dead,
+                          0xfd757c2469bd5b7,
+                          0xaeaf848d37ab6fb,
+                          0xd5f091a6f56df77,
+                          0xbe1234deadbeef0,
+                          0xc2469bd5b7dde03,
+                          0x48d37ab6fbbc070,
+                          0x1a6f56df7780e07,
+                          0x4deadbeef01c0ff,
+                          0xbd5b7dde0381ffd
+  };
 
-  // unpadded stream (bits_per_char is 5 => 1 bit padding)
+
+  // 8 bit input
   /* python:
-   * ", ".join(hex((val >> i*15) & 0x7fff) for i in range(0, 9))
-   */
-  uint16_t kmer_data[9] = {0x7fee, 0x381, 0x7bbc, 0x756d, 0x234d, 0x4f02, 0x6e95, 0x55, 0x0};
+    * print(",\n".join(hex( ((val >> (128 - (i+1) * 5)) & 0x1f) )[:-1] for i in range(0, 25)))
+    */
+  uint8_t kmer_data_8[25] = {
+                             0x15,
+                             0xe,
+                             0x1d,
+                             0xc,
+                             0x15,
+                             0x1f,
+                             0x15,
+                             0x1a,
+                             0x17,
+                             0x18,
+                             0x9,
+                             0x3,
+                             0x9,
+                             0x17,
+                             0x15,
+                             0xd,
+                             0x17,
+                             0x1b,
+                             0x17,
+                             0x10,
+                             0x3,
+                             0x10,
+                             0x7,
+                             0x1f,
+                             0x1d
+  };
 
-  // test with this data
-  test_kmers_5<uint16_t>(kmer_data, kmer_ex, 11);
+  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
+  test_kmers_5_packed<uint8_t>(kmer_data_8, kmer_ex, 14);
 
+
+
+  // 16 bit input  1 bit pad.   8 entries means only have 120 bits in input.  this covers the initial 60 bits, and 12 5-bit shifts, for total of 13 entries.
   /* python:
-   *  ", ".join(hex((val >> i*5) & 0x1f) for i in range(0, 24))
-   */
-  uint8_t kmer_data_8[24] = {0xe, 0x1f, 0x1f, 0x1, 0x1c, 0x0, 0x1c, 0x1d, 0x1e, 0xd, 0xb, 0x1d, 0xd, 0x1a, 0x8, 0x2, 0x18, 0x13, 0x15, 0x14, 0x1b, 0x15, 0x2, 0x0};
-  // test with 8 bit (padded by 3 bits)
-  test_kmers_5<uint8_t>(kmer_data_8, kmer_ex, 11);
+    * print(",\n".join(hex( (((val >> (128 - (i+3) * 5)) & 0x1f) << 10) | (((val >> (128 - (i+2) * 5)) & 0x1f) << 5) | ((val >> (128 - (i+1) * 5)) & 0x1f) )[:-1] for i in range(0, 22, 3)))
+    */
+  uint16_t kmer_data_16[8] = {
+                              0x75d5,
+                              0x7eac,
+                              0x5f55,
+                              0xd38,
+                              0x56e9,
+                              0x6eed,
+                              0xe17,
+                              0x7cf0
+  };
 
-  /* python:
-   * ", ".join(hex((val >> i*30) & 0x3fffffff) for i in range(0, 5))
-   */
-  // 32 bits (2 bits padding)
-  uint32_t kmer_data_32[5] = {0x1c0ffee, 0x3ab6fbbc, 0x2781234d, 0x2aee95, 0x0};
-  test_kmers_5<uint32_t>(kmer_data_32, kmer_ex, 11);
+  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
+  test_kmers_5_packed<uint16_t>(kmer_data_16, kmer_ex, 13);
 
+
+  // 32 bit input,  2 bit pad.   4 entries means only have 120 bits in input.  this covers the initial 60 bits, and 12 5-bit shifts, for total of 13 entries.
   /* python:
-   * ", ".join(hex((val >> i*60) & 0x0fffffffffffffff) for i in range(0, 3))
-   */
-  // 64 bits (4 bits padding)
-  uint64_t kmer_data_64[3] = {0xeadbeef01c0ffee, 0xabba56781234d, 0x0};
-  test_kmers_5<uint64_t>(kmer_data_64, kmer_ex, 11);
+    * print(",\n".join(hex( (((val >> (128 - (i+6) * 5)) & 0x1f) << 25) | (((val >> (128 - (i+5) * 5)) & 0x1f) << 20) | (((val >> (128 - (i+4) * 5)) & 0x1f) << 15) | (((val >> (128 - (i+3) * 5)) & 0x1f) << 10) | (((val >> (128 - (i+2) * 5)) & 0x1f) << 5) | ((val >> (128 - (i+1) * 5)) & 0x1f) )[:-1] for i in range(0, 19, 6)))
+    */
+  uint32_t kmer_data_32[4] = {
+                              0x3f5675d5,
+                              0x69c5f55,
+                              0x3776d6e9,
+                              0x3e780e17
+  };
+
+  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
+  test_kmers_5_packed<uint32_t>(kmer_data_32, kmer_ex, 13);
+
+  // 64 bit input,  4 bit pad.   2 entries means only have 120 bits in input.  this covers the initial 60 bits, and 12 5-bit shifts, for total of 13 entries.
+  /* python:
+    * print(",\n".join(hex( (((val >> (128 - (i+12) * 5)) & 0x1f) << 55) | (((val >> (128 - (i+11) * 5)) & 0x1f) << 50) | (((val >> (128 - (i+10) * 5)) & 0x1f) << 45) | (((val >> (128 - (i+9) * 5)) & 0x1f) << 40) | (((val >> (128 - (i+8) * 5)) & 0x1f) << 35) | (((val >> (128 - (i+7) * 5)) & 0x1f) <<30) | (((val >> (128 - (i+6) * 5)) & 0x1f) << 25) | (((val >> (128 - (i+5) * 5)) & 0x1f) << 20) | (((val >> (128 - (i+4) * 5)) & 0x1f) << 15) | (((val >> (128 - (i+3) * 5)) & 0x1f) << 10) | (((val >> (128 - (i+2) * 5)) & 0x1f) << 5) | ((val >> (128 - (i+1) * 5)) & 0x1f) )[:-1] for i in range(0, 13, 12)))
+    */
+  uint64_t kmer_data_64[2] = {
+                              0x1a717d57f5675d5,
+                              0xf9e0385f776d6e9
+  };
+
+  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
+  test_kmers_5_packed<uint64_t>(kmer_data_64, kmer_ex, 13);
+
 }
-
 
 
 // templated test function
 template<typename kmer_word_type, unsigned int kmer_size=31, class Alphabet=DNA>
-void test_kmer_with_word_type(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned step=1) {
+void test_kmer_with_word_type_unpacked(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned step=1) {
 
   typedef MyKmer<kmer_size, Alphabet, kmer_word_type> kmer_type;
 
@@ -660,46 +806,48 @@ void test_kmer_with_word_type(unsigned char* kmer_data, uint64_t* kmer_ex, unsig
 }
 
 
+
+
 template<unsigned int kmer_size=31, class Alphabet=DNA>
-void test_kmers_with_char_input(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned int step=1)
+void test_kmers_with_unpacked_input(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned int step=1)
 {
   // test with various kmer base types
-  test_kmer_with_word_type<uint8_t,  kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
-  test_kmer_with_word_type<uint16_t, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
-  test_kmer_with_word_type<uint32_t, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
-  test_kmer_with_word_type<uint64_t, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
+  test_kmer_with_word_type_unpacked<uint8_t,  kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
+  test_kmer_with_word_type_unpacked<uint16_t, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
+  test_kmer_with_word_type_unpacked<uint32_t, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
+  test_kmer_with_word_type_unpacked<uint64_t, kmer_size, Alphabet>(kmer_data, kmer_ex, nkmers, step);
 }
 
-void test_kmers(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
+void test_kmers_unpacked(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // test for bits per character: 2, 4, and 8 (no padding only!)
-  test_kmers_with_char_input<31, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<28, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<13, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<4,  DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<1,  DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<31, DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<28, DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<13, DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<4,  DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<1,  DNA>(kmer_data, kmer_ex, nkmers);
 }
 
-void test_kmers_3(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
+void test_kmers_3_unpacked(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // maximum in 64 bits is 21
-  test_kmers_with_char_input<21, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<20, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<13, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<9,  DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<1,  DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<21, DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<20, DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<13, DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<9,  DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<1,  DNA5>(kmer_data, kmer_ex, nkmers);
 }
 
-void test_kmers_5(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
+void test_kmers_5_unpacked(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // maximum in 64 bits is 12
-  test_kmers_with_char_input<12, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<11, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<10, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<9,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<5,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<3,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_char_input<1,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<12, Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<11, Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<10, Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<9,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<5,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<3,  Bits5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<1,  Bits5>(kmer_data, kmer_ex, nkmers);
 }
 
 /**
@@ -749,7 +897,7 @@ TEST(KmerGeneration, TestKmerGenerationChar2)
                                  3, 3, 3, 3, 3, 2, 3, 2};
 
   // test with this data
-  test_kmers(kmer_data, kmer_ex, 33);
+  test_kmers_unpacked(kmer_data, kmer_ex, 33);
 
 }
 
@@ -789,7 +937,7 @@ TEST(KmerGeneration, TestKmerGenerationChar3)
                            0x34deadbeef01c0ff,
                            0x26f56df7780e07ff,
                            0x37ab6fbbc0703ffb
-};
+  };
 
   /* python:
    *  print(",\n".join([" "*24 + hex(val >> (128 - 3 - 3*i) & 0x7)[:-1] for i in range(0,42)]))
@@ -840,7 +988,7 @@ TEST(KmerGeneration, TestKmerGenerationChar3)
   };
 
   // test with 8 bit (padded by 2 bits)
-  test_kmers_3(kmer_data_8, kmer_ex, 22);
+  test_kmers_3_unpacked(kmer_data_8, kmer_ex, 22);
 
 }
 
@@ -872,11 +1020,11 @@ TEST(KmerGeneration, TestKmerGenerationChar5)
                           0x1a6f56df7780e07,
                           0x4deadbeef01c0ff,
                           0xbd5b7dde0381ffd
-};
+  };
 
 
   /* python:
-   * print(",\n".join([" "*24 + hex(val >> (128 - 5 - 5*i) & 0x1f)[:-1] for i in range(0,25)]))
+   * print(",\n".join([" "*24 + hex(val >> (128 - 5*(i+1) ) & 0x1f)[:-1] for i in range(0,25)]))
    */
   uint8_t kmer_data_8[25] = {
                              0x15,
@@ -906,7 +1054,7 @@ TEST(KmerGeneration, TestKmerGenerationChar5)
                              0x1d
   };
   // test with 8 bit (padded by 3 bits)
-  test_kmers_5(kmer_data_8, kmer_ex, 14);
+  test_kmers_5_unpacked(kmer_data_8, kmer_ex, 14);
 
 }
 

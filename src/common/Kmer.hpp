@@ -186,13 +186,13 @@ public:
     //static_assert(sizeof(input_word_type) == 1, "only support byte as PackStream data type");
 
     const unsigned int chars_per_word = PackingTraits<word_type, bitsPerChar>::chars_per_word;
-
+    const unsigned int input_data_bits = PackingTraits<input_word_type, bitsPerChar>::data_bits;
 
     // iterate to next word if the current one is done
-    while (offset >= PackingTraits<input_word_type, bitsPerChar>::data_bits)
+    while (offset >= input_data_bits)
     {
       ++begin;
-      offset -= PackingTraits<input_word_type, bitsPerChar>::data_bits;
+      offset -= input_data_bits;
     }
 
     // clear k-mer
@@ -210,10 +210,10 @@ public:
 
         // increase offset
         offset += bitsPerChar;
-        if (offset >= PackingTraits<input_word_type, bitsPerChar>::data_bits)
+        if (offset >= input_data_bits)
         {
           ++begin;
-          offset -= PackingTraits<input_word_type, bitsPerChar>::data_bits;
+          offset -= input_data_bits;
         }
       }
 
@@ -227,10 +227,10 @@ public:
 
       // increase offset
       offset += bitsPerChar;
-      if (offset >= PackingTraits<input_word_type, bitsPerChar>::data_bits)
+      if (offset >= input_data_bits)
       {
         ++begin;
-        offset -= PackingTraits<input_word_type, bitsPerChar>::data_bits;
+        offset -= input_data_bits;
       }
 
     }
@@ -245,10 +245,10 @@ public:
     {
       // increase offset
       offset += bitsPerChar;
-      if (offset >= PackingTraits<input_word_type, bitsPerChar>::data_bits)
+      if (offset >= input_data_bits)
       {
         ++begin;
-        offset -= PackingTraits<input_word_type, bitsPerChar>::data_bits;
+        offset -= input_data_bits;
       }
 
     }
@@ -341,7 +341,7 @@ public:
   template <typename InputIterator, typename offset_t>
   void nextFromPackedStream(InputIterator& begin, offset_t& offset)
   {
-    typedef typename std::iterator_traits<InputIterator>::value_type input_type;
+    typedef typename std::iterator_traits<InputIterator>::value_type input_word_type;
 //  //     shift the kmer by the size of one character
 //  //     TODO: replace this by a call that does exactly bitsPerChar right shift
 //  //     (better compiler optimization)
@@ -349,12 +349,13 @@ public:
 
     //static_assert(sizeof(input_type) == 1, "only support byte as PackStream data type");
 
+    const unsigned int input_data_bits = PackingTraits<input_word_type, bitsPerChar>::data_bits;
 
     // iterate to next word if the current one is done
-    while (offset >= PackingTraits<input_type, bitsPerChar>::data_bits)
+    while (offset >= input_data_bits)
     {
       ++begin;
-      offset -= PackingTraits<input_type, bitsPerChar>::data_bits;
+      offset -= input_data_bits;
     }
 
     nextFromWordInternal(*begin >> offset, bitsPerChar);
@@ -397,10 +398,10 @@ public:
 
     // increase offset
     offset += bitsPerChar;
-    if (offset >= PackingTraits<input_type, bitsPerChar>::data_bits)
+    if (offset >= input_data_bits)
     {
       ++begin;
-      offset -= PackingTraits<input_type, bitsPerChar>::data_bits;
+      offset -= input_data_bits;
     }
   }
 
