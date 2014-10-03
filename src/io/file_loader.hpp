@@ -560,9 +560,7 @@ namespace io
           // first get the Range
           RangeType r = getNextL1BlockRange<Derived>();
 
-          loadL1DataForRange(r);
-
-          return L1Block;
+          return loadL1DataForRange(r);
         }
 
 
@@ -582,9 +580,7 @@ namespace io
 
           RangeType r = getNextL2BlockRange<Derived>(tid);
 
-          getL2DataForRange(tid, r);
-
-          return L2Blocks[tid];
+          return getL2DataForRange(tid, r);
         }
 
 
@@ -671,6 +667,9 @@ namespace io
         {
           // clean up any previous runs.
           unloadL1Data();
+
+          // don't do anything if range is empty.
+          if (range.size() == 0) return L1Block;
 
           // make sure the mmapRange is within the file range, and page align it.
           RangeType mmapRange = RangeType::intersect(range, fileRange);

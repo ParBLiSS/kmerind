@@ -204,7 +204,7 @@ int main(int argc, char** argv) {
   std::vector<int> failed;
 
   i = 0;
-  int fail = 0;
+  unsigned int fail = 0;
 #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4, failed) private(i, val) reduction(+: fail)
   for (i = 0; i < 9000; ++i) {
     val = static_cast<valType>(i);
@@ -255,7 +255,7 @@ int main(int argc, char** argv) {
 
   printf("TEST: par blocked\n");
   i = 0;
-  int failedFull = 0;
+  unsigned int failedFull = 0;
   fail = 0;
   tsBuffer4.block();
 #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer4) private(i, val) reduction(+ : fail, failedFull)

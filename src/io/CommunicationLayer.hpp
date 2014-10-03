@@ -245,6 +245,8 @@ namespace io
  *
  *          control thread call finishCommunication()
  *
+ *          Control thread call finalize (TO MAKE SURE ALL THREADS ARE FINISHED)
+ *
  * TODO - replace uint8_t by typedef
  *
  */
@@ -393,7 +395,7 @@ public:
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
     : sendQueue(3 * comm_size), recvQueue(3 * comm_size), sendAccept(),
       flushing(-1), finishing(false), sendDone(false), recvDone(false),
-      comm(communicator), epoch(0)
+      comm(communicator), epoch(0), finalized(false)
   {
     // init communicator rank and size
     MPI_Comm_size(comm, &commSize);
@@ -415,6 +417,16 @@ public:
    * @note    If finish() was not called for all used tags, this will block forever.
    */
   virtual ~CommunicationLayer () {
+    finalize();
+  }
+
+  /**
+   * @brief waits for all threads to finish.  this provides a mechanism to ensure all communications
+   *    are complete before subsequent MPI calls are made, such as MPI_FINALIZE.
+   */
+  void finalize() {
+    if (finalized) return;
+
     // TODO: check that we are finished??
 	  finishCommunication();
 
@@ -427,6 +439,8 @@ public:
     char* mpiBuf;
     MPI_Buffer_detach(&mpiBuf, &mpiBufSize);
     free(mpiBuf);
+
+    finalized = true;
   };
 
 
@@ -1294,6 +1308,8 @@ protected:
 
   /// id of the epochs.  aka the periods between barrier/synchronization.  each epoch is associated with a single flush/finish, thus to 1 tag.
   int epoch;
+
+  bool finalized;
 };
 
 /// CONTROL_TAG definition.  (declaration and initialization inside class).

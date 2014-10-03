@@ -332,11 +332,15 @@ namespace bliss
           if (done) return this->end;  // can only call this once.
 
           // if just 1 partition, return.
-          if (this->nPartitions == 1) return this->src;
+          if (this->nPartitions == 1) {
+            done = true;
+            curr = this->src;
+            return curr;
+          }
 
           // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
           ChunkSizeType cs = this->chunkSize;
-         RangeValueType startOffset = 0;
+          RangeValueType startOffset = 0;
           if (partId < rem)
           {
             // each chunk with partition id < rem gets 1 extra.
@@ -345,7 +349,7 @@ namespace bliss
           else
           {
             // first rem chunks have 1 extra element than chunkSize.  the rest have chunk size number of elements.
-           startOffset = rem;
+            startOffset = rem;
           }
 
           // compute the new range
@@ -373,7 +377,11 @@ namespace bliss
           if (done) return this->end;  // can only call this once.
 
           // if just 1 partition, return.
-          if (this->nPartitions == 1) return this->src;
+          if (this->nPartitions == 1) {
+            done = true;
+            curr = this->src;
+            return curr;
+          }
 
           // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
           BaseClassType::computeRangeForChunkId(curr, this->src, 0, partId, this->chunkSize, this->overlapSize);

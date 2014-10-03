@@ -793,63 +793,58 @@ public:
     return ss.str();
   }
 
-
   /// get 64 bit prefix.  for hashing.
-  uint64_t getPrefix64() const {
+  uint64_t getPrefix(const unsigned int NumBits) const {
 
-    if (bitstream::padBits + 64 <= bitstream::bitsPerWord) {
+    if (bitstream::padBits + NumBits <= bitstream::bitsPerWord) {
+      // word contains the NumBits bits and the padding bits.
       // need to shift to the right to get rid of extra bits
       return static_cast<uint64_t>(data[nWords - 1] >>
-                                   (bitstream::bitsPerWord - 64 - bitstream::padBits));
+                                   (bitstream::bitsPerWord - NumBits - bitstream::padBits));
 
     } else {
-      // padBits + 64 is larger than a word.
+      // padBits + NumBits is larger than a word.
         // more than 1 word, so shift and get suffix
         Kmer temp = *this;
-        if (bitstream::nBits > 64) {
-          temp.do_right_shift(bitstream::nBits - 64);
+        if (bitstream::nBits > NumBits) {
+          temp.do_right_shift(bitstream::nBits - NumBits);
         }
-        return temp.getSuffix64();
+        return temp.getSuffix(NumBits);
     }
 
   }
 
-  uint64_t getInfix64(const std::size_t offsetFromMSB) const {
-    if (bitstream::nBits - offsetFromMSB > 64) {
+  uint64_t getInfix(const unsigned int NumBits, const unsigned int offsetFromMSB) const {
+    if (bitstream::nBits - NumBits > offsetFromMSB ) {
 
       // more than 64 bits to the right of offsetFromMSB.  so need to shift to right.
       Kmer temp = *this;
-      temp.do_right_shift(bitstream::nBits - offsetFromMSB - 64);
-      return temp.getSuffix64();
-    } else if (bitstream::nBits - offsetFromMSB == 64) {
+      temp.do_right_shift(bitstream::nBits - offsetFromMSB - NumBits);
+      return temp.getSuffix(NumBits);
+    } else if (bitstream::nBits - NumBits == offsetFromMSB) {
       // exactly 64 bits left.  just use it.
-      return getSuffix64();
+      return getSuffix(NumBits);
     } else {
 
       // less than 64 bits left at offset from MSB.  don't need to shift to right.
       // but do need to clear leading portion.
-      return getSuffix64() & getLeastSignificantBitsMask<uint64_t>(bitstream::nBits - offsetFromMSB);
+      return getSuffix(NumBits) & getLeastSignificantBitsMask<uint64_t>(bitstream::nBits - offsetFromMSB);
 
     }
 
   }
 
-  uint64_t getSuffix64() const {
-    if (sizeof(word_type) >= sizeof(uint64_t)) {
-      // kmer composes of one or more words that are larger or equal to 64 bits.
-      return static_cast<uint64_t>(data[0]);
+  uint64_t getSuffix(const unsigned int NumBits) const {
+    if (sizeof(word_type) * 8 >= NumBits || bitstream::nWords == 1) {
+      // kmer composes of 1+ words that are larger or equal to 64 bits, or a single word.
+      return static_cast<uint64_t>(data[0]) & getLeastSignificantBitsMask<uint64_t>(NumBits);
 
-    } else if (bitstream::nWords == 1) {
 
-      // word is smaller than 64 bits but there is only 1.
-      return static_cast<uint64_t>(data[0]);
     } else {
-
-
       // kmer has multiple small words. compose it.
-      constexpr size_t nwords = static_cast<size_t>(bitstream::nWords) <= ((sizeof(uint64_t) + sizeof(word_type) - 1) / sizeof(word_type)) ?
+      const size_t nwords = static_cast<size_t>(bitstream::nWords) <= ((NumBits + sizeof(word_type) * 8 - 1) / (sizeof(word_type) * 8) ) ?
           static_cast<size_t>(bitstream::nWords) :
-          (sizeof(uint64_t) + sizeof(word_type) - 1) / sizeof(word_type);
+          ((NumBits + sizeof(word_type) * 8 - 1) / (sizeof(word_type) * 8) );
       uint64_t result = 0;
       for (int i = nwords - 1; i >= 0; --i) {
 
@@ -865,6 +860,81 @@ public:
       return result;
     }
   }
+
+
+
+//  /// get 64 bit prefix.  for hashing.
+//  uint64_t getPrefix64() const {
+//
+//    if (bitstream::padBits + 64 <= bitstream::bitsPerWord) {
+//      // word contains the 64 bits and the padding bits.
+//      // need to shift to the right to get rid of extra bits
+//      return static_cast<uint64_t>(data[nWords - 1] >>
+//                                   (bitstream::bitsPerWord - 64 - bitstream::padBits));
+//
+//    } else {
+//      // padBits + 64 is larger than a word.
+//        // more than 1 word, so shift and get suffix
+//        Kmer temp = *this;
+//        if (bitstream::nBits > 64) {
+//          temp.do_right_shift(bitstream::nBits - 64);
+//        }
+//        return temp.getSuffix64();
+//    }
+//
+//  }
+//
+//  uint64_t getInfix64(const std::size_t offsetFromMSB) const {
+//    if (bitstream::nBits - 64 > offsetFromMSB ) {
+//
+//      // more than 64 bits to the right of offsetFromMSB.  so need to shift to right.
+//      Kmer temp = *this;
+//      temp.do_right_shift(bitstream::nBits - offsetFromMSB - 64);
+//      return temp.getSuffix64();
+//    } else if (bitstream::nBits - 64 == offsetFromMSB) {
+//      // exactly 64 bits left.  just use it.
+//      return getSuffix64();
+//    } else {
+//
+//      // less than 64 bits left at offset from MSB.  don't need to shift to right.
+//      // but do need to clear leading portion.
+//      return getSuffix64() & getLeastSignificantBitsMask<uint64_t>(bitstream::nBits - offsetFromMSB);
+//
+//    }
+//
+//  }
+//
+//  uint64_t getSuffix64() const {
+//    if (sizeof(word_type) * 8 >= 64) {
+//      // kmer composes of one or more words that are larger or equal to 64 bits.
+//      return static_cast<uint64_t>(data[0]);
+//
+//    } else if (bitstream::nWords == 1) {
+//
+//      // word is smaller than 64 bits but there is only 1.
+//      return static_cast<uint64_t>(data[0]);
+//    } else {
+//
+//
+//      // kmer has multiple small words. compose it.
+//      constexpr size_t nwords = static_cast<size_t>(bitstream::nWords) <= ((sizeof(uint64_t) + sizeof(word_type) - 1) / sizeof(word_type)) ?
+//          static_cast<size_t>(bitstream::nWords) :
+//          (sizeof(uint64_t) + sizeof(word_type) - 1) / sizeof(word_type);
+//      uint64_t result = 0;
+//      for (int i = nwords - 1; i >= 0; --i) {
+//
+//        // this is to avoid GCC compiler warning.  even though the case
+//        // sizeof (word_type) >= sizeof(uint64_t) is already caught earlier, compiler
+//        // will still check this line and cause a warning to be thrown.
+//        // so we artificially insert a conditional that caps word_type size to 7
+//        // of word type will never go above 7 (actually 4) at runtime (caught by branch earlier)
+//        // and most of this code will be optimized out as well during compilation.
+//        result <<= ((sizeof(word_type) > 7 ? 7 : sizeof(word_type)) * 8);
+//        result |= data[i];
+//      }
+//      return result;
+//    }
+//  }
 
 
 protected:
@@ -1103,22 +1173,29 @@ protected:
 
 template <typename KMER>
 struct KmerPrefixHasher {
+    const unsigned int NumBits;
+    KmerPrefixHasher(const unsigned int nBits = 64) : NumBits(nBits) {};
     uint64_t operator()(const KMER & kmer) const {
-      return kmer.getPrefix64();
+      return kmer.getPrefix(NumBits);
     };
 };
 
 template<typename KMER>
 struct KmerInfixHasher {
+    const unsigned int NumBits;
+    const unsigned int offset;
+    KmerInfixHasher(const unsigned int nBits = 64, const unsigned int _offset = 0) : NumBits(nBits), offset(_offset) {};
     uint64_t operator()(const KMER & kmer) const {
-      return kmer.getInfix64(64);
+      return kmer.getInfix(NumBits, offset);
     }
 };
 
 template <typename KMER>
-struct KmerSuffixHashser {
+struct KmerSuffixHasher {
+  const unsigned int NumBits;
+  KmerSuffixHasher(const unsigned int nBits = 64) : NumBits(nBits) {};
   uint64_t operator()(const KMER & kmer) const {
-    return kmer.getSuffix64();
+    return kmer.getSuffix(NumBits);
   }
 };
 

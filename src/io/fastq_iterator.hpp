@@ -191,6 +191,19 @@ namespace bliss
 
         }
 
+        /**
+         * @brief print out an Warning, for example when there is malformed partial data.
+         * @param errType     string indicating the source of the error.  user choice
+         * @param start       iterator pointing to beginning of the data in question
+         * @param end         iterator pointing to end of the data in question
+         * @param startOffset offset for the beginning of the data in question
+         * @param endOffset   offset for the end of the data in question
+         */
+        void handleWarning(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
+          WARNING("WARNING: " << "did not find "<< errType << " in " << startOffset << " to " << endOffset);
+        }
+
+
       public:
         /**
          * @brief increments the iterator to the beginning of the next record, while saving the current record in memory and update the record id.
@@ -258,11 +271,15 @@ namespace bliss
           //== now check for error conditions.
           // if either sequence or if required quality score were not found, then failed parsing
           if (output.seqBegin == output.seqEnd) {
-            handleError("sequence", orig_iter, iter, orig_offset, offset);
-          }
-          if (!std::is_void<Quality>::value && isQualityIteratorAtEnd(output)) {
-            output.seqBegin = output.seqEnd;  // force seq data not to be used.
-            handleError("required quality score", orig_iter, iter, orig_offset, offset);
+            // if nothing is found, throw a warning.
+
+            handleWarning("sequence", orig_iter, iter, orig_offset, offset);
+          } else {
+            // sequence parsing is fine.  now check quality parsing.  if quality is not parsed, then this is an error.
+            if (!std::is_void<Quality>::value && isQualityIteratorAtEnd(output)) {
+              output.seqBegin = output.seqEnd;  // force seq data not to be used.
+              handleError("required quality score", orig_iter, iter, orig_offset, offset);
+            }
           }
           // leave iter and offset advanced.
 
@@ -393,7 +410,7 @@ namespace bliss
          *          this instance therefore does not traverse and only serves as marker for comparing to the traversing SequencesIterator.
          * @param end     end of the data to be parsed.
          */
-        SequencesIterator(const BaseIteratorType& end)
+        explicit SequencesIterator(const BaseIteratorType& end)
             : seq(), _curr(end), _next(end), _end(end), parser(), offset(std::numeric_limits<size_t>::max())
         {
         }
@@ -402,7 +419,7 @@ namespace bliss
          * @brief default copy constructor
          * @param Other   The SequencesIterator to copy from
          */
-        SequencesIterator(const type& Other)
+        explicit SequencesIterator(const type& Other)
             : seq(Other.seq), _curr(Other._curr), _next(Other._next), _end(Other._end),
               parser(Other.parser),  offset(Other.offset)
         {}
@@ -444,6 +461,8 @@ namespace bliss
           //== at end of the data block, can't parse any further, no movement.  (also true for end iterator)
           if (_next == _end)
           {
+            //DEBUG("no more.  seq should be empty: " << (seq.seqBegin == seq.seqEnd));
+
             //== check if reaching _end for the first time
             if (_curr != _end) {
               // advance to end
@@ -459,6 +478,7 @@ namespace bliss
 
             //== then try parsing.  this advances _next and offset, ready for next ++ call, and updates output cache.
             parser.increment(_next, _end, offset, seq);
+            //if (_next == _end) DEBUG("did not find one.  at end of block.  sequence should be empty: " << (seq.seqBegin == seq.seqEnd));
           }
 
           //== states updated.  return self.

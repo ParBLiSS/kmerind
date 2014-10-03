@@ -63,8 +63,8 @@ int main(int argc, char** argv) {
     filename.assign(argv[3]);
   }
 
-  int groupSize = 1;
-  int id = 0;
+  int nprocs = 1;
+  int rank = 0;
   //////////////// initialize MPI and openMP
 #ifdef USE_MPI
 
@@ -86,27 +86,37 @@ int main(int argc, char** argv) {
 
   MPI_Comm comm = MPI_COMM_WORLD;
 
-  MPI_Comm_size(comm, &groupSize);
-  MPI_Comm_rank(comm, &id);
+  MPI_Comm_size(comm, &nprocs);
+  MPI_Comm_rank(comm, &rank);
 
 
-  if (id == 0)
+  if (rank == 0)
     std::cout << "USE_MPI is set" << std::endl;
 #else
   static_assert(false, "MPI used although compilation is not set to use MPI");
 #endif
-  // replace with MPIRunner
+
 
   // initialize index
-  bliss::index::KmerPositionIndex<21, DNA> kmer_index(comm, groupSize);
+  bliss::index::KmerPositionIndex<21, DNA> kmer_index(comm, nprocs);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  kmer_index.build(filename, nthreads);
-
-      //// query:  use the same file as input.  walk through and generate kmers as before.  send query
-
+  kmer_index.build(filename, nthreads, chunkSize);
 
   MPI_Barrier(comm);
+  sleep(5);
+  INFO("COUNT " << rank << " Index Building for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+
+  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+  kmer_index.build(filename, nthreads, chunkSize);
+
+  //// query:  use the same file as input.  walk through and generate kmers as before.  send query
+
+  MPI_Barrier(comm);
+  sleep(5);
+  INFO("COUNT " << rank << " Index Building for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+
+  kmer_index.finalize();
 
 ////  {  // scoped to ensure index is deleted before MPI_Finalize()
 ////    CountIndexType index(comm, groupSize);

@@ -27,9 +27,7 @@
 #include "common/base_types.hpp"
 #include "common/AlphabetTraits.hpp"
 #include "io/fastq_loader.hpp"
-//#include "index/kmer_index_element.hpp"
 #include "index/kmer_index_functors.hpp"
-//#include "index/kmer_index_generator.hpp"
 #include "io/CommunicationLayer.hpp"
 #include "index/distributed_map.hpp"
 #include "iterators/zip_iterator.hpp"
@@ -90,7 +88,7 @@ namespace bliss
         using FileBlockIterType = typename FileLoaderType::L2BlockType::iterator;
         using RangeType = typename FileLoaderType::RangeType;
 
-        /// DEFINE the iterator parser to get fastq records.  this determines both the file format and whether quality scoring is used or not.
+        /// DEFINE the iterator parser to get fastq records.  this type determines both the file format and whether quality scoring is used or not.
         using ParserType = bliss::io::FASTQParser<FileBlockIterType>;
 
         // once have ParserType, then get the sequence type and sequence id type
@@ -101,10 +99,10 @@ namespace bliss
         using SeqIterType = bliss::io::SequencesIterator<ParserType>;
 
 
-        //==========below are to be redefined
+        //==========below are to be redefined for each index type
 
         ///////////// INDEX TYPES
-        /// kmer index element type and corresponding generator type
+        /// define kmer iterator, and the functors for it.
         typedef bliss::index::generate_kmer_simple<SeqType, DNA, KmerType>                                  KmoleculeOpType;
         typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
         typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
@@ -112,14 +110,15 @@ namespace bliss
         /// kmer position iterator type
         using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
 
-        /// kmer index element iterator
+        /// combine kmer iterator and position iterator to create an index iterator type.
         using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, IdIterType>;
 
+        // TODO: to incorporate quality, use another zip iterator.
 
-        /// define the index storage type
-        typedef bliss::index::distributed_multimap<KmerType, IdType, bliss::io::CommunicationLayer, bliss::KmerInfixHasher<KmerType>> IndexType;
+        /// define the index storage type.  using an infix of kmer since prefix is used for distributing to processors.
+        typedef bliss::index::distributed_multimap<KmerType, IdType, bliss::io::CommunicationLayer, bliss::KmerSuffixHasher<KmerType>, bliss::KmerPrefixHasher<KmerType> > IndexType;
 
-        /// actual index to store data
+        /// index instance to store data
         IndexType index;
 
         /// MPI communicator used by index and fileloader.
@@ -134,10 +133,18 @@ namespace bliss
          * @param comm
          * @param comm_size
          */
-        KmerPositionIndex(MPI_Comm _comm, int _comm_size) : index(_comm, _comm_size, bliss::KmerInfixHasher<KmerType>()), comm(_comm) {
+        KmerPositionIndex(MPI_Comm _comm, int _comm_size) : index(_comm, _comm_size, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm) {
           MPI_Comm_rank(comm, &rank);
         };
         virtual ~KmerPositionIndex() {};
+
+        void finalize() {
+          index.finalize();
+        }
+
+        size_t local_size() const {
+          return index.local_size();
+        }
 
         /**
          * build index, default to num of threads = system PAGE SIZE
@@ -171,22 +178,24 @@ namespace bliss
             // create FASTQ Loader
 
             FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
+            typename FileLoaderType::L1BlockType partition;
 
+            partition = loader.getNextL1Block();
             //===  repeatedly load the next L1 Block.
-            while (loader.getNextL1Block().getRange().size() > 0) {
+            while (partition.getRange().size() > 0) {
 
 
 //            t2 = std::chrono::high_resolution_clock::now();
 //            time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //            std::cout << "MMap rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
-//            std::cout << rank << " file partition: " << loader.getCurrentL1Block().getRange() << std::endl;
-
-
+              //DEBUG("RANK: " << rank << " file partition: " << partition.getRange());
 
               //====  now process the file .
 //              t1 = std::chrono::high_resolution_clock::now();
               buildForL1Block(loader, index, rank, nthreads, chunkSize);
+
+              partition = loader.getNextL1Block();
 
 //            t2 = std::chrono::high_resolution_clock::now();
 //            time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
@@ -199,7 +208,10 @@ namespace bliss
         }
 
 
+
+
         //============== what makes sense as return types for results?
+
 
 
       protected:
@@ -211,17 +223,15 @@ namespace bliss
 //          std::chrono::duration<double> time_span;
 //          t1 = std::chrono::high_resolution_clock::now();
 //
-//          INFO("buildIndex rank.tid = " << rank << "." << omp_get_thread_num());
 
           // local variables for information only.
-          int nReads = 0;    // read count
+          //int nReads = 0;    // read count
           int nChunks = 0;    // chunk count
 
-          // uses the fastq iterator as the queue itself, instead of master/slave.
-          //   at this point, no strong difference.
-          #pragma omp parallel num_threads(nthreads) shared(loader, nthreads, index, rank) reduction(+:nReads, nChunks) OMP_SHARE_DEFAULT
+          // get L2Block from L1Block, spread work to all threads.
+          #pragma omp parallel num_threads(nthreads) shared(loader, nthreads, index, rank) reduction(+:nChunks) OMP_SHARE_DEFAULT
           {
-            //== instantiate a local parser
+            //== instantiate a local parser in each thread
             ParserType parser;
 
             int tid = 0;
@@ -233,18 +243,24 @@ namespace bliss
             typename FileLoaderType::L2BlockType chunk;
 
 
-            //== initialize the loop by getting the first chunk
+            //== process L2Blocks in a loop.  loader.getNextL2Block is atomic.  the work is shared by all threads.
             chunk = loader.getNextL2Block(tid);
             while (chunk.getRange().size() > 0) {
 
+              //DEBUG("buildIndex rank.tid = " << rank << "." << tid << " L2Block range " << chunk.getRange());
+
+
               buildForL2Block(chunk, parser, index);
+
+//              if (nChunks % 256 == 0) INFO("buildIndex rank.tid=" << rank << "." << tid << " nChunks=" << nChunks << " current index size is " << index.local_size());
+
 
               //== get read for next loop iteration.
               chunk = loader.getNextL2Block(tid);
               ++nChunks;
             }
 
-            INFO("buildIndex rank.tid=" << rank << "." << tid << " nChunks=" << nChunks);
+            INFO("buildIndex rank.tid=" << rank << "." << tid << " nChunks=" << nChunks );
 
           }  // compute threads parallel
 
@@ -254,15 +270,24 @@ namespace bliss
 
 //          /// this MPI process is done.  now flush the index to all other nodes.
 //          t1 = std::chrono::high_resolution_clock::now();
-          index.flush();
+            index.flush();
 //          t2 = std::chrono::high_resolution_clock::now();
 //          time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //          INFO("flushIndex rank=" << rank << " elapsed time: " << time_span.count() << "s.");
 
         }
 
-
+        /**
+         * @brief processes a single L2Block to build the index.  results are inserted into index (atomic)
+         * @details  parses a L2Block into short sequences (e.g. for FASTQ, reads)
+         *           and then call buildForSequence to process each sequence.
+         * @param chunk
+         * @param parser
+         * @param index
+         */
         void buildForL2Block(typename FileLoaderType::L2BlockType &chunk, ParserType& parser, IndexType& index) {
+          if (chunk.getRange().size() == 0) return;
+
           //== process the chunk of data
           SeqType read;
 
@@ -286,7 +311,14 @@ namespace bliss
           }
         }
 
+        /**
+         * @brief processes a single FASTQ read or sequence into index, and insert (atomic)
+         * @param read
+         * @param index
+         */
         void buildForSequence(SeqType &read, IndexType& index) {
+
+          if (read.seqBegin == read.seqEnd) return;
 
           //== set up the kmer generating iterators.
           KmoleculeOpType kmer_op;
