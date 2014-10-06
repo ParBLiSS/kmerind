@@ -121,6 +121,8 @@ public:
    */
   void flush()
   {
+//    DEBUGF("FLUSH DISTR MAP");
+
     if (has_pending_inserts)
     {
       this->commLayer.flush(INSERT_MPI_TAG);
@@ -251,6 +253,10 @@ public:
    * finalize waits for commLayer to finish, which guarantees that all communications are done (to avoid timing issue with MPI_FINALIZE and distributed map object clean up.
    */
   void finalize() {
+    this->commLayer.finish(INSERT_MPI_TAG);
+    this->commLayer.finish(LOOKUP_MPI_TAG);
+    this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
+
     commLayer.finalize();
   }
 
@@ -274,7 +280,9 @@ protected:
   /**
    * @brief
    */
-  virtual ~_distributed_map_base() {}
+  virtual ~_distributed_map_base() {
+    this->finalize();
+  }
 
   /**
    * @brief Helper function to send the given key to the given rank.
@@ -517,10 +525,13 @@ public:
    */
   virtual ~distributed_multimap() {
     // finish all three tags in order
-//    this->commLayer.finishTag(_base_class::INSERT_MPI_TAG);
-//    this->commLayer.finishTag(_base_class::LOOKUP_MPI_TAG);
-//    this->commLayer.finishTag(_base_class::LOOKUP_ANSWER_MPI_TAG);
-	  this->commLayer.finishCommunication();
+//    this->commLayer.finish(_base_class::INSERT_MPI_TAG);
+//    this->commLayer.finish(_base_class::LOOKUP_MPI_TAG);
+//    this->commLayer.finish(_base_class::LOOKUP_ANSWER_MPI_TAG);
+
+    // called during finalize in baseclass and then in commLayer.
+//    // send the final message to end all communications.
+//	  this->commLayer.finishCommunication();
   }
 
   /**
@@ -689,10 +700,10 @@ public:
    */
   virtual ~distributed_counting_map()
   {
-//    this->commLayer.finishTag(_base_class::INSERT_MPI_TAG);
-//    this->commLayer.finishTag(_base_class::LOOKUP_MPI_TAG);
-//    this->commLayer.finishTag(_base_class::LOOKUP_ANSWER_MPI_TAG);
-	  this->commLayer.finishCommunication();
+    this->commLayer.finish(_base_class::INSERT_MPI_TAG);
+    this->commLayer.finish(_base_class::LOOKUP_MPI_TAG);
+    this->commLayer.finish(_base_class::LOOKUP_ANSWER_MPI_TAG);
+//	  this->commLayer.finishCommunication();
   }
 
   /**

@@ -109,12 +109,12 @@ int main(int argc, char** argv) {
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   kmer_index.build(filename, nthreads, chunkSize);
-
-  //// query:  use the same file as input.  walk through and generate kmers as before.  send query
-
   MPI_Barrier(comm);
   sleep(5);
   INFO("COUNT " << rank << " Index Building for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+
+  //// query:  use the same file as input.  walk through and generate kmers as before.  send query
+
 
   kmer_index.finalize();
 

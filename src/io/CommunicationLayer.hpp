@@ -333,7 +333,7 @@ class CommunicationLayer
         if (tag == CommunicationLayer::CONTROL_TAG)
           return ((int*)data)[1];
         else
-          return -1;
+          return TERMINAL_EPOCH;
       }
     };
 
@@ -380,6 +380,11 @@ class CommunicationLayer
     /// constant indicating message type is control (FOC) message.
     static const int CONTROL_TAG = 0;
 
+    /// constant indicating that there is no active tag. (e.g. during flushing)
+    static const int NO_TAG = -1;
+
+    /// terminal epoch id.
+    static const int TERMINAL_EPOCH = -1;
 
 public:
 
@@ -394,7 +399,7 @@ public:
    */
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
     : sendQueue(3 * comm_size), recvQueue(3 * comm_size), sendAccept(),
-      flushing(-1), finishing(false), sendDone(false), recvDone(false),
+      flushing(NO_TAG), finishing(false), sendDone(false), recvDone(false),
       comm(communicator), epoch(0), finalized(false)
   {
     // init communicator rank and size
@@ -425,6 +430,8 @@ public:
    *    are complete before subsequent MPI calls are made, such as MPI_FINALIZE.
    */
   void finalize() {
+    DEBUGF("FINALIZING COMM LAYER");
+
     if (finalized) return;
 
     // TODO: check that we are finished??
@@ -455,8 +462,8 @@ public:
     sendDone.store(false);
     recvDone.store(false);
     finishing.store(false);
-    flushing.store(-1);
-    recvRemaining[-1] = commSize;
+    flushing.store(NO_TAG);
+    recvRemaining[TERMINAL_EPOCH] = commSize;
     comm_thread = std::thread(&CommunicationLayer::commThread, this);
     callback_thread = std::thread(&CommunicationLayer::callbackThread, this);
   }
@@ -592,7 +599,7 @@ public:
       return;
     }
 
-    INFOF("FLUSHing tag %d, epoch %d", tag, epoch);
+    DEBUGF("Rank %d FLUSHing tag %d, epoch %d", commRank, tag, epoch);
 
     // flush all data buffers (put them into send queue)
     flushBuffers(tag);
@@ -602,7 +609,7 @@ public:
     // control thread (calling flush) sets it, while receive thread
     // unsets it in the callback function
     // can only set it if nothing else is flushing.
-    int t = -1;
+    int t = NO_TAG;
     if (!flushing.compare_exchange_strong(t, tag)) {
       // TODO throw exception?
       std::stringstream ss;
@@ -639,7 +646,11 @@ public:
       return;
     }
 
-    INFOF("FINISHing tag %d, epoch %d", tag, epoch);
+    // mark as no more coming in for this tag.  ONE THREAD ONLY modifies this.
+    sendAccept.erase(tag);
+
+
+    DEBUGF("Rank %d FINISHing tag %d, epoch %d", commRank, tag, epoch);
 
     // flush all buffers (put them into send queue)
     flushBuffers(tag);
@@ -649,7 +660,7 @@ public:
     // control thread (calling flush) sets it, while receive thread
     // unsets it in the callback function
     // can only set it if nothing else is flushing.
-    int t = -1;
+    int t = NO_TAG;
     if (!flushing.compare_exchange_strong(t, tag)) {
       // TODO throw exception?
       std::stringstream ss;
@@ -660,8 +671,6 @@ public:
     // send the control message
     sendControlMessages(tag);
 
-    // mark as no more coming in for this tag.  ONE THREAD ONLY modifies this.
-    sendAccept.erase(tag);
 
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
     waitForControlMessages(tag);
@@ -680,6 +689,9 @@ public:
    */
   void finishCommunication() throw (bliss::io::IOException)
   {
+    DEBUGF("Finish Communication");
+
+
 	  // already finishing.
 	  if (finishing.load() == true) return;
 
@@ -690,32 +702,7 @@ public:
 	  for (auto tag : temp) {
 
       if (tag != CONTROL_TAG && tag >= 0) {
-        INFOF("FINISHing tag %d, epoch %d", tag, epoch);
-
-        // flush all buffers (put them into send queue)
-        flushBuffers(tag);
-
-
-        // track the tag that is undergoing flush in a thread safe way
-        // control thread (calling flush) sets it, while receive thread
-        // unsets it in the callback function
-        // can only set it if nothing else is flushing.
-        int t = -1;
-        if (!flushing.compare_exchange_strong(t, tag)) {
-          // TODO throw exception?
-          std::stringstream ss;
-          ss << "ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << tag;
-          throw bliss::io::IOException(ss.str());
-        }
-
-        // send the control message
-        sendControlMessages(tag);
-
-        // mark as no more coming in for this tag.  ONE THREAD ONLY modifies this.
-        sendAccept.erase(tag);
-
-        // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
-        waitForControlMessages(tag);
+        finish(tag);
       }
     }
 
@@ -723,7 +710,7 @@ public:
     // control thread (calling flush) sets it, while receive thread
     // unsets it in the callback function
     // can only set it if nothing else is flushing.
-    int t = -1;
+    int t = NO_TAG;
     if (!flushing.compare_exchange_strong(t, CONTROL_TAG)) {
       // TODO throw exception?
       std::stringstream ss;
@@ -808,7 +795,7 @@ protected:
    */
   void callbackThread()
   {
-    INFOF("THREAD STARTED:  recv-thread on %d", commRank);
+    DEBUGF("THREAD STARTED:  recv-thread on %d", commRank);
     MessageReceived msg;
 
     // while there are messages to process, or we are still receiving
@@ -834,7 +821,7 @@ protected:
 
         // and unblock the flush/finish/finishCommunication call.
         // getting to here means that all control messages for a tag have been received from all senders.
-        if (flushing.compare_exchange_strong(tag, -1)) {
+        if (flushing.compare_exchange_strong(tag, NO_TAG)) {
           // so unset 'flushing', and unblock flush() via condition variable.
           flushBarrier.notify_all();
         } else {
@@ -847,7 +834,7 @@ protected:
         delete [] msg.data;
       }
     }
-    INFOF("THREAD FINISHED: recv-thread on %d", commRank);
+    DEBUGF("THREAD FINISHED: recv-thread on %d", commRank);
   }
 
 
@@ -863,7 +850,7 @@ protected:
       // send end tags in circular fashion, send tag to self last
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 
-      DEBUGF("Rank %d sendEndTags %d epoch %d target_rank = %d ", commRank, tag, epoch, target_rank );
+      //DEBUGF("Rank %d sendEndTags %d epoch %d target_rank = %d ", commRank, tag, epoch, target_rank );
 
       // send the end message for this tag.
       if (!sendQueue.waitAndPush(std::move(SendQueueElementType(BufferPoolType::ABSENT, tag, target_rank)))) {
@@ -894,7 +881,7 @@ protected:
       throw bliss::io::IOException("ERROR: waitForEndTags called but currently flushing a different tag.");
     }
 
-    DEBUGF("Rank %d WAITED FOR END TAG.  flushing= %d, tag= %d, epoch = %d", commRank, flushing.load(), tag, epoch);
+    DEBUGF("Rank %d received all END message for TAG %d, epoch = %d", commRank, tag, epoch);
     ++epoch;
   }
 
@@ -991,26 +978,27 @@ protected:
       auto count = buffers.at(se.tag).getBackBuffer(se.bufferId).getSize();
 
       if (count == 0) {
-        ERRORF("ERROR: SEND %d -> %d, trying to send 0 byte message as data for tag %d.", commRank, se.dst, se.tag);
-      }
-
-      if (se.dst == commRank) {
-        // local, directly handle by creating an output object and directly
-        // insert into the recv queue (thread safe)
-        uint8_t* array = new uint8_t[count];
-        memcpy(array, data, count);
-
-        // out of order receive, but can only be early, so okay.
-        if (!recvQueue.waitAndPush(std::move(MessageReceived(array, count, se.tag, commRank)))) {
-          throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
-        }
-        // finished inserting directly to local RecvQueue.  release the buffer
-        buffers.at(se.tag).releaseBuffer(se.bufferId);
+        WARNINGF("WARNING: NOT SEND %d -> %d: 0 byte message for tag %d, bufferid = %d.", commRank, se.dst, se.tag, se.bufferId);
       } else {
-        // remote: initiate async MPI message
-        MPI_Request req;
-        MPI_Isend(data, count, MPI_UINT8_T, se.dst, se.tag, comm, &req);
-        sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElementType>(std::move(req), std::move(se))));
+
+        if (se.dst == commRank) {
+          // local, directly handle by creating an output object and directly
+          // insert into the recv queue (thread safe)
+          uint8_t* array = new uint8_t[count];
+          memcpy(array, data, count);
+
+          // out of order receive, but can only be early, so okay.
+          if (!recvQueue.waitAndPush(std::move(MessageReceived(array, count, se.tag, commRank)))) {
+            throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
+          }
+          // finished inserting directly to local RecvQueue.  release the buffer
+          buffers.at(se.tag).releaseBuffer(se.bufferId);
+        } else {
+          // remote: initiate async MPI message
+          MPI_Request req;
+          MPI_Isend(data, count, MPI_UINT8_T, se.dst, se.tag, comm, &req);
+          sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElementType>(std::move(req), std::move(se))));
+        }
       }
     }
 
@@ -1164,7 +1152,7 @@ protected:
 
           //== if the message type is same as CONTROL_TAG, then this is a Application Termination FOC message.
           if (tag == CONTROL_TAG) {
-            epoch = -1;  // then use special epoch -1, which has counter set at commlayer init.
+            epoch = TERMINAL_EPOCH;  // then use special epoch TERMINAL_EPOCH, which has counter set at commlayer init.
           } else {
             // else we are controlling a data message type
 
@@ -1214,7 +1202,7 @@ protected:
 
     // see if we are done with all pending receives and all Application Termination FOC messages are received.
     if ((recvRemaining.size() == 0) && recvInProgress.empty()) {
-      // if completely done, epoch=-1 would have been erased from recvRemaining.
+      // if completely done, epoch=TERMINAL_EPOCH would have been erased from recvRemaining.
       recvDone.store(true);
       //DEBUGF("recv Done!");
       recvQueue.disablePush();
@@ -1314,6 +1302,14 @@ protected:
 
 /// CONTROL_TAG definition.  (declaration and initialization inside class).
 const int CommunicationLayer::CONTROL_TAG;
+
+/// NO_TAG definition.  (declaration and initialization inside class).
+const int CommunicationLayer::NO_TAG;
+
+/// TERMINAL_EPOCH definition.  (declaration and initialization inside class).
+const int CommunicationLayer::TERMINAL_EPOCH;
+
+
 
 } // namespace io
 } // namespace bliss

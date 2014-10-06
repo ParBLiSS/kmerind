@@ -202,9 +202,11 @@ namespace bliss
 //            std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
             }
+            index.flush();
           }  // scope to ensure file loader is destroyed.
 
-          printf("MPI number of entries in index for rank %d is %lu\n", rank, index.local_size());
+
+//          printf("MPI number of entries in index for rank %d is %lu\n", rank, index.local_size());
         }
 
 
@@ -260,7 +262,7 @@ namespace bliss
               ++nChunks;
             }
 
-            INFO("buildIndex rank.tid=" << rank << "." << tid << " nChunks=" << nChunks );
+//            INFO("BuildIndex L1Block rank.tid=" << rank << "." << tid << " num L2Blocks=" << nChunks );
 
           }  // compute threads parallel
 
@@ -270,7 +272,7 @@ namespace bliss
 
 //          /// this MPI process is done.  now flush the index to all other nodes.
 //          t1 = std::chrono::high_resolution_clock::now();
-            index.flush();
+//            index.flush();
 //          t2 = std::chrono::high_resolution_clock::now();
 //          time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //          INFO("flushIndex rank=" << rank << " elapsed time: " << time_span.count() << "s.");
