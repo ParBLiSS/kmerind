@@ -430,9 +430,10 @@ public:
    *    are complete before subsequent MPI calls are made, such as MPI_FINALIZE.
    */
   void finalize() {
-    DEBUGF("FINALIZING COMM LAYER");
-
     if (finalized) return;
+
+    finalized = true;
+    DEBUGF("FINALIZING COMM LAYER");
 
     // TODO: check that we are finished??
 	  finishCommunication();
@@ -447,7 +448,6 @@ public:
     MPI_Buffer_detach(&mpiBuf, &mpiBufSize);
     free(mpiBuf);
 
-    finalized = true;
   };
 
 
@@ -496,16 +496,6 @@ public:
 
     //== don't send control tag.
     assert(tag != CONTROL_TAG && tag >= 0);
-
-    //== if there isn't already a tag listed, add the MessageBuffers for that tag.
-    // multiple threads may call this.
-    if (buffers.find(tag) == buffers.end()) {
-      std::unique_lock<std::mutex> lock(buffers_mutex);
-      if (buffers.find(tag) == buffers.end()) {
-        // create new message buffer
-        buffers[tag] = std::move(MessageBuffersType(commSize, 8192));
-      }
-    }
 
     //== try to append the new data - repeat until successful.
     // along the way, if a full buffer's id is returned, queue it for sendQueue.
@@ -569,6 +559,16 @@ public:
 
     // register the tag so that messages of this type is now accepted by the CommLayer.
     sendAccept.insert(tag);
+
+    //== if there isn't already a tag listed, add the MessageBuffers for that tag.
+    // multiple threads may call this.
+    if (buffers.find(tag) == buffers.end()) {
+      std::unique_lock<std::mutex> lock(buffers_mutex);
+      if (buffers.find(tag) == buffers.end()) {
+        // create new message buffer
+        buffers[tag] = std::move(MessageBuffersType(commSize, 8192));
+      }
+    }
   }
 
   /**
@@ -600,22 +600,10 @@ public:
     }
 
     DEBUGF("Rank %d FLUSHing tag %d, epoch %d", commRank, tag, epoch);
+    DEBUGF("  buffer ids : %s", buffers.at(tag).bufferIdsToString().c_str());
 
     // flush all data buffers (put them into send queue)
     flushBuffers(tag);
-
-
-    // track the tag that is undergoing flush in a thread safe way
-    // control thread (calling flush) sets it, while receive thread
-    // unsets it in the callback function
-    // can only set it if nothing else is flushing.
-    int t = NO_TAG;
-    if (!flushing.compare_exchange_strong(t, tag)) {
-      // TODO throw exception?
-      std::stringstream ss;
-      ss << "ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << tag;
-      throw bliss::io::IOException(ss.str());
-    }
 
     // send the control message
     sendControlMessages(tag);
@@ -651,26 +639,14 @@ public:
 
 
     DEBUGF("Rank %d FINISHing tag %d, epoch %d", commRank, tag, epoch);
+    DEBUGF("  buffer ids : %s", buffers.at(tag).bufferIdsToString().c_str());
+
 
     // flush all buffers (put them into send queue)
     flushBuffers(tag);
 
-
-    // track the tag that is undergoing flush in a thread safe way
-    // control thread (calling flush) sets it, while receive thread
-    // unsets it in the callback function
-    // can only set it if nothing else is flushing.
-    int t = NO_TAG;
-    if (!flushing.compare_exchange_strong(t, tag)) {
-      // TODO throw exception?
-      std::stringstream ss;
-      ss << "ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << tag;
-      throw bliss::io::IOException(ss.str());
-    }
-
     // send the control message
     sendControlMessages(tag);
-
 
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
     waitForControlMessages(tag);
@@ -718,11 +694,11 @@ public:
       throw bliss::io::IOException(ss.str());
     }
 
-    // send the control message
-    sendControlMessages(CONTROL_TAG);
-
     // mark as finishing.
     finishing.store(true);
+
+    // send the control message
+    sendControlMessages(CONTROL_TAG);
 
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
     waitForControlMessages(CONTROL_TAG);
@@ -830,9 +806,9 @@ protected:
       } else {
         // data message.  process it.
         (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
-        // clean up message data
-        delete [] msg.data;
       }
+      // clean up message data
+      delete [] msg.data;
     }
     DEBUGF("THREAD FINISHED: recv-thread on %d", commRank);
   }
@@ -896,23 +872,36 @@ protected:
    */
   void flushBuffers(int tag) throw (bliss::io::IOException)
   {
-    // no MessageBuffers with the associated tag.  end.
-    if (buffers.find(tag) == buffers.end())
-    {
-      DEBUGF("NO BUFFERS for tag: %d", tag);
-      return;
+    // track the tag that is undergoing flush in a thread safe way
+    // control thread (calling flush) sets it, while receive thread
+    // unsets it in the callback function
+    // can only set it if nothing else is flushing.
+    int t = NO_TAG;
+    if (!flushing.compare_exchange_strong(t, tag)) {
+      // TODO throw exception?
+      std::stringstream ss;
+      ss << "ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << tag;
+      throw bliss::io::IOException(ss.str());
     }
-    //DEBUGF("Active Buffer Ids in message buffer: %s", buffers.at(tag).bufferIdsToString().c_str());
+
+
+//    // no MessageBuffers with the associated tag.  end.
+//    if (buffers.find(tag) == buffers.end())
+//    {
+//      DEBUGF("NO BUFFERS for tag: %d", tag);
+//      return;
+//    }
+//    //DEBUGF("Active Buffer Ids in message buffer: %s", buffers.at(tag).bufferIdsToString().c_str());
 
     // flush out all the send buffers matching a particular tag.
-    int idCount = buffers.at(tag).getBufferIds().size();
+    int idCount = buffers.at(tag).getBufferIdsForAllRanks().size();
     assert(idCount == commSize);
 
     for (int i = 0; i < idCount; ++i) {
       // flush buffers in a circular fashion, starting with the next neighbor
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 
-      auto id = buffers.at(tag).getBufferId(target_rank);
+      auto id = buffers.at(tag).flushBufferForRank(target_rank);
       // flush/send all remaining non-empty buffers
       if ((id != BufferPoolType::ABSENT) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
         if (!sendQueue.waitAndPush(std::move(SendQueueElementType(id, tag, target_rank)))) {
@@ -1297,7 +1286,7 @@ protected:
   /// id of the epochs.  aka the periods between barrier/synchronization.  each epoch is associated with a single flush/finish, thus to 1 tag.
   int epoch;
 
-  bool finalized;
+  std::atomic<bool> finalized;
 };
 
 /// CONTROL_TAG definition.  (declaration and initialization inside class).

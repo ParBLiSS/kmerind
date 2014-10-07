@@ -154,9 +154,9 @@ namespace bliss
           return this->pool[id];
         }
 
-
         /**
          * @brief Releases a Buffer by it's BufferPool id, after the buffer is no longer needed.
+         * @note  this should be called on a buffer that is not being used by MessageBuffers, i.e. flush does not satisfy this.
          *
          * @note  This to be called after the communication logic is done with the Send or Recv buffer.
          *
@@ -166,6 +166,7 @@ namespace bliss
           pool.releaseBuffer(id);
         }
 
+      protected:
         /**
          * @brief Convenience method to release and clear all current Buffers in the pool.
          */
@@ -284,21 +285,21 @@ namespace bliss
         }
 
         /**
-         * @brief get the BufferId that a messaging target max to.
+         * @brief get the BufferId that a messaging target maps to.
          * @details for simplicity, not distinguishing between thread safe and unsafe versions
          *
-         * @param idx   the target id for the messages.
+         * @param targetRank   the target id for the messages.
          * @return      the buffer id that the target id maps to.
          */
-        const BufferIdType getBufferId(const int idx) const {
-          return BufferIdType(bufferIds[idx]);
+        const BufferIdType getBufferIdForRank(const int targetRank) const {
+          return BufferIdType(bufferIds[targetRank]);
         }
 
         /**
          * @brief get the list of active Buffer ids.  (for debugging)
          * @return  vector containing the active Buffer ids.
          */
-        const std::vector<IdType>& getBufferIds() const {
+        const std::vector<IdType>& getBufferIdsForAllRanks() const {
           return bufferIds;
         }
 
@@ -381,7 +382,7 @@ namespace bliss
           BufferIdType fullBufferId = BufferPoolType::ABSENT;
 
           //== get the current Buffer's Id
-          BufferIdType targetBufferId = getBufferId(targetProc);
+          BufferIdType targetBufferId = getBufferIdForRank(targetProc);
 
           //== if targetBufferId is an invalid buffer, or if new data can't fit, need to replace bufferIds[dest]
           if ((targetBufferId == BufferPoolType::ABSENT) ||
@@ -390,7 +391,7 @@ namespace bliss
 
             // this call will mark the fullBuffer as blocked to prevent multiple write attempts while flushing the buffer
             fullBufferId = swapInEmptyBuffer<ThreadSafety>(targetProc, targetBufferId);    // swap in an empty buffer
-            targetBufferId = getBufferId(targetProc);               // and get the updated targetBuffer id
+            targetBufferId = getBufferIdForRank(targetProc);               // and get the updated targetBuffer id
           }
 
 
@@ -405,7 +406,22 @@ namespace bliss
           }
         }
 
+
+        BufferIdType flushBufferForRank(const int &targetProc) {
+
+          //== if targetProc is outside the valid range, throw an error
+          if (targetProc < 0 || targetProc > getSize()) {
+            throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
+          }
+
+          // passing in getBufferIdForRank result to ensure atomicity.
+          // may return ABSENT if there is no available buffer to use.
+          return swapInEmptyBuffer<ThreadSafety>(targetProc, getBufferIdForRank(targetProc));    // swap in an empty buffer
+
+        }
+
       protected:
+
         /**
          * @brief  Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
          * @details The new buffer may be BufferPoolType::ABSENT (invalid buffer, when there is no available Buffer from pool)

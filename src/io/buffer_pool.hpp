@@ -18,6 +18,7 @@
 #include <vector>
 #include <stdexcept>
 
+#include "utils/logging.h"
 #include "io/buffer.hpp"
 #include "concurrent/concurrent.hpp"
 
@@ -196,10 +197,12 @@ namespace bliss
           buffers(), fixedSize(_pool_capacity != std::numeric_limits<IdType>::max()) {
 
           // get an estimated size first, so don't have to keep growing the vector
-          IdType size_hint = fixedSize ? capacity : 128;
+          //IdType size_hint = fixedSize ? capacity : 128;
+          IdType size_hint = capacity;
 
           // reserve the buffer, and configure.  this part is not thread safe
           buffers.reserve(size_hint);
+          //DEBUGF("RESERVING: %d for buffer pool", size_hint);
           for (IdType i = 0; i < size_hint; ++i) {
             buffers.push_back(std::move(BufferType(buffer_capacity)));
             releaseBuffer<PoolTS>(i);
@@ -318,11 +321,15 @@ namespace bliss
          */
         std::pair<bool, IdType> tryAcquireBuffer() {
           std::pair<bool, IdType> output = std::move(getNextAvailable<PoolTS>());
+          //DEBUGF("acquired? %d, available count %ld, buffers count %ld", (output.first ? output.second : -1), available.size(), buffers.size());
           if (!output.first && !fixedSize) {
             // can grow and none available.  so allocate a new one and return.
             output.first = true;
             output.second = createNewBuffer<PoolTS>();
+
+            //DEBUGF("acquired final %d, available count %ld, buffers count %ld", output.second, available.size(), buffers.size());
           }
+
 
           return output;
         }
@@ -369,6 +376,8 @@ namespace bliss
           std::lock_guard<std::mutex> lock(mutex);
           buffers[id].clear();
           available.insert(id);
+
+          //DEBUGF("buffer id %d is available for reuse.", id);
         }
 
 
@@ -383,6 +392,8 @@ namespace bliss
 
           buffers[id].clear();
           available.insert(id);
+
+          //DEBUGF("buffer id %d is available for reuse.", id);
         }
 
         /**
