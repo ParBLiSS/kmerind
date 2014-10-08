@@ -197,8 +197,8 @@ namespace bliss
           buffers(), fixedSize(_pool_capacity != std::numeric_limits<IdType>::max()) {
 
           // get an estimated size first, so don't have to keep growing the vector
-          //IdType size_hint = fixedSize ? capacity : 128;
-          IdType size_hint = capacity;
+          IdType size_hint = fixedSize ? capacity : 4;
+          //IdType size_hint = capacity;
 
           // reserve the buffer, and configure.  this part is not thread safe
           buffers.reserve(size_hint);

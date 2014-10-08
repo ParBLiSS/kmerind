@@ -179,6 +179,8 @@ namespace bliss
           std::unique_lock<std::mutex> lock(mutex);
           q.clear();
           qsize.store(0, std::memory_order_relaxed);        // have lock.  relaxed.
+          lock.unlock();
+
           canPushCV.notify_all();
         }
 
@@ -186,6 +188,7 @@ namespace bliss
          * set the queue to accept new elements
          */
         void enablePush() {
+//          std::unique_lock<std::mutex> lock(mutex);  simple atomic upate to pushEnabled.  no need for lock
           pushEnabled.store(true, std::memory_order_release);
           canPushCV.notify_all();   // notify, so waitAndPush can check if it can push now.
           // not notifying canPopCV, used in waitAndPop, as that function exits the loop ONLY when queue is not empty.
@@ -195,6 +198,7 @@ namespace bliss
          * set the queue to disallow insertion of new elements.
          */
         void disablePush() {
+//          std::unique_lock<std::mutex> lock(mutex);   simple atomic update to pushEnabled.  no need for lock
           pushEnabled.store(false, std::memory_order_release);
           canPushCV.notify_all();   // notify, so waitAndPush can check if it can push now.  (only happens with a full buffer, allows waitToPush to return)
                                     // this allows waitAndPush to fail if push is disabled before the queue becomes not full.
@@ -314,8 +318,6 @@ namespace bliss
           if (!canPush()) return false;  // if finished, then no more insertion.  return.
 
           std::unique_lock<std::mutex> lock(mutex);
-
-
           while (!canPush() || isFull()) {
             // full q.  wait for someone to signal.
             canPushCV.wait(lock);
@@ -356,8 +358,8 @@ namespace bliss
 
           lock.unlock();
           output.first = true;
-
           canPushCV.notify_one();
+
           return output;
 
         }

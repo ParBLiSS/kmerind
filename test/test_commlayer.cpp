@@ -21,7 +21,7 @@ struct Tester
 
   int generate_message(int srcRank, int dstRank)
   {
-    return srcRank + dstRank;
+    return srcRank + dstRank + 13;
   }
 
   void receivedCallback(uint8_t* msg, std::size_t count, int fromRank)
