@@ -614,7 +614,7 @@ public:
 
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
     DEBUGF("M FLUSH Rank %d tag %d, epoch %d, waiting for control messages to complete", commRank, tag, epoch);
-    waitForControlMessages(tag);
+    while (!waitForControlMessages(tag)) {};
   }
 
   /**
@@ -659,7 +659,7 @@ public:
 
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
     DEBUGF("M FINISH Rank %d tag %d, epoch %d, waiting for control messages to complete", commRank, tag, epoch);
-    waitForControlMessages(tag);
+    while (!waitForControlMessages(tag)) {};
   }
 
 
@@ -702,7 +702,7 @@ public:
 
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
     DEBUGF("M FINISH COMM Rank %d tag %d, epoch %d, waiting for CONTROL messages to complete", commRank, CONTROL_TAG, epoch);
-    waitForControlMessages(CONTROL_TAG);
+    while(!waitForControlMessages(CONTROL_TAG)) {};
 
   }
 
@@ -796,8 +796,15 @@ protected:
         // get control message's target tag.
         int tag = msg.getTag();
 
-        // and unblock the flush/finish/finishCommunication call.
+        //===== and unblock the flush/finish/finishCommunication call.
         // getting to here means that all control messages for a tag have been received from all senders.
+        // this means the local "sendControlMessages" has been called.  now, look at order of calls in waitForControlMessage
+        //
+        // main thread:  lock; flushing = notag->tag; flushing==tag?; cv_wait;
+        // callback thread:  lock; flushing = tag->notag ? cv_notify_all : return message to front of queue
+        // to ensure the flushing is modified by 1 thread at a time, and notify_all does not get interleaved to before wait,
+        // lock is used to enclose the entire sequence on each thread.
+        // also if callback thread's block is called before the main thread, we don't want to discard the control message - requeue.
         std::unique_lock<std::mutex> lock(flushMutex);
         if (flushing.compare_exchange_strong(tag, NO_TAG)) {
         //if (flushing.load() == tag) {
@@ -806,6 +813,23 @@ protected:
 
           DEBUGF("R rank %d tag %d epoch %d flush complete.  flushing contains %d", commRank, tag, epoch, flushing.load());
         } else {
+          // if flushing is not tag, then some other tag is being processed, or flushing == notag.
+          // if notag - this block is called before waitForControlMessages.  need to requeue
+          // if some other tag (tag1), that means we received all tag2 messages in comm thread before receiving all tag1 messages
+          // therefore recv thread is processing tag2 before tag1 control message.
+          // if the delayed tag1 message is from remote process, and assume that process called sendControlMessages tag1 before tag2,
+          //  then strict ordering of MPI messages is violated.
+          // if the delayed tag1 message is from local process, because in mem message movement, tag1 is always before tag2.
+          // so tag2 cannot come before tag1, provided that all MPI processes call sendControlMessage and waitForControlMessages in the same order
+          //  including requirement that callers of sendControlMessage and waitForControlMessages reside in 1 thread only.
+
+          // to deal with multiple threads that can use control messages, we'd need to have an array of "flushing" variables, array of mutices (sharing would render the threads serial),
+          // and array of lock and condition variables (maybe)
+          // also, it may be good to set "flushing" when first control message arrives.  perhaps recvRemaining is a good substitute.
+          // finally, do we still need to have a UnPop function on the queue?
+
+
+
           ERRORF("R control message with tag=%d, but flushing contained %d", msg.tag, tag);
         }
         lock.unlock();
@@ -828,18 +852,6 @@ protected:
    */
   void sendControlMessages(int tag) throw (bliss::io::IOException)
   {
-    // track the tag that is undergoing flush in a thread safe way
-    // control thread (calling flush) sets it, while receive thread
-    // unsets it in the callback function
-    // can only set it if nothing else is flushing.
-    int t = NO_TAG;
-    if (!flushing.compare_exchange_strong(t, tag)) {
-      // TODO throw exception?
-      std::stringstream ss;
-      ss << "M ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << tag;
-      throw bliss::io::IOException(ss.str());
-    }
-    DEBUGF("M rank %d tag %d epoch %d flushed.  flushing changed to %d", commRank, tag, epoch, flushing.load());
 
 
     for (int i = 0; i < getCommSize(); ++i) {
@@ -861,13 +873,34 @@ protected:
    *        FOC messages have been received).
    *
    * @param tag The tag to wait for.
+   * @return boolean flag indicating if we've successfully waited, so caller can try again.
    */
-  void waitForControlMessages(int tag) throw (bliss::io::IOException)
+  bool waitForControlMessages(int tag) throw (bliss::io::IOException)
   {
+    // CONCERN:  tracking the tag being flushed using "flushing" opens up the possible problem
+    // when out-of-order calls to flush, finish, and finishCommunications.
+
+
+    int t = NO_TAG;
+
+    std::unique_lock<std::mutex> lock(flushMutex);  // lock it, so we use flushing to indicate we started waiting on a tag.
+
+    // track the tag that is undergoing flush in a thread safe way
+    // control thread (calling flush) sets it, while receive thread
+    // unsets it in the callback function
+    // can only set it if nothing else is flushing.  else it's an error
+    if (!flushing.compare_exchange_strong(t, tag)) {
+      // TODO throw exception?
+      ERROR("M ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << tag);
+
+      return false;
+    }
+    DEBUGF("M rank %d tag %d epoch %d flushed.  flushing changed to %d", commRank, tag, epoch, flushing.load());
+
+
     // waiting for all messages of this tag to flush.
     DEBUGF("M Rank %d Waiting for tag %d, currently flushing %d", commRank, tag, flushing.load());
 
-    std::unique_lock<std::mutex> lock(flushMutex);
     while (flushing.load() == tag) {
       // condition variable waits for notification, which is generated by recv thread
       // when all FOC messages with this tag are received.
@@ -1169,33 +1202,33 @@ protected:
         // if it's a control message, then need to count down
         if (front.second.tag == CONTROL_TAG)  {
 
-          // get the message type being controlled, and the epoch
+          // get the message type being controlled, and the ep
           int tag = front.second.getTag();
-          int epoch = front.second.getEpoch();
+          int ep = front.second.getEpoch();
 
 //          DEBUGF("C rank %d received control message for tag %d epoch %d.  recvRemaining has %ld tags", commRank, tag, epoch, recvRemaining.size());
 
           //== if the message type is same as CONTROL_TAG, then this is a Application Termination FOC message.
           if (tag == CONTROL_TAG) {
-            epoch = TERMINAL_EPOCH;  // then use special epoch TERMINAL_EPOCH, which has counter set at commlayer init.
+            ep = TERMINAL_EPOCH;  // then use special epoch TERMINAL_EPOCH, which has counter set at commlayer init.
           } else {
             // else we are controlling a data message type
 
             // if we haven't seen this epoch, add a new entry.
-            if (recvRemaining.find(epoch) == recvRemaining.end())
-              recvRemaining[epoch] = commSize;  // insert new.
+            if (recvRemaining.find(ep) == recvRemaining.end())
+              recvRemaining[ep] = commSize;  // insert new.
           }
 //          DEBUGF("C rank %d triaged control message for tag %d epoch %d.  recvRemaining has %ld tags", commRank, tag, epoch, recvRemaining.size());
 
-          //== now decrement the count of control messages for a epoch
-          --recvRemaining.at(epoch);
+          //== now decrement the count of control messages for a ep
+          --recvRemaining.at(ep);
           DEBUGF("C RECV rank %d receiving END signal tag %d epoch %d from %d, num senders remaining is %d",
-                 commRank, tag, epoch, front.second.src, recvRemaining.at(epoch));
+                 commRank, tag, ep, front.second.src, recvRemaining.at(ep));
 
-          //== if after decrement the count is 0 for the epoch,
-          if (recvRemaining.at(epoch) == 0) {
+          //== if after decrement the count is 0 for the ep,
+          if (recvRemaining.at(ep) == 0) {
             // then we've received all end messages for this epoch.  remove it from tracking.
-            recvRemaining.erase(epoch);
+            recvRemaining.erase(ep);
 
             //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
 
@@ -1204,10 +1237,10 @@ protected:
               throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
             }
 
-          } else if (recvRemaining.at(epoch) < 0) {
+          } else if (recvRemaining.at(ep) < 0) {
             // count decremented to negative.  should not happen.  throw exception.
             std::stringstream ss;
-            ss << "C ERROR: number of remaining receivers for tag " << tag << " epoch " << epoch << " is now NEGATIVE";
+            ss << "C ERROR: number of remaining receivers for tag " << tag << " epoch " << ep << " is now NEGATIVE";
             throw bliss::io::IOException(ss.str());
           }
         } else {
