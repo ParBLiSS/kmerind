@@ -399,7 +399,7 @@ public:
    */
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
     : sendQueue(3 * comm_size), recvQueue(3 * comm_size), sendAccept(),
-      flushing(NO_TAG), sendDone(false), recvDone(false),
+      waitMutices(), waitCondVars(), sendDone(false), recvDone(false),
       comm(communicator), epoch(0), finalized(false)
   {
     // init communicator rank and size
@@ -462,8 +462,10 @@ public:
     sendDone.store(false);
     recvDone.store(false);
    // finishing.store(false);
-    flushing.store(NO_TAG);
-    recvRemaining[TERMINAL_EPOCH] = commSize;
+//    flushing.store(NO_TAG);
+    recvRemaining[CONTROL_TAG] = commSize;
+    waitMutices.emplace(CONTROL_TAG, std::unique_ptr<std::mutex>(new std::mutex));
+    waitCondVars.emplace(CONTROL_TAG, std::unique_ptr<std::condition_variable>(new std::condition_variable));
     comm_thread = std::thread(&CommunicationLayer::commThread, this);
     callback_thread = std::thread(&CommunicationLayer::callbackThread, this);
   }
@@ -552,6 +554,9 @@ public:
     // check for valid arguments
     assert(tag != CONTROL_TAG && tag >= 0);
 
+    // insert one tag at a time - lock this.
+    std::unique_lock<std::mutex> lock(mutex);
+
     if (callbackFunctions.find(tag) != callbackFunctions.end()) {
       throw std::invalid_argument("M callback function already registered for given tag");
     }
@@ -561,16 +566,16 @@ public:
 
     // register the tag so that messages of this type is now accepted by the CommLayer.
     sendAccept.insert(tag);
+    waitMutices.emplace(tag, std::unique_ptr<std::mutex>(new std::mutex));
+    waitCondVars.emplace(tag, std::unique_ptr<std::condition_variable>(new std::condition_variable));
 
     //== if there isn't already a tag listed, add the MessageBuffers for that tag.
     // multiple threads may call this.
     if (buffers.find(tag) == buffers.end()) {
-      std::unique_lock<std::mutex> lock(buffers_mutex);
-      if (buffers.find(tag) == buffers.end()) {
-        // create new message buffer
-        buffers[tag] = std::move(MessageBuffersType(commSize, 8192, 2 * commSize));
-      }
+      // create new message buffer
+      buffers[tag] = std::move(MessageBuffersType(commSize, 8192, 2 * commSize));
     }
+
   }
 
   /**
@@ -610,11 +615,11 @@ public:
     flushBuffers(tag);
 
     // send the control message
-    sendControlMessages(tag);
+    while (!sendControlMessagesAndWait(tag)) {};
 
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
     DEBUGF("M FLUSH Rank %d tag %d, epoch %d, waiting for control messages to complete", commRank, tag, epoch);
-    while (!waitForControlMessages(tag)) {};
+    //while (!waitForControlMessages(tag)) {};
   }
 
   /**
@@ -644,8 +649,9 @@ public:
     }
 
     // mark as no more coming in for this tag.  ONE THREAD ONLY modifies this.
+    std::unique_lock<std::mutex> lock(mutex);
     sendAccept.erase(tag);
-
+    lock.unlock();
 
     DEBUGF("M FINISH Rank %d tag %d, epoch %d", commRank, tag, epoch);
     DEBUGF("M  buffer ids : %s", buffers.at(tag).bufferIdsToString().c_str());
@@ -655,11 +661,11 @@ public:
     flushBuffers(tag);
 
     // send the control message
-    sendControlMessages(tag);
+    while (!sendControlMessagesAndWait(tag)) {};
 
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
     DEBUGF("M FINISH Rank %d tag %d, epoch %d, waiting for control messages to complete", commRank, tag, epoch);
-    while (!waitForControlMessages(tag)) {};
+    //while (!waitForControlMessages(tag)) {};
   }
 
 
@@ -683,8 +689,11 @@ public:
     if (!sendQueue.canPush()) return;
 
 
-	  std::unordered_set<int> temp(sendAccept);
-
+    // locks the following so one thread does finish at a time.
+    //
+    std::unique_lock<std::mutex> lock(mutex);
+    std::unordered_set<int> temp = sendAccept;
+    lock.unlock();
 
 	  for (auto tag : temp) {
 
@@ -694,15 +703,16 @@ public:
     }
 
     // send the control message
-    sendControlMessages(CONTROL_TAG);
+    while (!sendControlMessagesAndWait(CONTROL_TAG)) {};
 
     // mark as finishing, only after enqueuing the final control messages (else sendDone will get set to true because sendQueue might be empty.)
     //finishing.store(true);
-    sendQueue.disablePush();
+    //sendQueue.disablePush();
 
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
     DEBUGF("M FINISH COMM Rank %d tag %d, epoch %d, waiting for CONTROL messages to complete", commRank, CONTROL_TAG, epoch);
-    while(!waitForControlMessages(CONTROL_TAG)) {};
+    //while(!waitForControlMessages(CONTROL_TAG)) {};
+    
 
   }
 
@@ -792,10 +802,11 @@ protected:
 
       // if the message is a control message (enqueued ONE into RecvQueue only after all control messages
       //  for a tag have been received.)
-      if (msg.tag == CONTROL_TAG) {
+      if (msg.tag == CONTROL_TAG) {   // received message is of type Control.
         // get control message's target tag.
-        int tag = msg.getTag();
+        int tag = msg.getTag();       // control message is actually of type...
 
+        DEBUG("R here");
         //===== and unblock the flush/finish/finishCommunication call.
         // getting to here means that all control messages for a tag have been received from all senders.
         // this means the local "sendControlMessages" has been called.  now, look at order of calls in waitForControlMessage
@@ -805,33 +816,40 @@ protected:
         // to ensure the flushing is modified by 1 thread at a time, and notify_all does not get interleaved to before wait,
         // lock is used to enclose the entire sequence on each thread.
         // also if callback thread's block is called before the main thread, we don't want to discard the control message - requeue.
-        std::unique_lock<std::mutex> lock(flushMutex);
-        if (flushing.compare_exchange_strong(tag, NO_TAG)) {
-        //if (flushing.load() == tag) {
-          // so unset 'flushing', and unblock flush() via condition variable.
-          flushBarrier.notify_all();
+        std::unique_lock<std::mutex> lock(*(waitMutices.at(tag)));
+        DEBUG("R here 2");
 
-          DEBUGF("R rank %d tag %d epoch %d flush complete.  flushing contains %d", commRank, tag, epoch, flushing.load());
-        } else {
-          // if flushing is not tag, then some other tag is being processed, or flushing == notag.
-          // if notag - this block is called before waitForControlMessages.  need to requeue
-          // if some other tag (tag1), that means we received all tag2 messages in comm thread before receiving all tag1 messages
-          // therefore recv thread is processing tag2 before tag1 control message.
-          // if the delayed tag1 message is from remote process, and assume that process called sendControlMessages tag1 before tag2,
-          //  then strict ordering of MPI messages is violated.
-          // if the delayed tag1 message is from local process, because in mem message movement, tag1 is always before tag2.
-          // so tag2 cannot come before tag1, provided that all MPI processes call sendControlMessage and waitForControlMessages in the same order
-          //  including requirement that callers of sendControlMessage and waitForControlMessages reside in 1 thread only.
+        // if flushing is not tag, then some other tag is being processed, or flushing == notag.
+        // if notag - this block is called before waitForControlMessages.  need to requeue
+        // if some other tag (tag1), that means we received all tag2 messages in comm thread before receiving all tag1 messages
+        // therefore recv thread is processing tag2 before tag1 control message.
+        // if the delayed tag1 message is from remote process, and assume that process called sendControlMessages tag1 before tag2,
+        //  then strict ordering of MPI messages is violated.
+        // if the delayed tag1 message is from local process, because in mem message movement, tag1 is always before tag2.
+        // so tag2 cannot come before tag1, provided that all MPI processes call sendControlMessage and waitForControlMessages in the same order
+        //  including requirement that callers of sendControlMessage and waitForControlMessages reside in 1 thread only.
 
-          // to deal with multiple threads that can use control messages, we'd need to have an array of "flushing" variables, array of mutices (sharing would render the threads serial),
-          // and array of lock and condition variables (maybe)
-          // also, it may be good to set "flushing" when first control message arrives.  perhaps recvRemaining is a good substitute.
-          // finally, do we still need to have a UnPop function on the queue?
+        // to deal with multiple threads that can use control messages, we'd need to have an array of "flushing" variables, array of mutices (sharing would render the threads serial),
+        // and array of lock and condition variables (maybe)
+        // also, it may be good to set "flushing" when first control message arrives.  perhaps recvRemaining is a good substitute.
+        // finally, do we still need to have a UnPop function on the queue? - probably not.
+        // even when multiple threads creating control messages, a tag can be handled by 1 thread at a time.
 
+        std::unique_lock<std::mutex> lock2(mutex);
+        //assert(recvRemaining.at(tag) == 0);
+        recvRemaining.erase(tag);
+        DEBUG("R here 3");
 
+        lock2.unlock();
 
-          ERRORF("R control message with tag=%d, but flushing contained %d", msg.tag, tag);
-        }
+        DEBUG("R here 4");
+
+        // so unset 'flushing', and unblock flush() via condition variable.
+        waitCondVars.at(tag)->notify_all();
+
+        DEBUG("R here 5");
+
+        DEBUGF("R rank %d tag %d epoch %d flush complete.", commRank, tag, epoch );
         lock.unlock();
       } else {
         // data message.  process it.
@@ -846,12 +864,40 @@ protected:
 
   /**
    * @brief Sends FOC message for the given tag to every MPI process
+   *        Blocks till the flusing of the given tag is completed (i.e., all
+   *        FOC messages have been received).
    *
    * @param tag     The MPI tag to end.
    * @throw bliss::io::IOException  If the sendQueue has been disabled.
+   * @return bool indicating if control messages were successfully sent.
    */
-  void sendControlMessages(int tag) throw (bliss::io::IOException)
+  bool sendControlMessagesAndWait(int tag) throw (bliss::io::IOException)
   {
+    // lock it for the tag - no multiple calls with the same tag.
+    std::unique_lock<std::mutex> lock(*(waitMutices.at(tag)));
+
+    if (tag == CONTROL_TAG) {
+      if (!sendQueue.canPush())
+        throw bliss::io::IOException("M ERROR: sendControlMessages already called with CONTROL_TAG");
+      // else can proceed to send the messages.  don't need to add to recvRemaining.
+    } else {
+      // other tags. check if we are processing one.
+      std::unique_lock<std::mutex> lock2(mutex);
+      // if we haven't seen this epoch, add a new entry.
+      if (recvRemaining.find(tag) == recvRemaining.end()) {
+        recvRemaining[tag] = commSize;  // insert new, and proceed to sending messages
+        lock2.unlock();
+      } else {
+        lock2.unlock();
+        WARNINGF("M WARN : already called sendControlMessages for tag %d.  need to wait", tag);
+        return false;
+        // auto unlocked.
+      }
+    }
+    lock.unlock();
+
+    DEBUG("M here");
+    // should be only 1 thread executing this code below with the provided tag.
 
 
     for (int i = 0; i < getCommSize(); ++i) {
@@ -865,50 +911,46 @@ protected:
         throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
       }
     }
-  }
+    DEBUG("M here2");
 
 
-  /**
-   * @brief Blocks till the flusing of the given tag is completed (i.e., all
-   *        FOC messages have been received).
-   *
-   * @param tag The tag to wait for.
-   * @return boolean flag indicating if we've successfully waited, so caller can try again.
-   */
-  bool waitForControlMessages(int tag) throw (bliss::io::IOException)
-  {
-    // CONCERN:  tracking the tag being flushed using "flushing" opens up the possible problem
+    // if we are sending the control tag, then afterward we are done.
+    if (tag == CONTROL_TAG)
+      sendQueue.disablePush();
+
+
+    DEBUG("M here3");
+
+    // now wait.
+
+    // CONCERN:  tracking the tag being flushed using a shared "flushing" opens up the possible problem
     // when out-of-order calls to flush, finish, and finishCommunications.
 
 
-    int t = NO_TAG;
-
-    std::unique_lock<std::mutex> lock(flushMutex);  // lock it, so we use flushing to indicate we started waiting on a tag.
-
-    // track the tag that is undergoing flush in a thread safe way
-    // control thread (calling flush) sets it, while receive thread
-    // unsets it in the callback function
-    // can only set it if nothing else is flushing.  else it's an error
-    if (!flushing.compare_exchange_strong(t, tag)) {
-      // TODO throw exception?
-      ERROR("M ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << tag);
-
-      return false;
-    }
-    DEBUGF("M rank %d tag %d epoch %d flushed.  flushing changed to %d", commRank, tag, epoch, flushing.load());
-
-
     // waiting for all messages of this tag to flush.
-    DEBUGF("M Rank %d Waiting for tag %d, currently flushing %d", commRank, tag, flushing.load());
+    DEBUGF("M Rank %d Waiting for tag %d", commRank, tag);
 
-    while (flushing.load() == tag) {
+    lock.lock();
+
+    // TODO:  does this need to be locked?  should recvRemaining be for epoch or tag?
+    std::unique_lock<std::mutex> lock2(mutex);
+    bool keepWaiting = recvRemaining.find(tag) != recvRemaining.end();
+    lock2.unlock();
+    DEBUG("M here 4");
+
+    while (keepWaiting) {
       // condition variable waits for notification, which is generated by recv thread
       // when all FOC messages with this tag are received.
-      DEBUGF("M PRE WAIT Rank %d Waiting for tag %d epoch %d, currently flushing %d", commRank, tag, epoch, flushing.load());
-      flushBarrier.wait(lock);
-      DEBUGF("M END WAIT Rank %d Waiting for tag %d epoch %d, currently flushing %d", commRank, tag, epoch, flushing.load());
+      DEBUGF("M PRE WAIT Rank %d Waiting for tag %d epoch %d, currently flushing", commRank, tag, epoch);
+      waitCondVars.at(tag)->wait(lock);
+      DEBUGF("M END WAIT Rank %d Waiting for tag %d epoch %d, currently flushing", commRank, tag, epoch);
+
+      lock2.lock();
+      keepWaiting = (recvRemaining.find(tag) != recvRemaining.end());
+      lock2.unlock();
     }
 
+    DEBUG("M here5");
 
 
 //    if (flushing.load() == tag) {  // precheck before locking.
@@ -925,9 +967,9 @@ protected:
 //      throw bliss::io::IOException("ERROR: waitForEndTags called but currently flushing a different tag.");
 //    }
 
-    DEBUGF("M Rank %d received all END message for TAG %d, epoch = %d, flushing = %d", commRank, tag, epoch, flushing.load());
+    DEBUGF("M Rank %d received all END message for TAG %d, epoch = %d", commRank, tag, epoch);
     ++epoch;
-
+		return true;
   }
 
 
@@ -1211,24 +1253,22 @@ protected:
           //== if the message type is same as CONTROL_TAG, then this is a Application Termination FOC message.
           if (tag == CONTROL_TAG) {
             ep = TERMINAL_EPOCH;  // then use special epoch TERMINAL_EPOCH, which has counter set at commlayer init.
-          } else {
-            // else we are controlling a data message type
-
-            // if we haven't seen this epoch, add a new entry.
-            if (recvRemaining.find(ep) == recvRemaining.end())
-              recvRemaining[ep] = commSize;  // insert new.
+//          } else {
+//            // else we are controlling a data message type
+//
+//            // if we haven't seen this epoch, add a new entry.
+//            if (recvRemaining.find(ep) == recvRemaining.end())
+//              recvRemaining[ep] = commSize;  // insert new.
           }
 //          DEBUGF("C rank %d triaged control message for tag %d epoch %d.  recvRemaining has %ld tags", commRank, tag, epoch, recvRemaining.size());
 
           //== now decrement the count of control messages for a ep
-          --recvRemaining.at(ep);
+          --recvRemaining.at(tag);
           DEBUGF("C RECV rank %d receiving END signal tag %d epoch %d from %d, num senders remaining is %d",
-                 commRank, tag, ep, front.second.src, recvRemaining.at(ep));
+                 commRank, tag, ep, front.second.src, recvRemaining.at(tag));
 
           //== if after decrement the count is 0 for the ep,
-          if (recvRemaining.at(ep) == 0) {
-            // then we've received all end messages for this epoch.  remove it from tracking.
-            recvRemaining.erase(ep);
+          if (recvRemaining.at(tag) == 0) {
 
             //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
 
@@ -1237,7 +1277,7 @@ protected:
               throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
             }
 
-          } else if (recvRemaining.at(ep) < 0) {
+          } else if (recvRemaining.at(tag) < 0) {
             // count decremented to negative.  should not happen.  throw exception.
             std::stringstream ss;
             ss << "C ERROR: number of remaining receivers for tag " << tag << " epoch " << ep << " is now NEGATIVE";
@@ -1306,7 +1346,7 @@ protected:
   /// Message buffers per message tag (maps each tag to a set of buffers, one buffer for each target rank)
   std::unordered_map<int, MessageBuffersType> buffers;
   /// Mutex for adding new tags to the buffers map (since inserts can be multi-threaded)
-  mutable std::mutex buffers_mutex;
+  mutable std::mutex mutex;
 
   // sending threads read, comm-thread modifies
   /// set of active message tags (still accepting new messages)
@@ -1316,19 +1356,17 @@ protected:
   /// Per tag: number of processes that haven't sent the END-TAG message yet
   std::unordered_map<int, int> recvRemaining;
 
+  std::unordered_map<int, std::unique_ptr<std::mutex> > waitMutices;
+  std::unordered_map<int, std::unique_ptr<std::condition_variable> > waitCondVars;
 
-  /// condition variable to make "flush" and "finish" blocking.
-  std::condition_variable flushBarrier;
-  /// Associated mutex for the flushBarrier condition variable
-  mutable std::mutex flushMutex;
-
-  /// Atomic status variable, -1: no flushing, otherwise holds the value of the
-  /// tag which is currently flushed
-  std::atomic<int> flushing;
-
-//  /// Atomic status variable: whether the commlayer is finishing (after all
-//  /// tags have been finished).
-//  std::atomic<bool> finishing;
+//  /// condition variable to make "flush" and "finish" blocking.
+//  std::condition_variable flushBarrier;
+//  /// Associated mutex for the flushBarrier condition variable
+//  mutable std::mutex flushMutex;
+//
+//  /// Atomic status variable, -1: no flushing, otherwise holds the value of the
+//  /// tag which is currently flushed
+//  std::atomic<int> flushing;
 
   /// Atomic status variable: set to true if `finishing` and if all sends are
   /// completed.
