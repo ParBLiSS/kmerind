@@ -365,7 +365,7 @@ class CommunicationLayer
       BufferIdType bufferId;
 
       /// Tag (type) of the message
-      int tag;
+      TaggedEpoch tag;
 
       /// Destination rank, i.e., id of the process where the message is to be sent
       int dst;
@@ -377,8 +377,14 @@ class CommunicationLayer
        * @param _tag  type of the message being sent
        * @param _dst  destination of the message
        */
-      MessageToSend(BufferIdType _id, int _tag, int _dst)
+      MessageToSend(BufferIdType _id, TaggedEpoch _tag, int _dst)
         : bufferId(_id), tag(_tag), dst(_dst) {}
+
+      MessageToSend(BufferIdType _id, int _tag, int _epoch, int _dst)
+        : bufferId(_id), tag(), dst(_dst) {
+        tag.tag = _tag;
+        tag.epoch = _epoch;
+      }
 
       /// default constructor
       MessageToSend() = default;
@@ -926,7 +932,7 @@ protected:
       DEBUGF("M Rank %d sendEndTags %d epoch %d target_rank = %d ", commRank, te.tag, te.epoch, target_rank );
 
       // send the end message for this tag.
-      if (!sendQueue.waitAndPush(std::move(SendQueueElementType(BufferPoolType::ABSENT, te.tag, target_rank)))) {
+      if (!sendQueue.waitAndPush(std::move(SendQueueElementType(BufferPoolType::ABSENT, te.tag, te.epoch, target_rank)))) {
         throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
       }
     }
@@ -1021,7 +1027,7 @@ protected:
       auto id = buffers.at(tag).flushBufferForRank(target_rank);
       // flush/send all remaining non-empty buffers
       if ((id != BufferPoolType::ABSENT) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
-        if (!sendQueue.waitAndPush(std::move(SendQueueElementType(id, tag, target_rank)))) {
+        if (!sendQueue.waitAndPush(std::move(SendQueueElementType(id, tag, NO_EPOCH, target_rank)))) {
           throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
         }
       }
@@ -1060,7 +1066,7 @@ protected:
       // if control message, SendQueueElement will have the
       // "ABSENT" buffer id, while tag is the message type to control
 
-      DEBUGF("C SEND %d -> %d, termination signal for tag %d", commRank, se.dst, se.tag);
+      DEBUGF("C SEND %d -> %d, termination signal for tag %d epoch %d", commRank, se.dst, se.tag.tag, se.tag.epoch);
 
       // termination message for this tag and destination
       if (se.dst == commRank) {
@@ -1069,30 +1075,30 @@ protected:
         // logic in "finishReceive", so can't put into receive queue)
         MPI_Request req = MPI_REQUEST_NULL;
         uint8_t *array = new uint8_t[2 * sizeof(int)];
-        memcpy(array, &(se.tag), sizeof(int));
-        memcpy(array + sizeof(int), &(epoch), sizeof(int));
+        memcpy(array, &(se.tag), 2 * sizeof(int));
+
         recvInProgress.push(std::move(std::pair<MPI_Request,
               MessageReceived>(std::move(req),
                 std::move(MessageReceived(array, 2 * sizeof(int), CONTROL_TAG.tag, commRank)))));
 
-        DEBUGF("C rank %d tag %d epoch %d local send control message to rank %d", commRank, se.tag, epoch, commRank);
+        DEBUGF("C rank %d tag %d epoch %d local send control message to rank %d", commRank, se.tag.tag, se.tag.epoch, commRank);
       } else {
         // remote.  send a terminating message with tag CONTROL_TAG
         // payload is the message type and epoch.  Message Ordering is guaranteed by MPI.
         // Bsend to allow use of preallocated buffer.
-        int stat[2] = {se.tag, epoch};
+        int stat[2] = {se.tag.tag, se.tag.epoch};
         MPI_Bsend(stat, 2, MPI_INT, se.dst, CONTROL_TAG.tag, comm);
-        DEBUGF("C rank %d tag %d epoch %d remote send control message to rank %d", commRank, se.tag, epoch, se.dst);
+        DEBUGF("C rank %d tag %d epoch %d remote send control message to rank %d", commRank, se.tag.tag, se.tag.epoch, se.dst);
       }
     } else {
       // this is an actual data message:
 
       // get message data and it's size
-      void* data = const_cast<void*>(buffers.at(se.tag).getBackBuffer(se.bufferId).getData());
-      auto count = buffers.at(se.tag).getBackBuffer(se.bufferId).getSize();
+      void* data = const_cast<void*>(buffers.at(se.tag.tag).getBackBuffer(se.bufferId).getData());
+      auto count = buffers.at(se.tag.tag).getBackBuffer(se.bufferId).getSize();
 
       if (count == 0) {
-        WARNINGF("C WARNING: NOT SEND %d -> %d: 0 byte message for tag %d, bufferid = %d.", commRank, se.dst, se.tag, se.bufferId);
+        WARNINGF("C WARNING: NOT SEND %d -> %d: 0 byte message for tag %d, bufferid = %d.", commRank, se.dst, se.tag.tag, se.bufferId);
       } else {
 
         if (se.dst == commRank) {
@@ -1102,15 +1108,15 @@ protected:
           memcpy(array, data, count);
 
           // out of order receive, but can only be early, so okay.
-          if (!recvQueue.waitAndPush(std::move(MessageReceived(array, count, se.tag, commRank)))) {
+          if (!recvQueue.waitAndPush(std::move(MessageReceived(array, count, se.tag.tag, commRank)))) {
             throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
           }
           // finished inserting directly to local RecvQueue.  release the buffer
-          buffers.at(se.tag).releaseBuffer(se.bufferId);
+          buffers.at(se.tag.tag).releaseBuffer(se.bufferId);
         } else {
           // remote: initiate async MPI message
           MPI_Request req;
-          MPI_Isend(data, count, MPI_UINT8_T, se.dst, se.tag, comm, &req);
+          MPI_Isend(data, count, MPI_UINT8_T, se.dst, se.tag.tag, comm, &req);
           sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElementType>(std::move(req), std::move(se))));
         }
       }
@@ -1148,7 +1154,7 @@ protected:
         // if there is a buffer, then release it.
         if (front.second.bufferId != BufferPoolType::ABSENT) {
           // cleanup, i.e., release the buffer back into the pool
-          buffers.at(front.second.tag).releaseBuffer(front.second.bufferId);
+          buffers.at(front.second.tag.tag).releaseBuffer(front.second.bufferId);
         }
         // remove the entry from the in-progress queue.
         sendInProgress.pop();
@@ -1265,25 +1271,17 @@ protected:
           //DEBUG("THERE 2a");
 
           // get the message type being controlled, and the ep
-          int tag = front.second.getTag();
-          int ep = front.second.getEpoch();
+          TaggedEpoch te;
+          te.tag = front.second.getTag();
+          te.epoch = front.second.getEpoch();
 
 //          DEBUGF("C rank %d received control message for tag %d epoch %d.  recvRemaining has %ld tags", commRank, tag, epoch, recvRemaining.size());
 
           //== if the message type is same as CONTROL_TAG, then this is a Application Termination FOC message.
-          if (tag == CONTROL_TAG.tag) {
-            ep = NO_EPOCH;  // then use special epoch NO_EPOCH, which has counter set at commlayer init.
-//          } else {
-//            // else we are controlling a data message type
-//
-//            // if we haven't seen this epoch, add a new entry.
-//            if (recvRemaining.find(tag) == recvRemaining.end())
-//              recvRemaining[tag] = commSize;  // insert new.
-          }
 //          DEBUGF("C rank %d triaged control message for tag %d epoch %d.  recvRemaining has %ld tags", commRank, tag, epoch, recvRemaining.size());
 
           // if we are not waiting for the tag, then skip over the remaining of this branch and leave the message in recvInProgress.
-          if (recvRemaining.find(tag) == recvRemaining.end()) {
+          if (recvRemaining.find(te) == recvRemaining.end()) {
             break;  // gives the worker threads a chance to call sendControlMessagesAndWait
 
             // this delays the processing, which hopefully does not create deadlock.
@@ -1294,15 +1292,15 @@ protected:
 
           //== now decrement the count of control messages for a ep
           DEBUGF("C RECV PRE rank %d receiving END signal tag %d epoch %d from %d, recvRemaining size: %ld",
-                 commRank, tag, ep, front.second.src, recvRemaining.size());
-          --(recvRemaining.at(tag));
+                 commRank, te.tag, te.epoch, front.second.src, recvRemaining.size());
+          --(recvRemaining.at(te));
           DEBUGF("C RECV rank %d receiving END signal tag %d epoch %d from %d, num senders remaining is %d",
-                 commRank, tag, ep, front.second.src, recvRemaining.at(tag));
+                 commRank, te.tag, te.epoch, front.second.src, recvRemaining.at(te));
 
           DEBUG("THERE 3a");
 
           //== if after decrement the count is 0 for the ep,
-          if (recvRemaining.at(tag) == 0) {
+          if (recvRemaining.at(te) == 0) {
 
             //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
 
@@ -1312,12 +1310,12 @@ protected:
             }
             DEBUG("THERE 4a");
 
-          } else if (recvRemaining.at(tag) < 0) {
+          } else if (recvRemaining.at(te) < 0) {
             // count decremented to negative.  should not happen.  throw exception.
             DEBUG("THERE 4b");
 
             std::stringstream ss;
-            ss << "C ERROR: number of remaining receivers for tag " << tag << " epoch " << ep << " is now NEGATIVE";
+            ss << "C ERROR: number of remaining receivers for tag " << te.tag << " epoch " << te.epoch << " is now NEGATIVE";
             throw bliss::io::IOException(ss.str());
           }
           // remove pending receive element
