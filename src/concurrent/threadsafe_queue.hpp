@@ -287,7 +287,7 @@ namespace bliss
 
           std::unique_lock<std::mutex> lock(mutex);
           while (!canPush() || isFull()) {
-            // full q.  wait for someone to signal.
+            // full q.  wait for someone to signal (not full && canPush, or !canPush).
             canPushCV.wait(lock);
 
             // to get here, have to have one of these conditions changed:  pushEnabled, !full
@@ -319,7 +319,7 @@ namespace bliss
 
           std::unique_lock<std::mutex> lock(mutex);
           while (!canPush() || isFull()) {
-            // full q.  wait for someone to signal.
+            // full q.  wait for someone to signal  (not full && canPush, or !canPush).
             canPushCV.wait(lock);
 
             // to get here, have to have one of these conditions changed:  pushEnabled, !full
@@ -390,7 +390,7 @@ namespace bliss
 
           std::unique_lock<std::mutex> lock(mutex);
           while (isEmpty()) {
-            // empty q.  wait for someone to signal.
+            // empty q.  wait for someone to signal (when !isEmpty, or !canPop)
             canPopCV.wait(lock);
 
             // if !canPush and queue is empty, then return false.
