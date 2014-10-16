@@ -257,7 +257,7 @@ public:
     this->commLayer.finish(LOOKUP_MPI_TAG);
     this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
 
-    commLayer.finalize();
+    this->commLayer.finalize();
   }
 
 protected:
@@ -524,14 +524,7 @@ public:
    * @brief Destructor.
    */
   virtual ~distributed_multimap() {
-    // finish all three tags in order
-//    this->commLayer.finish(_base_class::INSERT_MPI_TAG);
-//    this->commLayer.finish(_base_class::LOOKUP_MPI_TAG);
-//    this->commLayer.finish(_base_class::LOOKUP_ANSWER_MPI_TAG);
-
-    // called during finalize in baseclass and then in commLayer.
-//    // send the final message to end all communications.
-//	  this->commLayer.finishCommunication();
+    // finishCommunication called in base class dtor
   }
 
   /**

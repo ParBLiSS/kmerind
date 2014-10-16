@@ -1,5 +1,6 @@
 
 #include <mpi.h>
+#include <omp.h>
 #include <unistd.h> // for sleep!
 
 #include <iostream>
@@ -87,7 +88,7 @@ struct Tester
     }
   }
 
-  void test_comm_layer(int repeat_sends=10000)
+  void test_comm_layer(int repeat_sends=10000, int nthreads = 1)
   {
     DEBUG("Testing Comm Layer");
     DEBUG("Size: " << commLayer.getCommSize());
@@ -107,12 +108,15 @@ struct Tester
     for (int it = 0; it < iters; ++it) {
 
       // start sending one message to each:
+#pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank)
       for (int l = 0; l < repeat_sends; ++l)
       {
+        int tid = omp_get_thread_num();
+
         for (int i = 0; i < commLayer.getCommSize(); ++i)
         {
           int msg = generate_message(my_rank, i);
-          DEBUG("Sending " << msg << " to " << i);
+          DEBUG("Thread " << tid << " Sending " << msg << " to " << i);
           commLayer.sendMessage(&msg, sizeof(int), i, FIRST_TAG);
         }
       }
@@ -140,11 +144,15 @@ struct Tester
 
 
     // sending one message to each:
+#pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank)
     for (int l = 0; l < repeat_sends; ++l)
     {
+      int tid = omp_get_thread_num();
+
       for (int i = 0; i < commLayer.getCommSize(); ++i)
       {
         int msg = (my_rank+1)*(i+1);
+        DEBUG("Thread " << tid << " Querying " << msg << " from " << i);
         commLayer.sendMessage(&msg, sizeof(int), i, LOOKUP_TAG);
       }
     }
@@ -186,6 +194,12 @@ struct Tester
 
 int main(int argc, char *argv[])
 {
+  int nthreads = 1;
+  if (argc > 1) {
+    nthreads = atoi(argv[1]);
+  }
+
+
   // set up MPI
   MPI_Init(&argc, &argv);
 
@@ -198,7 +212,7 @@ int main(int argc, char *argv[])
   /* code */
   {
   Tester tester(comm, p);
-  tester.test_comm_layer(10);
+  tester.test_comm_layer(10 * nthreads, nthreads);
 
   MPI_Barrier(comm);
   }
