@@ -386,6 +386,7 @@ namespace bliss
           size_t s = size.fetch_add(count, std::memory_order_relaxed);  // no memory ordering needed within mutex lock
           if (s + count > capacity) {
             size.fetch_sub(count, std::memory_order_relaxed);
+            lock.unlock();
             return false;
           }
           lock.unlock();

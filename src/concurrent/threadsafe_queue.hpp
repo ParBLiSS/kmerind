@@ -236,7 +236,10 @@ namespace bliss
         bool tryPush (T const& data) {
           std::unique_lock<std::mutex> lock(mutex);
 
-          if (!canPush() || isFull()) return false;
+          if (!canPush() || isFull()) {
+            lock.unlock();
+            return false;
+          }
 
           qsize.fetch_add(1, std::memory_order_acq_rel);
           q.push_back(data);   // insert using predefined copy version of dequeue's push function
@@ -258,7 +261,10 @@ namespace bliss
         bool tryPush (T && data) {
           std::unique_lock<std::mutex> lock(mutex);
 
-          if (!canPush() || isFull()) return false;
+          if (!canPush() || isFull()) {
+            lock.unlock();
+            return false;
+          }
 
           qsize.fetch_add(1, std::memory_order_acq_rel);
           q.push_back(std::move(data));    // insert using predefined move version of deque's push function
@@ -291,7 +297,10 @@ namespace bliss
             canPushCV.wait(lock);
 
             // to get here, have to have one of these conditions changed:  pushEnabled, !full
-            if (!canPush()) return false;  // if finished, then no more insertion.  return.
+            if (!canPush()) {
+              lock.unlock();
+              return false;  // if finished, then no more insertion.  return.
+            }
           }
           qsize.fetch_add(1, std::memory_order_acq_rel);
           q.push_back(data);   // insert using predefined copy version of deque's push function
@@ -323,7 +332,10 @@ namespace bliss
             canPushCV.wait(lock);
 
             // to get here, have to have one of these conditions changed:  pushEnabled, !full
-            if (!canPush()) return false;  // if finished, then no more insertion.  return.
+            if (!canPush()) {
+              lock.unlock();
+              return false;  // if finished, then no more insertion.  return.
+            }
           }
 
           qsize.fetch_add(1, std::memory_order_acq_rel);
@@ -350,7 +362,10 @@ namespace bliss
           output.first = false;
 
           std::unique_lock<std::mutex> lock(mutex);
-          if (isEmpty()) return output;
+          if (isEmpty()) {
+            lock.unlock();
+            return output;
+          }
 
           qsize.fetch_sub(1, std::memory_order_acq_rel);
           output.second = std::move(q.front());  // convert to movable reference and move-assign.
@@ -394,7 +409,10 @@ namespace bliss
             canPopCV.wait(lock);
 
             // if !canPush and queue is empty, then return false.
-            if (!canPop()) return output;
+            if (!canPop()) {
+              lock.unlock();
+              return output;
+            }
           }
 
           qsize.fetch_sub(1, std::memory_order_acq_rel);
