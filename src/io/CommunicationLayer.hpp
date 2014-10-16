@@ -271,6 +271,12 @@ class CommunicationLayer
          return std::hash<int64_t>()(v.tagged_epoch);
        }
    };
+   struct TaggedEpochEqual {
+       inline bool operator()(const TaggedEpoch& lhs, const TaggedEpoch& rhs) const
+       {
+         return std::equal_to<int64_t>()(lhs.tagged_epoch, rhs.tagged_epoch);
+       }
+   };
 
    /// constant indicating message type is control (FOC) message.
    static constexpr TaggedEpoch CONTROL_TAG{ 0  };
@@ -527,12 +533,15 @@ class CommunicationLayer
           recvInProgress(), sendInProgress(),
           td()
         {
+        	int comm_size;
+        	MPI_Comm_size(communicator, &comm_size);
+
 
           //===== initialize the mpi buffer for control messaging, for MPI_Bsend
           int mpiBufSize = 0;
           // arbitrary, 4X commSize, each has 2 ints, one for tag, one for epoch id,.
-          MPI_Pack_size(commLayer.commSize * 4 * 2, MPI_INT, comm, &mpiBufSize);
-          mpiBufSize += commLayer.commSize * 4 * MPI_BSEND_OVERHEAD;
+          MPI_Pack_size(comm_size * 4 * 2, MPI_INT, communicator, &mpiBufSize);
+          mpiBufSize += comm_size * 4 * MPI_BSEND_OVERHEAD;
           char* mpiBuf = (char*)malloc(mpiBufSize);
           MPI_Buffer_attach(mpiBuf, mpiBufSize);
         };
@@ -628,7 +637,6 @@ class CommunicationLayer
 
 
 
-
           // try to get the send element
           auto el = std::move(commLayer.sendQueue.tryPop());
           if (!el.first) {  // no valid entry in the queue
@@ -636,6 +644,7 @@ class CommunicationLayer
           }
           // else there is a valid entry from sendQueue
 
+          DEBUGF("typename for el is %s ,expected ControlMessage&", typeid(decltype(el.second)).name());
 
           if (el.second.tag == CONTROL_TAG.tag) {
             // if control message,
@@ -654,8 +663,7 @@ class CommunicationLayer
 //              uint8_t *array = new uint8_t[sizeof(TaggedEpoch)];
 //              memcpy(array, &(te), sizeof(TaggedEpoch));
 
-              recvInProgress.push(std::move(std::pair<MPI_Request,
-                    MPIMessage>(std::move(req),
+              recvInProgress.push(std::move(std::make_pair(std::move(req),
                       std::move(ControlMessage(te, commLayer.commRank)))));
 
               DEBUGF("C rank %d tag %d epoch %d local send control message to rank %d", commLayer.commRank, te.tag, te.epoch, commLayer.commRank);
@@ -694,7 +702,7 @@ class CommunicationLayer
                 // remote: initiate async MPI message
                 MPI_Request req;
                 MPI_Isend(data, count, MPI_UINT8_T, se.rank, se.tag, comm, &req);
-                sendInProgress.push(std::move(std::pair<MPI_Request, MPIMessage>(std::move(req), std::move(se))));
+                sendInProgress.push(std::move(std::make_pair(std::move(req), std::move(se))));
               }
             }
           }
@@ -715,7 +723,7 @@ class CommunicationLayer
           while(!sendInProgress.empty())
           {
             // get the first request to check
-            std::pair<MPI_Request, MPIMessage>& front = sendInProgress.front();
+            auto front = sendInProgress.front();
 
             // check if MPI request has completed.
             if (front.first == MPI_REQUEST_NULL) {
@@ -799,7 +807,7 @@ class CommunicationLayer
 
               req = MPI_REQUEST_NULL;
               // insert into the received InProgress queue.
-              recvInProgress.push(std::pair<MPI_Request, MPIMessage>(req, msg));
+              recvInProgress.push(std::move(std::make_pair(std::move(req), std::move(msg))));
 
             } else {  // data messages
               MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &received_count);
@@ -808,8 +816,8 @@ class CommunicationLayer
               MPI_Irecv(msg_data, received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
 
               // insert into the received InProgress queue.
-              recvInProgress.push(std::pair<MPI_Request, MPIMessage>(req,
-                    DataMessageReceived(msg_data, received_count, tag, src)));  //TODO: received count differ based on tag.
+              recvInProgress.push(std::move(std::make_pair(std::move(req),
+                    std::move(DataMessageReceived(msg_data, received_count, tag, src)))));  //TODO: received count differ based on tag.
             }
 
           }
@@ -837,7 +845,7 @@ class CommunicationLayer
           while(!recvInProgress.empty())
           {
             // get the request
-            std::pair<MPI_Request, MPIMessage>& front = recvInProgress.front();
+            auto front = recvInProgress.front();
 
             if (front.first == MPI_REQUEST_NULL) {  // if local messages
               finished = 1;  // then this request is complete
@@ -1268,11 +1276,11 @@ public:
       // create new message buffer
       buffers[tag] = std::move(MessageBuffersType(commSize, 8192, 2 * commSize));
     }
+    lock.unlock();
 
     // now tell the callback thread to register the callbacks.
     callbackThread.addReceiveCallback(tag, callbackFunction);
 
-    lock.unlock();
 
   }
 
@@ -1665,7 +1673,7 @@ protected:
   std::unordered_map<int, TagMetadata > ctrlMsgProperties;
 
   /// Per tag: number of processes that haven't sent the END-TAG message yet
-  std::unordered_map<TaggedEpoch, int, TaggedEpochHash > ctrlMsgRemainingForEpoch;
+  std::unordered_map<TaggedEpoch, int, TaggedEpochHash, TaggedEpochEqual > ctrlMsgRemainingForEpoch;
 
   CommThread commThread;
 
