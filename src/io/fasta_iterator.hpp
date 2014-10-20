@@ -34,7 +34,6 @@
 
 namespace bliss
 {
-
   namespace io
   {
     /**
@@ -42,34 +41,51 @@ namespace bliss
      * @brief     represents a fasta sequence's id, also used for id of the FASTA file, and for position inside a FASTA sequence.
      * @detail    this is set up as a union to allow easy serialization
      *            and parsing of the content.
-     *            this keeps a 16 bit sequence id indicating its index
-     *                       an 8 bit file id
-     *                       a 40 bit as global offset in the file, broken up into 32 bit id and 8 significant bit id       
      *
-     *            A separate FASTA version will have a different fields but keeps the same 64 bit total length.
+     *            this keeps a 48 bit sequence ID, broken up into a 32 bit id and 16 bit significant bit id
+     *                       a 16 bit file id
+     *                       a 64 bit position within the sequence, broken up into 32 bit id and 32 significant bit id.
      *
-     *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
+     *            FASTQ version has different fields but keeps the same 64 bit total length.
+     *            This design of representing id can use the FASTQ parser's logic 
+     *
      */
     union FASTASequenceId
     {
-        /// the concatenation of the id components as a single unsigned 64 bit field
-        uint64_t composite;
+      /// the concatenation of the id components as a single unsigned 128 bit field
+      unsigned __int128 composite;
 
-        /// the id field components
-        struct
-        {  
-            /// sequence's id, the index of the sequence in the containing file
-            uint16_t seq_id;
-            /// id of fasta file
-            uint8_t file_id;
-            /// offset within the read , upper 8 of 40 bytes  (potentially as offset in the containing file)
-            uint32_t pos_msb;
-            /// offset within the read , lower 32 of 40 bytes (potentially as offset in the containing file)
-            uint8_t pos_id;
-        } components;
+      /// the id field components
+      struct
+      {  
+        /// sequence's id, lower 32 of 48 bits (potentially as offset in the containing file)
+        uint32_t seq_id;
+        /// sequence's id, upper 16 of 48 bits (potentially as offset in the containing file)
+        uint16_t seq_msb;
+        /// id of fasta file
+        uint16_t file_id;
+        /// offset within the FaSTA record, lower 32 of 64 bytes
+        uint32_t pos_id;
+        /// offset within the FASTA record, upper 32 of 64 bytes 
+        uint32_t pos_msb;
+      } components;
     };
 
+    template<typename Iterator, typename Alphabet>
+      struct Sequence
+      {
+        /// Type of the sequence elements
+        using ValueType = typename std::iterator_traits<Iterator>::value_type;
+        /// The alphabet this sequence uses
+        typedef Alphabet AlphabetType;
+        /// Iterator type for traversing the sequence.
+        typedef Iterator IteratorType;
 
+        /// begin iterator for the sequence
+        Iterator seqBegin;
+        /// end iterator for the sequence.
+        Iterator seqEnd;
+      };
 
   }
 }
