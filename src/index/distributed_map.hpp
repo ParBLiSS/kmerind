@@ -87,9 +87,9 @@ public:
    *
    * @return Iterator to the first local element.
    */
-  local_const_iterator begin() const
+  local_const_iterator cbegin() const
   {
-    return local_map.begin();
+    return local_map.cbegin();
   }
 
   /**
@@ -98,9 +98,9 @@ public:
    *
    * @return Iterator the the element following the last local element.
    */
-  local_const_iterator end() const
+  local_const_iterator cend() const
   {
-    return local_map.end();
+    return local_map.cend();
   }
 
   /**
@@ -122,18 +122,22 @@ public:
   void flush()
   {
 //    DEBUGF("FLUSH DISTR MAP");
-
-    if (has_pending_inserts)
-    {
+//    std::unique_lock<std::mutex> lock(mutex);
+//    if (has_pending_inserts.load())
+//    {
       this->commLayer.flush(INSERT_MPI_TAG);
-      has_pending_inserts = false;
-    }
-    if (has_pending_lookups)
-    {
+//      has_pending_inserts.store(false);
+//    }
+//    lock.unlock();
+
+//    lock.lock();
+//    if (has_pending_lookups.load())
+//    {
       this->commLayer.flush(LOOKUP_MPI_TAG);
       this->commLayer.flush(LOOKUP_ANSWER_MPI_TAG);
-      has_pending_lookups = false;
-    }
+//      has_pending_lookups.store(false);
+//    }
+//    lock.unlock();
   }
 
   /**
@@ -153,8 +157,9 @@ public:
     }
 
     const int targetRank = this->getTargetRank(key);
+
     this->sendKey(key, targetRank, LOOKUP_MPI_TAG);
-    has_pending_lookups = true;
+    has_pending_lookups.store(true);
   }
 
   /**
@@ -179,7 +184,7 @@ public:
    * @param count   The key count threshold. Everything lower than this will be
    *                removed.
    */
-  void filter(const std::size_t count)
+  void filter(const std::size_t lower_threshold)
   {
     // iterate through all keys
     for (auto iter = this->local_map.begin(); iter!=this->local_map.end();)
@@ -187,7 +192,7 @@ public:
       // get end of the range of identical key
       auto cur_end_iter = this->local_map.equal_range(iter->first)->second;
       std::size_t cur_count = getLocalCount(local_map, iter);
-      if (cur_count < count)
+      if (cur_count < lower_threshold)
       {
         // remove all entries with this key, this will invalidate the `iter`
         // iterator
@@ -461,6 +466,9 @@ protected:
   /// The async callback function, which is called when an answer to a
   /// lookup query is received
   std::function<void(std::pair<K, T>&)> lookupAnswerCallbackFunc;
+
+  std::mutex mutex;
+
 };
 
 

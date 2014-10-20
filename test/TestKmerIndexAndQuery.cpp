@@ -98,22 +98,35 @@ int main(int argc, char** argv) {
 
 
   // initialize index
+  printf("***** initializing index.\n");
   bliss::index::KmerPositionIndex<21, DNA> kmer_index(comm, nprocs);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  kmer_index.build(filename, nthreads, chunkSize);
+  printf("***** building index first pass.\n");
 
-  MPI_Barrier(comm);
-  sleep(5);
-  INFO("COUNT " << rank << " Index Building for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+  kmer_index.build(filename, nthreads, chunkSize);
+  //kmer_index.flush();
+
+//  MPI_Barrier(comm);
+  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+  std::cout << "COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size() << std::endl;
+  std::cout << std::flush;
+
+  fprintf(stderr, "COUNT %d index built pass 1 with index size: %ld\n", rank, kmer_index.local_size());
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+  printf("***** building index second pass.\n");
   kmer_index.build(filename, nthreads, chunkSize);
-  MPI_Barrier(comm);
-  sleep(5);
-  INFO("COUNT " << rank << " Index Building for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+  //kmer_index.flush();
 
+//  MPI_Barrier(comm);
+//  sleep(5);
+  //INFO("COUNT " << rank << " Index Building 2 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+  std::cout << "COUNT " << rank << " Index Building 2 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size() << std::endl;
+  std::cout << std::flush;
   //// query:  use the same file as input.  walk through and generate kmers as before.  send query
+
+  fprintf(stderr, "COUNT %d index built pass 2 with index size: %ld\n", rank, kmer_index.local_size());
 
 
   kmer_index.finalize();
@@ -142,6 +155,8 @@ int main(int argc, char** argv) {
   MPI_Finalize();
 
   DEBUGF("M Rank %d called MPI_Finalize", rank);
+
+  std::cout << std::flush;
 
   return 0;
 }

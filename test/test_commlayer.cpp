@@ -13,6 +13,7 @@
 int my_rank;
 volatile int msgs_received = 0;
 volatile int answers_received = 0;
+volatile int iters;
 
 struct Tester
 {
@@ -22,12 +23,12 @@ struct Tester
 
   int generate_message(int srcRank, int dstRank)
   {
-    return srcRank + dstRank + 13;
+    return (srcRank + 1) * iters * 10 + (dstRank + 1);
   }
 
   void receivedCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
-    DEBUG("Rank " << my_rank << " received " << count << " message from process: " << fromRank);
+    //DEBUG("Rank " << my_rank << " received " << count << " message from process: " << fromRank);
 
     // first: deserialize
     int* msgs = reinterpret_cast<int*>(msg);
@@ -39,7 +40,8 @@ struct Tester
       // check that the message is as expected
       if(msgs[i] != generate_message(fromRank, my_rank))
       {
-        DEBUG("ERROR: message not as expected: " << msgs[i]);
+        ERROR("ERROR: message not as expected.  Expected: " << generate_message(fromRank, my_rank) << " Actual: "<< msgs[i] << "");
+        ERROR("my rank: " << my_rank << " from rank " << fromRank);
         exit(EXIT_FAILURE);
       }
       else
@@ -62,7 +64,7 @@ struct Tester
       // check that the message is as expected
       if(msgs[i] != (fromRank+1)* (my_rank+1))
       {
-        DEBUG("ERROR: LOOKUP message not as expected: " << msgs[i]);
+        ERROR("ERROR: LOOKUP message not as expected: " << msgs[i]);
         exit(EXIT_FAILURE);
       }
       int msg = msgs[i] + 13;
@@ -81,7 +83,7 @@ struct Tester
       // check that the message is as expected
       if(msgs[i] != (fromRank+1)* (my_rank+1) + 13)
       {
-        DEBUG("ERROR: ANSWER message not as expected: " << msgs[i]);
+        ERROR("ERROR: ANSWER message not as expected: " << msgs[i]);
         exit(EXIT_FAILURE);
       }
       ++answers_received;
@@ -116,7 +118,7 @@ struct Tester
         for (int i = 0; i < commLayer.getCommSize(); ++i)
         {
           int msg = generate_message(my_rank, i);
-          DEBUG("Thread " << tid << " Sending " << msg << " to " << i);
+//          if (l % 10000) DEBUG("Thread " << tid << " Sending " << msg << " to " << i);
           commLayer.sendMessage(&msg, sizeof(int), i, FIRST_TAG);
         }
       }
@@ -133,8 +135,8 @@ struct Tester
     // check that all messages have been received
     if (msgs_received != repeat_sends * commLayer.getCommSize() * iters)
     {
-      DEBUG("ERROR: wrong amount of messages received in phase 1");
-      DEBUG("received: " << msgs_received << ", should: " << repeat_sends * commLayer.getCommSize());
+      ERROR("ERROR: wrong amount of messages received in phase 1");
+      ERROR("received: " << msgs_received << ", should: " << repeat_sends * commLayer.getCommSize());
       exit(EXIT_FAILURE);
     }
 
@@ -152,7 +154,7 @@ struct Tester
       for (int i = 0; i < commLayer.getCommSize(); ++i)
       {
         int msg = (my_rank+1)*(i+1);
-        DEBUG("Thread " << tid << " Querying " << msg << " from " << i);
+//        if (l % 10000) DEBUG("Thread " << tid << " Querying " << msg << " from " << i);
         commLayer.sendMessage(&msg, sizeof(int), i, LOOKUP_TAG);
       }
     }
@@ -164,17 +166,16 @@ struct Tester
     // check that all messages have been received correctly
     if (answers_received != repeat_sends * commLayer.getCommSize())
     {
-      DEBUG("ERROR: wrong amount of messages received in phase 2");
+      ERROR("ERROR: wrong amount of messages received in phase 2");
       exit(EXIT_FAILURE);
     }
 
-    commLayer.finish(FIRST_TAG);
-
-
+//    commLayer.finish(FIRST_TAG);
 //    commLayer.finishTag(LOOKUP_TAG);
 //    commLayer.finishTag(ANSWER_TAG);
     commLayer.finishCommunication();
 
+    DEBUG("SENT: " << msgs_received << " ANSWERS: " << answers_received);
 
     DEBUG("This was a triumph.");
     sleep(1);
@@ -199,6 +200,10 @@ int main(int argc, char *argv[])
     nthreads = atoi(argv[1]);
   }
 
+  iters = 10 * nthreads;
+  if (argc > 2) {
+    iters = atoi(argv[2]);
+  }
 
   // set up MPI
   MPI_Init(&argc, &argv);
@@ -212,7 +217,7 @@ int main(int argc, char *argv[])
   /* code */
   {
   Tester tester(comm, p);
-  tester.test_comm_layer(10 * nthreads, nthreads);
+  tester.test_comm_layer(iters, nthreads);
 
   MPI_Barrier(comm);
   }

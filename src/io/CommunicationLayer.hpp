@@ -696,9 +696,9 @@ class CommunicationLayer
 
 //              DEBUGF("C rank %d tag %d epoch %d local send control message to rank %d", commLayer.commRank, te.tag, te.epoch, commLayer.commRank);
             } else {
-              // remote.  send a terminating message with tag CONTROL_TAG
-              // payload is the message type and epoch.  Message Ordering is guaranteed by MPI.
-              // Bsend to allow use of preallocated buffer.
+//               remote.  send a terminating message with tag CONTROL_TAG
+//               payload is the message type and epoch.  Message Ordering is guaranteed by MPI.
+//               Bsend to allow use of preallocated buffer.
               MPI_Bsend(&(te), 2, MPI_INT, se->rank, CONTROL_TAG.tag, comm);
 
 //              std::unique_ptr<ControlMessage> dmr(new ControlMessage(TaggedEpoch(), se->rank));
@@ -719,9 +719,7 @@ class CommunicationLayer
             void* data = const_cast<void*>(commLayer.buffers.at(se->tag).getBackBuffer(se->bufferId).getData());
             auto count = commLayer.buffers.at(se->tag).getBackBuffer(se->bufferId).getSize();
 
-            if (count == 0) {
-              WARNINGF("C WARNING: NOT SEND %d -> %d: 0 byte message for tag %d, bufferid = %d.", commLayer.commRank, se->rank, se->tag, se->bufferId);
-            } else {
+            if (count > 0) {
 
               if (se->rank == commLayer.commRank) {
                 // local, directly handle by creating an output object and directly
@@ -766,7 +764,10 @@ class CommunicationLayer
                 assert(sendInProgress.back().second.get() != nullptr);
 
               }
+//            } else {
+//              WARNINGF("C WARNING: NOT SEND %d -> %d: 0 byte message for tag %d, bufferid = %d.", commLayer.commRank, se->rank, se->tag, se->bufferId);
             }
+
           }
 
         }
@@ -813,7 +814,7 @@ class CommunicationLayer
             else
             {
               // the head of the queue is not finished, so break and get it later.
-              DEBUGF("not done sending!");
+              //DEBUGF("not done sending!");
               break;
             }
           }
@@ -846,7 +847,9 @@ class CommunicationLayer
           // probe for messages
           int hasMessage = 0;
           MPI_Status status;
-          MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
+
+          if (commLayer.commSize > 1)
+            MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
 
           // if have message to receive,
           if (hasMessage > 0) {
@@ -1684,6 +1687,8 @@ protected:
 //    }
 //    //DEBUGF("Active Buffer Ids in message buffer: %s", buffers.at(tag).bufferIdsToString().c_str());
 
+    std::unique_lock<std::mutex> lock = std::move(ctrlMsgProperties.at(tag).getUniqueLock());
+
     // flush out all the send buffers matching a particular tag.
     int idCount = buffers.at(tag).getBufferIdsForAllRanks().size();
     assert(idCount == commSize);
@@ -1699,10 +1704,13 @@ protected:
         std::unique_ptr<SendDataElementType> msg(new SendDataElementType(id, tag, target_rank));
 
         if (!sendQueue.waitAndPush(std::move(msg))) {
+          lock.unlock();
           throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
         }
       }
     }
+
+    lock.unlock();
   }
 
 

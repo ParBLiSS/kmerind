@@ -146,6 +146,10 @@ namespace bliss
           return index.local_size();
         }
 
+        void flush() {
+          index.flush();
+        }
+
         /**
          * build index, default to num of threads = system PAGE SIZE
          * @param filename

@@ -241,10 +241,11 @@ namespace bliss
             return false;
           }
 
+          //std::unique_lock<std::mutex> lock(mutex);
           qsize.fetch_add(1, std::memory_order_acq_rel);
           q.push_back(data);   // insert using predefined copy version of dequeue's push function
-
           lock.unlock();
+
           canPopCV.notify_one();
           return true;
         }
@@ -266,10 +267,11 @@ namespace bliss
             return false;
           }
 
+//          std::unique_lock<std::mutex> lock(mutex);
           qsize.fetch_add(1, std::memory_order_acq_rel);
           q.push_back(std::move(data));    // insert using predefined move version of deque's push function
-
           lock.unlock();
+
           canPopCV.notify_one();
           return true;
         }
@@ -367,11 +369,12 @@ namespace bliss
             return output;
           }
 
-          qsize.fetch_sub(1, std::memory_order_acq_rel);
+          //std::unique_lock<std::mutex> lock(mutex);
           output.second = std::move(q.front());  // convert to movable reference and move-assign.
           q.pop_front();
-
+          qsize.fetch_sub(1, std::memory_order_relaxed);
           lock.unlock();
+
           output.first = true;
           canPushCV.notify_one();
 
