@@ -995,6 +995,8 @@ class CommunicationLayer
 
                   //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
 
+                	if (commLayer.recvQueue.isFull()) fprintf(stderr, "Rank %d recvQueue is full for control!!!", commLayer.commRank);
+
                   // and enqueue ONE FOC message for this tag to be handled by callback.  (reduction from commSize to 1)
                   if (!commLayer.recvQueue.waitAndPush(std::move(front.second))) {
                     throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
@@ -1008,6 +1010,7 @@ class CommunicationLayer
                   throw bliss::io::IOException(ss.str());
                 }
               } else {
+              	if (commLayer.recvQueue.isFull()) fprintf(stderr, "Rank %d recvQueue is full for data!!!", commLayer.commRank);
 
                 //==== Data message.  add the received messages into the recvQueue
                 if (!commLayer.recvQueue.waitAndPush(std::move(front.second))) {
@@ -1308,6 +1311,8 @@ public:
           // have a non-empty buffer - put in send queue.
 
           std::unique_ptr<SendDataElementType> msg(new SendDataElementType(fullId, tag, dst_rank));
+
+          if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for data msgs", commRank);
 
           if (!sendQueue.waitAndPush(std::move(msg))) {
             throw bliss::io::IOException("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
@@ -1623,6 +1628,8 @@ protected:
       // send the end message for this tag.
       std::unique_ptr<ControlMessage> msg(new ControlMessage(te, target_rank));
 
+
+      if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for control msgs", commRank);
       if (!sendQueue.waitAndPush(std::move(msg))) {
         lock.unlock();
         throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
@@ -1702,6 +1709,8 @@ protected:
       // flush/send all remaining non-empty buffers
       if ((id != BufferPoolType::ABSENT) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
         std::unique_ptr<SendDataElementType> msg(new SendDataElementType(id, tag, target_rank));
+
+        if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for flushBuffers", commRank);
 
         if (!sendQueue.waitAndPush(std::move(msg))) {
           lock.unlock();

@@ -118,7 +118,7 @@ struct Tester
         for (int i = 0; i < commLayer.getCommSize(); ++i)
         {
           int msg = generate_message(my_rank, i);
-//          if (l % 10000) DEBUG("Thread " << tid << " Sending " << msg << " to " << i);
+//          if (l % 10000 == 0) DEBUG("Thread " << tid << " Sending " << msg << " to " << i);
           commLayer.sendMessage(&msg, sizeof(int), i, FIRST_TAG);
         }
       }
@@ -154,7 +154,7 @@ struct Tester
       for (int i = 0; i < commLayer.getCommSize(); ++i)
       {
         int msg = (my_rank+1)*(i+1);
-//        if (l % 10000) DEBUG("Thread " << tid << " Querying " << msg << " from " << i);
+//        if (l % 10000 == 0) DEBUG("Thread " << tid << " Querying " << msg << " from " << i);
         commLayer.sendMessage(&msg, sizeof(int), i, LOOKUP_TAG);
       }
     }
