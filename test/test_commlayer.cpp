@@ -11,9 +11,9 @@
 //#define DEBUG(msg) std::cerr << msg << std::endl;
 
 int my_rank;
-volatile int msgs_received = 0;
-volatile int answers_received = 0;
-volatile int iters;
+std::atomic<int> msgs_received(0);
+std::atomic<int> answers_received(0);
+int iters;
 
 struct Tester
 {
@@ -47,7 +47,7 @@ struct Tester
       else
       {
         // DEBUG("SUCCESS: message received");
-        ++msgs_received;
+        msgs_received.fetch_add(1);
       }
     }
   }
@@ -86,7 +86,7 @@ struct Tester
         ERROR("ERROR: ANSWER message not as expected: " << msgs[i]);
         exit(EXIT_FAILURE);
       }
-      ++answers_received;
+      answers_received.fetch_add(1);
     }
   }
 
@@ -113,7 +113,6 @@ struct Tester
 #pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank)
       for (int l = 0; l < repeat_sends; ++l)
       {
-        int tid = omp_get_thread_num();
 
         for (int i = 0; i < commLayer.getCommSize(); ++i)
         {
@@ -127,29 +126,35 @@ struct Tester
         sleep(1);
       }
 
+      DEBUG("thread " << omp_get_thread_num() << " messages received = " << msgs_received.load());
+
       // call the flush function for this tag
       commLayer.flush(FIRST_TAG);
+
+      //=== debug messages show that there are no messages waiting.  so where are the missing messages?
+      DEBUG("thread " << omp_get_thread_num() << " flushed. messages received = " << msgs_received.load());
+
+
     }
 
 
     // check that all messages have been received
-    if (msgs_received != repeat_sends * commLayer.getCommSize() * iters)
+    if (msgs_received.load() != repeat_sends * commLayer.getCommSize() * iters)
     {
       ERROR("ERROR: wrong amount of messages received in phase 1");
-      ERROR("received: " << msgs_received << ", should: " << repeat_sends * commLayer.getCommSize());
+      ERROR("received: " << msgs_received.load() << ", should: " << repeat_sends * commLayer.getCommSize() * iters);
       exit(EXIT_FAILURE);
     }
 
 
     /* phase 2 communication */
-
+    msgs_received.store(0);
 
 
     // sending one message to each:
 #pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank)
     for (int l = 0; l < repeat_sends; ++l)
     {
-      int tid = omp_get_thread_num();
 
       for (int i = 0; i < commLayer.getCommSize(); ++i)
       {
@@ -160,13 +165,19 @@ struct Tester
     }
 
     // flush both tags
+    DEBUG("thread " << omp_get_thread_num() << " query messages received = " << msgs_received.load());
     commLayer.flush(LOOKUP_TAG);
+    DEBUG("thread " << omp_get_thread_num() << " query messages received = " << msgs_received.load());
+
+    DEBUG("thread " << omp_get_thread_num() << " answer messages received = " << msgs_received.load());
     commLayer.flush(ANSWER_TAG);
+    DEBUG("thread " << omp_get_thread_num() << " answer messages received = " << msgs_received.load());
 
     // check that all messages have been received correctly
     if (answers_received != repeat_sends * commLayer.getCommSize())
     {
       ERROR("ERROR: wrong amount of messages received in phase 2");
+      ERROR("received: " << answers_received.load() << ", should: " << repeat_sends * commLayer.getCommSize());
       exit(EXIT_FAILURE);
     }
 

@@ -531,23 +531,23 @@ class CommunicationLayer
 
 
 
-    // ==== comm thread class.  for organization.
+    // ==== send comm thread class.  for organization.
     // TODO: group the code for comm thread
-    class CommThread
+    class SendCommThread
     {
       public:
-        CommThread(CommunicationLayer& _comm_layer, const MPI_Comm& communicator) :
+        SendCommThread(CommunicationLayer& _comm_layer, const MPI_Comm& communicator) :
           commLayer(_comm_layer),
           comm(communicator),
-          sendDone(false), recvDone(false),
-          recvInProgress(), sendInProgress(),
+          sendDone(false),
+          sendInProgress(),
           td()
         {
         };
 
-        CommThread() = delete;
+        SendCommThread() = delete;
 
-        virtual ~CommThread() {
+        virtual ~SendCommThread() {
         }
 
         void start() {
@@ -564,7 +564,7 @@ class CommunicationLayer
             char* mpiBuf = (char*)malloc(mpiBufSize);
             MPI_Buffer_attach(mpiBuf, mpiBufSize);
 
-            td = std::move(std::thread(&bliss::io::CommunicationLayer::CommThread::run, this));
+            td = std::move(std::thread(&bliss::io::CommunicationLayer::SendCommThread::run, this));
           } // else already started the thread.
         }
 
@@ -572,7 +572,7 @@ class CommunicationLayer
           if (td.joinable()) {
             td.join();
 
-            DEBUGF("C commThread finished, thread joined.  about to detach mpi buffer.");
+            DEBUGF("C sendCommThread finished, thread joined.  about to detach mpi buffer.");
 
             // detach the buffer for Bsend.
             int mpiBufSize;
@@ -594,17 +594,6 @@ class CommunicationLayer
         /// completed.
         std::atomic<bool> sendDone;
 
-        /// Atomic status variable: set to true if `finishing` and if all receives
-        /// are completed.
-        std::atomic<bool> recvDone;
-
-
-        /* Queues of pending MPI operations (MPI_Requests)
-         * Used ONLY by the comm-thread, purely internal and purely single thread.
-         */
-        /// Queue of pending MPI receive operations
-        std::deque<std::pair<MPI_Request, std::unique_ptr<MPIMessage> > > recvInProgress;
-
         /// Queue of pending MPI send operations
         std::deque<std::pair<MPI_Request, std::unique_ptr<MPIMessage> > > sendInProgress;
 
@@ -625,14 +614,10 @@ class CommunicationLayer
           DEBUGF("C THREAD STARTED:  comm-thread on %d", commLayer.commRank);
 
           // while there's still work to be done:
-          while (!sendDone.load() || !recvDone.load())
+          while (!sendDone.load())
           {
             // first clean up finished operations
             finishSends();
-            finishReceives();
-
-            // start pending receives
-            tryStartReceive();
             // start pending sends
             tryStartSend();
           }
@@ -690,9 +675,13 @@ class CommunicationLayer
               assert(el.second.get() == nullptr);
               assert(pair.second.get() != nullptr);
 
-              recvInProgress.push_back(std::move(pair));
-              assert(pair.second.get() == nullptr);
-              assert(recvInProgress.back().second.get() != nullptr);
+//              commLayer.recvInProgress.push_back(std::move(pair));
+//              assert(pair.second.get() == nullptr);
+//              assert(commLayer.recvInProgress.back().second.get() != nullptr);
+
+              if (!commLayer.recvInProgress.waitAndPush(std::move(pair)) ) {
+                throw bliss::io::IOException("recvInProgress queue is disabled!");
+              }
 
 //              DEBUGF("C rank %d tag %d epoch %d local send control message to rank %d", commLayer.commRank, te.tag, te.epoch, commLayer.commRank);
             } else {
@@ -737,11 +726,14 @@ class CommunicationLayer
                 assert(dmr.get() == nullptr);
                 assert(pair.second.get() != nullptr);
 
-                recvInProgress.push_back(std::move(pair));
-                assert(pair.second.get() == nullptr);
+//                commLayer.recvInProgress.push_back(std::move(pair));
+//                assert(pair.second.get() == nullptr);
+//
+//                assert(commLayer.recvInProgress.back().second.get() != nullptr);
 
-                assert(recvInProgress.back().second.get() != nullptr);
-
+                if (!commLayer.recvInProgress.waitAndPush(std::move(pair)) ) {
+                  throw bliss::io::IOException("recvInProgress queue is disabled!");
+                }
 
 //                // out of order receive, but can only be early, so okay.
 //                if (!commLayer.recvQueue.waitAndPush(std::move(dmr))) {
@@ -834,6 +826,102 @@ class CommunicationLayer
           }
         }
 
+    };
+
+
+
+
+    // ==== comm Recv thread class.  for organization.
+    // TODO: group the code for comm thread
+    class RecvCommThread
+    {
+      public:
+        RecvCommThread(CommunicationLayer& _comm_layer, const MPI_Comm& communicator) :
+          commLayer(_comm_layer),
+          comm(communicator),
+          recvDone(false),
+          td()
+        {
+        };
+
+        RecvCommThread() = delete;
+
+        virtual ~RecvCommThread() {
+        }
+
+        void start() {
+          int comm_size;
+          MPI_Comm_size(comm, &comm_size);
+
+          if (!td.joinable()) {
+
+            //===== initialize the mpi buffer for control messaging, for MPI_Bsend
+            int mpiBufSize = 0;
+            // arbitrary, 4X commSize, each has 2 ints, one for tag, one for epoch id,.
+            MPI_Pack_size(comm_size * 4 * 2, MPI_INT, comm, &mpiBufSize);
+            mpiBufSize += comm_size * 4 * MPI_BSEND_OVERHEAD;
+            char* mpiBuf = (char*)malloc(mpiBufSize);
+            MPI_Buffer_attach(mpiBuf, mpiBufSize);
+
+            td = std::move(std::thread(&bliss::io::CommunicationLayer::RecvCommThread::run, this));
+          } // else already started the thread.
+        }
+
+        void finish() {
+          if (td.joinable()) {
+            td.join();
+
+            DEBUGF("C recvCommThread finished, thread joined.  about to detach mpi buffer.");
+
+            // detach the buffer for Bsend.
+            int mpiBufSize;
+            char* mpiBuf;
+            MPI_Buffer_detach(&mpiBuf, &mpiBufSize);
+            free(mpiBuf);
+          } // else already joined.
+
+        }
+
+      protected:
+        // parent, in which the thread runs.
+        CommunicationLayer& commLayer;
+
+        /// The MPI Communicator object for this communication layer
+        MPI_Comm comm;
+
+        /// Atomic status variable: set to true if `finishing` and if all receives
+        /// are completed.
+        std::atomic<bool> recvDone;
+
+
+        std::thread td;
+
+
+        /**
+         * @brief The function for the dedicated communicator thread.
+         * @details  loops until all sending and all receiving are done.
+         *    these are atomic variables since we have multiple threads.
+         *
+         *    completes pending send and recv requests, then receive any new and send any queued messages.
+         *
+         * @note  There should be only 1 thread calling this function.
+         */
+        void run()
+        {
+          DEBUGF("C THREAD STARTED:  comm-thread on %d", commLayer.commRank);
+
+          // while there's still work to be done:
+          while (!recvDone.load())
+          {
+            // first clean up finished operations
+            finishReceives();
+
+            // start pending receives
+            tryStartReceive();
+          }
+          DEBUGF("C THREAD FINISHED:  comm-thread on %d", commLayer.commRank);
+        }
+
 
         /**
          * @brief Initiates async MPI receives.
@@ -879,9 +967,13 @@ class CommunicationLayer
               assert(msg.get() == nullptr);
               assert(pair.second.get() != nullptr);
 
-              recvInProgress.push_back(std::move(pair));
-              assert(pair.second.get() == nullptr);
-              assert(recvInProgress.back().second.get() != nullptr);
+//              commLayer.recvInProgress.push_back(std::move(pair));
+//              assert(pair.second.get() == nullptr);
+//              assert(commLayer.recvInProgress.back().second.get() != nullptr);
+
+              if (!commLayer.recvInProgress.waitAndPush(std::move(pair)) ) {
+                throw bliss::io::IOException("recvInProgress queue is disabled!");
+              }
 
 
             } else {  // data messages
@@ -899,10 +991,15 @@ class CommunicationLayer
               assert(pair.second.get() != nullptr);
 
               // insert into the received InProgress queue.
-              recvInProgress.push_back(std::move(pair));
+//              commLayer.recvInProgress.push_back(std::move(pair));
+//
+//              assert(pair.second.get() == nullptr);
+//              assert(commLayer.recvInProgress.back().second.get() != nullptr);
 
-              assert(pair.second.get() == nullptr);
-              assert(recvInProgress.back().second.get() != nullptr);
+              if (!commLayer.recvInProgress.waitAndPush(std::move(pair)) ) {
+                throw bliss::io::IOException("recvInProgress queue is disabled!");
+              }
+
 
             }
 
@@ -927,26 +1024,32 @@ class CommunicationLayer
           int finished = 0;
 
           // if there are pending receive requests
-          while(!recvInProgress.empty())
+          while(!commLayer.recvInProgress.isEmpty())
           {
 
-            assert(recvInProgress.front().second.get() != nullptr);
+//            assert(commLayer.recvInProgress.front().second.get() != nullptr);
+            auto popped = std::move(commLayer.recvInProgress.waitAndPop());
+            auto front = std::move(popped.second);  // this thread owns the element now.
+            if (!popped.first) {
+              // waitAndPop returned becuase recvInProgress is disabled and empty.  break from loop
+              break;
+            }
 
-            if (recvInProgress.front().first == MPI_REQUEST_NULL) {  // if local messages
+            if (front.first == MPI_REQUEST_NULL) {  // if local messages
               finished = 1;  // then this request is complete
             } else {
               // test if the MPI request for receive has been completed.
-              MPI_Test(&(recvInProgress.front().first), &finished, MPI_STATUS_IGNORE);
+              MPI_Test(&(front.first), &finished, MPI_STATUS_IGNORE);
             }
 
             if (finished)
             {
               // finished request, so enqueue the message for processing.
 
-              // get the request
-              auto front = std::move(recvInProgress.front());
-              // remove pending receive element
-              recvInProgress.pop_front();
+//              // get the request
+//              auto front = std::move(commLayer.recvInProgress.front());
+//              // remove pending receive element
+//              commLayer.recvInProgress.pop_front();
 
               // if it's a control message, then need to count down
               if (front.second.get()->tag == CONTROL_TAG.tag)  {
@@ -970,9 +1073,13 @@ class CommunicationLayer
 
                   front.first = MPI_REQUEST_NULL;
                   assert(front.second.get() != nullptr);
-                  recvInProgress.push_back(std::move(front));
-                  assert(front.second.get() == nullptr);
-                  assert(recvInProgress.back().second.get() != nullptr);
+//                  commLayer.recvInProgress.push_back(std::move(front));
+//                  assert(front.second.get() == nullptr);
+//                  assert(commLayer.recvInProgress.back().second.get() != nullptr);
+                  if (!commLayer.recvInProgress.waitAndPush(std::move(front)) ) {
+                    throw bliss::io::IOException("recvInProgress queue is disabled!");
+                  }
+
 
                   break;  // gives the worker threads a chance to call sendControlMessagesAndWait
 
@@ -995,7 +1102,7 @@ class CommunicationLayer
 
                   //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
 
-                	if (commLayer.recvQueue.isFull()) fprintf(stderr, "Rank %d recvQueue is full for control!!!", commLayer.commRank);
+//                  if (commLayer.recvQueue.isFull()) fprintf(stderr, "Rank %d recvQueue is full for control!!!\n", commLayer.commRank);
 
                   // and enqueue ONE FOC message for this tag to be handled by callback.  (reduction from commSize to 1)
                   if (!commLayer.recvQueue.waitAndPush(std::move(front.second))) {
@@ -1010,7 +1117,8 @@ class CommunicationLayer
                   throw bliss::io::IOException(ss.str());
                 }
               } else {
-              	if (commLayer.recvQueue.isFull()) fprintf(stderr, "Rank %d recvQueue is full for data!!!", commLayer.commRank);
+
+ //               if (commLayer.recvQueue.isFull()) fprintf(stderr, "Rank %d recvQueue is full for data!!!\n", commLayer.commRank);
 
                 //==== Data message.  add the received messages into the recvQueue
                 if (!commLayer.recvQueue.waitAndPush(std::move(front.second))) {
@@ -1020,6 +1128,10 @@ class CommunicationLayer
             }
             else
             {
+              // not ready yet.  so push back in to front of queue
+              if (!commLayer.recvInProgress.waitAndPushFront(std::move(front)) ) {
+                throw bliss::io::IOException("recvInProgress queue is disabled!");
+              }
 
               // the recv request is not done, so stop and wait for the next cycle.
               break;
@@ -1027,7 +1139,7 @@ class CommunicationLayer
           }
 
           // see if we are done with all pending receives and all Application Termination FOC messages are received.
-          if ((commLayer.ctrlMsgRemainingForEpoch.size() == 0) && recvInProgress.empty()) {
+          if ((commLayer.ctrlMsgRemainingForEpoch.size() == 0)) { //&& !commLayer.recvInProgress.canPop()) {
             // if completely done, epoch=NO_EPOCH would have been erased from recvRemaining.
             recvDone.store(true);
             commLayer.recvQueue.disablePush();
@@ -1035,6 +1147,8 @@ class CommunicationLayer
         }
 
     };
+
+//TODO:  chagne recvInProgress to a threadsafe queue.
 
 
     // callback thread,  for organization.
@@ -1213,9 +1327,9 @@ public:
    * @param comm_size       The size of the MPI Communicator.
    */
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
-    : sendQueue(3 * comm_size), recvQueue(3 * comm_size), buffers(),
+    : sendQueue(), recvQueue(), recvInProgress(), buffers(),
       ctrlMsgProperties(), ctrlMsgRemainingForEpoch(),
-      commThread(*this, communicator), callbackThread(*this)
+      sendThread(*this, communicator), recvThread(*this, communicator), callbackThread(*this)
   {
     // init communicator rank and size
     MPI_Comm_size(communicator, &commSize);
@@ -1248,7 +1362,8 @@ public:
 
 	  // TODO: properly handle this part.
     // wait for both threads to quit
-    commThread.finish();
+    sendThread.finish();
+	  recvThread.finish();
     callbackThread.finish();
   };
 
@@ -1271,7 +1386,7 @@ public:
    * @param dst_rank    The rank of the destination processor.
    * @param tag         The tag (type) of the message.
    */
-  void sendMessage(const void* data, std::size_t count, int dst_rank, int tag)
+  void sendMessage(const void* data, std::size_t nbytes, int dst_rank, int tag)
   {
     //== don't send control tag.
     assert(tag != CONTROL_TAG.tag && tag >= 0);
@@ -1301,7 +1416,7 @@ public:
     std::pair<bool, BufferIdType> result;
     do {
       // try append.  append fails if there is no buffer or no room
-      result = buffers.at(tag).append(data, count, dst_rank);
+      result = buffers.at(tag).append(data, nbytes, dst_rank);
 
       fullId = result.second;
 
@@ -1312,7 +1427,7 @@ public:
 
           std::unique_ptr<SendDataElementType> msg(new SendDataElementType(fullId, tag, dst_rank));
 
-          if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for data msgs", commRank);
+//          if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for data msgs\n", commRank);
 
           if (!sendQueue.waitAndPush(std::move(msg))) {
             throw bliss::io::IOException("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
@@ -1423,7 +1538,7 @@ public:
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
     DEBUGF("M FLUSH Rank %d tag %d, waiting for control messages to complete", commRank, tag);
     while (!sendControlMessagesAndWait(tag)) {};
-    DEBUGF("M FLUSH Rank %d tag %d, finished wait for control messages", commRank, tag);
+    DEBUGF("M FLUSH DONE Rank %d tag %d, finished wait for control messages\n", commRank, tag);
   }
 
   /**
@@ -1503,8 +1618,9 @@ public:
     ctrlMsgProperties[CONTROL_TAG.tag] = std::move(TagMetadata());
 
     // TODO: deal with where to put the std::threads.
-    commThread.start();
     callbackThread.start();
+    recvThread.start();
+    sendThread.start();
   }
 
 
@@ -1629,7 +1745,7 @@ protected:
       std::unique_ptr<ControlMessage> msg(new ControlMessage(te, target_rank));
 
 
-      if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for control msgs", commRank);
+     // if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for control msgs\n", commRank);
       if (!sendQueue.waitAndPush(std::move(msg))) {
         lock.unlock();
         throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
@@ -1710,7 +1826,7 @@ protected:
       if ((id != BufferPoolType::ABSENT) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
         std::unique_ptr<SendDataElementType> msg(new SendDataElementType(id, tag, target_rank));
 
-        if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for flushBuffers", commRank);
+//        if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for flushBuffers\n", commRank);
 
         if (!sendQueue.waitAndPush(std::move(msg))) {
           lock.unlock();
@@ -1756,6 +1872,13 @@ protected:
   bliss::concurrent::ThreadSafeQueue<std::unique_ptr<MPIMessage> > recvQueue;
 
 
+  /* Queues of pending MPI operations (MPI_Requests)
+   * Used ONLY by the comm-thread, purely internal and purely single thread.
+   */
+  /// Queue of pending MPI receive operations
+  bliss::concurrent::ThreadSafeQueue<std::pair<MPI_Request, std::unique_ptr<MPIMessage> > > recvInProgress;
+
+
   /* information per message tag */
 
   // TODO: comments about when they are used.
@@ -1780,7 +1903,8 @@ protected:
   /// Per tag: number of processes that haven't sent the END-TAG message yet
   std::unordered_map<TaggedEpoch, int, TaggedEpochHash, TaggedEpochEqual > ctrlMsgRemainingForEpoch;
 
-  CommThread commThread;
+  SendCommThread sendThread;
+  RecvCommThread recvThread;
 
   CallbackThread callbackThread;
 

@@ -350,6 +350,132 @@ namespace bliss
 
 
         /**
+         * Non-blocking - pushes an element by constant reference (copy).
+         * Returns true only if push was successful.
+         * If queue is full, or if queue is not accepting new element inserts, return false.
+         *    Does not modify the element if cannot push onto queue.
+         *
+         * @param data    data element to be pushed onto the thread safe queue
+         * @return        whether push was successful.
+         */
+        bool tryPushFront (T const& data) {
+          std::unique_lock<std::mutex> lock(mutex);
+
+          if (!canPush() || isFull()) {
+            lock.unlock();
+            return false;
+          }
+
+          //std::unique_lock<std::mutex> lock(mutex);
+          qsize.fetch_add(1, std::memory_order_acq_rel);
+          q.push_front(data);   // insert using predefined copy version of dequeue's push function
+          lock.unlock();
+
+          canPopCV.notify_one();
+          return true;
+        }
+
+        /**
+         * Non-blocking - pushes an element by constant reference (move).
+         * Returns true only if push was successful.
+         * If queue is full, or if queue is not accepting new element inserts, return false.
+         *    Does not modify the element if cannot push onto queue.
+         *
+         * @param data    data element to be pushed onto the thread safe queue
+         * @return        whether push was successful.
+         */
+        bool tryPushFront (T && data) {
+          std::unique_lock<std::mutex> lock(mutex);
+
+          if (!canPush() || isFull()) {
+            lock.unlock();
+            return false;
+          }
+
+//          std::unique_lock<std::mutex> lock(mutex);
+          qsize.fetch_add(1, std::memory_order_acq_rel);
+          q.push_front(std::move(data));    // insert using predefined move version of deque's push function
+          lock.unlock();
+
+          canPopCV.notify_one();
+          return true;
+        }
+
+
+        /**
+         * Semi-blocking - pushes an element by constant reference (copy).
+         * Returns true only if push was successful.
+         * If queue is full, wait until space becomes available.
+         * If queue is not accepting new element inserts, return false.
+         *    Does not modify the element if cannot push onto queue.
+         *
+         * this function signature is useful where the application would like to have guaranteed insertion without busy-waiting,
+         * yet needs a way to lift the block when the queue has been marked by another thread as terminating (not accepting new elements)
+         *
+         * @param data    data element to be pushed onto the thread safe queue
+         * @return        whether push was successful.
+         */
+        bool waitAndPushFront (T const& data) {
+
+          if (!canPush()) return false;   // if finished, then no more insertion.  return.
+
+          std::unique_lock<std::mutex> lock(mutex);
+          while (!canPush() || isFull()) {
+            // full q.  wait for someone to signal (not full && canPush, or !canPush).
+            canPushCV.wait(lock);
+
+            // to get here, have to have one of these conditions changed:  pushEnabled, !full
+            if (!canPush()) {
+              lock.unlock();
+              return false;  // if finished, then no more insertion.  return.
+            }
+          }
+          qsize.fetch_add(1, std::memory_order_acq_rel);
+          q.push_front(data);   // insert using predefined copy version of deque's push function
+
+          lock.unlock();
+          canPopCV.notify_one();
+          return true;
+        }
+
+        /**
+         * Semi-blocking - pushes an element by constant reference (move).
+         * Returns true only if push was successful.
+         * If queue is full, wait until space becomes available.
+         * If queue is not accepting new element inserts, return false.
+         *    Does not modify the element if cannot push onto queue.
+         *
+         * this function signature is useful where the application would like to have guaranteed insertion without busy-waiting,
+         * yet needs a way to lift the block when the queue has been marked by another thread as terminating (not accepting new elements)
+         *
+         * @param data    data element to be pushed onto the thread safe queue
+         * @return        whether push was successful.
+         */
+        bool waitAndPushFront (T && data) {
+          if (!canPush()) return false;  // if finished, then no more insertion.  return.
+
+          std::unique_lock<std::mutex> lock(mutex);
+          while (!canPush() || isFull()) {
+            // full q.  wait for someone to signal  (not full && canPush, or !canPush).
+            canPushCV.wait(lock);
+
+            // to get here, have to have one of these conditions changed:  pushEnabled, !full
+            if (!canPush()) {
+              lock.unlock();
+              return false;  // if finished, then no more insertion.  return.
+            }
+          }
+
+          qsize.fetch_add(1, std::memory_order_acq_rel);
+          q.push_front(std::move(data));    // insert using predefined move version of deque's push function
+
+          lock.unlock();
+          canPopCV.notify_one();
+          return true;
+        }
+
+
+        /**
          * Non-blocking - remove the first element in the queue and return it to the calling thread.
          * returns a std::pair with first element indicating the success/failure of the Pop operation,
          * and second is the popped queue element, if pop were successful.
@@ -429,6 +555,89 @@ namespace bliss
 
           return output;
         }
+
+
+        /**
+         * Non-blocking - remove the first element in the queue and return it to the calling thread.
+         * returns a std::pair with first element indicating the success/failure of the Pop operation,
+         * and second is the popped queue element, if pop were successful.
+         *
+         * Function fails when the queue is empty, returning false.
+         * Function returns success and retrieved element, regardless of whether the thread safe queue is accepting new inserts.
+         *
+         * @return    std::pair with boolean (successful pop?) and an element from the queue (if successful)
+         */
+        std::pair<bool, T> tryPopBack() {
+          std::pair<bool, T> output;
+          output.first = false;
+
+          std::unique_lock<std::mutex> lock(mutex);
+          if (isEmpty()) {
+            lock.unlock();
+            return output;
+          }
+
+          //std::unique_lock<std::mutex> lock(mutex);
+          output.second = std::move(q.back());  // convert to movable reference and move-assign.
+          q.pop_back();
+          qsize.fetch_sub(1, std::memory_order_relaxed);
+          lock.unlock();
+
+          output.first = true;
+          canPushCV.notify_one();
+
+          return output;
+
+        }
+
+        /**
+         * Semi-blocking - remove the first element in the queue and return it to the calling thread.
+         * Returns a std::pair with first element indicating the success/failure of the Pop operation,
+         *  and second is the popped queue element, if pop were successful.
+         *
+         * Function will wait for some element to be available for pop from the queue.
+         * Function will return when it has retrieved some data from queue, or when if it is notified that the thread safe queue has terminated.
+         * Returns false if queue is terminated (no new elements) and flushed.
+         *
+         * This function signature is useful where the application would like to have guaranteed data retrieval from the queue without busy-waiting,
+         * yet needs a way to lift the block when the queue has been marked by another thread as terminated and flushed
+         *   (no more new elements to be inserted and queue is empty.)
+         *
+         * @return    std::pair with boolean (successful pop?) and an element from the queue (if successful)
+         */
+        std::pair<bool, T> waitAndPopBack() {
+          std::pair<bool, T> output;
+          output.first = false;
+
+          // if !canPush and queue is empty, then return false.
+          if (!canPop()) return output;
+
+          // else either canPush (queue empty or not), or !canPush and queue is not empty.
+
+          std::unique_lock<std::mutex> lock(mutex);
+          while (isEmpty()) {
+            // empty q.  wait for someone to signal (when !isEmpty, or !canPop)
+            canPopCV.wait(lock);
+
+            // if !canPush and queue is empty, then return false.
+            if (!canPop()) {
+              lock.unlock();
+              return output;
+            }
+          }
+
+          qsize.fetch_sub(1, std::memory_order_acq_rel);
+          output.second = std::move(q.back());  // convert to movable reference and move-assign.
+          q.pop_back();
+
+          lock.unlock();
+          output.first = true;
+
+          canPushCV.notify_one();
+
+          return output;
+        }
+
 
     };
 
