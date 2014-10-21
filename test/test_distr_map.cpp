@@ -2,6 +2,9 @@
 
 #include <iostream>
 
+#include <unistd.h> // for sleep!
+
+
 #include <io/CommunicationLayer.hpp>
 #include <index/distributed_map.hpp>
 
@@ -13,12 +16,14 @@ void receiveAnswer(std::pair<int, bliss::index::count_t>& answer)
 {
   if (answer.second != 1000u * glCommSize * answer.first)
   {
-    std::cerr << "ERROR: distributed count is wrong: received=" << answer.second << ", expected=" << answer.first*1000 << std::endl;
+    std::cerr << "ERROR: distributed count is wrong: received=" << answer.second << ", expected=" << (glCommSize* answer.first*1000) << std::endl;
   }
   else
   {
     std::cerr << "SUCCESS!" << std::endl;
   }
+
+  std::cerr << std::flush;
 }
 
 
@@ -30,6 +35,8 @@ void test_map(MPI_Comm& comm, int repeat=1000)
   glCommSize = p;
   bliss::index::distributed_counting_map<int, bliss::io::CommunicationLayer> counting_map(comm, p);
   counting_map.setLookupAnswerCallback(std::function<void(std::pair<int, bliss::index::count_t>&)>(&receiveAnswer));
+
+  sleep(1);
 
   for (int i = 0; i < p; ++i)
   {

@@ -850,19 +850,8 @@ class CommunicationLayer
         }
 
         void start() {
-          int comm_size;
-          MPI_Comm_size(comm, &comm_size);
 
           if (!td.joinable()) {
-
-            //===== initialize the mpi buffer for control messaging, for MPI_Bsend
-            int mpiBufSize = 0;
-            // arbitrary, 4X commSize, each has 2 ints, one for tag, one for epoch id,.
-            MPI_Pack_size(comm_size * 4 * 2, MPI_INT, comm, &mpiBufSize);
-            mpiBufSize += comm_size * 4 * MPI_BSEND_OVERHEAD;
-            char* mpiBuf = (char*)malloc(mpiBufSize);
-            MPI_Buffer_attach(mpiBuf, mpiBufSize);
-
             td = std::move(std::thread(&bliss::io::CommunicationLayer::RecvCommThread::run, this));
           } // else already started the thread.
         }
@@ -871,13 +860,8 @@ class CommunicationLayer
           if (td.joinable()) {
             td.join();
 
-            DEBUGF("C recvCommThread finished, thread joined.  about to detach mpi buffer.");
+            DEBUGF("C recvCommThread finished, thread joined.");
 
-            // detach the buffer for Bsend.
-            int mpiBufSize;
-            char* mpiBuf;
-            MPI_Buffer_detach(&mpiBuf, &mpiBufSize);
-            free(mpiBuf);
           } // else already joined.
 
         }

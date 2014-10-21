@@ -121,23 +121,23 @@ public:
    */
   void flush()
   {
-//    DEBUGF("FLUSH DISTR MAP");
-//    std::unique_lock<std::mutex> lock(mutex);
-//    if (has_pending_inserts.load())
-//    {
+    DEBUGF("FLUSH DISTR MAP");
+    std::unique_lock<std::mutex> lock(mutex);
+    if (has_pending_inserts.load())
+    {
       this->commLayer.flush(INSERT_MPI_TAG);
-//      has_pending_inserts.store(false);
-//    }
-//    lock.unlock();
+       has_pending_inserts.store(false);
+     }
+     lock.unlock();
 
-//    lock.lock();
-//    if (has_pending_lookups.load())
-//    {
+     lock.lock();
+     if (has_pending_lookups.load())
+     {
       this->commLayer.flush(LOOKUP_MPI_TAG);
       this->commLayer.flush(LOOKUP_ANSWER_MPI_TAG);
-//      has_pending_lookups.store(false);
-//    }
-//    lock.unlock();
+      has_pending_lookups.store(false);
+    }
+    lock.unlock();
   }
 
   /**
@@ -258,9 +258,9 @@ public:
    * finalize waits for commLayer to finish, which guarantees that all communications are done (to avoid timing issue with MPI_FINALIZE and distributed map object clean up.
    */
   void finalize() {
-    this->commLayer.finish(INSERT_MPI_TAG);
-    this->commLayer.finish(LOOKUP_MPI_TAG);
-    this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
+//    this->commLayer.finish(INSERT_MPI_TAG);
+//    this->commLayer.finish(LOOKUP_MPI_TAG);
+//    this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
 
     this->commLayer.finalize();
   }
@@ -701,9 +701,9 @@ public:
    */
   virtual ~distributed_counting_map()
   {
-    this->commLayer.finish(_base_class::INSERT_MPI_TAG);
-    this->commLayer.finish(_base_class::LOOKUP_MPI_TAG);
-    this->commLayer.finish(_base_class::LOOKUP_ANSWER_MPI_TAG);
+//    this->commLayer.finish(_base_class::INSERT_MPI_TAG);
+//    this->commLayer.finish(_base_class::LOOKUP_MPI_TAG);
+//    this->commLayer.finish(_base_class::LOOKUP_ANSWER_MPI_TAG);
 //	  this->commLayer.finishCommunication();
   }
 

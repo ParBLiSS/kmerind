@@ -175,9 +175,10 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T> &queue, const int nConsume
 template<typename T>
 void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<T>&& queue, const int nProducer, const int nConsumer) {
 
-  printf("=== TEST %s: %d producers, %d consumers, capacity %lu\n", message.c_str(), nProducer, nConsumer, queue.getCapacity());
-
   int entries = (queue.getCapacity() == bliss::concurrent::ThreadSafeQueue<T>::MAX_SIZE) ? 10000 : queue.getCapacity();
+
+  printf("=== TEST %s: %d producers, %d consumers, capacity %lu, entries %d\n", message.c_str(), nProducer, nConsumer, queue.getCapacity(), entries);
+
 
   int i = 0;
   int count = 0, count2 = 0;
@@ -378,7 +379,7 @@ void timeSTDQueueThreaded(const std::string &message, std::queue<T>&& q, const i
   {
 #pragma omp section
     {
-      volatile int localCount = entries-1;
+      volatile int localCount = entries-2;
       // insert
 #pragma omp parallel num_threads(nProducer) shared(q, localCount) reduction(+:count)
       {
@@ -427,7 +428,7 @@ void timeSTDQueueThreaded(const std::string &message, std::queue<T>&& q, const i
     }
   }
 
-  if ((count != entries) || (count2 != entries)) printf("FAIL: entries %d, numPushed = %d, numPopped= %d, expected= %d", entries, count, count2, entries);
+  if ((count != entries-1) || (count2 != entries-1)) printf("FAIL: entries %d, numPushed = %d, numPopped= %d, expected= %d", entries-1, count, count2, entries-1);
   else printf("PASS");
 
   printf(" result = %d\n", result);
@@ -481,7 +482,7 @@ void timeTSQueueThreaded(const std::string &message, bliss::concurrent::ThreadSa
     {
       // push
 #pragma omp parallel for default(none) num_threads(nProducer) shared(q) reduction(+:count)
-      for (int i = 0; i < entries; ++i) {
+      for (int i = 0; i < entries-1; ++i) {
         q.tryPush(std::move(T(i)));
         ++count;
       }
@@ -518,7 +519,7 @@ void timeTSQueueThreaded(const std::string &message, bliss::concurrent::ThreadSa
     }
   }
 
-  if ((count != entries) || (count2 != entries)) printf("FAIL: entries %d, numPushed = %d, numPopped= %d, expected= %d", entries, count, count2, entries);
+  if ((count != entries-1) || (count2 != entries-1)) printf("FAIL: entries %d, numPushed = %d, numPopped= %d, expected= %d", entries-1, count, count2, entries-1);
   else printf("PASS");
 
   printf(" result = %d\n", result);

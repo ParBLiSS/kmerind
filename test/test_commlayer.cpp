@@ -12,6 +12,7 @@
 
 int my_rank;
 std::atomic<int> msgs_received(0);
+std::atomic<int> lookup_received(0);
 std::atomic<int> answers_received(0);
 int iters;
 
@@ -40,8 +41,11 @@ struct Tester
       // check that the message is as expected
       if(msgs[i] != generate_message(fromRank, my_rank))
       {
-        ERROR("ERROR: message not as expected.  Expected: " << generate_message(fromRank, my_rank) << " Actual: "<< msgs[i] << "");
-        ERROR("my rank: " << my_rank << " from rank " << fromRank);
+//        ERROR("ERROR: message not as expected.  Expected: " << generate_message(fromRank, my_rank) << " Actual: "<< msgs[i] << "");
+//        ERROR("my rank: " << my_rank << " from rank " << fromRank);
+        std::cerr << "ERROR: message not as expected.  Expected: " << generate_message(fromRank, my_rank) << " Actual: "<< msgs[i] << "" << std::endl;
+        std::cerr << "my rank: " << my_rank << " from rank " << fromRank << std::endl;
+
         exit(EXIT_FAILURE);
       }
       else
@@ -64,8 +68,13 @@ struct Tester
       // check that the message is as expected
       if(msgs[i] != (fromRank+1)* (my_rank+1))
       {
-        ERROR("ERROR: LOOKUP message not as expected: " << msgs[i]);
+        //ERROR("ERROR: LOOKUP message not as expected: " << msgs[i]);
+        std::cerr << "ERROR: LOOKUP message not as expected: " << msgs[i] << std::endl;
         exit(EXIT_FAILURE);
+      } else {
+        // DEBUG("SUCCESS: message received");
+        lookup_received.fetch_add(1);
+
       }
       int msg = msgs[i] + 13;
       commLayer.sendMessage(&msg, sizeof(int), fromRank, ANSWER_TAG);
@@ -83,7 +92,8 @@ struct Tester
       // check that the message is as expected
       if(msgs[i] != (fromRank+1)* (my_rank+1) + 13)
       {
-        ERROR("ERROR: ANSWER message not as expected: " << msgs[i]);
+        //ERROR("ERROR: ANSWER message not as expected: " << msgs[i]);
+        std::cerr << "ERROR: ANSWER message not as expected: " << msgs[i] << std::endl;
         exit(EXIT_FAILURE);
       }
       answers_received.fetch_add(1);
@@ -122,9 +132,9 @@ struct Tester
         }
       }
 
-      if (commLayer.getCommRank() == 0) {
-        sleep(1);
-      }
+//      if (commLayer.getCommRank() == 0) {
+//        sleep(1);
+//      }
 
       DEBUG("thread " << omp_get_thread_num() << " messages received = " << msgs_received.load());
 
@@ -141,15 +151,16 @@ struct Tester
     // check that all messages have been received
     if (msgs_received.load() != repeat_sends * commLayer.getCommSize() * iters)
     {
-      ERROR("ERROR: wrong amount of messages received in phase 1");
-      ERROR("received: " << msgs_received.load() << ", should: " << repeat_sends * commLayer.getCommSize() * iters);
+//      ERROR("ERROR: wrong amount of messages received in phase 1");
+//      ERROR("received: " << msgs_received.load() << ", should: " << repeat_sends * commLayer.getCommSize() * iters);
+      std::cerr << "ERROR: wrong amount of messages received in phase 1" << std::endl;
+      std::cerr << "received: " << msgs_received.load() << ", should: " << repeat_sends * commLayer.getCommSize() * iters << std::endl;
       exit(EXIT_FAILURE);
     }
+    //std::cerr << "INDEX: " << msgs_received << std::endl;
 
 
     /* phase 2 communication */
-    msgs_received.store(0);
-
 
     // sending one message to each:
 #pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank)
@@ -176,8 +187,8 @@ struct Tester
     // check that all messages have been received correctly
     if (answers_received != repeat_sends * commLayer.getCommSize())
     {
-      ERROR("ERROR: wrong amount of messages received in phase 2");
-      ERROR("received: " << answers_received.load() << ", should: " << repeat_sends * commLayer.getCommSize());
+      std::cerr << "ERROR: wrong amount of messages received in phase 2" << std::endl;
+      std::cerr << "received: " << answers_received.load() << ", should: " << repeat_sends * commLayer.getCommSize() << std::endl;
       exit(EXIT_FAILURE);
     }
 
@@ -186,13 +197,15 @@ struct Tester
 //    commLayer.finishTag(ANSWER_TAG);
     commLayer.finishCommunication();
 
-    DEBUG("SENT: " << msgs_received << " ANSWERS: " << answers_received);
+    //std::cerr << "LOOKUP: " << lookup_received << " ANSWERS: " << answers_received << std::endl;
 
     DEBUG("This was a triumph.");
-    sleep(1);
+//    sleep(1);
     DEBUG("I'm making a note here: HUGE SUCCESS.");
-    sleep(1);
+//    sleep(1);
     DEBUG("It's hard to overstate my satisfaction.");
+
+    std::cout << "DONE." << std::endl;
 
     fflush(stdout);
   }

@@ -15,6 +15,11 @@
 constexpr uint8_t DNA::FROM_ASCII[256];
 constexpr char DNA::TO_ASCII[DNA::SIZE];
 constexpr uint8_t DNA::TO_COMPLEMENT[DNA::SIZE];
+
 constexpr uint8_t DNA5::FROM_ASCII[256];
 constexpr char DNA5::TO_ASCII[DNA5::SIZE];
 constexpr uint8_t DNA5::TO_COMPLEMENT[DNA5::SIZE];
+
+constexpr uint8_t DNA16::FROM_ASCII[256];
+constexpr char DNA16::TO_ASCII[DNA16::SIZE];
+constexpr uint8_t DNA16::TO_COMPLEMENT[DNA16::SIZE];
