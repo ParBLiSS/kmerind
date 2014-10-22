@@ -14,7 +14,7 @@ int my_rank;
 std::atomic<int> msgs_received(0);
 std::atomic<int> lookup_received(0);
 std::atomic<int> answers_received(0);
-int iters;
+int elems;
 
 struct Tester
 {
@@ -24,7 +24,7 @@ struct Tester
 
   int generate_message(int srcRank, int dstRank)
   {
-    return (srcRank + 1) * iters * 10 + (dstRank + 1);
+    return (srcRank + 1) * 100000 + (dstRank + 1);
   }
 
   void receivedCallback(uint8_t* msg, std::size_t count, int fromRank)
@@ -93,7 +93,7 @@ struct Tester
       if(msgs[i] != (fromRank+1)* (my_rank+1) + 13)
       {
         //ERROR("ERROR: ANSWER message not as expected: " << msgs[i]);
-        std::cerr << "ERROR: ANSWER message not as expected: " << msgs[i] << std::endl;
+        std::cerr << "ERROR: ANSWER message not as expected. val= " << msgs[i] << " expected = " << ((fromRank+1)* (my_rank+1) + 13) << std::endl;
         exit(EXIT_FAILURE);
       }
       answers_received.fetch_add(1);
@@ -121,14 +121,14 @@ struct Tester
 
       // start sending one message to each:
 #pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank)
-      for (int l = 0; l < repeat_sends; ++l)
+      for (int i = 0; i < repeat_sends; ++i)
       {
 
-        for (int i = 0; i < commLayer.getCommSize(); ++i)
+        for (int j = 0; j < commSize; ++j)
         {
-          int msg = generate_message(my_rank, i);
-//          if (l % 10000 == 0) DEBUG("Thread " << tid << " Sending " << msg << " to " << i);
-          commLayer.sendMessage(&msg, sizeof(int), i, FIRST_TAG);
+          int msg = generate_message(my_rank, j);
+          if (i % 1000 == 0) DEBUG("Rank " << my_rank << " " << i << " of " << repeat_sends << " Sending " << msg << " to Rank " << j);
+          commLayer.sendMessage(&msg, sizeof(int), j, FIRST_TAG);
         }
       }
 
@@ -164,14 +164,14 @@ struct Tester
 
     // sending one message to each:
 #pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank)
-    for (int l = 0; l < repeat_sends; ++l)
+    for (int i = 0; i < repeat_sends; ++i)
     {
 
-      for (int i = 0; i < commLayer.getCommSize(); ++i)
+      for (int j = 0; j < commSize; ++j)
       {
-        int msg = (my_rank+1)*(i+1);
-//        if (l % 10000 == 0) DEBUG("Thread " << tid << " Querying " << msg << " from " << i);
-        commLayer.sendMessage(&msg, sizeof(int), i, LOOKUP_TAG);
+        int msg = (my_rank+1)*(j+1);
+        if (i % 1000 == 0) DEBUG("Rank " << my_rank << " " << i << " of " << repeat_sends << " Querying " << msg << " at Rank " << i);
+        commLayer.sendMessage(&msg, sizeof(int), j, LOOKUP_TAG);
       }
     }
 
@@ -185,10 +185,10 @@ struct Tester
     DEBUG("thread " << omp_get_thread_num() << " answer messages received = " << msgs_received.load());
 
     // check that all messages have been received correctly
-    if (answers_received != repeat_sends * commLayer.getCommSize())
+    if (answers_received != repeat_sends * commSize)
     {
       std::cerr << "ERROR: wrong amount of messages received in phase 2" << std::endl;
-      std::cerr << "received: " << answers_received.load() << ", should: " << repeat_sends * commLayer.getCommSize() << std::endl;
+      std::cerr << "received: " << answers_received.load() << ", should: " << repeat_sends * commSize << std::endl;
       exit(EXIT_FAILURE);
     }
 
@@ -210,11 +210,13 @@ struct Tester
     fflush(stdout);
   }
 
-  Tester(MPI_Comm comm, int comm_size) : commLayer(comm, comm_size) {
+  Tester(MPI_Comm comm, int comm_size) : commLayer(comm, comm_size), commSize(comm_size) {
     //commLayer.startThreads();
   }
 
   bliss::io::CommunicationLayer commLayer;
+
+  int commSize;
 };
 
 int main(int argc, char *argv[])
@@ -224,9 +226,9 @@ int main(int argc, char *argv[])
     nthreads = atoi(argv[1]);
   }
 
-  iters = 10 * nthreads;
+  elems = 1536 * nthreads;
   if (argc > 2) {
-    iters = atoi(argv[2]);
+    elems = atoi(argv[2]);
   }
 
   // set up MPI
@@ -241,7 +243,7 @@ int main(int argc, char *argv[])
   /* code */
   {
   Tester tester(comm, p);
-  tester.test_comm_layer(iters, nthreads);
+  tester.test_comm_layer(elems, nthreads);
 
   MPI_Barrier(comm);
   }
