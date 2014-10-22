@@ -158,6 +158,8 @@ public:
 
     const int targetRank = this->getTargetRank(key);
 
+    DEBUG("Rank " << commRank << " LOOKUP " << key << " at rank " << targetRank);
+
     this->sendKey(key, targetRank, LOOKUP_MPI_TAG);
     has_pending_lookups.store(true);
   }
@@ -254,6 +256,14 @@ public:
     return count_hist;
   }
 
+
+  void init() {
+	DEBUG("initialize distributed multimap's communication");
+	// start the threads in the comm layer (if not already running)
+	this->commLayer.initCommunication();
+  }
+
+
   /**
    * finalize waits for commLayer to finish, which guarantees that all communications are done (to avoid timing issue with MPI_FINALIZE and distributed map object clean up.
    */
@@ -280,6 +290,7 @@ protected:
       : commLayer(mpi_comm, comm_size), comm(mpi_comm), hashFunct(hashFunction),
         has_pending_inserts(false), has_pending_lookups(false)
   {
+	  MPI_Comm_rank(comm, &commRank);
   }
 
   /**
@@ -288,6 +299,7 @@ protected:
   virtual ~_distributed_map_base() {
     this->finalize();
   }
+
 
   /**
    * @brief Helper function to send the given key to the given rank.
@@ -469,6 +481,8 @@ protected:
 
   std::mutex mutex;
 
+  int commRank;
+
 };
 
 
@@ -523,9 +537,6 @@ public:
     this->commLayer.addReceiveCallback(_base_class::LOOKUP_ANSWER_MPI_TAG,
         std::bind(&distributed_multimap::receivedLookupAnswerCallback,
                   this, _1, _2, _3));
-
-    // start the threads in the comm layer (if not already running)
-    this->commLayer.initCommunication();
   }
 
   /**
@@ -691,10 +702,8 @@ public:
     this->commLayer.addReceiveCallback(_base_class::LOOKUP_ANSWER_MPI_TAG,
         std::bind(&distributed_counting_map::receivedLookupAnswerCallback,
                   this, _1, _2, _3));
-
-    // start the threads in the comm layer (if not already running)
-    this->commLayer.initCommunication();
   }
+
 
   /**
    * @brief Destructor.
@@ -720,6 +729,7 @@ public:
     int targetRank = this->getTargetRank(key);
     this->sendKey(key, targetRank, _base_class::INSERT_MPI_TAG);
     this->has_pending_inserts = true;
+    //DEBUG("inserted key " << key);
   }
 
   /**

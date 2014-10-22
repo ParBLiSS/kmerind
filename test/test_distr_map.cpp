@@ -11,12 +11,16 @@
 //#define DEBUG(msg) std::cerr << msg << std::endl;
 
 int glCommSize;
+int repeats;
+
 
 void receiveAnswer(std::pair<int, bliss::index::count_t>& answer)
 {
-  if (answer.second != 1000u * glCommSize * answer.first)
+  int key = answer.first;
+  int count = answer.second;
+  if (count != repeats * (key+1) * glCommSize)
   {
-    std::cerr << "ERROR: distributed count is wrong: received=" << answer.second << ", expected=" << (glCommSize* answer.first*1000) << std::endl;
+    std::cerr << "ERROR: distributed count is wrong: received=" << count << ", expected=" << ((key+1) * repeats * glCommSize) << std::endl;
   }
   else
   {
@@ -27,20 +31,25 @@ void receiveAnswer(std::pair<int, bliss::index::count_t>& answer)
 }
 
 
-void test_map(MPI_Comm& comm, int repeat=1000)
+void test_map(MPI_Comm& comm)
 {
   int p, rank;
   MPI_Comm_size(comm, &p);
   MPI_Comm_rank(comm, &rank);
   glCommSize = p;
+
+  //printf("INIT COUNTING MAP\n");
   bliss::index::distributed_counting_map<int, bliss::io::CommunicationLayer> counting_map(comm, p);
+  //printf("REGISTER COUNTING MAP CALLBACK\n");
   counting_map.setLookupAnswerCallback(std::function<void(std::pair<int, bliss::index::count_t>&)>(&receiveAnswer));
+
+  counting_map.init();
 
   sleep(1);
 
   for (int i = 0; i < p; ++i)
   {
-    for (int j = 0; j < i*repeat; ++j)
+    for (int j = 0; j < (i+1)*repeats; ++j)
     {
       counting_map.insert(i);
     }
@@ -60,6 +69,10 @@ int main(int argc, char *argv[])
 {
   // set up MPI
   MPI_Init(&argc, &argv);
+
+  repeats = 1000;
+  if (argc > 1)
+	  repeats = atoi(argv[1]);
 
   // get communicator size and my rank
   MPI_Comm comm = MPI_COMM_WORLD;
