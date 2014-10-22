@@ -1408,7 +1408,7 @@ public:
         // verify that the buffer is not empty (may change because of threading)
         if (!(buffers.at(tag).getBackBuffer(fullId).isEmpty())) {
           // have a non-empty buffer - put in send queue.
-
+        	DEBUGF("Rank %d has full buffer at id %d.  enqueue for send.", commRank, fullId);
           std::unique_ptr<SendDataElementType> msg(new SendDataElementType(fullId, tag, dst_rank));
 
 //          if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for data msgs\n", commRank);

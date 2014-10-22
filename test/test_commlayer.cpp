@@ -44,7 +44,7 @@ struct Tester
 //        ERROR("ERROR: message not as expected.  Expected: " << generate_message(fromRank, my_rank) << " Actual: "<< msgs[i] << "");
 //        ERROR("my rank: " << my_rank << " from rank " << fromRank);
         std::cerr << "ERROR: message not as expected.  Expected: " << generate_message(fromRank, my_rank) << " Actual: "<< msgs[i] << "" << std::endl;
-        std::cerr << "my rank: " << my_rank << " from rank " << fromRank << std::endl;
+        std::cerr << "my rank: " << my_rank << " from rank " << fromRank << " message id = " << msgs_received.load() << std::endl;
 
         exit(EXIT_FAILURE);
       }
