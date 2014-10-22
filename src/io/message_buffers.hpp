@@ -215,10 +215,13 @@ namespace bliss
 
       protected:
         /// Id type of the Buffers, but here depending on the specified ThreadSafety template parameter, either BufferIdType or atomic version of BufferIdType
-        typedef typename std::conditional<ThreadSafety, std::atomic<BufferIdType>, BufferIdType>::type   IdType;
+        using IdType = typename std::conditional<ThreadSafety, std::atomic<BufferIdType>, BufferIdType>::type;
 
         /// Vector of IdType (atomic or not).  Provides a mapping from process id (0 to vector size), to buffer Ids (from BufferPool)
-        std::vector< IdType > bufferIds;
+        std::vector< IdType > bufferIdForProcId;
+
+//        /// map from IdType to process id.  for quickly checking if a bufferId is in use.
+//        std::unordered_map<IdType, int> procIdForBufferId;
 
       public:
         /**
@@ -228,9 +231,9 @@ namespace bliss
          * @param poolCapacity     The capacity of the pool.  default unbounded.
          */
         explicit SendMessageBuffers(const int & numDests, const size_t & bufferCapacity = 8192, const BufferIdType & poolCapacity = std::numeric_limits<BufferIdType>::max()) :
-          MessageBuffers<ThreadSafety>(bufferCapacity, poolCapacity), bufferIds(numDests)
+          MessageBuffers<ThreadSafety>(bufferCapacity, poolCapacity), bufferIdForProcId(numDests)
         {
-          //== initialize the bufferIds, acquiring them from the pool by calling reset.
+          //== initialize the bufferIdForProcId, acquiring them from the pool by calling reset.
           this->reset();
         };
 
@@ -250,7 +253,7 @@ namespace bliss
          * @param other   source SendMessageBuffers to move from.
          */
         explicit SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) :
-            MessageBuffers<ThreadSafety>(std::move(other)), bufferIds(std::move(other.bufferIds)) {};
+            MessageBuffers<ThreadSafety>(std::move(other)), bufferIdForProcId(std::move(other.bufferIdForProcId)) {};
 
         /**
          * @brief default copy assignment operator, deleted.
@@ -266,7 +269,7 @@ namespace bliss
          * @return        self
          */
         SendMessageBuffers<ThreadSafety>& operator=(SendMessageBuffers<ThreadSafety> && other) {
-          bufferIds = std::move(other.bufferIds);
+          bufferIdForProcId = std::move(other.bufferIdForProcId);
           this->pool = std::move(other.pool);
           return *this;
         }
@@ -281,7 +284,7 @@ namespace bliss
          * @return    number of buffers
          */
         const size_t getSize() const {
-          return bufferIds.size();
+          return bufferIdForProcId.size();
         }
 
         /**
@@ -291,16 +294,29 @@ namespace bliss
          * @param targetRank   the target id for the messages.
          * @return      the buffer id that the target id maps to.
          */
-        const BufferIdType getBufferIdForRank(const int targetRank) const {
-          return BufferIdType(bufferIds[targetRank]);
+        inline const BufferIdType getBufferIdForRank(const int targetRank) const {
+          return BufferIdType(bufferIdForProcId[targetRank]);
         }
+
+//        /**
+//         * @brief get the  messaging target that a bufferId maps to.
+//         * @details for simplicity, not distinguishing between thread safe and unsafe versions
+//         *
+//         * @param targetRank   the target id for the messages.
+//         * @return      the buffer id that the target id maps to.
+//         */
+//        inline const int getRankForBufferId(const BufferIdType targetBufferId) const {
+//          if (procIdForBufferId.find(targetBufferId) == procIdForBufferId.end()) return -1;
+//          else return procIdForBufferId.at(targetBufferId);
+//        }
+
 
         /**
          * @brief get the list of active Buffer ids.  (for debugging)
          * @return  vector containing the active Buffer ids.
          */
         const std::vector<IdType>& getBufferIdsForAllRanks() const {
-          return bufferIds;
+          return bufferIdForProcId;
         }
 
         /**
@@ -310,7 +326,7 @@ namespace bliss
         const std::string bufferIdsToString() const {
           std::stringstream ss;
           std::ostream_iterator<IdType> ost(ss, ",");
-          std::copy(bufferIds.begin(), bufferIds.end(), ost);
+          std::copy(bufferIdForProcId.begin(), bufferIdForProcId.end(), ost);
           ss << std::endl;
           return ss.str();
         }
@@ -320,8 +336,13 @@ namespace bliss
          */
         virtual void reset() {
           MessageBuffers<ThreadSafety>::reset();
-          for (int i = 0; i < this->bufferIds.size(); ++i) {
-            bufferIds[i] = this->pool.tryAcquireBuffer().second;
+          for (int i = 0; i < this->bufferIdForProcId.size(); ++i) {
+            auto newBuffer = this->pool.tryAcquireBuffer();
+            if (!newBuffer.first)
+              throw std::logic_error("not enough buffers in BufferPool to support this messagebuffers object.");
+
+            bufferIdForProcId[i] = newBuffer.second;
+//            procIdForBufferId[newBuffer.second] = i;
           }
         }
 
@@ -334,13 +355,13 @@ namespace bliss
          *
          * Notes:
          *  on left side -
-         *    targetBufferId is obtained outside of CAS, so when CAS is called to update bufferIds[dest], it may be different already  (on left side)
+         *    targetBufferId is obtained outside of CAS, so when CAS is called to update bufferIdForProcId[dest], it may be different already  (on left side)
          *  on right side -
          *  fullBufferId and bufferId[dest] are set atomically, but newTargetBufferId is obtained outside of CAS, so the id of the TargetBufferId
          *  may be more up to date than the CAS function results, which is okay.  Note that a fullBuffer will be marked as blocked to prevent further append.
          *
          * Table of values and compare exchange behavior (called when a buffer if full and an empty buffer is swapped in.)
-         *  targetBufferId,     bufferIds[dest],    newBufferId (from pool) ->  fullBufferId,     bufferId[dest],   newTargetBufferId
+         *  targetBufferId,     bufferIdForProcId[dest],    newBufferId (from pool) ->  fullBufferId,     bufferId[dest],   newTargetBufferId
          *  x                   x                   y                           x                 y                 y
          *  x                   x                   -1                          x                 -1                -1
          *  x                   z                   y                           -1                z                 z
@@ -352,13 +373,14 @@ namespace bliss
          *  -1                  z                   y                           -1                -1                -1
          *  -1                  z                   -1                          -1                -1                -1
          *
+         * @note              if failure, data to be inserted would need to be handled by the caller.
          *
          * @param[in] data    data to be inserted, as byteArray
          * @param[in] count   number of bytes to be inserted in the the Buffer
          * @param[in] dest    messaging target for the data, decides which buffer to append into.
          * @return            std::pair containing the status of the append (boolean success/fail), and the id of a full buffer if there is one.
          */
-        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int &targetProc) {
+        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int targetProc) {
           //== if count is 0, no write and this succeeds right away.
           if (count == 0)
             return std::pair<bool, BufferIdType>(true, BufferPoolType::ABSENT);
@@ -381,33 +403,39 @@ namespace bliss
           //== default fullBufferId return value.
           BufferIdType fullBufferId = BufferPoolType::ABSENT;
 
-          //== get the current Buffer's Id
+          //== get the current Buffer's Id. local var to ensure all three lines use the same value.
           BufferIdType targetBufferId = getBufferIdForRank(targetProc);
-
-          //== if targetBufferId is an invalid buffer, or if new data can't fit, need to replace bufferIds[dest]
+          //== if targetBufferId is an invalid buffer, or if new data can't fit, need to replace bufferIdForProcId[dest]
+          assert(this->pool[targetBufferId].getCapacity() != 1);
           if ((targetBufferId == BufferPoolType::ABSENT) ||
               this->pool[targetBufferId].getSize() > (this->getBufferCapacity() - count)) {
             // at this point, the local variables may be out of date already, and targetBufferId may already marked as full.
 
             // this call will mark the fullBuffer as blocked to prevent multiple write attempts while flushing the buffer
             fullBufferId = swapInEmptyBuffer<ThreadSafety>(targetProc, targetBufferId);    // swap in an empty buffer
-            targetBufferId = getBufferIdForRank(targetProc);               // and get the updated targetBuffer id
+            //targetBufferId = getBufferIdForRank(targetProc);               // and get the updated targetBuffer id
           }
 
-
-          if (targetBufferId == BufferPoolType::ABSENT) {
+          // now try to insert into the current bufferId.
+          if (getBufferIdForRank(targetProc) == BufferPoolType::ABSENT) {
             // we don't have a buffer to insert into
             // then don't insert
             return std::pair<bool, BufferIdType>(false, fullBufferId);
           } else {
+
+            if (this->pool[getBufferIdForRank(targetProc)].getCapacity() == 1) {
+              printf("ERROR!!!! targetProc %d maps to buffer id %d\n", targetProc, getBufferIdForRank(targetProc));
+              fflush(stdout);
+              assert(this->pool[getBufferIdForRank(targetProc)].getCapacity() != 1);
+            }
             // else we have a buffer to insert into, so try insert.
             // if targetBufferId buffer is now full, or marked as full, will get a false.  the next thread to call this function will swap the buffer out.
-            return std::pair<bool, BufferIdType>(this->pool[targetBufferId].append(data, count), fullBufferId);
+            return std::pair<bool, BufferIdType>(this->pool[getBufferIdForRank(targetProc)].append(data, count), fullBufferId);
           }
         }
 
 
-        BufferIdType flushBufferForRank(const int &targetProc) {
+        BufferIdType flushBufferForRank(const int targetProc) {
 
           //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
@@ -416,7 +444,7 @@ namespace bliss
 
           // passing in getBufferIdForRank result to ensure atomicity.
           // may return ABSENT if there is no available buffer to use.
-          return swapInEmptyBuffer<ThreadSafety>(targetProc, getBufferIdForRank(targetProc));    // swap in an empty buffer
+          return swapInEmptyBuffer<ThreadSafety>(targetProc, getBufferIdForRank(targetProc));
 
         }
 
@@ -426,50 +454,68 @@ namespace bliss
          * @brief  Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
          * @details The new buffer may be BufferPoolType::ABSENT (invalid buffer, when there is no available Buffer from pool)
          *
-         * Effect:  bufferIds[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
+         * Effect:  bufferIdForProcId[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
          *
          * This is the THREAD SAFE version.   Uses std::compare_exchange_strong to ensure that another thread hasn't swapped in a new Empty one already.
          *
-         * @note we make the caller get the new BufferIds[dest] directly instead of returning by reference in the method parameter variable
+         * @note we make the caller get the new bufferIdForProcId[dest] directly instead of returning by reference in the method parameter variable
          *  because this way there is less of a chance of race condition if a shared "old" variable was accidentally used.
-         *    and the caller will likely prefer the most up to date bufferIds[dest] anyway.
+         *    and the caller will likely prefer the most up to date bufferIdForProcId[dest] anyway.
+         *
+         * @note
+         *    ABSENT      available     not a valid case
+         *    ABSENT      at dest       swap, return ABS
+         *    ABSENT      not at dest   dest is already swapped.  no op, return ABS
+         *    not ABS     available     not used.  block old, no swap. return ABS
+         *    not ABS     at dest       swap, block old.  return old
+         *    not ABS     not at dest   being used.  no op. return ABS
          *
          * @tparam        used to choose thread safe vs not verfsion of the method.
-         * @param dest    position in BufferIds array to swap out
+         * @param dest    position in bufferIdForProcId array to swap out
          * @return        the BufferId that was swapped out.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, BufferIdType>::type swapInEmptyBuffer(const int& dest, const BufferIdType& old) {
+        typename std::enable_if<TS, BufferIdType>::type swapInEmptyBuffer(const int dest, const BufferIdType old) {
+
+          //== block the old buffer if it's not ABSENT, is available.  this means that it's not being used by message buffer, so swap is not going to happen
+          if ((old != BufferPoolType::ABSENT) && this->pool.isAvailable(old)) {
+            this->pool[old].block();
+            return BufferPoolType::ABSENT;
+          }
 
           //== get a new buffer and try to replace the existing.
           auto newBuffer = this->pool.tryAcquireBuffer();
 
-          bool hasNewBuffer = newBuffer.first;
           BufferIdType newBufferId = newBuffer.second;               // if acquire fails, we have BufferPoolType::ABSENT here.
           BufferIdType targetBufferId = old;
 
-          //== now try to set the bufferIds[dest] to the new buffer id (valid, or BufferPoolType::ABSENT if can't get a new one)
+          //== now try to set the bufferIdForProcId[dest] to the new buffer id (valid, or BufferPoolType::ABSENT if can't get a new one)
           // again, targetBufferId is BufferPoolType::ABSENT or pointing to a full buffer.
-          // use compare_exchange to ensure we only replace if bufferIds[dest] is still targetBufferId (no other thread has changed it)
-          if (bufferIds[dest].compare_exchange_strong(targetBufferId, newBufferId, std::memory_order_acq_rel)) {
-            // successful exchange.  bufferIds[dest] now has newBufferId value (will be accessed by caller). targetBufferId still has old value (full buffer, to be returned)
+          // use compare_exchange to ensure we only replace if bufferIdForProcId[dest] is still targetBufferId (no other thread has changed it)
+          if (bufferIdForProcId[dest].compare_exchange_strong(targetBufferId, newBufferId, std::memory_order_acq_rel)) {
+            // successful exchange.  bufferIdForProcId[dest] now has newBufferId value (will be accessed by caller). targetBufferId still has old value (full buffer, to be returned)
 
-            //== block the old buffer.
-            if (old != BufferPoolType::ABSENT) this->pool[old].block();
+            //== block the old buffer if it's not ABSENT, is being used by MessageBuffers, and is associated with "dest".  else another call had already blocked it.
+            if (targetBufferId != BufferPoolType::ABSENT) this->pool[targetBufferId].block();
 
-            return old;   // value could be full buffer, or could be BufferPoolType::ABSENT.
+
+            // return old buffer id.  value could be full buffer, or could be BufferPoolType::ABSENT, or a partially full buffer if this is called manually.
+            return targetBufferId;
           } else {
-            // failed exchange, another thread had already updated bufferIds[dest].
-            // bufferIds[dest] will be accessed by caller later, should return BufferPoolType::ABSENT as the replaced buffer id.
+            // failed exchange, another thread had already updated bufferIdForProcId[dest], INCLUDING PROCESSING THE OLD FULL BUFFER.
+            // bufferIdForProcId[dest] will be accessed by caller later, should return BufferPoolType::ABSENT as the replaced buffer id.
 
             // return the unused buffer id to pool.
-            if (hasNewBuffer) {
+            if (newBuffer.first) {
+              this->pool[newBufferId].block();
               this->pool.releaseBuffer(newBufferId);
             }
 
+            // if failed exchange, the old buffer still needs to be processed, so need to return old data type.
+            //(targetBufferId now holds bufferIdForProcId[dest], an active buffer id.)
             return BufferPoolType::ABSENT;
-          }
 
+          }
         }
 
 
@@ -477,29 +523,49 @@ namespace bliss
          * @brief Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
          * @details The new buffer may be BufferPoolType::ABSENT (invalid buffer, when there is no available Buffer from pool)
          *
-         * effect:  bufferIds[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
+         * effect:  bufferIdForProcId[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
          *
          * this is the THREAD UNSAFE version
 
-         * @note we make the caller get the new BufferIds[dest] directly instead of returning by reference in the method parameter variable
+         * @note we make the caller get the new bufferIdForProcId[dest] directly instead of returning by reference in the method parameter variable
          *  because this way there is less of a chance of race condition if a shared "old" variable was accidentally used.
-         *    and the caller will likely prefer the most up to date bufferIds[dest] anyway.
+         *    and the caller will likely prefer the most up to date bufferIdForProcId[dest] anyway.
+         *
+         * @note
+         *    ABSENT      available     not a valid case
+         *    ABSENT      at dest       swap, return ABS
+         *    ABSENT      not at dest   dest is already swapped.  no op, return ABS
+         *    not ABS     available     not used.  block old, no swap. return ABS
+         *    not ABS     at dest       swap, block old.  return old
+         *    not ABS     not at dest   being used.  no op. return ABS
          *
          * @tparam TS     used to choose thread safe vs not verfsion of the method.
-         * @param dest    position in BufferIds array to swap out
+         * @param dest    position in bufferIdForProcId array to swap out
          * @return        the BufferId that was swapped out.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, BufferIdType>::type swapInEmptyBuffer(const int& dest, const BufferIdType& old) {
+        typename std::enable_if<!TS, BufferIdType>::type swapInEmptyBuffer(const int dest, const BufferIdType old) {
+
+          //== block the old buffer if it's not ABSENT, is available.  this means that it's not being used by message buffer, so swap is not going to happen
+          if ((old != BufferPoolType::ABSENT) && (this->pool.isAvailable(old))) {
+            this->pool[old].block();
+            return BufferPoolType::ABSENT;
+          }
 
 
-          //== get a new buffer to replace the existing.  set it whether tryAcquire succeeds or fails (id = BufferPoolType::ABSENT)
-          bufferIds[dest] = this->pool.tryAcquireBuffer().second;
+          if (bufferIdForProcId[dest] == old) {
+            //== get a new buffer to replace the existing.  set it whether tryAcquire succeeds or fails (id = BufferPoolType::ABSENT)
 
-          //== blocks the old buffer
-          if (old != BufferPoolType::ABSENT) this->pool[old].block();
+            auto newBuffer = this->pool.tryAcquireBuffer();
+            bufferIdForProcId[dest] = newBuffer.second;
+            //== blocks the old buffer
+            if (old != BufferPoolType::ABSENT) this->pool[old].block();
+            return old;
+          } else {
+            // buffer already replaced for dest.  don't need to do anything
+            return BufferPoolType::ABSENT;
+          }
 
-          return old;
         }
 
 

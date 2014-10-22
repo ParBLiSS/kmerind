@@ -277,6 +277,7 @@ int main(int argc, char** argv) {
 
   printf("TEST: par Full\n");
   tsBuffer4.clear();
+  tsBuffer4.unblock();
   i = 0;
   fail = 0;
   failedFull = 0;

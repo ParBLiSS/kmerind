@@ -61,6 +61,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 #pragma omp parallel for num_threads(pool_threads) default(none) private(id) shared(pool) reduction(+ : count)
   for (id = 0; id < 350; ++id) {
     try {
+      pool[id].block();
       pool.releaseBuffer(id);
     } catch (const std::out_of_range & e)
     {
@@ -70,10 +71,15 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   expected = 350 - pool.getSize();
   if (count != expected) printf("ERROR: number of failed attempt to release buffer should be %d, actual %d. pool size: %d \n", expected, count, pool.getSize());
 
+#pragma omp parallel for num_threads(pool_threads) default(none) private(id) shared(pool) reduction(+ : count)
+  for (id = 0; id < pool.getSize(); ++id) {
+    pool[id].unblock();
+  }
+
   printf("TEST access by multiple threads, each a separate buffer.\n");
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool)
   {
-      int v = omp_get_thread_num() + 5;
+    int v = omp_get_thread_num() + 5;
     pool[omp_get_thread_num()+ 1].append(&v, sizeof(int));
   }
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool)
@@ -126,6 +132,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
         printf("ERROR: thread %d/%d buffer %d size is %lu, expected %lu\n", omp_get_thread_num(), pool_threads, id, pool[id].getSize(), sizeof(int) * iter);
 
       // clear buffer
+      pool[id].block();
       pool[id].clear();
 
       //release

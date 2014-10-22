@@ -1414,6 +1414,7 @@ public:
 //          if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for data msgs\n", commRank);
 
           if (!sendQueue.waitAndPush(std::move(msg))) {
+            ERROR("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush")
             throw bliss::io::IOException("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
           } // else successfully pushed into sendQueue.
         }  // else empty back buffer

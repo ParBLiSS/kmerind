@@ -12,6 +12,7 @@
 #ifndef BUFFERPOOL_HPP_
 #define BUFFERPOOL_HPP_
 
+#include <cassert>
 
 #include <mutex>
 #include <unordered_set>
@@ -21,6 +22,8 @@
 #include "utils/logging.h"
 #include "io/buffer.hpp"
 #include "concurrent/concurrent.hpp"
+
+
 
 namespace bliss
 {
@@ -40,13 +43,22 @@ namespace bliss
      *            Released buffers are marked as empty and available.
      *
      *            When the pool is exhausted, Acquire function returns false.
-     *     *
+     *
+     *      life cycle:  pool acquire():  buffer unblock().  -> allow rw.
+     *              application:  buffer block() -> allow ro
+     *              pool release():  buffer clear().
+     *
+     *
      * @note      Each buffer should be acquired by a single thread and released by a single thread.
      *            Note that Buffer does not actualy clear the memory, just resets the size, which is also the pointer for insertion.
      *            While the release method handles duplicate releases, there may be race conditions when multithreading, including
      *              likely loss of data (thread 1 appends data and thread 2 releases  it.
      *
      *            the pools RETAINS OWNERSHIP of the buffers.
+     *
+     *
+     *
+     *
      *  @tparam PoolTS    The thread safety property for the pool
      *  @tparam BufferTS  The thread safety property of each Buffer.
      */
@@ -64,7 +76,7 @@ namespace bliss
         typedef int                                       IdType;
 
         /// constant, represent when a pool element or Buffer is not present.
-        static const IdType ABSENT = -1;
+        static constexpr IdType ABSENT = -1;
 
       protected:
         /**
@@ -107,7 +119,7 @@ namespace bliss
         typename std::enable_if<TS == bliss::concurrent::THREAD_SAFE, IdType >::type createNewBuffer()
         {
           std::lock_guard<std::mutex> lock(mutex);
-
+          printf("creating new Thread Safe Buffer\n");
           IdType bufferId = static_cast<IdType>(buffers.size());
           buffers.push_back(std::move(BufferType(buffer_capacity)));
 
@@ -140,6 +152,7 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_UNSAFE, IdType >::type createNewBuffer()
         {
+          printf("creating new Thread Unsafe Buffer\n");
           IdType bufferId = buffers.size();
           buffers.push_back(std::move(BufferType(buffer_capacity)));
 
@@ -173,16 +186,17 @@ namespace bliss
           buffers(std::move(other.buffers)), fixedSize(other.fixedSize) {
           other.capacity = 0;
           other.buffer_capacity = 0;
+          other.available.clear();
         };
 
-        /**
-         * @brief verifies that the id is valid - throws exception.
-         * @param id    Id of the buffer to check.
-         */
-        void checkId(const IdType& id) const {
-          if (id < 0 || id >= static_cast<IdType>(buffers.size()))
-            throw std::out_of_range("Error:  buffer id was specified with out of range value");
-        }
+//        /**
+//         * @brief verifies that the id is valid - throws exception.
+//         * @param id    Id of the buffer to check.
+//         */
+//        void checkId(const IdType& id) const {
+//          if (id < 0 || id >= static_cast<IdType>(buffers.size()))
+//            throw std::out_of_range("Error:  buffer id was specified with out of range value");
+//        }
 
 
       public:
@@ -205,6 +219,7 @@ namespace bliss
           //DEBUGF("RESERVING: %d for buffer pool", size_hint);
           for (IdType i = 0; i < size_hint; ++i) {
             buffers.push_back(std::move(BufferType(buffer_capacity)));
+            buffers[i].block();
             releaseBuffer<PoolTS>(i);
           }
         };
@@ -248,12 +263,13 @@ namespace bliss
          * @return        self, with member variables moved from other.
          */
         BufferPool<PoolTS, BufferTS>& operator=(BufferPool<PoolTS, BufferTS>&& other) {
-          capacity = other.capacity; other.capacity = 0;
-          buffer_capacity = other.buffer_capacity; other.buffer_capacity = 0;
-          fixedSize = other.fixedSize;
           std::unique_lock<std::mutex> mylock(mutex, std::defer_lock),
                                         otherlock(other.mutex, std::defer_lock);
           std::lock(mylock, otherlock);
+
+          capacity = other.capacity; other.capacity = 0;
+          buffer_capacity = other.buffer_capacity; other.buffer_capacity = 0;
+          fixedSize = other.fixedSize;
           available = std::move(other.available);
           buffers = std::move(other.buffers);
           return *this;
@@ -311,9 +327,20 @@ namespace bliss
           available.clear();
           lock.unlock();
           for (IdType i = 0; i < static_cast<IdType>(buffers.size()); ++i) {
+            this->buffers[i].block();
             releaseBuffer<PoolTS>(i);
           }
         }
+
+        /**
+         * check if the buffer specified by id is available for reuse.
+         * @param id
+         * @return
+         */
+        bool isAvailable(const IdType& id) {
+          return available.find(id) != available.end();
+        }
+
 
         /**
          * @brief     Get the next available Buffer by id.  if none available, return false in the first argument of the pair.
@@ -329,7 +356,10 @@ namespace bliss
 
             //DEBUGF("acquired final %d, available count %ld, buffers count %ld", output.second, available.size(), buffers.size());
           }
-
+          // clear just before use.  buffer also gets unblocked.  This allows a 3 stage life cycle: actively used (rw), blocked (ro), released (no access)
+          // clear transitions from released to active use.  rw->ro should be done by application logic.  blocked to released is also done by application logic.
+          this->buffers[output.second].unblock();
+          assert(this->buffers[output.second].isEmpty());
 
           return output;
         }
@@ -371,10 +401,11 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_SAFE, void>::type releaseBuffer(const IdType& id) {
-          checkId(id);
+          //checkId(id);
 
           std::lock_guard<std::mutex> lock(mutex);
-          buffers[id].clear();
+          assert(this->buffers[id].isBlocked());
+          this->buffers.at(id).clear();
           available.insert(id);
 
           //DEBUGF("buffer id %d is available for reuse.", id);
@@ -388,9 +419,10 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_UNSAFE, void>::type releaseBuffer(const IdType& id) {
-          checkId(id);
+          //checkId(id);
 
-          buffers[id].clear();
+          assert(this->buffers[id].isBlocked());
+          this->buffers.at(id).clear();
           available.insert(id);
 
           //DEBUGF("buffer id %d is available for reuse.", id);
@@ -406,9 +438,10 @@ namespace bliss
          */
         const BufferType& operator[](const IdType& id) const {
           // can only access what has been allocated.  does not increase size of the pool.
-          checkId(id);
+          //checkId(id);
 
-          return buffers[id];               // multiple threads can access the same buffer...
+          return buffers.at(id);               // multiple threads can access the same buffer...
+                                                // bounds checking is done here.
         }
 
         /**
@@ -419,13 +452,13 @@ namespace bliss
          * @param bufferId    Id of the buffer to be access (get from Acquire)
          * @return            const reference to the Buffer
          */
-        const BufferType& at(const IdType& bufferId) const {
-          return this->operator[](bufferId);
+        const BufferType& at(const IdType& id) const {
+          return buffers.at(id);
         }
     };
 
     template<bliss::concurrent::ThreadSafety PoolTS, bliss::concurrent::ThreadSafety BufferTS>
-        const typename BufferPool<PoolTS, BufferTS>::IdType BufferPool<PoolTS, BufferTS>::ABSENT;
+        constexpr typename BufferPool<PoolTS, BufferTS>::IdType BufferPool<PoolTS, BufferTS>::ABSENT;
 
   } /* namespace io */
 } /* namespace bliss */
