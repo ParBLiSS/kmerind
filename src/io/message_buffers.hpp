@@ -223,6 +223,10 @@ namespace bliss
 //        /// map from IdType to process id.  for quickly checking if a bufferId is in use.
 //        std::unordered_map<IdType, int> procIdForBufferId;
 
+
+        std::mutex mutex;
+
+
       public:
         /**
          * @brief Constructor.
@@ -380,7 +384,10 @@ namespace bliss
          * @param[in] dest    messaging target for the data, decides which buffer to append into.
          * @return            std::pair containing the status of the append (boolean success/fail), and the id of a full buffer if there is one.
          */
-        std::pair<bool, BufferIdType> append(const void* data, const size_t &count, const int targetProc) {
+        std::pair<bool, BufferIdType> append(const void* data, const size_t count, const int targetProc) {
+
+          std::unique_lock<std::mutex> lock(mutex);
+
           //== if count is 0, no write and this succeeds right away.
           if (count == 0)
             return std::move(std::pair<bool, BufferIdType>(true, BufferPoolType::ABSENT));
@@ -400,9 +407,11 @@ namespace bliss
             throw (std::invalid_argument("ERROR: calling MessageBuffer append with nullptr"));
           }
 
-
           bool appendResult = false;
-          //== get the current Buffer's Id. local var to ensure all three lines use the same value.
+          //== get the current Buffer's Id. local var because we need to check value AND get back buffer.
+          // this means that the targetBufferId may not be associated with targetProc by the time append is called due to threading.
+          // TODO:  fix:  use a dummy buffer that does not allow append.  getBackBuffer with ABSENT buffer id returns the dummy buffer.
+          // this way, the actual buffer to insert is resolved in 1 single chained call with minimal branching.
           BufferIdType targetBufferId = getBufferIdForRank(targetProc);
           // now try to insert into the current bufferId.
           if (targetBufferId != BufferPoolType::ABSENT) {
@@ -436,7 +445,7 @@ namespace bliss
 
 
           }
-
+          lock.unlock();
           // don't try to reinsert right here.
 
 
@@ -483,6 +492,8 @@ namespace bliss
 
         BufferIdType flushBufferForRank(const int targetProc) {
 
+          DEBUG("flush buffer for rank!");
+
           //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
@@ -526,7 +537,7 @@ namespace bliss
 
           //== block the old buffer if it's not ABSENT, is available.  this means that it's not being used by message buffer, so swap is not going to happen
           if ((old != BufferPoolType::ABSENT) && this->pool.isAvailable(old)) {
-        	MessageBuffers<ThreadSafety>::getBackBuffer(old).block();
+        	  MessageBuffers<ThreadSafety>::getBackBuffer(old).block();
             return BufferPoolType::ABSENT;
           }
 

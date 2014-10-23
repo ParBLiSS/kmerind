@@ -348,13 +348,13 @@ namespace bliss
          */
         std::pair<bool, IdType> tryAcquireBuffer() {
           std::pair<bool, IdType> output = std::move(getNextAvailable<PoolTS>());
-          DEBUGF("acquired? %d, available count %ld, buffers count %ld", (output.first ? output.second : -1), available.size(), buffers.size());
+          //DEBUGF("acquired? %d, available count %ld, buffers count %ld", (output.first ? output.second : -1), available.size(), buffers.size());
           if (!output.first && !fixedSize) {
             // can grow and none available.  so allocate a new one and return.
             output.first = true;
             output.second = createNewBuffer<PoolTS>();
 
-            DEBUGF("acquired via NEW BUF %d, available count %ld, buffers count %ld", output.second, available.size(), buffers.size());
+            //DEBUGF("acquired via NEW BUF %d, available count %ld, buffers count %ld", output.second, available.size(), buffers.size());
           }
           // clear just before use.  buffer also gets unblocked.  This allows a 3 stage life cycle: actively used (rw), blocked (ro), released (no access)
           // clear transitions from released to active use.  rw->ro should be done by application logic.  blocked to released is also done by application logic.

@@ -25,6 +25,7 @@
 #include <stdexcept>
 
 #include "concurrent/concurrent.hpp"   // ThreadSafety boolean constants
+#include "utils/logging.h"
 
 namespace bliss
 {
@@ -70,7 +71,7 @@ namespace bliss
       protected:
 
         /// maximum capacity
-        size_t capacity;
+        mutable size_t capacity;
 
         /**
          * @brief current occupied size of the buffer
@@ -109,9 +110,11 @@ namespace bliss
       	  : capacity(other.capacity), size(other.getSize<ThreadSafety>()),
           blocked(other.isBlocked<ThreadSafety>()), data(std::move(other.data)) {
 
-          other.size = 0;
-          other.capacity = 1;
+          //DEBUG("BUFFER private move contructor 1 called");
+
           other.block<ThreadSafety>();
+          other.capacity = 1;
+          other.size = 0;
           other.data = nullptr;
 
         };
@@ -129,9 +132,12 @@ namespace bliss
           : capacity(other.capacity), size(other.getSize()),
             blocked(other.isBlocked()), data(std::move(other.data)) {
 
-          other.size = 0;
+          DEBUG("BUFFER private move contructor 2 called");
+
+
           other.block<!ThreadSafety>();
           other.capacity = 1;
+          other.size = 0;
           other.data = nullptr;
         }
 
@@ -197,6 +203,8 @@ namespace bliss
          * @return          target Buffer reference
          */
         Buffer<ThreadSafety>& operator=(Buffer<ThreadSafety>&& other) {
+          DEBUG("BUFFER public move assignment op 1 called");
+
           if (this->data != other.data) {
 
             std::unique_lock<std::mutex> myLock(mutex, std::defer_lock),
@@ -209,8 +217,8 @@ namespace bliss
             blocked = other.isBlocked<ThreadSafety>();
             data = std::move(other.data);
 
-            other.size = 0;
             other.block<ThreadSafety>();
+            other.size = 0;
             other.capacity = 1;
             other.data = nullptr;
           }
@@ -226,6 +234,8 @@ namespace bliss
          * @return          target Buffer reference
          */
         Buffer<ThreadSafety>& operator=(Buffer<!ThreadSafety>&& other) {
+          DEBUG("BUFFER public move assignment op 2 called");
+
           if (this->data != other.data) {
 
             std::unique_lock<std::mutex> myLock(mutex, std::defer_lock),
@@ -238,8 +248,8 @@ namespace bliss
             blocked = other.isBlocked<!ThreadSafety>();
             data = std::move(other.data);
 
-            other.size = 0;
             other.block<!ThreadSafety>();
+            other.size = 0;
             other.capacity = 1;
             other.data = nullptr;
           }
@@ -422,18 +432,18 @@ namespace bliss
           if (capacity == 0)
             throw std::length_error("ThreadSafe Buffer capacity is 0");
 
-          if (isBlocked<TS>()) {
-            return false;
-          }
-
-          size_t s;
+          // ONE thread at a time can get the position to copy in data.  If full, then the buffer is blocked.
           std::unique_lock<std::mutex> lock(mutex);
-          s = size.fetch_add(count, std::memory_order_acq_rel);  // no memory ordering needed within mutex lock
+
+          if (isBlocked<TS>()) return false;
+
+          size_t s = size.fetch_add(count, std::memory_order_acq_rel);  // no memory ordering needed within mutex lock
           if (s + count > capacity) {
             //printf("\nFULL!!!! capacity: %ld, size before: %ld, size after %ld, count %ld, ", capacity, s, size.load(), count);
             s = size.fetch_sub(count, std::memory_order_acq_rel);
             //printf("size rolled back before: %ld, size after %ld, count %ld ", s, size.load(), count);
 
+            block<TS>();
             lock.unlock();
             return false;
           }
@@ -463,12 +473,16 @@ namespace bliss
         typename std::enable_if<!TS, const bool>::type append(const void* _data, const size_t count) const {
 
           assert(capacity != 1);
-
           if (capacity == 0)
             throw std::length_error("Thread Unsafe Buffer capacity is 0");
 
+
           if (isBlocked<TS>()) return false;
-          if ((size + count) > capacity) return false;
+
+          if ((size + count) > capacity) {
+            block<TS>();
+            return false;
+          }
 
           std::memcpy(data.get() + size, _data, count);
           size += count;
@@ -504,16 +518,27 @@ namespace bliss
           if (capacity == 0)
             throw std::length_error("ThreadSafe LockFree Buffer capacity is 0");
 
+          // since this is not using a lock, each iteration needs to check when acquiring a position whether the
+          // buffer is blocked or not.  If blocked, then new calls here would not go through
           if (isBlocked<TS>()) return false;
+
+          // if the new position does not exceed capacity, then we can let it through. (data only)
+
 
           // try with compare and exchange weak.
           size_t s = size.load(std::memory_order_consume);
           size_t ns = s + count;
-          if (ns > capacity) return false;
+          if (ns > capacity) {
+            block<TS>();
+            return false;
+          }
           while (!size.compare_exchange_strong(s, ns, std::memory_order_acq_rel, std::memory_order_acquire)) {
             // choosing strong, slower but less spurious "false" return, and should allow the "return" statement to more reliably be reached.
             ns = s + count;
-            if (ns > capacity) return false;
+            if (ns > capacity) {
+              block<TS>();
+              return false;
+            }
           }
 
           std::memcpy(data.get() + s, typed_data, count);
@@ -521,80 +546,6 @@ namespace bliss
         }
 
     };
-
-//    /*
-//     * move constructor, unsafe buffer to safe buffer
-//     */
-//    template<>
-//    Buffer<bliss::concurrent::THREAD_SAFE>::Buffer(Buffer<bliss::concurrent::THREAD_UNSAFE>&& other, const std::lock_guard<std::mutex> &)
-//        : capacity(other.capacity), size(other.getSize()), blocked(other.isBlocked()), data(std::move(other.data)) {
-//      other.size = 0;
-//      other.block();
-//      other.capacity = 0;
-//      other.data = nullptr;
-//    };
-//
-//    /*
-//     * move constructor, safe buffer to unsafe buffer
-//     */
-//    template<>
-//    Buffer<bliss::concurrent::THREAD_UNSAFE>::Buffer(Buffer<bliss::concurrent::THREAD_SAFE>&& other, const std::lock_guard<std::mutex> &)
-//        : capacity(other.capacity), size(other.getSize()), blocked(other.isBlocked()), data(std::move(other.data)) {
-//      other.size = 0;
-//      other.capacity = 0;
-//      other.block();
-//      other.data = nullptr;
-//    };
-
-//    /*
-//     * move constructor, unsafe buffer to safe buffer
-//     */
-//    template<>
-//    Buffer<bliss::concurrent::THREAD_SAFE>& Buffer<bliss::concurrent::THREAD_SAFE>::operator=(Buffer<bliss::concurrent::THREAD_UNSAFE>&& other) {
-//      if (this->data != other.data) {
-//
-//        std::unique_lock<std::mutex> myLock(mutex, std::defer_lock),
-//                                     otherLock(other.mutex, std::defer_lock);
-//        std::lock(myLock, otherLock);
-//
-//        /// move the internal memory.
-//        capacity = other.capacity;
-//        size = other.getSize();
-//        blocked = other.isBlocked();
-//        data = std::move(other.data);
-//
-//        other.capacity = 0;
-//        other.size = 0;
-//        other.block();
-//        other.data = nullptr;
-//      }
-//      return *this;
-//    }
-//
-//    /*
-//     * move constructor, safe buffer to unsafe buffer
-//     */
-//    template<>
-//    Buffer<bliss::concurrent::THREAD_UNSAFE>& Buffer<bliss::concurrent::THREAD_UNSAFE>::operator=(Buffer<bliss::concurrent::THREAD_SAFE>&& other) {
-//      if (this->data != other.data) {
-//
-//        std::unique_lock<std::mutex> myLock(mutex, std::defer_lock),
-//                                     otherLock(other.mutex, std::defer_lock);
-//        std::lock(myLock, otherLock);
-//
-//        /// move the internal memory.
-//        capacity = other.capacity;
-//        size = other.getSize();
-//        blocked = other.isBlocked();
-//        data = std::move(other.data);
-//
-//        other.capacity = 0;
-//        other.size = 0;
-//        other.block();
-//        other.data = nullptr;
-//      }
-//      return *this;
-//    }
 
   } /* namespace io */
 } /* namespace bliss */
