@@ -40,6 +40,7 @@ namespace bliss
      *
      *          DUE TO LOCKS, this is NOT fast.  but may be fast enough for MPI buffer management.
      *
+     * TODO:  VERY IMPORTANT: tryPush and waitAndPush  can lose data, so need to return the && references.
      */
     template <typename T>
     class ThreadSafeQueue
@@ -259,12 +260,12 @@ namespace bliss
          * @param data    data element to be pushed onto the thread safe queue
          * @return        whether push was successful.
          */
-        bool tryPush (T && data) {
+        std::pair<bool,T> tryPush (T && data) {
           std::unique_lock<std::mutex> lock(mutex);
 
           if (!canPush() || isFull()) {
             lock.unlock();
-            return false;
+            return std::move(std::make_pair(false, std::move(data)));;
           }
 
 //          std::unique_lock<std::mutex> lock(mutex);
@@ -273,7 +274,7 @@ namespace bliss
           lock.unlock();
 
           canPopCV.notify_one();
-          return true;
+          return std::move(std::make_pair(true, std::move(T())));
         }
 
         /**
@@ -325,8 +326,9 @@ namespace bliss
          * @param data    data element to be pushed onto the thread safe queue
          * @return        whether push was successful.
          */
-        bool waitAndPush (T && data) {
-          if (!canPush()) return false;  // if finished, then no more insertion.  return.
+        std::pair<bool,T> waitAndPush (T && data) {
+          if (!canPush())
+        	  return std::move(std::make_pair(false, std::move(data)));  // if finished, then no more insertion.  return.
 
           std::unique_lock<std::mutex> lock(mutex);
           while (!canPush() || isFull()) {
@@ -336,7 +338,7 @@ namespace bliss
             // to get here, have to have one of these conditions changed:  pushEnabled, !full
             if (!canPush()) {
               lock.unlock();
-              return false;  // if finished, then no more insertion.  return.
+              return std::move(std::make_pair(false, std::move(data)));  // if finished, then no more insertion.  return.
             }
           }
 
@@ -345,7 +347,7 @@ namespace bliss
 
           lock.unlock();
           canPopCV.notify_one();
-          return true;
+          return std::move(std::make_pair(true, std::move(T())));
         }
 
 
@@ -384,12 +386,12 @@ namespace bliss
          * @param data    data element to be pushed onto the thread safe queue
          * @return        whether push was successful.
          */
-        bool tryPushFront (T && data) {
+        std::pair<bool, T> tryPushFront (T && data) {
           std::unique_lock<std::mutex> lock(mutex);
 
           if (!canPush() || isFull()) {
             lock.unlock();
-            return false;
+            return std::move(std::make_pair(false, std::move(data)));
           }
 
 //          std::unique_lock<std::mutex> lock(mutex);
@@ -398,7 +400,7 @@ namespace bliss
           lock.unlock();
 
           canPopCV.notify_one();
-          return true;
+          return std::move(std::make_pair(true, std::move(T())));
         }
 
 
@@ -451,8 +453,8 @@ namespace bliss
          * @param data    data element to be pushed onto the thread safe queue
          * @return        whether push was successful.
          */
-        bool waitAndPushFront (T && data) {
-          if (!canPush()) return false;  // if finished, then no more insertion.  return.
+        std::pair<bool, T> waitAndPushFront (T && data) {
+          if (!canPush()) return std::move(std::make_pair(false, std::move(data)));  // if finished, then no more insertion.  return.
 
           std::unique_lock<std::mutex> lock(mutex);
           while (!canPush() || isFull()) {
@@ -462,7 +464,7 @@ namespace bliss
             // to get here, have to have one of these conditions changed:  pushEnabled, !full
             if (!canPush()) {
               lock.unlock();
-              return false;  // if finished, then no more insertion.  return.
+              return std::move(std::make_pair(false, std::move(data)));  // if finished, then no more insertion.  return.
             }
           }
 
@@ -471,7 +473,7 @@ namespace bliss
 
           lock.unlock();
           canPopCV.notify_one();
-          return true;
+          return std::move(std::make_pair(true, std::move(T())));
         }
 
 

@@ -119,9 +119,9 @@ namespace bliss
         typename std::enable_if<TS == bliss::concurrent::THREAD_SAFE, IdType >::type createNewBuffer()
         {
           std::lock_guard<std::mutex> lock(mutex);
-          printf("creating new Thread Safe Buffer\n");
+          //printf("creating new Thread Safe Buffer\n");
           IdType bufferId = static_cast<IdType>(buffers.size());
-          buffers.push_back(std::move(BufferType(buffer_capacity)));
+          buffers.emplace_back(std::move(BufferType(buffer_capacity)));
 
           return bufferId;
         }
@@ -152,9 +152,9 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_UNSAFE, IdType >::type createNewBuffer()
         {
-          printf("creating new Thread Unsafe Buffer\n");
-          IdType bufferId = buffers.size();
-          buffers.push_back(std::move(BufferType(buffer_capacity)));
+          //printf("creating new Thread Unsafe Buffer\n");
+          IdType bufferId = static_cast<IdType>(buffers.size());
+          buffers.emplace_back(std::move(BufferType(buffer_capacity)));
 
           return bufferId;
         }
@@ -218,8 +218,8 @@ namespace bliss
           buffers.reserve(size_hint);
           //DEBUGF("RESERVING: %d for buffer pool", size_hint);
           for (IdType i = 0; i < size_hint; ++i) {
-            buffers.push_back(std::move(BufferType(buffer_capacity)));
-            buffers[i].block();
+            buffers.emplace_back(std::move(BufferType(buffer_capacity)));
+            buffers.at(i).block();
             releaseBuffer<PoolTS>(i);
           }
         };
@@ -327,7 +327,7 @@ namespace bliss
           available.clear();
           lock.unlock();
           for (IdType i = 0; i < static_cast<IdType>(buffers.size()); ++i) {
-            this->buffers[i].block();
+            this->buffers.at(i).block();
             releaseBuffer<PoolTS>(i);
           }
         }
@@ -348,20 +348,20 @@ namespace bliss
          */
         std::pair<bool, IdType> tryAcquireBuffer() {
           std::pair<bool, IdType> output = std::move(getNextAvailable<PoolTS>());
-          //DEBUGF("acquired? %d, available count %ld, buffers count %ld", (output.first ? output.second : -1), available.size(), buffers.size());
+          DEBUGF("acquired? %d, available count %ld, buffers count %ld", (output.first ? output.second : -1), available.size(), buffers.size());
           if (!output.first && !fixedSize) {
             // can grow and none available.  so allocate a new one and return.
             output.first = true;
             output.second = createNewBuffer<PoolTS>();
 
-            //DEBUGF("acquired final %d, available count %ld, buffers count %ld", output.second, available.size(), buffers.size());
+            DEBUGF("acquired via NEW BUF %d, available count %ld, buffers count %ld", output.second, available.size(), buffers.size());
           }
           // clear just before use.  buffer also gets unblocked.  This allows a 3 stage life cycle: actively used (rw), blocked (ro), released (no access)
           // clear transitions from released to active use.  rw->ro should be done by application logic.  blocked to released is also done by application logic.
-          this->buffers[output.second].unblock();
-          assert(this->buffers[output.second].isEmpty());
+          assert(this->buffers.at(output.second).isEmpty());
+          this->buffers.at(output.second).unblock();
 
-          return output;
+          return std::move(output);
         }
 
         /*
@@ -404,7 +404,7 @@ namespace bliss
           //checkId(id);
 
           std::lock_guard<std::mutex> lock(mutex);
-          assert(this->buffers[id].isBlocked());
+          assert(this->buffers.at(id).isBlocked());
           this->buffers.at(id).clear();
           available.insert(id);
 
@@ -421,7 +421,7 @@ namespace bliss
         typename std::enable_if<TS == bliss::concurrent::THREAD_UNSAFE, void>::type releaseBuffer(const IdType& id) {
           //checkId(id);
 
-          assert(this->buffers[id].isBlocked());
+          assert(this->buffers.at(id).isBlocked());
           this->buffers.at(id).clear();
           available.insert(id);
 

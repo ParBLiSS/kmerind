@@ -32,7 +32,7 @@ void testWaitAndPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int ent
   int count = 0;
 #pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+:count)
   for (int i = 0; i < entries; ++i) {
-    if (queue.waitAndPush(T(i)))
+    if (queue.waitAndPush(T(i)).first)
 //    if (i % 1000 == 0) usleep(5);
       ++count;
     usleep(5);
@@ -49,7 +49,7 @@ void testTryPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int entries
   int count = 0, count2 = 0;
 #pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+: count, count2)
   for (int i = 0; i < entries; ++i) {
-    if (queue.tryPush(T(i)))
+    if (queue.tryPush(T(i)).first)
       ++count;
     else
       ++count2;
@@ -202,7 +202,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   queue.clear();
 #pragma omp parallel for num_threads(nProducer) private(i) shared(queue, entries) default(none) reduction(+: count, count2)
   for (i = 0; i < (entries + 2); ++i) {
-    if (queue.tryPush(T(i)))
+    if (queue.tryPush(T(i)).first)
       ++count;
     else
       ++count2;
@@ -231,7 +231,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   count = 0;
 #pragma omp parallel for num_threads(nProducer) private(i) shared(queue, entries) default(none) reduction(+: count, count2)
   for (i = 0; i < entries; ++i) {
-    if (queue.waitAndPush(T(i)))
+    if (queue.waitAndPush(T(i)).first)
       ++count;
   }
 

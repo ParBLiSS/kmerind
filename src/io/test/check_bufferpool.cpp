@@ -184,10 +184,10 @@ int main(int argc, char** argv) {
 
 
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8192), "thread safe pool, thread unsafe buffer", 1, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8192), "thread safe pool, thread unsafe buffer", 2, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8192), "thread safe pool, thread unsafe buffer", 3, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8192), "thread safe pool, thread unsafe buffer", 4, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8192)), "thread safe pool, thread unsafe buffer", 1, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8192)), "thread safe pool, thread unsafe buffer", 2, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8192)), "thread safe pool, thread unsafe buffer", 3, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8192)), "thread safe pool, thread unsafe buffer", 4, 1);
 
 
 
@@ -205,36 +205,36 @@ int main(int argc, char** argv) {
   /// testing buffer_pool. thread unsafe
 
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_UNSAFE>(8, 8192), "thread unsafe pool", 1, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_UNSAFE>(8, 8192)), "thread unsafe pool", 1, 1);
 
 
 
 
   /// testing buffer_pool. thread safe
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 1, 8);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 2);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 3);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 4);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 8);
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 2, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 2, 2);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 2, 3);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 2, 4);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 2, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 2, 2);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 2, 3);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 2, 4);
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 3, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 3, 2);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192), "thread safe pool, thread safe buffer", 3, 3);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 3, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 3, 2);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE>(8, 8192)), "thread safe pool, thread safe buffer", 3, 3);
 
 
 
   /// testing buffer_pool, thread safe pool, unsafe buffers.
 
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "thread safe pool, thread unsafe buffer", 1, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "thread safe pool, thread unsafe buffer", 2, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "thread safe pool, thread unsafe buffer", 3, 1);
-  testPool(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192), "thread safe pool, thread unsafe buffer", 4, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192)), "thread safe pool, thread unsafe buffer", 1, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192)), "thread safe pool, thread unsafe buffer", 2, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192)), "thread safe pool, thread unsafe buffer", 3, 1);
+  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>(8, 8192)), "thread safe pool, thread unsafe buffer", 4, 1);
 
 
   // this one is not defined because it's not logical.  not compilable.

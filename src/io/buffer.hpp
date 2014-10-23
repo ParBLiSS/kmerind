@@ -105,8 +105,8 @@ namespace bliss
          * @param other   the source Buffer
          * @param l       the mutex lock on the source Buffer.
          */
-        Buffer(Buffer<ThreadSafety>&& other, const std::lock_guard<std::mutex> &l) :
-          capacity(other.capacity), size(other.getSize<ThreadSafety>()),
+        Buffer(Buffer<ThreadSafety>&& other, const std::lock_guard<std::mutex> &l)
+      	  : capacity(other.capacity), size(other.getSize<ThreadSafety>()),
           blocked(other.isBlocked<ThreadSafety>()), data(std::move(other.data)) {
 
           other.size = 0;
@@ -246,6 +246,9 @@ namespace bliss
           return *this;
         }
 
+
+//        explicit Buffer(Buffer<ThreadSafety>&& other) = delete;
+//        Buffer<ThreadSafety>& operator=(Buffer<ThreadSafety>&& other) = delete;
 
         /// remove copy constructor and copy assignement operators.
         explicit Buffer(const Buffer<ThreadSafety>& other) = delete;
@@ -425,11 +428,11 @@ namespace bliss
 
           size_t s;
           std::unique_lock<std::mutex> lock(mutex);
-          s = size.fetch_add(count, std::memory_order_relaxed);  // no memory ordering needed within mutex lock
+          s = size.fetch_add(count, std::memory_order_acq_rel);  // no memory ordering needed within mutex lock
           if (s + count > capacity) {
-            printf("\nFULL!!!! capacity: %ld, size before: %ld, size after %ld, count %ld, ", capacity, s, size.load(), count);
-            s = size.fetch_sub(count, std::memory_order_relaxed);
-            printf("size rolled back before: %ld, size after %ld, count %ld ", s, size.load(), count);
+            //printf("\nFULL!!!! capacity: %ld, size before: %ld, size after %ld, count %ld, ", capacity, s, size.load(), count);
+            s = size.fetch_sub(count, std::memory_order_acq_rel);
+            //printf("size rolled back before: %ld, size after %ld, count %ld ", s, size.load(), count);
 
             lock.unlock();
             return false;

@@ -59,16 +59,13 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       ++count; // success
     } else {
       ++count2; // failure
-    }
 
-    if (result.second != -1) {
-      ++count3;     // full buffer
-    } else {
-      if (!result.first) {
-        ++count4;   // failed insert and no full buffer
-      } else {
-        ++count5;
-      }
+
+		if (result.second != -1) {
+		  ++count3;     // full buffer
+		} else {
+			++count4;   // failed insert and no full buffer
+		}
     }
 
     if (result.second != -1)
@@ -77,7 +74,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 //  if ((count + count2) != repeats) printf("\nFAIL: number of successful inserts should be %d.  actual %d", repeats, count);
 //  else if (count2 != 0) printf("\nFAIL: number of failed insert overall should be 0. actual %d", count2);
 //  else
-    if (!(count5 <= count && count <= (count5 + count3))) printf("\nFAIL: number of successful inserts should be close to successful inserts without full buffers.");
+//    if (!(count5 <= count && count <= (count5 + count3))) printf("\nFAIL: number of successful inserts should be close to successful inserts without full buffers.");
 
   if (count3 != count/(bufferSize/data.length())) printf("\nFAIL: number of full Buffers is not right: %d should be %ld", count3, count/(bufferSize/data.length()));
   else if (fullBuffers.getSize() != count3) printf("\nFAIL: number of full Buffers do not match: fullbuffer size %ld  full count %d", fullBuffers.getSize(), count3);
@@ -165,8 +162,8 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 //  if (count1 != repeats) printf("\nFAIL: number of successful inserts should be %d.  actual %d", repeats, count1);
 //  else if (count2 != 0) printf("\nFAIL: number of failed insert overall should be 0. actual %d", count2);
 //  else
-  if (count3 != count1/(bufferSize/data.length())) printf("\nFAIL: number of full Buffers from successful insert is not right: %d should be %ld", count3, count1/(bufferSize/data.length()));
-  else if (count4 != count2/(bufferSize/data.length())) printf("\nFAIL: number of full Buffers from failed insert is not right: %d should be %ld", count4, count2/(bufferSize/data.length()));
+  if (count3 != 0) printf("\nFAIL: number of full Buffers from successful insert is not right: %d should be 0", count3);
+  else if (count4 != count1/(bufferSize/data.length())) printf("\nFAIL: number of full Buffers from failed insert is not right: %d should be %ld", count4, count1/(bufferSize/data.length()));
   else printf("PASS");
   printf("\n");
 

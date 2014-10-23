@@ -679,7 +679,7 @@ class CommunicationLayer
 //              assert(pair.second.get() == nullptr);
 //              assert(commLayer.recvInProgress.back().second.get() != nullptr);
 
-              if (!commLayer.recvInProgress.waitAndPush(std::move(pair)) ) {
+              if (!commLayer.recvInProgress.waitAndPush(std::move(pair)).first ) {
                 throw bliss::io::IOException("recvInProgress queue is disabled!");
               }
 
@@ -731,7 +731,7 @@ class CommunicationLayer
 //
 //                assert(commLayer.recvInProgress.back().second.get() != nullptr);
 
-                if (!commLayer.recvInProgress.waitAndPush(std::move(pair)) ) {
+                if (!commLayer.recvInProgress.waitAndPush(std::move(pair)).first ) {
                   throw bliss::io::IOException("recvInProgress queue is disabled!");
                 }
 
@@ -955,7 +955,7 @@ class CommunicationLayer
 //              assert(pair.second.get() == nullptr);
 //              assert(commLayer.recvInProgress.back().second.get() != nullptr);
 
-              if (!commLayer.recvInProgress.waitAndPush(std::move(pair)) ) {
+              if (!commLayer.recvInProgress.waitAndPush(std::move(pair)).first ) {
                 throw bliss::io::IOException("recvInProgress queue is disabled!");
               }
 
@@ -980,7 +980,7 @@ class CommunicationLayer
 //              assert(pair.second.get() == nullptr);
 //              assert(commLayer.recvInProgress.back().second.get() != nullptr);
 
-              if (!commLayer.recvInProgress.waitAndPush(std::move(pair)) ) {
+              if (!commLayer.recvInProgress.waitAndPush(std::move(pair)).first ) {
                 throw bliss::io::IOException("recvInProgress queue is disabled!");
               }
 
@@ -1060,7 +1060,7 @@ class CommunicationLayer
 //                  commLayer.recvInProgress.push_back(std::move(front));
 //                  assert(front.second.get() == nullptr);
 //                  assert(commLayer.recvInProgress.back().second.get() != nullptr);
-                  if (!commLayer.recvInProgress.waitAndPush(std::move(front)) ) {
+                  if (!commLayer.recvInProgress.waitAndPush(std::move(front)).first ) {
                     throw bliss::io::IOException("recvInProgress queue is disabled!");
                   }
 
@@ -1089,7 +1089,7 @@ class CommunicationLayer
 //                  if (commLayer.recvQueue.isFull()) fprintf(stderr, "Rank %d recvQueue is full for control!!!\n", commLayer.commRank);
 
                   // and enqueue ONE FOC message for this tag to be handled by callback.  (reduction from commSize to 1)
-                  if (!commLayer.recvQueue.waitAndPush(std::move(front.second))) {
+                  if (!commLayer.recvQueue.waitAndPush(std::move(front.second)).first) {
                     throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
                   }
 
@@ -1105,7 +1105,7 @@ class CommunicationLayer
  //               if (commLayer.recvQueue.isFull()) fprintf(stderr, "Rank %d recvQueue is full for data!!!\n", commLayer.commRank);
 
                 //==== Data message.  add the received messages into the recvQueue
-                if (!commLayer.recvQueue.waitAndPush(std::move(front.second))) {
+                if (!commLayer.recvQueue.waitAndPush(std::move(front.second)).first) {
                   throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
                 }
               }
@@ -1113,7 +1113,7 @@ class CommunicationLayer
             else
             {
               // not ready yet.  so push back in to front of queue
-              if (!commLayer.recvInProgress.waitAndPushFront(std::move(front)) ) {
+              if (!commLayer.recvInProgress.waitAndPushFront(std::move(front)).first ) {
                 throw bliss::io::IOException("recvInProgress queue is disabled!");
               }
 
@@ -1413,7 +1413,7 @@ public:
 
 //          if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for data msgs\n", commRank);
 
-          if (!sendQueue.waitAndPush(std::move(msg))) {
+          if (!sendQueue.waitAndPush(std::move(msg)).first) {
             ERROR("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush")
             throw bliss::io::IOException("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
           } // else successfully pushed into sendQueue.
@@ -1731,7 +1731,7 @@ protected:
 
 
      // if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for control msgs\n", commRank);
-      if (!sendQueue.waitAndPush(std::move(msg))) {
+      if (!sendQueue.waitAndPush(std::move(msg)).first) {
         lock.unlock();
         throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
       }
@@ -1813,7 +1813,7 @@ protected:
 
 //        if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for flushBuffers\n", commRank);
 
-        if (!sendQueue.waitAndPush(std::move(msg))) {
+        if (!sendQueue.waitAndPush(std::move(msg)).first) {
           lock.unlock();
           throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
         }
