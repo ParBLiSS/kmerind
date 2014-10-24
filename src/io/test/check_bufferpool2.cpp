@@ -30,7 +30,8 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   int count = 0;
 #pragma omp parallel for num_threads(pool_threads) default(none) private(i, id) shared(pool) reduction(+ : count)
   for (i = 0; i < 100; ++i) {
-    if (!pool.tryAcquireBuffer().first) {
+	auto ptr = std::move(pool.tryAcquireBuffer());
+    if (! ptr) {
       ++count;
     }
   }
@@ -45,9 +46,10 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   count = 0;
 #pragma omp parallel for num_threads(pool_threads) default(none) private(i, id) shared(pool) reduction(+ : count)
   for (i = 0; i < 150; ++i) {
-    if (!pool.tryAcquireBuffer().first) {
-      ++count;
-    }
+		auto ptr = std::move(pool.tryAcquireBuffer());
+	    if (! ptr) {
+	      ++count;
+	    }
   }
   expected = pool.getCapacity();
   expected = std::max(0, 150 - expected);
@@ -61,8 +63,12 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 #pragma omp parallel for num_threads(pool_threads) default(none) private(id) shared(pool) reduction(+ : count)
   for (id = 0; id < 350; ++id) {
     try {
-      pool[id].block();
-      pool.releaseBuffer(id);
+		auto ptr = std::move(pool.tryAcquireBuffer());
+	    if (! ptr) {
+	      ptr->block();
+	      pool.releaseBuffer(std::move(ptr));
+	    }
+
     } catch (const std::out_of_range & e)
     {
       ++count;
@@ -71,12 +77,10 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   expected = 350 - pool.getSize();
   if (count != expected) printf("ERROR: number of failed attempt to release buffer should be %d, actual %d. pool size: %d \n", expected, count, pool.getSize());
 
-#pragma omp parallel for num_threads(pool_threads) default(none) private(id) shared(pool) reduction(+ : count)
-  for (id = 0; id < pool.getSize(); ++id) {
-    pool[id].unblock();
-  }
-
   printf("TEST access by multiple threads, each a separate buffer.\n");
+  std::vector<std::unique_ptr<>>
+
+
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool)
   {
     int v = omp_get_thread_num() + 5;
