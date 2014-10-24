@@ -20,6 +20,9 @@
 #include <atomic>
 #include <stdexcept>
 
+// TODO: every operation that's modifying the queue is using unique lock. can this be made better with just careful atomic operations
+// 		 e.g. with memory fence?
+//       see http://en.wikipedia.org/wiki/Non-blocking_algorithm#cite_note-lf-queue-13 and references 12 and 14.
 
 namespace bliss
 {
@@ -39,8 +42,6 @@ namespace bliss
      *          note that this is NOT truly concurrent.  the class serializes parallel access.  move semantic minimizes the copy operations needed.
      *
      *          DUE TO LOCKS, this is NOT fast.  but may be fast enough for MPI buffer management.
-     *
-     * TODO:  VERY IMPORTANT: tryPush and waitAndPush  can lose data, so need to return the && references.
      */
     template <typename T>
     class ThreadSafeQueue

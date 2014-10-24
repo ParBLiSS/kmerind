@@ -193,7 +193,10 @@ namespace bliss
          * @return  size, type IdType (aka int).
          */
         const size_t getAvailableCount() const  {
-          return size_t(numBuffersAvailable);
+        	if (isFixedSize())
+        		return size_t(numBuffersAvailable);
+        	else
+        		return capacity;
         }
 
         /**
@@ -240,14 +243,14 @@ namespace bliss
          */
         BufferPtrType tryAcquireBuffer() {
           BufferPtrType ptr;  // default is a null ptr.
-          if (numBuffersAvailable > 0) {
-              numBuffersAvailable--;
+          if (this->getAvailableCount() > 0) {
+              if (this->isFixedSize()) numBuffersAvailable--;
 
         	  std::lock_guard lock(mutex);
         	  if (available.empty()) {
 				// none available for reuse
-				  // but has room to allocate, so do it.
-				  ptr = std::move(BufferPtrType(new BufferType(buffer_capacity)));
+				// but has room to allocate, so do it.
+				ptr = std::move(BufferPtrType(new BufferType(buffer_capacity)));
         	  } else {
 				// has available for reuse.
 				ptr = std::move(available.front());
@@ -271,11 +274,10 @@ namespace bliss
 			  assert(ptr->isBlocked());
 			  ptr->clear();
 			  available.push_back(std::move(ptr));
-			  numBuffersAvailable++;
+			  numBuffersAvailable++;  // post increment on atomic is 1 instruction less, but has an extract alloc for non-atomic.
 			  return true;
-          } else {
-        	  return false;
-          }
+          } else return false;
+
         }
 
 

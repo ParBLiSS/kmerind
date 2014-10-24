@@ -28,15 +28,15 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   int i = 0;
   typename PoolType::IdType id = 0;
   int count = 0;
-#pragma omp parallel for num_threads(pool_threads) default(none) private(i, id) shared(pool) reduction(+ : count)
-  for (i = 0; i < 100; ++i) {
+  int mx = pool.isFixedSize() ? pool.getCapacity() : 100;
+#pragma omp parallel for num_threads(pool_threads) default(none) private(i, id) shared(pool, mx) reduction(+ : count)
+  for (i = 0; i < mx; ++i) {
 	auto ptr = std::move(pool.tryAcquireBuffer());
     if (! ptr) {
       ++count;
     }
   }
-  expected = pool.getCapacity();
-  expected = std::max(0, 100 - expected);
+  expected = 0;
   if (count != expected) printf("ERROR: number of failed attempt to acquire buffer should be %d, actual %d.  pool capacity %d, size: %d \n", expected, count, pool.getCapacity(), pool.getSize());
   pool.reset();
 
@@ -44,35 +44,36 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   id = 0;
   i = 0;
   count = 0;
-#pragma omp parallel for num_threads(pool_threads) default(none) private(i, id) shared(pool) reduction(+ : count)
-  for (i = 0; i < 150; ++i) {
+  mx = pool.isFixedSize() ? pool.getCapacity() : 100;
+#pragma omp parallel for num_threads(pool_threads) default(none) private(i, id) shared(pool, mx) reduction(+ : count)
+  for (i = 0; i <= mx; ++i) {  // <= so we get 1 extra
 		auto ptr = std::move(pool.tryAcquireBuffer());
 	    if (! ptr) {
 	      ++count;
 	    }
   }
-  expected = pool.getCapacity();
-  expected = std::max(0, 150 - expected);
+  expected = pool.isFixedSize() ? 1 : 0;
   if (count != expected) printf("ERROR: number of failed attempt to acquire buffer should be %d, actual %d.  pool size: %d \n", expected, count, pool.getSize());
 
-
+  pool.reset();
 
   printf("TEST release\n");
   count = 0;
   id = 0;
-#pragma omp parallel for num_threads(pool_threads) default(none) private(id) shared(pool) reduction(+ : count)
-  for (id = 0; id < 350; ++id) {
-    try {
-		auto ptr = std::move(pool.tryAcquireBuffer());
-	    if (! ptr) {
-	      ptr->block();
-	      pool.releaseBuffer(std::move(ptr));
-	    }
+  mx = pool.isFixedSize() ? pool.getCapacity() : 100;
+  // first drain the pool
+  for (int i = 0; i < )
+  // and create some dummy buffers to insert
 
-    } catch (const std::out_of_range & e)
-    {
-      ++count;
-    }
+#pragma omp parallel for num_threads(pool_threads) default(none) private(id) shared(pool, mx) reduction(+ : count)
+  for (id = 0; id < mx; ++id) {
+	auto ptr = std::move(pool.tryAcquireBuffer());
+	if (ptr) {
+	  ptr->block();
+	  if (! pool.releaseBuffer(std::move(ptr))) {
+		  ++count; // failed release
+	  }
+	}
   }
   expected = 350 - pool.getSize();
   if (count != expected) printf("ERROR: number of failed attempt to release buffer should be %d, actual %d. pool size: %d \n", expected, count, pool.getSize());
