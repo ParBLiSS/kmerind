@@ -433,7 +433,7 @@ namespace bliss
             throw std::length_error("ThreadSafe Buffer capacity is 0");
 
           // ONE thread at a time can get the position to copy in data.  If full, then the buffer is blocked.
-          std::unique_lock<std::mutex> lock(mutex);
+          std::unique_lock<std::mutex> lock(mutex);   // block() and size need to be synchronized consistently across threads.
 
           if (isBlocked<TS>()) return false;
 
@@ -550,4 +550,4 @@ namespace bliss
   } /* namespace io */
 } /* namespace bliss */
 
-#endif /* BUFFERPOOL_HPP_ */
+#endif /* BUFFER_HPP_ */
