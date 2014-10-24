@@ -96,7 +96,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
     pool[1].append(&v, sizeof(int));
   }
   printf("values inserted were ");
-  for (int i = 0; i <= buffer_threads ; ++i) {
+  for (int i = 0; i < buffer_threads ; ++i) {
     int u = reinterpret_cast<const int*>(pool[1].getData())[i];
     printf(", %d", u);
   }

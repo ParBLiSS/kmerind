@@ -193,10 +193,7 @@ namespace bliss
          * @return  size, type IdType (aka int).
          */
         const size_t getAvailableCount() const  {
-        	if (isFixedSize())
-        		return size_t(numBuffersAvailable);
-        	else
-        		return capacity;
+          return size_t(numBuffersAvailable);
         }
 
         /**
@@ -207,6 +204,10 @@ namespace bliss
           return capacity;
         }
 
+        inline const bool isUnlimited() const {
+          return capacity == std::numeric_limits<size_t>::max();
+        }
+
         /**
          * @brief     Each buffer's maximum capacity.
          * @return  each buffer's maximum capacity.
@@ -215,13 +216,6 @@ namespace bliss
           return buffer_capacity;
         }
 
-        /**
-         * @brief     whether the BufferPool2 is growable
-         * @return    bool indicating if BufferPool2 is growable.
-         */
-        inline const bool isFixedSize() const {
-          return capacity < std::numeric_limits<size_t>::max();
-        }
 
         /**
          * @brief     Resets the entire BufferPool2: all Buffers in pool are  marked as released and available.
@@ -243,21 +237,21 @@ namespace bliss
          */
         BufferPtrType tryAcquireBuffer() {
           BufferPtrType ptr;  // default is a null ptr.
-          if (this->getAvailableCount() > 0) {
-              if (this->isFixedSize()) numBuffersAvailable--;
+          if (numBuffersAvailable > 0) {
+            numBuffersAvailable--;
 
-        	  std::lock_guard lock(mutex);
+        	  std::lock_guard<std::mutex> lock(mutex);
         	  if (available.empty()) {
-				// none available for reuse
-				// but has room to allocate, so do it.
-				ptr = std::move(BufferPtrType(new BufferType(buffer_capacity)));
-        	  } else {
-				// has available for reuse.
-				ptr = std::move(available.front());
-				available.pop_front();
-        	  }
-			  ptr->clear();
-			  ptr->unblock();
+              // none available for reuse
+              // but has room to allocate, so do it.
+              ptr = std::move(BufferPtrType(new BufferType(buffer_capacity)));
+            } else {
+              // has available for reuse.
+              ptr = std::move(available.front());
+              available.pop_front();
+            }
+            ptr->clear();
+            ptr->unblock();
           } // else, got all buffers allowed.
           return std::move(ptr);
         }
@@ -270,12 +264,13 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_SAFE, bool>::type releaseBuffer(BufferPtrType&& ptr) {
           std::lock_guard<std::mutex> lock(mutex);
+
           if (numBuffersAvailable < capacity) {
-			  assert(ptr->isBlocked());
-			  ptr->clear();
-			  available.push_back(std::move(ptr));
-			  numBuffersAvailable++;  // post increment on atomic is 1 instruction less, but has an extract alloc for non-atomic.
-			  return true;
+            assert(ptr->isBlocked());
+            ptr->clear();
+            available.push_back(std::move(ptr));
+            numBuffersAvailable++;  // post increment on atomic is 1 instruction less, but has an extract alloc for non-atomic.
+            return true;
           } else return false;
 
         }
@@ -289,14 +284,12 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_UNSAFE, bool>::type releaseBuffer(BufferPtrType&& ptr) {
         	if (numBuffersAvailable < capacity) {
-			  assert(ptr->isBlocked());
-			  ptr->clear();
-			  available.push_back(std::move(ptr));
-			  ++numBuffersAvailable;
-			  return true;
-        	} else {
-        		return false;
-        	}
+            assert(ptr->isBlocked());
+            ptr->clear();
+            available.push_back(std::move(ptr));
+            ++numBuffersAvailable;
+            return true;
+        	} else return false;
 
           //DEBUGF("buffer id %d is available for reuse.", id);
         }
