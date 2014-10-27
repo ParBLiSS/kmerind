@@ -214,7 +214,7 @@ namespace bliss
         std::vector< BufferPtrType > buffers;
 
         /// for synchronizing access to buffers (and pool).
-        std::mutex mutex;
+        mutable std::mutex mutex;
 
       private:
 
@@ -251,7 +251,7 @@ namespace bliss
          * @param other   source SendMessageBuffers to move from.
          */
         explicit SendMessageBuffers(SendMessageBuffers<ThreadSafety> && other) :
-            SendMessageBuffers(std::forward<SendMessageBuffers<ThreadSafety>(other), std::lock_guard<std::mutex>(other.mutex)) {};
+            SendMessageBuffers(std::forward<SendMessageBuffers<ThreadSafety> >(other), std::lock_guard<std::mutex>(other.mutex)) {};
 
         /**
          * @brief default copy assignment operator, deleted.
@@ -299,7 +299,8 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         const typename std::enable_if<TS, BufferPtrType>::type & at(const int targetRank) const {
-          std::lock_guard<std::mutex> lock(mutex);   // not the most efficient.
+          std::atomic_thread_fence(std::memory_order_acquire);
+
           return buffers.at(targetRank);   // can use reference since we made pool unlimited, so never get nullptr
         }
 
@@ -317,11 +318,17 @@ namespace bliss
          * @brief Reset the current MessageBuffers instance by first clearing its list of Buffer Ids, then repopulate it from the pool.
          */
         virtual void reset() {
+          swapCount = 0;
+
           std::lock_guard<std::mutex> lock(mutex);
           // release all buffers back to pool
           for (int i = 0; i < buffers.size(); ++i) {
-            buffers.at(i).block();
-            this->pool.releaseBuffer(std::move(buffers.at(i)));
+            if (buffers.at(i)) {
+              std::atomic_thread_fence(std::memory_order_acquire);
+
+              buffers.at(i)->block();
+              this->pool.releaseBuffer(std::move(buffers.at(i)));
+            }
           }
           // reset the pool. local vector should contain a bunch of nullptrs.
           this->pool.reset();
@@ -329,6 +336,7 @@ namespace bliss
           // populate the buffers from the pool
           for (int i = 0; i < buffers.size(); ++i) {
             buffers.at(i) = std::move(this->pool.tryAcquireBuffer());
+            std::atomic_thread_fence(std::memory_order_release);
           }
         }
 
@@ -396,7 +404,7 @@ namespace bliss
           // if flush, then block is set just before swap, so it's more likely this thread enters append without a block.
 
           // block() and size are critical in Buffer - they need to be synchronized consistently
-          bool appendResult = this->at<ThreadSafety>(targetProc)->append(data, count);
+          std::pair<bool, bool> appendResult = this->at<ThreadSafety>(targetProc)->append(data, count);
 
           // now if appendResult is false, then we return false, but also swap in a new buffer.
           // conditions are either full buffer, or blocked buffer.
@@ -405,10 +413,13 @@ namespace bliss
 
           //std::unique_lock<std::mutex> lock(mutex);
           BufferPtrType ptr;
-          if (!appendResult)  // equivalent to check isBlocked.  appendResult is already here.
+          if (appendResult.second) { // equivalent to check isBlocked.  appendResult is already here.
+            ++swapCount;
+            printf("SWAP count = %d\n", swapCount.load());
             ptr = std::move(swapInEmptyBuffer<ThreadSafety>(targetProc));
 
-          return std::move(std::make_pair(appendResult, std::move(ptr)));
+          }
+          return std::move(std::make_pair(appendResult.first, std::move(ptr)));
 
         }
 
@@ -422,7 +433,7 @@ namespace bliss
           }
 
           // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-          this->at<TS>(targetProc)->block();
+          this->at<ThreadSafety>(targetProc)->block();
 
 
           // passing in getBufferIdForRank result to ensure atomicity.
@@ -463,7 +474,9 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<TS, BufferPtrType>::type swapInEmptyBuffer(const int dest) {
 
-            std::lock_guard<std::mutex> lock(mutex);  // one thread at a time does this.
+            std::lock_guard<std::mutex> lock(mutex); // lock will prevent multiple threads from calling this or other msg buffer locking ops at the same time
+                  // does not prevent concurrent access to buffers.at(targetRank).
+            // one thread calls this per buffer.
         	if (this->at<TS>(dest)->isBlocked()) {  // lock this part until finished with swapping.
 
         		// get a new buffer and swap
@@ -471,11 +484,14 @@ namespace bliss
 
           // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
             // now swap.  using swap so that other threads referencing buffers.at(blah) will have it updated automatically.
-			  std::swap(buffers.at(targetRank), bufferPtr);
 
-			  return std::move(bufferPtr);
+            std::swap(buffers.at(dest), bufferPtr);  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
+            std::atomic_thread_fence(std::memory_order_release);
+
+            return std::move(bufferPtr);
         	}
         	else {
+        	  printf("swap but not blocked.");
         		return std::move(BufferPtrType());  // not blocked, so don't swap.
         	}
         }
@@ -518,18 +534,20 @@ namespace bliss
 
 
 			  // now swap.  using swap so that other threads referencing buffers.at(blah) will have it updated automatically.
-			  std::swap(buffers.at(targetRank), bufferPtr);
+			  std::swap(buffers.at(dest), bufferPtr);
 
 			  return std::move(bufferPtr);
         	}
         	else {
+            printf("swap but not blocked.");
         		return std::move(BufferPtrType());  // not blocked, so don't swap.
         	}
 
         }
 
 
-
+      protected:
+        std::atomic<int> swapCount;
     };
 
   } /* namespace io */

@@ -76,8 +76,14 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 //  else
 //    if (!(count5 <= count && count <= (count5 + count3))) printf("\nFAIL: number of successful inserts should be close to successful inserts without full buffers.");
 
-  if (count3 != count/(bufferSize/data.length())) printf("\nFAIL: number of full Buffers is not right: %d should be %ld", count3, count/(bufferSize/data.length()));
-  else if (fullBuffers.getSize() != count3) printf("\nFAIL: number of full Buffers do not match: fullbuffer size %ld  full count %d", fullBuffers.getSize(), count3);
+  // compute 2 expected since append returns full buffer only on failed insert and if there are n inserts that brings it to just before full, then it depends on timing
+  // as to when the buffer becomes full.  (other threads will fail on append until swap happens, but not return a full buffer.)
+  int expectedFull = count / (bufferSize/data.length()) - (count % (bufferSize/data.length()) == 0 ? 1 : 0);
+  int expectedFull2 = count / (bufferSize/data.length());
+
+  if (fullBuffers.getSize() != count3) printf("\nFAIL: number of full Buffers do not match: fullbuffer size %ld  full count %d", fullBuffers.getSize(), count3);
+  // buffer at 23 entries (86 bytes each, 2048 bytes per buffer) will not show as full until the next iterator.
+  else if (count3 != expectedFull && count3 != expectedFull2) printf("\nFAIL: number of full Buffers is not right: %d should be %d or %d", count3, expectedFull, expectedFull2);
   //else if (count4 != 0) printf("\nFAIL: number of failed insert due to no buffer should be 0. actual %d", count4);
   else printf("PASS");
   printf("\n");
@@ -113,10 +119,14 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       ++count4;       // error during pop
     }
   }
+
+  expectedFull = count / (bufferSize/data.length()) - (count % (bufferSize/data.length()) == 0 ? 1 : 0);
+  expectedFull2 = count / (bufferSize/data.length());
+
   if (count4 != 0) printf("\nFAIL: invalid argument exception during pop.  count = %d", count4);
-  else if (count5 != 350 - count/(bufferSize/data.length())) printf("\nFAIL: failed on pop %d times", count5);
+  else if (count5 != 350 - expectedFull && count5 != 350 - expectedFull2) printf("\nFAIL: failed on pop %d times", count5);
   else if (count2 != 0) printf("\nFAIL: succeeded in pop but not full buffer. %d", count2);
-  else if (count1 != count/(bufferSize/data.length())) printf("FAIL: expected %ld full buffers, but received %d", count/(bufferSize/data.length()), count1);
+  else if (count1 != expectedFull && count1 != expectedFull2) printf("FAIL: expected %d or %d full buffers, but received %d", expectedFull, expectedFull2, count1);
   else if (count1 != count3) printf("\nFAIL: successful pops. expected %d.  actual %d", count3, count1);
   else
     printf("PASS");
@@ -140,7 +150,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       ++count1;
 
       if (result.second) {
-        usleep(300);
+        //usleep(300);
         ++count3;
         //printf("%d ", result.second);
         buffers.releaseBuffer(std::move(result.second));
@@ -149,7 +159,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       ++count2;
 
       if (result.second) {
-        usleep(300);
+        //usleep(300);
         ++count4;
         //printf("%d ", result.second);
         buffers.releaseBuffer(std::move(result.second));
@@ -158,12 +168,14 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
 
   }
+  expectedFull = (count1 - 1 + (bufferSize/data.length())) / (bufferSize/data.length()) - (count1 % (bufferSize/data.length()) == 0 ? 1 : 0);
+  expectedFull2 = count1 / (bufferSize/data.length());
 
 //  if (count1 != repeats) printf("\nFAIL: number of successful inserts should be %d.  actual %d", repeats, count1);
 //  else if (count2 != 0) printf("\nFAIL: number of failed insert overall should be 0. actual %d", count2);
 //  else
   if (count3 != 0) printf("\nFAIL: number of full Buffers from successful insert is not right: %d should be 0", count3);
-  else if (count4 != count1/(bufferSize/data.length())) printf("\nFAIL: number of full Buffers from failed insert is not right: %d should be %ld", count4, count1/(bufferSize/data.length()));
+  else if (count4 != expectedFull && count4 != expectedFull2) printf("\nFAIL: number of full Buffers from failed insert is not right: %d should be %d or %d", count4, expectedFull, expectedFull2);
   else printf("PASS");
   printf("\n");
 

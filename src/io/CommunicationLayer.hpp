@@ -514,8 +514,8 @@ class CommunicationLayer
        * @param _tag  type of the message being sent
        * @param _dst  destination of the message
        */
-      DataMessageToSend(BufferPtrType _id, int _tag, int _dst)
-        : MPIMessage(_tag, _dst), ptr(_id) {}
+      DataMessageToSend(BufferPtrType _ptr, int _tag, int _dst)
+        : MPIMessage(_tag, _dst), ptr(std::move(_ptr)) {}
 
 
       /// default constructor
@@ -528,8 +528,6 @@ class CommunicationLayer
     //==== Message type aliases for convenience.
 
     using SendDataElementType = DataMessageToSend<BufferPtrType>;
-
-
 
     // ==== send comm thread class.  for organization.
     // TODO: group the code for comm thread
@@ -642,19 +640,19 @@ class CommunicationLayer
 
 
           // try to get the send element
-          auto el = std::move(commLayer.sendQueue.tryPop());
+          auto el = std::move(commLayer.sendQueue.tryPop());  // type: std::pair<bool, std::unique_ptr<MPIMessage>>
           if (!el.first) {  // no valid entry in the queue
             return;
           }
           // else there is a valid entry from sendQueue
-          assert(el.second.get() != nullptr);
+          assert(el.second);
 
           // second is a pointer to ControlMessage
-          if (el.second.get()->tag == CONTROL_TAG.tag) {
+          if (el.second->tag == CONTROL_TAG.tag) {
             // if control message,
 
             // ControlMessage ownership is maintained by el.
-            ControlMessage* se = dynamic_cast<ControlMessage*>(el.second.get());
+            ControlMessage* se = dynamic_cast<ControlMessage*>(el.second.get());  // MPIMessage*
             TaggedEpoch te = se->control;
 
             DEBUGF("C SEND %d -> %d, termination signal for tag %d epoch %d", commLayer.commRank, se->rank, te.tag, te.epoch);
@@ -672,8 +670,8 @@ class CommunicationLayer
               // now move ControlMessage ownership to recvInProgress
               auto pair = std::make_pair(std::move(req),
                                          std::move(el.second));
-              assert(el.second.get() == nullptr);
-              assert(pair.second.get() != nullptr);
+              assert(el.second == nullptr);
+              assert(pair.second != nullptr);
 
 //              commLayer.recvInProgress.push_back(std::move(pair));
 //              assert(pair.second.get() == nullptr);
@@ -702,11 +700,11 @@ class CommunicationLayer
             // this is an actual data message.
 
 
-            SendDataElementType* se = dynamic_cast<SendDataElementType*>(el.second.get());
+            SendDataElementType* se = dynamic_cast<SendDataElementType*>(el.second.get());  // MPIMessage*
 
             // get message data and it's size
-            void* data = const_cast<void*>(se->ptr->getData());
-            auto count = se->ptr->getSize();
+            uint8_t* data = se->ptr->getData();  // BufferPtrType then getData
+            auto count = se->ptr->getFinalSize();
 
             if (count > 0) {
 
@@ -723,8 +721,8 @@ class CommunicationLayer
                 MPI_Request req = MPI_REQUEST_NULL;
 
                 auto pair = std::make_pair(std::move(req), std::move(dmr));
-                assert(dmr.get() == nullptr);
-                assert(pair.second.get() != nullptr);
+                assert(dmr == nullptr);
+                assert(pair.second != nullptr);
 
 //                commLayer.recvInProgress.push_back(std::move(pair));
 //                assert(pair.second.get() == nullptr);
@@ -778,7 +776,7 @@ class CommunicationLayer
           while(!sendInProgress.empty())
           {
             // get the first request to check
-            assert(sendInProgress.front().second.get() != nullptr);
+            assert(sendInProgress.front().second != nullptr);
 
 
             // check if MPI request has completed.
@@ -793,9 +791,9 @@ class CommunicationLayer
             if (finished)
             {
               // if there is a buffer, then release it.
-              if (sendInProgress.front().second.get()->tag != CONTROL_TAG.tag) {
+              if (sendInProgress.front().second->tag != CONTROL_TAG.tag) {
                 SendDataElementType* msg = dynamic_cast<SendDataElementType*>(sendInProgress.front().second.get());
-                if (msg->ptr != BufferPoolType::ABSENT) {
+                if (msg->ptr) {
                   // cleanup, i.e., release the buffer back into the pool
                   commLayer.buffers.at(msg->tag).releaseBuffer(std::move(msg->ptr));
                 }
@@ -1396,20 +1394,17 @@ public:
 
     //== try to append the new data - repeat until successful.
     // along the way, if a full buffer's id is returned, queue it for sendQueue.
-    BufferPtrType fullId = BufferPoolType::ABSENT;
     std::pair<bool, BufferPtrType> result;
     do {
       // try append.  append fails if there is no buffer or no room
       result = buffers.at(tag).append(data, nbytes, dst_rank);
 
-      fullId = result.second;
-
-      if (fullId != CommunicationLayer::BufferPoolType::ABSENT) {        // have a full buffer.  implies !result.first
+      if (result.second) {        // have a full buffer.  implies !result.first
         // verify that the buffer is not empty (may change because of threading)
-        if (!(buffers.at(tag).getBackBuffer(fullId).isEmpty())) {
+        if (!(result.second->isEmpty())) {
           // have a non-empty buffer - put in send queue.
-        	DEBUGF("Rank %d has full buffer at id %d.  enqueue for send.", commRank, fullId);
-          std::unique_ptr<SendDataElementType> msg(new SendDataElementType(fullId, tag, dst_rank));
+        	DEBUGF("Rank %d has full buffer at %p.  enqueue for send.", commRank, result.second.get());
+          std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(result.second), tag, dst_rank));
 
 //          if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for data msgs\n", commRank);
 
@@ -1417,10 +1412,8 @@ public:
             ERROR("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush")
             throw bliss::io::IOException("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
           } // else successfully pushed into sendQueue.
-        }  // else empty back buffer
+        }  // else empty buffer
 
-        // full buffer enqueued, or empty buffer, reset it.
-        fullId = CommunicationLayer::BufferPoolType::ABSENT;
       } // else don't have a full buffer.
 
       // repeat until success;
@@ -1467,7 +1460,7 @@ public:
     // multiple threads may call this.
     if (buffers.find(tag) == buffers.end()) {
       // create new message buffer
-      buffers[tag] = std::move(MessageBuffersType(commSize, 8192, 2 * commSize));
+      buffers[tag] = std::move(MessageBuffersType(commSize, 8192));
     }
     lock.unlock();
 
@@ -1802,10 +1795,10 @@ protected:
       // flush buffers in a circular fashion, starting with the next neighbor
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 
-      auto id = buffers.at(tag).flushBufferForRank(target_rank);
+      auto bufPtr = buffers.at(tag).flushBufferForRank(target_rank);
       // flush/send all remaining non-empty buffers
-      if ((id != BufferPoolType::ABSENT) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
-        std::unique_ptr<SendDataElementType> msg(new SendDataElementType(id, tag, target_rank));
+      if ((bufPtr) && !(bufPtr->isEmpty())) {
+        std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(bufPtr), tag, target_rank));
 
 //        if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for flushBuffers\n", commRank);
 

@@ -99,7 +99,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   {
     int v = omp_get_thread_num() + 5;
     auto ptr = std::move(pool.tryAcquireBuffer());
-    if (! ptr->append(&v, sizeof(int))) {
+    if (! ptr->append(&v, sizeof(int)).first) {
       ++count;
     }
 
@@ -158,8 +158,8 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 
       // random sleep
       usleep(rand() % 1000);
-      if (buf->getSize() != sizeof(int) * iter)
-        printf("ERROR: thread %d/%d buffer size is %lu, expected %lu\n", omp_get_thread_num(), pool_threads, buf->getSize(), sizeof(int) * iter);
+      if (buf->getApproximateSize() != sizeof(int) * iter)
+        printf("ERROR: thread %d/%d buffer size is %u, expected %lu\n", omp_get_thread_num(), pool_threads, buf->getApproximateSize(), sizeof(int) * iter);
 
       // clear buffer
       buf->block();

@@ -22,7 +22,6 @@
 int main(int argc, char** argv) {
 
   typedef int valType;
-  int typeSize = sizeof(valType);
   valType val;
 
 
@@ -32,25 +31,32 @@ int main(int argc, char** argv) {
 
   printf("TEST insert\n");
   int start = -1, end = -1;
-  int i = 0;
+  int i;
   for (i = 0; i < 9000; ++i) {
     val = static_cast<valType>(i);
-    if (! tlBuffer.append(&val, sizeof(valType))) {
+    if (! (tlBuffer.append(&val, sizeof(valType)).first) ) {
        if (start == -1) start = i;
     }
   }
   end = i;
   if (start != 8192/sizeof(valType)) printf("\tFAILED can't insert (full) from %d to %d!\n", start, end);
+  const valType* temp = reinterpret_cast<const valType*>(tlBuffer.getData());
+  for (int j = 0; j < (8192/sizeof(valType)); ++j) {
+    if (temp[j] != j) {
+      printf("ERROR: result is not expected.  expected: %d actual %d\n", j, temp[j]);
+      //assert(false);
+    }
+  }
+
 
   printf("TEST clear\n");
   tlBuffer.clear();
-  if (tlBuffer.getSize() != 0) printf("\tERROR: NOT empty\n");
+  if (tlBuffer.getFinalSize() != 0) printf("\tERROR: NOT empty\n");
 
 
   printf("TEST isFull\n");
   start = -1;
   end = -1;
-  i = 0;
   for (i = 0; i < 9000; ++i) {
     if (tlBuffer.isFull()) {
       if (start == -1) start = i;
@@ -62,9 +68,12 @@ int main(int argc, char** argv) {
   if (start != 8192/sizeof(valType)) printf("\tERROR: isFULL from %d to %d!\n", start, end);
 
 
-  const valType* temp = reinterpret_cast<const valType*>(tlBuffer.getData());
-  for (int j = 0; j < (8192/typeSize); ++j) {
-    assert(temp[j] == j);
+  temp = reinterpret_cast<const valType*>(tlBuffer.getData());
+  for (int j = 0; j < (8192/sizeof(valType)); ++j) {
+    if (temp[j] != j) {
+      //printf("ERROR: result is not expected.  expected: %d actual %d\n", j, temp[j]);
+      assert(false);
+    }
   }
   printf("CONTENT Passes check after insert\n");
 
@@ -72,7 +81,7 @@ int main(int argc, char** argv) {
   size_t bufferCapBefore = tlBuffer.getCapacity();
   size_t bufferCapAfter = 0;
 
-  size_t bufferSizeBefore = tlBuffer.getSize();
+  size_t bufferSizeBefore = tlBuffer.getApproximateSize();
   size_t bufferSizeAfter = 0;
 
   const void* bufferPtrBefore = tlBuffer.getData();
@@ -81,26 +90,26 @@ int main(int argc, char** argv) {
   printf("TEST move ctor from thread unsafe to thread unsafe.\n");
   bliss::io::Buffer<bliss::concurrent::THREAD_UNSAFE> tlBuffer2(std::move(tlBuffer));
   if (tlBuffer.getCapacity()  !=  bufferCapAfter  ||
-      tlBuffer.getSize()      != bufferSizeAfter ||
+      tlBuffer.getApproximateSize()      != bufferSizeAfter ||
       tlBuffer.getData()      !=  bufferPtrAfter  ||
       tlBuffer2.getCapacity() !=  bufferCapBefore  ||
-      tlBuffer2.getSize()     != bufferSizeBefore ||
+      tlBuffer2.getApproximateSize()     != bufferSizeBefore ||
       tlBuffer2.getData()     !=  bufferPtrBefore)
-  printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
-         tlBuffer.getSize(), tlBuffer.getCapacity(), tlBuffer.getData(),
-         tlBuffer2.getSize(), tlBuffer2.getCapacity(), tlBuffer2.getData());
+  printf("before  size %u, capacity = %u, pointer = %p; after   size %u, capacity = %u, pointer = %p\n",
+         tlBuffer.getApproximateSize(), tlBuffer.getCapacity(), tlBuffer.getData(),
+         tlBuffer2.getApproximateSize(), tlBuffer2.getCapacity(), tlBuffer2.getData());
 
   printf("TEST move = from thread unsafe to thread unsafe.\n");
   tlBuffer = std::move(tlBuffer2);
   if (tlBuffer2.getCapacity()  !=  bufferCapAfter  ||
-      tlBuffer2.getSize()      != bufferSizeAfter ||
+      tlBuffer2.getApproximateSize()      != bufferSizeAfter ||
       tlBuffer2.getData()      !=  bufferPtrAfter  ||
       tlBuffer.getCapacity() !=  bufferCapBefore  ||
-      tlBuffer.getSize()     != bufferSizeBefore ||
+      tlBuffer.getApproximateSize()     != bufferSizeBefore ||
       tlBuffer.getData()     !=  bufferPtrBefore)
-  printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
-         tlBuffer2.getSize(), tlBuffer2.getCapacity(), tlBuffer2.getData(),
-         tlBuffer.getSize(), tlBuffer.getCapacity(), tlBuffer.getData());
+  printf("before  size %u, capacity = %u, pointer = %p; after   size %u, capacity = %u, pointer = %p\n",
+         tlBuffer2.getApproximateSize(), tlBuffer2.getCapacity(), tlBuffer2.getData(),
+         tlBuffer.getApproximateSize(), tlBuffer.getCapacity(), tlBuffer.getData());
 
 
 
@@ -108,82 +117,82 @@ int main(int argc, char** argv) {
   printf("TEST move ctor from thread unsafe to thread safe.\n");
   bliss::io::Buffer<bliss::concurrent::THREAD_SAFE> tsBuffer(std::move(tlBuffer));
   if (tlBuffer.getCapacity()  !=  bufferCapAfter  ||
-      tlBuffer.getSize()      != bufferSizeAfter ||
+      tlBuffer.getApproximateSize()      != bufferSizeAfter ||
       tlBuffer.getData()      !=  bufferPtrAfter  ||
       tsBuffer.getCapacity() !=  bufferCapBefore  ||
-      tsBuffer.getSize()     != bufferSizeBefore ||
+      tsBuffer.getApproximateSize()     != bufferSizeBefore ||
       tsBuffer.getData()     !=  bufferPtrBefore)
-  printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
-         tlBuffer.getSize(), tlBuffer.getCapacity(), tlBuffer.getData(),
-         tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData());
+  printf("before  size %u, capacity = %u, pointer = %p; after   size %u, capacity = %u, pointer = %p\n",
+         tlBuffer.getApproximateSize(), tlBuffer.getCapacity(), tlBuffer.getData(),
+         tsBuffer.getApproximateSize(), tsBuffer.getCapacity(), tsBuffer.getData());
 
 
   printf("TEST move ctor from thread safe to thread safe.\n");
   bliss::io::Buffer<bliss::concurrent::THREAD_SAFE> tsBuffer2(std::move(tsBuffer));
   if (tsBuffer.getCapacity()  !=  bufferCapAfter  ||
-      tsBuffer.getSize()      != bufferSizeAfter ||
+      tsBuffer.getApproximateSize()      != bufferSizeAfter ||
       tsBuffer.getData()      !=  bufferPtrAfter  ||
       tsBuffer2.getCapacity() !=  bufferCapBefore  ||
-      tsBuffer2.getSize()     != bufferSizeBefore ||
+      tsBuffer2.getApproximateSize()     != bufferSizeBefore ||
       tsBuffer2.getData()     !=  bufferPtrBefore)
-  printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
-         tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData(),
-         tsBuffer2.getSize(), tsBuffer2.getCapacity(), tsBuffer2.getData());
+  printf("before  size %u, capacity = %u, pointer = %p; after   size %u, capacity = %u, pointer = %p\n",
+         tsBuffer.getApproximateSize(), tsBuffer.getCapacity(), tsBuffer.getData(),
+         tsBuffer2.getApproximateSize(), tsBuffer2.getCapacity(), tsBuffer2.getData());
 
   printf("TEST move = from thread safe to thread safe.\n");
   tsBuffer = std::move(tsBuffer2);
   if (tsBuffer2.getCapacity()  !=  bufferCapAfter  ||
-      tsBuffer2.getSize()      != bufferSizeAfter ||
+      tsBuffer2.getApproximateSize()      != bufferSizeAfter ||
       tsBuffer2.getData()      !=  bufferPtrAfter  ||
       tsBuffer.getCapacity() !=  bufferCapBefore  ||
-      tsBuffer.getSize()     != bufferSizeBefore ||
+      tsBuffer.getApproximateSize()     != bufferSizeBefore ||
       tsBuffer.getData()     !=  bufferPtrBefore)
-  printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
-         tsBuffer2.getSize(), tsBuffer2.getCapacity(), tsBuffer2.getData(),
-         tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData());
+  printf("before  size %u, capacity = %u, pointer = %p; after   size %u, capacity = %u, pointer = %p\n",
+         tsBuffer2.getApproximateSize(), tsBuffer2.getCapacity(), tsBuffer2.getData(),
+         tsBuffer.getApproximateSize(), tsBuffer.getCapacity(), tsBuffer.getData());
 
 
   printf("TEST move ctor from thread safe to thread unsafe.\n");
   bliss::io::Buffer<bliss::concurrent::THREAD_UNSAFE> tlBuffer3(std::move(tsBuffer));
   if (tsBuffer.getCapacity()  !=  bufferCapAfter  ||
-      tsBuffer.getSize()      != bufferSizeAfter ||
+      tsBuffer.getApproximateSize()      != bufferSizeAfter ||
       tsBuffer.getData()      !=  bufferPtrAfter  ||
       tlBuffer3.getCapacity() !=  bufferCapBefore  ||
-      tlBuffer3.getSize()     != bufferSizeBefore ||
+      tlBuffer3.getApproximateSize()     != bufferSizeBefore ||
       tlBuffer3.getData()     !=  bufferPtrBefore)
-  printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
-         tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData(),
-         tlBuffer3.getSize(), tlBuffer3.getCapacity(), tlBuffer3.getData());
+  printf("before  size %u, capacity = %u, pointer = %p; after   size %u, capacity = %u, pointer = %p\n",
+         tsBuffer.getApproximateSize(), tsBuffer.getCapacity(), tsBuffer.getData(),
+         tlBuffer3.getApproximateSize(), tlBuffer3.getCapacity(), tlBuffer3.getData());
 
 
   printf("TEST move = from thread unsafe to thread safe.\n");
   tsBuffer = std::move(tlBuffer3);
   if (tlBuffer3.getCapacity()  !=  bufferCapAfter  ||
-      tlBuffer3.getSize()      != bufferSizeAfter ||
+      tlBuffer3.getApproximateSize()      != bufferSizeAfter ||
       tlBuffer3.getData()      !=  bufferPtrAfter  ||
       tsBuffer.getCapacity() !=  bufferCapBefore  ||
-      tsBuffer.getSize()     != bufferSizeBefore ||
+      tsBuffer.getApproximateSize()     != bufferSizeBefore ||
       tsBuffer.getData()     !=  bufferPtrBefore)
-  printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
-         tlBuffer3.getSize(), tlBuffer3.getCapacity(), tlBuffer3.getData(),
-         tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData());
+  printf("before  size %u, capacity = %u, pointer = %p; after   size %u, capacity = %u, pointer = %p\n",
+         tlBuffer3.getApproximateSize(), tlBuffer3.getCapacity(), tlBuffer3.getData(),
+         tsBuffer.getApproximateSize(), tsBuffer.getCapacity(), tsBuffer.getData());
 
   printf("TEST move = from thread unsafe to thread safe.\n");
   tlBuffer = std::move(tsBuffer);
   if (tsBuffer.getCapacity()  !=  bufferCapAfter  ||
-      tsBuffer.getSize()      != bufferSizeAfter ||
+      tsBuffer.getApproximateSize()      != bufferSizeAfter ||
       tsBuffer.getData()      !=  bufferPtrAfter  ||
       tlBuffer.getCapacity() !=  bufferCapBefore  ||
-      tlBuffer.getSize()     != bufferSizeBefore ||
+      tlBuffer.getApproximateSize()     != bufferSizeBefore ||
       tlBuffer.getData()     !=  bufferPtrBefore)
-  printf("before  size %lu, capacity = %lu, pointer = %p; after   size %lu, capacity = %lu, pointer = %p\n",
-         tsBuffer.getSize(), tsBuffer.getCapacity(), tsBuffer.getData(),
-         tlBuffer.getSize(), tlBuffer.getCapacity(), tlBuffer.getData());
+  printf("before  size %u, capacity = %u, pointer = %p; after   size %u, capacity = %u, pointer = %p\n",
+         tsBuffer.getApproximateSize(), tsBuffer.getCapacity(), tsBuffer.getData(),
+         tlBuffer.getApproximateSize(), tlBuffer.getCapacity(), tlBuffer.getData());
 
 
 
   temp = reinterpret_cast<const valType*>(tlBuffer.getData());
-  for (int j = 0; j < (8192/typeSize); ++j) {
+  for (int j = 0; j < (8192/sizeof(valType)); ++j) {
     assert(temp[j] == j);
   }
   printf("CONTENT Passes check after move\n");
@@ -209,7 +218,7 @@ int main(int argc, char** argv) {
   for (i = 0; i < 9000; ++i) {
     val = static_cast<valType>(i);
 
-    if (! tsBuffer4.append(&val, sizeof(valType))) {
+    if (! (tsBuffer4.append(&val, sizeof(valType))).first) {
       ++fail;
 #pragma omp critical
       failed.push_back(i);
@@ -249,7 +258,7 @@ int main(int argc, char** argv) {
 
   printf("TEST: clear\n");
   tsBuffer4.clear();
-  if (tsBuffer4.getSize() != 0) printf("\tERROR: NOT empty\n");
+  if (tsBuffer4.getFinalSize() != 0) printf("\tERROR: NOT empty\n");
 
 
 
@@ -266,7 +275,7 @@ int main(int argc, char** argv) {
     } else {
       val = static_cast<valType>(i);
 
-      if (!tsBuffer4.append(&val, sizeof(valType))) {
+      if (!tsBuffer4.append(&val, sizeof(valType)).first) {
         ++fail;
       }
     }
@@ -288,7 +297,7 @@ int main(int argc, char** argv) {
     } else {
       val = static_cast<valType>(i);
 
-      if (!tsBuffer4.append(&val, sizeof(valType))) {
+      if (!tsBuffer4.append(&val, sizeof(valType)).first) {
         ++fail;
       }
     }
@@ -318,11 +327,11 @@ int main(int argc, char** argv) {
       // check insertion.
       i = 0;
       fail = 0;
-    #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap, typeSize) private(i, val) reduction(+:fail)
-      for (i = 0; i < cap/typeSize + 1; ++i) {
+    #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap) private(i, val) reduction(+:fail)
+      for (i = 0; i < cap/sizeof(valType) + 1; ++i) {
         val = static_cast<valType>(i);
 
-        if (! tsBuffer5.append(&val, sizeof(valType))) {
+        if (! tsBuffer5.append(&val, sizeof(valType)).first) {
           ++fail;
         }
       }
@@ -333,25 +342,25 @@ int main(int argc, char** argv) {
       printf("locking append can't insert (full) %d iterations, expected %d iterations.  duration = %f\n", fail, expected, time_span.count());
 
 
-      tsBuffer5.clear();
-      t1 = std::chrono::high_resolution_clock::now();
-
-      // check insertion.
-      i = 0;
-      fail = 0;
-    #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap, typeSize) private(i, val) reduction(+:fail)
-      for (i = 0; i < cap/typeSize + 1; ++i) {
-        val = static_cast<valType>(i);
-
-        if (! tsBuffer5.append_lockfree(&val, sizeof(valType))) {
-          ++fail;
-        }
-      }
-      t2 = std::chrono::high_resolution_clock::now();
-
-      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-      expected = 1;
-      printf("lockfree append can't insert (full) %d iterations, expected %d iterations.  duration = %f\n", fail, expected, time_span.count());
+//      tsBuffer5.clear();
+//      t1 = std::chrono::high_resolution_clock::now();
+//
+//      // check insertion.
+//      i = 0;
+//      fail = 0;
+//    #pragma omp parallel for num_threads(4) default(none) shared(tsBuffer5, cap, typeSize) private(i, val) reduction(+:fail)
+//      for (i = 0; i < cap/typeSize + 1; ++i) {
+//        val = static_cast<valType>(i);
+//
+//        if (! tsBuffer5.append_lockfree(&val, sizeof(valType))) {
+//          ++fail;
+//        }
+//      }
+//      t2 = std::chrono::high_resolution_clock::now();
+//
+//      time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+//      expected = 1;
+//      printf("lockfree append can't insert (full) %d iterations, expected %d iterations.  duration = %f\n", fail, expected, time_span.count());
 
     }
 }

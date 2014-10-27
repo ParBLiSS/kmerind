@@ -84,7 +84,7 @@ namespace bliss
         /**
          * @brief     capacity of the individual Buffers (in bytes)
          */
-        const size_t buffer_capacity;
+        mutable size_t buffer_capacity;
 
         /**
          * @brief     current pool size
@@ -178,7 +178,7 @@ namespace bliss
 
           capacity = other.capacity; other.capacity = 0;
           buffer_capacity = other.buffer_capacity; other.buffer_capacity = 0;
-          numBuffersAvailable = other.numBuffersAvailable; other.numBuffersAvailable = 0;
+          numBuffersAvailable = int64_t(other.numBuffersAvailable); other.numBuffersAvailable = 0;
           available = std::move(other.available);
           return *this;
         };
