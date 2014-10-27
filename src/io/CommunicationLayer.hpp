@@ -353,8 +353,8 @@ class CommunicationLayer
     /// alias BufferPoolType to MessageBuffersType's
     using BufferPoolType = typename MessageBuffersType::BufferPoolType;
 
-    /// alias BufferIdType to MessageBuffersType's
-    using BufferIdType = typename MessageBuffersType::BufferIdType;
+    /// alias BufferPtrType to MessageBuffersType's
+    using BufferPtrType = typename MessageBuffersType::BufferPtrType;
 
 
     //========= internal message queue data types.
@@ -499,13 +499,13 @@ class CommunicationLayer
      *
      *          control message is NOT sent this way, since there is no Buffer associated with a control message.
      *
-     * @tparam  BufferIdType  type of Buffer id.  Obtained from SendMessageBuffer, parameterized by Thread Safety.
+     * @tparam  BufferPtrType  type of Buffer id.  Obtained from SendMessageBuffer, parameterized by Thread Safety.
      */
-    template<typename BufferIdType>
+    template<typename BufferPtrType>
     struct DataMessageToSend : public MPIMessage
     {
       /// The id of the message buffer
-      BufferIdType bufferId;
+      BufferPtrType ptr;
 
       /**
        * @brief Constructs a new instance of this struct and sets all members as given.
@@ -514,8 +514,8 @@ class CommunicationLayer
        * @param _tag  type of the message being sent
        * @param _dst  destination of the message
        */
-      DataMessageToSend(BufferIdType _id, int _tag, int _dst)
-        : MPIMessage(_tag, _dst), bufferId(_id) {}
+      DataMessageToSend(BufferPtrType _id, int _tag, int _dst)
+        : MPIMessage(_tag, _dst), ptr(_id) {}
 
 
       /// default constructor
@@ -527,7 +527,7 @@ class CommunicationLayer
 
     //==== Message type aliases for convenience.
 
-    using SendDataElementType = DataMessageToSend<BufferIdType>;
+    using SendDataElementType = DataMessageToSend<BufferPtrType>;
 
 
 
@@ -705,8 +705,8 @@ class CommunicationLayer
             SendDataElementType* se = dynamic_cast<SendDataElementType*>(el.second.get());
 
             // get message data and it's size
-            void* data = const_cast<void*>(commLayer.buffers.at(se->tag).getBackBuffer(se->bufferId).getData());
-            auto count = commLayer.buffers.at(se->tag).getBackBuffer(se->bufferId).getSize();
+            void* data = const_cast<void*>(se->ptr->getData());
+            auto count = se->ptr->getSize();
 
             if (count > 0) {
 
@@ -740,7 +740,7 @@ class CommunicationLayer
 //                  throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
 //                }
                 // finished inserting directly to local RecvQueue.  release the buffer
-                commLayer.buffers.at(se->tag).releaseBuffer(se->bufferId);
+                commLayer.buffers.at(se->tag).releaseBuffer(std::move(se->ptr));
               } else {
                 // remote: initiate async MPI message
                 MPI_Request req;
@@ -757,7 +757,7 @@ class CommunicationLayer
 
               }
 //            } else {
-//              WARNINGF("C WARNING: NOT SEND %d -> %d: 0 byte message for tag %d, bufferid = %d.", commLayer.commRank, se->rank, se->tag, se->bufferId);
+//              WARNINGF("C WARNING: NOT SEND %d -> %d: 0 byte message for tag %d, ptr = %d.", commLayer.commRank, se->rank, se->tag, se->bufferId);
             }
 
           }
@@ -795,9 +795,9 @@ class CommunicationLayer
               // if there is a buffer, then release it.
               if (sendInProgress.front().second.get()->tag != CONTROL_TAG.tag) {
                 SendDataElementType* msg = dynamic_cast<SendDataElementType*>(sendInProgress.front().second.get());
-                if (msg->bufferId != BufferPoolType::ABSENT) {
+                if (msg->ptr != BufferPoolType::ABSENT) {
                   // cleanup, i.e., release the buffer back into the pool
-                  commLayer.buffers.at(msg->tag).releaseBuffer(msg->bufferId);
+                  commLayer.buffers.at(msg->tag).releaseBuffer(std::move(msg->ptr));
                 }
               }
               // remove the entry from the in-progress queue.  object destruction will clean up data associated with tthe pointer.
@@ -1396,8 +1396,8 @@ public:
 
     //== try to append the new data - repeat until successful.
     // along the way, if a full buffer's id is returned, queue it for sendQueue.
-    BufferIdType fullId = BufferPoolType::ABSENT;
-    std::pair<bool, BufferIdType> result;
+    BufferPtrType fullId = BufferPoolType::ABSENT;
+    std::pair<bool, BufferPtrType> result;
     do {
       // try append.  append fails if there is no buffer or no room
       result = buffers.at(tag).append(data, nbytes, dst_rank);
@@ -1514,7 +1514,7 @@ public:
     }
     lock.unlock();
 
-    DEBUGF("M FLUSH Rank %d tag %d, buffer ids: %s", commRank, tag, buffers.at(tag).bufferIdsToString().c_str());
+    DEBUGF("M FLUSH Rank %d tag %d", commRank, tag);
 
     // flush all data buffers (put them into send queue)
     flushBuffers(tag);
@@ -1563,7 +1563,7 @@ public:
 
     lock.unlock();
 
-    DEBUGF("M FINISH Rank %d tag %d, buffer ids: %s", commRank, tag, buffers.at(tag).bufferIdsToString().c_str());
+    DEBUGF("M FINISH Rank %d tag %d", commRank, tag);
 
     // flush all buffers (put them into send queue)
     flushBuffers(tag);
@@ -1797,12 +1797,8 @@ protected:
 
     std::unique_lock<std::mutex> lock = std::move(ctrlMsgProperties.at(tag).getUniqueLock());
 
-    // flush out all the send buffers matching a particular tag.
-    int idCount = buffers.at(tag).getBufferIdsForAllRanks().size();
-    assert(idCount == commSize);
 
-
-    for (int i = 0; i < idCount; ++i) {
+    for (int i = 0; i < commSize; ++i) {
       // flush buffers in a circular fashion, starting with the next neighbor
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 

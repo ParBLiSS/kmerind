@@ -34,9 +34,9 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
 
   printf("TEST append until full: ");
-  typedef typename BuffersType::BufferIdType BufferIdType;
-  std::pair<bool, BufferIdType > result(false, -1);
-  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferIdType> fullBuffers;
+  typedef typename BuffersType::BufferPtrType BufferPtrType;
+  std::pair<bool, BufferPtrType > result(false, std::move(BufferPtrType()));
+  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType> fullBuffers;
 
   //printf("test string is \"%s\", length %lu\n", data.c_str(), data.length());
   int id = 0;
@@ -61,15 +61,15 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       ++count2; // failure
 
 
-		if (result.second != -1) {
+		if (result.second) {
 		  ++count3;     // full buffer
 		} else {
 			++count4;   // failed insert and no full buffer
 		}
     }
 
-    if (result.second != -1)
-      fullBuffers.waitAndPush(result.second);  // full buffer
+    if (result.second)
+      fullBuffers.waitAndPush(std::move(result.second));  // full buffer
   }
 //  if ((count + count2) != repeats) printf("\nFAIL: number of successful inserts should be %d.  actual %d", repeats, count);
 //  else if (count2 != 0) printf("\nFAIL: number of failed insert overall should be 0. actual %d", count2);
@@ -98,8 +98,8 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       result = fullBuffers.tryPop();
       if (result.first) {
 //        printf("%d ", result.second);
-        if (result.second != -1) {
-          buffers.releaseBuffer(result.second);
+        if (result.second) {
+          buffers.releaseBuffer(std::move(result.second));
           ++count1;    // successful pop
         } else {
           ++count2;   // successful pop but no actual buffer to release
@@ -139,20 +139,20 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
     if (result.first) {
       ++count1;
 
-      if (result.second != -1) {
+      if (result.second) {
         usleep(300);
         ++count3;
         //printf("%d ", result.second);
-        buffers.releaseBuffer(result.second);
+        buffers.releaseBuffer(std::move(result.second));
       }
     } else {
       ++count2;
 
-      if (result.second != -1) {
+      if (result.second) {
         usleep(300);
         ++count4;
         //printf("%d ", result.second);
-        buffers.releaseBuffer(result.second);
+        buffers.releaseBuffer(std::move(result.second));
       }
     }
 

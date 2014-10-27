@@ -22,7 +22,9 @@
 
 // TODO: every operation that's modifying the queue is using unique lock. can this be made better with just careful atomic operations
 // 		 e.g. with memory fence?
-//       see http://en.wikipedia.org/wiki/Non-blocking_algorithm#cite_note-lf-queue-13 and references 12 and 14.
+//       see http://en.wikipedia.org/wiki/Non-blocking_algorithm#cite_note-lf-queue-13, (CAS)
+//       and http://www.cs.technion.ac.il/~mad/publications/ppopp2013-x86queues.pdf,	(F&A)
+//
 
 namespace bliss
 {

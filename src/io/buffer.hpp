@@ -70,8 +70,8 @@ namespace bliss
 
       protected:
 
-        /// maximum capacity
-        mutable size_t capacity;
+        /// maximum capacity.  unrealistic to use size_t - can't possibly allocate.
+        mutable uint32_t capacity;
 
         /**
          * @brief current occupied size of the buffer
@@ -79,7 +79,7 @@ namespace bliss
          *
          * @note mutable so a const Buffer object can still call append and modify the internal. (conceptually, size and data are constant members of the Buffer)
          */
-        mutable typename std::conditional<ThreadSafety, std::atomic<size_t>, size_t>::type size;
+        mutable typename std::conditional<ThreadSafety, std::atomic<uint32_t>, uint32_t>::type size;
 
         /**
          * @brief indicating whether the buffer is accepting data or not.
@@ -92,6 +92,8 @@ namespace bliss
 
         /// internal data storage
         DataType data;
+        mutable typename std::conditional<ThreadSafety, std::atomic<uint8_t*>, uint8_t*>::type pointer;
+        mutable uint8_t* max_pointer;
 
         /// mutex for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
         mutable std::mutex mutex;
@@ -108,7 +110,8 @@ namespace bliss
          */
         Buffer(Buffer<ThreadSafety>&& other, const std::lock_guard<std::mutex> &l)
       	  : capacity(other.capacity), size(other.getSize<ThreadSafety>()),
-          blocked(other.isBlocked<ThreadSafety>()), data(std::move(other.data)) {
+          blocked(other.isBlocked<ThreadSafety>()), data(std::move(other.data)),
+          pointer(other.pointer), max_pointer(other.max_pointer) {
 
           //DEBUG("BUFFER private move contructor 1 called");
 
@@ -116,7 +119,8 @@ namespace bliss
           other.capacity = 1;
           other.size = 0;
           other.data = nullptr;
-
+          other.pointer = nullptr;
+          other.max_pointer = nullptr;
         };
 
         /**
@@ -130,7 +134,9 @@ namespace bliss
          */
         Buffer(Buffer<!ThreadSafety>&& other, const std::lock_guard<std::mutex> &l)
           : capacity(other.capacity), size(other.getSize()),
-            blocked(other.isBlocked()), data(std::move(other.data)) {
+            blocked(other.isBlocked()), data(std::move(other.data)),
+            pointer(other.pointer), max_pointer(other.max_pointer)
+        {
 
           DEBUG("BUFFER private move contructor 2 called");
 
@@ -139,6 +145,9 @@ namespace bliss
           other.capacity = 1;
           other.size = 0;
           other.data = nullptr;
+          other.pointer = nullptr;
+          other.max_pointer = nullptr;
+
         }
 
       public:
@@ -146,12 +155,14 @@ namespace bliss
          * @brief Normal constructor.  Allocate and initialize memory with size specified as parameter.
          * @param _capacity   The maximum capacity of the Buffer in bytes
          */
-        explicit Buffer(const size_t _capacity) : capacity(_capacity), size(0), blocked(false), data(new uint8_t[_capacity])
+        explicit Buffer(const uint32_t _capacity) : capacity(_capacity), size(0), blocked(false), data(new uint8_t[_capacity])
         {
           if (_capacity == 0)
             throw std::invalid_argument("Buffer constructor parameter capacity is given as 0");
 
           memset(data.get(), 0, _capacity * sizeof(uint8_t));
+          pointer = data.get();
+          max_pointer = data.get() + _capacity;
         };
 
         /**
@@ -159,11 +170,14 @@ namespace bliss
          * @param _data   The pointer/address of preallocated memory block
          * @param count   The size of preallocated memory block
          */
-        Buffer(void* _data, const size_t count) : capacity(count), size(count), blocked(false), data(static_cast<uint8_t*>(_data)) {
+        Buffer(void* _data, const uint32_t count) : capacity(count), size(count), blocked(false), data(static_cast<uint8_t*>(_data)) {
           if (count == 0)
             throw std::invalid_argument("Buffer constructor parameter count is given as 0");
           if (_data == nullptr)
             throw std::invalid_argument("Buffer constructor parameter _data is given as nullptr");
+
+          pointer = data.get();
+          max_pointer = data.get() + count;
         }
 
         /**
@@ -216,11 +230,16 @@ namespace bliss
             size = other.getSize<ThreadSafety>();
             blocked = other.isBlocked<ThreadSafety>();
             data = std::move(other.data);
+            pointer = other.pointer;
+            max_pointer = other.max_pointer;
 
             other.block<ThreadSafety>();
             other.size = 0;
             other.capacity = 1;
             other.data = nullptr;
+            other.pointer = nullptr;
+            other.max_pointer = nullptr;
+
           }
           return *this;
         }
@@ -247,11 +266,16 @@ namespace bliss
             size = other.getSize<!ThreadSafety>();
             blocked = other.isBlocked<!ThreadSafety>();
             data = std::move(other.data);
+            pointer = other.pointer;
+            max_pointer = other.max_pointer;
 
             other.block<!ThreadSafety>();
             other.size = 0;
             other.capacity = 1;
             other.data = nullptr;
+            other.pointer = nullptr;
+            other.max_pointer = nullptr;
+
           }
           return *this;
         }
@@ -274,8 +298,8 @@ namespace bliss
          * @return    current size
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, const size_t>::type getSize() const {
-          return size.load(std::memory_order_consume);
+        typename std::enable_if<TS, const uint32_t>::type getSize() const {
+          return pointer.load(std::memory_order_consume) - data.get();
         }
 
         /**
@@ -284,8 +308,8 @@ namespace bliss
          * @return    current size
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, const size_t>::type getSize() const {
-          return size;
+        typename std::enable_if<!TS, const uint32_t>::type getSize() const {
+          return pointer - data.get();
         }
 
         /**
@@ -346,14 +370,15 @@ namespace bliss
          * const because the caller will have a const reference to the buffer.
          */
         void clear() const {
-          size = 0UL;
+          size = 0;
+          pointer = data.get();
         }
 
         /**
          * @brief get the capacity of the buffer.
          * @return    maximum capacity of buffer.
          */
-        const size_t & getCapacity() const {
+        const uint32_t & getCapacity() const {
           return capacity;
         }
 
@@ -380,7 +405,7 @@ namespace bliss
          * @return    true if the buffer is full, false otherwise.
          */
         const bool isFull() const {
-          return getSize<ThreadSafety>() >= capacity;
+          return ((uint8_t*)pointer >= (uint8_t*)max_pointer);
         }
 
         /**
@@ -391,7 +416,7 @@ namespace bliss
          * @return    true if the buffer is empty, false otherwise.
          */
         const bool isEmpty() const {
-          return getSize<ThreadSafety>() == 0;
+          return (uint8_t*)pointer <= data.get();
         }
 
 
@@ -426,30 +451,43 @@ namespace bliss
          * @return            bool indicated whether operation succeeded.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, const bool>::type append(const void* _data, const size_t count) const {
+        typename std::enable_if<TS, const bool>::type append(const void* _data, const uint32_t count) const {
+
+          if (count == 0)
+          	  return true;
+          if (_data == nullptr)
+        	  throw std::invalid_argument("_data is nullptr");
 
           assert(capacity != 1);
           if (capacity == 0)
             throw std::length_error("ThreadSafe Buffer capacity is 0");
 
           // ONE thread at a time can get the position to copy in data.  If full, then the buffer is blocked.
-          std::unique_lock<std::mutex> lock(mutex);   // block() and size need to be synchronized consistently across threads.
+          //std::unique_lock<std::mutex> lock(mutex);   // block() and size need to be synchronized consistently across threads.
 
           if (isBlocked<TS>()) return false;
 
-          size_t s = size.fetch_add(count, std::memory_order_acq_rel);  // no memory ordering needed within mutex lock
-          if (s + count > capacity) {
-            //printf("\nFULL!!!! capacity: %ld, size before: %ld, size after %ld, count %ld, ", capacity, s, size.load(), count);
-            s = size.fetch_sub(count, std::memory_order_acq_rel);
-            //printf("size rolled back before: %ld, size after %ld, count %ld ", s, size.load(), count);
-
+          uint8_t* ptr = pointer.fetch_add(count, std::memory_order_acq_rel);  // no memory ordering needed within mutex lock
+          if ((ptr + count) > max_pointer) { // FULL
             block<TS>();
-            lock.unlock();
-            return false;
-          }
-          lock.unlock();
+            // After the F&A, there are 3 types of threads:  target write area is
+        	  //  1. completely within buffer:	these threads should proceed to memcpy with the local ptr var
+        	  //  2. completely outside buffer:	these threads will not memcpy.  they all disabled buffer, and
+        	  //     only 1 thread from 2) or 3) should swap in a new buffer atomically.
+        	  //     	- if curr buffer is not disabled (already swapped), then don't swap further.
+        	  //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
+          	if (ptr < max_pointer)  // original pointer is within buffer - put it back.
+          		pointer.exchange(ptr);
 
-          std::memcpy(data.get() + s, _data, count);
+            //lock.unlock();
+            return false;	// at this point, buffer is blocked, and can be replaced.  this may be faster than we can copy the data.
+            				// to fix this - compute the pointer where data is to be copied before unlock.  For threads that
+            				// pass the capacity test, they continue to memcpy, knowing where the addresses are.  The failed ones will
+            				// cause a buffer swap, but the passed threads has the absolute address.
+          }
+          //lock.unlock();
+
+          std::memcpy(ptr, _data, count);
           return true;
         }
 
@@ -470,7 +508,13 @@ namespace bliss
          * @return            bool indicated whether operation succeeded.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, const bool>::type append(const void* _data, const size_t count) const {
+        typename std::enable_if<!TS, const bool>::type append(const void* _data, const uint32_t count) const {
+
+            if (count == 0)
+            	  return true;
+            if (_data == nullptr)
+          	  throw std::invalid_argument("_data is nullptr");
+
 
           assert(capacity != 1);
           if (capacity == 0)
@@ -479,71 +523,77 @@ namespace bliss
 
           if (isBlocked<TS>()) return false;
 
-          if ((size + count) > capacity) {
+          if ((pointer + count) > max_pointer) {
             block<TS>();
             return false;
           }
+          pointer += count;
 
-          std::memcpy(data.get() + size, _data, count);
-          size += count;
+
+          std::memcpy(pointer, _data, count);
           return true;
         }
 
-        /**
-         * @brief Append data to the buffer, THREAD SAFE.
-         * @details  The function updates the current occupied size of the Buffer
-         * and memcopies the supplied data into the internal memory block.
-         *
-         * This is the THREAD SAFE version using Compare And Swap operation in a loop, lookfree.
-         *  sync version is faster on 4 threads.  using compare_exchange_strong (_weak causes extra loops but is supposed to be faster)
-         *    using relaxed and release vs acquire and acq_rel - no major difference.
-         *
-         * Semantically, a "false" return value means there is not enough room for the new data, not that the buffer is full.
-         *
-         * method is const because the caller will have const reference to the Buffer.
-         *
-         * NOTE: we can't use memory ordering alone.  WE have to lock with a mutex or use CAS in a loop
-         * See Thread Safe "append" method documentation for rationale.
-         *
-         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
-         * @param[in] _data   pointer to data to be copied into the Buffer
-         * @param[in] count   number of bytes to be copied into the Buffer
-         * @return            bool indicated whether operation succeeded.
-         */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, const bool>::type append_lockfree(const void* typed_data, const size_t count) const {
-
-          assert(capacity != 1);
-
-          if (capacity == 0)
-            throw std::length_error("ThreadSafe LockFree Buffer capacity is 0");
-
-          // since this is not using a lock, each iteration needs to check when acquiring a position whether the
-          // buffer is blocked or not.  If blocked, then new calls here would not go through
-          if (isBlocked<TS>()) return false;
-
-          // if the new position does not exceed capacity, then we can let it through. (data only)
-
-
-          // try with compare and exchange weak.
-          size_t s = size.load(std::memory_order_consume);
-          size_t ns = s + count;
-          if (ns > capacity) {
-            block<TS>();
-            return false;
-          }
-          while (!size.compare_exchange_strong(s, ns, std::memory_order_acq_rel, std::memory_order_acquire)) {
-            // choosing strong, slower but less spurious "false" return, and should allow the "return" statement to more reliably be reached.
-            ns = s + count;
-            if (ns > capacity) {
-              block<TS>();
-              return false;
-            }
-          }
-
-          std::memcpy(data.get() + s, typed_data, count);
-          return true;
-        }
+//        /**
+//         * @brief Append data to the buffer, THREAD SAFE.
+//         * @details  The function updates the current occupied size of the Buffer
+//         * and memcopies the supplied data into the internal memory block.
+//         *
+//         * This is the THREAD SAFE version using Compare And Swap operation in a loop, lookfree.
+//         *  sync version is faster on 4 threads.  using compare_exchange_strong (_weak causes extra loops but is supposed to be faster)
+//         *    using relaxed and release vs acquire and acq_rel - no major difference.
+//         *
+//         * Semantically, a "false" return value means there is not enough room for the new data, not that the buffer is full.
+//         *
+//         * method is const because the caller will have const reference to the Buffer.
+//         *
+//         * NOTE: we can't use memory ordering alone.  WE have to lock with a mutex or use CAS in a loop
+//         * See Thread Safe "append" method documentation for rationale.
+//         *
+//         * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
+//         * @param[in] _data   pointer to data to be copied into the Buffer
+//         * @param[in] count   number of bytes to be copied into the Buffer
+//         * @return            bool indicated whether operation succeeded.
+//         */
+//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+//        typename std::enable_if<TS, const bool>::type append_lockfree(const void* typed_data, const uint32_t count) const {
+//
+//            if (count == 0)
+//            	  return true;
+//            if (_data == nullptr)
+//          	  throw std::invalid_argument("_data is nullptr");
+//
+//
+//          assert(capacity != 1);
+//          if (capacity == 0)
+//            throw std::length_error("ThreadSafe LockFree Buffer capacity is 0");
+//
+//          // since this is not using a lock, each iteration needs to check when acquiring a position whether the
+//          // buffer is blocked or not.  If blocked, then new calls here would not go through
+//          if (isBlocked<TS>()) return false;
+//
+//          // if the new position does not exceed capacity, then we can let it through. (data only)
+//
+//
+//          // try with compare and exchange weak.
+//          uint32_t s = size.load(std::memory_order_consume);
+//          uint32_t ns = s + count;
+//          if (ns > capacity) {
+//            block<TS>();
+//            return false;
+//          }
+//          while (!size.compare_exchange_strong(s, ns, std::memory_order_acq_rel, std::memory_order_acquire)) {
+//            // choosing strong, slower but less spurious "false" return, and should allow the "return" statement to more reliably be reached.
+//            ns = s + count;
+//            if (ns > capacity) {
+//              block<TS>();
+//              return false;
+//            }
+//          }
+//
+//          std::memcpy(data.get() + s, typed_data, count);
+//          return true;
+//        }
 
     };
 

@@ -395,7 +395,7 @@ namespace bliss
           // or flushing, so block() would have been set for the full case.  now it depends on what happens in append.
           // if flush, then block is set just before swap, so it's more likely this thread enters append without a block.
 
-          // block() and qsize are critical in Buffer - they need to be synchronized consistently
+          // block() and size are critical in Buffer - they need to be synchronized consistently
           bool appendResult = this->at<ThreadSafety>(targetProc)->append(data, count);
 
           // now if appendResult is false, then we return false, but also swap in a new buffer.
@@ -405,7 +405,7 @@ namespace bliss
 
           //std::unique_lock<std::mutex> lock(mutex);
           BufferPtrType ptr;
-          if (!appendResult)
+          if (!appendResult)  // equivalent to check isBlocked.  appendResult is already here.
             ptr = std::move(swapInEmptyBuffer<ThreadSafety>(targetProc));
 
           return std::move(std::make_pair(appendResult, std::move(ptr)));
@@ -420,6 +420,10 @@ namespace bliss
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
+
+          // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
+          this->at<TS>(targetProc)->block();
+
 
           // passing in getBufferIdForRank result to ensure atomicity.
           // may return ABSENT if there is no available buffer to use.
@@ -449,6 +453,9 @@ namespace bliss
          *    not ABS     at dest       swap, block old.  return old
          *    not ABS     not at dest   being used.  no op. return ABS
          *
+         *
+         * @note:  requires that the queue at dest to be blocked.
+         *
          * @tparam        used to choose thread safe vs not verfsion of the method.
          * @param dest    position in bufferIdForProcId array to swap out
          * @return        the BufferId that was swapped out.
@@ -456,18 +463,21 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<TS, BufferPtrType>::type swapInEmptyBuffer(const int dest) {
 
-          // get a new buffer and swap
-          auto bufferPtr = std::move(this->pool.tryAcquireBuffer());
+            std::lock_guard<std::mutex> lock(mutex);  // one thread at a time does this.
+        	if (this->at<TS>(dest)->isBlocked()) {  // lock this part until finished with swapping.
 
-          std::lock_guard<std::mutex> lock(mutex);
+        		// get a new buffer and swap
+        	 auto bufferPtr = std::move(this->pool.tryAcquireBuffer());
 
           // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-          this->at<TS>(dest)->block();
+            // now swap.  using swap so that other threads referencing buffers.at(blah) will have it updated automatically.
+			  std::swap(buffers.at(targetRank), bufferPtr);
 
-          // now swap.  using swap so that other threads referencing buffers.at(blah) will have it updated automatically.
-          std::swap(buffers.at(targetRank), bufferPtr);
-
-          return std::move(bufferPtr);
+			  return std::move(bufferPtr);
+        	}
+        	else {
+        		return std::move(BufferPtrType());  // not blocked, so don't swap.
+        	}
         }
 
 
@@ -491,6 +501,9 @@ namespace bliss
          *    not ABS     at dest       swap, block old.  return old
          *    not ABS     not at dest   being used.  no op. return ABS
          *
+         * @note:  requires that the queue at dest to be blocked.
+         *
+         *
          * @tparam TS     used to choose thread safe vs not verfsion of the method.
          * @param dest    position in bufferIdForProcId array to swap out
          * @return        the BufferId that was swapped out.
@@ -498,16 +511,20 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, BufferPtrType>::type swapInEmptyBuffer(const int dest) {
 
-          // get a new buffer and swap
-          auto bufferPtr = std::move(this->pool.tryAcquireBuffer());
+        	if (this->at<TS>(dest)->isBlocked()) {  // lock this part until finished with swapping.
 
-          // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-          this->at<TS>(dest)->block();
+			  // get a new buffer and swap
+			  auto bufferPtr = std::move(this->pool.tryAcquireBuffer());
 
-          // now swap.  using swap so that other threads referencing buffers.at(blah) will have it updated automatically.
-          std::swap(buffers.at(targetRank), bufferPtr);
 
-          return std::move(bufferPtr);
+			  // now swap.  using swap so that other threads referencing buffers.at(blah) will have it updated automatically.
+			  std::swap(buffers.at(targetRank), bufferPtr);
+
+			  return std::move(bufferPtr);
+        	}
+        	else {
+        		return std::move(BufferPtrType());  // not blocked, so don't swap.
+        	}
 
         }
 
