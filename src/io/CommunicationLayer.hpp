@@ -315,10 +315,10 @@ class CommunicationLayer
        TagMetadata& operator=(const TagMetadata& other) = delete;
 
        void finish() {
-         finished.store(true, std::memory_order_release);
+         finished.store(true, std::memory_order_seq_cst);
        }
        bool isFinished() {
-         return finished.load(std::memory_order_consume);
+         return finished.load(std::memory_order_seq_cst);
        }
 
        int getNextEpoch() {

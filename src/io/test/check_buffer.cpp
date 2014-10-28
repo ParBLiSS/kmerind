@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
 
   printf("TEST insert\n");
   int start = -1, end = -1;
-  int i;
+  unsigned int i;
   for (i = 0; i < 9000; ++i) {
     val = static_cast<valType>(i);
     if (! (tlBuffer.append(&val, sizeof(valType)).first) ) {
@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
   end = i;
   if (start != 8192/sizeof(valType)) printf("\tFAILED can't insert (full) from %d to %d!\n", start, end);
   const valType* temp = reinterpret_cast<const valType*>(tlBuffer.getData());
-  for (int j = 0; j < (8192/sizeof(valType)); ++j) {
+  for (int j = 0; j < int(8192/sizeof(valType)); ++j) {
     if (temp[j] != j) {
       printf("ERROR: result is not expected.  expected: %d actual %d\n", j, temp[j]);
       //assert(false);
@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
 
 
   temp = reinterpret_cast<const valType*>(tlBuffer.getData());
-  for (int j = 0; j < (8192/sizeof(valType)); ++j) {
+  for (int j = 0; j < int(8192/sizeof(valType)); ++j) {
     if (temp[j] != j) {
       //printf("ERROR: result is not expected.  expected: %d actual %d\n", j, temp[j]);
       assert(false);
@@ -192,7 +192,7 @@ int main(int argc, char** argv) {
 
 
   temp = reinterpret_cast<const valType*>(tlBuffer.getData());
-  for (int j = 0; j < (8192/sizeof(valType)); ++j) {
+  for (int j = 0; j < int(8192/sizeof(valType)); ++j) {
     assert(temp[j] == j);
   }
   printf("CONTENT Passes check after move\n");

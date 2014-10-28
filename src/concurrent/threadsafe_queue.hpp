@@ -84,8 +84,8 @@ namespace bliss
         ThreadSafeQueue(ThreadSafeQueue<T>&& other, const std::lock_guard<std::mutex>& l) : q(std::move(other.q)),
             capacity(other.capacity), qsize(0), pushEnabled(false) {
           other.capacity = 0;
-          qsize.exchange(other.qsize.load(std::memory_order_relaxed), std::memory_order_relaxed);              // relaxed, since we have a lock.
-          pushEnabled.exchange(other.pushEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed);
+          qsize.exchange(other.qsize.load(std::memory_order_seq_cst), std::memory_order_seq_cst);              // relaxed, since we have a lock.
+          pushEnabled.exchange(other.pushEnabled.load(std::memory_order_seq_cst), std::memory_order_seq_cst);
         };
 
 
@@ -133,8 +133,8 @@ namespace bliss
           std::lock(mylock, otherlock);
           q = std::move(other.q);
           capacity = other.capacity; other.capacity = 0;
-          qsize.exchange(other.qsize.load(std::memory_order_relaxed), std::memory_order_relaxed);             // relaxed, since we have a lock.
-          pushEnabled.exchange(other.pushEnabled.load(std::memory_order_relaxed), std::memory_order_relaxed);
+          qsize.exchange(other.qsize.load(std::memory_order_seq_cst), std::memory_order_seq_cst);             // relaxed, since we have a lock.
+          pushEnabled.exchange(other.pushEnabled.load(std::memory_order_seq_cst), std::memory_order_seq_cst);
 
           return *this;
         }
@@ -154,7 +154,7 @@ namespace bliss
         bool isFull() const {
         	if (capacity >= MAX_SIZE) return false;
         
-          return qsize.load(std::memory_order_consume) >= capacity;
+          return qsize.load(std::memory_order_seq_cst) >= capacity;
         }
 
         /**
@@ -163,7 +163,7 @@ namespace bliss
          */
         bool isEmpty() const
         {
-          return qsize.load(std::memory_order_consume) == 0;
+          return qsize.load(std::memory_order_seq_cst) == 0;
         }
 
         /**
@@ -172,7 +172,7 @@ namespace bliss
          */
         size_t getSize() const
         {
-          return qsize.load(std::memory_order_consume);
+          return qsize.load(std::memory_order_seq_cst);
         }
 
         /**
@@ -182,7 +182,7 @@ namespace bliss
         {
           std::unique_lock<std::mutex> lock(mutex);
           q.clear();
-          qsize.store(0, std::memory_order_relaxed);        // have lock.  relaxed.
+          qsize.store(0, std::memory_order_seq_cst);        // have lock.  relaxed.
           lock.unlock();
 
           canPushCV.notify_all();
@@ -193,7 +193,7 @@ namespace bliss
          */
         void enablePush() {
 //          std::unique_lock<std::mutex> lock(mutex);  simple atomic upate to pushEnabled.  no need for lock
-          pushEnabled.store(true, std::memory_order_release);
+          pushEnabled.store(true, std::memory_order_seq_cst);
           canPushCV.notify_all();   // notify, so waitAndPush can check if it can push now.
           // not notifying canPopCV, used in waitAndPop, as that function exits the loop ONLY when queue is not empty.
         }
@@ -203,7 +203,7 @@ namespace bliss
          */
         void disablePush() {
 //          std::unique_lock<std::mutex> lock(mutex);   simple atomic update to pushEnabled.  no need for lock
-          pushEnabled.store(false, std::memory_order_release);
+          pushEnabled.store(false, std::memory_order_seq_cst);
           canPushCV.notify_all();   // notify, so waitAndPush can check if it can push now.  (only happens with a full buffer, allows waitToPush to return)
                                     // this allows waitAndPush to fail if push is disabled before the queue becomes not full.
           canPopCV.notify_all();   // notify, so waitAndPop can exit because there is no more data coming in. (only happens with an empty buffer, allows waitToPop to return)
@@ -214,7 +214,7 @@ namespace bliss
          * @return    boolean - queue insertion allowed or not.
          */
         bool canPush() {
-          return pushEnabled.load(std::memory_order_acquire);
+          return pushEnabled.load(std::memory_order_seq_cst);
         }
 
         /**
@@ -246,7 +246,7 @@ namespace bliss
           }
 
           //std::unique_lock<std::mutex> lock(mutex);
-          qsize.fetch_add(1, std::memory_order_acq_rel);
+          qsize.fetch_add(1, std::memory_order_seq_cst);
           q.push_back(data);   // insert using predefined copy version of dequeue's push function
           lock.unlock();
 
@@ -272,7 +272,7 @@ namespace bliss
           }
 
 //          std::unique_lock<std::mutex> lock(mutex);
-          qsize.fetch_add(1, std::memory_order_acq_rel);
+          qsize.fetch_add(1, std::memory_order_seq_cst);
           q.push_back(std::move(data));    // insert using predefined move version of deque's push function
           lock.unlock();
 
@@ -308,7 +308,7 @@ namespace bliss
               return false;  // if finished, then no more insertion.  return.
             }
           }
-          qsize.fetch_add(1, std::memory_order_acq_rel);
+          qsize.fetch_add(1, std::memory_order_seq_cst);
           q.push_back(data);   // insert using predefined copy version of deque's push function
 
           lock.unlock();
@@ -345,7 +345,7 @@ namespace bliss
             }
           }
 
-          qsize.fetch_add(1, std::memory_order_acq_rel);
+          qsize.fetch_add(1, std::memory_order_seq_cst);
           q.push_back(std::move(data));    // insert using predefined move version of deque's push function
 
           lock.unlock();
@@ -372,7 +372,7 @@ namespace bliss
           }
 
           //std::unique_lock<std::mutex> lock(mutex);
-          qsize.fetch_add(1, std::memory_order_acq_rel);
+          qsize.fetch_add(1, std::memory_order_seq_cst);
           q.push_front(data);   // insert using predefined copy version of dequeue's push function
           lock.unlock();
 
@@ -398,7 +398,7 @@ namespace bliss
           }
 
 //          std::unique_lock<std::mutex> lock(mutex);
-          qsize.fetch_add(1, std::memory_order_acq_rel);
+          qsize.fetch_add(1, std::memory_order_seq_cst);
           q.push_front(std::move(data));    // insert using predefined move version of deque's push function
           lock.unlock();
 
@@ -435,7 +435,7 @@ namespace bliss
               return false;  // if finished, then no more insertion.  return.
             }
           }
-          qsize.fetch_add(1, std::memory_order_acq_rel);
+          qsize.fetch_add(1, std::memory_order_seq_cst);
           q.push_front(data);   // insert using predefined copy version of deque's push function
 
           lock.unlock();
@@ -471,7 +471,7 @@ namespace bliss
             }
           }
 
-          qsize.fetch_add(1, std::memory_order_acq_rel);
+          qsize.fetch_add(1, std::memory_order_seq_cst);
           q.push_front(std::move(data));    // insert using predefined move version of deque's push function
 
           lock.unlock();
@@ -503,7 +503,7 @@ namespace bliss
           //std::unique_lock<std::mutex> lock(mutex);
           output.second = std::move(q.front());  // convert to movable reference and move-assign.
           q.pop_front();
-          qsize.fetch_sub(1, std::memory_order_relaxed);
+          qsize.fetch_sub(1, std::memory_order_seq_cst);
           lock.unlock();
 
           output.first = true;
@@ -549,7 +549,7 @@ namespace bliss
             }
           }
 
-          qsize.fetch_sub(1, std::memory_order_acq_rel);
+          qsize.fetch_sub(1, std::memory_order_seq_cst);
           output.second = std::move(q.front());  // convert to movable reference and move-assign.
           q.pop_front();
 
@@ -585,7 +585,7 @@ namespace bliss
           //std::unique_lock<std::mutex> lock(mutex);
           output.second = std::move(q.back());  // convert to movable reference and move-assign.
           q.pop_back();
-          qsize.fetch_sub(1, std::memory_order_relaxed);
+          qsize.fetch_sub(1, std::memory_order_seq_cst);
           lock.unlock();
 
           output.first = true;
@@ -631,7 +631,7 @@ namespace bliss
             }
           }
 
-          qsize.fetch_sub(1, std::memory_order_acq_rel);
+          qsize.fetch_sub(1, std::memory_order_seq_cst);
           output.second = std::move(q.back());  // convert to movable reference and move-assign.
           q.pop_back();
 

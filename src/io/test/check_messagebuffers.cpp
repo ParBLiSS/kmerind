@@ -22,7 +22,7 @@
 #include <chrono>
 #include <cstdlib>   // for rand
 
-int repeats = 1000;
+int repeats = 11;
 int bufferSize = 2048;
 std::string data("this is a test.  this a test of the emergency broadcast system.  this is only a test. ");
 
@@ -30,7 +30,7 @@ std::string data("this is a test.  this a test of the emergency broadcast system
 template<typename BuffersType>
 void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
-  printf("TESTING %s: ntargets = %lu, pool threads %d\n", name.c_str(), buffers.getSize(), nthreads);
+  printf("*** TESTING %s: ntargets = %lu, pool threads %d\n", name.c_str(), buffers.getSize(), nthreads);
 
 
   printf("TEST append until full: ");
@@ -140,6 +140,8 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   count1 = 0;
   count2 = 0;
   count4 = 0;
+  count = 0;
+  count5 = 0;
   //printf("full buffer: ");
   id = 0;
 #pragma omp parallel for num_threads(nthreads) default(none) private(i, result) firstprivate(id) shared(buffers, data, repeats, bufferSize) reduction(+ : count, count1, count2, count3,count4)
@@ -150,24 +152,33 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       ++count1;
 
       if (result.second) {
-        //usleep(300);
         ++count3;
-        //printf("%d ", result.second);
+        count += result.second->getFinalSize();
         buffers.releaseBuffer(std::move(result.second));
       }
     } else {
       ++count2;
 
       if (result.second) {
-        //usleep(300);
         ++count4;
-        //printf("%d ", result.second);
+        bool updating = result.second->isUpdating();
+        if (updating) printf("  FULLBUFFER: size %d updating ? %s, blocked? %s\n", result.second->getFinalSize(), (updating ? "Y" : "N"), (result.second->isBlocked() ? "Y" : "N"));
+
+        count += result.second->getFinalSize();
+
         buffers.releaseBuffer(std::move(result.second));
       }
     }
-
-
   }
+  BufferPtrType final = buffers.flushBufferForRank(id);
+  count5 = final->getApproximateSize();
+  if ((count + count5) != count1 * data.length()) {
+    printf("\nFAIL: number of entries in full %d and final buffers %d is not the same as number successfully inserted %ld bytes for %d entries.\n", count , count5 , count1 * data.length(), count1);
+
+    printf("    content length %ld: %s\n", strlen(reinterpret_cast<char*>(final->getData())), reinterpret_cast<char*>(final->getData()));
+  }
+  buffers.releaseBuffer(std::move(final));
+
   expectedFull = (count1 - 1 + (bufferSize/data.length())) / (bufferSize/data.length()) - (count1 % (bufferSize/data.length()) == 0 ? 1 : 0);
   expectedFull2 = count1 / (bufferSize/data.length());
 
@@ -175,7 +186,10 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 //  else if (count2 != 0) printf("\nFAIL: number of failed insert overall should be 0. actual %d", count2);
 //  else
   if (count3 != 0) printf("\nFAIL: number of full Buffers from successful insert is not right: %d should be 0", count3);
-  else if (count4 != expectedFull && count4 != expectedFull2) printf("\nFAIL: number of full Buffers from failed insert is not right: %d should be %d or %d", count4, expectedFull, expectedFull2);
+  else if (count4 != expectedFull && count4 != expectedFull2) {
+    printf("\nFAIL: number of full Buffers from failed insert is not right: %d should be %d or %d", count4, expectedFull, expectedFull2);
+    throw std::logic_error("GDB stop here!");
+  }
   else printf("PASS");
   printf("\n");
 
@@ -188,10 +202,12 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 int main(int argc, char** argv) {
 
   // construct, acquire, access, release
-
+  if (argc > 1) {
+    repeats = atoi(argv[1]);
+  }
 
   /// thread unsafe.  test in single thread way.
-
+//while(true) {
 
   testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_UNSAFE>(1, 2048)), "thread unsafe buffers", 1);
   testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_UNSAFE>(2, 2048)), "thread unsafe buffers", 1);
@@ -222,12 +238,24 @@ int main(int argc, char** argv) {
   testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(4, 2048)), "thread safe buffers", 1);
   testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(4, 2048)), "thread safe buffers", 2);
 
+  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(5, 2048)), "thread safe buffers", 1);
+  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(5, 2048)), "thread safe buffers", 2);
+
+  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(6, 2048)), "thread safe buffers", 1);
+  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(6, 2048)), "thread safe buffers", 2);
+
+  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(7, 2048)), "thread safe buffers", 1);
+  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(7, 2048)), "thread safe buffers", 2);
+
+  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(8, 2048)), "thread safe buffers", 1);
+  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(8, 2048)), "thread safe buffers", 2);
+
 
   // this one is not defined because it's not logical.  not compilable.
   // bliss::io::BufferPool<bliss::concurrent::THREAD_UNSAFE, bliss::concurrent::THREAD_SAFE> tsusPool(8192, 8);
 
 
-
+//}
 
 
 

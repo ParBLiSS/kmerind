@@ -642,7 +642,7 @@ namespace bliss
          */
         template<typename T = ChunkSizeType>
         typename std::enable_if<std::is_integral<T>::value, RangeValueType>::type getNextOffset() {
-          return chunkOffset.fetch_add(this->chunkSize, std::memory_order_acq_rel);
+          return chunkOffset.fetch_add(this->chunkSize, std::memory_order_seq_cst);
         }
         /**
          * @brief     internal method to atomically increment the chunkOffset for floating point types
@@ -651,11 +651,11 @@ namespace bliss
          */
         template<typename T = ChunkSizeType>
         typename std::enable_if<std::is_floating_point<T>::value, RangeValueType>::type getNextOffset() {
-          RangeValueType origval = chunkOffset.load(std::memory_order_consume);
+          RangeValueType origval = chunkOffset.load(std::memory_order_seq_cst);
           RangeValueType newval;
           do {
             newval = origval + this->chunkSize;
-          } while (!chunkOffset.compare_exchange_weak(origval, newval, std::memory_order_acq_rel, std::memory_order_acquire));
+          } while (!chunkOffset.compare_exchange_weak(origval, newval, std::memory_order_seq_cst, std::memory_order_seq_cst));
           return origval;
         }
 
@@ -707,20 +707,20 @@ namespace bliss
          */
         inline Range& getNextImpl(const size_t& partId) {
           // all done, so return end
-          if (done.load(std::memory_order_consume)) return this->end;
+          if (done.load(std::memory_order_seq_cst)) return this->end;
 
           // call internal function (so integral and floating point types are handled properly)
           RangeValueType s = getNextOffset<ChunkSizeType>();
 
           //== identify the location in array to store the result
           // first get the id of the chunk we are returning.
-          size_t id = chunkId.fetch_add(1, std::memory_order_acq_rel);
+          size_t id = chunkId.fetch_add(1, std::memory_order_seq_cst);
           // if there are more partitions than chunks, then the array represents mapping from chunkId to subrange
           // else if there are more chunks than partitions, then the array represents the most recent chunk assigned to a partition.
           id = (nChunks < this->nPartitions ? id : partId);
 
           if (s >= this->src.end) {
-            done.store(true, std::memory_order_release);
+            done.store(true, std::memory_order_seq_cst);
             return this->end;
           } else {
 
@@ -746,15 +746,15 @@ namespace bliss
 
         /**
          * @brief resets the partitioner by resetting the internal subrange arrays.  also reset the offset to the start of the src range, chunk Id, and "done".
-         * @details this function also serves to initialize the subrange array.          chunkOffset.store(this->src.start, std::memory_order_release);
+         * @details this function also serves to initialize the subrange array.          chunkOffset.store(this->src.start, std::memory_order_seq_cst);
           chunkId.store(0, )
          *
          */
         void resetImpl() {
           // these 3 calls probably should be synchronized together.
-          chunkOffset.store(this->src.start, std::memory_order_release);
-          chunkId.store(0, std::memory_order_release);
-          done.store(false, std::memory_order_release);
+          chunkOffset.store(this->src.start, std::memory_order_seq_cst);
+          chunkId.store(0, std::memory_order_seq_cst);
+          done.store(false, std::memory_order_seq_cst);
 
           // range will be completely recomputed, so don't have to do much here.
         }

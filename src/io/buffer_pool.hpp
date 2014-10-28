@@ -274,6 +274,8 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_SAFE, bool>::type releaseBuffer(BufferPtrType&& ptr) {
+          assert(ptr->isBlocked());
+
           if (!isUnlimited()) {  // check against size_t max - thread safe, and ensures there is no overflow.
 
             // if multiple threads, the preincrement is atomic, so each thread has a valid value to compare to capacity.
@@ -286,7 +288,6 @@ namespace bliss
             }  // else not at capacity and already incremented it.
           } // else don't need to touch numBuffersAvailable.
 
-          assert(ptr->isBlocked());
           ptr->clear();
 
           // now store the buffer.  make sure push_back is done one thread at a time.
@@ -305,6 +306,8 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_UNSAFE, bool>::type releaseBuffer(BufferPtrType&& ptr) {
+          assert(ptr->isBlocked());
+
           if (!isUnlimited()) {
             if (numBuffersAvailable >= capacity)
               // not unlimited, and already at capacity.  bufferPtr is now lost, but that's okay.
@@ -315,7 +318,6 @@ namespace bliss
             }
           } // else don't need to touch numBuffersAvailable.
 
-          assert(ptr->isBlocked());
           ptr->clear();
 
           available.push_back(std::move(ptr));
