@@ -81,8 +81,8 @@ int main(int argc, char** argv) {
   size_t bufferCapBefore = tlBuffer.getCapacity();
   size_t bufferCapAfter = 0;
 
-  size_t bufferSizeBefore = tlBuffer.getApproximateSize();
-  size_t bufferSizeAfter = 0;
+  int bufferSizeBefore = tlBuffer.getApproximateSize();
+  int bufferSizeAfter = 0;
 
   const void* bufferPtrBefore = tlBuffer.getData();
   const void* bufferPtrAfter = nullptr;

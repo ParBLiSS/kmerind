@@ -350,13 +350,7 @@ namespace bliss
 
         virtual void releaseBuffer(BufferPtrType &&ptr) {
 
-          std::atomic_thread_fence(std::memory_order_seq_cst);
-
-          // without this check, buffers get release before threads are done with them, hence missing buffers? and possible bad writes?
-          while (ptr->isUpdating()) {
-            usleep(1);  // wait for updates to finish.
-            std::atomic_thread_fence(std::memory_order_seq_cst);
-          }
+          ptr->waitForAllUpdates();
 
           MessageBuffers<ThreadSafety>::releaseBuffer(std::forward<BufferPtrType>(ptr));
         }
@@ -396,6 +390,8 @@ namespace bliss
          * @return            std::pair containing the status of the append (boolean success/fail), and the id of a full buffer if there is one.
          */
         std::pair<bool, BufferPtrType> append(const void* data, const size_t count, const int targetProc) {
+
+
           // block() and size are critical in Buffer - they need to be synchronized consistently
           // large number of calls that encounter blocked buffer.  use a spinlock to prevent append while swapping.
           std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -442,6 +438,7 @@ namespace bliss
           //std::pair<bool, bool> appendResult = this->at<ThreadSafety>(targetProc)->append(data, count);
           std::pair<bool, bool> appendResult = bufferptr->append(data, count);
 
+
 //          postappend = this->at<ThreadSafety>(targetProc).get();
 //          if (initial != postappend) printf("ERROR: initial %p and post append %p are not same\n", initial, postappend);
 
@@ -453,13 +450,12 @@ namespace bliss
           //std::unique_lock<std::mutex> lock(mutex);
           BufferPtrType ptr;
           if (appendResult.second) { // equivalent to check isBlocked.  appendResult is already here.
-            bufferReady.at(targetProc).store(false, std::memory_order_seq_cst);
-            std::atomic_thread_fence(std::memory_order_seq_cst);
+
+            // ensure all other threads are done writing to this buffer.  (for benefit of MPI send to have all data.)
+            bufferptr->waitForAllUpdates();
 
             ptr = std::move(swapInEmptyBuffer<ThreadSafety>(targetProc));
 
-            bufferReady.at(targetProc).store(true, std::memory_order_seq_cst);
-            std::atomic_thread_fence(std::memory_order_seq_cst);
 
           } else {
             //if (preswap != postswap) printf("ERROR: NOSWAP: preswap %p and postswap %p are not the same.\n", preswap, postswap);
@@ -477,17 +473,15 @@ namespace bliss
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
-          bufferReady.at(targetProc).store(false, std::memory_order_seq_cst);
-          std::atomic_thread_fence(std::memory_order_seq_cst);
-
           // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
           this->at<ThreadSafety>(targetProc)->block();
+
+          // ensure all other threads are done writing to this buffer.   (for benefit of MPI send to have all data.)
+          this->at<ThreadSafety>(targetProc)->waitForAllUpdates();
 
           // passing in getBufferIdForRank result to ensure atomicity.
           // may return ABSENT if there is no available buffer to use.
           BufferPtrType ptr = std::move(swapInEmptyBuffer<ThreadSafety>(targetProc));
-          bufferReady.at(targetProc).store(true, std::memory_order_seq_cst);
-          std::atomic_thread_fence(std::memory_order_seq_cst);
 
           return std::move(ptr);
 
@@ -526,32 +520,39 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<TS, BufferPtrType>::type swapInEmptyBuffer(const int dest) {
 
-            std::unique_lock<std::mutex> lock(mutex); // lock will prevent multiple threads from calling this or other msg buffer locking ops at the same time
+          // get a new buffer and swap
+         auto bufferPtr = std::move(this->pool.tryAcquireBuffer());
+
+//            std::unique_lock<std::mutex> lock(mutex); // lock will prevent multiple threads from calling this or other msg buffer locking ops at the same time
+          bufferReady.at(dest).store(false, std::memory_order_seq_cst);
+          std::atomic_thread_fence(std::memory_order_seq_cst);
+
 
 
             // does not prevent concurrent access to buffers.at(targetRank).
             // one thread calls this per buffer.
-        	if (this->at<TS>(dest)->isBlocked()) {  // lock this part until finished with swapping.
+//        	if (this->at<TS>(dest)->isBlocked()) {  // lock this part until finished with swapping.
 
-        		// get a new buffer and swap
-        	 auto bufferPtr = std::move(this->pool.tryAcquireBuffer());
 
           // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
             // now swap.  using swap so that other threads referencing buffers.at(blah) will have it updated automatically.
 
             std::swap(buffers.at(dest), bufferPtr);  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
+
+
+            bufferReady.at(dest).store(true, std::memory_order_seq_cst);
             std::atomic_thread_fence(std::memory_order_seq_cst);
 
 
             return std::move(bufferPtr);
-        	}
-        	else {
-        	  printf("SWAP BUT NOT BLOCKED!");
-
-            std::atomic_thread_fence(std::memory_order_seq_cst);
-
-        		return std::move(BufferPtrType());  // not blocked, so don't swap.
-        	}
+//        	}
+//        	else {
+//        	  printf("SWAP BUT NOT BLOCKED!");
+//
+//            std::atomic_thread_fence(std::memory_order_seq_cst);
+//
+//        		return std::move(BufferPtrType());  // not blocked, so don't swap.
+//        	}
         }
 
 
@@ -585,26 +586,31 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, BufferPtrType>::type swapInEmptyBuffer(const int dest) {
 
-          std::unique_lock<std::mutex> lock(mutex); // lock will prevent multiple threads from calling this or other msg buffer locking ops at the same time
+//          std::unique_lock<std::mutex> lock(mutex); // lock will prevent multiple threads from calling this or other msg buffer locking ops at the same time
 
-        	if (this->at<TS>(dest)->isBlocked()) {  // lock this part until finished with swapping.
+//        	if (this->at<TS>(dest)->isBlocked()) {  // lock this part until finished with swapping.
 
             // get a new buffer and swap
             auto bufferPtr = std::move(this->pool.tryAcquireBuffer());
 
+            bufferReady.at(dest).store(false, std::memory_order_seq_cst);
+            std::atomic_thread_fence(std::memory_order_seq_cst);
 
             // now swap.  using swap so that other threads referencing buffers.at(blah) will have it updated automatically.
             std::swap(buffers.at(dest), bufferPtr);
+
+            bufferReady.at(dest).store(true, std::memory_order_seq_cst);
             std::atomic_thread_fence(std::memory_order_seq_cst);
+
 
             return std::move(bufferPtr);
-        	}
-        	else {
-            printf("swap but not blocked.");
-            std::atomic_thread_fence(std::memory_order_seq_cst);
-
-            return std::move(BufferPtrType());  // not blocked, so don't swap.
-        	}
+//        	}
+//        	else {
+//            printf("swap but not blocked.");
+//            std::atomic_thread_fence(std::memory_order_seq_cst);
+//
+//            return std::move(BufferPtrType());  // not blocked, so don't swap.
+//        	}
 
         }
 

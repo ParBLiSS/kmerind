@@ -98,8 +98,10 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   count5 = 0;
 //  printf("buffer ids 0 to %lu initially in use.\n", buffers.getSize() - 1);
 //  printf("releasing: ");
-#pragma omp parallel for num_threads(nthreads) default(none) private(id, result) shared(buffers, data, fullBuffers, repeats, bufferSize) reduction(+ : count,count1, count2, count3, count4, count5)
-  for (id = 0; id < 350; ++id) {
+
+  int iterations = count3 + 10;
+#pragma omp parallel for num_threads(nthreads) default(none) private(id, result) shared(buffers, data, fullBuffers, repeats, bufferSize, iterations) reduction(+ : count,count1, count2, count3, count4, count5)
+  for (id = 0; id < iterations; ++id) {
     try {
       result = fullBuffers.tryPop();
       if (result.first) {
@@ -124,7 +126,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   expectedFull2 = count / (bufferSize/data.length());
 
   if (count4 != 0) printf("\nFAIL: invalid argument exception during pop.  count = %d", count4);
-  else if (count5 != 350 - expectedFull && count5 != 350 - expectedFull2) printf("\nFAIL: failed on pop %d times", count5);
+  else if (count5 != 10) printf("\nFAIL: failed on pop %d times, expected 10", count5);
   else if (count2 != 0) printf("\nFAIL: succeeded in pop but not full buffer. %d", count2);
   else if (count1 != expectedFull && count1 != expectedFull2) printf("FAIL: expected %d or %d full buffers, but received %d", expectedFull, expectedFull2, count1);
   else if (count1 != count3) printf("\nFAIL: successful pops. expected %d.  actual %d", count3, count1);
@@ -143,9 +145,10 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   count = 0;
   count5 = 0;
   int count6 = 0;
+  int count7 = 0;
   //printf("full buffer: ");
   id = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, result) firstprivate(id) shared(buffers, data, repeats, bufferSize) reduction(+ : count, count1, count2, count3,count4, count6)
+#pragma omp parallel for num_threads(nthreads) default(none) private(i, result) firstprivate(id) shared(buffers, data, repeats, bufferSize) reduction(+ : count, count1, count2, count3,count4, count6, count7)
   for (i = 0; i < repeats; ++i) {
     result = buffers.append(data.c_str(), data.length(), id);
 
@@ -154,7 +157,12 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
       if (result.second) {
         ++count3;
+        count7 = count1;  // save the number of successful inserts so far.
+        bool updating = result.second->isUpdating();
+        if (updating) printf("  FULLBUFFER1: size %d updating? %s, blocked? %s\n", result.second->getFinalSize(), (updating ? "Y" : "N"), (result.second->isBlocked() ? "Y" : "N"));
+
         count += result.second->getFinalSize();
+        count6 += strlen(reinterpret_cast<char*>(result.second->getData()));
         buffers.releaseBuffer(std::move(result.second));
       }
     } else {
@@ -162,8 +170,9 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
       if (result.second) {
         ++count4;
+        count7 = count1;  // save the number of successful inserts so far.
         bool updating = result.second->isUpdating();
-        if (updating) printf("  FULLBUFFER: size %d updating ? %s, blocked? %s\n", result.second->getFinalSize(), (updating ? "Y" : "N"), (result.second->isBlocked() ? "Y" : "N"));
+        if (updating) printf("  FULLBUFFER: size %d blocked? %s\n", result.second->getFinalSize(), (result.second->isBlocked() ? "Y" : "N"));
 
         count += result.second->getFinalSize();
         count6 += strlen(reinterpret_cast<char*>(result.second->getData()));
@@ -172,15 +181,35 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       }
     }
   }
+
+  buffers.at(id)->block();
+  bool updating = buffers.at(id)->isUpdating();
+  if (updating) printf("  PreFLUSH: size %d updating? %s, blocked? %s\n", buffers.at(id)->getApproximateSize(), (updating ? "Y" : "N"), (buffers.at(id)->isBlocked() ? "Y" : "N"));
+
   BufferPtrType final = buffers.flushBufferForRank(id);
   count5 = final->getApproximateSize();
   if (count != count6) printf("\nFAIL: number of bytes written %d and number of bytes in FinalSize %d are not the same", count6, count);
   if ((count + count5) != count1 * data.length()) {
-    printf("\nFAIL: number of entries in full %d and final buffers %d is not the same as number successfully inserted %ld bytes for %d entries.\n", count , count5 , count1 * data.length(), count1);
+    printf("\nFAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.\n", (count + count5), count , count5, (count + count5)/data.length(), count1);
 
-    printf("    content length %ld: %s\n", strlen(reinterpret_cast<char*>(final->getData())), reinterpret_cast<char*>(final->getData()));
+    printf("    content length %ld\n", strlen(reinterpret_cast<char*>(final->getData()))); //, reinterpret_cast<char*>(final->getData()));
+  }
+  if ((count + count5)/data.length() + 1 < count1) {
+    printf("\nFAIL: missing %ld entries, expected 1", count1 -(count + count5)/data.length());
+    throw std::logic_error("missing more than 1 entry.");
   }
   buffers.releaseBuffer(std::move(final));
+
+  //if (count7 != count/data.length()) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
+
+
+  final = buffers.flushBufferForRank(id);
+  count5 = final->getApproximateSize();
+  if (count5 > 0) printf("\nFAIL: received %d data after flush.", count5);
+  buffers.releaseBuffer(std::move(final));
+
+
+
 
   expectedFull = (count1 - 1 + (bufferSize/data.length())) / (bufferSize/data.length()) - (count1 % (bufferSize/data.length()) == 0 ? 1 : 0);
   expectedFull2 = count1 / (bufferSize/data.length());
@@ -191,7 +220,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   if (count3 != 0) printf("\nFAIL: number of full Buffers from successful insert is not right: %d should be 0", count3);
   else if (count4 != expectedFull && count4 != expectedFull2) {
     printf("\nFAIL: number of full Buffers from failed insert is not right: %d should be %d or %d", count4, expectedFull, expectedFull2);
-    throw std::logic_error("GDB stop here!");
+    fflush(stdout);
   }
   else printf("PASS");
   printf("\n");
