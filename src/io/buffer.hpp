@@ -563,101 +563,103 @@ namespace bliss
           // ONE thread at a time can get the position to copy in data.  If full, then the buffer is blocked.
 //          std::unique_lock<std::mutex> lock(mutex);   // block() and size need to be synchronized consistently across threads.
 
-//          std::unique_lock<std::mutex> lock(mutex);
-//
-//          //DEBUG("Thread Safe buffer append");
-//          if (isBlocked<TS>()) {
-//            //printf("BLOCKED     shared pointer %p, count %d, start %p, max_pointer %p, size %d, updaters %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)updaterCount);
-//            return std::make_pair(false, false);
-//          }
-//
-//          uint8_t* ptr = pointer.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex lock
-//          if ((ptr + count) > max_pointer) { // FULL   // max_pointer may be swapped during buffer move.  TEST: disable that and use pointer to buffers only
-//            block<TS>();   // will also take away an updater.
-//
-//           lock.unlock();
-//
-//
-//            // After the F&A, there are 3 types of threads:  target write area is
-//        	  //  1. completely within buffer:	these threads should proceed to memcpy with the local ptr var
-//        	  //  2. completely outside buffer:	these threads will not memcpy.  they all disabled buffer, and
-//        	  //     only 1 thread from 2) or 3) should swap in a new buffer atomically.
-//        	  //     	- if curr buffer is not disabled (already swapped), then don't swap further.
-//        	  //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
-//          	if (ptr <= max_pointer)  {// original pointer is within buffer - put it back. however, this could cause multiple threads to reach this point.
-//          	  size.store(ptr - data.get(), std::memory_order_seq_cst);  // overwrite the size with this one's
-//          	  swap = true;
-//
-//              //printf("FULL    SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
-//          	} // else swap is false;
-//          	//else {
-//              //printf("FULL NO SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
-//          	// }
-//
-//            	// at this point, buffer is blocked, and can be replaced.  this may be faster than we can copy the data.
-//            				// to fix this - compute the pointer where data is to be copied before unlock.  For threads that
-//            				// pass the capacity test, they continue to memcpy, knowing where the addresses are.  The failed ones will
-//            				// cause a buffer swap, but the passed threads has the absolute address.
-//          } else {
-//            lock.unlock();
-//            updaterCount.fetch_add(1, std::memory_order_seq_cst);
-//
-//            appended = true;
-//            std::memcpy(ptr, _data, count);
-//            updaterCount.fetch_sub(1, std::memory_order_seq_cst);
-//          }
-//
-//          atomic_thread_fence(std::memory_order_seq_cst);   // commits all changes up to this point to memory
+          uint8_t* start = data.get();
 
-            uint8_t* start = data.get();
+          std::unique_lock<std::mutex> lock(mutex);
 
+          //DEBUG("Thread Safe buffer append");
+          if (isBlocked<TS>()) {
+            //printf("BLOCKED     shared pointer %p, count %d, start %p, max_pointer %p, size %d, updaters %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)updaterCount);
+            return std::make_pair(false, false);
+          }
 
+          uint8_t* ptr = pointer.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex lock
+          if ((ptr + count) > max_pointer) { // FULL   // max_pointer may be swapped during buffer move.  TEST: disable that and use pointer to buffers only
+            block<TS>();   // will also take away an updater.
 
-            std::unique_lock<std::mutex> lock(mutex);
-
-            //DEBUG("Thread Safe buffer append");
-            if (isBlocked<TS>()) {
-              //printf("BLOCKED     shared pointer %p, count %d, start %p, max_pointer %p, size %d, updaters %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)updaterCount);
-              return std::make_pair(false, false);
-            }
-
+           lock.unlock();
 
 
             // After the F&A, there are 3 types of threads:  target write area is
-            //  1. completely within buffer:  these threads should proceed to memcpy with the local ptr var
-            //  2. completely outside buffer: these threads will not memcpy.  they all disabled buffer, and
-            //     only 1 thread from 2) or 3) should swap in a new buffer atomically.
-            //      - if curr buffer is not disabled (already swapped), then don't swap further.
-            //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
+        	  //  1. completely within buffer:	these threads should proceed to memcpy with the local ptr var
+        	  //  2. completely outside buffer:	these threads will not memcpy.  they all disabled buffer, and
+        	  //     only 1 thread from 2) or 3) should swap in a new buffer atomically.
+        	  //     	- if curr buffer is not disabled (already swapped), then don't swap further.
+        	  //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
+          	if (ptr <= max_pointer)  {// original pointer is within buffer - put it back. however, this could cause multiple threads to reach this point.
+          	  size.store(ptr - start, std::memory_order_seq_cst);  // overwrite the size with this one's
+          	  swap = true;
 
-            uint8_t* ptr = pointer.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex loc
+              //printf("FULL    SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
+          	} // else swap is false;
+          	//else {
+              //printf("FULL NO SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
+          	// }
 
-            if ((max_pointer - ptr) >= static_cast<std::ptrdiff_t>(count) ) {
-              // has room to copy.
-              lock.unlock();
-              updaterCount.fetch_add(1, std::memory_order_seq_cst);
+            	// at this point, buffer is blocked, and can be replaced.  this may be faster than we can copy the data.
+            				// to fix this - compute the pointer where data is to be copied before unlock.  For threads that
+            				// pass the capacity test, they continue to memcpy, knowing where the addresses are.  The failed ones will
+            				// cause a buffer swap, but the passed threads has the absolute address.
+          } else {
+            lock.unlock();
+            updaterCount.fetch_add(1, std::memory_order_seq_cst);
 
-              std::memcpy(ptr, _data, count);
+            appended = true;
+            std::memcpy(ptr, _data, count);
+            updaterCount.fetch_sub(1, std::memory_order_seq_cst);
+          }
 
-              appended = true;
-              updaterCount.fetch_sub(1, std::memory_order_seq_cst);
-            } else if (ptr <=  max_pointer) {
-              lock.unlock();
-              // the append that overflows.
-              blocked.store(true, std::memory_order_seq_cst);
+          atomic_thread_fence(std::memory_order_seq_cst);   // commits all changes up to this point to memory
 
-              size.store(ptr - start, std::memory_order_seq_cst);  // overwrite the size with this one's
-
-              swap = true;
-              updaterCount.fetch_sub(1, std::memory_order_seq_cst);
-            } else {
-              lock.unlock();
-              // way full.
-              blocked.store(true, std::memory_order_seq_cst);
-
-            }
-
-            atomic_thread_fence(std::memory_order_seq_cst);   // commits all changes up to this point to memory
+// same number of missing and extra elements.
+//            uint8_t* start = data.get();
+//
+//
+//            std::unique_lock<std::mutex> lock(mutex);
+//
+//            //DEBUG("Thread Safe buffer append");
+//            if (isBlocked<TS>()) {
+//              //printf("BLOCKED     shared pointer %p, count %d, start %p, max_pointer %p, size %d, updaters %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)updaterCount);
+//              return std::make_pair(false, false);
+//            }
+//
+//
+//
+//            // After the F&A, there are 3 types of threads:  target write area is
+//            //  1. completely within buffer:  these threads should proceed to memcpy with the local ptr var
+//            //  2. completely outside buffer: these threads will not memcpy.  they all disabled buffer, and
+//            //     only 1 thread from 2) or 3) should swap in a new buffer atomically.
+//            //      - if curr buffer is not disabled (already swapped), then don't swap further.
+//            //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
+//
+//            uint8_t* ptr = pointer.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex loc
+//
+//            if ((max_pointer - ptr) >= static_cast<std::ptrdiff_t>(count) ) {
+//              // has room to copy.
+//              lock.unlock();
+//              updaterCount.fetch_add(1, std::memory_order_seq_cst);
+//
+//              std::memcpy(ptr, _data, count);
+//
+//              appended = true;
+//              updaterCount.fetch_sub(1, std::memory_order_seq_cst);
+//            } else if (ptr <=  max_pointer) {
+//              // the append that overflows.
+//              blocked.store(true, std::memory_order_seq_cst);
+//              lock.unlock();
+//
+//              size.store(ptr - start, std::memory_order_seq_cst);  // overwrite the size with this one's
+//
+//              swap = true;
+//              updaterCount.fetch_sub(1, std::memory_order_seq_cst);
+//            } else {
+//              // way full.
+//              blocked.store(true, std::memory_order_seq_cst);
+//              lock.unlock();
+//
+//            }
+//
+//            atomic_thread_fence(std::memory_order_seq_cst);   // commits all changes up to this point to memory
 
 
           return std::make_pair(appended, swap);
