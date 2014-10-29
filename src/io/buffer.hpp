@@ -563,7 +563,7 @@ namespace bliss
         	  //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
           	if (ptr < max_pointer)  {// original pointer is within buffer - put it back. however, this could cause multiple threads to reach this point.
           	  size.store(ptr - data.get(), std::memory_order_seq_cst);
-              swap = true;
+          	  swap = true;
               //printf("FULL    SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
           	} // else swap is false;
           	//else {

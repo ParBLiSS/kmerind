@@ -142,9 +142,10 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   count4 = 0;
   count = 0;
   count5 = 0;
+  int count6 = 0;
   //printf("full buffer: ");
   id = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, result) firstprivate(id) shared(buffers, data, repeats, bufferSize) reduction(+ : count, count1, count2, count3,count4)
+#pragma omp parallel for num_threads(nthreads) default(none) private(i, result) firstprivate(id) shared(buffers, data, repeats, bufferSize) reduction(+ : count, count1, count2, count3,count4, count6)
   for (i = 0; i < repeats; ++i) {
     result = buffers.append(data.c_str(), data.length(), id);
 
@@ -165,6 +166,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
         if (updating) printf("  FULLBUFFER: size %d updating ? %s, blocked? %s\n", result.second->getFinalSize(), (updating ? "Y" : "N"), (result.second->isBlocked() ? "Y" : "N"));
 
         count += result.second->getFinalSize();
+        count6 += strlen(reinterpret_cast<char*>(result.second->getData()));
 
         buffers.releaseBuffer(std::move(result.second));
       }
@@ -172,6 +174,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   }
   BufferPtrType final = buffers.flushBufferForRank(id);
   count5 = final->getApproximateSize();
+  if (count != count6) printf("\nFAIL: number of bytes written %d and number of bytes in FinalSize %d are not the same", count6, count);
   if ((count + count5) != count1 * data.length()) {
     printf("\nFAIL: number of entries in full %d and final buffers %d is not the same as number successfully inserted %ld bytes for %d entries.\n", count , count5 , count1 * data.length(), count1);
 
