@@ -19,6 +19,88 @@
 #include <vector>
 #include <cstdlib>   // for rand
 
+#include <utils/test_utils.hpp>
+
+
+template<typename PoolType, int NumThreads>
+void testAppendMultipleBuffers(const int buffer_capacity, const int total_count) {
+
+
+  printf("TESTING: %d threads, pool thread %s buffer thread %s append with %d bufferSize and %d total counts from unlimited pool\n",
+         NumThreads, PoolType::poolTS ? "SAFE" : "UNSAFE", PoolType::bufferTS ? "SAFE" : "UNSAFE", buffer_capacity, total_count);
+
+
+  PoolType pool(buffer_capacity);
+
+  std::vector<int> gold;
+  std::vector<int> stored;
+
+  int data = 0;
+  std::pair<bool, bool> result { false, false };
+
+  int success = 0;
+  int failure = 0;
+  int swap = 0;
+  int i = 0;
+
+  auto buf_ptr = std::move(pool.tryAcquireBuffer());
+
+#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored) private(i, data, result) reduction(+:success, failure, swap)
+  for (i = 0; i < total_count; ++i) {
+
+    auto ptr = buf_ptr.get();
+
+    data = static_cast<int>(i);
+    result = ptr->append(&data, sizeof(int));
+
+    if (result.first) {
+      ++success;
+#pragma omp critical
+      gold.push_back(data);
+    }
+    else ++failure;
+
+    if (result.second) {
+      ++swap;
+
+      // swap in a new one.
+      auto new_buf_ptr = std::move(pool.tryAcquireBuffer());
+      buf_ptr.swap(new_buf_ptr);
+
+      // process the old buffer
+#pragma omp critical
+      {
+        stored.insert(stored.end(), new_buf_ptr->operator int*(), new_buf_ptr->operator int*() + new_buf_ptr->getFinalSize() / sizeof(int));
+      }
+
+      // and release - few threads doing this, and full.
+      pool.releaseBuffer(std::move(new_buf_ptr));
+
+    }
+
+  }
+
+  buf_ptr->block();
+
+  // compare unordered buffer content.
+  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getFinalSize() / sizeof(int));
+  pool.releaseBuffer(std::move(buf_ptr));
+  int stored_count = stored.size();
+
+
+  if ( swap != success / (buffer_capacity / sizeof(int)) || success != stored_count)
+      printf("FAIL: (actual/expected)  success (%d/%d), failure (%d/?), swap(%ld/%d).\n", success, stored_count, failure, success / (buffer_capacity / sizeof(int)), swap);
+  else {
+    printf("INFO: success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
+
+    if (compareUnorderedSequences(stored.begin(), gold.begin(), stored_count)) {
+      printf("PASS\n");
+    } else {
+      printf("FAIL: content not matching\n");
+    }
+  }
+
+}
 
 
 template<typename PoolType>
@@ -103,7 +185,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       ++count;
     }
 
-    int u = reinterpret_cast<const int*>(ptr->getData())[0];
+    int u = ptr->operator int*()[0];
     if (v != u) {
       ++count1;
     }
@@ -127,7 +209,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 
   bool same = true;
   for (int i = 0; i < buffer_threads ; ++i) {
-    same &= reinterpret_cast<const int*>(ptr->getData())[i] == 7;
+    same &= ptr->operator int*()[i] == 7;
   }
   if (!same) printf("ERROR: inserted not same\n");
   pool.reset();

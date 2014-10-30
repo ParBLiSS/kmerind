@@ -75,6 +75,10 @@ namespace bliss
          */
         using BufferPtrType = std::unique_ptr<BufferType>;
 
+        static const bliss::concurrent::ThreadSafety poolTS = PoolTS;
+        static const bliss::concurrent::ThreadSafety bufferTS = BufferTS;
+
+
       protected:
         /**
          * @brief     capacity of the BufferPool (in number of Buffers)
@@ -328,6 +332,12 @@ namespace bliss
         }
 
     };
+
+    template<bliss::concurrent::ThreadSafety PoolTS, bliss::concurrent::ThreadSafety BufferTS>
+    const bliss::concurrent::ThreadSafety BufferPool<PoolTS, BufferTS>::bufferTS;
+
+    template<bliss::concurrent::ThreadSafety PoolTS, bliss::concurrent::ThreadSafety BufferTS>
+    const bliss::concurrent::ThreadSafety BufferPool<PoolTS, BufferTS>::poolTS;
 
 
   } /* namespace io */

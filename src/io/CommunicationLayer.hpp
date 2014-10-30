@@ -703,7 +703,7 @@ class CommunicationLayer
             SendDataElementType* se = dynamic_cast<SendDataElementType*>(el.second.get());  // MPIMessage*
 
             // get message data and it's size
-            uint8_t* data = se->ptr->getData();  // BufferPtrType then getData
+            uint8_t* data = se->ptr->operator uint8_t*();  // BufferPtrType then getData
             auto count = se->ptr->getFinalSize();
 
             if (count > 0) {

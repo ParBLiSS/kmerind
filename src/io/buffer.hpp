@@ -119,7 +119,7 @@ namespace bliss
       	  : capacity(other.capacity), data(std::move(other.data)), max_pointer(other.max_pointer),
       	    size(int32_t(other.size)),
       	    blocked(bool(other.blocked)),
-      	    pointer((uint8_t*)(other.pointer)), updaterCount((bool)(other.blocked) ? 0 : 1) {
+      	    pointer((uint8_t*)(other.pointer)), updaterCount(0) {
 
           //DEBUG("BUFFER private move contructor 1 called");
 
@@ -145,7 +145,7 @@ namespace bliss
           : capacity(other.capacity), data(std::move(other.data)), max_pointer(other.max_pointer),
             size(int32_t(other.size)),
             blocked(bool(other.blocked)),
-            pointer((uint8_t*)(other.pointer)), updaterCount((bool)(other.blocked) ? 0 : 1) {
+            pointer((uint8_t*)(other.pointer)), updaterCount(0) {
 
           DEBUG("BUFFER private move contructor 2 called");
 
@@ -164,7 +164,7 @@ namespace bliss
          * @brief Normal constructor.  Allocate and initialize memory with size specified as parameter.
          * @param _capacity   The maximum capacity of the Buffer in bytes
          */
-        explicit Buffer(const uint32_t _capacity) : capacity(_capacity), data(new uint8_t[_capacity]), size(-1), blocked(false), updaterCount(1)
+        explicit Buffer(const uint32_t _capacity) : capacity(_capacity), data(new uint8_t[_capacity]), size(-1), blocked(false), updaterCount(0)
         {
           if (_capacity == 0)
             throw std::invalid_argument("Buffer constructor parameter capacity is given as 0");
@@ -181,7 +181,7 @@ namespace bliss
          * @param _data   The pointer/address of preallocated memory block
          * @param count   The size of preallocated memory block
          */
-        Buffer(void* _data, const int32_t count) : capacity(count), data(static_cast<uint8_t*>(_data)), size(count), blocked(false), updaterCount(1) {
+        Buffer(void* _data, const int32_t count) : capacity(count), data(static_cast<uint8_t*>(_data)), size(count), blocked(false), updaterCount(0) {
           if (count == 0)
             throw std::invalid_argument("Buffer constructor parameter count is given as 0");
           if (_data == nullptr)
@@ -230,7 +230,7 @@ namespace bliss
          * @return          target Buffer reference
          */
         Buffer<ThreadSafety>& operator=(Buffer<ThreadSafety>&& other) {
-          DEBUG("BUFFER public move assignment op 1 called");
+          //DEBUG("BUFFER public move assignment op 1 called");
 
           if (this->data != other.data) {
 
@@ -269,7 +269,7 @@ namespace bliss
          * @return          target Buffer reference
          */
         Buffer<ThreadSafety>& operator=(Buffer<!ThreadSafety>&& other) {
-          DEBUG("BUFFER public move assignment op 2 called");
+          //DEBUG("BUFFER public move assignment op 2 called");
 
           if (this->data != other.data) {
 
@@ -318,8 +318,8 @@ namespace bliss
           //std::atomic_thread_fence(std::memory_order_seq_cst);
           // wait until updating is done.
           this->waitForAllUpdates();  // after all updates, no threads touching this.  so size would have been updated by a thread if full, else unset.
-          if (size == -1) return this->getApproximateSize<TS>();
-          else return size.load(std::memory_order_seq_cst);
+          if (isBlocked<TS>()) return size.load(std::memory_order_seq_cst);
+          else return getApproximateSize<TS>();
         }
 
         /**
@@ -330,8 +330,8 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, const int32_t>::type getFinalSize() const {
           this->waitForAllUpdates();  // after all updates, no threads touching this.  so size would have been updated by a thread if full, else unset.
-          if (size == -1) return this->getApproximateSize<TS>();
-          else return size;
+          if (isBlocked<TS>()) return size;
+          else return getApproximateSize<TS>();
         }
 
         /**
@@ -383,8 +383,8 @@ namespace bliss
         typename std::enable_if<TS, void>::type block() {
           bool init = false;
           if (blocked.compare_exchange_strong(init, true, std::memory_order_seq_cst)) {
-            updaterCount.fetch_sub(1, std::memory_order_seq_cst);   // transition from true to false, so add one updater
-//            size.store(getApproximateSize<TS>());  // one thread writes here.  if blocking because full, size will be overwritten by the correct one.
+            //updaterCount.fetch_sub(1, std::memory_order_seq_cst);   // transition from true to false, so add one updater
+            size.store(getApproximateSize<TS>());  // one thread writes here.  if blocking because full, size will be overwritten by the correct one.
           } // else already false.
         }
         /**
@@ -394,8 +394,8 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, void>::type block() {
           if (!blocked) { // transition from true to false, so remove one updater
-            --updaterCount;
-//            size = getApproximateSize<TS>();  // one thread writes here.  if blocking because full, size will be overwritten by the correct one.
+            //--updaterCount;
+            size = getApproximateSize<TS>();  // one thread writes here.  if blocking because full, size will be overwritten by the correct one.
           }
           blocked = true;
         }
@@ -408,7 +408,7 @@ namespace bliss
         typename std::enable_if<TS, void>::type unblock() {
           bool init = true;
           if (blocked.compare_exchange_strong(init, false, std::memory_order_seq_cst)) {
-            updaterCount.fetch_add(1, std::memory_order_seq_cst);   // transition from true to false, so add one updater
+            //updaterCount.fetch_add(1, std::memory_order_seq_cst);   // transition from true to false, so add one updater
           } // else already false.
         }
         /**
@@ -417,8 +417,9 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, void>::type unblock() {
-          if (blocked)  // transition from true to false, so add one updater
-            ++updaterCount;
+          if (blocked) { // transition from true to false, so add one updater
+            //++updaterCount;
+          }
           blocked = false;
         }
 
@@ -445,6 +446,7 @@ namespace bliss
          * const because the caller will have a const reference to the buffer.
          */
         void clear() {
+          updaterCount = 0;
           size = -1;
           // TODO: remove after finish debugging.
           memset(data.get(), 0, capacity * sizeof(uint8_t));
@@ -467,16 +469,11 @@ namespace bliss
          *
          * const because the caller will have a const reference to the buffer
          */
-        template <bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, uint8_t>::type * getData() const {
-          std::atomic_thread_fence(std::memory_order_seq_cst);
-          return data.get();
+        template <typename T>
+        operator T*() const {
+          return reinterpret_cast<T*>(data.get());
         }
 
-        template <bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, uint8_t>::type * getData() const {
-          return data.get();
-        }
 
 
 
@@ -565,101 +562,96 @@ namespace bliss
 
           uint8_t* start = data.get();
 
-          std::unique_lock<std::mutex> lock(mutex);
-
-          //DEBUG("Thread Safe buffer append");
-          if (isBlocked<TS>()) {
-            //printf("BLOCKED     shared pointer %p, count %d, start %p, max_pointer %p, size %d, updaters %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)updaterCount);
-            return std::make_pair(false, false);
-          }
-
-          uint8_t* ptr = pointer.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex lock
-          if ((ptr + count) > max_pointer) { // FULL   // max_pointer may be swapped during buffer move.  TEST: disable that and use pointer to buffers only
-            block<TS>();   // will also take away an updater.
-
-           lock.unlock();
-
-
-            // After the F&A, there are 3 types of threads:  target write area is
-        	  //  1. completely within buffer:	these threads should proceed to memcpy with the local ptr var
-        	  //  2. completely outside buffer:	these threads will not memcpy.  they all disabled buffer, and
-        	  //     only 1 thread from 2) or 3) should swap in a new buffer atomically.
-        	  //     	- if curr buffer is not disabled (already swapped), then don't swap further.
-        	  //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
-          	if (ptr <= max_pointer)  {// original pointer is within buffer - put it back. however, this could cause multiple threads to reach this point.
-          	  size.store(ptr - start, std::memory_order_seq_cst);  // overwrite the size with this one's
-          	  swap = true;
-
-              //printf("FULL    SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
-          	} // else swap is false;
-          	//else {
-              //printf("FULL NO SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
-          	// }
-
-            	// at this point, buffer is blocked, and can be replaced.  this may be faster than we can copy the data.
-            				// to fix this - compute the pointer where data is to be copied before unlock.  For threads that
-            				// pass the capacity test, they continue to memcpy, knowing where the addresses are.  The failed ones will
-            				// cause a buffer swap, but the passed threads has the absolute address.
-          } else {
-            lock.unlock();
-            updaterCount.fetch_add(1, std::memory_order_seq_cst);
-
-            appended = true;
-            std::memcpy(ptr, _data, count);
-            updaterCount.fetch_sub(1, std::memory_order_seq_cst);
-          }
-
-          atomic_thread_fence(std::memory_order_seq_cst);   // commits all changes up to this point to memory
-
-// same number of missing and extra elements.
-//            uint8_t* start = data.get();
+//          std::unique_lock<std::mutex> lock(mutex);
 //
+//          //DEBUG("Thread Safe buffer append");
+//          if (isBlocked<TS>()) {
+//            //printf("BLOCKED     shared pointer %p, count %d, start %p, max_pointer %p, size %d, updaters %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)updaterCount);
+//            return std::make_pair(false, false);
+//          }
 //
-//            std::unique_lock<std::mutex> lock(mutex);
+//            updaterCount.fetch_add(1, std::memory_order_seq_cst);
+//          uint8_t* ptr = pointer.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex lock
+//          if ((ptr + count) > max_pointer) { // FULL   // max_pointer may be swapped during buffer move.  TEST: disable that and use pointer to buffers only
 //
-//            //DEBUG("Thread Safe buffer append");
-//            if (isBlocked<TS>()) {
-//              //printf("BLOCKED     shared pointer %p, count %d, start %p, max_pointer %p, size %d, updaters %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)updaterCount);
-//              return std::make_pair(false, false);
-//            }
-//
+//           lock.unlock();
 //
 //
 //            // After the F&A, there are 3 types of threads:  target write area is
-//            //  1. completely within buffer:  these threads should proceed to memcpy with the local ptr var
-//            //  2. completely outside buffer: these threads will not memcpy.  they all disabled buffer, and
-//            //     only 1 thread from 2) or 3) should swap in a new buffer atomically.
-//            //      - if curr buffer is not disabled (already swapped), then don't swap further.
-//            //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
+//        	  //  1. completely within buffer:	these threads should proceed to memcpy with the local ptr var
+//        	  //  2. completely outside buffer:	these threads will not memcpy.  they all disabled buffer, and
+//        	  //     only 1 thread from 2) or 3) should swap in a new buffer atomically.
+//        	  //     	- if curr buffer is not disabled (already swapped), then don't swap further.
+//        	  //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
+//          	if (ptr <= max_pointer)  {// original pointer is within buffer - put it back. however, this could cause multiple threads to reach this point.
+//          	  size.store(ptr - start, std::memory_order_seq_cst);  // overwrite the size with this one's
+//          	  swap = true;
 //
-//            uint8_t* ptr = pointer.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex loc
+//            block<TS>();   // will also take away an updater.
+//              //printf("FULL    SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
+//          	} // else swap is false;
+//          	//else {
+//              //printf("FULL NO SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
+//          	// }
 //
-//            if ((max_pointer - ptr) >= static_cast<std::ptrdiff_t>(count) ) {
-//              // has room to copy.
+//            	// at this point, buffer is blocked, and can be replaced.  this may be faster than we can copy the data.
+//            				// to fix this - compute the pointer where data is to be copied before unlock.  For threads that
+//            				// pass the capacity test, they continue to memcpy, knowing where the addresses are.  The failed ones will
+//            				// cause a buffer swap, but the passed threads has the absolute address.
+//            updaterCount.fetch_sub(1, std::memory_order_seq_cst);
+//          } else {
+//            lock.unlock();
+//
+//            appended = true;
+//            std::memcpy(ptr, _data, count);
+//            updaterCount.fetch_sub(1, std::memory_order_seq_cst);
+//          }
+
+
+// same number of missing and extra elements.
+//            std::unique_lock<std::mutex> lock(mutex);
+
+            //DEBUG("Thread Safe buffer append");
+            if (isBlocked<TS>()) {
+              //printf("BLOCKED     shared pointer %p, count %d, start %p, max_pointer %p, size %d, updaters %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)updaterCount);
+              return std::make_pair(false, false);
+            }
+
+
+
+            // After the F&A, there are 3 types of threads:  target write area is
+            //  1. completely within buffer:  these threads should proceed to memcpy with the local ptr var
+            //  2. completely outside buffer: these threads will not memcpy.  they all disabled buffer, and
+            //     only 1 thread from 2) or 3) should swap in a new buffer atomically.
+            //      - if curr buffer is not disabled (already swapped), then don't swap further.
+            //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
+
+            uint8_t* ptr = pointer.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex loc
+            updaterCount.fetch_add(1, std::memory_order_seq_cst);
+
+            if ((max_pointer - ptr) >= static_cast<std::ptrdiff_t>(count) ) {
+              // has room to copy.
+
+              std::memcpy(ptr, _data, count);
+
+              appended = true;
+            } else {
+              // the append that overflows.
+              blocked.store(true, std::memory_order_seq_cst);
 //              lock.unlock();
-//              updaterCount.fetch_add(1, std::memory_order_seq_cst);
-//
-//              std::memcpy(ptr, _data, count);
-//
-//              appended = true;
-//              updaterCount.fetch_sub(1, std::memory_order_seq_cst);
-//            } else if (ptr <=  max_pointer) {
-//              // the append that overflows.
-//              blocked.store(true, std::memory_order_seq_cst);
-//              lock.unlock();
-//
-//              size.store(ptr - start, std::memory_order_seq_cst);  // overwrite the size with this one's
-//
-//              swap = true;
-//              updaterCount.fetch_sub(1, std::memory_order_seq_cst);
-//            } else {
-//              // way full.
-//              blocked.store(true, std::memory_order_seq_cst);
-//              lock.unlock();
-//
-//            }
-//
-//            atomic_thread_fence(std::memory_order_seq_cst);   // commits all changes up to this point to memory
+
+              if (ptr <=  max_pointer) {
+                size.store(ptr - start, std::memory_order_seq_cst);  // overwrite the size with this one's
+
+               swap = true;
+              }
+
+
+            }
+            updaterCount.fetch_sub(1, std::memory_order_seq_cst);
+
+
+            atomic_thread_fence(std::memory_order_seq_cst);   // commits all changes up to this point to memory
 
 
           return std::make_pair(appended, swap);
@@ -701,9 +693,10 @@ namespace bliss
           ++updaterCount;
           bool swap = false;
           if ((pointer + count) > max_pointer) {
-            block<TS>();  // also takes away an updater.
 
-            if (pointer < max_pointer)  {// original pointer is within buffer - put it back. however, this could cause multiple threads to reach this point.
+
+            if (pointer <= max_pointer)  {// original pointer is within buffer - put it back. however, this could cause multiple threads to reach this point.
+              block<TS>();  // also takes away an updater.
               size = pointer - data.get(); // final
               swap = true;
             }

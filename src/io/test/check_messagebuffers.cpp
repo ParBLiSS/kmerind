@@ -162,7 +162,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
         if (updating) printf("  FULLBUFFER1: size %d updating? %s, blocked? %s\n", result.second->getFinalSize(), (updating ? "Y" : "N"), (result.second->isBlocked() ? "Y" : "N"));
 
         count += result.second->getFinalSize();
-        count6 += strlen(reinterpret_cast<char*>(result.second->getData()));
+        count6 += strlen(result.second->operator char*());
         buffers.releaseBuffer(std::move(result.second));
       }
     } else {
@@ -175,7 +175,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
         if (updating) printf("  FULLBUFFER: size %d blocked? %s\n", result.second->getFinalSize(), (result.second->isBlocked() ? "Y" : "N"));
 
         count += result.second->getFinalSize();
-        count6 += strlen(reinterpret_cast<char*>(result.second->getData()));
+        count6 += strlen(result.second->operator char*());
 
         buffers.releaseBuffer(std::move(result.second));
       }
@@ -192,7 +192,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   if ((count + count5) != count1 * data.length()) {
     printf("\nFAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.\n", (count + count5), count , count5, (count + count5)/data.length(), count1);
 
-    printf("    content length %ld\n", strlen(reinterpret_cast<char*>(final->getData()))); //, reinterpret_cast<char*>(final->getData()));
+    printf("    content length %ld\n", strlen(final->operator char*())); //, final->operator char*());
   }
   if ((count + count5)/data.length() + 1 < count1) {
     printf("\nFAIL: missing %ld entries, expected 1", count1 -(count + count5)/data.length());

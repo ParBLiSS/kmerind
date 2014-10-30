@@ -438,6 +438,7 @@ namespace bliss
           //std::pair<bool, bool> appendResult = this->at<ThreadSafety>(targetProc)->append(data, count);
           std::pair<bool, bool> appendResult = bufferptr->append(data, count);
 
+          std::atomic_thread_fence(std::memory_order_seq_cst);
 
 //          postappend = this->at<ThreadSafety>(targetProc).get();
 //          if (initial != postappend) printf("ERROR: initial %p and post append %p are not same\n", initial, postappend);
