@@ -341,10 +341,11 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
   buf_ptr->block();
 
   for (int i = 0; i < full.size(); ++i) {
-
+		full.at(i)->waitForAllUpdates();
     stored.insert(stored.end(), full.at(i)->operator int*(), full.at(i)->operator int*() + full.at(i)->getFinalSize() / sizeof(int));
   }
 
+buf_ptr->waitForAllUpdates();
   // compare unordered buffer content.
   stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getFinalSize() / sizeof(int));
   int stored_count = stored.size();
@@ -402,6 +403,7 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
     if (result.second) {
       ++swap;
 
+			buf_ptr->waitForAllUpdates();
       // swap in a new one.
       std::unique_ptr<bliss::io::Buffer<TS> > new_buf_ptr(new bliss::io::Buffer<TS>(buffer_capacity));
       buf_ptr.swap(new_buf_ptr);
