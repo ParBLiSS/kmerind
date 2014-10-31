@@ -33,39 +33,19 @@ namespace bliss
     /**
      * @class FASTALoader
      * @brief FileLoader subclass specialized for the FASTA file format
-     *
-     *
-     * @tparam  T                 type of each element read from file
-     * @tparam  L1Buffering       bool indicating if L1 partition blocks should be buffered.  default to false
-     * @tparam  L2Buffering       bool indicating if L2 partition blocks should be buffered.  default to true (to avoid contention between threads)
-     * @tparam  L1PartitionerT    Type of the Level 1 Partitioner to generate the range of the file to load from disk
-     * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
      */
-    template<typename T,
-      bool L2Buffering = true,
-      bool L1Buffering = false,
-      typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
-      typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >
-        class FASTALoader : public FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT, void>
+    class FASTALoader
     {
       protected:
-        /// base class type (FileLoader with the specific template parameters)
-        typedef FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
-                FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> >    SuperType;
-
-        friend class FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
-               FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> >;
 
         /// constant representing the EOL character
         static const typename std::iterator_traits<Iterator>::value_type eol = '\n';
 
       public:
         //==== exposing types from base class
-        /// Type of iterator for traversing the input data.
-        typedef typename SuperType::InputIteratorType                   InputIteratorType;
 
         /// Type of range object.
-        typedef typename SuperType::RangeType                            RangeType;
+        typedef bliss::partition::range<size_t>     RangeType;
 
       protected:
         /**

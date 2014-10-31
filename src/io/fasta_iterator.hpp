@@ -111,35 +111,44 @@ namespace bliss
     class FASTAParser
     {
       protected:
-        /// alias for this type, for use inside this class.
-        using type = FASTQParser<Iterator, Alphabet, Kmer>;
+
+        //Type for the offset
+        typedef uint32_t offSetType;
 
         //Counting iterator
-        typedef boost::counting_iterator<uint32_t> 
+        typedef boost::counting_iterator<offSetType> 
           count_iterator;
 
         //Tranform iterator on top of Counting iterator
-        typedef boost::transform_iterator <std::function<uint32_t(const uint32_t&)> , count_iterator> 
+        typedef boost::transform_iterator <std::function<offSetType(const offSetType&)> , count_iterator> 
           offset_transform_iterator;
+
+        //Tuple of two iterators id and sequence
+        typedef boost::tuple<offset_transform_iterator, iterator> 
+          the_offset_sequence_tuple;
+
+        //Zip iterator to zip the tuple of sequence and id
+        typedef boost::zip_iterator<the_offset_sequence_tuple> 
+          the_offset_sequence_zip;
+
+        //Filter iterator over the zip iterator 
+        typedef boost::filter_iterator <std::function <bool(the_zip_iterator&) >, the_zip_iterator>
+          corrected_offset_sequence_zip;
 
         //K-mer generating iterator on Sequence data
         typedef bliss::KmerGenerationIterator<Iterator, Kmer> 
           kmer_gen_iterator;
 
-        //Tuple of two iterators id and kmers
-        typedef boost::tuple<offset_transform_iterator,kmer_gen_iterator> 
-          the_iterator_tuple;
+        //Tuple of two iterators id and sequence
+        typedef boost::tuple<offset_transform_iterator, kmer_gen_iterator> 
+          the_offset_kmer_tuple;
 
-        //Zip iterator to zip the tuple 
-        typedef boost::zip_iterator<the_iterator_tuple> 
-          the_zip_iterator;
-
-        //Filter iterator over the zip iterator which gives the fasta iterator 
-        typedef boost::filter_iterator <std::function <bool(the_zip_iterator&) >, the_zip_iterator>
-          fasta_iter;
+        //Zip iterator to zip the tuple of kmer and id
+        typedef boost::zip_iterator<the_offset_kmer_tuple> 
+          the_offset_kmer_zip;
 
         //Vector containing positions of fasta record start
-        typedef std::vector <pair<std::size_t, std::size_t>> vectorType;
+        typedef std::vector <pair<offSetType, offSetType>> vectorType;
 
         /// iterator for the vector 
         typedef vectorType::iterator vectorIteratorType;
@@ -153,17 +162,32 @@ namespace bliss
         /// vector of pairs that has the positions of fasta sequence headers
         vectorType _localStartLocStore; 
 
+        /**
+         * @brief     the offset of start and end of the search range.  This is used for generating the sequenceId.
+         */
+        RangeType _offsetRange;
+
         // Iterator to iterate over the vector of tuples
         vectorIteratorType _localStartLocStoreIter;
 
+        //Define EOL type
+        static const typename std::iterator_traits<Iterator>::value_type eol = '\n';
+
+        /// alias for this type, for use inside this class.
+        using type = FASTQParser<Iterator, Alphabet, Quality>;
 
         /**
-         * @brief     the offset from the start of the file.  This is used as sequenceId.
-         * @details   for each file with file id (fid) between 0 and 255, the seq id starts at (fid << 40).
-         *            if base iterator is pointer, then units are in bytes.
+         * @brief     Filter predicate, to discard the invalid entries in the zipped offset and sequence iterators
+         * @details   sequence is not valid if its EOL, offset is invalid if it has been set 
+         *            to the max of the underlining data type
+         * @param e   zip iterator to filter
+         * @return    true if both offset and sequence is valid, false otherwise
          */
-        size_t _offset;
-
+        auto filterFunctor = [](const the_offset_sequence_zip &e) { 
+          bool b1 = *(e.first) < std::numeric_limits<offSetType>::max();
+          bool b2 = *(e.second) != type::eol;
+          return b1 && b2;
+        }
 
       public:
 
@@ -176,95 +200,83 @@ namespace bliss
          * @param localStartLocStore    vector of tuples that stores fasta sequence header's begin and index offset 
          */
         FASTAParser(const Iterator& start, const Iterator& end, 
-            const size_t &offset, vectorType &localStartLocStore)
-            : _curr(start), _end(end), _offset(offset), _localStartLocStore(localStartLocStore), _localStartLocStoreIter(_localStartLocStore.begin())
+            const RangeType &offsetRange, vectorType &localStartLocStore)
+            : _curr(start), _end(end), _offsetRange(offsetRange), _localStartLocStore(localStartLocStore), _localStartLocStoreIter(_localStartLocStore.begin())
         {
         }
 
 
         /**
          * @brief   construct the begin FASTA iterator
-         * @return  begin FASTA iterator 
+         * @return  start FASTA iterator as zip iterator (id, kmer)
          */
-        fasta_iter begin(){
-            fasta_iter it_begin(
+        the_offset_kmer_zip begin(){
 
-                //Filter predicate, to discard invalid kmers marked by some id
-                [](const the_zip_iterator& e) { return *(e.first) < std::numeric_limits<uint32_t>::max();},
+          //Initialise the begin and end of the base sequence iterator
+          Iterator sequenceBegin = _curr;
+          Iterator sequenceEnd = _end;
 
-                //filter iterator's start range
-                the_zip_iterator(
-                  the_iterator_tuple(
-                    offset_transform_iterator(
-                      count_iterator(_offset),
-                      //Transform counter to ids
-                      returnOffset<uint32_t>()
-                      )
-                    kmer_gen_iterator(
-                      _curr,
-                      true
-                      )
-                    )
-                  ),
+          //Initialise the begin and end of id iterator using count_iterator 
+          count_iterator countBegin = count_iterator(_offsetRange.start);
+          count_iterator countEnd = count_iterator(offsetRange_.end);
 
-                //filter iterator's end range
-                the_zip_iterator(
-                  the_iterator_tuple(
-                    offset_transform_iterator(
-                      //TODO : Need to correct the end of count_iterator
-                      count_iterator(_offset),
-                      //Transform counter to ids
-                      returnOffset<uint32_t>()
-                      )
-                    kmer_gen_iterator(
-                      _end,
-                      true
-                      )
-                    )
-                  )
-                );
-            return it_begin;
+          //Transform counter elements to ids by using transform iterator
+          offset_transform_iterator idBeginCorrect = offset_transform_iterator(countBegin, returnOffset<offSetType>());
+          offset_transform_iterator idEndCorrect = offset_transform_iterator(countEnd, returnOffset<offSetType>());
+
+          //Construct the tuple of ids and sequence iterators
+          the_offset_sequence_tuple idSeqStart = the_offset_sequence_tuple(idBeginCorrect, sequenceBegin);
+          the_offset_sequence_tuple idSeqEnd = the_offset_sequence_tuple(idEndCorrect, sequenceEnd);
+
+          //Zip the tuple 
+          the_offset_sequence_zip idSeqZipStart = the_offset_sequence_zip(idSeqStart);
+          the_offset_sequence_zip idSeqZipEnd = the_offset_sequence_zip(idSeqEnd);
+
+          //Filter the zip iterator using filter iterator; need both start and end iterators for the constructor
+          corrected_offset_sequence_zip idSeqZipStartCorrect = corrected_offset_sequence_zip(filterFunctor, idSeqZipStart, idSeqZipEnd);
+
+          //"Unzip the iterator" and construct the kmer iterator from sequence iterator 
+          kmer_gen_iterator KmerIteratorStart = kmer_gen_iterator(idSeqZipStartCorrect.second, true);;
+
+          //"Rezip the iterators" to pair the id and kmer iterators
+          the_offset_kmer_tuple idKmerStart = the_offset_kmer_tuple(idBeginCorrect, KmerIteratorStart);
+          the_offset_kmer_zip finalIdKmerZipStart = the_offset_kmer_zip(idKmerStart);
+
+          return finalIdKmerZipStart;
         }
 
         /**
          * @brief   construct the end of FASTA iterator
-         * @return  end FASTA iterator 
+         * @return  end FASTA iterator as zip iterator (id, kmer)
          */
-        fasta_iter end(){
-            fasta_iter it_end(
+        the_offset_kmer_zip end(){
 
-                //Filter predicate, to discard invalid kmers marked by some id
-                [](const the_zip_iterator& e) { return *(e.first) < std::numeric_limits<uint32_t>::max();},
+          //Initialise the end of the base sequence iterator
+          Iterator sequenceEnd = _end;
 
-                //filter iterator's start range
-                the_zip_iterator(
-                  the_iterator_tuple(
-                    offset_transform_iterator(
-                      count_iterator(_offset),
-                      returnOffset<uint32_t>()
-                      )
-                    kmer_gen_iterator(
-                      _end,
-                      false
-                      )
-                    )
-                  ),
+          //Initialise the end of id iterator using count_iterator 
+          count_iterator countEnd = count_iterator(offsetRange_.end);
 
-                //filter iterator's end range
-                the_zip_iterator(
-                  the_iterator_tuple(
-                    offset_transform_iterator(
-                      count_iterator(_offset),
-                      returnOffset<uint32_t>()
-                      )
-                    kmer_gen_iterator(
-                      _end,
-                      false
-                      )
-                    )
-                  )
-                );
-            return it_end;
+          //Transform counter elements to ids by using transform iterator
+          offset_transform_iterator idEndCorrect = offset_transform_iterator(countEnd, returnOffset<offSetType>());
+
+          //Construct the tuple of ids and sequence iterators
+          the_offset_sequence_tuple idSeqEnd = the_offset_sequence_tuple(idEndCorrect, sequenceEnd);
+
+          //Zip the tuple 
+          the_offset_sequence_zip idSeqZipEnd = the_offset_sequence_zip(idSeqEnd);
+
+          //Filter the zip iterator using filter iterator; need both start and end iterators for the constructor
+          corrected_offset_sequence_zip idSeqZipEndCorrect = corrected_offset_sequence_zip(filterFunctor, idSeqZipEnd, idSeqZipEnd);
+
+          //"Unzip the iterator" and construct the kmer iterator from sequence iterator 
+          kmer_gen_iterator KmerIteratorEnd = kmer_gen_iterator(idSeqZipEnd.second, true);;
+
+          //"Rezip the iterators" to pair the id and kmer iterators
+          the_offset_kmer_tuple idKmerEnd = the_offset_kmer_tuple(idEndCorrect, KmerIteratorEnd);
+          the_offset_kmer_zip finalIdKmerZipEnd = the_offset_kmer_zip(idKmerEnd);
+
+          return finalIdKmerZipEnd;
         }
 
       protected:
@@ -295,6 +307,5 @@ namespace bliss
           else if(leftIndex < rawOffset && rightIndex > rawOffset)
             return std::numeric_limits<eleType>::max();
         }
-        
     }
 }
