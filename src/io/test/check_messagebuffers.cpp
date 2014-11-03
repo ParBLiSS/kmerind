@@ -158,8 +158,8 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       if (result.second) {
         ++count3;
         count7 = count1;  // save the number of successful inserts so far.
-        bool updating = result.second->isUpdating();
-        if (updating) printf("  FULLBUFFER1: size %d updating? %s, blocked? %s\n", result.second->getFinalSize(), (updating ? "Y" : "N"), (result.second->isBlocked() ? "Y" : "N"));
+        bool updating = result.second->isWriting();
+        if (updating) printf("  FULLBUFFER1: size %d updating? %s, blocked? %s\n", result.second->getFinalSize(), (updating ? "Y" : "N"), (result.second->isReading() ? "Y" : "N"));
 
         count += result.second->getFinalSize();
         count6 += strlen(result.second->operator char*());
@@ -171,8 +171,8 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       if (result.second) {
         ++count4;
         count7 = count1;  // save the number of successful inserts so far.
-        bool updating = result.second->isUpdating();
-        if (updating) printf("  FULLBUFFER: size %d blocked? %s\n", result.second->getFinalSize(), (result.second->isBlocked() ? "Y" : "N"));
+        bool updating = result.second->isWriting();
+        if (updating) printf("  FULLBUFFER: size %d blocked? %s\n", result.second->getFinalSize(), (result.second->isReading() ? "Y" : "N"));
 
         count += result.second->getFinalSize();
         count6 += strlen(result.second->operator char*());
@@ -182,9 +182,9 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
     }
   }
 
-  buffers.at(id)->block();
-  bool updating = buffers.at(id)->isUpdating();
-  if (updating) printf("  PreFLUSH: size %d updating? %s, blocked? %s\n", buffers.at(id)->getApproximateSize(), (updating ? "Y" : "N"), (buffers.at(id)->isBlocked() ? "Y" : "N"));
+  buffers.at(id)->lock_read();
+  bool updating = buffers.at(id)->isWriting();
+  if (updating) printf("  PreFLUSH: size %d updating? %s, blocked? %s\n", buffers.at(id)->getApproximateSize(), (updating ? "Y" : "N"), (buffers.at(id)->isReading() ? "Y" : "N"));
 
   BufferPtrType final = buffers.flushBufferForRank(id);
   count5 = final->getApproximateSize();

@@ -30,7 +30,7 @@ void moveTest( const int count = 1000, const int capacity = 8192) {
 
   bliss::io::Buffer<TS1> b1(capacity);
   assignSequence(b1.operator int*(), count);
-  b1.block();
+  b1.lock_read();
 
   // verify that what went in is correct
   if (!checkSequence(b1.operator int*(), count)) {
@@ -72,7 +72,7 @@ void moveTest( const int count = 1000, const int capacity = 8192) {
   bliss::io::Buffer<TS1> b3(8192);
 
   assignSequence(b3.operator int*(), count);
-  b3.block();
+  b3.lock_read();
 
   bufferCapBefore = b3.getCapacity();
   bufferCapAfter = 0;
@@ -203,7 +203,7 @@ void appendTest(const int capacity = 8192) {
   failure = 0;
   swap = 0;
   gold.clear();
-  b1.unblock();
+  b1.unlock_read();
 
   printf("TEST insert AT capacity: ");
 
@@ -220,7 +220,7 @@ void appendTest(const int capacity = 8192) {
   }
 
   b1.clear();
-  b1.unblock();
+  b1.unlock_read();
 
   success = 0;
   failure = 0;
@@ -244,7 +244,7 @@ void appendTest(const int capacity = 8192) {
 
   printf("TEST blocked buffer: ");
   b1.clear();
-  b1.block();
+  b1.lock_read();
 
   success = 0;
   failure = 0;
@@ -266,7 +266,7 @@ void appendTest(const int capacity = 8192) {
   printf("TEST unblock buffer: ");
 
   b1.clear();
-  b1.unblock();
+  b1.unlock_read();
 
   success = 0;
   failure = 0;
@@ -332,27 +332,28 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
       std::unique_ptr<bliss::io::Buffer<TS> > new_buf_ptr(new bliss::io::Buffer<TS>(buffer_capacity));
       buf_ptr.swap(new_buf_ptr);
       // save the old buffer
+#pragma omp critical
       full.push_back(std::move(new_buf_ptr));
 
     }
 
   }
 
-  buf_ptr->block();
+  buf_ptr->lock_read();
 
   for (int i = 0; i < full.size(); ++i) {
-		full.at(i)->waitForAllUpdates();
     stored.insert(stored.end(), full.at(i)->operator int*(), full.at(i)->operator int*() + full.at(i)->getFinalSize() / sizeof(int));
   }
 
-buf_ptr->waitForAllUpdates();
+  buf_ptr->lock_read();
   // compare unordered buffer content.
-  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getFinalSize() / sizeof(int));
+  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getApproximateSize() / sizeof(int));
   int stored_count = stored.size();
 
 
   if (swap != full.size()  || swap != success / (buffer_capacity / sizeof(int)) || success != stored_count)
-      printf("FAIL: (actual/expected)  success (%d/%d), failure (%d/?), swap(%ld,%lu/%d).\n", success, stored_count, failure, success / (buffer_capacity / sizeof(int)), full.size(), swap);
+    printf("FAIL: (actual/expected)  success (%d/%d), failure (%d/?), swap(%d,%ld/%ld).\n", stored_count, success, failure, swap, full.size(), success / (buffer_capacity / sizeof(int)));
+
   else {
     printf("INFO: success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
 
@@ -378,10 +379,11 @@ buf_ptr->waitForAllUpdates();
   failure = 0;
   swap = 0;
   i = 0;
+  int success2 = 0;
 
   buf_ptr.reset(new bliss::io::Buffer<TS>(buffer_capacity));
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored) private(i, data, result) reduction(+:success, failure, swap)
+#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored) private(i, data, result) reduction(+:success, failure, swap, success2)
   for (i = 0; i < total_count; ++i) {
 
     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -403,14 +405,15 @@ buf_ptr->waitForAllUpdates();
     if (result.second) {
       ++swap;
 
-			buf_ptr->waitForAllUpdates();
-      // swap in a new one.
       std::unique_ptr<bliss::io::Buffer<TS> > new_buf_ptr(new bliss::io::Buffer<TS>(buffer_capacity));
+			buf_ptr->lock_read();
+      // swap in a new one.
       buf_ptr.swap(new_buf_ptr);
       // save the old buffer
 
 #pragma omp critical
       {
+        success2 += new_buf_ptr->getFinalSize() / sizeof(int);
         stored.insert(stored.end(), new_buf_ptr->operator int*(), new_buf_ptr->operator int*() + new_buf_ptr->getFinalSize() / sizeof(int));
       }
 
@@ -418,16 +421,16 @@ buf_ptr->waitForAllUpdates();
 
   }
 
-  buf_ptr->block();
+  buf_ptr->lock_read();
 
 
   // compare unordered buffer content.
-  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getFinalSize() / sizeof(int));
+  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getApproximateSize() / sizeof(int));
   stored_count = stored.size();
-
+  success2 += buf_ptr->getApproximateSize() / sizeof(int);
 
   if ( swap != success / (buffer_capacity / sizeof(int)) || success != stored_count)
-    printf("FAIL: (actual/expected)  success (%d/%d), failure (%d/?), swap(%ld/%d).\n", success, stored_count, failure, success / (buffer_capacity / sizeof(int)), swap);
+    printf("FAIL: (actual/expected)  success (%d,%d/%d), failure (%d/?), swap(%d/%ld).\n", stored_count, success2, success, failure, swap, success / (buffer_capacity / sizeof(int)));
   else {
     printf("INFO: success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
 
@@ -463,7 +466,7 @@ void appendTimed(const int capacity, const int iterations) {
   for (int k = 0; k < iterations; ++k) {
 
       buf.clear();
-      buf.unblock();
+      buf.unlock_read();
       t1 = std::chrono::high_resolution_clock::now();
 
       i = 0;

@@ -28,6 +28,8 @@
 #include "concurrent/concurrent.hpp"   // ThreadSafety boolean constants
 #include "utils/logging.h"
 
+#include "xmmintrin.h"
+
 namespace bliss
 {
   namespace io
@@ -94,13 +96,14 @@ namespace bliss
          *
          * @note mutable so a const Buffer object can still call append and modify the internal. (conceptually, size and data are constant members of the Buffer)
          */
-        typename std::conditional<ThreadSafety, std::atomic<bool>, bool>::type blocked;   // no more future append.  can still have pending appends
+        typename std::conditional<ThreadSafety, std::atomic<bool>, bool>::type full;   // no more future append.  can still have pending appends
 
 
         typename std::conditional<ThreadSafety, std::atomic<uint8_t*>, uint8_t*>::type pointer;
 
         /// Reference Count of threads performing append update.  to ensure that all updates are done before used for sending.
-        typename std::conditional<ThreadSafety, std::atomic<int>, int>::type updaterCount;    // track how many are appending.  blocking == false counts as 1.
+        typename std::conditional<ThreadSafety, std::atomic<int>, int>::type writerCount;    // track how many are appending.  writerCount == int::MAX means reading thread is active.
+
 
         /// mutex for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
         mutable std::mutex mutex;
@@ -118,18 +121,18 @@ namespace bliss
         Buffer(Buffer<ThreadSafety>&& other, const std::lock_guard<std::mutex> &l)
       	  : capacity(other.capacity), data(std::move(other.data)), max_pointer(other.max_pointer),
       	    size(int32_t(other.size)),
-      	    blocked(bool(other.blocked)),
-      	    pointer((uint8_t*)(other.pointer)), updaterCount(0) {
+      	    //full(bool(other.full)),
+      	    pointer((uint8_t*)(other.pointer)), writerCount(0) {
 
           //DEBUG("BUFFER private move contructor 1 called");
 
-          other.blocked = true;
+          //other.full = true;
           other.capacity = 0;
           other.size = -1;
           other.data = nullptr;
           other.pointer = nullptr;
           other.max_pointer = nullptr;
-          other.updaterCount = 0;
+          other.writerCount = 0;
         };
 
         /**
@@ -144,19 +147,19 @@ namespace bliss
         Buffer(Buffer<!ThreadSafety>&& other, const std::lock_guard<std::mutex> &l)
           : capacity(other.capacity), data(std::move(other.data)), max_pointer(other.max_pointer),
             size(int32_t(other.size)),
-            blocked(bool(other.blocked)),
-            pointer((uint8_t*)(other.pointer)), updaterCount(0) {
+            //full(bool(other.full)),
+            pointer((uint8_t*)(other.pointer)), writerCount(0) {
 
           DEBUG("BUFFER private move contructor 2 called");
 
 
-          other.blocked = true;
+          //other.full = true;
           other.capacity = 0;
           other.size = -1;
           other.data = nullptr;
           other.pointer = nullptr;
           other.max_pointer = nullptr;
-          other.updaterCount = 0;
+          other.writerCount = 0;
         }
 
       public:
@@ -164,7 +167,8 @@ namespace bliss
          * @brief Normal constructor.  Allocate and initialize memory with size specified as parameter.
          * @param _capacity   The maximum capacity of the Buffer in bytes
          */
-        explicit Buffer(const uint32_t _capacity) : capacity(_capacity), data(new uint8_t[_capacity]), size(-1), blocked(false), updaterCount(0)
+        explicit Buffer(const uint32_t _capacity) : capacity(_capacity), data(new uint8_t[_capacity]), size(-1), //full(false),
+        writerCount(0)
         {
           if (_capacity == 0)
             throw std::invalid_argument("Buffer constructor parameter capacity is given as 0");
@@ -173,7 +177,7 @@ namespace bliss
           pointer = data.get();
           max_pointer = data.get() + _capacity;
 
-          //printf("NEW BUFF:  start: %p, max_pointer %p, pointer %p, size %d, updaters %d\n", data.get(), max_pointer, (uint8_t*)pointer, (int32_t)size, (int)updaterCount);
+          //printf("NEW BUFF:  start: %p, max_pointer %p, pointer %p, size %d, writers %d\n", data.get(), max_pointer, (uint8_t*)pointer, (int32_t)size, (int)writerCount);
         };
 
         /**
@@ -181,7 +185,8 @@ namespace bliss
          * @param _data   The pointer/address of preallocated memory block
          * @param count   The size of preallocated memory block
          */
-        Buffer(void* _data, const int32_t count) : capacity(count), data(static_cast<uint8_t*>(_data)), size(count), blocked(false), updaterCount(0) {
+        Buffer(void* _data, const int32_t count) : capacity(count), data(static_cast<uint8_t*>(_data)), size(count), //full(false),
+            writerCount(0) {
           if (count == 0)
             throw std::invalid_argument("Buffer constructor parameter count is given as 0");
           if (_data == nullptr)
@@ -239,22 +244,22 @@ namespace bliss
             std::lock(myLock, otherLock);
 
             /// move the internal memory.
-            blocked = bool(other.blocked);
-            other.blocked = true;
+            //full = bool(other.full);
+            //other.full = true;
 
             capacity = other.capacity;
             size = int32_t(other.size);
             data = std::move(other.data);
             pointer = (uint8_t*)(other.pointer);
             max_pointer = other.max_pointer;
-            updaterCount = int(other.updaterCount);
+            writerCount = int(other.writerCount);
 
             other.capacity = 0;
             other.size = -1;
             other.data = nullptr;
             other.pointer = nullptr;
             other.max_pointer = nullptr;
-            other.updaterCount = 0;
+            other.writerCount = 0;
           }
           return *this;
         }
@@ -278,21 +283,21 @@ namespace bliss
             std::lock(myLock, otherLock);
 
             /// move the internal memory.
-            blocked = bool(other.blocked);             other.blocked = true;
+            //full = bool(other.full);             other.full = true;
 
             capacity = other.capacity;
             size = int32_t(other.size);
             data = std::move(other.data);
             pointer = (uint8_t*)(other.pointer);
             max_pointer = other.max_pointer;
-            updaterCount = int(other.updaterCount);
+            writerCount = int(other.writerCount);
 
             other.capacity = 0;
             other.size = -1;
             other.data = nullptr;
             other.pointer = nullptr;
             other.max_pointer = nullptr;
-            other.updaterCount = 0;
+            other.writerCount = 0;
 
           }
           return *this;
@@ -317,9 +322,9 @@ namespace bliss
         typename std::enable_if<TS, const int32_t>::type getFinalSize() const {
           //std::atomic_thread_fence(std::memory_order_seq_cst);
           // wait until updating is done.
-          this->waitForAllUpdates();  // after all updates, no threads touching this.  so size would have been updated by a thread if full, else unset.
-          if (isBlocked<TS>()) return size.load(std::memory_order_seq_cst);
-          else return getApproximateSize<TS>();
+          //while(!isReading()) { _mm_pause(); };  // after all updates, no threads touching this.  so size would have been updated by a thread if full, else unset.
+          return size.load(std::memory_order_seq_cst);
+
         }
 
         /**
@@ -329,9 +334,9 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, const int32_t>::type getFinalSize() const {
-          this->waitForAllUpdates();  // after all updates, no threads touching this.  so size would have been updated by a thread if full, else unset.
-          if (isBlocked<TS>()) return size;
-          else return getApproximateSize<TS>();
+          //while(!isReading()) { _mm_pause(); };  // after all updates, no threads touching this.  so size would have been updated by a thread if full, else unset.
+          return size;
+
         }
 
         /**
@@ -362,81 +367,96 @@ namespace bliss
          * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          * @return    true if buffer is NOT accepting more data
          */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, const bool>::type isBlocked() const {
-          return blocked.load(std::memory_order_seq_cst);
-        }
+//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+//        typename std::enable_if<TS, const bool>::type isFull() const {
+//          return full.load(std::memory_order_seq_cst);
+//        }
         /**
          * @brief get the status of whether buffer is accepting new appends
          * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          * @return    true if buffer is NOT accepting more data
          */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, const bool>::type isBlocked() const {
-          return blocked;
-        }
+//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+//        typename std::enable_if<!TS, const bool>::type isFull() const {
+//          return full;
+//        }
         /**
          * @brief block the buffer from accepting more data.
          * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, void>::type block() {
-          bool init = false;
-          if (blocked.compare_exchange_strong(init, true, std::memory_order_seq_cst)) {
-            //updaterCount.fetch_sub(1, std::memory_order_seq_cst);   // transition from true to false, so add one updater
-            size.store(getApproximateSize<TS>());  // one thread writes here.  if blocking because full, size will be overwritten by the correct one.
-          } // else already false.
-        }
+//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+//        typename std::enable_if<TS, void>::type markFull() {
+//          bool init = false;
+//          if (full.compare_exchange_strong(init, true, std::memory_order_seq_cst)) {
+//            //writerCount.fetch_sub(1, std::memory_order_seq_cst);   // transition from true to false, so add one writer
+//            size.store(getApproximateSize<TS>());  // one thread writes here.  if blocking because full, size will be overwritten by the correct one.
+//          } // else already false.
+//        }
         /**
-         * @brief block the buffer from accepting more data.
+         * @brief markFull the buffer from accepting more data.
          * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, void>::type block() {
-          if (!blocked) { // transition from true to false, so remove one updater
-            //--updaterCount;
-            size = getApproximateSize<TS>();  // one thread writes here.  if blocking because full, size will be overwritten by the correct one.
-          }
-          blocked = true;
-        }
+//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+//        typename std::enable_if<!TS, void>::type markFull() {
+//          if (!full) { // transition from true to false, so remove one writer
+//            //--writerCount;
+//            size = getApproximateSize<TS>();  // one thread writes here.  if blocking because full, size will be overwritten by the correct one.
+//          }
+//          full = true;
+//        }
 
         /**
-         * @brief unblock the buffer to accept more data.
+         * @brief unmarkFull the buffer to accept more data.
          * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, void>::type unblock() {
-          bool init = true;
-          if (blocked.compare_exchange_strong(init, false, std::memory_order_seq_cst)) {
-            //updaterCount.fetch_add(1, std::memory_order_seq_cst);   // transition from true to false, so add one updater
-          } // else already false.
-        }
+//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+//        typename std::enable_if<TS, void>::type unmarkFull() {
+//          bool init = true;
+//          if (full.compare_exchange_strong(init, false, std::memory_order_seq_cst)) {
+//            //writerCount.fetch_add(1, std::memory_order_seq_cst);   // transition from true to false, so add one writer
+//          } // else already false.
+//        }
         /**
-         * @brief unblock the buffer to accept more data.
+         * @brief unmarkFull the buffer to accept more data.
          * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          */
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, void>::type unblock() {
-          if (blocked) { // transition from true to false, so add one updater
-            //++updaterCount;
-          }
-          blocked = false;
+//        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
+//        typename std::enable_if<!TS, void>::type unmarkFull() {
+//          if (full) { // transition from true to false, so add one writer
+//            //++writerCount;
+//          }
+//          full = false;
+//        }
+
+        inline void lock_write() {
+          ++writerCount;  // normal ++.
+        }
+        inline void unlock_write() {
+          --writerCount;  // normal --.
         }
 
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, bool>::type isUpdating() const {
-          return updaterCount.load(std::memory_order_seq_cst) > 0;
+        inline bool isWriting() const {
+          return writerCount > 0;
+        }
+        inline bool isQuiet() const {
+          return writerCount == 0;
         }
 
-        template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, bool>::type isUpdating() const {
-          return updaterCount > 0;
+        inline void lock_read() {  // only one thread can call this.
+          full = true;
+          while(isWriting()) _mm_pause();  // all threads attempting to lock read are waiting until writing is done.
+//          std::atomic_thread_fence(std::memory_order_seq_cst);  // ensure approximate size is updated correctly
+//          size = getApproximateSize<ThreadSafety>();
+//          std::atomic_thread_fence(std::memory_order_seq_cst);  // ensure subsequent call to change size (by the
         }
 
-        void waitForAllUpdates() const {
-          while (this->isUpdating<ThreadSafety>()) {
-            usleep(1);
-          }
+        inline void unlock_read() {
+          full = false;
+          assert(writerCount == 0);
+        }
+
+        inline bool isReading() const {
+          return bool(full);
         }
 
 
@@ -446,7 +466,7 @@ namespace bliss
          * const because the caller will have a const reference to the buffer.
          */
         void clear() {
-          updaterCount = 0;
+          writerCount = 0;
           size = -1;
           // TODO: remove after finish debugging.
           memset(data.get(), 0, capacity * sizeof(uint8_t));
@@ -475,19 +495,6 @@ namespace bliss
         }
 
 
-
-
-
-        /**
-         * @brief Checks if a buffer is full.
-         * @note The return value is not precise - between getSize and return, other threads may have modified the size.
-         *  For "isFull" error is infrequent.
-         *
-         * @return    true if the buffer is full, false otherwise.
-         */
-        const bool isFull() const {
-          return isBlocked<ThreadSafety>();
-        }
 
         /**
          * @brief Checks if a buffer is empty.
@@ -538,8 +545,6 @@ namespace bliss
 //
 
 
-
-
           if (count == 0) {
               //printf("append EMPTY...\n");
           	  return std::make_pair(false, false);
@@ -552,25 +557,29 @@ namespace bliss
             throw std::length_error("ThreadSafe Buffer capacity is 0");
 
 
+          // local copy of data
+//          void* ldata = malloc(count);
+//          std::unique_lock<std::mutex> lock(mutex);   // block() and size need to be synchronized consistently across threads.
+//          memcpy(ldata, _data, count);
+//          lock.unlock();
+
 
           bool swap = false;
           bool appended = false;
 
 
-          // ONE thread at a time can get the position to copy in data.  If full, then the buffer is blocked.
-//          std::unique_lock<std::mutex> lock(mutex);   // block() and size need to be synchronized consistently across threads.
+          // ONE thread at a time can get the position to copy in data.  If full, then the buffer is full.
 
-          uint8_t* start = data.get();
 
 //          std::unique_lock<std::mutex> lock(mutex);
 //
 //          //DEBUG("Thread Safe buffer append");
-//          if (isBlocked<TS>()) {
-//            //printf("BLOCKED     shared pointer %p, count %d, start %p, max_pointer %p, size %d, updaters %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)updaterCount);
+//          if (isFull<TS>()) {
+//            //printf("full     shared pointer %p, count %d, start %p, max_pointer %p, size %d, writers %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)writerCount);
 //            return std::make_pair(false, false);
 //          }
 //
-//            updaterCount.fetch_add(1, std::memory_order_seq_cst);
+//            writerCount.fetch_add(1, std::memory_order_seq_cst);
 //          uint8_t* ptr = pointer.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex lock
 //          if ((ptr + count) > max_pointer) { // FULL   // max_pointer may be swapped during buffer move.  TEST: disable that and use pointer to buffers only
 //
@@ -587,24 +596,24 @@ namespace bliss
 //          	  size.store(ptr - start, std::memory_order_seq_cst);  // overwrite the size with this one's
 //          	  swap = true;
 //
-//            block<TS>();   // will also take away an updater.
-//              //printf("FULL    SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
+//            block<TS>();   // will also take away an writer.
+//              //printf("FULL    SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, writers %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)writerCount);
 //          	} // else swap is false;
 //          	//else {
-//              //printf("FULL NO SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, updaters %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)updaterCount);
+//              //printf("FULL NO SWAP ptr %p, shared pointer %p, count %d, start %p, max_pointer %p, size %d, ptrdiff %ld, swap %s, writers %d\n", ptr, (uint8_t*)pointer, count, data.get(), max_pointer, (uint32_t)size, (ptr - data.get()), (swap ? "Y" : "N"), (int)writerCount);
 //          	// }
 //
-//            	// at this point, buffer is blocked, and can be replaced.  this may be faster than we can copy the data.
+//            	// at this point, buffer is full, and can be replaced.  this may be faster than we can copy the data.
 //            				// to fix this - compute the pointer where data is to be copied before unlock.  For threads that
 //            				// pass the capacity test, they continue to memcpy, knowing where the addresses are.  The failed ones will
 //            				// cause a buffer swap, but the passed threads has the absolute address.
-//            updaterCount.fetch_sub(1, std::memory_order_seq_cst);
+//            writerCount.fetch_sub(1, std::memory_order_seq_cst);
 //          } else {
 //            lock.unlock();
 //
 //            appended = true;
 //            std::memcpy(ptr, _data, count);
-//            updaterCount.fetch_sub(1, std::memory_order_seq_cst);
+//            writerCount.fetch_sub(1, std::memory_order_seq_cst);
 //          }
 
 
@@ -612,11 +621,17 @@ namespace bliss
 //            std::unique_lock<std::mutex> lock(mutex);
 
             //DEBUG("Thread Safe buffer append");
-            if (isBlocked<TS>()) {
-              //printf("BLOCKED     shared pointer %p, count %d, start %p, max_pointer %p, size %d, updaters %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)updaterCount);
+            if (isReading()) {  // already full and being read.
+            //  free(ldata);
+              //printf("full     shared pointer %p, count %d, start %p, max_pointer %p, size %d, writers %d\n", (uint8_t*)pointer, count, data.get(), max_pointer, (int32_t)size, (int)writerCount);
               return std::make_pair(false, false);
             }
 
+
+            lock_write();
+            std::atomic_thread_fence(std::memory_order_seq_cst);  // pointer++ only after lock_write.
+
+             // if fails, then already full
 
 
             // After the F&A, there are 3 types of threads:  target write area is
@@ -627,33 +642,40 @@ namespace bliss
             //  3. crossing buffer boundary: this thread will not memcpy.  disabled.  and it should retract the pointer advance.
 
             uint8_t* ptr = pointer.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex loc
-            updaterCount.fetch_add(1, std::memory_order_seq_cst);
+            std::atomic_thread_fence(std::memory_order_seq_cst);    // branch and memcpy only after computing the ptr.
 
-            if ((max_pointer - ptr) >= static_cast<std::ptrdiff_t>(count) ) {
+            if ((this->max_pointer - ptr) >= static_cast<std::ptrdiff_t>(count) ) {
               // has room to copy.
+
 
               std::memcpy(ptr, _data, count);
 
+              std::atomic_thread_fence(std::memory_order_seq_cst);  // unlock only after memcpy.
+              unlock_write();
               appended = true;
+
+
             } else {
-              // the append that overflows.
-              blocked.store(true, std::memory_order_seq_cst);
-//              lock.unlock();
 
-              if (ptr <=  max_pointer) {
-                size.store(ptr - start, std::memory_order_seq_cst);  // overwrite the size with this one's
+              unlock_write();
+              std::atomic_thread_fence(std::memory_order_seq_cst);  // lock_read needs to happen after unlock_write.
+              lock_read();
 
-               swap = true;
+              if (ptr <= this->max_pointer) {
+                // lock it for read.
+
+
+                this->size.store(ptr - data.get(), std::memory_order_seq_cst);  // overwrite the size with this one's
+
+                swap = true;
               }
 
 
             }
-            updaterCount.fetch_sub(1, std::memory_order_seq_cst);
-
 
             atomic_thread_fence(std::memory_order_seq_cst);   // commits all changes up to this point to memory
 
-
+           // free(ldata);
           return std::make_pair(appended, swap);
         }
 
@@ -677,7 +699,7 @@ namespace bliss
         typename std::enable_if<!TS, std::pair<bool, bool> >::type append(const void* _data, const uint32_t count) {
 
           //DEBUG("Thread Unsafe buffer append");
-          if (isBlocked<TS>()) return std::make_pair(false, false);
+          if (isReading()) return std::make_pair(false, false);
 
 
             if (count == 0)
@@ -690,26 +712,29 @@ namespace bliss
           if (capacity == 0)
             throw std::length_error("Thread Unsafe Buffer capacity is 0");
 
-          ++updaterCount;
+          lock_write();
           bool swap = false;
           if ((pointer + count) > max_pointer) {
 
+            unlock_write();
+            lock_read();  // also takes away an writer.
 
             if (pointer <= max_pointer)  {// original pointer is within buffer - put it back. however, this could cause multiple threads to reach this point.
-              block<TS>();  // also takes away an updater.
+
               size = pointer - data.get(); // final
               swap = true;
             }
-            --updaterCount;
             atomic_thread_fence(std::memory_order_seq_cst);   // commits all changes up to this point to memory
 
             return std::make_pair(false, swap);
           }
-          std::memcpy(pointer, _data, count);
 
+
+          std::memcpy(pointer, _data, count);
+          unlock_write();
 
           pointer += count;
-          --updaterCount;
+          --writerCount;
           atomic_thread_fence(std::memory_order_seq_cst);   // commits all changes up to this point to memory
 
           return std::make_pair(true, swap);
@@ -750,8 +775,8 @@ namespace bliss
 //            throw std::length_error("ThreadSafe LockFree Buffer capacity is 0");
 //
 //          // since this is not using a lock, each iteration needs to check when acquiring a position whether the
-//          // buffer is blocked or not.  If blocked, then new calls here would not go through
-//          if (isBlocked<TS>()) return false;
+//          // buffer is full or not.  If full, then new calls here would not go through
+//          if (isFull<TS>()) return false;
 //
 //          // if the new position does not exceed capacity, then we can let it through. (data only)
 //
@@ -760,14 +785,14 @@ namespace bliss
 //          uint32_t s = size.load(std::memory_order_seq_cst);
 //          uint32_t ns = s + count;
 //          if (ns > capacity) {
-//            block<TS>();
+//            markFull<TS>();
 //            return false;
 //          }
 //          while (!size.compare_exchange_strong(s, ns, std::memory_order_seq_cst, std::memory_order_seq_cst)) {
 //            // choosing strong, slower but less spurious "false" return, and should allow the "return" statement to more reliably be reached.
 //            ns = s + count;
 //            if (ns > capacity) {
-//              block<TS>();
+//              markFull<TS>();
 //              return false;
 //            }
 //          }

@@ -332,7 +332,7 @@ namespace bliss
             if (buffers.at(i)) {
 
               bufferReady.at(i) = false;
-              buffers.at(i)->block();
+              buffers.at(i)->lock_read();
               this->pool.releaseBuffer(std::move(buffers.at(i)));
             }
           }
@@ -350,7 +350,7 @@ namespace bliss
 
         virtual void releaseBuffer(BufferPtrType &&ptr) {
 
-          ptr->waitForAllUpdates();
+          ptr->lock_read();
 
           MessageBuffers<ThreadSafety>::releaseBuffer(std::forward<BufferPtrType>(ptr));
         }
@@ -392,7 +392,7 @@ namespace bliss
         std::pair<bool, BufferPtrType> append(const void* data, const size_t count, const int targetProc) {
 
 
-          // block() and size are critical in Buffer - they need to be synchronized consistently
+          // lock_read() and size are critical in Buffer - they need to be synchronized consistently
           // large number of calls that encounter blocked buffer.  use a spinlock to prevent append while swapping.
           std::atomic_thread_fence(std::memory_order_seq_cst);
           while(!bool(bufferReady.at(targetProc))) {
@@ -425,7 +425,7 @@ namespace bliss
           // NOTE: BufferPool is unlimited in size, so don't need to check for nullptr, can just append directly.   is append really atomic?
           // question is what happens in unique_ptr when dereferencing the internal pointer - if the dereference happens before a unique_ptr swap
           // from swapInEmptyBuffer, then append would use the old object.  however, it was probably swapped because it's full,
-          // or flushing, so block() would have been set for the full case.  now it depends on what happens in append.
+          // or flushing, so lock_read() would have been set for the full case.  now it depends on what happens in append.
           // if flush, then block is set just before swap, so it's more likely this thread enters append without a block.
 
 //          preappend = this->at<ThreadSafety>(targetProc).get();
@@ -453,7 +453,7 @@ namespace bliss
           if (appendResult.second) { // equivalent to check isBlocked.  appendResult is already here.
 
             // ensure all other threads are done writing to this buffer.  (for benefit of MPI send to have all data.)
-            bufferptr->waitForAllUpdates();
+            bufferptr->lock_read();
 
             ptr = std::move(swapInEmptyBuffer<ThreadSafety>(targetProc));
 
@@ -475,10 +475,10 @@ namespace bliss
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
           // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-          this->at<ThreadSafety>(targetProc)->block();
+          this->at<ThreadSafety>(targetProc)->lock_read();
 
           // ensure all other threads are done writing to this buffer.   (for benefit of MPI send to have all data.)
-          this->at<ThreadSafety>(targetProc)->waitForAllUpdates();
+          this->at<ThreadSafety>(targetProc)->lock_read();
 
           // passing in getBufferIdForRank result to ensure atomicity.
           // may return ABSENT if there is no available buffer to use.
