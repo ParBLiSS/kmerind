@@ -182,7 +182,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
     }
   }
 
-  buffers.at(id)->lock_read();
+  buffers.at(id)->force_lock_read();
   bool updating = buffers.at(id)->isWriting();
   if (updating) printf("  PreFLUSH: size %d updating? %s, blocked? %s\n", buffers.at(id)->getApproximateSize(), (updating ? "Y" : "N"), (buffers.at(id)->isReading() ? "Y" : "N"));
 

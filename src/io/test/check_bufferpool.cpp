@@ -36,7 +36,7 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
   std::vector<int> stored;
 
   int data = 0;
-  std::pair<bool, bool> result { false, false };
+  unsigned int result = 0;
 
   int success = 0;
   int failure = 0;
@@ -53,14 +53,14 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
     data = static_cast<int>(i);
     result = ptr->append(&data, sizeof(int));
 
-    if (result.first) {
+    if (result & 0x1) {
       ++success;
 #pragma omp critical
       gold.push_back(data);
     }
     else ++failure;
 
-    if (result.second) {
+    if (result & 0x2) {
       ++swap;
 
       // swap in a new one.
@@ -80,10 +80,10 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
 
   }
 
-  buf_ptr->lock_read();
+  buf_ptr->force_lock_read();
 
   // compare unordered buffer content.
-  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getApproximateSize() / sizeof(int));
+  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getFinalSize() / sizeof(int));
   pool.releaseBuffer(std::move(buf_ptr));
   int stored_count = stored.size();
 
@@ -161,7 +161,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 
     auto ptr = std::move(temp[i]);
     if (ptr) {
-      ptr->lock_read();
+      ptr->force_lock_read();
       if (! pool.releaseBuffer(std::move(ptr))) {
         ++count; // failed release
       }
@@ -181,7 +181,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   {
     int v = omp_get_thread_num() + 5;
     auto ptr = std::move(pool.tryAcquireBuffer());
-    if (! ptr->append(&v, sizeof(int)).first) {
+    if (! (ptr->append(&v, sizeof(int)) & 0x1)) {
       ++count;
     }
 
@@ -190,7 +190,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       ++count1;
     }
 
-    ptr->lock_read();
+    ptr->force_lock_read();
     pool.releaseBuffer(std::move(ptr));
   }
   if (count != 0) printf("ERROR: append failed\n");
@@ -240,11 +240,12 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 
       // random sleep
       usleep(rand() % 1000);
-      if (buf->getApproximateSize() != sizeof(int) * iter)
-        printf("ERROR: thread %d/%d buffer size is %u, expected %lu\n", omp_get_thread_num(), pool_threads, buf->getApproximateSize(), sizeof(int) * iter);
-
       // clear buffer
-      buf->lock_read();
+      buf->force_lock_read();
+
+      if (buf->getFinalSize() != sizeof(int) * iter)
+        printf("ERROR: thread %d/%d buffer size is %u, expected %lu\n", omp_get_thread_num(), pool_threads, buf->getFinalSize(), sizeof(int) * iter);
+
       //release
       pool.releaseBuffer(std::move(buf));
       //if (i % 25 == 0)

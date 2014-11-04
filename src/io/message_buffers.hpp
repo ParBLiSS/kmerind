@@ -332,7 +332,7 @@ namespace bliss
             if (buffers.at(i)) {
 
               bufferReady.at(i) = false;
-              buffers.at(i)->lock_read();
+              buffers.at(i)->force_lock_read();
               this->pool.releaseBuffer(std::move(buffers.at(i)));
             }
           }
@@ -350,7 +350,7 @@ namespace bliss
 
         virtual void releaseBuffer(BufferPtrType &&ptr) {
 
-          ptr->lock_read();
+          ptr->force_lock_read();
 
           MessageBuffers<ThreadSafety>::releaseBuffer(std::forward<BufferPtrType>(ptr));
         }
@@ -435,8 +435,8 @@ namespace bliss
 //          preappend = this->at<ThreadSafety>(targetProc).get();
 //          if (initial != preappend) printf("ERROR: initial %p and post append %p are not same\n", initial, preappend);
 
-          //std::pair<bool, bool> appendResult = this->at<ThreadSafety>(targetProc)->append(data, count);
-          std::pair<bool, bool> appendResult = bufferptr->append(data, count);
+          //unsigned int appendResult = this->at<ThreadSafety>(targetProc)->append(data, count);
+          unsigned int appendResult = bufferptr->append(data, count);
 
           std::atomic_thread_fence(std::memory_order_seq_cst);
 
@@ -450,10 +450,10 @@ namespace bliss
 
           //std::unique_lock<std::mutex> lock(mutex);
           BufferPtrType ptr;
-          if (appendResult.second) { // equivalent to check isBlocked.  appendResult is already here.
+          if (appendResult & 0x2) { // equivalent to check isBlocked.  appendResult is already here.
 
             // ensure all other threads are done writing to this buffer.  (for benefit of MPI send to have all data.)
-            bufferptr->lock_read();
+           // bufferptr->lock_read();
 
             ptr = std::move(swapInEmptyBuffer<ThreadSafety>(targetProc));
 
@@ -462,7 +462,7 @@ namespace bliss
             //if (preswap != postswap) printf("ERROR: NOSWAP: preswap %p and postswap %p are not the same.\n", preswap, postswap);
           }
 
-          return std::move(std::make_pair(appendResult.first, std::move(ptr)));
+          return std::move(std::make_pair(appendResult & 0x1, std::move(ptr)));
 
         }
 
@@ -475,10 +475,10 @@ namespace bliss
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
           // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-          this->at<ThreadSafety>(targetProc)->lock_read();
+          this->at<ThreadSafety>(targetProc)->force_lock_read();
 
           // ensure all other threads are done writing to this buffer.   (for benefit of MPI send to have all data.)
-          this->at<ThreadSafety>(targetProc)->lock_read();
+          //this->at<ThreadSafety>(targetProc)->lock_read();
 
           // passing in getBufferIdForRank result to ensure atomicity.
           // may return ABSENT if there is no available buffer to use.
