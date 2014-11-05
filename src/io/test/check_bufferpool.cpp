@@ -70,7 +70,7 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
       // process the old buffer
 #pragma omp critical
       {
-        stored.insert(stored.end(), new_buf_ptr->operator int*(), new_buf_ptr->operator int*() + new_buf_ptr->getFinalSize() / sizeof(int));
+        stored.insert(stored.end(), new_buf_ptr->operator int*(), new_buf_ptr->operator int*() + new_buf_ptr->getSize() / sizeof(int));
       }
 
       // and release - few threads doing this, and full.
@@ -83,7 +83,7 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
   buf_ptr->force_lock_read();
 
   // compare unordered buffer content.
-  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getFinalSize() / sizeof(int));
+  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getSize() / sizeof(int));
   pool.releaseBuffer(std::move(buf_ptr));
   int stored_count = stored.size();
 
@@ -161,7 +161,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 
     auto ptr = std::move(temp[i]);
     if (ptr) {
-      ptr->force_lock_read();
+      ptr->flush_and_set_size();
       if (! pool.releaseBuffer(std::move(ptr))) {
         ++count; // failed release
       }
@@ -190,7 +190,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       ++count1;
     }
 
-    ptr->force_lock_read();
+    ptr->flush_and_set_size();
     pool.releaseBuffer(std::move(ptr));
   }
   if (count != 0) printf("ERROR: append failed\n");
@@ -241,10 +241,10 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       // random sleep
       usleep(rand() % 1000);
       // clear buffer
-      buf->force_lock_read();
+      buf->flush_and_set_size();
 
-      if (buf->getFinalSize() != sizeof(int) * iter)
-        printf("ERROR: thread %d/%d buffer size is %u, expected %lu\n", omp_get_thread_num(), pool_threads, buf->getFinalSize(), sizeof(int) * iter);
+      if (buf->getSize() != sizeof(int) * iter)
+        printf("ERROR: thread %d/%d buffer size is %u, expected %lu\n", omp_get_thread_num(), pool_threads, buf->getSize(), sizeof(int) * iter);
 
       //release
       pool.releaseBuffer(std::move(buf));

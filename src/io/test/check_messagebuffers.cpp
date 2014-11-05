@@ -158,10 +158,10 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       if (result.second) {
         ++count3;
         count7 = count1;  // save the number of successful inserts so far.
-        bool updating = result.second->isWriting();
-        if (updating) printf("  FULLBUFFER1: size %d updating? %s, blocked? %s\n", result.second->getFinalSize(), (updating ? "Y" : "N"), (result.second->isReading() ? "Y" : "N"));
+        bool updating = result.second->is_writing();
+        if (updating) printf("  FULLBUFFER1: size %d updating? %s, blocked? %s\n", result.second->getSize(), (updating ? "Y" : "N"), (result.second->is_reading() ? "Y" : "N"));
 
-        count += result.second->getFinalSize();
+        count += result.second->getSize();
         count6 += strlen(result.second->operator char*());
         buffers.releaseBuffer(std::move(result.second));
       }
@@ -171,10 +171,10 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
       if (result.second) {
         ++count4;
         count7 = count1;  // save the number of successful inserts so far.
-        bool updating = result.second->isWriting();
-        if (updating) printf("  FULLBUFFER: size %d blocked? %s\n", result.second->getFinalSize(), (result.second->isReading() ? "Y" : "N"));
+        bool updating = result.second->is_writing();
+        if (updating) printf("  FULLBUFFER: size %d blocked? %s\n", result.second->getSize(), (result.second->is_reading() ? "Y" : "N"));
 
-        count += result.second->getFinalSize();
+        count += result.second->getSize();
         count6 += strlen(result.second->operator char*());
 
         buffers.releaseBuffer(std::move(result.second));
@@ -182,12 +182,12 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
     }
   }
 
-  buffers.at(id)->force_lock_read();
-  bool updating = buffers.at(id)->isWriting();
-  if (updating) printf("  PreFLUSH: size %d updating? %s, blocked? %s\n", buffers.at(id)->getApproximateSize(), (updating ? "Y" : "N"), (buffers.at(id)->isReading() ? "Y" : "N"));
+  buffers.at(id)->flush_and_set_size();
+  bool updating = buffers.at(id)->is_writing();
+  if (updating) printf("  PreFLUSH: size %d updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_reading() ? "Y" : "N"));
 
   BufferPtrType final = buffers.flushBufferForRank(id);
-  count5 = final->getApproximateSize();
+  count5 = final->getSize();
   if (count != count6) printf("\nFAIL: number of bytes written %d and number of bytes in FinalSize %d are not the same", count6, count);
   if ((count + count5) != count1 * data.length()) {
     printf("\nFAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.\n", (count + count5), count , count5, (count + count5)/data.length(), count1);
@@ -204,7 +204,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
 
   final = buffers.flushBufferForRank(id);
-  count5 = final->getApproximateSize();
+  count5 = final->getSize();
   if (count5 > 0) printf("\nFAIL: received %d data after flush.", count5);
   buffers.releaseBuffer(std::move(final));
 

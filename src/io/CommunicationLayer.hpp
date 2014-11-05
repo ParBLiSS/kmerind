@@ -704,7 +704,7 @@ class CommunicationLayer
 
             // get message data and it's size
             uint8_t* data = se->ptr->operator uint8_t*();  // BufferPtrType then getData
-            auto count = se->ptr->getFinalSize();
+            auto count = se->ptr->getSize();
 
             if (count > 0) {
 

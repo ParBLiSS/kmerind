@@ -332,7 +332,7 @@ namespace bliss
             if (buffers.at(i)) {
 
               bufferReady.at(i) = false;
-              buffers.at(i)->force_lock_read();
+              buffers.at(i)->flush_and_set_size();
               this->pool.releaseBuffer(std::move(buffers.at(i)));
             }
           }
@@ -350,7 +350,7 @@ namespace bliss
 
         virtual void releaseBuffer(BufferPtrType &&ptr) {
 
-          ptr->force_lock_read();
+          ptr->flush_and_set_size();
 
           MessageBuffers<ThreadSafety>::releaseBuffer(std::forward<BufferPtrType>(ptr));
         }
@@ -475,7 +475,7 @@ namespace bliss
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
           // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-          this->at<ThreadSafety>(targetProc)->force_lock_read();
+          this->at<ThreadSafety>(targetProc)->flush_and_set_size();
 
           // ensure all other threads are done writing to this buffer.   (for benefit of MPI send to have all data.)
           //this->at<ThreadSafety>(targetProc)->lock_read();

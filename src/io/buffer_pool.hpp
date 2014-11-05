@@ -266,7 +266,7 @@ namespace bliss
             available.pop_front();
           }
           ptr->clear();
-          ptr->unlock_read();
+          ptr->read_unlock();
 
           return std::move(ptr);
         }
@@ -278,7 +278,7 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_SAFE, bool>::type releaseBuffer(BufferPtrType&& ptr) {
-          assert(ptr->isReading());
+          assert(ptr->is_reading());
 
           if (!isUnlimited()) {  // check against size_t max - thread safe, and ensures there is no overflow.
 
@@ -310,7 +310,7 @@ namespace bliss
          */
         template<bliss::concurrent::ThreadSafety TS = PoolTS>
         typename std::enable_if<TS == bliss::concurrent::THREAD_UNSAFE, bool>::type releaseBuffer(BufferPtrType&& ptr) {
-          assert(ptr->isReading());
+          assert(ptr->is_reading());
 
           if (!isUnlimited()) {
             if (numBuffersAvailable >= capacity)

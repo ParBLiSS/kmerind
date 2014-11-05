@@ -181,9 +181,9 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
         // result.second->lock_read();
 
-        count += result.second->getFinalSize();
+        count += result.second->getSize();
 
-        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), result.second->operator int*(), result.second->operator int*() + result.second->getFinalSize());
+        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), result.second->operator int*(), result.second->operator int*() + result.second->getSize());
         buffers.releaseBuffer(std::move(result.second));
       }
     }
@@ -199,15 +199,15 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
 
   BufferPtrType final = buffers.flushBufferForRank(id);  // flush blocks buffer and waits for all updates., but need to set final size.
-  count5 = final->getFinalSize();
+  count5 = final->getSize();
 
-  allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getFinalSize());
+  allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize());
   buffers.releaseBuffer(std::move(final));
 
   //if (count7 != count/sizeof(int)) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/sizeof(int) );
 
   final = buffers.flushBufferForRank(id);
-  count6 = final->getFinalSize();
+  count6 = final->getSize();
   if (count6 > 0) printf("\nFAIL: received %d data after flush.", count6);
   buffers.releaseBuffer(std::move(final));
 

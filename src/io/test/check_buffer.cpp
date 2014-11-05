@@ -19,6 +19,7 @@
 #include <iterator>  // for ostream_iterator
 #include <iostream>   // for cout
 #include <sstream>
+#include <xmmintrin.h>
 
 #include <utils/test_utils.hpp>
 
@@ -31,7 +32,7 @@ void moveTest( const int count = 1000, const int capacity = 8192) {
 
   bliss::io::Buffer<TS1> b1(capacity);
   assignSequence(b1.operator int*(), count);
-  b1.lock_read2();
+  b1.flush_and_set_size();
 
   // verify that what went in is correct
   if (!checkSequence(b1.operator int*(), count)) {
@@ -42,8 +43,8 @@ void moveTest( const int count = 1000, const int capacity = 8192) {
   size_t bufferCapBefore = b1.getCapacity();
   size_t bufferCapAfter = 0;
 
-  int bufferSizeBefore = b1.getFinalSize();
-  int bufferSizeAfter = 0;
+  int bufferSizeBefore = b1.getSize();
+  int bufferSizeAfter = -1;
 
   int* bufferPtrBefore = b1.operator int*();
   int* bufferPtrAfter = nullptr;
@@ -52,13 +53,13 @@ void moveTest( const int count = 1000, const int capacity = 8192) {
   printf("TEST move ctor: ");
   bliss::io::Buffer<TS2> b2(std::move(b1));
   if (b1.getCapacity()  !=  bufferCapAfter  ||
-      b1.getApproximateSize()      != bufferSizeAfter ||
+      b1.getSize()      != bufferSizeAfter ||
       b1.operator int*()      !=  bufferPtrAfter  ||
       b2.getCapacity() !=  bufferCapBefore  ||
-      b2.getApproximateSize()     != bufferSizeBefore ||
+      b2.getSize()     != bufferSizeBefore ||
       b2.operator int*()     !=  bufferPtrBefore)
-    printf(" FAIL: size %u (%u->%u), capacity %u (%lu->%u), pointer = %p (%p->%p)\n",
-         b2.getApproximateSize(), bufferSizeBefore, b1.getApproximateSize(),
+    printf(" FAIL: size %d (%d->%d), capacity %d (%ld->%d), pointer = %p (%p->%p)\n",
+         b2.getSize(), bufferSizeBefore, b1.getSize(),
          b2.getCapacity(),        bufferCapBefore,  b1.getCapacity(),
          b2.operator int*(),      bufferPtrBefore,   b1.operator int*()
          );
@@ -74,27 +75,27 @@ void moveTest( const int count = 1000, const int capacity = 8192) {
   bliss::io::Buffer<TS1> b3(8192);
 
   assignSequence(b3.operator int*(), count);
-  b3.lock_read2();
+  b3.flush_and_set_size();
 
   bufferCapBefore = b3.getCapacity();
-  bufferSizeBefore = b3.getFinalSize();
+  bufferSizeBefore = b3.getSize();
   bufferPtrBefore = b3.operator int*();
 
   bufferCapAfter  = 0;
-  bufferSizeAfter = 0;
+  bufferSizeAfter = -1;
   bufferPtrAfter  = nullptr;
 
 
   printf("TEST move = operator: ");
   b2 = std::move(b3);
   if (b3.getCapacity()  !=  bufferCapAfter  ||
-      b3.getApproximateSize()      != bufferSizeAfter ||
+      b3.getSize()      != bufferSizeAfter ||
       b3.operator int*()      !=  bufferPtrAfter  ||
       b2.getCapacity() !=  bufferCapBefore  ||
-      b2.getApproximateSize()     != bufferSizeBefore ||
+      b2.getSize()     != bufferSizeBefore ||
       b2.operator int*()     !=  bufferPtrBefore)
-    printf(" FAIL: size %u (%u->%u), capacity %u (%lu->%u), pointer = %p (%p->%p)\n",
-         b2.getApproximateSize(), bufferSizeBefore, b3.getApproximateSize(),
+    printf(" FAIL: size %d (%d->%d), capacity %d (%ld->%d), pointer = %p (%p->%p)\n",
+         b2.getSize(), bufferSizeBefore, b3.getSize(),
          b2.getCapacity(),        bufferCapBefore,  b3.getCapacity(),
          b2.operator int*(),      bufferPtrBefore,   b3.operator int*()
          );
@@ -197,7 +198,7 @@ void appendTest(const int capacity = 8192) {
 
   printf("TEST clear: ");
   b1.clear();
-  if (b1.getFinalSize() != -1 || b1.getApproximateSize() != 0) printf("\tFAIL: NOT empty:  finalSize: %d, approx Size: %d\n", b1.getFinalSize(), b1.getApproximateSize());
+  if (b1.getSize() != -1) printf("\tFAIL: NOT empty:  Size: %d\n", b1.getSize());
   else printf("PASS\n");
 
 
@@ -206,7 +207,7 @@ void appendTest(const int capacity = 8192) {
   failure = 0;
   swap = 0;
   gold.clear();
-  b1.unlock_read();
+  b1.read_unlock();
 
   printf("TEST insert AT capacity: ");
 
@@ -223,7 +224,7 @@ void appendTest(const int capacity = 8192) {
   }
 
   b1.clear();
-  b1.unlock_read();
+  b1.read_unlock();
 
   success = 0;
   failure = 0;
@@ -247,7 +248,7 @@ void appendTest(const int capacity = 8192) {
 
   printf("TEST blocked buffer: ");
   b1.clear();
-  b1.lock_read2();
+  b1.flush_and_set_size();
 
   success = 0;
   failure = 0;
@@ -269,7 +270,7 @@ void appendTest(const int capacity = 8192) {
   printf("TEST unblock buffer: ");
 
   b1.clear();
-  b1.unlock_read();
+  b1.read_unlock();
 
   success = 0;
   failure = 0;
@@ -328,7 +329,7 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
     }
     else {
       ++failure;
-      usleep(1);  // slow it down a little.
+      _mm_pause();  // slow it down a little.
     }
 
     if (result & 0x2) {
@@ -339,10 +340,11 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
       // save the old buffer
 
       // this is showing a possible spurious wakeup...
-      int oldsize = new_buf_ptr->getFinalSize() / sizeof(int);
-      int oldapproxsize = new_buf_ptr->getApproximateSize() / sizeof(int);
-      int newsize = buf_ptr->getFinalSize() / sizeof(int);
-      if (oldsize != buffer_capacity / sizeof(int)) fprintf(stderr, "DID NOT GET 2047 elements. got %d. other info: data %p, local swap = %d, i = %d, newbuff size= %d, oldapproxsize=%d, buffer read locked? %s  buffer write lock %s\n", oldsize, new_buf_ptr->operator int*(), swap, i, newsize, oldapproxsize, new_buf_ptr->isReading() ? "yes" : "no", new_buf_ptr->isWriting() ? "yes": "no");
+      int oldsize = new_buf_ptr->getSize() / sizeof(int);
+      int newsize = buf_ptr->getSize() / sizeof(int);
+      if (oldsize != buffer_capacity / sizeof(int))
+        fprintf(stderr, "DID NOT GET 2047 elements. got %d. other info: data %p, local swap = %d, i = %d, newbuff size= %d, buffer read locked? %s  buffer write lock %s, flushing %s\n",
+                oldsize, new_buf_ptr->operator int*(), swap, i, newsize, new_buf_ptr->is_reading() ? "yes" : "no", new_buf_ptr->is_writing() ? "yes": "no", new_buf_ptr->is_flushing() ? "yes": "no");
 
 #pragma omp critical
       {
@@ -355,15 +357,15 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
 
   }
 
-  buf_ptr->force_lock_read();
+  buf_ptr->flush_and_set_size();
 
   for (int i = 0; i < full.size(); ++i) {
-    stored.insert(stored.end(), full.at(i)->operator int*(), full.at(i)->operator int*() + full.at(i)->getFinalSize() / sizeof(int));
+    stored.insert(stored.end(), full.at(i)->operator int*(), full.at(i)->operator int*() + full.at(i)->getSize() / sizeof(int));
   }
 
-  buf_ptr->force_lock_read();
+  buf_ptr->flush_and_set_size();
   // compare unordered buffer content.
-  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getFinalSize() / sizeof(int));
+  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getSize() / sizeof(int));
   int stored_count = stored.size();
 
 
@@ -418,7 +420,7 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
     }
     else {
        ++failure;
-       usleep(1);  // slow it down a little.
+       _mm_pause();  // slow it down a little.
     }
 
     if (result & 0x2) {
@@ -434,10 +436,11 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
         // this part shows that some threads end up
 
       // this is showing a possible spurious wake up.
-        int oldsize = new_buf_ptr->getFinalSize() / sizeof(int);
-        int oldapproxsize = new_buf_ptr->getApproximateSize() / sizeof(int);
-        int newsize = buf_ptr->getFinalSize() / sizeof(int);
-        if (oldsize != buffer_capacity / sizeof(int)) fprintf(stderr, "DID NOT GET 2047 elements. got %d. other info: data %p, local swap = %d, i = %d, newbuff size= %d, oldapproxsize=%d, buffer read locked? %s  buffer write lock %s\n", oldsize, new_buf_ptr->operator int*(), swap, i, newsize, oldapproxsize, new_buf_ptr->isReading() ? "yes" : "no", new_buf_ptr->isWriting() ? "yes": "no");
+        int oldsize = new_buf_ptr->getSize() / sizeof(int);
+        int newsize = buf_ptr->getSize() / sizeof(int);
+        if (oldsize != buffer_capacity / sizeof(int))
+          fprintf(stderr, "DID NOT GET 2047 elements. got %d. other info: data %p, local swap = %d, i = %d, newbuff size= %d, buffer read locked? %s  buffer write lock %s, flushing %s\n",
+                  oldsize, new_buf_ptr->operator int*(), swap, i, newsize, new_buf_ptr->is_reading() ? "yes" : "no", new_buf_ptr->is_writing() ? "yes": "no", new_buf_ptr->is_flushing() ? "yes": "no");
 
 #pragma omp atomic
         success2 += oldsize;
@@ -453,13 +456,13 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
 
   }
 
-  buf_ptr->force_lock_read();
+  buf_ptr->flush_and_set_size();
 
 
   // compare unordered buffer content.
-  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getFinalSize() / sizeof(int));
+  stored.insert(stored.end(), buf_ptr->operator int*(), buf_ptr->operator int*() + buf_ptr->getSize() / sizeof(int));
   stored_count = stored.size();
-  success2 += buf_ptr->getFinalSize() / sizeof(int);
+  success2 += buf_ptr->getSize() / sizeof(int);
 
   if ( success == 0 || swap != success / (buffer_capacity / sizeof(int)) || success != stored_count)
     printf("FAIL: (actual/expected)  success (%d,%d/%d), failure (%d/?), swap(%d/%ld). content match? %s\n", stored_count, success2, success, failure, swap, success / (buffer_capacity / sizeof(int)), compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
@@ -498,7 +501,7 @@ void appendTimed(const int capacity, const int iterations) {
   for (int k = 0; k < iterations; ++k) {
 
       buf.clear();
-      buf.unlock_read();
+      buf.read_unlock();
       t1 = std::chrono::high_resolution_clock::now();
 
       i = 0;
