@@ -145,10 +145,10 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   count = 0;
   count5 = 0;
   int count6 = 0;
-  int count7 = 0;
+//  int count7 = 0;
   //printf("full buffer: ");
   id = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, result) firstprivate(id) shared(buffers, data, repeats, bufferSize) reduction(+ : count, count1, count2, count3,count4, count6, count7)
+#pragma omp parallel for num_threads(nthreads) default(none) private(i, result) firstprivate(id) shared(buffers, data, repeats, bufferSize) reduction(+ : count, count1, count2, count3,count4, count6)
   for (i = 0; i < repeats; ++i) {
     result = buffers.append(data.c_str(), data.length(), id);
 
@@ -157,7 +157,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
       if (result.second) {
         ++count3;
-        count7 = count1;  // save the number of successful inserts so far.
+//        count7 = count1;  // save the number of successful inserts so far.
         bool updating = result.second->is_writing();
         if (updating) printf("  FULLBUFFER1: size %d updating? %s, blocked? %s\n", result.second->getSize(), (updating ? "Y" : "N"), (result.second->is_reading() ? "Y" : "N"));
 
@@ -170,7 +170,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
       if (result.second) {
         ++count4;
-        count7 = count1;  // save the number of successful inserts so far.
+//        count7 = count1;  // save the number of successful inserts so far.
         bool updating = result.second->is_writing();
         if (updating) printf("  FULLBUFFER: size %d blocked? %s\n", result.second->getSize(), (result.second->is_reading() ? "Y" : "N"));
 

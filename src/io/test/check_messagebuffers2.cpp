@@ -150,7 +150,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
   count = 0;
   count5 = 0;
   int count6 = 0;
-  int count7 = 0;
+//  int count7 = 0;
   //printf("full buffer: ");
 
   std::vector< std::vector<int> > stored(nthreads);
@@ -158,7 +158,7 @@ void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
 
 
   id = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, result) firstprivate(id) shared(stored, appended, buffers, repeats, bufferSize) reduction(+ : count, count1, count2, count3,count4, count6, count7)
+#pragma omp parallel for num_threads(nthreads) default(none) private(i, result) firstprivate(id) shared(stored, appended, buffers, repeats, bufferSize) reduction(+ : count, count1, count2, count3,count4, count6)
   for (i = 0; i < repeats; ++i) {
     int data = i;
         result = buffers.append(&data, sizeof(int), id);
