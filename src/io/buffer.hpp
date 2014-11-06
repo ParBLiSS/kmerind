@@ -723,6 +723,12 @@ namespace bliss
 
                 return 0x2;
               } else {
+
+                _mm_pause();
+                _mm_pause();
+                _mm_pause();
+                _mm_pause();
+
                 return 0x0;
               }
 
@@ -799,7 +805,8 @@ namespace bliss
       ost << "THREAD "<< (ThreadSafety ? "SAFE" : "UNSAFE") << " BUFFER: data_ptr=" << static_cast <const void *>(buffer.data.get())
         << " ptr/maxptr=" << static_cast <const void *>((uint8_t*)(buffer.pointer)) << "/" << static_cast <const void *>(buffer.max_pointer)
         << " approx,size/cap=" << buffer.getApproximateSize() << "," << int(buffer.size) << "/" << buffer.capacity
-        << " writerCount=" << std::hex << int(buffer.writerCount) << std::dec << std::endl << std::flush;
+        << " writerCount=" << std::hex << int(buffer.writerCount) << std::dec
+        << " R? " << (buffer.is_reading() ? "y" : "n") << " F? " << (buffer.is_flushing() ? "y" : "n") << " W? " << (buffer.is_writing() ? "y" : "n") << std::endl << std::flush;
 
 
       return ost;
