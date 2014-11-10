@@ -148,7 +148,7 @@ namespace bliss
           the_offset_kmer_zip;
 
         //Vector containing positions of fasta record start
-        typedef std::vector <pair<offSetType, offSetType>> vectorType;
+        typedef std::vector <std::pair<offSetType, offSetType>> vectorType;
 
         /// iterator for the vector 
         typedef vectorType::iterator vectorIteratorType;
@@ -296,15 +296,16 @@ namespace bliss
           leftIndex = (*_localStartLocStoreIter).first;
           rightIndex = (*_localStartLocStoreIter).second;
 
-          //FASTA sequence header lies before the offset
-          if(leftIndex < rawOffset && rightIndex < rawOffset)
+          //if FASTA sequence header lies before the offset
+          while(rightIndex < rawOffset)
             _localStartLocStoreIter ++;
 
           //Next FASTA sequence header lies after the offset
-          if(leftIndex > rawOffset && rightIndex > rawOffset)
+          if(leftIndex > rawOffset)
             return rawOffset;
           //The offset points doesn't point to sequence data but the header
-          else if(leftIndex < rawOffset && rightIndex > rawOffset)
+          //(leftIndex <= rawOffset && rightIndex >= rawOffset)
+          else
             return std::numeric_limits<eleType>::max();
         }
     }
