@@ -628,10 +628,16 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
     }
     else {
        ++failure;
-       _mm_pause();  // slow it down a little.
+//       _mm_pause();  // slow it down a little.
     }
 
     if ((result & 0x2) > 0) {
+
+    	// TODO: issue here:  if a large number of threads call append, and most of them are rescheduled, so that we reach calc
+    	// of pointer for a large number of threads in progress.  Then we could have the "just overflowing" thread executing and returning
+    	// 0x2 before all the memcpy are completed.  thus we could get is_reading() failed while result is 0x2, and also observe a large
+    	// number of writes after result is set to 0x2 (and before that the flush bit is set)
+    	// this is a theory.
 
       if (!(ptr.load()->is_reading())) {
         fprintf(stdout, "FAIL atomic incremental proc: at this point the buffer should be in read state.\n");
@@ -803,15 +809,6 @@ int main(int argc, char** argv) {
   ////////////// timing.  the insert before this is to warm up.
   testAppendMultipleBuffers<bliss::concurrent::THREAD_UNSAFE, 1>(8191, 1000000);
 
-  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 1>(8191, 1000000);
-  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 2>(8191, 1000000);
-  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 3>(8191, 1000000);
-  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 4>(8191, 1000000);
-  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 5>(8191, 1000000);
-  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 6>(8191, 1000000);
-  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 7>(8191, 1000000);
-  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 8>(8191, 1000000);
-
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 1>(8191, 1000000);
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 2>(8191, 1000000);
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 3>(8191, 1000000);
@@ -820,5 +817,16 @@ int main(int argc, char** argv) {
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 6>(8191, 1000000);
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 7>(8191, 1000000);
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 8>(8191, 1000000);
+
+
+//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 1>(8191, 1000000);
+//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 2>(8191, 1000000);
+//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 3>(8191, 1000000);
+//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 4>(8191, 1000000);
+//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 5>(8191, 1000000);
+//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 6>(8191, 1000000);
+//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 7>(8191, 1000000);
+//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 8>(8191, 1000000);
+
 
 }
