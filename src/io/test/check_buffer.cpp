@@ -31,20 +31,28 @@ void moveTest( const int count = 1000, const int capacity = 8192) {
 
 
   bliss::io::Buffer<TS1> b1(capacity);
-  assignSequence(b1.operator int*(), count);
-  b1.flush_and_set_size();
+  b1.read_unlock();
+
+//  std::cout << " empty buffer: " << b1 << std::endl << std::flush;
+  for (size_t i = 0; i < count; ++i) {
+	  int data = i;
+    b1.append(&data, sizeof(int));
+  }
+//  std::cout << " initialized buffer: " << b1 << std::endl << std::flush;
+//  b1.flush_and_set_size();
 
   // verify that what went in is correct
   if (!checkSequence(b1.operator int*(), count)) {
     printf("FAIL: append is not working correctly\n");
   }
 
+  b1.read_lock();
 
   size_t bufferCapBefore = b1.getCapacity();
   size_t bufferCapAfter = 0;
 
   int bufferSizeBefore = b1.getSize();
-  int bufferSizeAfter = -1;
+  int bufferSizeAfter = 0;
 
   int* bufferPtrBefore = b1.operator int*();
   int* bufferPtrAfter = nullptr;
@@ -73,8 +81,13 @@ void moveTest( const int count = 1000, const int capacity = 8192) {
   }
 
   bliss::io::Buffer<TS1> b3(8192);
+  b3.read_unlock();
 
-  assignSequence(b3.operator int*(), count);
+  for (size_t i = 0; i < count; ++i) {
+	  int data = i;
+    b3.append(&data, sizeof(int));
+  }
+//  assignSequence(b3.operator int*(), count);
   b3.flush_and_set_size();
 
   bufferCapBefore = b3.getCapacity();
@@ -82,7 +95,7 @@ void moveTest( const int count = 1000, const int capacity = 8192) {
   bufferPtrBefore = b3.operator int*();
 
   bufferCapAfter  = 0;
-  bufferSizeAfter = -1;
+  bufferSizeAfter = 0;
   bufferPtrAfter  = nullptr;
 
 
@@ -145,6 +158,7 @@ void append(const int nthreads, bliss::io::Buffer<TS>& buf, const unsigned int s
   success += lsuccess;
   failure += lfailure;
   swap += lswap;
+  //printf("DEBUG: threads %d (actual,added/expected) success (%d/%d), failure (%d/%d), swap(%d)\n", nthreads, success, end - start, failure, end-start, swap);
 
 }
 
@@ -175,7 +189,7 @@ void appendTest(const int capacity = 8192) {
   else {
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
-      printf("PASS\n");
+      printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
     }
@@ -197,7 +211,7 @@ void appendTest(const int capacity = 8192) {
   else {
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
-      printf("PASS\n");
+      printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
     }
@@ -226,7 +240,7 @@ void appendTest(const int capacity = 8192) {
   else {
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
-      printf("PASS\n");
+      printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
     }
@@ -248,7 +262,7 @@ void appendTest(const int capacity = 8192) {
   else {
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
-      printf("PASS\n");
+      printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
     }
@@ -270,7 +284,7 @@ void appendTest(const int capacity = 8192) {
   else {
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
-      printf("PASS\n");
+      printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
     }
@@ -292,7 +306,7 @@ void appendTest(const int capacity = 8192) {
   else {
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
-      printf("PASS\n");
+      printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
     }
@@ -530,13 +544,13 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
   std::atomic<bliss::io::Buffer<TS>* > ptr(new bliss::io::Buffer<TS>(buffer_capacity));                            // ensure atomicity
   ptr.load()->read_unlock();
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, full, gold, stderr,stdout, std::cout) private(i, data, result) reduction(+:success, failure, swap)
+#pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, full, gold, stderr, stdout, std::cout) private(i, data, result) reduction(+:success, failure, swap)
   for (i = 0; i < total_count; ++i) {
 
     data = static_cast<int>(i);
     result = ptr.load()->append(&data, sizeof(int));
 
-    if ((result & 0x1) > 0) {
+    if (result & 0x1) {
       ++success;
 #pragma omp critical
       gold.push_back(data);
@@ -546,7 +560,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
       _mm_pause();  // slow it down a little.
     }
 
-    if ((result & 0x2) > 0) {
+    if (result & 0x2) {
       if (!ptr.load()->is_reading()) {
         fprintf(stdout, "FAIL atomic batched proc: at this point the buffer should be in read state.\n");
         fflush(stdout);
@@ -556,13 +570,11 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 
       // swap in a new one.
       bliss::io::Buffer<TS>* new_ptr = new bliss::io::Buffer<TS>(buffer_capacity);  // manage new buffer
+	  new_ptr->read_unlock();
 
       bliss::io::Buffer<TS>* old_ptr = nullptr;
-#pragma omp critical
-      {
+
       old_ptr = ptr.exchange(new_ptr);             //
-      ptr.load()->read_unlock();
-      }
       // save the old buffer
 
 
@@ -585,10 +597,10 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
   }
 
   ptr.load()->flush_and_set_size();
-  full.push_back(std::move(std::unique_ptr<bliss::io::Buffer<TS> >(ptr)));
+  full.push_back(std::move(std::unique_ptr<bliss::io::Buffer<TS> >(ptr.load())));
 
-  printf("DEBUG: atomic success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
-
+//  printf("DEBUG: atomic 1 success %d, failure %d, swap %d, total %d, full count %ld\n", success, failure, swap, total_count, full.size());
+//  std::cout << " buffer: " << *(ptr.load()) << std::endl << std::flush;
 
   for (int i = 0; i < full.size(); ++i) {
     stored.insert(stored.end(), full.at(i)->operator int*(), full.at(i)->operator int*() + full.at(i)->getSize() / sizeof(int));
@@ -600,12 +612,10 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
     printf("FAIL atomic: (actual/expected)  success (%d/%d), failure (%d/?), swap(%d,%ld/%ld), content match? %s.\n", stored_count, success, failure, swap, full.size(), success / (buffer_capacity / sizeof(int)), compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
 
   else {
-    printf("INFO: atomic success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
-
     if (compareUnorderedSequences(stored.begin(), gold.begin(), stored_count)) {
-      printf("PASS\n");
+      printf("PASS: atomic success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
     } else {
-      printf("FAIL: atomic content not matching\n");
+      printf("FAIL: atomic success %d, failure %d, swap %d, total %d, content not matching\n", success, failure, swap, total_count);
     }
   }
 
@@ -638,7 +648,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
     data = static_cast<int>(i);
     int res = ptr.load()->append(&data, sizeof(int));
 
-    if ((res & 0x1) > 0) {
+    if (res & 0x1) {
       ++success;
 #pragma omp critical
       gold.push_back(data);
@@ -648,7 +658,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 //       _mm_pause();  // slow it down a little.
     }
 
-    if ((res & 0x2) > 0) {
+    if (res & 0x2) {
 
     	// TODO: issue here:  if a large number of threads call append, and most of them are rescheduled, so that we reach calc
     	// of pointer for a large number of threads in progress.  Then we could have the "just overflowing" thread executing and returning
@@ -667,9 +677,9 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
       bliss::io::Buffer<TS>* old_ptr = nullptr;
 #pragma omp critical
       {
+          new_ptr->read_unlock();
       old_ptr = ptr.exchange(new_ptr);             //
       // save the old buffer
-      ptr.load()->read_unlock();
       }
         // this part shows that some threads end up
 
@@ -699,7 +709,9 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 
   ptr.load()->flush_and_set_size();
 
-  printf("DEBUG: atomic success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
+  stored_count = stored.size();
+
+  printf("DEBUG: atomic before last buffer (actual/expected)  success (%d,%d/%d), failure (%d/?), swap(%d/%ld). content match? %s\n", stored_count, success2, success, failure, swap, success / (buffer_capacity / sizeof(int)), compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
 
 
   // compare unordered buffer content.
@@ -707,21 +719,21 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 
   stored_count = stored.size();
   success2 += ptr.load()->getSize() / sizeof(int);
-  delete ptr;
 
+  printf("DEBUG: atomic after last buffer (actual/expected)  success (%d,%d/%d), failure (%d/?), swap(%d/%ld). content match? %s\n", stored_count, success2, success, failure, swap, success / (buffer_capacity / sizeof(int)), compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
 
   if ( success == 0 || swap != success / (buffer_capacity / sizeof(int)) || success != stored_count)
     printf("FAIL atomic: (actual/expected)  success (%d,%d/%d), failure (%d/?), swap(%d/%ld). content match? %s\n", stored_count, success2, success, failure, swap, success / (buffer_capacity / sizeof(int)), compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
   else {
-    printf("INFO atomic: success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
 
     if (compareUnorderedSequences(stored.begin(), gold.begin(), stored_count)) {
-      printf("PASS\n");
+      printf("PASS: atomic success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
     } else {
-      printf("FAILatomic : content not matching\n");
+      printf("FAIL: atomic success %d, failure %d, swap %d, total %d, content not matching\n", success, failure, swap, total_count);
     }
   }
 
+  delete ptr.load();
 
 }
 
@@ -810,20 +822,6 @@ int main(int argc, char** argv) {
   appendTest<bliss::concurrent::THREAD_SAFE, 8>(8191);
 
 
-  // timing tests
-
-  ////////////// timing.  the insert before this is to warm up.
-  appendTimed<bliss::concurrent::THREAD_UNSAFE, 1>(1000000, 3);
-
-  appendTimed<bliss::concurrent::THREAD_SAFE, 1>(1000000, 3);
-  appendTimed<bliss::concurrent::THREAD_SAFE, 2>(1000000, 3);
-  appendTimed<bliss::concurrent::THREAD_SAFE, 3>(1000000, 3);
-  appendTimed<bliss::concurrent::THREAD_SAFE, 4>(1000000, 3);
-  appendTimed<bliss::concurrent::THREAD_SAFE, 5>(1000000, 3);
-  appendTimed<bliss::concurrent::THREAD_SAFE, 6>(1000000, 3);
-  appendTimed<bliss::concurrent::THREAD_SAFE, 7>(1000000, 3);
-  appendTimed<bliss::concurrent::THREAD_SAFE, 8>(1000000, 3);
-
 
   // multiple buffer swap test.
 
@@ -850,5 +848,19 @@ int main(int argc, char** argv) {
 //  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 7>(8191, 1000000);
 //  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 8>(8191, 1000000);
 
+
+    // timing tests
+
+    ////////////// timing.  the insert before this is to warm up.
+    appendTimed<bliss::concurrent::THREAD_UNSAFE, 1>(1000000, 3);
+
+    appendTimed<bliss::concurrent::THREAD_SAFE, 1>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 2>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 3>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 4>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 5>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 6>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 7>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 8>(1000000, 3);
 
 }

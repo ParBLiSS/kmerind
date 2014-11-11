@@ -111,9 +111,9 @@ namespace bliss
 
           other.capacity = 0;
           other.start_ptr = nullptr;
-          other.end_ptr = MAX_PTR_ADDR;
+          other.end_ptr = nullptr;
           other.max_ptr = nullptr;
-          other.curr_ptr = nullptr;
+          other.curr_ptr = MAX_PTR_ADDR;
           other.writerCount = 0;
         };
 
@@ -132,9 +132,9 @@ namespace bliss
 
           other.capacity = 0;
           other.start_ptr = nullptr;
-          other.end_ptr = MAX_PTR_ADDR;
+          other.end_ptr = nullptr;
           other.max_ptr = nullptr;
-          other.curr_ptr = nullptr;
+          other.curr_ptr = MAX_PTR_ADDR;
           other.writerCount = 0;
         }
 
@@ -150,9 +150,9 @@ namespace bliss
             throw std::invalid_argument("Buffer constructor parameter capacity is given as 0");
 
           memset(start_ptr, 0, _capacity * sizeof(uint8_t));
-          end_ptr = MAX_PTR_ADDR;
+          end_ptr = start_ptr;
           max_ptr = start_ptr + _capacity;
-          curr_ptr = max_ptr + 1;   // block from insertion.
+          curr_ptr = MAX_PTR_ADDR;   // block from insertion.
 
           //printf("NEW BUFF:  start: %p, max_ptr %p, curr_ptr %p, size %d, writers %d\n", start_ptr, max_ptr, (uint8_t*)curr_ptr, (int32_t)size, (CountType)writerCount);
         };
@@ -171,7 +171,7 @@ namespace bliss
 
           end_ptr = start_ptr + count;
           max_ptr = start_ptr + count;
-          curr_ptr = max_ptr + 1;
+          curr_ptr = MAX_PTR_ADDR;
         }
 
         /**
@@ -182,9 +182,9 @@ namespace bliss
             delete [] start_ptr;
             start_ptr = nullptr;
           }
-          end_ptr = MAX_PTR_ADDR;
+          end_ptr = nullptr;
           max_ptr = nullptr;
-          curr_ptr = nullptr;
+          curr_ptr = MAX_PTR_ADDR;
         };
 
         /**
@@ -239,9 +239,9 @@ namespace bliss
             writerCount = CountType(other.writerCount);
 
             other.capacity = 0;
-            other.end_ptr = MAX_PTR_ADDR;
+            other.end_ptr = nullptr;
             other.start_ptr = other.max_ptr = nullptr;
-            other.curr_ptr = nullptr;
+            other.curr_ptr = MAX_PTR_ADDR;
             other.writerCount = 0;
           }
           return *this;
@@ -274,9 +274,9 @@ namespace bliss
             writerCount = CountType(other.writerCount);
 
             other.capacity = 0;
-            other.end_ptr = MAX_PTR_ADDR;
+            other.end_ptr = nullptr;
             other.start_ptr = other.max_ptr = nullptr;
-            other.curr_ptr = nullptr;
+            other.curr_ptr = MAX_PTR_ADDR;
             other.writerCount = 0;
 
           }
@@ -364,18 +364,26 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         inline typename std::enable_if<TS, uint8_t*>::type write_lock(const uint32_t count) {
 
-          uint8_t* ptr = curr_ptr.fetch_add(count, std::memory_order_seq_cst);  // no memory ordering needed within mutex loc
-          std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
+        	uint8_t* curr = curr_ptr.load();
+        	// read locked.
+        	if (curr == MAX_PTR_ADDR) return nullptr;
 
-          if (ptr > max_ptr) return nullptr;  //if ptr == max_ptr, buffer must be FILLED in this cycle.  need to process it as if not full yet.
+        	bool stop = false;
+        	while (curr <= max_ptr && ! stop) {
+        		stop = curr_ptr.compare_exchange_weak(curr, curr+count);
+                std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
+        	}
+        	// result is curr has the previous val, curr_ptr has the updated value.
+          if (curr > max_ptr) return nullptr;  //if ptr == max_ptr, buffer must be FILLED in this cycle.  need to process it as if not full yet.
 
           // else starting position is inside buffer range.
           ++writerCount;  // important:  only increment if not full.
           std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
-          return ptr;
+          return curr;
         }
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         inline typename std::enable_if<!TS, uint8_t*>::type write_lock(const uint32_t count) {
+        	if (curr_ptr == MAX_PTR_ADDR) return nullptr;
           uint8_t* ptr = curr_ptr;
           curr_ptr += count;
         	if (ptr > max_ptr) return nullptr;  //if ptr == max_ptr, buffer must be FILLED in this cycle.  need to process it as if not full yet.
@@ -424,7 +432,7 @@ namespace bliss
         inline typename std::enable_if<TS, void>::type read_lock(uint8_t* _curr = nullptr) {  // not using xor since it toggles and write_unlock is not going to change the sign bit (so we don't need xor)
           // disable curr_ptr and
           uint8_t* prev = end_ptr;
-          uint8_t* curr = curr_ptr.exchange(max_ptr + 1);
+          uint8_t* curr = curr_ptr.exchange(MAX_PTR_ADDR);
           curr = (_curr ? _curr : curr);
           bool stop = false;
 
@@ -433,13 +441,12 @@ namespace bliss
           while (prev > curr && !stop) {
             stop = end_ptr.compare_exchange_weak(prev, curr);  // get smallest, indicating the first one to reach read_lock
           }
-
         }
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         inline typename std::enable_if<!TS, void>::type read_lock(uint8_t* _curr = nullptr) {  // not using xor since it toggles and write_unlock is not going to change the sign bit (so we don't need xor)
           // disable curr_ptr and
           uint8_t* curr = (_curr ? _curr : curr_ptr);
-          curr_ptr = max_ptr + 1;
+          curr_ptr = MAX_PTR_ADDR;
 
           if (end_ptr > curr) {
             end_ptr = curr;
@@ -451,7 +458,7 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         inline typename std::enable_if<TS, void>::type read_unlock() {
           // put the end_ptr into curr if it hasn't been done.
-          uint8_t* temp = max_ptr + 1;
+          uint8_t* temp = MAX_PTR_ADDR;
           curr_ptr.compare_exchange_strong(temp, (uint8_t*)end_ptr);
 
           std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
@@ -462,7 +469,7 @@ namespace bliss
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         inline typename std::enable_if<!TS, void>::type read_unlock() {
           // put the end_ptr into curr if it hasn't been done.
-          if (curr_ptr == max_ptr + 1)
+          if (curr_ptr == MAX_PTR_ADDR)
             curr_ptr = (uint8_t*)end_ptr;
 
           std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
@@ -492,11 +499,17 @@ namespace bliss
 
         // ONLY CALL IF BUFFER IS NOT FULL AND WE ARE FORCING THE FLUSH
         inline void flush_and_set_size() {
+            std::cout << "DEBUG: read unlocked buffer: " << *(this) << std::endl << std::flush;
+
           read_lock<ThreadSafety>();
+          std::cout << "DEBUG: read locked buffer: " << *(this) << std::endl << std::flush;
+
           std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
 
           // now everyone wait for the writes to finish during flush period.
           wait_for_flush();
+          std::cout << "DEBUG: flushed buffer: " << *(this) << std::endl << std::flush;
+
           std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
         }
 
@@ -515,8 +528,8 @@ namespace bliss
           writerCount = 0;
           // TODO: remove after finish debugging.
           memset(start_ptr, 0, capacity * sizeof(uint8_t));
-          curr_ptr = start_ptr;
-          end_ptr = MAX_PTR_ADDR;
+          curr_ptr = MAX_PTR_ADDR;
+          end_ptr = start_ptr;
         }
 
         /**
@@ -589,11 +602,8 @@ namespace bliss
           if (count == 0 || _data == nullptr)
         	  throw std::invalid_argument("_data is nullptr");
 
-//          volatile bool swap = false;
-//          volatile bool appended = false;
 
           uint8_t* ptr = write_lock<TS>(count);
-
 
           // After the F&A, there are 3 types of threads:  target write area is
           //  1. completely within buffer:  these threads should proceed to memcpy with the local ptr var
@@ -608,14 +618,19 @@ namespace bliss
           if (ptr == nullptr) {  // write lock returns nullptr if ptr points to outside of the range.
             //printf("flushing     shared pointer %p, count %d, start %p, max_ptr %p, size %d, writers %d\n", (uint8_t*)pointer, count, start_ptr, max_ptr, (int32_t)size, (CountType)writerCount);
 
+        	//printf(" FULL.  end_ptr = %p, curr_ptr = %p. writerCount = %d.\n", end_ptr.load(), curr_ptr.load(), writerCount.load());
+
             // don't need to write unlock since it was not locked.  but should read lock
-            read_lock<TS>();  // okay to call multiple times.
+            read_lock<TS>();  // not okay to call multiple times.
 
             return 0x0;  // full and not swapping.
           } else {  // ptr starts inside allocated buffer range.
 
             if ((ptr + count) > this->max_ptr) { // thread that filled the buffer
-              // read lock
+
+            	//printf(" JUST FULL.  end_ptr = %p, curr_ptr = %p. writerCount = %d.\n", end_ptr.load(), curr_ptr.load(), writerCount.load());
+
+            	// read lock
               read_lock<TS>(ptr);
               write_unlock<TS>();
 
@@ -660,6 +675,9 @@ namespace bliss
               return 0x2;  // was not full, now full.
 
             } else { // can insert.  may make buffer full
+            	//printf(" COPY.  end_ptr = %p, curr_ptr = %p. writerCount = %d.\n", end_ptr.load(), curr_ptr.load(), writerCount.load());
+
+
               // write
               std::memcpy(ptr, _data, count);
               std::atomic_thread_fence(std::memory_order_seq_cst);  // unlock only after memcpy.
@@ -701,9 +719,13 @@ namespace bliss
           if (count == 0 || _data == nullptr)
             throw std::invalid_argument("_data has 0 count or is _nullptr");
 
+
           //DEBUG("Thread Unsafe buffer append");
           uint8_t* ptr = write_lock<TS>(count);
+
+
           if (ptr == nullptr) {
+
             read_lock<TS>();
             return 0x0;
           }
