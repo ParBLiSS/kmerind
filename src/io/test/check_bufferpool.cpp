@@ -244,7 +244,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       buf->flush_and_set_size();
 
       if (buf->getSize() != sizeof(int) * iter)
-        printf("ERROR: thread %d/%d buffer size is %u, expected %lu\n", omp_get_thread_num(), pool_threads, buf->getSize(), sizeof(int) * iter);
+        printf("ERROR: thread %d/%d buffer size is %ld, expected %lu\n", omp_get_thread_num(), pool_threads, buf->getSize(), sizeof(int) * iter);
 
       //release
       pool.releaseBuffer(std::move(buf));
