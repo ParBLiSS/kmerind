@@ -817,45 +817,45 @@ void appendTimed(const int capacity, const int iterations) {
 
 
 int main(int argc, char** argv) {
-while (true) {
+for (int i = 0; i < 10; ++i) {
   // test move
-//  moveTest<bliss::concurrent::THREAD_UNSAFE, bliss::concurrent::THREAD_UNSAFE>();
-//  moveTest<bliss::concurrent::THREAD_UNSAFE, bliss::concurrent::THREAD_SAFE>();
-//  moveTest<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_SAFE>();
-//  moveTest<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>();
-//
-//
-//  // test append
-//  appendTest<bliss::concurrent::THREAD_UNSAFE, 1>(8192);
-//
-//  appendTest<bliss::concurrent::THREAD_SAFE, 1>(8192);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 2>(8192);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 3>(8192);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 4>(8192);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 5>(8192);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 6>(8192);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 7>(8192);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 8>(8192);
-//
-//  // test append with buffer that is not multple of element size.
-//  appendTest<bliss::concurrent::THREAD_UNSAFE, 1>(8191);
-//
-//  appendTest<bliss::concurrent::THREAD_SAFE, 1>(8191);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 2>(8191);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 3>(8191);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 4>(8191);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 5>(8191);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 6>(8191);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 7>(8191);
-//  appendTest<bliss::concurrent::THREAD_SAFE, 8>(8191);
+  moveTest<bliss::concurrent::THREAD_UNSAFE, bliss::concurrent::THREAD_UNSAFE>();
+  moveTest<bliss::concurrent::THREAD_UNSAFE, bliss::concurrent::THREAD_SAFE>();
+  moveTest<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_SAFE>();
+  moveTest<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>();
+
+
+  // test append
+  appendTest<bliss::concurrent::THREAD_UNSAFE, 1>(8192);
+
+  appendTest<bliss::concurrent::THREAD_SAFE, 1>(8192);
+  appendTest<bliss::concurrent::THREAD_SAFE, 2>(8192);
+  appendTest<bliss::concurrent::THREAD_SAFE, 3>(8192);
+  appendTest<bliss::concurrent::THREAD_SAFE, 4>(8192);
+  appendTest<bliss::concurrent::THREAD_SAFE, 5>(8192);
+  appendTest<bliss::concurrent::THREAD_SAFE, 6>(8192);
+  appendTest<bliss::concurrent::THREAD_SAFE, 7>(8192);
+  appendTest<bliss::concurrent::THREAD_SAFE, 8>(8192);
+
+  // test append with buffer that is not multple of element size.
+  appendTest<bliss::concurrent::THREAD_UNSAFE, 1>(8191);
+
+  appendTest<bliss::concurrent::THREAD_SAFE, 1>(8191);
+  appendTest<bliss::concurrent::THREAD_SAFE, 2>(8191);
+  appendTest<bliss::concurrent::THREAD_SAFE, 3>(8191);
+  appendTest<bliss::concurrent::THREAD_SAFE, 4>(8191);
+  appendTest<bliss::concurrent::THREAD_SAFE, 5>(8191);
+  appendTest<bliss::concurrent::THREAD_SAFE, 6>(8191);
+  appendTest<bliss::concurrent::THREAD_SAFE, 7>(8191);
+  appendTest<bliss::concurrent::THREAD_SAFE, 8>(8191);
 
 
 
   // multiple buffer swap test.
 
   ////////////// timing.  the insert before this is to warm up.
-//  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_UNSAFE, 1>(8191, 1000000);
-//
+  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_UNSAFE, 1>(8191, 1000000);
+
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 1>(8191, 1000000);
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 2>(8191, 1000000);
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 3>(8191, 1000000);
@@ -878,17 +878,17 @@ while (true) {
 
 
     // timing tests
-//
-//    ////////////// timing.  the insert before this is to warm up.
-//    appendTimed<bliss::concurrent::THREAD_UNSAFE, 1>(1000000, 3);
-//
-//    appendTimed<bliss::concurrent::THREAD_SAFE, 1>(1000000, 3);
-//    appendTimed<bliss::concurrent::THREAD_SAFE, 2>(1000000, 3);
-//    appendTimed<bliss::concurrent::THREAD_SAFE, 3>(1000000, 3);
-//    appendTimed<bliss::concurrent::THREAD_SAFE, 4>(1000000, 3);
-//    appendTimed<bliss::concurrent::THREAD_SAFE, 5>(1000000, 3);
-//    appendTimed<bliss::concurrent::THREAD_SAFE, 6>(1000000, 3);
-//    appendTimed<bliss::concurrent::THREAD_SAFE, 7>(1000000, 3);
-//    appendTimed<bliss::concurrent::THREAD_SAFE, 8>(1000000, 3);
+
+    ////////////// timing.  the insert before this is to warm up.
+    appendTimed<bliss::concurrent::THREAD_UNSAFE, 1>(1000000, 3);
+
+    appendTimed<bliss::concurrent::THREAD_SAFE, 1>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 2>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 3>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 4>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 5>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 6>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 7>(1000000, 3);
+    appendTimed<bliss::concurrent::THREAD_SAFE, 8>(1000000, 3);
 }
 }
