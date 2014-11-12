@@ -588,7 +588,9 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 
       bliss::io::Buffer<TS>* old_ptr = nullptr;
 
-      old_ptr = ptr.exchange(new_ptr);             //
+      old_ptr = ptr.exchange(new_ptr);
+#pragma omp flush(ptr)
+//
       // save the old buffer
 
 
@@ -707,7 +709,9 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 
       new_ptr->read_unlock();
 
+
       old_ptr = ptr.exchange(new_ptr);             //
+#pragma omp flush(ptr)
       // save the old buffer
 
 

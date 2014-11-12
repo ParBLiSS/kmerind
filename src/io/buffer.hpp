@@ -28,7 +28,7 @@
 #include "concurrent/concurrent.hpp"   // ThreadSafety boolean constants
 #include "utils/logging.h"
 
-#include "xmmintrin.h"  // _mm_pause, instead of usleep.
+#include <xmmintrin.h>  // _mm_pause, instead of usleep.
 
 namespace bliss
 {
