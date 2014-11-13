@@ -1,6 +1,7 @@
 project(bliss-index)
+include("${CMAKE_SOURCE_DIR}/Sanitizer.cmake")
 
-
+if (ENABLE_TESTING)
 #add_subdirectory(testlib)
 # TODO: add .cpp files (if we have some)
 #add_library(${PROJECT_NAME}
@@ -12,4 +13,5 @@ if (IS_DIRECTORY ./test)
     # get all files from ./test
     FILE(GLOB TEST_FILES test/test_*.cpp test/benchmark_*.cpp)
     bliss_add_test(${PROJECT_NAME} FALSE ${TEST_FILES})
+endif()
 endif()

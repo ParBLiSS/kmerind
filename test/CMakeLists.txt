@@ -1,8 +1,34 @@
+project(bliss_test_apps)
 
+include("${CMAKE_SOURCE_DIR}/Sanitizer.cmake")
+
+if(ENABLE_TESTING)
 
 ## EXECUTABLES
 add_executable(test_omp_patterns test_omp_patterns.cpp)
 target_link_libraries(test_omp_patterns ${EXTRA_LIBS})
+
+## EXECUTABLES
+add_executable(test_iterator_and_function_traits test_iterator_and_function_traits.cpp)
+target_link_libraries(test_iterator_and_function_traits ${EXTRA_LIBS})
+
+## EXECUTABLES
+add_executable(testCommLayer test_commlayer.cpp)
+target_link_libraries(testCommLayer ${EXTRA_LIBS})
+target_link_libraries(testCommLayer bliss-common)
+
+add_executable(testDistrMap test_distr_map.cpp)
+target_link_libraries(testDistrMap ${EXTRA_LIBS})
+target_link_libraries(testDistrMap bliss-common)
+
+endif()
+
+
+
+
+
+
+if (BUILD_TEST_APPLICATIONS)
 
 # EXECUTABLES
 add_executable(benchmark_concurrent_IO_MMAP benchmark_concurrent_IO.cpp)
@@ -48,10 +74,6 @@ target_link_libraries(benchmark_concurrent_IO_FASTQIterNoQual ${EXTRA_LIBS})
 #target_link_libraries(testIndex2 bliss-common)
 
 
-## EXECUTABLES
-add_executable(test_iterator_and_function_traits test_iterator_and_function_traits.cpp)
-target_link_libraries(test_iterator_and_function_traits ${EXTRA_LIBS})
-
 
 ## EXECUTABLES
 #add_executable(testThreads test_threads.cpp)
@@ -62,16 +84,6 @@ add_executable(testKmerIndex TestKmerIndexAndQuery.cpp)
 target_link_libraries(testKmerIndex ${EXTRA_LIBS})
 target_link_libraries(testKmerIndex bliss-common)
 
-
-## EXECUTABLES
-add_executable(testCommLayer test_commlayer.cpp)
-target_link_libraries(testCommLayer ${EXTRA_LIBS})
-target_link_libraries(testCommLayer bliss-common)
-
-add_executable(testDistrMap test_distr_map.cpp)
-target_link_libraries(testDistrMap ${EXTRA_LIBS})
-target_link_libraries(testDistrMap bliss-common)
-
 ## EXECUTABLES
 add_executable(profile_mem_usage profile_mem_usage.cpp)
 target_link_libraries(profile_mem_usage ${EXTRA_LIBS})
@@ -81,7 +93,8 @@ target_link_libraries(profile_mem_usage bliss-common)
 
 
 
-
-
 add_executable(quicktest quicktest.cpp)
 target_link_libraries(quicktest ${EXTRA_LIBS})
+
+endif()
+

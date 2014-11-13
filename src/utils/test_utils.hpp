@@ -15,6 +15,8 @@
 #include <vector>
 #include <iterator>
 #include <algorithm>  // for sort
+#include <cstdio>
+#include <sstream>
 
 
 template<typename Iterator>

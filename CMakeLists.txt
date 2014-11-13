@@ -11,11 +11,7 @@ set (bliss_VERSION_MINOR 1)
 
 ### REQUIRE C++11
 # Initialize CXXFLAGS.
-set(CMAKE_CXX_FLAGS                "-Wall -std=c++11")
-set(CMAKE_CXX_FLAGS_DEBUG          "-O0 -g -DOMP_DEBUG")
-set(CMAKE_CXX_FLAGS_MINSIZEREL     "-Os")
-set(CMAKE_CXX_FLAGS_RELEASE        "-O3")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
+add_definitions(-Wall -std=c++11 -fPIC)
 
 # Compiler-specific C++11 activation.
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
@@ -68,7 +64,7 @@ endif()
 # Build static or dynamic libs?
 # Default: dynamic libraries
 # ----------------------------------------------------------------------------
-set(BUILD_SHARED_LIBS ON CACHE BOOL "Build shared libraries (.dll/.so) instead of static ones (.lib/.a)")
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries (.dll/.so) instead of static ones (.lib/.a)")
 
 # ----------------------------------------------------------------------------
 # Include profiling?
@@ -94,10 +90,10 @@ function(update_logging_engine varname cacheaccess varval)
 
 
     if (${cacheaccess} STREQUAL READ_ACCESS AND
-        ${varname} STREQUAL ENABLE_OMP_DEBUGGING)
+        ${varname} STREQUAL USE_OPENMP)
 
             
-        if (ENABLE_OMP_DEBUGGING)
+        if (USE_OPENMP)
 
             # restrict log engine to no_log or printf
             if (LOG_ENGINE STREQUAL "NO_LOG" OR
@@ -109,7 +105,7 @@ function(update_logging_engine varname cacheaccess varval)
             else (LOG_ENGINE STREQUAL "NO_LOG" OR
                 LOG_ENGINE STREQUAL "PRINTF")
 
-                message("OMP Debugging ENABLED.  Default Log Engine set to NO_LOG")
+                message("OMP ENABLED.  Default Log Engine set to NO_LOG")
                 
                 set(LOG_ENGINE "NO_LOG" CACHE STRING
                 "choose a logging engine.  options are NO_LOG PRINTF." FORCE)
@@ -117,7 +113,7 @@ function(update_logging_engine varname cacheaccess varval)
             endif (LOG_ENGINE STREQUAL "NO_LOG" OR
                 LOG_ENGINE STREQUAL "PRINTF")
             
-        else (ENABLE_OMP_DEBUGGING)
+        else (USE_OPENMP)
             # OMP debugging is not on.  so log engine choice depends on whether boost logging is enabled.
         
           if (LOG_ENGINE STREQUAL "NO_LOG" OR
@@ -135,7 +131,7 @@ function(update_logging_engine varname cacheaccess varval)
                 LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
                 LOG_ENGINE STREQUAL "BOOST_CUSTOM")
                 
-                message("OMP Debugging DISABLED.  Default Log Engine set to NO_LOG")
+                message("OMP DISABLED.  Default Log Engine set to NO_LOG")
                 
             set(LOG_ENGINE "NO_LOG" CACHE STRING
             "choose a logging engine.  options are NO_LOG PRINTF CERR BOOST_TRIVIAL BOOST_CUSTOM." FORCE)
@@ -145,21 +141,15 @@ function(update_logging_engine varname cacheaccess varval)
                 LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
                 LOG_ENGINE STREQUAL "BOOST_CUSTOM")
 
-        
-        
-        
-        endif(ENABLE_OMP_DEBUGGING)
-
-
-
+        endif(USE_OPENMP)
 
     else(${cacheaccess} STREQUAL READ_ACCESS AND
-        ${varname} STREQUAL ENABLE_OMP_DEBUGGING)
+        ${varname} STREQUAL USE_OPENMP)
         
        message("${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
         
     endif(${cacheaccess} STREQUAL READ_ACCESS AND
-        ${varname} STREQUAL ENABLE_OMP_DEBUGGING)
+        ${varname} STREQUAL USE_OPENMP)
         
         
     # set the log engine in the logger_config.hpp file.
@@ -174,13 +164,14 @@ endfunction(update_logging_engine varname cacheaccess varval)
 
 
 # if OMP_DEBUGGING is enabled, default(none) is set in the omp pragmas.   this means that only NO_LOG and PRINTF logging are compatible.
-set(ENABLE_OMP_DEBUGGING OFF CACHE BOOL "Enable OpenMP debugging (turns on default(none) in omp pragma, requiring NO_LOG or PRINTF logging)")
-variable_watch(ENABLE_OMP_DEBUGGING update_logging_engine)
-if (ENABLE_OMP_DEBUGGING)
-    add_definitions(-DOMP_DEBUG)
-endif(ENABLE_OMP_DEBUGGING)
-    
 
+
+set(OPENMP_STRICT_SCOPING ON CACHE BOOL "Enable OpenMP debugging (turns on default(none) in omp pragma)")
+mark_as_advanced(OPENMP_STRICT_SCOPING)
+if (OPENMP_STRICT_SCOPING)
+    add_definitions(-DOMP_DEBUG)
+endif(OPENMP_STRICT_SCOPING)
+    
 
 
 
@@ -251,9 +242,11 @@ if (USE_MPI)
   message(STATUS "Found MPI:")
   message(STATUS "    headers: ${MPI_INCLUDE_PATH}")
   message(STATUS "    libs:    ${MPI_LIBRARIES}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MPI_COMPILE_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_COMPILE_FLAGS}")
-  set(CMAKE_LINK_FLAGS "${CMAKE_LINK_FLAGS} ${MPI_LINK_FLAGS}")
+  add_definitions(${MPI_COMPILE_FLAGS})
+  set(CMAKE_EXE_LINK_FLAGS "${CMAKE_EXE_LINK_FLAGS} ${MPI_LINK_FLAGS}")
+  set(CMAKE_MODULE_LINK_FLAGS "${CMAKE_MODULE_LINK_FLAGS} ${MPI_LINK_FLAGS}")
+  set(CMAKE_SHARED_LINK_FLAGS "${CMAKE_SHARED_LINK_FLAGS} ${MPI_LINK_FLAGS}")
+  set(CMAKE_STATIC_LINK_FLAGS "${CMAKE_STATIC_LINK_FLAGS} ${MPI_LINK_FLAGS}")
 else(USE_MPI)
   #set(MPI_FOUND 0)
 endif(USE_MPI)
@@ -277,6 +270,8 @@ if (OPENMP_FOUND)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
     
     set(USE_OPENMP ON CACHE BOOL "Build with OpenMP support")
+    variable_watch(USE_OPENMP update_logging_engine)
+    
     if (USE_OPENMP)
       message(STATUS "Found OpenMP")
       set(OPENMP_DEFINE "#define USE_OPENMP")
@@ -285,10 +280,11 @@ if (OPENMP_FOUND)
     endif (USE_OPENMP)
 else (OPENMP_FOUND)
     if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+        add_definitions(-fopenmp)
 
         set(USE_OPENMP ON CACHE BOOL "Build with OpenMP support")
+        variable_watch(USE_OPENMP update_logging_engine)
+        
         if (USE_OPENMP)
           message(STATUS "Found OpenMP")
           set(OPENMP_DEFINE "#define USE_OPENMP")
@@ -318,32 +314,83 @@ if(DOXYGEN_FOUND)
 endif(DOXYGEN_FOUND)
 
 
+###### TESTING
+
+# LOGGING ENGINE configuration
+function(update_test_options varname cacheaccess varval) 
+#       message("${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
+
+
+    if (${cacheaccess} STREQUAL READ_ACCESS AND
+        ${varname} STREQUAL ENABLE_TESTING)
+
+            
+        if (ENABLE_TESTING)
+            if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
+              set(ENABLE_COVERAGE ${ENABLE_COVERAGE} CACHE BOOL "Enable Code Coverage reporting" FORCE)
+              set(ENABLE_SANITIZER ${ENABLE_SANITIZER} CACHE BOOL "Enable Sanitizer.  Choose via SANITIZER_STYLE" FORCE)              
+            elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+              set(ENABLE_COVERAGE ${ENABLE_COVERAGE} CACHE BOOL "Enable Code Coverage reporting" FORCE)
+              set(ENABLE_SANITIZER ${ENABLE_SANITIZER} CACHE BOOL "Enable Sanitizer.  Choose via SANITIZER_STYLE" FORCE)
+            else()
+              set(ENABLE_COVERAGE OFF CACHE INTERNAL "DISABLE Code Coverage Reporting because we are using Intel Compiler - don't know profiling options." FORCE) 
+              set(ENABLE_SANITIZER OFF CACHE INTERNAL "Disabled Sanitizer as we are using Intel compiler." FORCE)
+            endif()
+            
+        else()
+              set(ENABLE_COVERAGE OFF CACHE INTERNAL "DISABLE Code Coverage Reporting because we are using Intel Compiler - don't know profiling options." FORCE) 
+              set(ENABLE_SANITIZER OFF CACHE INTERNAL "Disabled Sanitizer as testing is turned off." FORCE)
+        endif()
+
+        if (ENABLE_SANITIZER)
+            set(SANITIZER_STYLE ${SANITIZER_STYLE} CACHE STRING "Any Compiler supported Sanitizer style.  e.g. thread, address" FORCE)
+        else()
+            set(SANITIZER_STYLE "" CACHE INTERNAL "Disabled Sanitizer as we are NOT enabling sanitizer." FORCE)
+        endif()
+            
+                
+
+
+    else(${cacheaccess} STREQUAL READ_ACCESS AND
+        ${varname} STREQUAL ENABLE_TESTING)
+        
+       message("${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
+        
+    endif(${cacheaccess} STREQUAL READ_ACCESS AND
+        ${varname} STREQUAL ENABLE_TESTING)
+                
+endfunction(update_test_options varname cacheaccess varval)
+
+
+
 ###### Google test library
 # require "git submodule init" and "git submodule update"
 
 # Testing can be turned off: (for now the default is: ON)
-set(ENABLE_TESTING ON CACHE BOOL "Enable Unit testing via googletest")
+set(ENABLE_TESTING OFF CACHE BOOL "Enable different testing mechanisms including coverage, thread and address sanitizers, and google test")
+variable_watch(ENABLE_TESTING update_test_options)
+
+
+
 if (ENABLE_TESTING)
-    if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
-      set(ENABLE_COVERAGE OFF CACHE INTERNAL "DISABLE Code Coverage Reporting because we are using Intel Compiler - don't know profiling options") 
-    else()
-      set(ENABLE_COVERAGE ON CACHE BOOL "Enable Code Coverage reporting")
-    endif()
-endif()
 
 if (ENABLE_COVERAGE)
   # set flags for coverage test
   message(STATUS "Code coverage reporting enabled")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage -g")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage -g")
+  add_definitions(-fprofile-arcs -ftest-coverage -g)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs")
+  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fprofile-arcs")
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-arcs")
+  set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fprofile-arcs")
 endif()
 
-if (ENABLE_TESTING)
-  message(STATUS "Unit testing enabled")
+
+
+  message(STATUS "Testing enabled")
   # include/load the Google Test framework
   set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
+#  set_property(DIRECTORY ${EXT_PROJECTS_DIR}/gtest APPEND PROPERTY CMAKE_CXX_FLAGS -fPIC)
+#  set_property(DIRECTORY ${EXT_PROJECTS_DIR}/gtest APPEND PROPERTY CMAKE_C_FLAGS -fPIC)
   add_subdirectory(${EXT_PROJECTS_DIR}/gtest)
   include_directories(${EXT_PROJECTS_DIR}/gtest/include)
 
