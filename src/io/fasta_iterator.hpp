@@ -31,6 +31,7 @@
 #include <utils/logging.h>
 #include <iterators/function_traits.hpp>
 #include <partition/range.hpp>
+#include <common/kmer_iterators.hpp>
 
 
 namespace bliss
@@ -107,7 +108,7 @@ namespace bliss
      * @tparam    Alphabet    allows interpretation of the sequence
      * @tparam    Kmer        bliss::Kmer type
      */
-    template<typename Iterator, typename Alphabet, typename Kmer>
+    template<typename Iterator, typename Kmer>
     class FASTAParser
     {
       protected:
@@ -148,7 +149,7 @@ namespace bliss
           the_offset_kmer_zip;
 
         //Vector containing positions of fasta record start
-        typedef std::vector <std::pair<offSetType, offSetType>> vectorType;
+        typedef FASTALoader::vectorType vectorType;
 
         /// iterator for the vector 
         typedef vectorType::iterator vectorIteratorType;
@@ -174,7 +175,7 @@ namespace bliss
         static const typename std::iterator_traits<Iterator>::value_type eol = '\n';
 
         /// alias for this type, for use inside this class.
-        using type = FASTQParser<Iterator, Alphabet, Quality>;
+        using type = FASTQParser<Iterator, Kmer>;
 
         /**
          * @brief     Filter predicate, to discard the invalid entries in the zipped offset and sequence iterators
@@ -200,7 +201,7 @@ namespace bliss
          * @param localStartLocStore    vector of tuples that stores fasta sequence header's begin and index offset 
          */
         FASTAParser(const Iterator& start, const Iterator& end, 
-            const RangeType &offsetRange, vectorType &localStartLocStore)
+            const RangeType &offsetRange, const vectorType &localStartLocStore)
             : _curr(start), _end(end), _offsetRange(offsetRange), _localStartLocStore(localStartLocStore), _localStartLocStoreIter(_localStartLocStore.begin())
         {
         }

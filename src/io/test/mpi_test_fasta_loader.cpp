@@ -47,7 +47,7 @@ class FASTALoaderTest : public ::testing::Test
       stat(fileName.c_str(), &filestat);
       fileSize = static_cast<size_t>(filestat.st_size);
 
-      ASSERT_EQ(34111308, fileSize);
+      ASSERT_EQ(34526831, fileSize);
     }
 
     static void readFilePOSIX(const std::string &fileName, const size_t& offset,
@@ -77,12 +77,10 @@ TYPED_TEST_P(FASTALoaderTest, OpenWithRange)
   typedef FASTALoader<typename FILELoaderType::InputIteratorType> FASTALoaderType;
   typedef typename FILELoaderType::RangeType RangeType;
 
-  // get this->fileName
   int rank = 3;
   int nprocs = 7;
 
   FILELoaderType loader(nprocs, rank, this->fileName);
-  FASTALoaderType fastaPreparse();
 
   RangeType r;
   typename FILELoaderType::L1BlockType d;
@@ -94,7 +92,6 @@ TYPED_TEST_P(FASTALoaderTest, OpenWithRange)
   FASTALoaderType obj;
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
   ASSERT_LT(0 , vectorReturned.size());
-
 }
 
 // now register the test cases

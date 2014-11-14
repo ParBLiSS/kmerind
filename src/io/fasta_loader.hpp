@@ -103,8 +103,8 @@ namespace bliss
               MPI_Irecv(recvInfo, 1, datatype, rank_src, msg_tag_recv, MPI_COMM_WORLD, &request_recv);
             }
             MPI_Status stat;   
-            MPI_Wait(&request_recv, &stat);
-            MPI_Wait(&request_send, &stat);
+            if (myRank < noProcs - 1) MPI_Wait(&request_send, &stat);
+            if (myRank > 0) MPI_Wait(&request_recv, &stat);
         }
 #endif
 
@@ -140,8 +140,8 @@ namespace bliss
               MPI_Irecv(recvInfo, 1, datatype, rank_src, msg_tag_recv, MPI_COMM_WORLD, &request_recv);
             }
             MPI_Status stat;   
-            MPI_Wait(&request_recv, &stat);
-            MPI_Wait(&request_send, &stat);
+            if (myRank > 0) MPI_Wait(&request_send, &stat);
+            if (myRank < noProcs - 1) MPI_Wait(&request_recv, &stat);
         }
 #endif
 
