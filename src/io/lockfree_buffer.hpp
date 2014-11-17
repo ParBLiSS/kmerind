@@ -60,8 +60,8 @@ namespace bliss
      *
      *
      * @note  Buffer swap and free is expected to be conducted by a single thread.  other threads may access the buffer via pointer during free or swap.
-     *         It is therefore important to swap via atomic operation and to free outside of parallel region (symptom - heap corruption, write after free to reserved_ptr)
-     *         reserve function has been updated to prevent write if reserved_ptr is null, but this is not a guarantee.
+     *         It is therefore important to swap via atomic operation and to free outside of parallel region (symptom - heap corruption, write after free to reserved)
+     *         reserve function has been updated to prevent write if reserved is null, but this is not a guarantee.
      *            2 simple alternatives:
      *             1. have each thread hold its own buffer
      *             2. save the buffer into a list/vector and clean out later.
@@ -91,16 +91,16 @@ namespace bliss
         mutable uint8_t* start_ptr; // const, does not change
 
         /// start pointer shifted by maximum capacity.  unrealistic to use size_t - can't possibly allocate.
-        mutable uint8_t* max_ptr;   // const, does not change
+        mutable int64_t capacity;   // const, does not change
 
         /// pointer to current head of reservation
-        volatile typename std::conditional<ThreadSafety, std::atomic<uint8_t*>, uint8_t*>::type reserved_ptr;
+        volatile typename std::conditional<ThreadSafety, std::atomic<int64_t>, int64_t>::type reserved;
 
-        /// pointer to FINAL  end of data.   only updated when buffer is blocked or when full (from reserved_ptr)
-        mutable typename std::conditional<ThreadSafety, std::atomic<uint8_t*>, uint8_t*>::type end_ptr;
+        /// pointer to FINAL  end of data.   only updated when buffer is blocked or when full (from reserved)
+        mutable typename std::conditional<ThreadSafety, std::atomic<int64_t>, int64_t>::type size;
 
-        /// represent amount of data written.  will not update beyond the FINAL end_ptr
-        volatile typename std::conditional<ThreadSafety, std::atomic<uint8_t*>, uint8_t*>::type written_ptr;
+        /// represent amount of data written.  will not update beyond the FINAL size
+        volatile typename std::conditional<ThreadSafety, std::atomic<int64_t>, int64_t>::type written;
 
         /// mutex for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
         mutable std::mutex mutex;
@@ -116,15 +116,15 @@ namespace bliss
          * @param l       the mutex lock on the source Buffer.
          */
         Buffer(Buffer<ThreadSafety>&& other, const std::lock_guard<std::mutex> &l)
-      	  : start_ptr(other.start_ptr), max_ptr(other.max_ptr),
-      	    reserved_ptr((uint8_t*)(other.reserved_ptr)), end_ptr((uint8_t*)(other.end_ptr)),
-      	    written_ptr((uint8_t*)(other.written_ptr)) {
+      	  : start_ptr(other.start_ptr), capacity(other.capacity),
+      	    reserved((int64_t)(other.reserved)), size((int64_t)(other.size)),
+      	    written((int64_t)(other.written)) {
 
           other.start_ptr = nullptr;
-          other.end_ptr =   nullptr;
-          other.max_ptr =   nullptr;
-          other.written_ptr = nullptr;
-          other.reserved_ptr = max_ptr + 1;
+          other.size =   0;
+          other.capacity =   0;
+          other.written = 0;
+          other.reserved = capacity + 1;
 
         };
 
@@ -138,15 +138,15 @@ namespace bliss
          * @param l       the mutex lock on the source Buffer.
          */
         Buffer(Buffer<!ThreadSafety>&& other, const std::lock_guard<std::mutex> &l)
-          : start_ptr(other.start_ptr), max_ptr(other.max_ptr),
-            reserved_ptr((uint8_t*)(other.reserved_ptr)), end_ptr((uint8_t*)(other.end_ptr)),
-            written_ptr((uint8_t*)other.written_ptr) {
+          : start_ptr(other.start_ptr), capacity(other.capacity),
+            reserved((int64_t)(other.reserved)), size((int64_t)(other.size)),
+            written((int64_t)other.written) {
 
           other.start_ptr = nullptr;
-          other.end_ptr =   nullptr;
-          other.max_ptr =   nullptr;
-          other.written_ptr = nullptr;
-          other.reserved_ptr = max_ptr + 1;
+          other.size =   0;
+          other.capacity =   0;
+          other.written = 0;
+          other.reserved = capacity + 1;
         }
 
       public:
@@ -163,11 +163,11 @@ namespace bliss
           start_ptr = new uint8_t[_capacity]();  // parenthesis initializes the memory to 0
 
           // buffer empty
-          written_ptr = start_ptr;
-          max_ptr = start_ptr + _capacity;
+          written = 0;
+          capacity = _capacity;
           // buffer blocked.
-          end_ptr = start_ptr;
-          reserved_ptr = max_ptr + 1;   // block from insertion.
+          size = 0;
+          reserved = capacity + 1;   // block from insertion.
 
         };
 
@@ -181,12 +181,12 @@ namespace bliss
 
           std::lock_guard<std::mutex> lock(mutex);
           // blocked.
-          reserved_ptr = max_ptr + 1;
-          end_ptr = nullptr;
+          reserved = capacity + 1;
+          size = 0;
 
 
-          max_ptr = nullptr;
-          written_ptr = nullptr;
+          capacity = 0;
+          written = 0;
 
           if (start_ptr != nullptr) {
             delete [] start_ptr;
@@ -242,16 +242,16 @@ namespace bliss
             /// move the internal memory.
 
             start_ptr = other.start_ptr;
-            written_ptr = (uint8_t*)(other.written_ptr);
-            end_ptr = (uint8_t*)(other.end_ptr);
-            max_ptr = other.max_ptr;
-            reserved_ptr = (uint8_t*)(other.reserved_ptr);
+            written = (int64_t)(other.written);
+            size = (int64_t)(other.size);
+            capacity = other.capacity;
+            reserved = (int64_t)(other.reserved);
 
-            other.end_ptr = nullptr;
+            other.size = 0;
             other.start_ptr = nullptr;
-            other.max_ptr =   nullptr;
-            other.written_ptr = nullptr;
-            other.reserved_ptr = max_ptr + 1;
+            other.capacity = 0;
+            other.written = 0;
+            other.reserved = capacity + 1;
           }
           return *this;
         }
@@ -279,16 +279,16 @@ namespace bliss
 
             /// move the internal memory.
             start_ptr = other.start_ptr;
-            written_ptr = (uint8_t*)(other.written_ptr);
-            end_ptr = (uint8_t*)(other.end_ptr);
-            max_ptr = other.max_ptr;
-            reserved_ptr = (uint8_t*)(other.reserved_ptr);
+            written = (int64_t)(other.written);
+            size = (int64_t)(other.size);
+            capacity = other.capacity;
+            reserved = (int64_t)(other.reserved);
 
-            other.end_ptr = nullptr;
+            other.size = 0;
             other.start_ptr = nullptr;
-            other.max_ptr =   nullptr;
-            other.written_ptr = nullptr;
-            other.reserved_ptr = max_ptr + 1;
+            other.capacity =   0;
+            other.written = 0;
+            other.reserved = capacity + 1;
 
           }
           return *this;
@@ -312,7 +312,7 @@ namespace bliss
          */
         const int64_t getSize() const {
           std::atomic_thread_fence(std::memory_order_seq_cst);
-          return (uint8_t*)end_ptr - start_ptr;
+          return (int64_t)size;
         }
 
       protected:
@@ -323,7 +323,7 @@ namespace bliss
          */
         const int64_t getApproximateSize() const {
           std::atomic_thread_fence(std::memory_order_seq_cst);
-          return (uint8_t*)reserved_ptr - start_ptr;
+          return (int64_t)reserved;
         }
 
         /**
@@ -333,7 +333,7 @@ namespace bliss
          */
         const int64_t getWrittenSize() const {
           std::atomic_thread_fence(std::memory_order_seq_cst);
-          return (uint8_t*)written_ptr - start_ptr;
+          return (int64_t)written;
         }
 
       public:
@@ -357,7 +357,7 @@ namespace bliss
          * @return    maximum capacity of buffer.
          */
         const int64_t getCapacity() const {
-          return max_ptr - start_ptr;
+          return capacity;
         }
 
 
@@ -386,12 +386,12 @@ namespace bliss
 
         bool is_writing() const {
           std::atomic_thread_fence(std::memory_order_seq_cst);
-          return (uint8_t*)written_ptr < (uint8_t*)end_ptr;
+          return (int64_t)written < (int64_t)size;
         }
 
         bool is_full() const {
           std::atomic_thread_fence(std::memory_order_seq_cst);
-          return (uint8_t*)reserved_ptr > max_ptr;
+          return (int64_t)reserved > capacity;
         }
 
         bool is_flushing() const {
@@ -409,59 +409,60 @@ namespace bliss
 
         /**
          * @brief       reserves a position in the buffer at which to insert the count number of bytes.
-         * @details     increment only if we have room (so done via atomic CAS.).  if full, return nullptr. if becoming full, set the end_ptr.  else return the insertion point
+         * @details     increment only if we have room (so done via atomic CAS.).  if full, return nullptr. if becoming full, set the size.  else return the insertion point
          * @param count
          * @return      pointer at which to insert.
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, uint8_t*>::type reserve(const uint32_t count) {
+        typename std::enable_if<TS, int64_t>::type reserve(const uint32_t count) {
 
           // this part reduces likelihood of accessing freed memory (a different thread tries to reserve to a freed region, i.e. )
           // does not prevent ABA problem (if the memory is reallocated.)
           std::atomic_thread_fence(std::memory_order_seq_cst);
-          uint8_t* ptr = reserved_ptr.load();
-          //increment
+          int64_t curr = reserved.load();
+
+          // increment
           bool exchanged = false;
-          while (ptr != nullptr && ptr <= max_ptr && !exchanged) {
-            exchanged = reserved_ptr.compare_exchange_weak(ptr, ptr + count);
+          while (curr <= capacity && !exchanged) {
+            exchanged = reserved.compare_exchange_weak(curr, curr + count);
           }
           std::atomic_thread_fence(std::memory_order_seq_cst);
 
-          if (ptr == nullptr || ptr > max_ptr) {  // full.  another thread saved to end_ptr
-            return nullptr;
-          } else {  //if ptr == max_ptr, buffer must be FILLED in this cycle.  need to process it as if not full yet.
-            if (ptr + count > max_ptr) {  // just filled.  set end_ptr.  reserved_ptr is already set.
+          if (curr > capacity) {  // full.  another thread saved to size
+            return -1;
+          } else {  //if curr == capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
+            if (curr + count > capacity) {  // just filled.  set size.  reserved is already set.
               // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
 
-              // since only 1 thread reaching here, just set end_ptr, no need to check to make sure we store minimum.
-              end_ptr.store(ptr);
+              // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
+              size.store(curr);
 
             }  // else normal append
           }
-          return ptr;
+          return curr;
         }
 
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, uint8_t*>::type reserve(const uint32_t count) {
-          uint8_t* ptr = reserved_ptr;
-          if (ptr == nullptr || ptr > max_ptr) {
-            return nullptr;
-          } else {  //if ptr == max_ptr, buffer must be FILLED in this cycle.  need to process it as if not full yet.
-            reserved_ptr += count;
-            if (ptr + count > max_ptr) {
+        typename std::enable_if<!TS, int64_t>::type reserve(const uint32_t count) {
+          int64_t curr = reserved;
+          if (curr > capacity) {
+            return -1;
+          } else {  //if ptr == capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
+            reserved += count;
+            if (curr + count > capacity) {
               // again, only 1 thread eaches here, so
 
-              end_ptr = ptr;
+              size = curr;
             }  // else normal append
 
           }
-        	return ptr;
+        	return curr;
         }
 
         /// marked write as completed.
         void complete_write(const int count) {
           std::atomic_thread_fence(std::memory_order_seq_cst);
-        	written_ptr += count;
+        	written += count;
         }
 
 
@@ -472,62 +473,62 @@ namespace bliss
         /**
          * @brief  read lock prevents future writes.  read lock can be turned on while there are writes in progress.  once read lock is on, reserve will returns nullptr.
          *
-         * @details purpose of this method is to swap the end_ptr and reserved_ptr, so that reserved_ptr is at max+1, and end_ptr is the smallest of all locking thread's pointers
+         * @details purpose of this method is to swap the size and reserved, so that reserved is at max+1, and size is the smallest of all locking thread's pointers
          */
          template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<TS, void>::type block(uint8_t* _curr = nullptr) {  // not using xor since it toggles and complete_write is not going to change the sign bit (so we don't need xor)
-          // disable reserved_ptr and put the content in end_ptr
-          uint8_t* end = (uint8_t*)end_ptr;
-          uint8_t* curr = reserved_ptr.exchange(max_ptr + 1);
+        typename std::enable_if<TS, void>::type block(int64_t _curr = -1) {  // not using xor since it toggles and complete_write is not going to change the sign bit (so we don't need xor)
+          // disable reserved and put the content in size
+          int64_t end = (int64_t)size;
+          int64_t curr = reserved.exchange(capacity + 1);
 
           std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
 
-          curr = (_curr ? _curr : curr);
+          curr = (_curr >= 0 ? _curr : curr);
           bool stop = false;
 
           while (end > curr && !stop) {
-            stop = end_ptr.compare_exchange_weak(end, curr);  // get smallest, indicating the first one to reach block
+            stop = size.compare_exchange_weak(end, curr);  // get smallest, indicating the first one to reach block
           }
           std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all updates are done.
         }
 
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
-        typename std::enable_if<!TS, void>::type block(uint8_t* _curr = nullptr) {
-          // disable reserved_ptr and set the end_ptr
-          uint8_t* curr = (_curr ? _curr : reserved_ptr);
-          reserved_ptr = max_ptr + 1;
+        typename std::enable_if<!TS, void>::type block(int64_t _curr = -1) {
+          // disable reserved and set the size
+          int64_t curr = (_curr >= 0 ? _curr : reserved);
+          reserved = capacity + 1;
 
-          if (end_ptr > curr) {
-            end_ptr = curr;
+          if (size > curr) {
+            size = curr;
           }
         }
 
         /**
          * @brief  read lock prevents future writes.  read lock can be turned on while there are writes in progress.  once read lock is on, reserve will returns nullptr.
          *
-         * @details purpose of this method is to swap the end_ptr and reserved_ptr, so that reserved_ptr is at max+1, and end_ptr is the smallest of all locking thread's pointers
+         * @details purpose of this method is to swap the size and reserved, so that reserved is at max+1, and size is the smallest of all locking thread's pointers
          */
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<TS, void>::type unblock() {
-          // put the end_ptr into curr if it hasn't been done.
-          uint8_t* curr = (uint8_t*)reserved_ptr;
-          uint8_t* end = end_ptr.exchange(max_ptr+1);
+          // put the size into curr if it hasn't been done.
+          int64_t curr = (int64_t)reserved;
+          int64_t end = size.exchange(capacity+1);
           std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
 
           bool stop = false;
-          while (curr > max_ptr && ! stop) {
-            stop = reserved_ptr.compare_exchange_weak(curr, end);
+          while (curr > capacity && ! stop) {
+            stop = reserved.compare_exchange_weak(curr, end);
           }
           std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
 
         }
         template<bliss::concurrent::ThreadSafety TS = ThreadSafety>
         typename std::enable_if<!TS, void>::type unblock() {
-          // put the end_ptr into curr if it hasn't been done.
-          if (reserved_ptr > max_ptr)
-            reserved_ptr = end_ptr;
-          // then reset end_ptr to max
-          end_ptr = max_ptr + 1;
+          // put the size into curr if it hasn't been done.
+          if (reserved > capacity)
+            reserved = size;
+          // then reset size to max
+          size = capacity + 1;
         }
 
 
@@ -551,9 +552,9 @@ namespace bliss
           // TODO: remove after finish debugging.
           memset(start_ptr, 0, getCapacity());
           // blocked
-          reserved_ptr = max_ptr +1;
-          end_ptr = start_ptr;
-          written_ptr = start_ptr;
+          reserved = capacity +1;
+          size = 0;
+          written = 0;
         }
 
 
@@ -568,11 +569,11 @@ namespace bliss
          *
          * method is const because the caller will have const reference to the Buffer.
          *
-         * This method relies on the current reserved_ptr incrementing monotonically (by count) until it exceeds capacity, and the written_ptr
-         * incrementing monotonically (by count) as threads finish writes, chasing the reserved_ptr thread.
+         * This method relies on the current reserved incrementing monotonically (by count) until it exceeds capacity, and the written
+         * incrementing monotonically (by count) as threads finish writes, chasing the reserved thread.
          *
-         * The first thread to exceed the capacity will set the end_ptr.  written_ptr will never exceed that, and reserved_ptr will not
-         * be smaller than end_ptr.
+         * The first thread to exceed the capacity will set the size.  written will never exceed that, and reserved will not
+         * be smaller than size.
          *
          * @tparam TS Choose thread safe vs unsafe implementation. defaults to same as the parent class.
          * @param[in] _data   pointer to data to be copied into the Buffer..  this SHOULD NOT be shared between threads
@@ -586,32 +587,32 @@ namespace bliss
         	  throw std::invalid_argument("_data is nullptr");
 
           // reserve a spot.
-          uint8_t* ptr = reserve<TS>(count);
+          int64_t pos = reserve<TS>(count);
 
           // if fails, then already full
-          if (ptr == nullptr) {  // write lock returns nullptr if ptr points to outside of the range.
+          if (pos == -1) {  // write lock returns nullptr if ptr points to outside of the range.
         	  // already read locked.
 
             return 0x0;  // full and not swapping.
-          } else {  // ptr starts inside allocated buffer range.
+          } else {  // pos starts inside allocated buffer range.
 
-            if ((ptr + count) > this->max_ptr) { // thread that filled the buffer
+            if ((pos + count) > this->capacity) { // thread that filled the buffer
 
 
               // prvent from being swapped out (prevent move constructor and assignment operator)
               std::unique_lock<std::mutex> lock(mutex);
 
 
-//              if (ptr > this->max_ptr) {
-//                fprintf(stdout, "FAIL: ptr is %p, larger than maxptr %p\n", ptr, this->max_ptr);
+//              if (pos > this->capacity) {
+//                fprintf(stdout, "FAIL: pos is %p, larger than maxptr %p\n", ptr, this->capacity);
 //                std::cout << " buffer: " << *this << std::endl << std::flush;
 //              }
 //
 //              if (this->start_ptr == nullptr)
-//                std::cout << "DEBUG FAIL null data ptr.  swap requested. buffer: " << *this << std::endl << std::flush;
+//                std::cout << "DEBUG FAIL null data pos.  swap requested. buffer: " << *this << std::endl << std::flush;
 //
 //              std::atomic_thread_fence(std::memory_order_seq_cst);  // make sure all writes are done.
-//              if ((uint8_t*)reserved_ptr <= max_ptr) {
+//              if ((int64_t)reserved <= capacity) {
 //                fprintf(stdout, "FAIL before flush: flush bit should be set\n");
 //                std::cout << " buffer: " << *this << std::endl << std::flush;
 //              }
@@ -620,7 +621,7 @@ namespace bliss
               while (is_writing()) _mm_pause();
 
 //              if (! is_reading()) {
-//                fprintf(stdout, "FAIL after flush: all writes should be done and flush set. curr %p, max %p, written_ptr %p\n", (uint8_t*)reserved_ptr, max_ptr, (uint8_t*)written_ptr);
+//                fprintf(stdout, "FAIL after flush: all writes should be done and flush set. curr %p, max %p, written %p\n", (int64_t)reserved, capacity, (int64_t)written);
 //                std::cout << " buffer: " << *this << std::endl << std::flush;
 //              }
 //
@@ -638,7 +639,7 @@ namespace bliss
             	std::atomic_thread_fence(std::memory_order_seq_cst);  // unlock only after memcpy.
 
               // write
-              std::memcpy(ptr, _data, count);
+              std::memcpy(start_ptr + pos, _data, count);
               std::atomic_thread_fence(std::memory_order_seq_cst);  // unlock only after memcpy.
               complete_write(count);  // all full buffers lock the read and unlock the writer
               std::atomic_thread_fence(std::memory_order_seq_cst);  // unlock only after memcpy.
@@ -673,21 +674,21 @@ namespace bliss
             throw std::invalid_argument("_data has 0 count or is _nullptr");
 
 
-          uint8_t* ptr = reserve<TS>(count);
+          int64_t pos = reserve<TS>(count);
 
 
-          if (ptr == nullptr) {
+          if (pos == -1) {
 
             return 0x0;
           }
 
-          if ((ptr + count) > max_ptr) {  // append that filled the buffer
+          if ((pos + count) > capacity) {  // append that filled the buffer
 
             while (is_writing()) _mm_pause();
 
             return 0x2;
           } else {
-            std::memcpy(ptr, _data, count);
+            std::memcpy(start_ptr + pos, _data, count);
             complete_write(count);
 
             return 0x1;
@@ -708,9 +709,9 @@ namespace bliss
     template<bliss::concurrent::ThreadSafety ThreadSafety>
     std::ostream& operator<<(std::ostream& ost, const Buffer<ThreadSafety> & buffer)
     {
-      ost << "THREAD "<< (ThreadSafety ? "SAFE" : "UNSAFE") << " BUFFER: data_ptr/end_ptr=" << static_cast <const void *>(buffer.start_ptr) << "/" << static_cast <const void *>(buffer.end_ptr)
-        << " currptr/maxptr=" << static_cast <const void *>((uint8_t*)(buffer.reserved_ptr)) << "/" << static_cast <const void *>(buffer.max_ptr)
-        << " written_ptr=" << static_cast <const void *>((uint8_t*)(buffer.written_ptr))
+      ost << "THREAD "<< (ThreadSafety ? "SAFE" : "UNSAFE") << " BUFFER: data_ptr/size=" << static_cast <const void *>(buffer.start_ptr) << "/" << (int64_t)(buffer.size)
+        << " currptr/maxptr=" << (int64_t)(buffer.reserved) << "/" << buffer.capacity
+        << " written=" << (int64_t)(buffer.written)
         << " approx,size/cap=" << buffer.getApproximateSize() << "," << buffer.getSize() << "/" << buffer.getCapacity()
         << " R? " << (buffer.is_reading() ? "y" : "n") << " F? " << (buffer.is_flushing() ? "y" : "n") << " W? " << (buffer.is_writing() ? "y" : "n") << std::flush;
 

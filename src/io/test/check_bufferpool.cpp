@@ -161,7 +161,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 
     auto ptr = std::move(temp[i]);
     if (ptr) {
-      ptr->flush_and_set_size();
+      ptr->block_and_flush();
       if (! pool.releaseBuffer(std::move(ptr))) {
         ++count; // failed release
       }
@@ -190,7 +190,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       ++count1;
     }
 
-    ptr->flush_and_set_size();
+    ptr->block_and_flush();
     pool.releaseBuffer(std::move(ptr));
   }
   if (count != 0) printf("ERROR: append failed\n");
@@ -241,7 +241,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       // random sleep
       usleep(rand() % 1000);
       // clear buffer
-      buf->flush_and_set_size();
+      buf->block_and_flush();
 
       if (buf->getSize() != sizeof(int) * iter)
         printf("ERROR: thread %d/%d buffer size is %ld, expected %lu\n", omp_get_thread_num(), pool_threads, buf->getSize(), sizeof(int) * iter);

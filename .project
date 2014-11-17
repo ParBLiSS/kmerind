@@ -50,6 +50,11 @@
 			<location>/home/tpan/src/bliss/src/utils</location>
 		</link>
 		<link>
+			<name>[Subprojects]/bliss_test_apps</name>
+			<type>2</type>
+			<location>/home/tpan/src/bliss/test</location>
+		</link>
+		<link>
 			<name>[Subprojects]/gtest</name>
 			<type>2</type>
 			<location>/home/tpan/src/bliss/ext/gtest</location>

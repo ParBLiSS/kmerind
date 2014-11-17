@@ -266,7 +266,7 @@ namespace bliss
             available.pop_front();
           }
           ptr->clear();
-          ptr->read_unlock();
+          ptr->unblock();
 
           return std::move(ptr);
         }
