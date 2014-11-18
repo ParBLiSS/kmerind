@@ -67,6 +67,8 @@ namespace bliss
      *         also not a guarantee - using compare-exchange in the presence of allocator that can reuse memory - could result in ABA problem.
      *            Solution to this is to use cmpxchg16b instruction with custom reference counted pointers. (gcc intrinsic, enabled with -march=native)
      *
+     * data array access via shared_ptr
+     *
      * @tparam  LockType  controls whether this class is thread safe or not
      */
     template<bliss::concurrent::LockType LockType>
@@ -89,7 +91,7 @@ namespace bliss
       protected:
 
         /// internal data storage
-        mutable uint8_t* start_ptr; // const, does not change
+        mutable std::shared_ptr<uint8_t> start_ptr; // const, does not change
 
         /// start pointer shifted by maximum capacity.  unrealistic to use size_t - can't possibly allocate.
         mutable int64_t capacity;   // const, does not change
@@ -124,7 +126,7 @@ namespace bliss
          * @param l       the mutex lock on the source Buffer.
          */
         Buffer(Buffer<LockType> && other, const std::lock_guard<std::mutex> &l)
-            : start_ptr(other.start_ptr), capacity(other.capacity),
+            : start_ptr(std::move(other.start_ptr)), capacity(other.capacity),
               reserved((int64_t)(other.reserved)), size((int64_t)(other.size)),
               written((int64_t)(other.written))
         {
@@ -135,30 +137,30 @@ namespace bliss
           other.written = 0;
           other.reserved = capacity + 1;
 
-        }
-        ;
+        };
 
       public:
         /**
          * @brief Normal constructor.  Allocate and initialize memory with size specified as parameter.
          * @param _capacity   The maximum capacity of the Buffer in bytes
          */
-        explicit Buffer(const uint32_t _capacity)
+        explicit Buffer(const uint32_t _capacity) : start_ptr(new uint8_t[_capacity](), []( uint8_t *p ) { delete [] p; }),
+          capacity(_capacity), reserved(_capacity + 1), size(0), written(0)
         {
           if (_capacity == 0)
             throw std::invalid_argument(
                 "Buffer constructor parameter capacity is given as 0");
 
-          std::lock_guard<std::mutex> lock(mutex);
-          start_ptr = new uint8_t[_capacity](); // parenthesis initializes the memory to 0
-
-          // buffer empty
-          written = 0;
-          capacity = _capacity;
-          // buffer blocked.
-          size = 0;
-          reserved = capacity + 1;   // block from insertion.
-
+//          std::lock_guard<std::mutex> lock(mutex);
+//          start_ptr = new uint8_t[_capacity](); // parenthesis initializes the memory to 0
+//
+//          // buffer empty
+//          written = 0;
+//          capacity = _capacity;
+//          // buffer blocked.
+//          size = 0;
+//          reserved = capacity + 1;   // block from insertion.
+//
         }
         ;
 
@@ -170,19 +172,19 @@ namespace bliss
 
           block_and_flush();
 
-          std::lock_guard<std::mutex> lock(mutex);
-          // blocked.
-          reserved = capacity + 1;
-          size = 0;
-
-          capacity = 0;
-          written = 0;
-
-          if (start_ptr != nullptr)
-          {
-            delete[] start_ptr;
-            start_ptr = nullptr;
-          }
+//          std::lock_guard<std::mutex> lock(mutex);
+//          // blocked.
+//          reserved = capacity + 1;
+//          size = 0;
+//
+//          capacity = 0;
+//          written = 0;
+//
+//          if (start_ptr != nullptr)
+//          {
+//            delete[] start_ptr;
+//            start_ptr = nullptr;
+//          }
         }
         ;
 
@@ -221,15 +223,15 @@ namespace bliss
                 otherLock(other.mutex, std::defer_lock);
             std::lock(myLock, otherLock);
 
-            if (start_ptr != nullptr)
-            {
-              delete[] start_ptr;
-              start_ptr = nullptr;
-            }
+//            if (start_ptr != nullptr)
+//            {
+//              delete[] start_ptr;
+//              start_ptr = nullptr;
+//            }
 
             /// move the internal memory.
 
-            start_ptr = other.start_ptr;
+            start_ptr = std::move(other.start_ptr);
             written = (int64_t)(other.written);
             size = (int64_t)(other.size);
             capacity = other.capacity;
@@ -293,10 +295,9 @@ namespace bliss
          *
          * const because the caller will have a const reference to the buffer
          */
-        template<typename T>
-        operator T*() const
+        std::weak_ptr<uint8_t> getData() const
         {
-          return reinterpret_cast<T*>(start_ptr);
+          return std::move(std::weak_ptr<uint8_t>(start_ptr));
         }
 
         /**
@@ -881,7 +882,7 @@ namespace bliss
             { // can insert.  may make buffer full
 
               // write
-              std::memcpy(start_ptr + pos, _data, count);
+              std::memcpy(start_ptr.get() + pos, _data, count);
               complete_write<LockType>(count); // all full buffers lock the read and unlock the writer
 
               return 0x1;   // not full, successfully inserted.
@@ -906,7 +907,7 @@ namespace bliss
     {
       ost << "LockType=" << static_cast<int>(LockType)
       << " BUFFER: data_ptr/size="
-      << static_cast<const void *>(buffer.start_ptr) << "/"
+      << static_cast<const void *>(buffer.start_ptr.get()) << "/"
       << (int64_t)(buffer.size) << " currptr/maxptr="
       << (int64_t)(buffer.reserved) << "/" << buffer.capacity << " written="
       << (int64_t)(buffer.written) << " approx,size/cap="

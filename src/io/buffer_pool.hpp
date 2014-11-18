@@ -19,7 +19,7 @@
 #include <stdexcept>
 
 #include "utils/logging.h"
-#include "io/lockfree_buffer.hpp"
+#include "io/buffer.hpp"
 #include "concurrent/concurrent.hpp"
 
 
