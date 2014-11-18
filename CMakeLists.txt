@@ -500,7 +500,7 @@ endif()
         add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name})
       endforeach(f)
   
-  endfunction(bliss_add_non_google_test)
+  endfunction(bliss_add_metaprog_test)
 endif (ENABLE_TESTING)
 
 

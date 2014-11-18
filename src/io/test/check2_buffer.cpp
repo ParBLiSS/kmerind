@@ -336,6 +336,12 @@ void appendTest(const int capacity = 8192) {
 //void testAppendMultipleBuffers(const int buffer_capacity, const int total_count) {
 //
 //  printf("TESTING: %d threads, thread %s append with %d bufferSize and %d total counts\n", NumThreads, TS ? "SAFE" : "UNSAFE", buffer_capacity, total_count);
+//  omp_lock_t writelock;
+//  omp_init_lock(&writelock);
+//  omp_lock_t writelock2;
+//  omp_init_lock(&writelock2);
+//  omp_lock_t writelock3;
+//  omp_init_lock(&writelock3);
 //
 //
 //  printf("TEST: save full buffers and process at end: ");
@@ -355,18 +361,23 @@ void appendTest(const int capacity = 8192) {
 //  std::unique_ptr<bliss::io::Buffer<TS> > buf_ptr(new bliss::io::Buffer<TS>(buffer_capacity));
 //  buf_ptr->unblock();
 //
-//#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, full, gold, stderr,stdout, std::cout) private(i, data, result) reduction(+:success, failure, swap)
+//#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, full, gold, stderr,stdout, std::cout, writelock, writelock2, writelock3) private(i, data, result) reduction(+:success, failure, swap)
 //  for (i = 0; i < total_count; ++i) {
 //
+//    omp_set_lock(&writelock);
+//
 //    bliss::io::Buffer<TS>* ptr = buf_ptr.get();
+//    omp_unset_lock(&writelock);
+//
 //
 //    data = static_cast<int>(i);
 //    result = ptr->append(&data, sizeof(int));
 //
 //    if ((result & 0x1) > 0) {
 //      ++success;
-//#pragma omp critical
+//      omp_set_lock(&writelock3);
 //      gold.push_back(data);
+//      omp_unset_lock(&writelock3);
 //    }
 //    else {
 //      ++failure;
@@ -374,15 +385,17 @@ void appendTest(const int capacity = 8192) {
 //    }
 //
 //    if ((result & 0x2) > 0) {
-//      if (!ptr->is_reading()) {
-//        fprintf(stdout, "FAIL batched proc: at this point the buffer should be in read state.\n");
-//      }
+////      if (!ptr->is_reading()) {
+////        fprintf(stdout, "FAIL batched proc: at this point the buffer should be in read state.\n");
+////      }
 //
 //      // swap in a new one.
 //      std::unique_ptr<bliss::io::Buffer<TS> > new_buf_ptr(new bliss::io::Buffer<TS>(buffer_capacity));
-//      new_buf_ptr->block();
 //
+//      omp_set_lock(&writelock);
 //      buf_ptr.swap(new_buf_ptr);
+//#pragma omp flush(buf_ptr)
+//      omp_unset_lock(&writelock);
 //      buf_ptr->unblock();
 //      // save the old buffer
 //
@@ -393,18 +406,21 @@ void appendTest(const int capacity = 8192) {
 //        std::cout << "old buf: " << *(new_buf_ptr.get()) << std::endl
 //            << "new buf: " << *(buf_ptr) << std::endl << std::flush;
 //      }
-//#pragma omp critical
-//      {
-//        full.push_back(std::move(new_buf_ptr));
-//      }
+//      omp_set_lock(&writelock2);
+//      full.push_back(std::move(new_buf_ptr));
+//      omp_unset_lock(&writelock2);
 //
 //      ++swap;
-//      buf_ptr->unblock();
+//
 //    }
 //
 //  }
 //
 //  buf_ptr->block_and_flush();
+//  int last = buf_ptr.get()->getSize();
+//  if (last == (buffer_capacity / sizeof(int))) {
+//    ++swap;
+//  }
 //
 //  for (int i = 0; i < full.size(); ++i) {
 //    stored.insert(stored.end(), full.at(i)->operator int*(), full.at(i)->operator int*() + full.at(i)->getSize() / sizeof(int));
@@ -449,22 +465,24 @@ void appendTest(const int capacity = 8192) {
 //  buf_ptr.reset(new bliss::io::Buffer<TS>(buffer_capacity));
 //  buf_ptr->unblock();
 //
-//#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, stderr, stdout, std::cout) private(i, data, result) reduction(+:success, failure, swap, success2)
+//#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, stderr, stdout, std::cout, writelock, writelock2, writelock3) private(i, data, result) reduction(+:success, failure, swap, success2)
 //  for (i = 0; i < total_count; ++i) {
 //
 //    std::atomic_thread_fence(std::memory_order_seq_cst);
 //
+//    omp_set_lock(&writelock);
 //    bliss::io::Buffer<TS>* ptr = buf_ptr.get();
-//
-//
+//    omp_unset_lock(&writelock);
 //
 //    data = static_cast<int>(i);
 //    result = ptr->append(&data, sizeof(int));
 //
 //    if ((result & 0x1) > 0) {
 //      ++success;
-//#pragma omp critical
+//
+//      omp_set_lock(&writelock3);
 //      gold.push_back(data);
+//      omp_unset_lock(&writelock3);
 //    }
 //    else {
 //       ++failure;
@@ -473,18 +491,22 @@ void appendTest(const int capacity = 8192) {
 //
 //    if ((result & 0x2) > 0) {
 //
-//      if (!ptr->is_reading()) {
-//        fprintf(stdout, "FAIL incremental proc: at this point the buffer should be in read state.\n");
-//      }
+////      if (!ptr->is_reading()) {
+////        fprintf(stdout, "FAIL incremental proc: at this point the buffer should be in read state.\n");
+////      }
 //
 //
 //      std::unique_ptr<bliss::io::Buffer<TS> > new_buf_ptr(new bliss::io::Buffer<TS>(buffer_capacity));
 //
 //        // try locking this part...  -
-//      new_buf_ptr->block();
+//      //new_buf_ptr->block();
 //
 //      // swap in a new one.
+//      omp_set_lock(&writelock);
 //      buf_ptr.swap(new_buf_ptr);
+//#pragma omp flush(buf_ptr)
+//      omp_unset_lock(&writelock);
+//
 //      buf_ptr->unblock();
 //      // save the old buffer
 //
@@ -499,22 +521,23 @@ void appendTest(const int capacity = 8192) {
 //              << "new buf: " << *(buf_ptr) << std::endl << std::flush;
 //        }
 //
-//#pragma omp atomic
 //        success2 += oldsize;
 //
-//#pragma omp critical
-//      {
+//        omp_set_lock(&writelock2);
 //        stored.insert(stored.end(), new_buf_ptr->operator int*(), new_buf_ptr->operator int*() + oldsize);
-//      }
+//        omp_unset_lock(&writelock2);
 //
 //      ++swap;
-//      buf_ptr->unblock();
 //
 //    }
 //
 //  }
 //
 //  buf_ptr->block_and_flush();
+//  last = buf_ptr.get()->getSize();
+//  if (last == (buffer_capacity / sizeof(int))) {
+//    ++swap;
+//  }
 //
 //
 //  // compare unordered buffer content.
@@ -534,6 +557,9 @@ void appendTest(const int capacity = 8192) {
 //    }
 //  }
 //
+//  omp_destroy_lock(&writelock);
+//  omp_destroy_lock(&writelock2);
+//  omp_destroy_lock(&writelock3);
 //
 //}
 
@@ -648,7 +674,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 
 
   if (success == 0 || swap != full.size() - 1  || swap != success / (buffer_capacity / sizeof(int)) || success != stored_count)
-    printf("FAIL atomic: (actual/expected)  success (%d/%d), failure (%d/?), swap(%d,%ld/%ld), last buf size %d, content match? %s.\n", stored_count, success, failure, swap, full.size(), success / (buffer_capacity / sizeof(int)), last, compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
+    printf("FAIL atomic: (actual/expected)  success (%d/%d), failure (%d/?), last %d, swap(%d,%ld/%ld), last buf size %d, content match? %s.\n", stored_count, success, failure, last, swap, full.size(), success / (buffer_capacity / sizeof(int)), last, compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
 
   else {
     if (compareUnorderedSequences(stored.begin(), gold.begin(), stored_count)) {
@@ -726,29 +752,26 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 
       new_ptr->unblock();
 
-
       old_ptr = ptr.exchange(new_ptr);             //
 #pragma omp flush(ptr)
       // save the old buffer
-      ++swap;
 
+        if (old_ptr != nullptr) {
+          ++swap;
+          int oldsize = old_ptr->getSize() / sizeof(int);
+  //        int newsize = buf_ptr.load()->getSize() / sizeof(int);
+          if (oldsize != buffer_capacity / sizeof(int) || !(old_ptr->is_reading())) {
+            fprintf(stdout, "FAIL: atomic DID NOT GET 2047 elements 2. local swap = %d, i = %d\n", swap, i);
+            std::cout << "   old buf: " << *(old_ptr) << std::endl <<  std::flush;
+          }
+          success2 += oldsize;
 
-      if (old_ptr != nullptr) {
-        int oldsize = old_ptr->getSize() / sizeof(int);
-//        int newsize = buf_ptr.load()->getSize() / sizeof(int);
-        if (oldsize != buffer_capacity / sizeof(int) || !(old_ptr->is_reading())) {
-          fprintf(stdout, "FAIL: atomic DID NOT GET 2047 elements 2. local swap = %d, i = %d\n", swap, i);
-          std::cout << "   old buf: " << *(old_ptr) << std::endl <<  std::flush;
+          omp_set_lock(&writelock);
+          stored.insert(stored.end(), old_ptr->operator int*(), old_ptr->operator int*() + oldsize);
+          full.push_back(std::move(std::unique_ptr<bliss::io::Buffer<TS> >(old_ptr)));
+          omp_unset_lock(&writelock);
+
         }
-        success2 += oldsize;
-
-        omp_set_lock(&writelock);
-        stored.insert(stored.end(), old_ptr->operator int*(), old_ptr->operator int*() + oldsize);
-        full.push_back(std::move(std::unique_ptr<bliss::io::Buffer<TS> >(old_ptr)));
-        omp_unset_lock(&writelock);
-
-      }
-
 
     }
 
@@ -895,6 +918,7 @@ int main(int argc, char** argv) {
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 7>(8191, 1000000);
   testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 8>(8191, 1000000);
 
+//  // these will fail with more than 1 thread, unless we use a lock when appending.
 //  testAppendMultipleBuffers<bliss::concurrent::THREAD_UNSAFE, 1>(8191, 1000000);
 //
 //  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 1>(8191, 1000000);

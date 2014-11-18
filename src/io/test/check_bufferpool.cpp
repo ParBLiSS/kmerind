@@ -18,12 +18,23 @@
 #include <chrono>
 #include <vector>
 #include <cstdlib>   // for rand
+#include <atomic>
+
 
 #include <utils/test_utils.hpp>
 
 
 template<typename PoolType, int NumThreads>
 void testAppendMultipleBuffers(const int buffer_capacity, const int total_count) {
+  omp_lock_t writelock;
+  omp_init_lock(&writelock);
+  omp_lock_t writelock2;
+  omp_init_lock(&writelock2);
+  omp_lock_t writelock3;
+  omp_init_lock(&writelock3);
+//  std::atomic_flag writelock = ATOMIC_FLAG_INIT;
+//  std::atomic_flag writelock2 = ATOMIC_FLAG_INIT;
+//  std::atomic_flag writelock3 = ATOMIC_FLAG_INIT;
 
 
   printf("TESTING: %d threads, pool thread %s buffer thread %s append with %d bufferSize and %d total counts from unlimited pool\n",
@@ -45,18 +56,25 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
 
   auto buf_ptr = std::move(pool.tryAcquireBuffer());
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored) private(i, data, result) reduction(+:success, failure, swap)
+#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, writelock, writelock2, writelock3) private(i, data, result) reduction(+:success, failure, swap)
   for (i = 0; i < total_count; ++i) {
 
+//    while (writelock2.test_and_set());
+    omp_set_lock(&writelock2);
     auto ptr = buf_ptr.get();
+    omp_unset_lock(&writelock2);
+//    writelock2.clear();
 
     data = static_cast<int>(i);
     result = ptr->append(&data, sizeof(int));
 
     if (result & 0x1) {
       ++success;
-#pragma omp critical
+//      while (writelock.test_and_set());
+      omp_set_lock(&writelock);
       gold.push_back(data);
+      omp_unset_lock(&writelock);
+//      writelock.clear();
     }
     else ++failure;
 
@@ -65,13 +83,20 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
 
       // swap in a new one.
       auto new_buf_ptr = std::move(pool.tryAcquireBuffer());
+
+//      while (writelock2.test_and_set());
+      omp_set_lock(&writelock2);
       buf_ptr.swap(new_buf_ptr);
+#pragma omp flush(new_buf_ptr)
+      omp_unset_lock(&writelock2);
+//      writelock2.clear();
 
       // process the old buffer
-#pragma omp critical
-      {
-        stored.insert(stored.end(), new_buf_ptr->operator int*(), new_buf_ptr->operator int*() + new_buf_ptr->getSize() / sizeof(int));
-      }
+//      while (writelock3.test_and_set());
+      omp_set_lock(&writelock3);
+      stored.insert(stored.end(), new_buf_ptr->operator int*(), new_buf_ptr->operator int*() + new_buf_ptr->getSize() / sizeof(int));
+      omp_unset_lock(&writelock3);
+//      writelock3.clear();
 
       // and release - few threads doing this, and full.
       pool.releaseBuffer(std::move(new_buf_ptr));
@@ -99,7 +124,9 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
       printf("FAIL: content not matching\n");
     }
   }
-
+  omp_destroy_lock(&writelock);
+  omp_destroy_lock(&writelock2);
+  omp_destroy_lock(&writelock3);
 }
 
 
@@ -109,7 +136,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   using BufferType = typename PoolType::BufferType;
 
 
-  printf("TESTING %s %s: pool threads %d, buffer threads %d\n", name.c_str(), (pool.isUnlimited() ? "FIXED" : "GROW"),  pool_threads, buffer_threads);
+  printf("TESTING %s %s: pool threads %d, buffer threads %d\n", name.c_str(), (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
 
   printf("TEST acquire\n");
   int expected;
@@ -167,7 +194,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
       }
     }
   }
-  expected = mx;  // unlimited or not, can only push back in as much as taken out.
+  expected = pool.isUnlimited() ? 0 : mx;  // unlimited or not, can only push back in as much as taken out.
   if (count != expected) printf("ERROR: number of failed attempt to release buffer should be %d, actual %d. pool remaining: %lu \n", expected, count, pool.getAvailableCount());
   pool.reset();
   temp.clear();

@@ -40,6 +40,7 @@
 #include <sstream>
 #include <mutex>
 #include <condition_variable>
+#include <xmmintrin.h>
 
 #include "config.hpp"
 #include "io/buffer.hpp"
@@ -391,36 +392,32 @@ namespace bliss
          */
         std::pair<bool, BufferPtrType> append(const void* data, const size_t count, const int targetProc) {
 
-
-          // lock_read() and size are critical in Buffer - they need to be synchronized consistently
-          // large number of calls that encounter blocked buffer.  use a spinlock to prevent append while swapping.
-          std::atomic_thread_fence(std::memory_order_seq_cst);
-          while(!bool(bufferReady.at(targetProc))) {
-            usleep(1);
-            std::atomic_thread_fence(std::memory_order_seq_cst);
+          //== if data being set is null, throw error
+          if (data == nullptr || count <= 0) {
+            throw (std::invalid_argument("ERROR: calling MessageBuffer append with nullptr"));
           }
-
-          BufferType *bufferptr = this->at<ThreadSafety>(targetProc).get();
-
-          //== if count is 0, no write and this succeeds right away.
-          if (count == 0)
-            return std::move(std::pair<bool, BufferPtrType>(true, std::move(BufferPtrType())));
 
           //== if there is not enough room for the new data in even a new buffer, LOGIC ERROR IN CODE: throw exception
           if (count > this->getBufferCapacity()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with count exceeding Buffer capacity"));
           }
 
-          //== if data being set is null, throw error
-          if (data == nullptr) {
-            throw (std::invalid_argument("ERROR: calling MessageBuffer append with nullptr"));
-          }
-
-
           //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
+
+
+          // lock_read() and size are critical in Buffer - they need to be synchronized consistently
+          // large number of calls that encounter blocked buffer.  use a spinlock to prevent append while swapping.
+          std::atomic_thread_fence(std::memory_order_seq_cst);
+          while(!bool(bufferReady.at(targetProc))) {
+            _mm_pause();
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+          }
+
+          BufferType *bufferptr = this->at<ThreadSafety>(targetProc).get();
+
 
           // NOTE: BufferPool is unlimited in size, so don't need to check for nullptr, can just append directly.   is append really atomic?
           // question is what happens in unique_ptr when dereferencing the internal pointer - if the dereference happens before a unique_ptr swap

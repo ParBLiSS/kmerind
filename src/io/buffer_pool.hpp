@@ -19,7 +19,7 @@
 #include <stdexcept>
 
 #include "utils/logging.h"
-#include "io/buffer.hpp"
+#include "io/lockfree_buffer.hpp"
 #include "concurrent/concurrent.hpp"
 
 
@@ -73,7 +73,7 @@ namespace bliss
         /**
          * @brief     Index Type used to reference the Buffers in the BufferPool.
          */
-        using BufferPtrType = std::unique_ptr<BufferType>;
+        using BufferPtrType = std::unique_ptr<BufferType>;   // do we need this to be atomic? NO.  we are not going to change a buffer pointer.
 
         static const bliss::concurrent::ThreadSafety poolTS = PoolTS;
         static const bliss::concurrent::ThreadSafety bufferTS = BufferTS;
@@ -105,6 +105,7 @@ namespace bliss
          * @brief     mutex to control access.
          */
         mutable std::mutex mutex;
+        mutable std::atomic_flag spinlock = ATOMIC_FLAG_INIT;
 
 
         /**
@@ -240,22 +241,22 @@ namespace bliss
          * @brief     Get the next available Buffer by id.  if none available, return false in the first argument of the pair.
          * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the BufferId if successful.
          */
-        BufferPtrType tryAcquireBuffer() {
+        template<bliss::concurrent::ThreadSafety TS = PoolTS>
+                typename std::enable_if<TS == bliss::concurrent::THREAD_SAFE, BufferPtrType>::type tryAcquireBuffer() {
           BufferPtrType ptr;  // default is a null ptr.
-          if (!isUnlimited()) {  // not fix size
 
-            // if multiple threads, the predecrement is atomic, so each thread has a valid value to compare to empty
-            // the total number of threads to continue will be same as total number of values that pass the empty test.
-            if (--numBuffersAvailable < 0) {  // predecrement is a.fetch_sub(1)-1.  compare result to 0.
-              // not unlimited, and already >= capacity.  bufferPtr is now lost, but that's okay.
-              // undo and return.
-              numBuffersAvailable++;    // post increment is a.fetch_add(1)
+          while (spinlock.test_and_set());
+
+          if (!isUnlimited()) {
+            if (numBuffersAvailable <= 0) {  // not fix size, and no more available
+              spinlock.clear();
               return ptr;
-            }  // else not empty and already decremented it.
-          } // else don't need to touch numBuffersAvailable.
+            } else {
+              numBuffersAvailable--;
+            }
+          }
 
           // now get or create
-          std::lock_guard<std::mutex> lock(mutex);
           if (available.empty()) {
             // none available for reuse
             // but has room to allocate, so do it.
@@ -265,6 +266,38 @@ namespace bliss
             ptr = std::move(available.front());
             available.pop_front();
           }
+
+          spinlock.clear();
+
+          ptr->clear();
+          ptr->unblock();
+
+          return std::move(ptr);
+        }
+
+        template<bliss::concurrent::ThreadSafety TS = PoolTS>
+                typename std::enable_if<TS == bliss::concurrent::THREAD_UNSAFE, BufferPtrType>::type tryAcquireBuffer() {
+          BufferPtrType ptr;  // default is a null ptr.
+
+          if (!isUnlimited()) {
+            if (numBuffersAvailable <= 0) {  // not fix size, and no more available
+              return ptr;
+            } else {
+              numBuffersAvailable--;
+            }
+          }
+
+          // now get or create
+          if (available.empty()) {
+            // none available for reuse
+            // but has room to allocate, so do it.
+            ptr = std::move(BufferPtrType(new BufferType(buffer_capacity)));
+          } else {
+            // has available for reuse.
+            ptr = std::move(available.front());
+            available.pop_front();
+          }
+
           ptr->clear();
           ptr->unblock();
 
@@ -280,23 +313,27 @@ namespace bliss
         typename std::enable_if<TS == bliss::concurrent::THREAD_SAFE, bool>::type releaseBuffer(BufferPtrType&& ptr) {
           assert(ptr->is_reading());
 
+          while (spinlock.test_and_set());
           if (!isUnlimited()) {  // check against size_t max - thread safe, and ensures there is no overflow.
 
             // if multiple threads, the preincrement is atomic, so each thread has a valid value to compare to capacity.
             // the total number of threads to continue will be  same as total number of values that pass the capacity test.
-            if (++numBuffersAvailable > capacity) {  // preincrement is a.fetch_add(1)+1.  compare result to capacity.
+            if (numBuffersAvailable >= capacity) {  // preincrement is a.fetch_add(1)+1.  compare result to capacity.
               // not unlimited, and already >= capacity.  bufferPtr is now lost, but that's okay.
               // undo and return.
-              numBuffersAvailable--;    // post decrement is a.fetch_sub(1)
+              spinlock.clear();
               return false;
-            }  // else not at capacity and already incremented it.
+            } else {
+              // else not at capacity and already incremented it.
+              numBuffersAvailable++;
+            }
           } // else don't need to touch numBuffersAvailable.
 
           ptr->clear();
 
           // now store the buffer.  make sure push_back is done one thread at a time.
-          std::lock_guard<std::mutex> lock(mutex);
           available.push_back(std::move(ptr));
+          spinlock.clear();
 
           return true;
 
@@ -318,7 +355,7 @@ namespace bliss
               return false;
             else {
               // not at capacity, so increment.
-              ++numBuffersAvailable;
+              numBuffersAvailable++;
             }
           } // else don't need to touch numBuffersAvailable.
 
