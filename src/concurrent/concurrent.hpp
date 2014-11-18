@@ -24,6 +24,10 @@ namespace bliss {
     /// Constant indicating Thread Unsafe
     constexpr bool THREAD_UNSAFE = false;
 
+
+    // types of threading locks.
+    enum class LockType { NONE = 0, MUTEX = 1, SPINLOCK = 2, LOCK_FREE = 4 };
+
   }
 }
 

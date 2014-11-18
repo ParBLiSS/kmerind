@@ -11,19 +11,20 @@
  */
 
 
-#ifdef LOCKING
-#include "io/locking_buffer.hpp"
-#endif
-#ifdef SPINLOCKING
-#include "io/spinlocking_buffer.hpp"
-#endif
-#ifdef LOCKFREE
-#include "io/lockfree_buffer.hpp"
-#endif
-#ifdef LOCKFREE_PTR
-#include "io/buffer.hpp"
-#endif
+//#ifdef LOCKING
+//#include "io/locking_buffer.hpp"
+//#endif
+//#ifdef SPINLOCKING
+//#include "io/spinlocking_buffer.hpp"
+//#endif
+//#ifdef LOCKFREE
+//#include "io/lockfree_buffer.hpp"
+//#endif
+//#ifdef LOCKFREE_PTR
+//#include "io/buffer.hpp"
+//#endif
 
+#include "io/locking_buffer.hpp"
 
 
 #include "omp.h"
@@ -38,108 +39,108 @@
 
 #include <utils/test_utils.hpp>
 
+//
+//
+//template<bliss::concurrent::ThreadSafety TS1, bliss::concurrent::LockType TS2>
+//void moveTest( const int count = 1000, const int capacity = 8192) {
+//  printf("TESTING move from thread %s to thread %s\n", TS1 ? "SAFE" : "UNSAFE", TS2 ? "SAFE" : "UNSAFE");
+//
+//
+//  bliss::io::Buffer<TS1> b1(capacity);
+//  b1.unblock();
+//
+////  std::cout << " empty buffer: " << b1 << std::endl << std::flush;
+//  for (size_t i = 0; i < count; ++i) {
+//	  int data = i;
+//    b1.append(&data, sizeof(int));
+//  }
+////  std::cout << " initialized buffer: " << b1 << std::endl << std::flush;
+////  b1.block_and_flush();
+//
+//  // verify that what went in is correct
+//  if (!checkSequence(b1.operator int*(), count)) {
+//    printf("FAIL: append is not working correctly\n");
+//  }
+//
+//  b1.block();
+//
+//  int64_t bufferCapBefore = b1.getCapacity();
+//  int64_t bufferCapAfter = 0;
+//
+//  int64_t bufferSizeBefore = b1.getSize();
+//  int64_t bufferSizeAfter = 0;
+//
+//  int* bufferPtrBefore = b1.operator int*();
+//  int* bufferPtrAfter = nullptr;
+//
+//
+//  printf("TEST move ctor: ");
+//  bliss::io::Buffer<TS2> b2(std::move(b1));
+//
+//
+//  if (b1.getCapacity()  !=  bufferCapAfter  ||
+//      b1.getSize()      != bufferSizeAfter ||
+//      b1.operator int*()      !=  bufferPtrAfter  ||
+//      b2.getCapacity() !=  bufferCapBefore  ||
+//      b2.getSize()     != bufferSizeBefore ||
+//      b2.operator int*()     !=  bufferPtrBefore)
+//    printf(" FAIL: size %ld (%ld->%ld), capacity %ld (%ld->%ld), pointer = %p (%p->%p)\n",
+//         b2.getSize(), bufferSizeBefore, b1.getSize(),
+//         b2.getCapacity(),        bufferCapBefore,  b1.getCapacity(),
+//         b2.operator int*(),      bufferPtrBefore,   b1.operator int*()
+//         );
+//  else {
+//
+//    if (checkSequence(b2.operator int*(), count)) {
+//      printf("PASS\n");
+//    } else {
+//      printf("FAIL: content mismatch\n");
+//    }
+//  }
+//
+//  bliss::io::Buffer<TS1> b3(8192);
+//  b3.unblock();
+//
+//  for (size_t i = 0; i < count; ++i) {
+//	  int data = i;
+//    b3.append(&data, sizeof(int));
+//  }
+////  assignSequence(b3.operator int*(), count);
+//  b3.block_and_flush();
+//
+//  bufferCapBefore = b3.getCapacity();
+//  bufferSizeBefore = b3.getSize();
+//  bufferPtrBefore = b3.operator int*();
+//
+//  bufferCapAfter  = 0;
+//  bufferSizeAfter = 0;
+//  bufferPtrAfter  = nullptr;
+//
+//
+//  printf("TEST move = operator: ");
+//  b2 = std::move(b3);
+//  if (b3.getCapacity()  !=  bufferCapAfter  ||
+//      b3.getSize()      != bufferSizeAfter ||
+//      b3.operator int*()      !=  bufferPtrAfter  ||
+//      b2.getCapacity() !=  bufferCapBefore  ||
+//      b2.getSize()     != bufferSizeBefore ||
+//      b2.operator int*()     !=  bufferPtrBefore)
+//    printf(" FAIL: size %ld (%ld->%ld), capacity %ld (%ld->%ld), pointer = %p (%p->%p)\n",
+//         b2.getSize(), bufferSizeBefore, b3.getSize(),
+//         b2.getCapacity(),        bufferCapBefore,  b3.getCapacity(),
+//         b2.operator int*(),      bufferPtrBefore,   b3.operator int*()
+//         );
+//  else {
+//
+//    if (checkSequence(b2.operator int*(), count)) {
+//      printf("PASS\n");
+//    } else {
+//      printf("FAIL: content mismatch\n");
+//    }
+//  }
+//}
 
-
-template<bliss::concurrent::ThreadSafety TS1, bliss::concurrent::ThreadSafety TS2>
-void moveTest( const int count = 1000, const int capacity = 8192) {
-  printf("TESTING move from thread %s to thread %s\n", TS1 ? "SAFE" : "UNSAFE", TS2 ? "SAFE" : "UNSAFE");
-
-
-  bliss::io::Buffer<TS1> b1(capacity);
-  b1.unblock();
-
-//  std::cout << " empty buffer: " << b1 << std::endl << std::flush;
-  for (size_t i = 0; i < count; ++i) {
-	  int data = i;
-    b1.append(&data, sizeof(int));
-  }
-//  std::cout << " initialized buffer: " << b1 << std::endl << std::flush;
-//  b1.block_and_flush();
-
-  // verify that what went in is correct
-  if (!checkSequence(b1.operator int*(), count)) {
-    printf("FAIL: append is not working correctly\n");
-  }
-
-  b1.block();
-
-  int64_t bufferCapBefore = b1.getCapacity();
-  int64_t bufferCapAfter = 0;
-
-  int64_t bufferSizeBefore = b1.getSize();
-  int64_t bufferSizeAfter = 0;
-
-  int* bufferPtrBefore = b1.operator int*();
-  int* bufferPtrAfter = nullptr;
-
-
-  printf("TEST move ctor: ");
-  bliss::io::Buffer<TS2> b2(std::move(b1));
-
-
-  if (b1.getCapacity()  !=  bufferCapAfter  ||
-      b1.getSize()      != bufferSizeAfter ||
-      b1.operator int*()      !=  bufferPtrAfter  ||
-      b2.getCapacity() !=  bufferCapBefore  ||
-      b2.getSize()     != bufferSizeBefore ||
-      b2.operator int*()     !=  bufferPtrBefore)
-    printf(" FAIL: size %ld (%ld->%ld), capacity %ld (%ld->%ld), pointer = %p (%p->%p)\n",
-         b2.getSize(), bufferSizeBefore, b1.getSize(),
-         b2.getCapacity(),        bufferCapBefore,  b1.getCapacity(),
-         b2.operator int*(),      bufferPtrBefore,   b1.operator int*()
-         );
-  else {
-
-    if (checkSequence(b2.operator int*(), count)) {
-      printf("PASS\n");
-    } else {
-      printf("FAIL: content mismatch\n");
-    }
-  }
-
-  bliss::io::Buffer<TS1> b3(8192);
-  b3.unblock();
-
-  for (size_t i = 0; i < count; ++i) {
-	  int data = i;
-    b3.append(&data, sizeof(int));
-  }
-//  assignSequence(b3.operator int*(), count);
-  b3.block_and_flush();
-
-  bufferCapBefore = b3.getCapacity();
-  bufferSizeBefore = b3.getSize();
-  bufferPtrBefore = b3.operator int*();
-
-  bufferCapAfter  = 0;
-  bufferSizeAfter = 0;
-  bufferPtrAfter  = nullptr;
-
-
-  printf("TEST move = operator: ");
-  b2 = std::move(b3);
-  if (b3.getCapacity()  !=  bufferCapAfter  ||
-      b3.getSize()      != bufferSizeAfter ||
-      b3.operator int*()      !=  bufferPtrAfter  ||
-      b2.getCapacity() !=  bufferCapBefore  ||
-      b2.getSize()     != bufferSizeBefore ||
-      b2.operator int*()     !=  bufferPtrBefore)
-    printf(" FAIL: size %ld (%ld->%ld), capacity %ld (%ld->%ld), pointer = %p (%p->%p)\n",
-         b2.getSize(), bufferSizeBefore, b3.getSize(),
-         b2.getCapacity(),        bufferCapBefore,  b3.getCapacity(),
-         b2.operator int*(),      bufferPtrBefore,   b3.operator int*()
-         );
-  else {
-
-    if (checkSequence(b2.operator int*(), count)) {
-      printf("PASS\n");
-    } else {
-      printf("FAIL: content mismatch\n");
-    }
-  }
-}
-
-template<bliss::concurrent::ThreadSafety TS>
+template<bliss::concurrent::LockType TS>
 void append(const int nthreads, bliss::io::Buffer<TS>& buf, const unsigned int start, const unsigned int end, int& success, int& failure, int& swap, std::vector<int>& gold) {
 
 
@@ -180,12 +181,12 @@ void append(const int nthreads, bliss::io::Buffer<TS>& buf, const unsigned int s
 }
 
 
-template<bliss::concurrent::ThreadSafety TS, int NumThreads = 1>
+template<bliss::concurrent::LockType TS, int NumThreads = 1>
 void appendTest(const int capacity = 8192) {
   static_assert(NumThreads > 0, "instantiated with NumThreads < 1");
-  static_assert(TS || NumThreads == 1, "instantiated with Thread Unsafe version and NumThreads != 1");
+  static_assert(TS != bliss::concurrent::LockType::NONE || NumThreads == 1, "instantiated with Thread Unsafe version and NumThreads != 1");
 
-  printf("TESTING operations on thread %s buffer\n", TS ? "SAFE" : "UNSAFE");
+  printf("TESTING operations on locktype %d buffer\n", static_cast<int>(TS) );
 
 
   // create a buffer.
@@ -332,7 +333,7 @@ void appendTest(const int capacity = 8192) {
 }
 
 //
-//template<bliss::concurrent::ThreadSafety TS, int NumThreads>
+//template<bliss::concurrent::LockType TS, int NumThreads>
 //void testAppendMultipleBuffers(const int buffer_capacity, const int total_count) {
 //
 //  printf("TESTING: %d threads, thread %s append with %d bufferSize and %d total counts\n", NumThreads, TS ? "SAFE" : "UNSAFE", buffer_capacity, total_count);
@@ -564,10 +565,10 @@ void appendTest(const int capacity = 8192) {
 //}
 
 
-template<bliss::concurrent::ThreadSafety TS, int NumThreads>
+template<bliss::concurrent::LockType TS, int NumThreads>
 void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int total_count) {
 
-  printf("TESTING atomic_ptrs: %d threads, thread %s append with %d bufferSize and %d total counts\n", NumThreads, TS ? "SAFE" : "UNSAFE", buffer_capacity, total_count);
+  printf("TESTING atomic_ptrs: %d threads, locktype %d append with %d bufferSize and %d total counts\n", NumThreads, static_cast<int>(TS), buffer_capacity, total_count);
   omp_lock_t writelock;
   omp_init_lock(&writelock);
   omp_lock_t writelock2;
@@ -822,10 +823,10 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 }
 
 
-template<bliss::concurrent::ThreadSafety TS, int NumThreads>
+template<bliss::concurrent::LockType TS, int NumThreads>
 void appendTimed(const int capacity, const int iterations) {
 
-  printf("PROFILING: %d threads, thread %s buffer append with %d elements and %d iterations\n", NumThreads, TS ? "SAFE" : "UNSAFE", capacity, iterations);
+  printf("PROFILING: %d threads, locktype %d buffer append with %d elements and %d iterations\n", NumThreads, static_cast<int>(TS), capacity, iterations);
   bliss::io::Buffer<TS> buf(capacity);
 
   std::chrono::high_resolution_clock::time_point t1, t2;
@@ -871,77 +872,90 @@ void appendTimed(const int capacity, const int iterations) {
 
 
 int main(int argc, char** argv) {
+
+
+#ifdef LOCKING
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
+#endif
+#ifdef SPINLOCKING
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
+#endif
+#ifdef LOCKFREE
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCK_FREE;
+#endif
+
+
   // test move
-  moveTest<bliss::concurrent::THREAD_UNSAFE, bliss::concurrent::THREAD_UNSAFE>();
-  moveTest<bliss::concurrent::THREAD_UNSAFE, bliss::concurrent::THREAD_SAFE>();
-  moveTest<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_SAFE>();
-  moveTest<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_UNSAFE>();
+//  moveTest<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE>();
+//  moveTest<bliss::concurrent::LockType::NONE, bliss::concurrent::THREAD_SAFE>();
+//  moveTest<bliss::concurrent::THREAD_SAFE, bliss::concurrent::THREAD_SAFE>();
+//  moveTest<bliss::concurrent::THREAD_SAFE, bliss::concurrent::LockType::NONE>();
 
 
   // test append
-  appendTest<bliss::concurrent::THREAD_UNSAFE, 1>(8192);
+  appendTest<bliss::concurrent::LockType::NONE, 1>(8192);
 
-  appendTest<bliss::concurrent::THREAD_SAFE, 1>(8192);
-  appendTest<bliss::concurrent::THREAD_SAFE, 2>(8192);
-  appendTest<bliss::concurrent::THREAD_SAFE, 3>(8192);
-  appendTest<bliss::concurrent::THREAD_SAFE, 4>(8192);
-  appendTest<bliss::concurrent::THREAD_SAFE, 5>(8192);
-  appendTest<bliss::concurrent::THREAD_SAFE, 6>(8192);
-  appendTest<bliss::concurrent::THREAD_SAFE, 7>(8192);
-  appendTest<bliss::concurrent::THREAD_SAFE, 8>(8192);
+  appendTest<lt, 1>(8192);
+  appendTest<lt, 2>(8192);
+  appendTest<lt, 3>(8192);
+  appendTest<lt, 4>(8192);
+  appendTest<lt, 5>(8192);
+  appendTest<lt, 6>(8192);
+  appendTest<lt, 7>(8192);
+  appendTest<lt, 8>(8192);
 
   // test append with buffer that is not multple of element size.
-  appendTest<bliss::concurrent::THREAD_UNSAFE, 1>(8191);
+  appendTest<bliss::concurrent::LockType::NONE, 1>(8191);
 
-  appendTest<bliss::concurrent::THREAD_SAFE, 1>(8191);
-  appendTest<bliss::concurrent::THREAD_SAFE, 2>(8191);
-  appendTest<bliss::concurrent::THREAD_SAFE, 3>(8191);
-  appendTest<bliss::concurrent::THREAD_SAFE, 4>(8191);
-  appendTest<bliss::concurrent::THREAD_SAFE, 5>(8191);
-  appendTest<bliss::concurrent::THREAD_SAFE, 6>(8191);
-  appendTest<bliss::concurrent::THREAD_SAFE, 7>(8191);
-  appendTest<bliss::concurrent::THREAD_SAFE, 8>(8191);
+  appendTest<lt, 1>(8191);
+  appendTest<lt, 2>(8191);
+  appendTest<lt, 3>(8191);
+  appendTest<lt, 4>(8191);
+  appendTest<lt, 5>(8191);
+  appendTest<lt, 6>(8191);
+  appendTest<lt, 7>(8191);
+  appendTest<lt, 8>(8191);
 
 
 
   // multiple buffer swap test.
 
   ////////////// timing.  the insert before this is to warm up.
-  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_UNSAFE, 1>(8191, 1000000);
+  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::LockType::NONE, 1>(8191, 1000000);
 
-  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 1>(8191, 1000000);
-  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 2>(8191, 1000000);
-  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 3>(8191, 1000000);
-  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 4>(8191, 1000000);
-  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 5>(8191, 1000000);
-  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 6>(8191, 1000000);
-  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 7>(8191, 1000000);
-  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::THREAD_SAFE, 8>(8191, 1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 1>(8191, 1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 2>(8191, 1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 3>(8191, 1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 4>(8191, 1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 5>(8191, 1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 6>(8191, 1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 7>(8191, 1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 8>(8191, 1000000);
 
 //  // these will fail with more than 1 thread, unless we use a lock when appending.
-//  testAppendMultipleBuffers<bliss::concurrent::THREAD_UNSAFE, 1>(8191, 1000000);
+//  testAppendMultipleBuffers<bliss::concurrent::LockType::NONE, 1>(8191, 1000000);
 //
-//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 1>(8191, 1000000);
-//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 2>(8191, 1000000);
-//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 3>(8191, 1000000);
-//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 4>(8191, 1000000);
-//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 5>(8191, 1000000);
-//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 6>(8191, 1000000);
-//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 7>(8191, 1000000);
-//  testAppendMultipleBuffers<bliss::concurrent::THREAD_SAFE, 8>(8191, 1000000);
+//  testAppendMultipleBuffers<lt, 1>(8191, 1000000);
+//  testAppendMultipleBuffers<lt, 2>(8191, 1000000);
+//  testAppendMultipleBuffers<lt, 3>(8191, 1000000);
+//  testAppendMultipleBuffers<lt, 4>(8191, 1000000);
+//  testAppendMultipleBuffers<lt, 5>(8191, 1000000);
+//  testAppendMultipleBuffers<lt, 6>(8191, 1000000);
+//  testAppendMultipleBuffers<lt, 7>(8191, 1000000);
+//  testAppendMultipleBuffers<lt, 8>(8191, 1000000);
 
 
     // timing tests
 
     ////////////// timing.  the insert before this is to warm up.
-    appendTimed<bliss::concurrent::THREAD_UNSAFE, 1>(1000000, 3);
+    appendTimed<bliss::concurrent::LockType::NONE, 1>(1000000, 3);
 
-    appendTimed<bliss::concurrent::THREAD_SAFE, 1>(1000000, 3);
-    appendTimed<bliss::concurrent::THREAD_SAFE, 2>(1000000, 3);
-    appendTimed<bliss::concurrent::THREAD_SAFE, 3>(1000000, 3);
-    appendTimed<bliss::concurrent::THREAD_SAFE, 4>(1000000, 3);
-    appendTimed<bliss::concurrent::THREAD_SAFE, 5>(1000000, 3);
-    appendTimed<bliss::concurrent::THREAD_SAFE, 6>(1000000, 3);
-    appendTimed<bliss::concurrent::THREAD_SAFE, 7>(1000000, 3);
-    appendTimed<bliss::concurrent::THREAD_SAFE, 8>(1000000, 3);
+    appendTimed<lt, 1>(1000000, 3);
+    appendTimed<lt, 2>(1000000, 3);
+    appendTimed<lt, 3>(1000000, 3);
+    appendTimed<lt, 4>(1000000, 3);
+    appendTimed<lt, 5>(1000000, 3);
+    appendTimed<lt, 6>(1000000, 3);
+    appendTimed<lt, 7>(1000000, 3);
+    appendTimed<lt, 8>(1000000, 3);
 }
