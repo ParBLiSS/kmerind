@@ -15,7 +15,7 @@
 
 #include <unistd.h>  // for usleep
 
-#include "io/message_buffers.hpp"
+#include "io/locking_message_buffers.hpp"
 #include "concurrent/threadsafe_queue.hpp"
 #include "omp.h"
 #include <cassert>
@@ -271,53 +271,24 @@ int main(int argc, char** argv) {
     repeats = atoi(argv[1]);
   }
 
+#ifdef BLISS_MUTEX
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
+#endif
+#ifdef BLISS_SPINLOCK
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
+#endif
+
   /// thread unsafe.  test in single thread way.
 //while(true) {
 
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_UNSAFE>(1, 2047)), "thread unsafe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_UNSAFE>(2, 2047)), "thread unsafe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_UNSAFE>(3, 2047)), "thread unsafe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_UNSAFE>(4, 2047)), "thread unsafe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_UNSAFE>(5, 2047)), "thread unsafe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_UNSAFE>(6, 2047)), "thread unsafe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_UNSAFE>(7, 2047)), "thread unsafe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_UNSAFE>(8, 2047)), "thread unsafe buffers", 1);
+  for (int i = 0; i < 8; ++i) {
+    testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE>(i, 2047)), "thread unsafe buffers", 1);
 
+    for (int j = 0; j < 8; ++j) {
+      testPool(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::LockType::LOCKFREE>(i, 2047)), "thread safe buffers", j);
+    }
+  }
 
-
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(1, 2047)), "thread safe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(1, 2047)), "thread safe buffers", 2);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(1, 2047)), "thread safe buffers", 3);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(1, 2047)), "thread safe buffers", 4);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(1, 2047)), "thread safe buffers", 8);
-
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(2, 2047)), "thread safe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(2, 2047)), "thread safe buffers", 2);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(2, 2047)), "thread safe buffers", 3);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(2, 2047)), "thread safe buffers", 4);
-
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(3, 2047)), "thread safe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(3, 2047)), "thread safe buffers", 2);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(3, 2047)), "thread safe buffers", 3);
-
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(4, 2047)), "thread safe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(4, 2047)), "thread safe buffers", 2);
-
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(5, 2047)), "thread safe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(5, 2047)), "thread safe buffers", 2);
-
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(6, 2047)), "thread safe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(6, 2047)), "thread safe buffers", 2);
-
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(7, 2047)), "thread safe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(7, 2047)), "thread safe buffers", 2);
-
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(8, 2047)), "thread safe buffers", 1);
-  testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::THREAD_SAFE>(8, 2047)), "thread safe buffers", 2);
-
-
-  // this one is not defined because it's not logical.  not compilable.
-  // bliss::io::BufferPool<bliss::concurrent::THREAD_UNSAFE, bliss::concurrent::THREAD_SAFE> tsusPool(8192, 8);
 
 
 //}

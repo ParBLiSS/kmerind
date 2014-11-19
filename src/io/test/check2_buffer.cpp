@@ -39,106 +39,6 @@
 
 #include <utils/test_utils.hpp>
 
-//
-//
-//template<bliss::concurrent::ThreadSafety TS1, bliss::concurrent::LockType TS2>
-//void moveTest( const int count = 1000, const int capacity = 8192) {
-//  printf("TESTING move from thread %s to thread %s\n", TS1 ? "SAFE" : "UNSAFE", TS2 ? "SAFE" : "UNSAFE");
-//
-//
-//  bliss::io::Buffer<TS1> b1(capacity);
-//  b1.unblock();
-//
-////  std::cout << " empty buffer: " << b1 << std::endl << std::flush;
-//  for (size_t i = 0; i < count; ++i) {
-//	  int data = i;
-//    b1.append(&data, sizeof(int));
-//  }
-////  std::cout << " initialized buffer: " << b1 << std::endl << std::flush;
-////  b1.block_and_flush();
-//
-//  // verify that what went in is correct
-//  if (!checkSequence(reinterpret_cast<int*>(b1.getData().lock().get()), count)) {
-//    printf("FAIL: append is not working correctly\n");
-//  }
-//
-//  b1.block();
-//
-//  int64_t bufferCapBefore = b1.getCapacity();
-//  int64_t bufferCapAfter = 0;
-//
-//  int64_t bufferSizeBefore = b1.getSize();
-//  int64_t bufferSizeAfter = 0;
-//
-//  int* bufferPtrBefore = reinterpret_cast<int*>(b1.getData().lock().get());
-//  int* bufferPtrAfter = nullptr;
-//
-//
-//  printf("TEST move ctor: ");
-//  bliss::io::Buffer<TS2> b2(std::move(b1));
-//
-//
-//  if (b1.getCapacity()  !=  bufferCapAfter  ||
-//      b1.getSize()      != bufferSizeAfter ||
-//      reinterpret_cast<int*>(b1.getData().lock().get())      !=  bufferPtrAfter  ||
-//      b2.getCapacity() !=  bufferCapBefore  ||
-//      b2.getSize()     != bufferSizeBefore ||
-//      reinterpret_cast<int*>(b2.getData().lock().get())     !=  bufferPtrBefore)
-//    printf(" FAIL: size %ld (%ld->%ld), capacity %ld (%ld->%ld), pointer = %p (%p->%p)\n",
-//         b2.getSize(), bufferSizeBefore, b1.getSize(),
-//         b2.getCapacity(),        bufferCapBefore,  b1.getCapacity(),
-//         reinterpret_cast<int*>(b2.getData().lock().get()),      bufferPtrBefore,   reinterpret_cast<int*>(b1.getData().lock().get())
-//         );
-//  else {
-//
-//    if (checkSequence(reinterpret_cast<int*>(b2.getData().lock().get()), count)) {
-//      printf("PASS\n");
-//    } else {
-//      printf("FAIL: content mismatch\n");
-//    }
-//  }
-//
-//  bliss::io::Buffer<TS1> b3(8192);
-//  b3.unblock();
-//
-//  for (size_t i = 0; i < count; ++i) {
-//	  int data = i;
-//    b3.append(&data, sizeof(int));
-//  }
-////  assignSequence(reinterpret_cast<int*>(b3.getData().lock().get()), count);
-//  b3.block_and_flush();
-//
-//  bufferCapBefore = b3.getCapacity();
-//  bufferSizeBefore = b3.getSize();
-//  bufferPtrBefore = reinterpret_cast<int*>(b3.getData().lock().get());
-//
-//  bufferCapAfter  = 0;
-//  bufferSizeAfter = 0;
-//  bufferPtrAfter  = nullptr;
-//
-//
-//  printf("TEST move = operator: ");
-//  b2 = std::move(b3);
-//  if (b3.getCapacity()  !=  bufferCapAfter  ||
-//      b3.getSize()      != bufferSizeAfter ||
-//      reinterpret_cast<int*>(b3.getData().lock().get())      !=  bufferPtrAfter  ||
-//      b2.getCapacity() !=  bufferCapBefore  ||
-//      b2.getSize()     != bufferSizeBefore ||
-//      reinterpret_cast<int*>(b2.getData().lock().get())     !=  bufferPtrBefore)
-//    printf(" FAIL: size %ld (%ld->%ld), capacity %ld (%ld->%ld), pointer = %p (%p->%p)\n",
-//         b2.getSize(), bufferSizeBefore, b3.getSize(),
-//         b2.getCapacity(),        bufferCapBefore,  b3.getCapacity(),
-//         reinterpret_cast<int*>(b2.getData().lock().get()),      bufferPtrBefore,   reinterpret_cast<int*>(b3.getData().lock().get())
-//         );
-//  else {
-//
-//    if (checkSequence(reinterpret_cast<int*>(b2.getData().lock().get()), count)) {
-//      printf("PASS\n");
-//    } else {
-//      printf("FAIL: content mismatch\n");
-//    }
-//  }
-//}
 
 template<bliss::concurrent::LockType TS>
 void append(const int nthreads, bliss::io::Buffer<TS>& buf, const unsigned int start, const unsigned int end, int& success, int& failure, int& swap, std::vector<int>& gold) {
@@ -206,7 +106,7 @@ void appendTest(const int capacity = 8192) {
   if (success == 0 || (success != nelems/2) || failure != 0 || swap != 0) printf("FAIL: (actual,added/expected) success (%d,%d/%d), failure (%d,%d/%d), swap(%d,%d/%d)\n", success, success, nelems/2, failure, failure, 0, swap, swap, 0);
   else {
     // compare unordered buffer content.
-    if (compareUnorderedSequences(reinterpret_cast<int*>(b1.getData().lock().get()), gold.begin(), success)) {
+    if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
       printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
@@ -228,7 +128,7 @@ void appendTest(const int capacity = 8192) {
   if (success == 0 || (success != nelems) || failure != nelems || swap != 1) printf("FAIL: (actual,added/expected) success (%d,%d/%d), failure (%d,%d/%d), swap(%d,%d/%d)\n", success, success2, nelems, failure, failure2, nelems, swap, swap2, 1);
   else {
     // compare unordered buffer content.
-    if (compareUnorderedSequences(reinterpret_cast<int*>(b1.getData().lock().get()), gold.begin(), success)) {
+    if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
       printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
@@ -257,7 +157,7 @@ void appendTest(const int capacity = 8192) {
   if (success == 0 || (success != nelems) || failure != 0 || swap != 0) printf("FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)\n", success, nelems, failure, 0, swap, 0);
   else {
     // compare unordered buffer content.
-    if (compareUnorderedSequences(reinterpret_cast<int*>(b1.getData().lock().get()), gold.begin(), success)) {
+    if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
       printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
@@ -279,7 +179,7 @@ void appendTest(const int capacity = 8192) {
   if (success == 0 || (success != nelems) || failure != NumThreads || swap != 1) printf("FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)\n", success, nelems, failure, NumThreads, swap, 1);
   else {
     // compare unordered buffer content.
-    if (compareUnorderedSequences(reinterpret_cast<int*>(b1.getData().lock().get()), gold.begin(), success)) {
+    if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
       printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
@@ -301,7 +201,7 @@ void appendTest(const int capacity = 8192) {
   if ((success != 0) || failure != nelems || swap != 0) printf("FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)\n", success, 0, failure, nelems, swap, 0);
   else {
     // compare unordered buffer content.
-    if (compareUnorderedSequences(reinterpret_cast<int*>(b1.getData().lock().get()), gold.begin(), success)) {
+    if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
       printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
@@ -323,7 +223,7 @@ void appendTest(const int capacity = 8192) {
   if (success == 0 || (success != nelems) || failure != 0 || swap != 0) printf("FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)\n", success, nelems, failure, 0, swap, 0);
   else {
     // compare unordered buffer content.
-    if (compareUnorderedSequences(reinterpret_cast<int*>(b1.getData().lock().get()), gold.begin(), success)) {
+    if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
       printf("PASS success %d failure %d swap %d\n", success, failure, swap);
     } else {
       printf("FAIL: content not matching\n");
@@ -669,9 +569,8 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 //  std::cout << " buffer: " << *(ptr.load()) << std::endl << std::flush;
 
   for (int i = 0; i < full.size(); ++i) {
-    auto p = full.at(i)->getData().lock();
-    if (p)
-    stored.insert(stored.end(), reinterpret_cast<int*>(p.get()), reinterpret_cast<int*>(p.get()) + full.at(i)->getSize() / sizeof(int));
+
+    stored.insert(stored.end(), full.at(i)->operator int*(), full.at(i)->operator int*() + full.at(i)->getSize() / sizeof(int));
   }
   int stored_count = stored.size();
 
@@ -770,11 +669,8 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
           success2 += oldsize;
 
           omp_set_lock(&writelock);
-          auto p = old_ptr->getData().lock();
-          if (p) {
-            stored.insert(stored.end(), reinterpret_cast<int*>(p.get()), reinterpret_cast<int*>(p.get()) + oldsize);
+            stored.insert(stored.end(), old_ptr->operator int*(), old_ptr->operator int*() + oldsize);
             full.push_back(std::move(std::unique_ptr<bliss::io::Buffer<TS> >(old_ptr)));
-          }
           omp_unset_lock(&writelock);
 
         }
@@ -798,12 +694,9 @@ void testAppendMultipleBuffersAtomicPtrs(const int buffer_capacity, const int to
 
 
   // compare unordered buffer content.
-  auto p = ptr.load()->getData().lock();
-  if (p) {
-
-    stored.insert(stored.end(), reinterpret_cast<int*>(p.get()), reinterpret_cast<int*>(p.get()) + ptr.load()->getSize() / sizeof(int));
+    stored.insert(stored.end(), ptr.load()->operator int*(), ptr.load()->operator int*() + ptr.load()->getSize() / sizeof(int));
     full.push_back(std::move(std::unique_ptr<bliss::io::Buffer<TS> >(ptr.load())));
-  }
+
   stored_count = stored.size();
   success2 += ptr.load()->getSize() / sizeof(int);
 
@@ -882,14 +775,14 @@ void appendTimed(const int capacity, const int iterations) {
 int main(int argc, char** argv) {
 
 
-#ifdef LOCKING
+#ifdef BLISS_MUTEX
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
 #endif
-#ifdef SPINLOCKING
+#ifdef BLISS_SPINLOCK
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
 #endif
-#ifdef LOCKFREE
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCK_FREE;
+#ifdef BLISS_LOCKFREE
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCKFREE;
 #endif
 
 

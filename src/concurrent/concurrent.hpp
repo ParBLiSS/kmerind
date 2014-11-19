@@ -26,7 +26,7 @@ namespace bliss {
 
 
     // types of threading locks.
-    enum class LockType { NONE = 0, MUTEX = 1, SPINLOCK = 2, LOCK_FREE = 4 };
+    enum class LockType { NONE = 0, MUTEX = 1, SPINLOCK = 2, LOCKFREE = 4 };
 
   }
 }
