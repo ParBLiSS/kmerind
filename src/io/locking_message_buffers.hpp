@@ -74,8 +74,8 @@ namespace bliss
         typedef typename bliss::io::BufferPool<PoolLT, BufferLT>  BufferPoolType;
 
         /// IdType of a Buffer, aliased from BufferPool
-        typedef typename BufferPoolType::BufferPtrType    BufferPtrType;
-        typedef typename BufferPoolType::BufferType    BufferType;
+        typedef typename BufferPoolType::BufferPtrType            BufferPtrType;
+        typedef typename BufferPoolType::BufferType               BufferType;
 
         /// a pool of in-memory Buffers for storage.
         BufferPoolType pool;
@@ -156,8 +156,8 @@ namespace bliss
          *
          * @param id    Buffer's id (assigned from BufferPool)
          */
-        virtual void releaseBuffer(BufferPtrType &&ptr) {
-          pool.releaseBuffer(std::forward<BufferPtrType>(ptr));
+        virtual void releaseBuffer(BufferType *ptr) {
+          pool.releaseBuffer(ptr);
         }
 
       protected:
@@ -190,6 +190,9 @@ namespace bliss
      *  5. When a particular buffer is full, return the Buffer Id to the calling thread for it to process (send), and swap in an empty
      *      Buffer from BufferPool.
      *
+     *  An internal vector is used to map from target process rank to Buffer pointer.  For multithreading flavors of message buffers,
+     *    atomic<BufferType*> is used.
+     *
      *  @note
      *  pool size is unlimited so we would not get nullptr, and therefore do not need to check it.
      *
@@ -206,15 +209,17 @@ namespace bliss
       public:
         /// Id type of the Buffers
         using BufferType = typename MessageBuffers<PoolLT, BufferLT>::BufferType;
-        using BufferPtrType = typename MessageBuffers<PoolLT, BufferLT>::BufferPtrType;
+        //using BufferPtrType = typename MessageBuffers<PoolLT, BufferLT>::BufferPtrType;
 
         /// the BufferPoolType from parent class
         using BufferPoolType = typename MessageBuffers<PoolLT, BufferLT>::BufferPoolType;
 
       protected:
 
-        /// Vector of IdType (atomic or not).  Provides a mapping from process id (0 to vector size), to bufferPtrs (from BufferPool)
-        std::vector< BufferPtrType > buffers;
+        /// Vector of pointers (atomic).  Provides a mapping from process id (0 to vector size), to bufferPtr (from BufferPool)
+        /// using vector of atomic pointers allows atomic swap of each pointer, without array of mutex or atomic_flags.
+        typedef typename std::conditional<PoolLT == bliss::concurrent::LockType::NONE, BufferType*, std::atomic<BufferType*> >::type BufferPtrTypeInternal;
+        std::vector< BufferPtrTypeInternal > buffers;
 
         /// for synchronizing access to buffers (and pool).
         mutable std::mutex mutex;
@@ -302,28 +307,16 @@ namespace bliss
          * @param targetRank   the target id for the messages.
          * @return      reference to the unique_ptr.  when swapping, the content of the unique ptrs are swapped.
          */
-        template<bliss::concurrent::LockType LT = PoolLT>
-        const typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, BufferPtrType>::type & at(const int targetRank) const {
-          std::lock_guard<std::mutex> lock(mutex);
-          return std::move(at<bliss::concurrent::LockType::NONE>(targetRank));   // can use reference since we made pool unlimited, so never get nullptr
-        }
-        template<bliss::concurrent::LockType LT = PoolLT>
-        const typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, BufferPtrType>::type & at(const int targetRank) const {
-
-          while(spinlock.test_and_set());
-          BufferPtrType ptr = at<bliss::concurrent::LockType::NONE>(targetRank);
-
-          spinlock.clear();
-          return std::move(ptr);
-          //return std::atomic_load(buffers.data() + targetRank);   // can use reference since we made pool unlimited, so never get nullptr
-        }
-        template<bliss::concurrent::LockType LT = PoolLT>
-        const typename std::enable_if<LT == bliss::concurrent::LockType::NONE, BufferPtrType>::type & at(const int targetRank) const {
-          return buffers.at(targetRank);
+//        template<bliss::concurrent::LockType LT = PoolLT>
+//        const typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type at(const int targetRank) const {
+//          return buffers.at(targetRank).load();   // can use reference since we made pool unlimited, so never get nullptr
+//        }
+        const BufferType* at(const int targetRank) const {
+          return (BufferType*)(buffers.at(targetRank));   // if atomic pointer, then will do load()
         }
 
-        const BufferPtrType & operator[](const int targetRank) const {
-          return at<PoolLT>(targetRank);
+        const BufferType* operator[](const int targetRank) const {
+          return at(targetRank);
         }
 
 
@@ -335,10 +328,10 @@ namespace bliss
           std::lock_guard<std::mutex> lock(mutex);
           // release all buffers back to pool
           for (int i = 0; i < buffers.size(); ++i) {
-            if (buffers.at(i)) {
+            if (this->at(targetRank)) {
 
-              buffers.at(i)->block_and_flush();
-              this->pool.releaseBuffer(std::move(buffers.at(i)));
+              this->at(targetRank)->block_and_flush();
+              this->pool.releaseBuffer(this->at(targetRank));
             }
           }
           // reset the pool. local vector should contain a bunch of nullptrs.
@@ -350,11 +343,11 @@ namespace bliss
           }
         }
 
-        virtual void releaseBuffer(BufferPtrType &&ptr) {
+        virtual void releaseBuffer(BufferType * ptr) {
 
-          ptr->block_and_flush();
+          ptr->block_and_flush();  // if already blocked and flushed, no op.
 
-          MessageBuffers<PoolLT, BufferLT>::releaseBuffer(std::forward<BufferPtrType>(ptr));
+          MessageBuffers<PoolLT, BufferLT>::releaseBuffer(ptr);
         }
 
         /**
@@ -391,7 +384,7 @@ namespace bliss
          * @param[in] dest    messaging target for the data, decides which buffer to append into.
          * @return            std::pair containing the status of the append (boolean success/fail), and the id of a full buffer if there is one.
          */
-        std::pair<bool, BufferPtrType> append(const void* data, const size_t count, const int targetProc) {
+        std::pair<bool, BufferType*> append(const void* data, const size_t count, const int targetProc) {
 
           //== if data being set is null, throw error
           if (data == nullptr || count <= 0) {
@@ -416,8 +409,7 @@ namespace bliss
           // or flushing, so lock_read() would have been set for the full case.  now it depends on what happens in append.
           // if flush, then block is set just before swap, so it's more likely this thread enters append without a block.
 
-
-          unsigned int appendResult = this->at<PoolLT>(targetProc)->append(data, count);
+          unsigned int appendResult = this->at(targetProc)->append(data, count);
 
 
           // now if appendResult is false, then we return false, but also swap in a new buffer.
@@ -425,16 +417,14 @@ namespace bliss
           // this call will mark the fullBuffer as blocked to prevent multiple write attempts while flushing the buffer
           // ideally, we want it to be a reference that gets updated for all threads.
 
-          //std::unique_lock<std::mutex> lock(mutex);
-
           if (appendResult & 0x2) { // only 1 thread gets 0x2 result for a buffer.  all other threads are already finished with meaningful writes.
 
-            return std::move(std::make_pair(appendResult & 0x1, std::move(swapInEmptyBuffer<PoolLT>(targetProc)) ) );
+            return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer<PoolLT>(targetProc) ) );
 
 
           } else {
             //if (preswap != postswap) printf("ERROR: NOSWAP: preswap %p and postswap %p are not the same.\n", preswap, postswap);
-            return std::move(std::make_pair(appendResult & 0x1, std::move(BufferPtrType())));
+            return std::move(std::make_pair(appendResult & 0x1, nullptr));
           }
 
         }
@@ -449,7 +439,7 @@ namespace bliss
          * @return
          */
 
-        BufferPtrType flushBufferForRank(const int targetProc) {
+        BufferType* flushBufferForRank(const int targetProc) {
           DEBUG("flush buffer for rank!");
 
           //== if targetProc is outside the valid range, throw an error
@@ -458,11 +448,11 @@ namespace bliss
           }
 
           // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-          this->at<PoolLT>(targetProc)->block_and_flush();  // this part can be concurrent.
+          this->at(targetProc)->block_and_flush();  // this part can be concurrent.
 
           // passing in getBufferIdForRank result to ensure atomicity.
           // may return ABSENT if there is no available buffer to use.
-          return std::move(swapInEmptyBuffer<PoolLT>(targetProc));   // one thread calls this.
+          return swapInEmptyBuffer<PoolLT>(targetProc);   // ONE thread calls this.
 
         }
 
@@ -499,23 +489,10 @@ namespace bliss
          * @return        the BufferId that was swapped out.
          */
         template<bliss::concurrent::LockType LT = PoolLT>
-        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, BufferPtrType>::type swapInEmptyBuffer(const int dest) {
+        typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest) {
 
-            std::lock_guard<std::mutex> lock(mutex);
-            return std::move(swapInEmptyBuffer<bliss::concurrent::LockType::NONE>(dest));
-//            return std::move( std::atomic_exchange(&(buffers.at(dest)), this->pool.tryAcquireBuffer()) );  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
+          return std::atomic_exchange(buffers.at(dest), this->pool.tryAcquireBuffer());
         }
-
-        template<bliss::concurrent::LockType LT = PoolLT>
-        typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, BufferPtrType>::type swapInEmptyBuffer(const int dest) {
-
-          while(spinlock.test_and_set());
-          BufferPtrType ptr = swapInEmptyBuffer<bliss::concurrent::LockType::NONE>(dest);
-            spinlock.clear();
-            return std::move(ptr);
-            //            return std::move( std::atomic_exchange(&(buffers.at(dest)), this->pool.tryAcquireBuffer()) );  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
-        }
-
 
 
         /**
@@ -546,13 +523,11 @@ namespace bliss
          * @return        the BufferId that was swapped out.
          */
         template<bliss::concurrent::LockType LT = PoolLT>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, BufferPtrType>::type swapInEmptyBuffer(const int dest) {
+        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest) {
 
-          BufferPtrType oldbuf = this->pool.tryAcquireBuffer();
-          std::swap(buffers.at(dest), oldbuf);
-          return std::move( oldbuf );  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
-
-
+          BufferType* oldbuf = this->at(dest);
+          buffers.at(dest) = this->pool.tryAcquireBuffer();
+          return oldbuf;  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
         }
 
 

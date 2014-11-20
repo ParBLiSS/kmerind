@@ -1,16 +1,16 @@
 /**
- * @file		buffer_pool.hpp
+ * @file		object_pool.hpp
  * @ingroup bliss::io
  * @author	tpan
- * @brief   this file defines in-memory Buffer Pool.
+ * @brief   this file defines in-memory Object Pool.
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
  * TODO add License
  */
-#ifndef BUFFERPOOL_HPP_
-#define BUFFERPOOL_HPP_
+#ifndef OBJECTPOOL_HPP_
+#define OBJECTPOOL_HPP_
 
 #include <cassert>
 
@@ -23,19 +23,19 @@
 #include "io/locking_buffer.hpp"
 #include "concurrent/concurrent.hpp"
 
-
+// TODO: change to an object pool, not just a buffer pool.
 
 namespace bliss
 {
   namespace io
   {
-    // TODO: move constructor and assignment operators between BufferPools of different thread safeties.
+    // TODO: move constructor and assignment operators between ObjectPools of different thread safeties.
     // TODO: use threadsafe_queue where appropriate.
 
     /**
-     * @class     BufferPool
-     * @brief     BufferPool manages a set of reusable, in-memory buffers.  In particular, it can limit the amount of memory usage.
-     * @details   The class is templated to provide thread-safe or unsafe BufferPools, managing thread-safe or unsafe Buffers
+     * @class     ObjectPool
+     * @brief     ObjectPool manages a set of reusable, in-memory buffers.  In particular, it can limit the amount of memory usage.
+     * @details   The class is templated to provide thread-safe or unsafe ObjectPools, managing thread-safe or unsafe Objects
      *
      *            Each buffer is a block of preallocated memory that can be appended into.
      *
@@ -50,7 +50,7 @@ namespace bliss
      *
      *
      * @note      Each buffer should be acquired by a single thread  and released by a single thread.   (NOT REASONABLE)
-     *            Note that Buffer does not actualy clear the memory, just resets the size, which is also the pointer for insertion.
+     *            Note that Object does not actualy clear the memory, just resets the size, which is also the pointer for insertion.
      *            While the release method handles duplicate releases, there may be race conditions when multithreading, including
      *              likely loss of data (thread 1 appends data and thread 2 releases  it.
      *
@@ -60,48 +60,40 @@ namespace bliss
      *
      *
      *
-     *  @tparam PoolLT    The thread safety property for the pool
-     *  @tparam BufferLT  The thread safety property of each Buffer.
+     *  @tparam LockType    The thread safety property for the pool
+     *  @tparam ObjectLT  The thread safety property of each Object.
      */
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT = PoolLT>
-    class BufferPool
+    template<typename ObjectType, typename ObjectAllocatorType, bliss::concurrent::LockType LockType>
+    class ObjectPool
     {
       public:
         /**
-         * @brief     Type of Buffer in the BufferPool (thread safe or not)
+         * @brief     Index Type used to reference the Objects in the ObjectPool.
          */
-        using BufferType = bliss::io::Buffer<BufferLT>;
-        /**
-         * @brief     Index Type used to reference the Buffers in the BufferPool.
-         */
-        using BufferPtrType = std::shared_ptr<BufferType>;   // shared pointer allows atomic operations as well as check for expired pointers.
+        using ObjectPtrType = ObjectType*;   // shared pointer allows atomic operations as well as check for expired pointers.
 
-        static const bliss::concurrent::LockType poolLT = PoolLT;
-        static const bliss::concurrent::LockType bufferLT = BufferLT;
+        static const bliss::concurrent::LockType poolLT = LockType;
 
 
       protected:
         /**
-         * @brief     capacity of the BufferPool (in number of Buffers)
+         * @brief     capacity of the ObjectPool (in number of Objects)
          */
         mutable int64_t capacity;
 
         /**
-         * @brief     capacity of the individual Buffers (in bytes)
-         */
-        mutable size_t buffer_capacity;
-
-        /**
          * @brief     current pool size
          */
-        mutable typename std::conditional<PoolLT == bliss::concurrent::LockType::LOCKFREE, std::atomic<int64_t>, int64_t>::type numBuffersAvailable;
+        mutable typename std::conditional<LockType == bliss::concurrent::LockType::LOCKFREE, std::atomic<int64_t>, int64_t>::type numAvailable;
 
         /**
-         * @brief     Internal Set of available Buffers for immediate use.
-         * @details   Using set instead of ThreadSafeQueue to ensure uniqueness of Buffer Ids.
+         * @brief     Internal Set of available Objects for immediate use.
+         * @details   Using set instead of ThreadSafeQueue to ensure uniqueness of Object Ids.
          */
-        std::deque<BufferPtrType>                          available;
-        std::unordered_set<BufferPtrType>                  in_use;
+        std::deque<ObjectPtrType>                          available;
+        std::unordered_set<ObjectPtrType>                  in_use;
+
+        ObjectAllocatorType alloc;
 
         /**
          * @brief     mutex to control access.
@@ -112,85 +104,106 @@ namespace bliss
 
         /**
          * @brief     Private move constructor with mutex lock.
-         * @param other   Source BufferPool object to move
-         * @param l       Mutex lock on the Source BufferPool object
+         * @param other   Source ObjectPool object to move
+         * @param l       Mutex lock on the Source ObjectPool object
          */
-        BufferPool(BufferPool<PoolLT, BufferLT>&& other, const std::lock_guard<std::mutex>&) :
+        ObjectPool(ObjectPool<ObjectType, ObjectAllocatorType, LockType>&& other, const std::lock_guard<std::mutex>&) :
           capacity(other.capacity),
-          buffer_capacity(other.buffer_capacity),
-          numBuffersAvailable((int64_t)(other.numBuffersAvailable)),
-          available(std::move(other.available)),
-          in_use(std::move(other.in_use())){
+          numAvailable((int64_t)(other.numAvailable)),
+          alloc(std::move(other.alloc))
 
+        {
           other.capacity = 0;
-          other.numBuffersAvailable = 0;
-          other.available.clear();
-          other.in_use.clear();
+          other.numAvailable = 0;
+
+          ObjectPtrType ptr;
+          while (!available.empty()) {
+            ptr = available.front();
+            delete ptr;
+            available.pop_front();
+          }
+          available.clear();  available.swap(other.available);
+
+          for (auto ptr : in_use) {
+            delete ptr;
+          }
+          in_use.clear();  in_use.swap(other.in_use);
         };
 
 
       public:
         /**
-         * @brief     construct a Buffer Pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is set to _pool_capacity.
+         * @brief     construct a Object Pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is set to _pool_capacity.
          *
          * @param _pool_capacity       number of buffers in the pool
          * @param _buffer_capacity     size of the individual buffers
          */
-        BufferPool(const int64_t _pool_capacity, const size_t _buffer_capacity) :
+        ObjectPool(const int64_t _pool_capacity, ObjectAllocatorType & _alloc) :
           capacity(_pool_capacity),
-          buffer_capacity(_buffer_capacity),
-          numBuffersAvailable(_pool_capacity),
-          available(), in_use()
+          numAvailable(_pool_capacity),
+          available(), in_use(), alloc(_alloc)
           {};
 
         /**
          * @brief     default constructor is deleted.
          */
-        BufferPool() = delete;
+        ObjectPool() = delete;
 
         /**
-         * @brief     construct a Buffer pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is unbounded.
+         * @brief     construct a Object pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is unbounded.
          *
          * @param _buffer_capacity    size of the individual buffers
          */
-        explicit BufferPool(const size_t _buffer_capacity) :
-            BufferPool<PoolLT, BufferLT>(std::numeric_limits<int64_t>::max(), _buffer_capacity) {};
+        explicit ObjectPool(const size_t _buffer_capacity) :
+            ObjectPool<ObjectType, ObjectAllocatorType, LockType>(std::numeric_limits<int64_t>::max(), _buffer_capacity) {};
 
         /**
          * @brief     default copy constructor is deleted.
-         * @param other   source BufferPool object to copy from.
+         * @param other   source ObjectPool object to copy from.
          */
-        explicit BufferPool(const BufferPool<PoolLT, BufferLT>& other) = delete;
+        explicit ObjectPool(const ObjectPool<ObjectType, ObjectAllocatorType, LockType>& other) = delete;
 
         /**
          * @brief      Move constructor.  Delegates to the Move constructor that locks access on the source.
-         * @param other    source BufferPool object to move.
+         * @param other    source ObjectPool object to move.
          */
-        explicit BufferPool(BufferPool<PoolLT, BufferLT>&& other) :
-          BufferPool<PoolLT, BufferLT>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
+        explicit ObjectPool(ObjectPool<ObjectType, ObjectAllocatorType, LockType>&& other) :
+          ObjectPool<ObjectType, ObjectAllocatorType, LockType>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
 
         /**
          * @brief     default copy assignment operator is deleted.
-         * @param other   source BufferPool object to copy from.
+         * @param other   source ObjectPool object to copy from.
          * @return        self, with member variables copied from other.
          */
-        BufferPool<PoolLT, BufferLT>& operator=(const BufferPool<PoolLT, BufferLT>& other) = delete;
+        ObjectPool<ObjectType, ObjectAllocatorType, LockType>& operator=(const ObjectPool<ObjectType, ObjectAllocatorType, LockType>& other) = delete;
 
         /**
          * @brief     move assignment operator.
-         * @param other   source BufferPool object to move from.
+         * @param other   source ObjectPool object to move from.
          * @return        self, with member variables moved from other.
          */
-        BufferPool<PoolLT, BufferLT>& operator=(BufferPool<PoolLT, BufferLT>&& other) {
+        ObjectPool<ObjectType, ObjectAllocatorType, LockType>& operator=(ObjectPool<ObjectType, ObjectAllocatorType, LockType>&& other) {
           std::unique_lock<std::mutex> mylock(mutex, std::defer_lock),
                                         otherlock(other.mutex, std::defer_lock);
           std::lock(mylock, otherlock);
 
           capacity = other.capacity; other.capacity = 0;
-          buffer_capacity = other.buffer_capacity; other.buffer_capacity = 0;
-          numBuffersAvailable = (int64_t)(other.numBuffersAvailable); other.numBuffersAvailable = 0;
+          numAvailable = (int64_t)(other.numAvailable); other.numAvailable = 0;
+
+          ObjectPtrType ptr;
+          while (!available.empty()) {
+            ptr = available.front();
+            delete ptr;
+            available.pop_front();
+          }
           available.clear();  available.swap(other.available);
+
+          for (auto ptr : in_use) {
+            delete ptr;
+          }
           in_use.clear();  in_use.swap(other.in_use);
+          alloc = std::move(other.alloc);
+
 
           return *this;
         };
@@ -199,18 +212,35 @@ namespace bliss
         /**
          * @brief     default destructor
          */
-        virtual ~BufferPool() {};
+        virtual ~ObjectPool() {
+          // delete all the objects
+          std::lock_guard<std::mutex> lock(mutex);
+          numAvailable = 0;
+          capacity = 0;
+          ObjectPtrType ptr;
+          while (!available.empty()) {
+            ptr = available.front();
+            delete ptr;
+            available.pop_front();
+          }
+          available.clear();
+
+          for (auto ptr : in_use) {
+            delete ptr;
+          }
+          in_use.clear();
+        };
 
         /**
-         * @brief     Current size of the BufferPool
+         * @brief     Current size of the ObjectPool
          * @return  size, type IdType (aka int).
          */
         const int64_t getAvailableCount() const  {
-          return (int64_t)(numBuffersAvailable);   // load is atomic
+          return (int64_t)(numAvailable);   // load is atomic
         }
 
         /**
-         * @brief     Current capacity of the BufferPool
+         * @brief     Current capacity of the ObjectPool
          * @return    capacity, type IdTyype (aka int)
          */
         const int64_t getCapacity() const {
@@ -221,45 +251,37 @@ namespace bliss
           return capacity == std::numeric_limits<int64_t>::max();
         }
 
-        /**
-         * @brief     Each buffer's maximum capacity.
-         * @return  each buffer's maximum capacity.
-         */
-        const size_t getBufferCapacity() const {
-          return buffer_capacity;
-        }
-
 
         /**
-         * @brief     Resets the entire BufferPool: all Buffers in pool are  marked as released and available.
+         * @brief     Resets the entire ObjectPool: all Objects in pool are  marked as released and available.
          *
          * @note      This is not entirely thread safe.  the available set is cleared by a single thread, but other
-         *            threads may be acquiring buffers while they are being released.
+         *            threads may be acquiring objects while they are being released.
          *
          *            It is envisioned that this function should be called from a single thread.
          *            however, care must be taken to ensure that all other threads have completed their work, else data loss is likely.
          */
         void reset() {
-          numBuffersAvailable = capacity;  // store is atomic .
+          numAvailable = capacity;  // store is atomic .
         }
 
 
         /**
-         * @brief     Get the next available Buffer by id.  if none available, return false in the first argument of the pair.
-         * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the BufferId if successful.
+         * @brief     Get the next available Object by id.  if none available, return false in the first argument of the pair.
+         * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the ObjectId if successful.
          */
-        template<bliss::concurrent::LockType LT = PoolLT>
-                typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, BufferPtrType>::type tryAcquireBuffer() {
-          BufferPtrType sptr;  // default is a null ptr.
+        template<bliss::concurrent::LockType LT = LockType>
+                typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, ObjectPtrType>::type tryAcquireObject() {
+          ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
           std::unique_lock<std::mutex> lock(mutex);
 
           if (!isUnlimited()) {
-            if (numBuffersAvailable <= 0) {  // not fix size, and no more available
+            if (numAvailable <= 0) {  // not fix size, and no more available
               lock.unlock();
               return sptr;
             } else {
-              numBuffersAvailable--;
+              numAvailable--;
             }
           }
 
@@ -267,16 +289,14 @@ namespace bliss
           if (available.empty()) {
             // none available for reuse
             // but has room to allocate, so do it.
-            sptr.reset(new BufferType(buffer_capacity));
+            sptr = alloc();
           } else {
             // has available for reuse.
             sptr = available.front();
             available.pop_front();
           }
 
-          // get the buffer ready for use.
-          sptr->clear();
-          sptr->unblock();
+          // get the object ready for use.
           in_use.insert(sptr);  // store the shared pointer.
 
           lock.unlock();
@@ -285,21 +305,21 @@ namespace bliss
         }
 
         /**
-         * @brief     Get the next available Buffer by id.  if none available, return false in the first argument of the pair.
-         * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the BufferId if successful.
+         * @brief     Get the next available Object by id.  if none available, return false in the first argument of the pair.
+         * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the ObjectId if successful.
          */
-        template<bliss::concurrent::LockType LT = PoolLT>
-                typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, BufferPtrType>::type tryAcquireBuffer() {
-          BufferPtrType sptr;  // default is a null ptr.
+        template<bliss::concurrent::LockType LT = LockType>
+                typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, ObjectPtrType>::type tryAcquireObject() {
+          ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
           while (spinlock.test_and_set());
 
           if (!isUnlimited()) {
-            if (numBuffersAvailable <= 0) {  // not fix size, and no more available
+            if (numAvailable <= 0) {  // not fix size, and no more available
               spinlock.clear();
               return sptr;
             } else {
-              numBuffersAvailable--;
+              numAvailable--;
             }
           }
 
@@ -307,7 +327,7 @@ namespace bliss
           if (available.empty()) {
             // none available for reuse
             // but has room to allocate, so do it.
-            sptr.reset(new BufferType(buffer_capacity));
+            sptr = alloc();
           } else {
             // has available for reuse.
             sptr = available.front();
@@ -315,31 +335,29 @@ namespace bliss
           }
 
 
-          // get the buffer ready for use.
-          sptr->clear();
-          sptr->unblock();
+          // get the object ready for use.
           in_use.insert(sptr);  // store the shared pointer.
           spinlock.clear();
 
           return std::move(sptr);
         }
 //
-//        template<bliss::concurrent::LockType LT = PoolLT>
-//                typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE, BufferPtrRefType>::type tryAcquireBuffer() {
-//          static_assert(false, "BufferPool currently does not support LockFree operations due to internal use of deque");
+//        template<bliss::concurrent::LockType LT = LockType>
+//                typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE, ObjectPtrRefType>::type tryAcquireObject() {
+//          static_assert(false, "ObjectPool currently does not support LockFree operations due to internal use of deque");
 //        }
 //
 
 
-        template<bliss::concurrent::LockType LT = PoolLT>
-               typename std::enable_if<LT == bliss::concurrent::LockType::NONE, BufferPtrType>::type tryAcquireBuffer() {
-          BufferPtrType sptr;  // default is a null ptr.
+        template<bliss::concurrent::LockType LT = LockType>
+               typename std::enable_if<LT == bliss::concurrent::LockType::NONE, ObjectPtrType>::type tryAcquireObject() {
+          ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
           if (!isUnlimited()) {
-            if (numBuffersAvailable <= 0) {  // not fix size, and no more available
+            if (numAvailable <= 0) {  // not fix size, and no more available
               return sptr;
             } else {
-              numBuffersAvailable--;
+              numAvailable--;
             }
           }
 
@@ -347,16 +365,14 @@ namespace bliss
           if (available.empty()) {
             // none available for reuse
             // but has room to allocate, so do it.
-            sptr.reset(new BufferType(buffer_capacity));
+            sptr = alloc();
           } else {
             // has available for reuse.
             sptr = available.front();
             available.pop_front();
           }
 
-          // get the buffer ready for use.
-          sptr->clear();
-          sptr->unblock();
+          // get the object ready for use.
 
           in_use.insert(sptr);  // store the shared pointer.
 
@@ -364,12 +380,12 @@ namespace bliss
         }
 
         /**
-         * @brief     Release a buffer back to pool, by id.  if id is incorrect, throw std exception.  clears buffer before release back into available.
+         * @brief     Release a buffer back to pool, by id.  if id is incorrect, throw std exception.  clears object before release back into available.
          * @note      THREAD SAFE
-         * @param ptr weak_ptr to buffer.
+         * @param ptr weak_ptr to object.
          */
-        template<bliss::concurrent::LockType LT = PoolLT>
-        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type releaseBuffer(BufferPtrType&& ptr) {
+        template<bliss::concurrent::LockType LT = LockType>
+        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type releaseObject(ObjectPtrType ptr) {
 
           if (! ptr) return false;
 
@@ -378,20 +394,20 @@ namespace bliss
 
             // if multiple threads, the preincrement is atomic, so each thread has a valid value to compare to capacity.
             // the total number of threads to continue will be  same as total number of values that pass the capacity test.
-            if (numBuffersAvailable >= capacity) {  // preincrement is a.fetch_add(1)+1.  compare result to capacity.
-              // not unlimited, and already >= capacity.  bufferPtr is now lost, but that's okay.
+            if (numAvailable >= capacity) {  // preincrement is a.fetch_add(1)+1.  compare result to capacity.
+              // not unlimited, and already >= capacity.  objectPtr is now lost, but that's okay.
               // undo and return.
               lock.unlock();
               return false;
             } else {
               // else not at capacity and already incremented it.
-              numBuffersAvailable++;
+              numAvailable++;
             }
-          } // else don't need to touch numBuffersAvailable.
+          } // else don't need to touch numAvailable.
 
-          // now store the buffer.  make sure push_back is done one thread at a time.
+          // now store the object.  make sure push_back is done one thread at a time.
           in_use.erase(ptr);
-          available.push_back(std::move(ptr));
+          available.push_back(ptr);
           lock.unlock();
 
           return true;
@@ -400,12 +416,12 @@ namespace bliss
 
 
         /**
-         * @brief     Release a buffer back to pool, by id.  if id is incorrect, throw std exception.  clears buffer before release back into available.
+         * @brief     Release a object back to pool, by id.  if id is incorrect, throw std exception.  clears object before release back into available.
          * @note      THREAD SAFE
-         * @param bufferId    The id of the Buffer to be released.
+         * @param objectId    The id of the Object to be released.
          */
-        template<bliss::concurrent::LockType LT = PoolLT>
-        typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, bool>::type releaseBuffer(BufferPtrType&& ptr) {
+        template<bliss::concurrent::LockType LT = LockType>
+        typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, bool>::type releaseObject(ObjectPtrType ptr) {
           if (! ptr) return false;
 
           while (spinlock.test_and_set());
@@ -413,20 +429,20 @@ namespace bliss
 
             // if multiple threads, the preincrement is atomic, so each thread has a valid value to compare to capacity.
             // the total number of threads to continue will be  same as total number of values that pass the capacity test.
-            if (numBuffersAvailable >= capacity) {  // preincrement is a.fetch_add(1)+1.  compare result to capacity.
-              // not unlimited, and already >= capacity.  bufferPtr is now lost, but that's okay.
+            if (numAvailable >= capacity) {  // preincrement is a.fetch_add(1)+1.  compare result to capacity.
+              // not unlimited, and already >= capacity.  objectPtr is now lost, but that's okay.
               // undo and return.
               spinlock.clear();
               return false;
             } else {
               // else not at capacity and already incremented it.
-              numBuffersAvailable++;
+              numAvailable++;
             }
-          } // else don't need to touch numBuffersAvailable.
+          } // else don't need to touch numAvailable.
 
-          // now store the buffer.  make sure push_back is done one thread at a time.
+          // now store the object.  make sure push_back is done one thread at a time.
           in_use.erase(ptr);
-          available.push_back(std::move(ptr));
+          available.push_back(ptr);
           spinlock.clear();
 
           return true;
@@ -434,56 +450,53 @@ namespace bliss
         }
 //
 //        /**
-//         * @brief     Release a buffer back to pool, by id.  if id is incorrect, throw std exception.  clears buffer before release back into available.
+//         * @brief     Release a object back to pool, by id.  if id is incorrect, throw std exception.  clears object before release back into available.
 //         * @note      THREAD SAFE
-//         * @param bufferId    The id of the Buffer to be released.
+//         * @param objectId    The id of the Object to be released.
 //         */
-//        template<bliss::concurrent::LockType LT = PoolLT>
-//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE, bool>::type releaseBuffer(BufferPtrRefType&& ptr) {
-//          static_assert(false, "BufferPool currently does not support LockFree operations due to internal use of deque");
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE, bool>::type releaseObject(ObjectPtrRefType&& ptr) {
+//          static_assert(false, "ObjectPool currently does not support LockFree operations due to internal use of deque");
 //        }
 
 
         /**
-         * @brief     Release a buffer back to pool, by id.  if id is incorrect, throw std exception.  clears buffer before release back into available.
+         * @brief     Release a object back to pool, by id.  if id is incorrect, throw std exception.  clears object before release back into available.
          * @note      THREAD UNSAFE
-         * @param bufferId    The id of the Buffer to be released.
+         * @param objectId    The id of the Object to be released.
          */
-        template<bliss::concurrent::LockType LT = PoolLT>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, bool>::type releaseBuffer(BufferPtrType&& ptr) {
+        template<bliss::concurrent::LockType LT = LockType>
+        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, bool>::type releaseObject(ObjectPtrType ptr) {
            if (! ptr) return false;
 
           if (!isUnlimited()) {  // check against size_t max - thread safe, and ensures there is no overflow.
 
             // if multiple threads, the preincrement is atomic, so each thread has a valid value to compare to capacity.
             // the total number of threads to continue will be  same as total number of values that pass the capacity test.
-            if (numBuffersAvailable >= capacity) {  // preincrement is a.fetch_add(1)+1.  compare result to capacity.
-              // not unlimited, and already >= capacity.  bufferPtr is now lost, but that's okay.
+            if (numAvailable >= capacity) {  // preincrement is a.fetch_add(1)+1.  compare result to capacity.
+              // not unlimited, and already >= capacity.  objectPtr is now lost, but that's okay.
               // undo and return.
               return false;
             } else {
               // else not at capacity and already incremented it.
-              numBuffersAvailable++;
+              numAvailable++;
             }
-          } // else don't need to touch numBuffersAvailable.
+          } // else don't need to touch numAvailable.
 
-          // now store the buffer.  make sure push_back is done one thread at a time.
+          // now store the object.  make sure push_back is done one thread at a time.
           in_use.erase(ptr);
-          available.push_back(std::move(ptr));
+          available.push_back(ptr);
 
           return true;
         }
 
     };
 
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT>
-    const bliss::concurrent::LockType BufferPool<PoolLT, BufferLT>::bufferLT;
-
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT>
-    const bliss::concurrent::LockType BufferPool<PoolLT, BufferLT>::poolLT;
+    template<typename ObjectType, typename ObjectAllocatorType, bliss::concurrent::LockType LockType>
+    const bliss::concurrent::LockType ObjectPool<ObjectType, ObjectAllocatorType, LockType>::poolLT;
 
 
   } /* namespace io */
 } /* namespace bliss */
 
-#endif /* BUFFERPOOL_HPP_ */
+#endif /* OBJECTPOOL_HPP_ */
