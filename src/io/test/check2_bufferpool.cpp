@@ -12,20 +12,23 @@
 
 #include <unistd.h>  // for usleep
 
-#include "io/locking_bufferpool.hpp"
 #include "omp.h"
 #include <cassert>
 #include <chrono>
 #include <vector>
 #include <cstdlib>   // for rand
 #include <atomic>
+#include <memory>
+
+#include "utils/test_utils.hpp"
+
+#include "io/locking_buffer.hpp"
+#include "io/locking_object_pool.hpp"
 
 
-#include <utils/test_utils.hpp>
 
-
-template<typename PoolType, int NumThreads>
-void testAppendMultipleBuffers(const int buffer_capacity, const int total_count) {
+template<typename PoolType>
+void testAppendMultipleBuffers(const int NumThreads, const int total_count, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, const int64_t buffer_cap) {
   omp_lock_t writelock;
   omp_init_lock(&writelock);
   omp_lock_t writelock2;
@@ -37,11 +40,11 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
 //  std::atomic_flag writelock3 = ATOMIC_FLAG_INIT;
 
 
-  printf("TESTING: %d threads, pool thread %d buffer thread %d append with %d bufferSize and %d total counts from unlimited pool\n",
-         NumThreads, PoolType::poolLT, PoolType::bufferLT, buffer_capacity, total_count);
+  printf("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %d total counts from unlimited pool\n",
+         NumThreads, poollt, bufferlt, buffer_cap, total_count);
 
 
-  PoolType pool(buffer_capacity);
+  PoolType pool;
 
   std::vector<int> gold;
   std::vector<int> stored;
@@ -54,7 +57,8 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
   int swap = 0;
   int i = 0;
 
-  auto buf_ptr = pool.tryAcquireBuffer();
+  auto buf_ptr = pool.tryAcquireObject();
+  buf_ptr->clear_and_unblock_writes();
 
 #pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, writelock, writelock2, writelock3, pool) private(i, data, result) reduction(+:success, failure, swap)
   for (i = 0; i < total_count; ++i) {
@@ -62,7 +66,7 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
 //    while (writelock2.test_and_set());
     omp_set_lock(&writelock2);
     auto sptr = buf_ptr;
-    auto ptr = sptr.get();
+    auto ptr = sptr;
     omp_unset_lock(&writelock2);
 //    writelock2.clear();
 
@@ -88,11 +92,14 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
       ++swap;
 
       // swap in a new one.
-      auto new_buf_ptr = pool.tryAcquireBuffer();
+      auto new_buf_ptr = pool.tryAcquireObject();
+      new_buf_ptr->clear_and_unblock_writes();
 
 //      while (writelock2.test_and_set());
       omp_set_lock(&writelock2);
-      buf_ptr.swap(new_buf_ptr);
+      auto tmp = buf_ptr;
+      buf_ptr = new_buf_ptr;
+      new_buf_ptr = tmp;
 #pragma omp flush(buf_ptr)
       omp_unset_lock(&writelock2);
 //      writelock2.clear();
@@ -107,18 +114,19 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
 
       // and release - few threads doing this, and full.
 
-      pool.releaseBuffer(std::move(new_buf_ptr));
+      pool.releaseObject(new_buf_ptr);
 
     }
 
   }
+  int64_t buffer_capacity = buf_ptr->getCapacity();
 
   auto sptr = buf_ptr;
   sptr->block_and_flush();
 
   // compare unordered buffer content.
   stored.insert(stored.end(), sptr->operator int*(), sptr->operator int*() + sptr->getSize() / sizeof(int));
-  pool.releaseBuffer(std::move(buf_ptr));
+  pool.releaseObject(buf_ptr);
   int stored_count = stored.size();
 
 
@@ -140,12 +148,10 @@ void testAppendMultipleBuffers(const int buffer_capacity, const int total_count)
 
 
 template<typename PoolType>
-void testPool(PoolType && pool, const std::string &name, int pool_threads, int buffer_threads) {
-
-  using BufferType = typename PoolType::BufferType;
+void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int pool_threads, int buffer_threads) {
 
 
-  printf("TESTING %s %s: pool threads %d, buffer threads %d\n", name.c_str(), (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
+  printf("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d\n", poollt, bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
 
   printf("TEST acquire\n");
   int expected;
@@ -154,7 +160,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   int mx = pool.isUnlimited() ? 100 : pool.getCapacity();
 #pragma omp parallel for num_threads(pool_threads) default(none) private(i) shared(pool, mx) reduction(+ : count)
   for (i = 0; i < mx; ++i) {
-	  auto ptr = std::move(pool.tryAcquireBuffer());
+	  auto ptr = pool.tryAcquireObject();
     if (! ptr) {
       ++count;
     }
@@ -169,7 +175,7 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   mx = pool.isUnlimited() ? 100 : pool.getCapacity();
 #pragma omp parallel for num_threads(pool_threads) default(none) private(i) shared(pool, mx) reduction(+ : count)
   for (i = 0; i <= mx; ++i) {  // <= so we get 1 extra
-		auto ptr = std::move(pool.tryAcquireBuffer());
+		auto ptr = pool.tryAcquireObject();
 	    if (! ptr) {
 	      ++count;
 	    }
@@ -182,28 +188,26 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   printf("TEST release\n");
   count = 0;
   mx = pool.isUnlimited() ? 100 : pool.getCapacity();
+  // and create some dummy buffers to insert
+  std::vector<typename PoolType::ObjectPtrType> temp;
   // first drain the pool
   for (i = 0; i < mx; ++i) {
-    auto ptr = std::move(pool.tryAcquireBuffer());
-  }
-  // and create some dummy buffers to insert
-  std::vector<typename PoolType::BufferPtrType> temp;
-  for (i = 0; i < mx; ++i) {
-    temp.push_back(std::move(std::unique_ptr<BufferType>(new BufferType(pool.getBufferCapacity()))));
-    temp.push_back(std::move(std::unique_ptr<BufferType>(new BufferType(pool.getBufferCapacity()))));
+    typename PoolType::ObjectPtrType ptr = pool.tryAcquireObject();
+    temp.push_back(ptr);
+    temp.push_back(ptr);
   }
 #pragma omp parallel for num_threads(pool_threads) default(none) shared(pool, mx, temp) private(i) reduction(+ : count)
   for (i = 0; i < mx * 2; ++i) {
 
-    std::shared_ptr<BufferType> ptr = std::move(temp[i]);
+    typename PoolType::ObjectPtrType ptr = temp[i];
     if (ptr) {
       ptr->block_and_flush();
-      if (! pool.releaseBuffer(std::move(ptr))) {
+      if (! pool.releaseObject(ptr)) {
         ++count; // failed release
       }
     }
   }
-  expected = pool.isUnlimited() ? 0 : mx;  // unlimited or not, can only push back in as much as taken out.
+  expected = mx;  // unlimited or not, can only push back in as much as taken out.
   if (count != expected) printf("ERROR: number of failed attempt to release buffer should be %d, actual %d. pool remaining: %lu \n", expected, count, pool.getAvailableCount());
   pool.reset();
   temp.clear();
@@ -213,11 +217,20 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
 
   count = 0;
   int count1 = 0;
-#pragma omp parallel num_threads(pool_threads) default(none) shared(pool) reduction(+ : count, count1)
+  int count2 = 0;
+#pragma omp parallel num_threads(pool_threads) default(none) shared(pool, std::cout) reduction(+ : count, count1, count2)
   {
     int v = omp_get_thread_num() + 5;
-    auto ptr = pool.tryAcquireBuffer();
-    if (! (ptr->append(&v, sizeof(int)) & 0x1)) {
+    auto ptr = pool.tryAcquireObject();
+
+    if (! ptr) ++count2;
+    else {
+      ptr->clear_and_unblock_writes();
+
+      int res = ptr->append(&v, sizeof(int));
+
+
+    if (! (res & 0x1)) {
       ++count;
     }
 
@@ -227,16 +240,20 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
     }
 
     ptr->block_and_flush();
-    pool.releaseBuffer(std::move(ptr));
+    pool.releaseObject(ptr);
+    }
   }
-  if (count != 0) printf("ERROR: append failed\n");
-  else if (count1 != 0) printf("ERROR: inserted and got back\n");
+  if (count2 != 0) printf("ERROR: acquire failed\n");
+  else if (count != 0) printf("ERROR: append failed\n");
+  else if (count1 != 0) printf("ERROR: inserted and got back wrong values\n");
   pool.reset();
 
   printf("TEST access by multiple threads, all to same buffer.\n");
 
 
-  auto ptr = pool.tryAcquireBuffer();
+  auto ptr = pool.tryAcquireObject();
+  ptr->clear_and_unblock_writes();
+
 #pragma omp parallel num_threads(buffer_threads) default(none) shared(pool, ptr)
   {
     int v = 7;
@@ -254,36 +271,50 @@ void testPool(PoolType && pool, const std::string &name, int pool_threads, int b
   omp_set_nested(1);
 
   printf("TEST all operations together\n");
-#pragma omp parallel num_threads(pool_threads) default(none) shared(pool, pool_threads, buffer_threads)
+#pragma omp parallel num_threads(pool_threads) default(none) shared(pool, pool_threads, buffer_threads, std::cout)
   {
     // Id range is 0 to 100
     int iter;
     int j = 0;
     for (int i = 0; i < 100; ++i) {
       // acquire
-      auto buf = pool.tryAcquireBuffer();
+      auto buf = pool.tryAcquireObject();
+//      printf("acquiring ");
       while (!buf) {
-        usleep(50);
-        buf = pool.tryAcquireBuffer();
+        _mm_pause();
+//        printf(".");
+        buf = pool.tryAcquireObject();
       }
+//      printf(" done.\n");
+      buf->clear_and_unblock_writes();
 
       // access
       iter = rand() % 100;
-#pragma omp parallel for num_threads(buffer_threads) default(none) shared(pool, buf, iter) private(j)
+      int count = 0;
+#pragma omp parallel for num_threads(buffer_threads) default(none) shared(buf, iter) private(j) reduction(+:count)
       for (j = 0; j < iter; ++j) {
-        buf->append(&j, sizeof(int));
+        bool res = buf->append(&j, sizeof(int));
+        if (! (res & 0x1)) {
+          count++;
+        }
       }
 
       // random sleep
-      usleep(rand() % 1000);
+      for (int i = 0; i < rand() % 1000; ++i) {
+        _mm_pause();
+      }
       // clear buffer
+//      std::cout << "before block and flush: " << *buf << std::endl << std::flush;
       buf->block_and_flush();
+//      std::cout << "after block and flush: " << *buf << std::endl << std::flush;
 
-      if (buf->getSize() != sizeof(int) * iter)
-        printf("ERROR: thread %d/%d buffer size is %ld, expected %lu\n", omp_get_thread_num(), pool_threads, buf->getSize(), sizeof(int) * iter);
+//      printf("count = %d\n", count);
+
+      if (buf->getSize() != sizeof(int) * iter  || count != 0)
+        printf("ERROR: thread %d/%d buffer size is %ld, expected %lu\n", omp_get_thread_num() + 1, pool_threads, buf->getSize(), sizeof(int) * iter);
 
       //release
-      pool.releaseBuffer(std::move(buf));
+      pool.releaseObject(buf);
       //if (i % 25 == 0)
 //      printf("thread %d released buffer %d\n", omp_get_thread_num(), id);
 
@@ -311,168 +342,39 @@ int main(int argc, char** argv) {
   /// thread unsafe.  test in single thread way.
 
 
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE>(8192)), "thread unsafe pool", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 1, 8);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 1, 8);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 1, 8);
+  testPool(std::move(bliss::io::ObjectPool< bliss::concurrent::LockType::NONE, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >()), bliss::concurrent::LockType::NONE,bliss::concurrent::LockType::NONE, 1, 1);
+  testPool(std::move(bliss::io::ObjectPool< bliss::concurrent::LockType::NONE, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >(16)), bliss::concurrent::LockType::NONE,bliss::concurrent::LockType::NONE, 1, 1);
+
+  for (int i = 1; i <= 8; ++i) {
+    // okay to test.  in real life, pools would not be single threaded.
+    testPool(std::move(bliss::io::ObjectPool<bliss::concurrent::LockType::NONE, bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192> >()),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
+    testPool(std::move(bliss::io::ObjectPool<bliss::concurrent::LockType::NONE, bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192> >()), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
+    testPool(std::move(bliss::io::ObjectPool<bliss::concurrent::LockType::NONE, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192> >()), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
+
+    // okay to test.  in real life, pools would not be single threaded.
+    testPool(std::move(bliss::io::ObjectPool<bliss::concurrent::LockType::NONE, bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192> >(16)),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
+    testPool(std::move(bliss::io::ObjectPool<bliss::concurrent::LockType::NONE, bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192> >(16)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
+    testPool(std::move(bliss::io::ObjectPool<bliss::concurrent::LockType::NONE, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192> >(16)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
 
 
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 1, 8);
+    for (int j = 1; j <= 4; ++j) {
+      testPool(std::move(bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192> >()),    lt, bliss::concurrent::LockType::MUTEX, j, i);
+      testPool(std::move(bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192> >()), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
+      testPool(std::move(bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192> >()), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
 
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 2, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 2, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 2, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 2, 4);
+      testPool(std::move(bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192> >(16)),    lt, bliss::concurrent::LockType::MUTEX, j, i);
+      testPool(std::move(bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192> >(16)), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
+      testPool(std::move(bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192> >(16)), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
 
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 3, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 3, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8192)), "thread safe pool, thread safe buffer", 3, 3);
+    }
 
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 1, 8);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 2, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 2, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 2, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 2, 4);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 3, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 3, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8192)), "thread safe pool, thread safe buffer", 3, 3);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 1, 8);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 2, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 2, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 2, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 2, 4);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 3, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 3, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8192)), "thread safe pool, thread safe buffer", 3, 3);
+    testAppendMultipleBuffers<bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192> > >(i, 1000000, lt, bliss::concurrent::LockType::LOCKFREE, 8192);
 
 
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::NONE>(8192)), "thread safe pool, thread unsafe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::NONE>(8192)), "thread safe pool, thread unsafe buffer", 2, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::NONE>(8192)), "thread safe pool, thread unsafe buffer", 3, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::NONE>(8192)), "thread safe pool, thread unsafe buffer", 4, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::NONE>(8192)), "thread safe pool, thread unsafe buffer", 8, 1);
+    // no multithread pool single thread buffer test right now.
+    //testPool(std::move(bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >()), lt, bliss::concurrent::LockType::NONE, i, 1);
+    //testPool(std::move(bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >(16)), lt, bliss::concurrent::LockType::NONE, i, 1);
+  }
 
-
-
-
-
-
-
-  /////////////  fixed size version.
-
-
-
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE>(8, 8192)), "thread unsafe pool", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 1, 8);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 1, 8);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 8);
-
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 1, 8);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 2, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 2, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 2, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 2, 4);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 3, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 3, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::MUTEX>(8, 8192)), "thread safe pool, thread safe buffer", 3, 3);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 1, 8);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 2, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 2, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 2, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 2, 4);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 3, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 3, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::SPINLOCK>(8, 8192)), "thread safe pool, thread safe buffer", 3, 3);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 4);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 1, 8);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 2, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 2, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 2, 3);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 2, 4);
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 3, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 3, 2);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>(8, 8192)), "thread safe pool, thread safe buffer", 3, 3);
-
-
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::NONE>(8, 8192)), "thread safe pool, thread unsafe buffer", 1, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::NONE>(8, 8192)), "thread safe pool, thread unsafe buffer", 2, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::NONE>(8, 8192)), "thread safe pool, thread unsafe buffer", 3, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::NONE>(8, 8192)), "thread safe pool, thread unsafe buffer", 4, 1);
-  testPool(std::move(bliss::io::BufferPool<lt, bliss::concurrent::LockType::NONE>(8, 8192)), "thread safe pool, thread unsafe buffer", 8, 1);
-
-
-
-
-
-
-  testAppendMultipleBuffers<bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>, 1>(8192, 1000000);
-  testAppendMultipleBuffers<bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>, 2>(8192, 1000000);
-  testAppendMultipleBuffers<bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>, 3>(8192, 1000000);
-  testAppendMultipleBuffers<bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>, 4>(8192, 1000000);
-  testAppendMultipleBuffers<bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>, 5>(8192, 1000000);
-  testAppendMultipleBuffers<bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>, 6>(8192, 1000000);
-  testAppendMultipleBuffers<bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>, 7>(8192, 1000000);
-  testAppendMultipleBuffers<bliss::io::BufferPool<lt, bliss::concurrent::LockType::LOCKFREE>, 8>(8192, 1000000);
 
 }

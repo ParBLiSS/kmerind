@@ -44,7 +44,7 @@
 
 #include "config.hpp"
 #include "io/locking_buffer.hpp"
-#include "io/locking_bufferpool.hpp"
+#include "io/locking_object_pool.hpp"
 #include <atomic>
 
 #include <iterator> // for ostream_iterator
@@ -64,19 +64,23 @@ namespace bliss
      *
      * @tparam LockType   Indicates whether the class should be thread safe or not.
      */
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT = PoolLT>
+    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT = PoolLT, int64_t BufferCapacity = 8192>
     class MessageBuffers
     {
         // TODO: move consturctor and assignment operator to copy between thread safety levels.
+      public:
+
+        typedef Buffer<BufferLT, BufferCapacity> BufferType;
+
       protected:
 
         /// Internal BufferPool Type.  typedefed only to shorten the usage.
-        typedef typename bliss::io::BufferPool<PoolLT, BufferLT>  BufferPoolType;
-
+        typedef typename bliss::io::ObjectPool<PoolLT, BufferType>  BufferPoolType;
+      public:
         /// IdType of a Buffer, aliased from BufferPool
-        typedef typename BufferPoolType::BufferPtrType            BufferPtrType;
-        typedef typename BufferPoolType::BufferType               BufferType;
+        typedef typename BufferPoolType::ObjectPtrType            BufferPtrType;
 
+      protected:
         /// a pool of in-memory Buffers for storage.
         BufferPoolType pool;
 
@@ -85,7 +89,7 @@ namespace bliss
          * @return    capacity of each buffer.
          */
         const size_t getBufferCapacity() const {
-          return pool.getBufferCapacity();
+          return BufferCapacity;
         }
 
         /**
@@ -99,8 +103,7 @@ namespace bliss
          * @param buffer_capacity   the Buffer's maximum capacity.  default to 8192.
          * @param pool_capacity     the BufferPool's capacity.  default to unlimited.
          */
-        explicit MessageBuffers(const size_t & _buffer_capacity = 8192) :
-          pool(_buffer_capacity) {};  // unlimited size pool
+        explicit MessageBuffers() : pool() {};  // unlimited size pool
 
         /**
          * @brief default copy constructor.  deleted.  since internal BufferPool does not allow copy construction/assignment.
@@ -108,7 +111,7 @@ namespace bliss
          *
          * @param other     source MessageBuffers to copy from
          */
-        explicit MessageBuffers(const MessageBuffers<PoolLT, BufferLT>& other) = delete;
+        explicit MessageBuffers(const MessageBuffers<PoolLT, BufferLT, BufferCapacity>& other) = delete;
 
         /**
          * @brief default copy assignment operator.  deleted.   since internal BufferPool does not allow copy construction/assignment.
@@ -117,7 +120,7 @@ namespace bliss
          * @param other     source MessageBuffers to copy from
          * @return          self.
          */
-        MessageBuffers<PoolLT, BufferLT>& operator=(const MessageBuffers<PoolLT, BufferLT>& other) = delete;
+        MessageBuffers<PoolLT, BufferLT, BufferCapacity>& operator=(const MessageBuffers<PoolLT, BufferLT, BufferCapacity>& other) = delete;
 
 
         /**
@@ -126,7 +129,7 @@ namespace bliss
          *
          * @param other     source MessageBuffers to move from
          */
-        explicit MessageBuffers(MessageBuffers<PoolLT, BufferLT>&& other) : pool(std::move(other.pool)) {};
+        explicit MessageBuffers(MessageBuffers<PoolLT, BufferLT, BufferCapacity>&& other) : pool(std::move(other.pool)) {};
 
 
         /**
@@ -136,7 +139,7 @@ namespace bliss
          * @param other     source MessageBuffers to move from
          * @return          self.
          */
-        MessageBuffers<PoolLT, BufferLT>& operator=(MessageBuffers<PoolLT, BufferLT>&& other) {
+        MessageBuffers<PoolLT, BufferLT, BufferCapacity>& operator=(MessageBuffers<PoolLT, BufferLT, BufferCapacity>&& other) {
           pool = std::move(other.pool);
           return *this;
         }
@@ -156,8 +159,8 @@ namespace bliss
          *
          * @param id    Buffer's id (assigned from BufferPool)
          */
-        virtual void releaseBuffer(BufferType *ptr) {
-          pool.releaseBuffer(ptr);
+        virtual void releaseBuffer(BufferPtrType ptr) {
+          pool.releaseObject(ptr);
         }
 
       protected:
@@ -203,16 +206,16 @@ namespace bliss
      *
      *  @tparam LockType    determines if this class should be thread safe
      */
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT = PoolLT>
-    class SendMessageBuffers : public MessageBuffers<PoolLT, BufferLT>
+    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT = PoolLT, int64_t BufferCapacity = 8192>
+    class SendMessageBuffers : public MessageBuffers<PoolLT, BufferLT, BufferCapacity>
     {
       public:
         /// Id type of the Buffers
-        using BufferType = typename MessageBuffers<PoolLT, BufferLT>::BufferType;
-        //using BufferPtrType = typename MessageBuffers<PoolLT, BufferLT>::BufferPtrType;
+        using BufferType = typename MessageBuffers<PoolLT, BufferLT, BufferCapacity>::BufferType;
+        //using BufferPtrType = typename MessageBuffers<PoolLT, BufferLT, BufferCapacity>::BufferPtrType;
 
         /// the BufferPoolType from parent class
-        using BufferPoolType = typename MessageBuffers<PoolLT, BufferLT>::BufferPoolType;
+        using BufferPoolType = typename MessageBuffers<PoolLT, BufferLT, BufferCapacity>::BufferPoolType;
 
       protected:
 
@@ -229,8 +232,27 @@ namespace bliss
 
         // private copy contructor
         SendMessageBuffers(SendMessageBuffers&& other, const std::lock_guard<std::mutex>&) :
-          MessageBuffers<PoolLT, BufferLT>(std::move(other)), buffers(std::move(other.buffers))
+          MessageBuffers<PoolLT, BufferLT, BufferCapacity>(std::move(other)), buffers(std::move(other.buffers))
           {};
+
+        /**
+         * @brief default copy constructor.  deleted.
+         * @param other   source SendMessageBuffers to copy from.
+         */
+        explicit SendMessageBuffers(const SendMessageBuffers<PoolLT, BufferLT, BufferCapacity> &other) = delete;
+
+        /**
+         * @brief default copy assignment operator, deleted.
+         * @param other   source SendMessageBuffers to copy from.
+         * @return        self
+         */
+        SendMessageBuffers<PoolLT, BufferLT, BufferCapacity>& operator=(const SendMessageBuffers<PoolLT, BufferLT, BufferCapacity> &other) = delete;
+
+
+        /**
+         * @brief Default constructor, deleted
+         */
+        SendMessageBuffers() = delete;
 
       public:
         /**
@@ -239,36 +261,20 @@ namespace bliss
          * @param bufferCapacity   The capacity of the individual buffers.  default 8192.
          * @param poolCapacity     The capacity of the pool.  default unbounded.
          */
-        explicit SendMessageBuffers(const int & numDests, const size_t & bufferCapacity = 8192) :
-          MessageBuffers<PoolLT, BufferLT>(bufferCapacity), buffers(numDests)
+        explicit SendMessageBuffers(const int & numDests) :
+          MessageBuffers<PoolLT, BufferLT, BufferCapacity>(), buffers(numDests)
         {
           this->reset();
         };
 
-        /**
-         * @brief Default constructor, deleted
-         */
-        SendMessageBuffers() :  MessageBuffers<PoolLT, BufferLT>() {};
 
-        /**
-         * @brief default copy constructor.  deleted.
-         * @param other   source SendMessageBuffers to copy from.
-         */
-        explicit SendMessageBuffers(const SendMessageBuffers<PoolLT, BufferLT> &other) = delete;
 
         /**
          * default move constructor.  calls superclass move constructor first.
          * @param other   source SendMessageBuffers to move from.
          */
-        explicit SendMessageBuffers(SendMessageBuffers<PoolLT, BufferLT> && other) :
-            SendMessageBuffers(std::forward<SendMessageBuffers<PoolLT, BufferLT> >(other), std::lock_guard<std::mutex>(other.mutex)) {};
-
-        /**
-         * @brief default copy assignment operator, deleted.
-         * @param other   source SendMessageBuffers to copy from.
-         * @return        self
-         */
-        SendMessageBuffers<PoolLT, BufferLT>& operator=(const SendMessageBuffers<PoolLT, BufferLT> &other) = delete;
+        explicit SendMessageBuffers(SendMessageBuffers<PoolLT, BufferLT, BufferCapacity> && other) :
+            SendMessageBuffers(std::forward<SendMessageBuffers<PoolLT, BufferLT, BufferCapacity> >(other), std::lock_guard<std::mutex>(other.mutex)) {};
 
 
         /**
@@ -276,7 +282,7 @@ namespace bliss
          * @param other   source SendMessageBuffers to move from.
          * @return        self
          */
-        SendMessageBuffers<PoolLT, BufferLT>& operator=(SendMessageBuffers<PoolLT, BufferLT> && other) {
+        SendMessageBuffers<PoolLT, BufferLT, BufferCapacity>& operator=(SendMessageBuffers<PoolLT, BufferLT, BufferCapacity> && other) {
           std::unique_lock<std::mutex> mine(mutex, std::defer_lock),
                                           hers(other.mutex, std::defer_lock);
           std::lock(mine, hers);
@@ -290,7 +296,9 @@ namespace bliss
         /**
          * @brief default destructor
          */
-        virtual ~SendMessageBuffers() {};
+        virtual ~SendMessageBuffers() {
+          buffers.clear();
+        };
 
         /**
          * @brief get the number of buffers.  should be same as number of targets for messages
@@ -311,11 +319,11 @@ namespace bliss
 //        const typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type at(const int targetRank) const {
 //          return buffers.at(targetRank).load();   // can use reference since we made pool unlimited, so never get nullptr
 //        }
-        const BufferType* at(const int targetRank) const {
+        BufferType* at(const int targetRank) const {
           return (BufferType*)(buffers.at(targetRank));   // if atomic pointer, then will do load()
         }
 
-        const BufferType* operator[](const int targetRank) const {
+        BufferType* operator[](const int targetRank) const {
           return at(targetRank);
         }
 
@@ -328,10 +336,9 @@ namespace bliss
           std::lock_guard<std::mutex> lock(mutex);
           // release all buffers back to pool
           for (int i = 0; i < buffers.size(); ++i) {
-            if (this->at(targetRank)) {
-
-              this->at(targetRank)->block_and_flush();
-              this->pool.releaseBuffer(this->at(targetRank));
+            if (this->at(i)) {
+              this->at(i)->block_and_flush();
+              this->pool.releaseObject(this->at(i));
             }
           }
           // reset the pool. local vector should contain a bunch of nullptrs.
@@ -339,7 +346,7 @@ namespace bliss
 
           // populate the buffers from the pool
           for (int i = 0; i < buffers.size(); ++i) {
-            buffers.at(i) = this->pool.tryAcquireBuffer();
+            swapInEmptyBuffer<PoolLT>(i);
           }
         }
 
@@ -347,7 +354,7 @@ namespace bliss
 
           ptr->block_and_flush();  // if already blocked and flushed, no op.
 
-          MessageBuffers<PoolLT, BufferLT>::releaseBuffer(ptr);
+          MessageBuffers<PoolLT, BufferLT, BufferCapacity>::releaseBuffer(ptr);
         }
 
         /**
@@ -491,7 +498,7 @@ namespace bliss
         template<bliss::concurrent::LockType LT = PoolLT>
         typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest) {
 
-          return std::atomic_exchange(buffers.at(dest), this->pool.tryAcquireBuffer());
+          return buffers.at(dest).exchange(this->pool.tryAcquireObject());
         }
 
 
@@ -526,7 +533,7 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest) {
 
           BufferType* oldbuf = this->at(dest);
-          buffers.at(dest) = this->pool.tryAcquireBuffer();
+          buffers.at(dest) = this->pool.tryAcquireObject();
           return oldbuf;  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
         }
 

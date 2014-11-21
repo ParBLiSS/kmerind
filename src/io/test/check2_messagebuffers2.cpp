@@ -29,9 +29,9 @@ int bufferSize = 2047;
 
 
 template<typename BuffersType>
-void testPool(BuffersType && buffers, const std::string &name, int nthreads) {
+void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int nthreads) {
 
-  printf("*** TESTING %s: ntargets = %lu, pool threads %d\n", name.c_str(), buffers.getSize(), nthreads);
+  printf("*** TESTING pool lock %d buffer lock %d: ntargets = %lu, pool threads %d\n", poollt, bufferlt, buffers.getSize(), nthreads);
 
 
   printf("TEST append until full: ");
@@ -281,11 +281,11 @@ int main(int argc, char** argv) {
   /// thread unsafe.  test in single thread way.
 //while(true) {
 
-  for (int i = 0; i < 8; ++i) {
-    testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE>(i, 2047)), "thread unsafe buffers", 1);
+  for (int i = 1; i <= 8; ++i) {
+    testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
 
-    for (int j = 0; j < 8; ++j) {
-      testPool(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::LockType::LOCKFREE>(i, 2047)), "thread safe buffers", j);
+    for (int j = 1; j <= 8; ++j) {
+      testPool(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::LockType::LOCKFREE, 2047>(i)), lt, bliss::concurrent::LockType::LOCKFREE, j);
     }
   }
 
