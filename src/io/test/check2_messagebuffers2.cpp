@@ -169,7 +169,7 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
 
 
       if (result.second) {
-        throw std::logic_error("ERROR: append result is true-true.  should not get here.\n");
+        throw std::logic_error("FAIL: append result is true-true.  should not get here.\n");
 
       }
     } else {
@@ -183,7 +183,7 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
 
         count += result.second->getSize();
 
-        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), result.second->operator int*(), result.second->operator int*() + result.second->getSize());
+        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), result.second->operator int*(), result.second->operator int*() + result.second->getSize() / sizeof(int));
         buffers.releaseBuffer(std::move(result.second));
       }
     }
@@ -201,7 +201,7 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
   BufferPtrType final = buffers.flushBufferForRank(id);  // flush blocks buffer and waits for all updates., but need to set final size.
   count5 = final->getSize();
 
-  allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize());
+  allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize() / sizeof(int));
   buffers.releaseBuffer(std::move(final));
 
   //if (count7 != count/sizeof(int)) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/sizeof(int) );

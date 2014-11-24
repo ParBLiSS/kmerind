@@ -447,8 +447,6 @@ namespace bliss
          */
 
         BufferType* flushBufferForRank(const int targetProc) {
-          DEBUG("flush buffer for rank!");
-
           //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
@@ -498,7 +496,10 @@ namespace bliss
         template<bliss::concurrent::LockType LT = PoolLT>
         typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest) {
 
-          return buffers.at(dest).exchange(this->pool.tryAcquireObject());
+	  auto ptr = this->pool.tryAcquireObject();
+	  ptr->clear_and_unblock_writes();
+
+          return buffers.at(dest).exchange(ptr);
         }
 
 
@@ -532,8 +533,9 @@ namespace bliss
         template<bliss::concurrent::LockType LT = PoolLT>
         typename std::enable_if<LT == bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest) {
 
-          BufferType* oldbuf = this->at(dest);
+          auto oldbuf = this->at(dest);
           buffers.at(dest) = this->pool.tryAcquireObject();
+	  buffers.at(dest)->clear_and_unblock_writes();
           return oldbuf;  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
         }
 
