@@ -153,7 +153,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 
   printf("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d\n", poollt, bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
 
-  printf("TEST acquire\n");
+  printf("TEST acquire: ");
   int expected;
   int i = 0;
   int count = 0;
@@ -170,7 +170,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   else printf("PASSED.\n");
   pool.reset();
 
-  printf("TEST acquire with growth\n");
+  printf("TEST acquire with growth: ");
   i = 0;
   count = 0;
   mx = pool.isUnlimited() ? 100 : pool.getCapacity();
@@ -188,7 +188,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 
   pool.reset();
 
-  printf("TEST release\n");
+  printf("TEST release: ");
   count = 0;
   mx = pool.isUnlimited() ? 100 : pool.getCapacity();
   // and create some dummy buffers to insert
@@ -216,7 +216,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   pool.reset();
   temp.clear();
 
-  printf("TEST access by multiple threads, each a separate buffer.\n");
+  printf("TEST access by multiple threads, each a separate buffer: ");
 
 
   count = 0;
@@ -253,7 +253,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   else printf("PASSED.\n");
   pool.reset();
 
-  printf("TEST access by multiple threads, all to same buffer.\n");
+  printf("TEST access by multiple threads, all to same buffer: ");
 
 
   auto ptr = pool.tryAcquireObject();
@@ -277,7 +277,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 
   omp_set_nested(1);
 
-  printf("TEST all operations together\n");
+  printf("TEST all operations together: ");
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool, pool_threads, buffer_threads, std::cout)
   {
     // Id range is 0 to 100
@@ -319,7 +319,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 
       if (buf->getSize() != sizeof(int) * iter  || count != 0)
         printf("FAIL: thread %d/%d buffer size is %ld, expected %lu\n", omp_get_thread_num() + 1, pool_threads, buf->getSize(), sizeof(int) * iter);
-  else printf("PASSED.\n");
+ // else printf("PASSED.\n");
 
       //release
       pool.releaseObject(buf);

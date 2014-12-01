@@ -127,7 +127,7 @@ struct Tester
         for (int j = 0; j < commSize; ++j)
         {
           int msg = generate_message(my_rank, j);
-          if (i % 1000 == 0) DEBUG("Rank " << my_rank << " " << i << " of " << repeat_sends << " Sending " << msg << " to Rank " << j);
+          if (i % 1000 == 0) DEBUG("Rank " << my_rank << ", " << i << " of " << repeat_sends << " Sending " << msg << " to Rank " << j);
           commLayer.sendMessage(&msg, sizeof(int), j, FIRST_TAG);
         }
       }
