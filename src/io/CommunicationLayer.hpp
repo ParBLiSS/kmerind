@@ -37,6 +37,9 @@
 #include "concurrent/concurrent.hpp"
 #include "io/locking_message_buffers.hpp"
 #include "io/io_exception.hpp"
+#include "io/message_type_info.hpp"
+#include "io/message_types.hpp"
+#include "io/mpi_comm_thread.hpp"
 
 namespace bliss
 {
@@ -61,15 +64,21 @@ namespace io
  *        Design and Implementation  (MORE DETAILS BELOW)
  *        1. support application where there are different message types (e.g. query-response).
  *          each data message type is assigned an id ranging from 1 to MAX_INT.
- *          FOC messages have id 0, but carries in payload the id of the message type that is being controlled.
+ *          FOC messages have tag 0, but carries in payload the tag of the message type that is being controlled.
+ *          in addition, FOC messages have an additional, sequentially assigned id for each message type to
+ *          disambiguate multiple FOC messages with the same tag
  *
- *        2. support collectively, blocking flushing all messages of a particular type.
+ *        2. support collective, blocking flushing of all messages of a particular type.
  *          To indicate to the system that there is no further messages of a particular type, collective flush
- *          operations have been implemented.  There are 2 types:
- *          a. "flush":  flush a single message type
- *          b. "finish": flush all message types (and mark end of application)
+ *          operations have been implemented.  There are 3 types:
+ *          a. "flush":  flush a single message type, allow future messages of this type
+ *          b. "finish": flush a single message type, disallow future messages of this type
+ *          c. "finish communication":  flush all message types, and mark end of application communication)
  *
- *          All processes need to call these functions together.  When called, the function blocks the calling thread
+ *          As these are collective functions, all MPI processes need to make matching calls.
+ *          The timing of the calls need not be synchronous, but they need to preserve the order of the calls
+ *
+ *          The functions form barriers, and blocks the calling thread
  *          until all processes have completely processed all matching FOC messages from all senders
  *
  *        3. provide flexible way of handling received messages based on message type
@@ -78,14 +87,19 @@ namespace io
  *
  *        4. Thread Safe, non-blocking send (allow overlap of computation with communication)
  *          A compute thread can call sendMessage on the Communication Layer object.  each invocation
- *          atomically gets a location to insert the message into a batching buffer via CAS operation.
- *          (thread safe insert)
+ *          atomically gets a location to insert the message into a batching buffer via thread safe insert/
  *
- *          When a buffer is full and sent, it is inserted into a thread-safe send queue for the comm thread to
+ *          When a buffer is full and sent, it is inserted into a thread-safe send queue for the sending comm thread to
  *          send via MPI  (non-blocking).
  *
- *        5. Thread Safe processing of received messages
- *          Multiple receive threads can process the received messages in the receive queue, which is thread safe.
+ *        5. Thread Safe, non-blocking receive
+ *          A dedicated thread checks for MPI messages to receive remote messages and populate the recvQueue. Separation
+ *          of sender and receiver communication threads avoids deadlock when the receiving process is blocked by a full
+ *          recvQueue, thus blocking the sending function.
+ *
+ *
+ *        6. Thread Safe processing of received messages
+ *          Multiple callback threads can process the received messages in the receive queue, which is thread safe.
  *
  *        6. single threaded control of the Communication Layer (flush messages, finish, etc)
  *          flush and finish functions are collectively called by the control thread (owner of Communication Layer object)
@@ -96,7 +110,8 @@ namespace io
  *          The following are the intended threading pattern:
  *          * single control thread (owner of Communication Layer instance.  can be one of the compute threads)
  *          * one or more compute threads (producer of messages to be sent)
- *          * single MPI communication thread (internal)
+ *          * single MPI communication thread for send (internal)
+ *          * single MPI communication thread for recv (internal)
  *          * one or more receive threads (consumers of messages received, internal)
  *
  *        The choice of using a single MPI communication thread is based on
@@ -132,6 +147,7 @@ namespace io
  *          Collective operations (flush, finish; for requirement 2) are implemented using Point to Point communication of FOC messages.
  *          The messaging pattern is peer-to-peer (no master-slave relationship).
  *            as a consequence, collective operations require all to send to all (in a non-blocking way)
+ *          not using MPI AllToAllv because that blocks the compute threads
  *            TODO: perhaps use master-slave, with rotating master based on epoch id.  reduces comm from p^2 for each epoch to 2p.
  *
  *          flush requires:
@@ -255,45 +271,9 @@ namespace io
  */
 class CommunicationLayer
 {
-  protected:
-
-    // ========= static variables for control messages.
-    // unioned data structure is not friendly with both endianness and atomic operations.
-    // since Tag+Epoch is used only for control messages, just use methods to extract tag and epoch when needed.
-    // this also avoids defining out own hash and equal functions.
-//   union TaggedEpoch {
-//       struct {  // order:  lower bits = epoch, higher bits = tag.
-//           int32_t epoch;
-//           int32_t tag;
-//       };
-//       int64_t tagged_epoch;
-//   };
-//   struct TaggedEpochHash {
-//       inline size_t operator()(const TaggedEpoch& v) const
-//       {
-//         return std::hash<int64_t>()(v.tagged_epoch);
-//       }
-//   };
-//   struct TaggedEpochEqual {
-//       inline bool operator()(const TaggedEpoch& lhs, const TaggedEpoch& rhs) const
-//       {
-//         return std::equal_to<int64_t>()(lhs.tagged_epoch, rhs.tagged_epoch);
-//       }
-//   };
-
-   /// constant indicating message type is control (FOC) message.
-   static constexpr int32_t CONTROL_TAG = 0;
-
-   /// constant indicating that there is no active tag. (e.g. during flushing)
-   static constexpr int32_t NO_TAG = -1;
-
-   /// terminal epoch id.
-   static constexpr int32_t NO_EPOCH = -1;
 
 
-   //==== type definitions
-
-
+protected:
    /// alias MessageBuffersType to Use the thread safe version of the SendMessageBuffers
    using MessageBuffersType = SendMessageBuffers<bliss::concurrent::LockType::SPINLOCK, bliss::concurrent::LockType::LOCKFREE, 8192>;
 
@@ -303,287 +283,7 @@ class CommunicationLayer
    /// alias BufferPtrType to MessageBuffersType's
    using BufferPtrType = typename MessageBuffersType::BufferType*;
 
-   using TaggedEpoch = int64_t;
-
-   static constexpr TaggedEpoch CONTROL_TAGGED_EPOCH = 0;
-
-   /**
-    * Metadata re. a message type (tag), used to manage whether communication with this message type is completed, the epoch number of the communication,
-    * and lock/waits.
-    */
-   class TagMetadata {
-     protected:
-       std::atomic<bool> finished;
-       std::atomic<TaggedEpoch>  tagged_epoch;
-       std::atomic<MessageBuffersType *> buffers;
-       std::recursive_mutex mutex;
-       std::unique_lock<std::recursive_mutex> ulock;
-       std::condition_variable_any condVar;
-
-       explicit TagMetadata(const TagMetadata& other) = delete;
-       TagMetadata& operator=(const TagMetadata& other) = delete;
-
-       TagMetadata(TagMetadata&& other, const std::lock_guard<std::recursive_mutex> &) {
-         finished.exchange(other.finished.load());          other.finished = true;
-         tagged_epoch.exchange(other.tagged_epoch.load());  other.tagged_epoch = -1;
-         // have to set other to nullptr else destructor will clean up the reassigned buffer.
-         buffers.exchange(other.buffers.load());            other.buffers = nullptr;
-         ulock = std::move(std::unique_lock<std::recursive_mutex>(mutex, std::defer_lock));
-       }
-
-     public:
-       // needed by unordered_map during initial insert, before actual value is assigned.
-       TagMetadata() : finished(false), tagged_epoch(-1), buffers(nullptr) {
-         ulock = std::move(std::unique_lock<std::recursive_mutex>(mutex, std::defer_lock));
-       }
-
-       TagMetadata(const int32_t tag, const int commSize) : finished(false), tagged_epoch(static_cast<TaggedEpoch>(tag) << 32), buffers(new MessageBuffersType(commSize)) {
-         ulock = std::move(std::unique_lock<std::recursive_mutex>(mutex, std::defer_lock));
-       }
-
-       explicit TagMetadata(TagMetadata&& other) : TagMetadata(std::forward<TagMetadata>(other), std::lock_guard<std::recursive_mutex>(other.mutex)) {}
-
-       TagMetadata& operator=(TagMetadata&& other) {
-         std::lock(ulock, other.ulock);
-
-         finished.exchange(other.finished.load());              other.finished = true;
-         // -1 in64 is 0xFFFFFFFFFFFFFFFF, which is -1, -1 for 2 ints.
-         tagged_epoch.exchange(other.tagged_epoch.load());      other.tagged_epoch = -1;
-
-         // have to clean up old pointer to avoid leak
-         // have to set other to nullptr else destructor will clean up the reassigned buffer.
-         auto ptr = buffers.exchange(other.buffers.load());     other.buffers = nullptr;
-         if (ptr) {
-           printf("deleting old buffer during move assignment!! %p\n", ptr);
-           delete ptr;
-         }
-
-         other.ulock.unlock();
-         ulock.unlock();
-         return *this;
-       }
-
-       ~TagMetadata() {
-         ulock.lock();
-         auto ptr = buffers.exchange(nullptr);
-         if (ptr) delete ptr;
-
-         ulock.unlock();
-       }
-
-       //===== accessors
-       bool finish() {
-         return finished.exchange(true, std::memory_order_seq_cst);
-       }
-       bool isFinished() {
-         return finished.load(std::memory_order_seq_cst);
-       }
-       TaggedEpoch getNextEpoch() {
-         return tagged_epoch.fetch_add(1);
-       }
-       MessageBuffersType* getBuffers() {
-         return buffers.load();
-       }
-       //===== conveience methods
-       static inline int32_t getTag(const TaggedEpoch & te) {
-         return te >> 32;
-       }
-
-
-       //===== lock the data structure.
-       // TODO: have to return a new lock object each time, else either deadlock with recursive mutex, or system_error trying to relock already locked object.
-       void lock() {
-         ulock.lock();
-       }
-       void unlock() {
-         ulock.unlock();
-       }
-
-       //===== condition variable handling.  this can be shared, but then we need to pass in the lock.
-       void wait() {
-         condVar.wait(ulock);
-       }
-       void notifyAll() {
-         condVar.notify_all();
-       }
-       void notifyOne() {
-         condVar.notify_one();
-       }
-
-   };
-
-
-
-    //========= internal message queue data types.
-
-    /**
-     * base class for storing mpi tag and sr for a received message.
-     */
-    struct MPIMessage
-    {
-        /// The message tag, indicates the type of message (how to interpret the message)
-        int tag;
-
-        /// The message source id
-        int rank;
-
-        /**
-         * @brief constructor using a pre-existing memory block
-         *
-         * @param tag       the MPI message tag, indicating the type of message
-         * @param src       the MPI source process rank
-         */
-        MPIMessage(int _tag, int _rank)
-          : tag(_tag), rank(_rank) {}
-
-        /// default constructor
-        MPIMessage() = default;
-
-        /// needed to create a virtual function table, only then is polymorphism allowed.  (inheritance not sufficient)
-        virtual ~MPIMessage() {};
-    };
-
-
-    /**
-     * @brief Structure to hold all associated information of a received MPI message.
-     * @details tag is used to annotate the message type/format.  The message is processed according to this tag.
-     *
-     *        tag == CONTROL_TAG:  control message indicating the last of a type of data messages for a synchronization epoch (period between synchronizations)
-     *                    data contains the tag for the data message type that is ending, as well as an identifier for a synchronization epoch.
-     *                    if data contains a tag of 0, then the application is ending.
-     *        otherwise:  data messages, with data containing payload.
-     *
-     *        Here we need to rely on non-overtaking behavior of MPI to preserve order between data messages (tag > 0) and control messages (tag == 0).
-     *
-     *        The control messages are used to flush the receiver's queue of a particular message type.  "flush" is considered
-     *        a collective operation, with synchronization barrier satisfied when control messages for the same message type are received from all sources.
-     *
-     */
-    struct ControlMessage : public MPIMessage
-    {
-      /// The received data
-      TaggedEpoch control;
-
-      /**
-       * @brief constructor using a pre-existing memory block
-       *
-       * @param data      in memory block of data (received from remote proc, to be processed here)
-       * @param count     number of bytes in the data block
-       * @param tag       the MPI message tag, indicating the type of message
-       * @param src       the MPI source process rank
-       */
-      ControlMessage(TaggedEpoch _control, int rank)
-        : MPIMessage(CONTROL_TAG, rank), control(_control) {}
-
-      /**
-       * @brief Constructs a new instance of this struct and sets all members as given.
-       *
-       * @param _id   Id of MessageBuffer that will be sent
-       * @param _tag  type of the message being sent
-       * @param _epoch  epoch in which to send the message (epoch of the tag)
-       * @param _dst  destination of the message
-       */
-      ControlMessage(int _tag, int _epoch, int rank)
-        : MPIMessage(CONTROL_TAG, rank), control(static_cast<TaggedEpoch>(_tag) << 32 | static_cast<TaggedEpoch>(_epoch)) {}
-
-
-      /// default constructor
-      ControlMessage() = default;
-
-      virtual ~ControlMessage() {};
-
-    };
-
-
-    /**
-     * @brief Structure to hold all associated information of a received MPI message.
-     * @details tag is used to annotate the message type/format.  The message is processed according to this tag.
-     *
-     *        tag == CONTROL_TAG:  control message indicating the last of a type of data messages for a synchronization epoch (period between synchronizations)
-     *                    data contains the tag for the data message type that is ending, as well as an identifier for a synchronization epoch.
-     *                    if data contains a tag of 0, then the application is ending.
-     *        otherwise:  data messages, with data containing payload.
-     *
-     *        Here we need to rely on non-overtaking behavior of MPI to preserve order between data messages (tag > 0) and control messages (tag == 0).
-     *
-     *        The control messages are used to flush the receiver's queue of a particular message type.  "flush" is considered
-     *        a collective operation, with synchronization barrier satisfied when control messages for the same message type are received from all sources.
-     *
-     *        data is a unique pointer to a byte array.  received data buffer is managed by DataMessageRecevied.
-     */
-    struct DataMessageReceived  : public MPIMessage
-    {
-      /// The received data
-      std::unique_ptr<uint8_t[]> data;
-
-      /// The number of bytes received
-      std::size_t count;
-
-      /**
-       * @brief constructor using a pre-existing memory block
-       *
-       * @param data      in memory block of data (received from remote proc, to be processed here).  unique_ptr
-       * @param count     number of bytes in the data block
-       * @param tag       the MPI message tag, indicating the type of message
-       * @param src       the MPI source process rank
-       */
-      DataMessageReceived(std::unique_ptr<uint8_t[]>&& _data, std::size_t count, int tag, int src)
-        : MPIMessage(tag, src), data(std::move(_data)), count(count) {}
-
-      /**
-       * @brief constructor using a pre-existing memory block
-       *
-       * @param raw_data  in memory block of data (received from remote proc, to be processed here).  raw pointer
-       * @param count     number of bytes in the data block
-       * @param tag       the MPI message tag, indicating the type of message
-       * @param src       the MPI source process rank
-       */
-      DataMessageReceived(uint8_t* raw_data, std::size_t count, int tag, int src)
-        : MPIMessage(tag, src), data(raw_data), count(count) {}
-
-
-      /// default constructor
-      DataMessageReceived() = default;
-
-      virtual ~DataMessageReceived() {};
-
-    };
-
-
-    /**
-     * @brief Structure to hold all associated information of a message to be sent via MPI.
-     * @details MessageToSend is a small metadata stucture to be used for message queuing (to be sent)
-     *          MessageToSend does not actually hold any data.  it points to a in-memory Buffer by id.
-     *
-     *          Does NOT manage data.
-     *
-     *          control message is NOT sent this way, since there is no Buffer associated with a control message.
-     *
-     * @tparam  BufferPtrType  type of Buffer id.  Obtained from SendMessageBuffer, parameterized by Thread Safety.
-     */
-    template<typename BufferPtrType>
-    struct DataMessageToSend : public MPIMessage
-    {
-      /// The id of the message buffer
-      BufferPtrType ptr;
-
-      /**
-       * @brief Constructs a new instance of this struct and sets all members as given.
-       *
-       * @param _id   Id of MessageBuffer that will be sent
-       * @param _tag  type of the message being sent
-       * @param _dst  destination of the message
-       */
-      DataMessageToSend(BufferPtrType _ptr, int _tag, int _dst)
-        : MPIMessage(_tag, _dst), ptr(std::move(_ptr)) {}
-
-
-      /// default constructor
-      DataMessageToSend() = default;
-
-      virtual ~DataMessageToSend() {};
-    };
-
+   using MessageTypeInfo = typename bliss::io::MessageTypeInfo<MessageBuffersType>;
 
     //==== Message type aliases for convenience.
 
@@ -718,7 +418,7 @@ class CommunicationLayer
             ControlMessage* se = dynamic_cast<ControlMessage*>(el.second.get());  // MPIMessage*
             TaggedEpoch te = se->control;
 
-            DEBUGF("C SEND %d -> %d, termination signal for tag %d epoch %ld", commLayer.commRank, se->rank, TagMetadata::getTag(te), te & 0x00000000FFFFFFFF);
+            DEBUGF("C SEND %d -> %d, termination signal for tag %d epoch %ld", commLayer.commRank, se->rank, MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
 
             // termination message for this tag and destination
             if (se->rank == commLayer.commRank) {
@@ -745,7 +445,7 @@ class CommunicationLayer
                 throw bliss::io::IOException("recvInProgress queue is disabled!");
               }
 
-              DEBUGF("C rank %d tag %d epoch %ld local send control message to rank %d", commLayer.commRank, TagMetadata::getTag(te), te & 0x00000000FFFFFFFF, commLayer.commRank);
+              DEBUGF("C rank %d tag %d epoch %ld local send control message to rank %d", commLayer.commRank, MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF, commLayer.commRank);
             } else {
 
 
@@ -760,7 +460,7 @@ class CommunicationLayer
 //              MPI_Isend(&(te), 2, MPI_INT, se->rank, CONTROL_TAG, comm, &req);
 //              recvInProgress.push_back(std::move(std::make_pair(std::move(req),
 //                                 std::move(dmr))));
-              DEBUGF("C rank %d tag %d epoch %ld remote send control message to rank %d", commLayer.commRank, TagMetadata::getTag(te), te & 0x00000000FFFFFFFF, se->rank);
+              DEBUGF("C rank %d tag %d epoch %ld remote send control message to rank %d", commLayer.commRank, MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF, se->rank);
             }
           } else {
             // this is an actual data message.
@@ -1176,7 +876,7 @@ class CommunicationLayer
                   // count decremented to negative.  should not happen.  throw exception.
 
                   std::stringstream ss;
-                  ss << "R ERROR: number of remaining receivers for tag " << TagMetadata::getTag(te) << " epoch " << (te & 0x00000000FFFFFFFF) << " is now NEGATIVE";
+                  ss << "R ERROR: number of remaining receivers for tag " << MessageTypeInfo::getTag(te) << " epoch " << (te & 0x00000000FFFFFFFF) << " is now NEGATIVE";
                   throw bliss::io::IOException(ss.str());
                 }
               } else {
@@ -1265,7 +965,7 @@ class CommunicationLayer
           assert(tag != CONTROL_TAG && tag >= 0);
 
           // one thread calls this at a time.
-          std::unique_lock<std::mutex> lock(commLayer.mutex);
+          std::unique_lock<std::recursive_mutex> lock(commLayer.mutex);
 
           if (callbackFunctions.count(tag) > 0) {
             lock.unlock();
@@ -1329,7 +1029,6 @@ class CommunicationLayer
               // get control message's target tag.
               TaggedEpoch te = msg->control;
 
-              printf("HERE1\n");
 
               //===== and unblock the flush/finish/finishCommunication call.
               // getting to here means that all control messages for a tag have been received from all senders.
@@ -1340,8 +1039,7 @@ class CommunicationLayer
               // to ensure the flushing is modified by 1 thread at a time, and notify_all does not get interleaved to before wait,
               // lock is used to enclose the entire sequence on each thread.
               // also if callback thread's block is called before the main thread, we don't want to discard the control message - requeue.
-              commLayer.ctrlMsgProperties.at(TagMetadata::getTag(te)).lock();
-              printf("HERE2\n");
+              commLayer.ctrlMsgProperties.at(MessageTypeInfo::getTag(te)).lock();
 
               // if flushing is not tag, then some other tag is being processed, or flushing == notag.
               // if notag - this block is called before waitForControlMessages.  need to requeue
@@ -1361,20 +1059,18 @@ class CommunicationLayer
 
               // here only when all ctrlMsg for the tagged_epoch is complete.
               commLayer.ctrlMsgRemainingForEpoch.erase(te);
-              DEBUGF("B Rank %d tag %d epoch %ld start waiting", commLayer.commRank, TagMetadata::getTag(te), te & 0x00000000FFFFFFFF);
+              DEBUGF("B Rank %d tag %d epoch %ld start waiting", commLayer.commRank, MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
 
-              printf("HERE3\n");
 
               // TODO: probably won't work - need multiple worker threads may call lock.  using recrusive is okay but condvar only unlock once.
-              commLayer.ctrlMsgProperties.at(TagMetadata::getTag(te)).unlock();
-              printf("HERE4\n");
+              commLayer.ctrlMsgProperties.at(MessageTypeInfo::getTag(te)).unlock();
 
               // so unset 'flushing', and unblock flush() via condition variable.
 
-              commLayer.ctrlMsgProperties.at(TagMetadata::getTag(te)).notifyAll();
+              commLayer.ctrlMsgProperties.at(MessageTypeInfo::getTag(te)).notifyAll();
 
 
-              DEBUGF("B rank %d tag %d epoch %ld notified all.", commLayer.commRank, TagMetadata::getTag(te), te & 0x00000000FFFFFFFF);
+              DEBUGF("B rank %d tag %d epoch %ld notified all.", commLayer.commRank, MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
             } else {
               DataMessageReceived* msg = dynamic_cast<DataMessageReceived*>(result.second.get());
               // data message.  process it.
@@ -1426,7 +1122,7 @@ public:
    */
   void finalize() {
     // only 1 thread does this.
-//    std::unique_lock<std::mutex> lock(mutex);
+//    std::unique_lock<std::recursive_mutex> lock(mutex);
 
     DEBUGF("M FINALIZING COMMLAYER");
 
@@ -1470,7 +1166,7 @@ public:
     }
 
     //== check to see if the target tag is still accepting
-    std::unique_lock<std::mutex> lock(mutex);
+    std::unique_lock<std::recursive_mutex> lock(mutex);
 
     if (ctrlMsgProperties.count(tag) == 0) {
       lock.unlock();
@@ -1478,7 +1174,7 @@ public:
     }
 
 
-    TagMetadata&  tagprop = ctrlMsgProperties.at(tag);
+    MessageTypeInfo&  tagprop = ctrlMsgProperties.at(tag);
     tagprop.lock();
     lock.unlock();
     //printf("tagprop: tagprop buffers %p, in array %p\n", tagprop.getBuffers(), ctrlMsgProperties.at(tag).getBuffers());
@@ -1546,23 +1242,23 @@ public:
     assert(tag != CONTROL_TAG && tag >= 0);
 
     // single thread calls this at a time.
-    std::unique_lock<std::mutex> lock(mutex);
+    std::unique_lock<std::recursive_mutex> lock(mutex);
 
     //=======  reigster the tag.
 //    if (ctrlMsgProperties.find(tag) == ctrlMsgProperties.end()) {
 //      // register a new tag.
-//      ctrlMsgProperties[tag] = std::move(TagMetadata());
+//      ctrlMsgProperties[tag] = std::move(MessageTypeInfo());
 //    }
 
     //== if there isn't already a tag listed, add the MessageBuffers for that tag.
     // multiple threads may call this.
     if (ctrlMsgProperties.count(tag) == 0) {
       // create new message buffer
-      //ctrlMsgProperties[tag] = std::move(TagMetadata(tag, commSize));
-      ctrlMsgProperties[tag] = std::move(TagMetadata(tag, commSize));
+      //ctrlMsgProperties[tag] = std::move(MessageTypeInfo(tag, commSize));
+      ctrlMsgProperties[tag] = std::move(MessageTypeInfo(tag, commSize));
     }
     int64_t te = ctrlMsgProperties[tag].getNextEpoch();
-    printf("DONE ADD RECV CALLBACK for tag %d, tagProp tagged_epoch %ld, stored tag %d, epoch %ld\n", tag, te, TagMetadata::getTag(te), te & 0x00000000FFFFFFFF);
+    printf("DONE ADD RECV CALLBACK for tag %d, tagProp tagged_epoch %ld, stored tag %d, epoch %ld\n", tag, te, MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
     lock.unlock();
 
     // now tell the callback thread to register the callbacks.
@@ -1599,7 +1295,7 @@ public:
     }
 
     //== check to see if the target tag is still accepting
-    std::unique_lock<std::mutex> lock(mutex);
+    std::unique_lock<std::recursive_mutex> lock(mutex);
 
     if (ctrlMsgProperties.count(tag) == 0) {
       lock.unlock();
@@ -1607,7 +1303,7 @@ public:
     }
 
 
-    TagMetadata& tagprop = ctrlMsgProperties.at(tag);
+    MessageTypeInfo& tagprop = ctrlMsgProperties.at(tag);
     tagprop.lock();
     lock.unlock();
 
@@ -1655,7 +1351,7 @@ public:
     // Mark tag as finished in the metadata.
     // TODO: see if we can change to no lock - at() throws exception, and finish() returns prev value.
     //== check to see if the target tag is still accepting
-    std::unique_lock<std::mutex> lock(mutex);
+    std::unique_lock<std::recursive_mutex> lock(mutex);
 
     if (ctrlMsgProperties.count(tag) == 0) {
       lock.unlock();
@@ -1663,7 +1359,7 @@ public:
     }
 
 
-    TagMetadata& tagprop = ctrlMsgProperties.at(tag);
+    MessageTypeInfo& tagprop = ctrlMsgProperties.at(tag);
     tagprop.lock();
     lock.unlock();
 
@@ -1701,7 +1397,7 @@ public:
       throw std::logic_error("W initCommunication called after finishCommunication");
     }
 
-    std::unique_lock<std::mutex> lock(mutex);
+    std::unique_lock<std::recursive_mutex> lock(mutex);
 
     if (ctrlMsgProperties.count(CONTROL_TAG) > 0) {
       lock.unlock();
@@ -1712,7 +1408,7 @@ public:
 
     //== init with control_tag only.
     ctrlMsgRemainingForEpoch.emplace(CONTROL_TAGGED_EPOCH, bliss::concurrent::CopyableAtomic<int>(commSize));
-    ctrlMsgProperties[CONTROL_TAG] = std::move(TagMetadata(CONTROL_TAG, commSize));
+    ctrlMsgProperties[CONTROL_TAG] = std::move(MessageTypeInfo(CONTROL_TAG, commSize));
 
     lock.unlock();
 
@@ -1743,7 +1439,7 @@ public:
       return;
       //throw std::logic_error("W finishCommunication called after finishCommunication");
     }
-    std::unique_lock<std::mutex> lock(mutex);  // not okay to use global mutex.
+    std::unique_lock<std::recursive_mutex> lock(mutex);  // not okay to use global mutex.
     ctrlMsgProperties.at(CONTROL_TAG).lock();   // okay to lock wuith control tag, since "finish" uses a different tag.
 
     // not deleting entries from ctrlMsgProperties, so no need to lock whole thing.
@@ -1794,11 +1490,11 @@ protected:
   // TODO: convert to use try-catch of out-of-range exception.
   bool isTagActive(int tag) {
     // single threaded
-    std::unique_lock<std::mutex> lock(mutex);
+    std::unique_lock<std::recursive_mutex> lock(mutex);
 
     return isTagActive(tag, lock);
   }
-  bool isTagActive(int tag, std::unique_lock<std::mutex>& lock) {
+  bool isTagActive(int tag, std::unique_lock<std::recursive_mutex>& lock) {
 
     //== check to see if the target tag is still accepting
     if (ctrlMsgProperties.count(tag) == 0) {
@@ -1832,7 +1528,7 @@ protected:
 
       // lock it for the tag - no multiple concurrent calls with the same tag.
       ctrlMsgRemainingForEpoch.emplace(te, bliss::concurrent::CopyableAtomic<int>(commSize));  // insert new, and proceed to sending messages
-      DEBUGF("M Rank %d tag %d epoch %ld added tag to recvRemaining.", commRank, TagMetadata::getTag(te), te & 0x00000000FFFFFFFF);
+      DEBUGF("M Rank %d tag %d epoch %ld added tag to recvRemaining.", commRank, MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
     } // else there is only one epoch for CONTROL_TAG, and it's already added to the list.
 
 
@@ -1877,13 +1573,13 @@ protected:
     while (ctrlMsgRemainingForEpoch.count(te) > 0) {
       // condition variable waits for notification, which is generated by recv thread
       // when all FOC messages with this tag are received.
-      DEBUGF("M PRE WAIT Rank %d Waiting for tag %d epoch %ld, currently flushing", commRank, TagMetadata::getTag(te), te & 0x00000000FFFFFFFF);
+      DEBUGF("M PRE WAIT Rank %d Waiting for tag %d epoch %ld, currently flushing", commRank, MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
       ctrlMsgProperties.at(tag).wait();
-      DEBUGF("M END WAIT Rank %d Waiting for tag %d epoch %ld, currently flushing", commRank, TagMetadata::getTag(te), te & 0x00000000FFFFFFFF);
+      DEBUGF("M END WAIT Rank %d Waiting for tag %d epoch %ld, currently flushing", commRank, MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
     }
 //    ctrlMsgProperties.at(tag).unlock();
 
-    DEBUGF("M Rank %d received all END message for TAG %d, epoch = %ld", commRank, TagMetadata::getTag(te), te & 0x00000000FFFFFFFF);
+    DEBUGF("M Rank %d received all END message for TAG %d, epoch = %ld", commRank, MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
     return true;
   }
 
@@ -1945,7 +1641,7 @@ protected:
    */
 
   /// Mutex for adding/removing from local arrays and maps.
-  mutable std::mutex mutex;
+  mutable std::recursive_mutex mutex;
 
   /// atomic variable indicating if the CommLayer has been finalized (all communications are completed, ready for destruction.)
 //  std::atomic<bool> finalized;
@@ -1977,19 +1673,19 @@ protected:
    *  Message buffers per message tag (maps each tag to a set of buffers, one buffer for each target rank)
    *  only destroyed at the end, after all sends are done.
    */
-  //std::unordered_map<int, MessageBuffersType> buffers;
+  std::unordered_map<int, std::atomic<MessageBuffersType*> > buffers;
 
 
   /**
-   *  map between tag and TagMetadata, which contains info about next epoch id,
+   *  map between tag and MessageTypeInfo, which contains info about next epoch id,
    *  mutex, and condition variables.  Also has flag to indicate if tag is "finished"
    *
-   *  use the flag instead of deleting the TagMetadata because it's easier for other threads to check the flag.
+   *  use the flag instead of deleting the MessageTypeInfo because it's easier for other threads to check the flag.
    *
    *  Ensures that during sendControlMessageAndWait, a single thread is changing the condition for the wait.
    *
    */
-  std::unordered_map<int, TagMetadata > ctrlMsgProperties;
+  std::unordered_map<int, MessageTypeInfo > ctrlMsgProperties;
 
   // each tag-epoch pair has a count, so each MPI process can check to see how many from that epoch is still remaining.
   /// Per tag: number of processes that haven't sent the END-TAG message yet
@@ -2016,18 +1712,6 @@ protected:
 
 
 
-//==== static variable definitions.
-
-/// CONTROL_TAG definition.  (declaration and initialization inside class).
-constexpr CommunicationLayer::TaggedEpoch CommunicationLayer::CONTROL_TAGGED_EPOCH;
-
-constexpr int32_t CommunicationLayer::CONTROL_TAG;
-
-/// NO_TAG definition.  (declaration and initialization inside class).
-constexpr int CommunicationLayer::NO_TAG;
-
-/// NO_EPOCH definition.  (declaration and initialization inside class).
-constexpr int CommunicationLayer::NO_EPOCH;
 
 
 } // namespace io

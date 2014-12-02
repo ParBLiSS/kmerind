@@ -330,6 +330,7 @@ namespace bliss
 
         /**
          * @brief Reset the current MessageBuffers instance by first clearing its list of Buffer Ids, then repopulate it from the pool.
+         * @note  One thread only should call this.
          */
         virtual void reset() {
 
@@ -424,7 +425,7 @@ namespace bliss
           // this call will mark the fullBuffer as blocked to prevent multiple write attempts while flushing the buffer
           // ideally, we want it to be a reference that gets updated for all threads.
 
-          if (appendResult & 0x2) { // only 1 thread gets 0x2 result for a buffer.  all other threads are already finished with meaningful writes.
+          if (appendResult & 0x2) { // only 1 thread gets 0x2 result for a buffer.  all other threads either writes successfully or fails.
 
             return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer<PoolLT>(targetProc) ) );
 
@@ -439,27 +440,28 @@ namespace bliss
         /**
          * flushes the buffer at rank targetProc.
          *
-         * only 1 thread should call this per proc.
-         *
+         * @note  only 1 thread should call this per proc.
+         *        multiple calls to this may be needed to get all data that are written to the new empty buffer.
          *
          * @param targetProc
          * @return
          */
-
         BufferType* flushBufferForRank(const int targetProc) {
           //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
 
-          // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-          this->at(targetProc)->block_and_flush();  // this part can be concurrent.
-
+//          // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
+//          this->at(targetProc)->block_and_flush();  // this part can be concurrent.
+//
           // passing in getBufferIdForRank result to ensure atomicity.
           // may return ABSENT if there is no available buffer to use.
-          return swapInEmptyBuffer<PoolLT>(targetProc);   // ONE thread calls this.
-
+          auto old = swapInEmptyBuffer<PoolLT>(targetProc);
+          if (old) old->block_and_flush();
+          return old;
         }
+
 
       protected:
 
@@ -496,10 +498,14 @@ namespace bliss
         template<bliss::concurrent::LockType LT = PoolLT>
         typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest) {
 
-	  auto ptr = this->pool.tryAcquireObject();
-	  ptr->clear_and_unblock_writes();
-
-          return buffers.at(dest).exchange(ptr);
+          auto ptr = this->pool.tryAcquireObject();
+          ptr->clear_and_unblock_writes();
+          auto oldbuf = buffers.at(dest).exchange(ptr);
+          if (oldbuf.isEmpty()) {
+            releaseBuffer(oldbuf);
+            return nullptr;
+          }
+          else return oldbuf;
         }
 
 
@@ -535,8 +541,12 @@ namespace bliss
 
           auto oldbuf = this->at(dest);
           buffers.at(dest) = this->pool.tryAcquireObject();
-	  buffers.at(dest)->clear_and_unblock_writes();
-          return oldbuf;  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
+          buffers.at(dest)->clear_and_unblock_writes();
+          if (oldbuf.isEmpty()) {
+            releaseBuffer(oldbuf);
+            return nullptr;
+          }
+          else return oldbuf;  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
         }
 
 
