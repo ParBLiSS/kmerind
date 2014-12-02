@@ -106,7 +106,7 @@ namespace bliss
             //===== initialize the mpi buffer for control messaging, for MPI_Bsend
             int mpiBufSize = 0;
             // arbitrary, 4X commSize, each has 2 ints, one for tag, one for epoch id,.
-            MPI_Pack_size(commSize * 4 * 2, MPI_INT, comm, &mpiBufSize);
+            MPI_Pack_size(commSize * 4, MPI_LONG, comm, &mpiBufSize);
             mpiBufSize += commSize * 4 * MPI_BSEND_OVERHEAD;
             char* mpiBuf = (char*)malloc(mpiBufSize);
             MPI_Buffer_attach(mpiBuf, mpiBufSize);
