@@ -335,19 +335,26 @@ namespace bliss
         virtual void reset() {
 
           std::lock_guard<std::mutex> lock(mutex);
+          int count = buffers.size();
           // release all buffers back to pool
-          for (int i = 0; i < buffers.size(); ++i) {
+          for (int i = 0; i < count; ++i) {
             if (this->at(i)) {
               this->at(i)->block_and_flush();
               this->pool.releaseObject(this->at(i));
+              buffers.at(i) = nullptr;
             }
           }
           // reset the pool. local vector should contain a bunch of nullptrs.
           this->pool.reset();
+//          buffers.clear();
+//          buffers.resize(count);
 
           // populate the buffers from the pool
-          for (int i = 0; i < buffers.size(); ++i) {
+          for (int i = 0; i < count; ++i) {
+            printf("initializing buffer %p \n", this->at(i));
             swapInEmptyBuffer<PoolLT>(i);
+            printf("initialized buffer %p blocked? %s, empty? %s\n", this->at(i), this->at(i)->is_read_only()? "y" : "n", this->at(i)->isEmpty() ? "y" : "n");
+
           }
         }
 
@@ -419,6 +426,7 @@ namespace bliss
 
           unsigned int appendResult = this->at(targetProc)->append(data, count);
 
+//          printf("buffer blocked? %s, empty? %s\n", this->at(targetProc)->is_read_only()? "y" : "n", this->at(targetProc)->isEmpty() ? "y" : "n");
 
           // now if appendResult is false, then we return false, but also swap in a new buffer.
           // conditions are either full buffer, or blocked buffer.
@@ -501,7 +509,8 @@ namespace bliss
           auto ptr = this->pool.tryAcquireObject();
           ptr->clear_and_unblock_writes();
           auto oldbuf = buffers.at(dest).exchange(ptr);
-          if (oldbuf.isEmpty()) {
+          if (oldbuf && oldbuf->isEmpty()) {
+            printf("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
             releaseBuffer(oldbuf);
             return nullptr;
           }
@@ -542,7 +551,9 @@ namespace bliss
           auto oldbuf = this->at(dest);
           buffers.at(dest) = this->pool.tryAcquireObject();
           buffers.at(dest)->clear_and_unblock_writes();
-          if (oldbuf.isEmpty()) {
+          if (oldbuf && oldbuf->isEmpty()) {
+            printf("oldbuf %p, empty? %s\n", oldbuf, oldbuf->isEmpty() ? "y" : "n");
+
             releaseBuffer(oldbuf);
             return nullptr;
           }

@@ -56,13 +56,13 @@ namespace bliss
 
         // TODO: static epoch id?
 
-        std::recursive_mutex mutex;                    // do we need this?
-        std::condition_variable_any condVar;           // do we need this?
+        std::mutex mutex;                    // do we need this?
+        std::condition_variable condVar;           // do we need this?
 
         explicit MessageTypeInfo(const MessageTypeInfo& other) = delete;
         MessageTypeInfo& operator=(const MessageTypeInfo& other) = delete;
 
-        MessageTypeInfo(MessageTypeInfo&& other, const std::lock_guard<std::recursive_mutex> &) {
+        MessageTypeInfo(MessageTypeInfo&& other, const std::lock_guard<std::mutex> &) {
           finished.exchange(other.finished.load());          other.finished = true;
           tagged_epoch.exchange(other.tagged_epoch.load());  other.tagged_epoch = -1;
           // have to set other to nullptr else destructor will clean up the reassigned buffer.
@@ -76,11 +76,11 @@ namespace bliss
           finished(false), tagged_epoch(static_cast<TaggedEpoch>(tag) << 32) {}
 
         explicit MessageTypeInfo(MessageTypeInfo&& other) :
-            MessageTypeInfo(std::forward<MessageTypeInfo>(other), std::lock_guard<std::recursive_mutex>(other.mutex)) {}
+            MessageTypeInfo(std::forward<MessageTypeInfo>(other), std::lock_guard<std::mutex>(other.mutex)) {}
 
         MessageTypeInfo& operator=(MessageTypeInfo&& other) {
-          std::unique_lock<std::recursive_mutex> lock(mutex, std::defer_lock);
-          std::unique_lock<std::recursive_mutex> otherlock(other.mutex, std::defer_lock);
+          std::unique_lock<std::mutex> lock(mutex, std::defer_lock);
+          std::unique_lock<std::mutex> otherlock(other.mutex, std::defer_lock);
           std::lock(lock, otherlock);
 
           finished.exchange(other.finished.load());              other.finished = true;
@@ -110,15 +110,15 @@ namespace bliss
 
         //===== lock the data structure.
         // TODO: have to return a new lock object each time, else either deadlock with recursive mutex, or system_error trying to relock already locked object.
-        std::unique_lock<std::recursive_mutex> lock() {
-          return std::move(std::unique_lock<std::recursive_mutex>(mutex));
+        std::unique_lock<std::mutex> lock() {
+          return std::move(std::unique_lock<std::mutex>(mutex));
         }
-        void unlock(std::unique_lock<std::recursive_mutex>&& l) {
+        void unlock(std::unique_lock<std::mutex>&& l) {
           l.unlock();
         }
 
         //===== condition variable handling.  this can be shared, but then we need to pass in the lock.
-        void wait(std::unique_lock<std::recursive_mutex>&& l) {
+        void wait(std::unique_lock<std::mutex>& l) {
           condVar.wait(l);
         }
         void notifyAll() {
