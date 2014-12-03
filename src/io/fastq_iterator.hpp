@@ -94,7 +94,7 @@ namespace bliss
          * @return        iterator at the new position, where the Non EOL char is found, or end.
          */
         inline Iterator& findNonEOL(Iterator& iter, const Iterator& end, size_t &offset) {
-          while ((*iter == type::eol)  &&  (iter != end)) {
+          while ((iter != end) && (*iter == type::eol)) {
             ++iter;
             ++offset;
           }
@@ -110,7 +110,7 @@ namespace bliss
          * @return        iterator at the new position, where the EOL char is found, or end.
          */
         inline Iterator& findEOL(Iterator& iter, const Iterator& end, size_t &offset) {
-          while ((*iter != type::eol)  &&  (iter != end)) {
+          while ((iter != end) && (*iter != type::eol) ) {
             ++iter;
             ++offset;
           }

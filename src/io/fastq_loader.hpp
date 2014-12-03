@@ -167,7 +167,7 @@ namespace bliss
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
 
           //== range checking
-          assert(parentRange.contains(inMemRange));
+          if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
           RangeType t = RangeType::intersect(searchRange, inMemRange); // intersection to bound target to between parent's ends.
           if (t.start == t.end) return t.start;
 
@@ -357,7 +357,8 @@ namespace bliss
         RangeType getNextL2BlockRangeImpl(const size_t tid) {
 
           // data has to be loaded
-          assert(this->loaded);
+          if (!this->loaded) throw std::logic_error("ERROR: getting L2Block range before file is loaded");
+
 
           // get the parent range
           RangeType parentRange = this->L1Block.getRange();
@@ -420,7 +421,8 @@ namespace bliss
          */
         size_t getRecordSizeImpl(int iterations = 3) {
 
-          assert(this->loaded);
+          if (!this->loaded) throw std::logic_error("ERROR: getting record's size before file is loaded");
+
 
           std::size_t s, e;
           std::size_t ss = 1;

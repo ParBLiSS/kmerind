@@ -258,9 +258,9 @@ public:
 
 
   void init() {
-	DEBUG("initialize distributed multimap's communication");
-	// start the threads in the comm layer (if not already running)
-	this->commLayer.initCommunication();
+    DEBUG("initialize distributed multimap's communication");
+    // start the threads in the comm layer (if not already running)
+    this->commLayer.initCommunication();
   }
 
 
@@ -268,9 +268,9 @@ public:
    * finalize waits for commLayer to finish, which guarantees that all communications are done (to avoid timing issue with MPI_FINALIZE and distributed map object clean up.
    */
   void finalize() {
-//    this->commLayer.finish(INSERT_MPI_TAG);
-//    this->commLayer.finish(LOOKUP_MPI_TAG);
-//    this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
+    this->commLayer.finish(INSERT_MPI_TAG);
+    this->commLayer.finish(LOOKUP_MPI_TAG);
+    this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
 
     this->commLayer.finalize();
   }
@@ -537,6 +537,7 @@ public:
     this->commLayer.addReceiveCallback(_base_class::LOOKUP_ANSWER_MPI_TAG,
         std::bind(&distributed_multimap::receivedLookupAnswerCallback,
                   this, _1, _2, _3));
+
   }
 
   /**
@@ -702,6 +703,7 @@ public:
     this->commLayer.addReceiveCallback(_base_class::LOOKUP_ANSWER_MPI_TAG,
         std::bind(&distributed_counting_map::receivedLookupAnswerCallback,
                   this, _1, _2, _3));
+
   }
 
 

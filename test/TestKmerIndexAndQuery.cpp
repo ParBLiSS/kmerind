@@ -56,7 +56,8 @@ int main(int argc, char** argv) {
     chunkSize = atoi(argv[2]);
   }
 
-  std::string filename("/home/tpan/src/bliss/test/data/test.medium.fastq");
+  //std::string filename("/home/tpan/src/bliss/test/data/test.medium.fastq");
+  std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
   //std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
   if (argc > 3)
   {

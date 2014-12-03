@@ -15,7 +15,7 @@
 
 #include <unistd.h>  // for usleep
 
-#include "io/locking_message_buffers.hpp"
+#include "io/message_buffers.hpp"
 #include "concurrent/threadsafe_queue.hpp"
 #include "omp.h"
 #include <cassert>
@@ -199,15 +199,15 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
 
 
   BufferPtrType final = buffers.flushBufferForRank(id);  // flush blocks buffer and waits for all updates., but need to set final size.
-  count5 = final->getSize();
-
-  allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize() / sizeof(int));
-  buffers.releaseBuffer(std::move(final));
-
+  count5 = (final == nullptr) ? 0 : final->getSize();
+  if (final) {
+    allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize() / sizeof(int));
+    buffers.releaseBuffer(std::move(final));
+  }
   //if (count7 != count/sizeof(int)) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/sizeof(int) );
 
   final = buffers.flushBufferForRank(id);
-  count6 = final->getSize();
+  count6 = (final == nullptr) ? 0 : final->getSize();
   if (count6 > 0) printf("\nFAIL: received %d data after flush.", count6);
   buffers.releaseBuffer(std::move(final));
 

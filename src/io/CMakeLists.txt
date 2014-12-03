@@ -20,13 +20,6 @@ endif()
 # load the testing:
 if (IS_DIRECTORY ./test)
     
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_buffer.cpp )
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check2_buffer.cpp )
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_LOCKFREE test/check2_buffer.cpp )
-
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_bufferpool.cpp )
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check2_bufferpool.cpp )
-
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_messagebuffers.cpp )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check2_messagebuffers.cpp )
 

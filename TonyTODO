@@ -456,3 +456,8 @@ TODO:
 	keep current File -FASTQLoader-> L1Block -FASTQLoader-> L2Block -FASTQIterator-> Sequence -KmerGenerator-> kmer + id + quality
 		but now make the last part based on zip iterator.
 	top level interfaces for FASTQ with/without quality, FASTQ without id, 
+	
+	
+	
+12/3/2014
+	convert pair's first/second to use std::tie(var1, var2) for readability.

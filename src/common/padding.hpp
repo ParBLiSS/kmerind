@@ -150,7 +150,7 @@ unsigned int removePaddingSameType(InputIterator& begin,
       // increase output iterator
       ++out;
       // write out the cut off bits up to the next offset
-      *out = nextWord >> static_cast<base_type>(readBits - cur_offset);
+      if (cur_offset > 0) *out = nextWord >> static_cast<base_type>(readBits - cur_offset);
     }
     else
     {

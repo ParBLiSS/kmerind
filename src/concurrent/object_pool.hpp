@@ -371,6 +371,7 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::NONE, bool>::type releaseObject(ObjectPtrType ptr) {
 
           bool res = false;            // nullptr would not be in in_use.
+
           if (in_use.erase(ptr) > 0) { // object is in in_use.  this means that this one is within the capacity.  releasing it would not increase past capacity
             // now make object available.  make sure push_back is done one thread at a time.
             available.push_back(ptr);

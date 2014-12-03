@@ -64,6 +64,13 @@ namespace bliss
 
 
 
+    template<typename KmerType, typename IdType>
+    void receiveAnswer(std::pair<KmerType, IdType>& answer)
+    {
+      auto key = answer.first;
+      auto val = answer.second;
+
+    }
 
 
     /**
@@ -116,7 +123,11 @@ namespace bliss
         // TODO: to incorporate quality, use another zip iterator.
 
         /// define the index storage type.  using an infix of kmer since prefix is used for distributing to processors.
-        typedef bliss::index::distributed_multimap<KmerType, IdType, bliss::io::CommunicationLayer, bliss::KmerSuffixHasher<KmerType>, bliss::KmerPrefixHasher<KmerType> > IndexType;
+        typedef bliss::index::distributed_multimap<KmerType,
+                                                   IdType,
+                                                   bliss::io::CommunicationLayer,
+                                                   bliss::KmerSuffixHasher<KmerType>,
+                                                   bliss::KmerPrefixHasher<KmerType> > IndexType;
 
         /// index instance to store data
         IndexType index;
@@ -135,6 +146,9 @@ namespace bliss
          */
         KmerPositionIndex(MPI_Comm _comm, int _comm_size) : index(_comm, _comm_size, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm) {
           MPI_Comm_rank(comm, &rank);
+
+          index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, IdType>&)>(&receiveAnswer<KmerType, IdType>));
+          index.init();
         };
         virtual ~KmerPositionIndex() {};
 
@@ -221,6 +235,9 @@ namespace bliss
 
 
       protected:
+
+
+
 
         void buildForL1Block(FileLoaderType &loader, IndexType &index, const int& rank,
                         const int& nthreads, const int& chunkSize)

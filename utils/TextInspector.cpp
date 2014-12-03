@@ -22,7 +22,7 @@
 #include <sys/mman.h>   // mmap
 #include <cstring>      // memcpy, strerror
 
-
+#include <cassert>
 #include "io/file_loader.hpp"
 #include "partition/range.hpp"
 

@@ -11,7 +11,7 @@
  */
 
 
-#include "io/locking_buffer.hpp"
+#include "concurrent/buffer.hpp"
 
 
 #include "omp.h"

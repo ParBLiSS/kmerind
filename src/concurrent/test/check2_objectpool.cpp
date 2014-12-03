@@ -22,8 +22,8 @@
 
 #include "utils/test_utils.hpp"
 
-#include "io/locking_buffer.hpp"
-#include "io/locking_object_pool.hpp"
+#include "concurrent/buffer.hpp"
+#include "concurrent/object_pool.hpp"
 
 
 

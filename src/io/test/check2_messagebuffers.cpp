@@ -15,7 +15,7 @@
 
 #include <unistd.h>  // for usleep
 
-#include "io/locking_message_buffers.hpp"
+#include "io/message_buffers.hpp"
 #include "concurrent/threadsafe_queue.hpp"
 #include "omp.h"
 #include <cassert>
@@ -187,12 +187,12 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
   if (updating) printf("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
 
   BufferPtrType final = buffers.flushBufferForRank(id);
-  count5 = final->getSize();
+  count5 = (final == nullptr) ? 0 : final->getSize();
   if (count != count6) printf("\nFAIL: number of bytes written %d and number of bytes in FinalSize %d are not the same", count6, count);
   if ((count + count5) != count1 * data.length()) {
     printf("\nFAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.\n", (count + count5), count , count5, (count + count5)/data.length(), count1);
 
-    printf("    content length %ld\n", strlen(final->operator char*())); //, final->operator char*());
+    printf("    content length %ld\n", (final == nullptr) ? 0 : strlen(final->operator char*())); //, final->operator char*());
   }
   if ((count + count5)/data.length() + 1 < count1) {
     printf("\nFAIL: missing %ld entries, expected 1", count1 -(count + count5)/data.length());
@@ -204,7 +204,7 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
 
 
   final = buffers.flushBufferForRank(id);
-  count5 = final->getSize();
+  count5 = (final == nullptr) ? 0 : final->getSize();
   if (count5 > 0) printf("\nFAIL: received %d data after flush.", count5);
   buffers.releaseBuffer(std::move(final));
 

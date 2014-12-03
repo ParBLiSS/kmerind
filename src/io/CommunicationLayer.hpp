@@ -35,7 +35,7 @@
 #include "concurrent/threadsafe_queue.hpp"
 #include "concurrent/copyable_atomic.hpp"
 #include "concurrent/concurrent.hpp"
-#include "io/locking_message_buffers.hpp"
+#include "io/message_buffers.hpp"
 #include "io/io_exception.hpp"
 #include "io/message_type_info.hpp"
 #include "io/message_types.hpp"
@@ -433,6 +433,7 @@ protected:
 
 
          // try to get the send element
+
          auto el = std::move(commLayer.sendQueue.tryPop());  // type: std::pair<bool, std::unique_ptr<MPIMessage>>
          if (!el.first) {  // no valid entry in the queue
            return false;
@@ -527,7 +528,7 @@ protected:
                printf("HERE!\n");
 
                // TODO:  don't release the buffer for local transmit.  do it after callback thread is done with it.
-               commLayer.buffers.at(se->tag).val.load()->releaseBuffer(std::move(se->ptr));
+               commLayer.buffers.at(se->tag).load()->releaseBuffer(std::move(se->ptr));
              } else {
 
 
@@ -668,7 +669,7 @@ protected:
                SendDataElementType* msg = dynamic_cast<SendDataElementType*>(sendInProgress.front().second.get());
                if (msg->ptr) {
                  // cleanup, i.e., release the buffer back into the pool
-                 commLayer.buffers.at(msg->tag).val.load()->releaseBuffer(std::move(msg->ptr));
+                 commLayer.buffers.at(msg->tag).load()->releaseBuffer(std::move(msg->ptr));
                }
              }  // control tag, and mpi send finished, so nothing to clean up.
 
@@ -784,7 +785,7 @@ protected:
                //== now decrement the count of control messages for a epoch
 //                DEBUGF("C RECV PRE rank %d receiving END signal tag %d epoch %ld from %d, recvRemaining size: %ld",
 //                     commRank, te.tag, te.epoch, front.second->rank, commLayer.ctrlMsgRemainingForEpoch.size());
-               auto v = --(commLayer.ctrlMsgRemainingForEpoch.at(te).val);
+               auto v = --(commLayer.ctrlMsgRemainingForEpoch.at(te));
 //                DEBUGF("C RECV rank %d receiving END signal tag %d epoch %ld from %d, num senders remaining is %d",
 //                     commRank, te.tag, te.epoch, front.second->rank, commLayer.ctrlMsgRemainingForEpoch.at(te));
 
@@ -939,23 +940,15 @@ protected:
           // while there are messages to process, or we are still receiving
           while (commLayer.recvQueue.canPop() )  // same as !recvDone || !recvQueue.isEmpty()
           {
-            printf("R");
-
-
-            printf("HERE\n");
             // get next element from the queue, wait if none is available.
             // waitAndPop will exit out of wait when termination flag is set on the recvQueue
             auto result = std::move(commLayer.recvQueue.waitAndPop());
             if (!result.first) {
               // no valid result, we must be done with receiving
-              printf("HERE bad\n");
 
               assert(!commLayer.recvQueue.canPush());
-
-
               break;
             }
-            printf("HERE2\n");
 
             // get the message (data or control)
 
@@ -963,7 +956,6 @@ protected:
             //  for a tag have been received.)
             if (result.second.get()->tag == bliss::io::MessageTypeInfo::CONTROL_TAG) {   // Control message
 
-              printf("HERE3\n");
 
               ControlMessage* msg = dynamic_cast<ControlMessage*>(result.second.get());
 
@@ -1013,7 +1005,6 @@ protected:
 
               DEBUGF("B rank %d tag %d epoch %ld notified all.", commLayer.commRank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
             } else {
-              printf("HERE3b\n");
 
               DataMessageReceived* msg = dynamic_cast<DataMessageReceived*>(result.second.get());
               // data message.  process it.
@@ -1081,7 +1072,7 @@ public:
     if (!buffers.empty()) {
       ERRORF("BUFFER was not cleared by finish Communication\n");
       for (auto el : buffers) {
-        delete el.second.val.load();
+        delete el.second.load();
       }
     }
   };
@@ -1109,6 +1100,7 @@ public:
   {
     //== don't send control tag.
     assert(tag != bliss::io::MessageTypeInfo::CONTROL_TAG && tag >= 0);
+    assert(initialized.load());
 
     //check to see if sendQueue is still accepting (if not, then comm is finished)
     if (!sendQueue.canPush()) {
@@ -1139,7 +1131,7 @@ public:
     std::pair<bool, BufferPtrType> result;
     do {
       // try append.  append fails if there is no buffer or no room
-      result = buffers.at(tag).val.load()->append(data, nbytes, dst_rank);
+      result = buffers.at(tag).load()->append(data, nbytes, dst_rank);
       //if (result.first != 0) printf("result = %d\n", result.first);
 
       if (result.second) {        // have a full buffer.  implies !result.first
@@ -1205,8 +1197,8 @@ public:
     // multiple threads may call this.
     if (buffers.count(tag) == 0) {
       // create new message buffer
-      buffers[tag] = std::move(bliss::concurrent::CopyableAtomic<MessageBuffersType*>(new MessageBuffersType(commSize)));
-      //buffers.at(tag).val.load()->reset();
+      buffers[tag] = std::move(bliss::concurrent::copyable_atomic<MessageBuffersType*>(new MessageBuffersType(commSize)));
+      //buffers.at(tag).load()->reset();
       ctrlMsgProperties[tag] = std::move(bliss::io::MessageTypeInfo(tag));
     }
 //    int64_t te = ctrlMsgProperties[tag].getNextEpoch();
@@ -1241,6 +1233,7 @@ public:
 
     // can only flush data tag.
     assert(tag != bliss::io::MessageTypeInfo::CONTROL_TAG && tag >= 0);
+    assert(initialized.load());
 
     if (!sendQueue.canPush()) {
       throw std::logic_error("W flush called after finishCommunication");
@@ -1294,6 +1287,7 @@ public:
   void finish(int tag) throw (bliss::io::IOException)
   {
     assert(tag != bliss::io::MessageTypeInfo::CONTROL_TAG && tag >= 0);
+    assert(initialized.load());
 
     if (!sendQueue.canPush()) {
       //throw std::logic_error("W finish called after finishCommunication");
@@ -1336,7 +1330,7 @@ public:
     lock.lock();
     tagprop.unlock(std::move(l));
 
-    delete buffers.at(tag).val.load();
+    delete buffers.at(tag).load();
     buffers.erase(tag);
     ctrlMsgProperties.erase(tag);
 
@@ -1352,6 +1346,9 @@ public:
    */
   void initCommunication()
   {
+    assert(!initialized.load());
+
+
     // one thread calls this
     if (!sendQueue.canPush()) {
       throw std::logic_error("W initCommunication called after finishCommunication");
@@ -1367,9 +1364,9 @@ public:
 
 
     //== init with control_tag only.
-    buffers[bliss::io::MessageTypeInfo::CONTROL_TAG] = std::move(bliss::concurrent::CopyableAtomic<MessageBuffersType*>(new MessageBuffersType(commSize)));
-    //buffers.at(bliss::io::MessageTypeInfo::CONTROL_TAG).val.load()->reset();
-    ctrlMsgRemainingForEpoch.emplace(bliss::io::MessageTypeInfo::CONTROL_TAGGED_EPOCH, bliss::concurrent::CopyableAtomic<int>(commSize));
+    buffers[bliss::io::MessageTypeInfo::CONTROL_TAG] = std::move(bliss::concurrent::copyable_atomic<MessageBuffersType*>(new MessageBuffersType(commSize)));
+    //buffers.at(bliss::io::MessageTypeInfo::CONTROL_TAG).load()->reset();
+    ctrlMsgRemainingForEpoch.emplace(bliss::io::MessageTypeInfo::CONTROL_TAGGED_EPOCH, bliss::concurrent::copyable_atomic<int>(commSize));
     ctrlMsgProperties[bliss::io::MessageTypeInfo::CONTROL_TAG] = std::move(bliss::io::MessageTypeInfo(bliss::io::MessageTypeInfo::CONTROL_TAG));
 
     lock.unlock();
@@ -1377,6 +1374,8 @@ public:
     // TODO: deal with where to put the std::threads.
     callbackThread.start();
     commThread.start();
+
+    initialized.store(true);
   }
 
 
@@ -1393,6 +1392,7 @@ public:
   void finishCommunication() throw (bliss::io::IOException)
   {
     DEBUGF("M FINISH COMM rank %d", commRank);
+    assert(initialized.load());
 
 
 	  // already finishing.
@@ -1424,7 +1424,7 @@ public:
 
     ctrlMsgProperties.at(bliss::io::MessageTypeInfo::CONTROL_TAG).unlock(std::move(l));
 
-    delete buffers.at(bliss::io::MessageTypeInfo::CONTROL_TAG).val.load();
+    delete buffers.at(bliss::io::MessageTypeInfo::CONTROL_TAG).load();
     buffers.erase(bliss::io::MessageTypeInfo::CONTROL_TAG);
     ctrlMsgProperties.erase(bliss::io::MessageTypeInfo::CONTROL_TAG);
 
@@ -1484,6 +1484,9 @@ protected:
    */
   bool sendControlMessagesAndWait(int tag, std::unique_lock<std::mutex>& l) throw (bliss::io::IOException)
   {
+    assert(initialized.load());
+
+
     if (!sendQueue.canPush())
       throw bliss::io::IOException("M ERROR: sendControlMessagesAndWait already called with bliss::io::MessageTypeInfo::CONTROL_TAG");
 
@@ -1497,7 +1500,7 @@ protected:
       // not a control tag, so don't need to add to recvRemaining.
 
       // lock it for the tag - no multiple concurrent calls with the same tag.
-      ctrlMsgRemainingForEpoch.emplace(te, bliss::concurrent::CopyableAtomic<int>(commSize));  // insert new, and proceed to sending messages
+      ctrlMsgRemainingForEpoch.emplace(te, bliss::concurrent::copyable_atomic<int>(commSize));  // insert new, and proceed to sending messages
       DEBUGF("M Rank %d tag %d epoch %ld added tag to recvRemaining.", commRank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
     } // else there is only one epoch for bliss::io::MessageTypeInfo::CONTROL_TAG, and it's already added to the list.
 
@@ -1564,6 +1567,7 @@ protected:
    */
   void flushBuffers(int tag) throw (bliss::io::IOException)
   {
+    assert(initialized.load());
 
     if (!sendQueue.canPush()) {
       throw std::logic_error("W cannot flush buffer: cannot push to sendQueue.");
@@ -1578,7 +1582,7 @@ protected:
       // flush buffers in a circular fashion, starting with the next neighbor
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 
-      auto bufPtr = buffers.at(tag).val.load()->flushBufferForRank(target_rank);
+      auto bufPtr = buffers.at(tag).load()->flushBufferForRank(target_rank);
       // flush/send all remaining non-empty buffers
       if ((bufPtr) && !(bufPtr->isEmpty())) {
         std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(bufPtr), tag, target_rank));
@@ -1637,7 +1641,7 @@ protected:
    *  Message buffers per message tag (maps each tag to a set of buffers, one buffer for each target rank)
    *  only destroyed at the end, after all sends are done.
    */
-  std::unordered_map<int, bliss::concurrent::CopyableAtomic<MessageBuffersType*> > buffers;
+  std::unordered_map<int, bliss::concurrent::copyable_atomic<MessageBuffersType*> > buffers;
 
 
   /**
@@ -1654,7 +1658,7 @@ protected:
   // each tag-epoch pair has a count, so each MPI process can check to see how many from that epoch is still remaining.
   /// Per tag: number of processes that haven't sent the END-TAG message yet
   //std::unordered_map<TaggedEpoch, int, TaggedEpochHash, TaggedEpochEqual> ctrlMsgRemainingForEpoch;
-  std::unordered_map<bliss::io::MessageTypeInfo::TaggedEpoch, bliss::concurrent::CopyableAtomic<int> > ctrlMsgRemainingForEpoch;
+  std::unordered_map<bliss::io::MessageTypeInfo::TaggedEpoch, bliss::concurrent::copyable_atomic<int> > ctrlMsgRemainingForEpoch;
 
   // send thread and recv thread should be separate, else we could have a race condition.
   // e.g. send locally, recvInProgres queue is full, so send function blocks,
@@ -1671,6 +1675,7 @@ protected:
   /// The MPI Communicator rank
   int commRank;
 
+  std::atomic<bool> initialized;
 };
 
 

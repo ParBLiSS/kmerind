@@ -8,6 +8,16 @@ if (IS_DIRECTORY ./test)
     FILE(GLOB CHECK_FILES test/check_*.cpp)
     
     bliss_add_non_google_test(${PROJECT_NAME} FALSE ${CHECK_FILES})
+    
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_buffer.cpp )
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check2_buffer.cpp )
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_LOCKFREE test/check2_buffer.cpp )
+
+    
+    
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_objectpool.cpp )
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check2_objectpool.cpp )
+    
 endif()
 
 endif()
