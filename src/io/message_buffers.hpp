@@ -511,7 +511,7 @@ namespace bliss
           ptr->clear_and_unblock_writes();
           auto oldbuf = buffers.at(dest).exchange(ptr);
           if (oldbuf && oldbuf->isEmpty()) {
-            printf("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
+//            printf("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
             releaseBuffer(oldbuf);
             return nullptr;
           }
@@ -553,7 +553,7 @@ namespace bliss
           buffers.at(dest) = this->pool.tryAcquireObject();
           buffers.at(dest)->clear_and_unblock_writes();
           if (oldbuf && oldbuf->isEmpty()) {
-            printf("oldbuf %p, empty? %s\n", oldbuf, oldbuf->isEmpty() ? "y" : "n");
+//            printf("oldbuf %p, empty? %s\n", oldbuf, oldbuf->isEmpty() ? "y" : "n");
 
             releaseBuffer(oldbuf);
             return nullptr;

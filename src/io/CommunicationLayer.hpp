@@ -525,7 +525,6 @@ protected:
                assert(recvInProgress.back().second.get() != nullptr);
 
                // finished inserting directly to local RecvInProgress.  release the buffer
-               printf("HERE!\n");
 
                // TODO:  don't release the buffer for local transmit.  do it after callback thread is done with it.
                commLayer.buffers.at(se->tag).load()->releaseBuffer(std::move(se->ptr));
@@ -1138,7 +1137,7 @@ public:
         // verify that the buffer is not empty (may change because of threading)
         if (!(result.second->isEmpty())) {
           // have a non-empty buffer - put in send queue.
-        	DEBUGF("Rank %d has full buffer at %p.  enqueue for send.", commRank, result.second);
+//        	DEBUGF("Rank %d has full buffer at %p.  enqueue for send.", commRank, result.second);
           std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(result.second), tag, dst_rank));
 
 //          if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for data msgs\n", commRank);
