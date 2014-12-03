@@ -19,6 +19,7 @@
 
 #include "io/fasta_loader.hpp"
 #include "io/file_loader.hpp"
+#include "common/Kmer.hpp"
 #include "io/fasta_iterator.hpp"
 
 using namespace bliss::io;
@@ -96,8 +97,8 @@ TYPED_TEST_P(FASTAIteratorTest, FASTAIteration)
   ASSERT_LT(0 , vectorReturned.size());
 
   //Begin iteration
-  typedef bliss::Kmer<35, 2, uint32_t> Kmer;
-  FASTAParser FASTAIterObj<typename FILELoaderType::InputIteratorType, Kmer>(d.begin(), d.end(), loader.getFileRange(), vectorReturned);
+  typedef bliss::Kmer<35, 2, uint32_t> KmerType;
+  FASTAParser<typename FILELoaderType::L1BlockType::iterator, KmerType> FASTAIterObj(d.begin(), d.end(), loader.getFileRange(), vectorReturned);
 }
 
 // now register the test cases

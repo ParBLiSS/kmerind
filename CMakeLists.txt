@@ -188,8 +188,8 @@ endif(ENABLE_OMP_DEBUGGING)
 ###### External Library Settings
 #### Boost Library
 #set(EXTRA_LIBS pthread)
-if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
-                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+#if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+#                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
     set(Boost_USE_MULTITHREADED ON)
     set(Boost_ADDITIONAL_VERSIONS "1.54" "1.54.0")
     set(Boost_DETAILED_FAILURE_MSG ON)
@@ -219,28 +219,28 @@ if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
             "${PROJECT_BINARY_DIR}/logger_config.hpp"
             @ONLY
             )
-    endif(Boost_FOUND)
+        endif(Boost_FOUND)
     
     # need this flag for boost log
-else(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
-                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
-    unset(Boost_USE_MULTITHREADED)
-    unset(Boost_ADDITIONAL_VERSIONS)
-    unset(Boost_DETAILED_FAILURE_MSG)
-    unset(Boost_FOUND)
-    unset(BOOST_ROOT CACHE)
-    unset(Boost_DIR CACHE)
-    unset(Boost_INCLUDE_DIR CACHE)
-    unset(Boost_LIBRARY_DIR CACHE)
-    unset(Boost_LOG_LIBRARY_DEBUG CACHE)
-    unset(Boost_LOG_LIBRARY_RELEASE CACHE)
-    unset(Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG CACHE)
-    unset(Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE CACHE)
-    unset(Boost_SYSTEM_LIBRARY_DEBUG CACHE)
-    unset(Boost_SYSTEM_LIBRARY_RELEASE CACHE)
+#else(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+#                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+#    unset(Boost_USE_MULTITHREADED)
+#    unset(Boost_ADDITIONAL_VERSIONS)
+#    unset(Boost_DETAILED_FAILURE_MSG)
+#    unset(Boost_FOUND)
+#    unset(BOOST_ROOT CACHE)
+#    unset(Boost_DIR CACHE)
+#    unset(Boost_INCLUDE_DIR CACHE)
+#    unset(Boost_LIBRARY_DIR CACHE)
+#    unset(Boost_LOG_LIBRARY_DEBUG CACHE)
+#    unset(Boost_LOG_LIBRARY_RELEASE CACHE)
+#    unset(Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG CACHE)
+#    unset(Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE CACHE)
+#    unset(Boost_SYSTEM_LIBRARY_DEBUG CACHE)
+#    unset(Boost_SYSTEM_LIBRARY_RELEASE CACHE)
 
-endif(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
-                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+#endif(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+#                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
 
 
 #### MPI
