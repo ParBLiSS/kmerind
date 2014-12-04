@@ -1107,21 +1107,24 @@ public:
     }
 
     //== check to see if the target tag is still accepting
-    std::unique_lock<std::recursive_mutex> lock(mutex);
+    // modification to ctrlMsgProperties only at finish, and finishCommunications, both are after sendMessage
+    //  after sendControlMessageAndWait.  these should be single threaded, so we don't need a lock here.
+    //std::unique_lock<std::recursive_mutex> lock(mutex);
 
     if (ctrlMsgProperties.count(tag) == 0) {
-      lock.unlock();
+      //lock.unlock();
       throw std::invalid_argument("W invalid tag: tag has not been registered");
     }
 
 
-    bliss::io::MessageTypeInfo&  tagprop = ctrlMsgProperties.at(tag);
-    auto l = std::move(tagprop.lock());
-    lock.unlock();
+    //bliss::io::MessageTypeInfo&  tagprop = ctrlMsgProperties.at(tag);
+    //auto l = std::move(tagprop.lock());
+    //lock.unlock();
     //printf("tagprop: tagprop buffers %p, in array %p\n", tagprop.getBuffers(), ctrlMsgProperties.at(tag).getBuffers());
 
-    if (tagprop.isFinished()) {
-      tagprop.unlock(std::move(l));
+    //if (tagprop.isFinished()) {  //atomic, don't need to lock.
+    if (ctrlMsgProperties.at(tag).isFinished()) {  //atomic, don't need to lock.
+      //tagprop.unlock(std::move(l));
       throw std::invalid_argument("W invalid tag: tag is already FINISHED");
     }
 
@@ -1144,7 +1147,7 @@ public:
 
           if (!sendQueue.waitAndPush(std::move(msg)).first) {
             ERROR("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
-            tagprop.unlock(std::move(l));
+            //tagprop.unlock(std::move(l));
             throw bliss::io::IOException("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
           } // else successfully pushed into sendQueue.
         }  // else empty buffer
@@ -1153,7 +1156,7 @@ public:
 
       // repeat until success;
     } while (!result.first);
-    tagprop.unlock(std::move(l));
+    //tagprop.unlock(std::move(l));
   }
 
 

@@ -45,7 +45,7 @@ void test_map(MPI_Comm& comm)
 
   counting_map.init();
 
-  sleep(1);
+  //sleep(1);
 
   for (int i = 0; i < p; ++i)
   {

@@ -29,6 +29,7 @@
 
 #include "omp.h"
 
+#include <xmmintrin.h>
 
 #include "utils/logging.h"
 #include "utils/constexpr_array.hpp"
@@ -134,7 +135,8 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
     //        length between probing needs to be tuned.
     while (hasMessage == 0) {
       MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
-      usleep(usleep_duration);
+      //usleep(usleep_duration);
+      _mm_pause();
       //printf("%dw",rank); fflush(stdout);
     }
     //printf("\n");
@@ -494,7 +496,8 @@ void computeP2P(FileLoaderType &loader,
             delete [] lre.second;
 
           } else {
-            usleep(50);
+            //usleep(50);
+            _mm_pause();
           }
 
 
@@ -563,7 +566,9 @@ void computeP2P(FileLoaderType &loader,
           if (fin == 1) {
             // finished receiving.  insert into recvQueue
             while (!recvQueue.tryPush(std::move(el.second))) {
-              usleep(50);
+              //usleep(50);
+              _mm_pause();
+
             }
           } else {
             recvInProgress.push(std::move(el));
@@ -675,7 +680,9 @@ void computeP2P(FileLoaderType &loader,
              memcpy(array, se.second.data(), se.second.size() * sizeof(KmerIndexType));
              RecvQueueElementType temp(se.second.size(), array);
              while(!recvQueue.tryPush(std::move(temp))) {
-               usleep(50);
+               //usleep(50);
+               _mm_pause();
+
              }
 
              //printf("%d->%d Sent %lu locally. in queue: sendQueue size %lu\n", rank, rank, se.second.size(), sendQueue.size());
@@ -700,7 +707,9 @@ void computeP2P(FileLoaderType &loader,
           //printf("inprogress:  send queue %lu -> %lu -> %lu -> %lu recv queue\n", sendQueue.size(), sendInProgress.size(), recvInProgress.size(), recvQueue.size());
           break;
         }
-        usleep(50);
+//        usleep(50);
+        _mm_pause();
+
       }
     }  // section for handling the MPI communications
 
