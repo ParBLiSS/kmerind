@@ -16,7 +16,14 @@
 #include <unistd.h>
 #include <queue>
 
+
+#ifdef BLISS_MUTEX
 #include "concurrent/threadsafe_queue.hpp"
+#endif
+#ifdef BLISS_SPINLOCK
+#include "concurrent/spinlock_queue.hpp"
+#endif
+
 
 #include "omp.h"
 
@@ -373,7 +380,7 @@ void timeSTDQueueThreaded(const std::string &message, std::queue<T>&& q, const i
   omp_lock_t lock;
   omp_init_lock(&lock);
 
-  volatile bool done;
+  volatile bool done = false;
 
 #pragma omp parallel sections num_threads(2) shared(q, done, result)
   {

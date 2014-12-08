@@ -1,6 +1,7 @@
 project(bliss-concurrent)
 include("${CMAKE_SOURCE_DIR}/Sanitizer.cmake")
 
+
 if (ENABLE_TESTING)
 # load the testing:
 if (IS_DIRECTORY ./test)
@@ -17,6 +18,10 @@ if (IS_DIRECTORY ./test)
     
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_objectpool.cpp )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check2_objectpool.cpp )
+
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check_threadsafe_queue.cpp )
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check_threadsafe_queue.cpp )
+
     
 endif()
 

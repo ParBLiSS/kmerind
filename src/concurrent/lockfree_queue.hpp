@@ -1,9 +1,11 @@
 /**
- * @file		spinlock_queue.hpp
+ * @file		lockfree_queue.hpp
  * @ingroup bliss::concurrent
  * @author	tpan
  * @brief   Thread Safe Queue Implementation
  * @details this header file contains the templated implementation of a thread safe queue.  this class is used for MPI buffer management.
+ *
+ *    // can't use boost's lockfree queue:  expect T to have copy constuctor, tribial assignment operator, and trivial destuctor.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -14,11 +16,12 @@
 
 #include <thread>
 #include <mutex>
-#include <deque>
 #include <limits>
 #include <atomic>
 #include <stdexcept>
 #include <xmmintrin.h>
+#include <concurrentqueue/concurrentqueue.h>
+
 
 // TODO: every operation that's modifying the queue is using unique lock. can this be made better with just careful atomic operations
 // 		 e.g. with memory fence?
@@ -51,29 +54,13 @@ namespace bliss
       protected:
 
         /// mutex for locking access to the queue
-       mutable std::mutex mutex;
-
-        std::atomic_flag spinlock = ATOMIC_FLAG_INIT;
-
-        /// condition variable for event notification.  specifically, for unblocking the waitAndPop calls (queue transitions from empty to not-empty)
-        // no need. just unlock and pause, then lock again.
-        //bool empty_cv;
-
-        /// condition variable for event notification.  specifically, for unblocking the waitAndPush calls (queue transitions from full to not-full)
-        //bool full_cv;
-
+        mutable std::mutex mutex;
 
         /// underlying queue that is not thread safe.
-        std::deque<T> q;
-
+        boost::lockfree::queue<T> q;
 
         /// capacity of the queue.  if set to std::numeric_limits<size_t>::max() indicates unlimited size queue
         size_t capacity;
-
-
-        /// the current size of the underlying queue.  using atomic data type avoids having to lock the queue prior to checking its size.
-        std::atomic<size_t> qsize;
-
 
         /// atomic boolean variable to indicate whether a calling thread can push into this queue.  use when suspending or terminating a queue.
         std::atomic<bool> pushEnabled;
@@ -85,11 +72,12 @@ namespace bliss
          * @param l       a lock that uses the mutex of the source ThreadSafeQueue.
          */
         ThreadSafeQueue(ThreadSafeQueue<T>&& other, const std::lock_guard<std::mutex>& l) :
-              q(std::move(other.q)),
             capacity(other.capacity) {
           other.capacity = 0;
-          qsize.exchange(other.qsize.exchange(0));              // relaxed, since we have a lock.
           pushEnabled.exchange(other.pushEnabled.exchange(false));
+
+          q.unsynchronized_push(other.q.)
+
         };
 
 

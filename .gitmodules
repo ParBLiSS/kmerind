@@ -1,3 +1,6 @@
 [submodule "ext/gtest"]
 	path = ext/gtest
 	url = https://tcpan@bitbucket.org/AluruLab/googletest-patched.git
+[submodule "ext/concurrentqueue"]
+	path = ext/concurrentqueue
+	url = https://github.com/cameron314/concurrentqueue.git
