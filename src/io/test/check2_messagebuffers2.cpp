@@ -271,13 +271,11 @@ int main(int argc, char** argv) {
     repeats = atoi(argv[1]);
   }
 
-#ifdef BLISS_MUTEX
+#if defined( BLISS_MUTEX )
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
-#endif
-#ifdef BLISS_SPINLOCK
+#else // #ifdef BLISS_SPINLOCK
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
 #endif
-
   /// thread unsafe.  test in single thread way.
 //while(true) {
 

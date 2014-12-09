@@ -757,15 +757,14 @@ void appendTimed(const int iterations) {
 int main(int argc, char** argv) {
 
 
-#ifdef BLISS_MUTEX
+#if defined( BLISS_MUTEX)
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
-#endif
-#ifdef BLISS_SPINLOCK
+#elif defined(BLISS_SPINLOCK)
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
-#endif
-#ifdef BLISS_LOCKFREE
+#else //if defined(BLISS_LOCKFREE)
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCKFREE;
 #endif
+
 
 
 

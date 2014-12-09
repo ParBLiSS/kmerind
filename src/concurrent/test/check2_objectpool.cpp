@@ -338,12 +338,13 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 int main(int argc, char** argv) {
 
   // construct, acquire, access, release
-#ifdef BLISS_MUTEX
+#if defined( BLISS_MUTEX )
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
-#endif
-#ifdef BLISS_SPINLOCK
+#else // #ifdef BLISS_SPINLOCK
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
 #endif
+
+
 
   //////////////  unbounded version
 

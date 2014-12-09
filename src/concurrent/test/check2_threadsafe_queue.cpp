@@ -17,10 +17,11 @@
 #include <queue>
 
 
-#ifdef BLISS_MUTEX
+#if defined( BLISS_MUTEX)
 #include "concurrent/threadsafe_queue.hpp"
-#endif
-#ifdef BLISS_SPINLOCK
+#elif defined(BLISS_LOCKFREE)
+#include "concurrent/lockfree_queue.hpp"
+#else   //if defined(BLISS_SPINLOCK)
 #include "concurrent/spinlock_queue.hpp"
 #endif
 
@@ -214,7 +215,8 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     else
       ++count2;
   }
-  if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2)))  printf("FAIL: TSQueue capacity %lu, finished tryPush until full at iteration %d, success %d, fail %d. \n", queue.getCapacity(), i, count, count2);
+  int expected = (queue.getCapacity() == bliss::concurrent::ThreadSafeQueue<T>::MAX_SIZE) ? entries+2 : entries;
+  if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2)))  printf("FAIL: TSQueue capacity %lu, finished tryPush until full, expected %d, success %d, fail %d. \n", queue.getCapacity(), expected, count, count2);
   else printf("PASS\n");
 
   printf("  CHECK tryPop too much: ");
@@ -227,7 +229,8 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     else
       ++count2;
   }
-  if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2))) printf("FAIL: TSQueue capacity %lu, finished tryPop from full at iteration %d, success %d, fail %d\n",queue.getCapacity(),  i, count, count2);
+  expected = (queue.getCapacity() == bliss::concurrent::ThreadSafeQueue<T>::MAX_SIZE) ? entries+2 : entries;
+  if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2))) printf("FAIL: TSQueue capacity %lu, finished tryPop from full, expected %d, success %d, fail %d\n",queue.getCapacity(),  expected, count, count2);
   else printf("PASS\n");
 
 
