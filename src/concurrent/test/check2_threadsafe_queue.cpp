@@ -36,14 +36,14 @@ using namespace bliss::concurrent;
 
 template<typename T>
 void testWaitAndPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int entries, const int nProducer) {
-  usleep(1000);
+  //usleep(1000);
   int count = 0;
 #pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+:count)
   for (int i = 0; i < entries; ++i) {
     if (queue.waitAndPush(T(i)).first)
 //    if (i % 1000 == 0) usleep(5);
       ++count;
-    usleep(5);
+    //usleep(5);
   }
   queue.disablePush();
 
@@ -53,7 +53,7 @@ void testWaitAndPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int ent
 
 template<typename T>
 void testTryPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int entries, const int nProducer) {
-  usleep(1000);
+  //usleep(1000);
   int count = 0, count2 = 0;
 #pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+: count, count2)
   for (int i = 0; i < entries; ++i) {
@@ -62,7 +62,7 @@ void testTryPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int entries
     else
       ++count2;
 //    if (i % 1000 == 0) usleep(20);
-    usleep(5);
+    //usleep(5);
   }
   queue.disablePush();
 
