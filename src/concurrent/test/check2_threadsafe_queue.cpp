@@ -183,7 +183,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T> &queue, const int nConsume
 template<typename T>
 void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<T>&& queue, const int nProducer, const int nConsumer) {
 
-  int entries = (queue.getCapacity() == bliss::concurrent::ThreadSafeQueue<T>::MAX_SIZE) ? 10000 : queue.getCapacity();
+  int entries = (!queue.isFixedSize()) ? 10000 : queue.getCapacity();
 
   printf("=== TEST %s: %d producers, %d consumers, capacity %lu, entries %d\n", message.c_str(), nProducer, nConsumer, queue.getCapacity(), entries);
 
@@ -215,7 +215,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     else
       ++count2;
   }
-  int expected = (queue.getCapacity() == bliss::concurrent::ThreadSafeQueue<T>::MAX_SIZE) ? entries+2 : entries;
+  int expected = (!queue.isFixedSize()) ? entries+2 : entries;
   if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2)))  printf("FAIL: TSQueue capacity %lu, finished tryPush until full, expected %d, success %d, fail %d. \n", queue.getCapacity(), expected, count, count2);
   else printf("PASS\n");
 
@@ -229,7 +229,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     else
       ++count2;
   }
-  expected = (queue.getCapacity() == bliss::concurrent::ThreadSafeQueue<T>::MAX_SIZE) ? entries+2 : entries;
+  expected = (!queue.isFixedSize()) ? entries+2 : entries;
   if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2))) printf("FAIL: TSQueue capacity %lu, finished tryPop from full, expected %d, success %d, fail %d\n",queue.getCapacity(),  expected, count, count2);
   else printf("PASS\n");
 

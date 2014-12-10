@@ -146,6 +146,9 @@ namespace bliss
         const size_t& getCapacity() const {
           return capacity;
         }
+        inline bool isFixedSize() const {
+        	return getCapacity() < MAX_SIZE;
+        }
 
         /**
          * check if the thread safe queue is full.

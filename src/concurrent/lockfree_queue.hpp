@@ -22,7 +22,8 @@
 #include <stdexcept>
 #include <xmmintrin.h>
 #include <concurrentqueue/concurrentqueue.h>
-
+#include <cassert>
+#include <tuple>
 
 
 namespace bliss
@@ -95,10 +96,11 @@ namespace bliss
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueue(const int64_t &_capacity = MAX_SIZE) :
-              q( _capacity == MAX_SIZE ? 128 : _capacity), capacity(_capacity), size(0)
+        explicit ThreadSafeQueue(const size_t &_capacity = static_cast<size_t>(MAX_SIZE)) :
+              q( _capacity == static_cast<size_t>(MAX_SIZE) ? 128 : _capacity),
+              capacity(static_cast<int64_t>(_capacity)), size(0)
         {
-          assert(_capacity <= MAX_SIZE);
+          assert(_capacity <= static_cast<size_t>(MAX_SIZE));
 
           if (capacity == 0)
             throw std::invalid_argument("ThreadSafeQueue constructor parameter capacity is given as 0");
@@ -129,8 +131,12 @@ namespace bliss
          * get the capacity of the thread safe queue
          * @return    capacity of the queue
          */
-        inline const int64_t& getCapacity() const {
+        inline size_t getCapacity() const {
           return capacity;
+        }
+
+        inline bool isFixedSize() const {
+        	return getCapacity() < MAX_SIZE;
         }
 
         /**
@@ -138,7 +144,7 @@ namespace bliss
          * @return    boolean - whether the queue is full.
          */
         inline bool isFull() const {
-          return (capacity < MAX_SIZE) && (getSize() >= capacity);
+          return (isFixedSize()) && (getSize() >= getCapacity());
         }
 
         /**
@@ -156,7 +162,7 @@ namespace bliss
          */
         inline size_t getSize() const
         {
-          return size.load() & std::numeric_limits<int64_t>::max();
+          return static_cast<size_t>(size.load() & MAX_SIZE);
         }
 
         /**
@@ -176,7 +182,7 @@ namespace bliss
          * set the queue to accept new elements
          */
         void enablePush() {
-          size.fetch_and(std::numeric_limits<int64_t>::max());  // clear the push bit, and leave size as is
+          size.fetch_and(MAX_SIZE);  // clear the push bit, and leave size as is
         }
 
         /**
@@ -191,7 +197,7 @@ namespace bliss
          * @return    boolean - queue insertion allowed or not.
          */
         bool canPush() {
-          return size.load(std::memory_order_seq_cst) >= 0;   // int highest bit set means negative, and means cannot push
+          return size.load() >= 0;   // int highest bit set means negative, and means cannot push
         }
 
         /**
@@ -205,18 +211,20 @@ namespace bliss
           //return canPush() || !isEmpty();
         }
 
-      protected:
-        inline bool canPushAndHasRoom() {
-          // canPush() && !full() :  positive number less than capacity.
-          //return size.load(std::memory_order_seq_cst) >= 0 &&
-          //    ((capacity >= MAX_SIZE) || ((size.load() & std::numeric_limits<int64_t>::max()) < capacity));
+//      protected:
+//        inline bool canPushAndHasRoom() {
+//          // canPush() && !full() :  positive number less than capacity.
+//          //return size.load(std::memory_order_seq_cst) >= 0 &&
+//          //    ((capacity >= MAX_SIZE) || ((size.load() & std::numeric_limits<int64_t>::max()) < capacity));
+//
+//          // if we reinterpret this number as a uint64_t, then we only need to check less than capacity, since now highest bits are all way higher.
+//          int64_t v = size.load();
+//          return reinterpret_cast<uint64_t&>(v) < capacity;
+//        }
+//
+//      public:
 
-          // if we reinterpret this number as a uint64_t, then we only need to check less than capacity, since now highest bits are all way higher.
-          int64_t v = size.load();
-          return reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity);
-        }
-
-      public:
+        // push increments size first, then add to queue.
 
         /**
          * Non-blocking - pushes an element by constant reference (copy).
@@ -229,13 +237,12 @@ namespace bliss
          */
         bool tryPush (T const& data) {
 
-          int64_t v = size.load();
-          bool res = false;
+          int64_t v = size.fetch_add(1);
           if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
-            if ((res = q.enqueue(data)) == true) size++;
+            if (q.enqueue(data)) return true;
           }
-
-          return res;
+          size--; // failed enqueue, decrement size.
+          return false;
         }
 
         /**
@@ -253,14 +260,15 @@ namespace bliss
          * @return        whether push was successful.
          */
         std::pair<bool,T> tryPush (T && data) {
-          int64_t v = size.load();
-          bool res = false;
+          int64_t v = size.fetch_add(1);
           if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
-            if ((res = q.enqueue(std::forward<T>(data))) == true) size++;
+            if (q.enqueue(std::forward<T>(data)))
+            	return std::move(std::make_pair(true, std::forward<T>(data)));
           }
 
+          size--; // failed enqueue, decrement size.
           // at this point, if success, data should be empty.  else data should be untouched.
-          return std::move(std::make_pair(res, std::forward<T>(data)));;
+          return std::move(std::make_pair(false, std::forward<T>(data)));
         }
 
         /**
@@ -279,21 +287,23 @@ namespace bliss
         bool waitAndPush (T const& data) {
 
           // wait while size is greater than capacity.
-          volatile int64_t v = 0;
-          if ((v = size.load()) >= capacity) {
-            _mm_pause();              // full q.  wait for someone to signal (not full && canPush, or !canPush).
+        	volatile int64_t v;;
+        	while ((v = size.fetch_add(1)) >= capacity) {
+        		size--;
+        		_mm_pause();               // full q.  wait for someone to signal (not full && canPush, or !canPush).
+        	}
+            // to get here, have to have one of these conditions changed:  pushEnabled, !full
 
-          }
-          // to get here, have to have one of these conditions changed:  pushEnabled, !full
 
-          // after the loop, if size is less than 0, then push disabled, return false.  else push and increment.
-          bool res = false;
-          if (v >= 0 ) {
-            if ((res = q.enqueue(data))  == true) size++;
-          } // else push disabled. return false.
+        	if ( v >= 0 )
+        		if (q.enqueue(data))
+        			return true;  //  0 <= v < capacity
 
-          return res;
 
+        	// else v < 0. push disabled., or enqueue failed for other reasons
+			size--;
+			return false;
+        	// no v >= capacity case.  would still be in loop.
         }
 
         /**
@@ -310,26 +320,30 @@ namespace bliss
          * @return        whether push was successful.
          */
         std::pair<bool,T> waitAndPush (T && data) {
-          // wait while size is greater than capacity.
-          volatile int64_t v = 0;
-          if ((v = size.load()) >= capacity) {
-            _mm_pause();              // full q.  wait for someone to signal (not full && canPush, or !canPush).
 
-          }
-          // to get here, have to have one of these conditions changed:  pushEnabled, !full
+            // wait while size is greater than capacity.
+          	volatile int64_t v;;
+          	while ((v = size.fetch_add(1)) >= capacity) {
+          		size--;
+          		_mm_pause();               // full q.  wait for someone to signal (not full && canPush, or !canPush).
+          	}
+              // to get here, have to have one of these conditions changed:  pushEnabled, !full
 
-          // after the loop, if size is less than 0, then push disabled, return false.  else push and increment.
-          bool res = false;
-          if (v >= 0 ) {  // == canPush
-            if ((res = q.enqueue(std::forward<T>(data)))  == true) size++;
-          } // else push disabled. return false.
 
-          // at this point, if success, data should be empty.  else data should be untouched.
-          return std::move(std::make_pair(res, std::forward<T>(data)));
+          	if (v >= 0 )
+          		if (q.enqueue(std::forward<T>(data)))
+          			return std::move(std::make_pair(true, std::forward<T>(data)));;  //  0 <= v < capacity
 
+          	// else v < 0. push disabled.  or enqueue failed for other reasons
+  			size--;
+          	// no v >= capacity case.  would still be in loop.
+            // at this point, if success, data should be empty.  else data should be untouched.
+  			return std::move(std::make_pair(false, std::forward<T>(data)));
         }
 
 
+
+        // pop dequeues first, then decrement count
 
         /**
          * Non-blocking - remove the first element in the queue and return it to the calling thread.
@@ -345,11 +359,9 @@ namespace bliss
          */
         std::pair<bool, T> tryPop() {
           std::pair<bool, T> output;
-          output.first = false;
 
-          if ((output.first = q.try_dequeue(output.second)) == true) {
+          if ((output.first = q.try_dequeue(output.second)) == true)
             size--;
-          }
 
           return output;
         }
@@ -371,15 +383,16 @@ namespace bliss
          */
         std::pair<bool, T> waitAndPop() {
           std::pair<bool, T> output;
-          output.first = false;
 
-          // loop while pop fails, and canPop()
-          if (canPop() && ((output.first = q.try_dequeue(output.second)) == false)) {
+          // loop while pop fails and canPop()
+          output.first = q.try_dequeue(output.second);
+          while (!output.first && canPop()) {
             _mm_pause();
+            output.first = q.try_dequeue(output.second);
           }
 
           // get here if !canPop, OR dequeue succeeds
-          if (output.first) --size;   // successful dequeue, so decrement size.
+          if (output.first) size--;   // successful dequeue, so decrement size.
 
           return output;
         }
@@ -392,7 +405,7 @@ namespace bliss
     /**
      * static templated MAX_SIZE definition.
      */
-    template<typename T> constexpr size_t ThreadSafeQueue<T>::MAX_SIZE;
+    template<typename T> constexpr int64_t ThreadSafeQueue<T>::MAX_SIZE;
 
 
 
