@@ -71,7 +71,7 @@ namespace bliss
         ThreadSafeQueue(ThreadSafeQueue<T>&& other, const std::lock_guard<std::mutex>& l) :
           q(std::move(other.q)), capacity(other.capacity) {
           other.capacity = 0;
-          size.exchange(other.size.exchange(std::numeric_limits<int64_t>::lowest()));
+          size.exchange(other.size.exchange(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed), std::memory_order_relaxed);
         };
 
 
@@ -123,7 +123,7 @@ namespace bliss
           std::lock(mylock, otherlock);
           q = std::move(other.q);
           capacity = other.capacity; other.capacity = 0;
-          size.exchange(other.size.exchange(std::numeric_limits<int64_t>::lowest()));
+          size.exchange(other.size.exchange(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;
         }
 
@@ -162,7 +162,7 @@ namespace bliss
          */
         inline size_t getSize() const
         {
-          return static_cast<size_t>(size.load() & MAX_SIZE);
+          return static_cast<size_t>(size.load(std::memory_order_relaxed) & MAX_SIZE);
         }
 
         /**
@@ -174,30 +174,31 @@ namespace bliss
           T val;
           while (q.try_dequeue(val)) ;
 
-          size.fetch_and(std::numeric_limits<int64_t>::lowest());  // keep the push bit, and set size to 0
+          size.fetch_and(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed);  // keep the push bit, and set size to 0
 
         }
 
         /**
          * set the queue to accept new elements
          */
-        void enablePush() {
-          size.fetch_and(MAX_SIZE);  // clear the push bit, and leave size as is
+        inline void enablePush() {
+          size.fetch_and(MAX_SIZE, std::memory_order_release);  // clear the push bit, and leave size as is
+
         }
 
         /**
          * set the queue to disallow insertion of new elements.
          */
-        void disablePush() {
-          size.fetch_or(std::numeric_limits<int64_t>::lowest());   // set the push bit, and leave size as is.
+        inline void disablePush() {
+          size.fetch_or(std::numeric_limits<int64_t>::lowest(), std::memory_order_acquire);   // set the push bit, and leave size as is.
         }
 
         /**
          * check if the thread safe queue is accepting new elements. (full or not)
          * @return    boolean - queue insertion allowed or not.
          */
-        bool canPush() {
-          return size.load() >= 0;   // int highest bit set means negative, and means cannot push
+        inline bool canPush() {
+          return size.load(std::memory_order_relaxed) >= 0;   // int highest bit set means negative, and means cannot push
         }
 
         /**
@@ -205,9 +206,9 @@ namespace bliss
          * if additional items can be pushed in.
          * @return    boolean - queue pop is allowed or not.
          */
-        bool canPop() {
+        inline bool canPop() {
           // canPush == first bit is 0, OR has some elements (not 0 for remaining bits).  so basically, not 1000000000...
-          return size.load() != std::numeric_limits<int64_t>::lowest();
+          return size.load(std::memory_order_acquire) != std::numeric_limits<int64_t>::lowest();
           //return canPush() || !isEmpty();
         }
 
@@ -237,11 +238,11 @@ namespace bliss
          */
         bool tryPush (T const& data) {
 
-          int64_t v = size.fetch_add(1);
+          int64_t v = size.fetch_add(1, std::memory_order_acquire);
           if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
             if (q.enqueue(data)) return true;
           }
-          size--; // failed enqueue, decrement size.
+          size.fetch_sub(1, std::memory_order_release); // failed enqueue, decrement size.
           return false;
         }
 

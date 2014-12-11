@@ -461,3 +461,36 @@ TODO:
 	
 12/3/2014
 	convert pair's first/second to use std::tie(var1, var2) for readability.
+	
+	
+12/11/2014
+	1. lockfree
+		1. queue - decorated concurrentqueue with size and enable/disable
+			for send/recv, has to be shared between threads
+		2. object pool - need lockfree?
+		3. memory buffers - need lockfree?
+		4. buffer  - okay
+	2. KmerIndex:
+		1. thread global, lockfree memorybuffer version.
+		2. thread local memorybuffer-pool-buffer version.
+		3. query interface
+		
+	3. Memory ordering in buffer and Lockfree Queue
+	4. KmerIndex construction:  
+		1. AllToAll version for construction - performance comparison
+		2. suffix array byproduct.
+	5. other types of kmer indices
+	
+	6. paper: 
+		performance comparison:
+		1. best sequential algo.  suffix array based?
+		2. async kmer generation vs AllToAll.
+			minimize comm, or hide comm?
+		3. parallel suffix array based.
+			should beat 17 sec by a lot.  please.
+		4. memory usage
+			sorting version?
+			
+		writing.
+		
+	7. documentation and testing.

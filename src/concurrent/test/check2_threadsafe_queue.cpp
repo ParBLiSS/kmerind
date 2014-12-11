@@ -19,10 +19,10 @@
 
 #if defined( BLISS_MUTEX)
 #include "concurrent/threadsafe_queue.hpp"
-#elif defined(BLISS_LOCKFREE)
-#include "concurrent/lockfree_queue.hpp"
-#else   //if defined(BLISS_SPINLOCK)
+#elif defined( BLISS_SPINLOCK )
 #include "concurrent/spinlock_queue.hpp"
+#else   //if defined( BLISS_LOCKFREE )
+#include "concurrent/lockfree_queue.hpp"
 #endif
 
 
@@ -583,21 +583,9 @@ int main(int argc, char** argv) {
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   printf("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
 
-  t1 = std::chrono::high_resolution_clock::now();
-  timeSTDQueueSerial("TIME STD 1 thread", std::move(std::queue<int>()), count);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  printf("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
-
 
   t1 = std::chrono::high_resolution_clock::now();
   timeTSQueueThreaded("TIME TSQ 4 threads ", std::move(QueueType()), count, 4, 1);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  printf("  time: entries %d nthread %d,%d time %f\n", count, 4, 1, time_span.count());
-
-  t1 = std::chrono::high_resolution_clock::now();
-  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), count, 4, 1);
   t2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   printf("  time: entries %d nthread %d,%d time %f\n", count, 4, 1, time_span.count());
@@ -610,23 +598,35 @@ int main(int argc, char** argv) {
   printf("  time: entries %d nthread %d,%d time %f\n", count, 1, 4, time_span.count());
 
   t1 = std::chrono::high_resolution_clock::now();
-  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), count, 1, 4);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  printf("  time: entries %d nthread %d,%d time %f\n", count, 1, 4, time_span.count());
-
-
-  t1 = std::chrono::high_resolution_clock::now();
   timeTSQueueThreaded("TIME TSQ 4 threads ", std::move(QueueType()), count, 4, 4);
   t2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
   printf("  time: entries %d nthread %d,%d time %f\n", count, 4, 4, time_span.count());
 
-  t1 = std::chrono::high_resolution_clock::now();
-  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), count, 4, 4);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  printf("  time: entries %d nthread %d,%d time %f\n", count, 4, 4, time_span.count());
+  //========= STD VERSION
 
+//  t1 = std::chrono::high_resolution_clock::now();
+//  timeSTDQueueSerial("TIME STD 1 thread", std::move(std::queue<int>()), count);
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+//  printf("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
+//
+//  t1 = std::chrono::high_resolution_clock::now();
+//  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), count, 4, 1);
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+//  printf("  time: entries %d nthread %d,%d time %f\n", count, 4, 1, time_span.count());
+//
+//  t1 = std::chrono::high_resolution_clock::now();
+//  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), count, 1, 4);
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+//  printf("  time: entries %d nthread %d,%d time %f\n", count, 1, 4, time_span.count());
+//
+//  t1 = std::chrono::high_resolution_clock::now();
+//  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), count, 4, 4);
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+//  printf("  time: entries %d nthread %d,%d time %f\n", count, 4, 4, time_span.count());
 
 };
