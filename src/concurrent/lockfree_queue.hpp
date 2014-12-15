@@ -162,7 +162,7 @@ namespace bliss
          */
         inline size_t getSize() const
         {
-          return static_cast<size_t>(size.load(std::memory_order_relaxed) & MAX_SIZE);
+          return static_cast<size_t>(size.load(std::memory_order_relaxed) & MAX_SIZE);   // size is atomic, so don't need strong memory ordering.
         }
 
         /**
@@ -174,6 +174,7 @@ namespace bliss
           T val;
           while (q.try_dequeue(val)) ;
 
+          // clear is done by 1, so don't need strong mem ordering.
           size.fetch_and(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed);  // keep the push bit, and set size to 0
 
         }
@@ -182,7 +183,9 @@ namespace bliss
          * set the queue to accept new elements
          */
         inline void enablePush() {
-          size.fetch_and(MAX_SIZE, std::memory_order_release);  // clear the push bit, and leave size as is
+          // before enablePush, queue is probably empty or no one is writing to it.  so prior side effects don't need to be visible right away.
+          // size itself is atomic
+          size.fetch_and(MAX_SIZE, std::memory_order_relaxed);  // clear the push bit, and leave size as is
 
         }
 
@@ -190,7 +193,9 @@ namespace bliss
          * set the queue to disallow insertion of new elements.
          */
         inline void disablePush() {
-          size.fetch_or(std::numeric_limits<int64_t>::lowest(), std::memory_order_acquire);   // set the push bit, and leave size as is.
+
+          // before disable push, should make sure that all writes are visible to all other threads, so release here.
+          size.fetch_or(std::numeric_limits<int64_t>::lowest(), std::memory_order_acq_rel);   // set the push bit, and leave size as is.
         }
 
         /**
@@ -198,6 +203,7 @@ namespace bliss
          * @return    boolean - queue insertion allowed or not.
          */
         inline bool canPush() {
+          // pushing thread does not immediately are what other threads did before this
           return size.load(std::memory_order_relaxed) >= 0;   // int highest bit set means negative, and means cannot push
         }
 
@@ -208,6 +214,9 @@ namespace bliss
          */
         inline bool canPop() {
           // canPush == first bit is 0, OR has some elements (not 0 for remaining bits).  so basically, not 1000000000...
+
+
+          // popping thread should have visibility of all changes to the queue
           return size.load(std::memory_order_acquire) != std::numeric_limits<int64_t>::lowest();
           //return canPush() || !isEmpty();
         }
@@ -238,11 +247,11 @@ namespace bliss
          */
         bool tryPush (T const& data) {
 
-          int64_t v = size.fetch_add(1, std::memory_order_acquire);
+          int64_t v = size.fetch_add(1, std::memory_order_relaxed);
           if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
             if (q.enqueue(data)) return true;
-          }
-          size.fetch_sub(1, std::memory_order_release); // failed enqueue, decrement size.
+          }  // else at capacity.
+          size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
           return false;
         }
 
@@ -261,13 +270,13 @@ namespace bliss
          * @return        whether push was successful.
          */
         std::pair<bool,T> tryPush (T && data) {
-          int64_t v = size.fetch_add(1);
+          int64_t v = size.fetch_add(1, std::memory_order_relaxed);
           if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
             if (q.enqueue(std::forward<T>(data)))
             	return std::move(std::make_pair(true, std::forward<T>(data)));
           }
 
-          size--; // failed enqueue, decrement size.
+          size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
           // at this point, if success, data should be empty.  else data should be untouched.
           return std::move(std::make_pair(false, std::forward<T>(data)));
         }
@@ -289,8 +298,8 @@ namespace bliss
 
           // wait while size is greater than capacity.
         	volatile int64_t v;;
-        	while ((v = size.fetch_add(1)) >= capacity) {
-        		size--;
+        	while ((v = size.fetch_add(1, std::memory_order_relaxed)) >= capacity) {
+        		size.fetch_sub(1, std::memory_order_relaxed);
         		_mm_pause();               // full q.  wait for someone to signal (not full && canPush, or !canPush).
         	}
             // to get here, have to have one of these conditions changed:  pushEnabled, !full
@@ -302,8 +311,8 @@ namespace bliss
 
 
         	// else v < 0. push disabled., or enqueue failed for other reasons
-			size--;
-			return false;
+          size.fetch_sub(1, std::memory_order_relaxed);
+          return false;
         	// no v >= capacity case.  would still be in loop.
         }
 
@@ -324,8 +333,8 @@ namespace bliss
 
             // wait while size is greater than capacity.
           	volatile int64_t v;;
-          	while ((v = size.fetch_add(1)) >= capacity) {
-          		size--;
+          	while ((v = size.fetch_add(1, std::memory_order_relaxed)) >= capacity) {
+          	  size.fetch_sub(1, std::memory_order_relaxed);
           		_mm_pause();               // full q.  wait for someone to signal (not full && canPush, or !canPush).
           	}
               // to get here, have to have one of these conditions changed:  pushEnabled, !full
@@ -336,10 +345,10 @@ namespace bliss
           			return std::move(std::make_pair(true, std::forward<T>(data)));;  //  0 <= v < capacity
 
           	// else v < 0. push disabled.  or enqueue failed for other reasons
-  			size--;
+          	size.fetch_sub(1, std::memory_order_relaxed);
           	// no v >= capacity case.  would still be in loop.
             // at this point, if success, data should be empty.  else data should be untouched.
-  			return std::move(std::make_pair(false, std::forward<T>(data)));
+          	return std::move(std::make_pair(false, std::forward<T>(data)));
         }
 
 
@@ -362,7 +371,7 @@ namespace bliss
           std::pair<bool, T> output;
 
           if ((output.first = q.try_dequeue(output.second)) == true)
-            size--;
+            size.fetch_sub(1, std::memory_order_acq_rel);
 
           return output;
         }
@@ -393,7 +402,7 @@ namespace bliss
           }
 
           // get here if !canPop, OR dequeue succeeds
-          if (output.first) size--;   // successful dequeue, so decrement size.
+          if (output.first) size.fetch_sub(1, std::memory_order_acq_rel);   // successful dequeue, so decrement size.
 
           return output;
         }

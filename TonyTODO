@@ -466,10 +466,12 @@ TODO:
 12/11/2014
 	1. lockfree
 		1. queue - decorated concurrentqueue with size and enable/disable
-			for send/recv, has to be shared between threads
+			for send/recv, has to be shared between threads - need to be lockfree, and is.
+			
+			my own imple?
 		2. object pool - need lockfree?
 		3. memory buffers - need lockfree?
-		4. buffer  - okay
+		4. buffer  - lockfree now.  need lockfree?  also needto change memory ordering.
 	2. KmerIndex:
 		1. thread global, lockfree memorybuffer version.
 		2. thread local memorybuffer-pool-buffer version.
