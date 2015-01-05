@@ -116,20 +116,24 @@ namespace bliss
 
 
 
-//        /**
-//         * @brief     Private move constructor with mutex lock.
-//         * @param other   Source ObjectPool object to move
-//         * @param l       Mutex lock on the Source ObjectPool object
-//         */
-//        ObjectPool(ObjectPool<LockType, T>&& other, const std::lock_guard<std::mutex>&) :
-//          capacity(other.capacity)
-//
-//        {
-//          other.capacity = 0;
-//
-//          available.swap(other.available);
-//          in_use.swap(other.in_use);
-//        };
+        /**
+         * @brief     Private move constructor with mutex lock.
+         * @param other   Source ObjectPool object to move
+         * @param l       Mutex lock on the Source ObjectPool object
+         */
+        ObjectPool(ObjectPool<LockType, T>&& other, const std::lock_guard<std::mutex>&) :
+          capacity(other.capacity)
+
+        {
+          other.capacity = 0;
+          size_in_use.store(other.size_in_use.exchange(0, std::memory_order_relaxed), std::memory_order_relaxed);
+
+          available.clear();
+          auto entry = other.available.tryPop();
+          while (entry.first) {
+             available.tryPush(entry.second);
+          }
+        };
 
 
         /**
@@ -159,34 +163,37 @@ namespace bliss
           {};
 
 
-//        /**
-//         * @brief      Move constructor.  Delegates to the Move constructor that locks access on the source.
-//         * @param other    source ObjectPool object to move.
-//         */
-//        explicit ObjectPool(ObjectPool<LockType, T>&& other) :
-//          ObjectPool<LockType, T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
-//
-//        /**
-//         * @brief     move assignment operator.
-//         * @param other   source ObjectPool object to move from.
-//         * @return        self, with member variables moved from other.
-//         */
-//        ObjectPool<LockType, T>& operator=(ObjectPool<LockType, T>&& other) {
-//          std::unique_lock<std::mutex> mylock(mutex, std::defer_lock),
-//                                        otherlock(other.mutex, std::defer_lock);
-//          std::lock(mylock, otherlock);
-//
-//          capacity = other.capacity; other.capacity = 0;
-//
-//          clear_storage();
-//
-//          available.swap(other.available);
-//          in_use.swap(other.in_use);
-//
-//          return *this;
-//        };
-        explicit ObjectPool(ObjectPool<LockType, T>&& other) = delete;
-        ObjectPool<LockType, T>& operator=(ObjectPool<LockType, T>&& other) = delete;
+        /**
+         * @brief      Move constructor.  Delegates to the Move constructor that locks access on the source.
+         * @param other    source ObjectPool object to move.
+         */
+        explicit ObjectPool(ObjectPool<LockType, T>&& other) :
+          ObjectPool<LockType, T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
+
+        /**
+         * @brief     move assignment operator.
+         * @param other   source ObjectPool object to move from.
+         * @return        self, with member variables moved from other.
+         */
+        ObjectPool<LockType, T>& operator=(ObjectPool<LockType, T>&& other) {
+          std::unique_lock<std::mutex> mylock(mutex, std::defer_lock),
+                                        otherlock(other.mutex, std::defer_lock);
+          std::lock(mylock, otherlock);
+
+          capacity = other.capacity; other.capacity = 0;
+          size_in_use.store(other.size_in_use.exchange(0, std::memory_order_relaxed), std::memory_order_relaxed);
+
+          clear_storage();
+
+          auto entry = other.available.tryPop();
+          while (entry.first) {
+             available.tryPush(entry.second);
+          }
+
+          return *this;
+        };
+//        explicit ObjectPool(ObjectPool<LockType, T>&& other) = delete;
+//        ObjectPool<LockType, T>& operator=(ObjectPool<LockType, T>&& other) = delete;
 
 
 
@@ -326,6 +333,8 @@ namespace bliss
 
         int64_t size_in_use;
 
+        mutable std::mutex mutex;
+
         /**
          * NOT thread safe, so need to be wrapped in synchronized calls.
          */
@@ -342,20 +351,20 @@ namespace bliss
 
 
 
-//        /**
-//         * @brief     Private move constructor with mutex lock.
-//         * @param other   Source ObjectPool object to move
-//         * @param l       Mutex lock on the Source ObjectPool object
-//         */
-//        ObjectPool(ObjectPool<lt, T>&& other, const std::lock_guard<std::mutex>&) :
-//          capacity(other.capacity)
-//
-//        {
-//          other.capacity = 0;
-//
-//          available.swap(other.available);
-//          in_use.swap(other.in_use);
-//        };
+        /**
+         * @brief     Private move constructor with mutex lock.
+         * @param other   Source ObjectPool object to move
+         * @param l       Mutex lock on the Source ObjectPool object
+         */
+        ObjectPool(ObjectPool<poolLT, T>&& other, const std::lock_guard<std::mutex>&) :
+          capacity(other.capacity), size_in_use(other.size_in_use)
+
+        {
+          other.capacity = 0;
+          other.size_in_use = 0;
+
+          available.swap(other.available);
+        };
 
 
         /**
@@ -385,34 +394,33 @@ namespace bliss
           {};
 
 
-//        /**
-//         * @brief      Move constructor.  Delegates to the Move constructor that locks access on the source.
-//         * @param other    source ObjectPool object to move.
-//         */
-//        explicit ObjectPool(ObjectPool<LockType, T>&& other) :
-//          ObjectPool<LockType, T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
-//
-//        /**
-//         * @brief     move assignment operator.
-//         * @param other   source ObjectPool object to move from.
-//         * @return        self, with member variables moved from other.
-//         */
-//        ObjectPool<LockType, T>& operator=(ObjectPool<LockType, T>&& other) {
-//          std::unique_lock<std::mutex> mylock(mutex, std::defer_lock),
-//                                        otherlock(other.mutex, std::defer_lock);
-//          std::lock(mylock, otherlock);
-//
-//          capacity = other.capacity; other.capacity = 0;
-//
-//          clear_storage();
-//
-//          available.swap(other.available);
-//          in_use.swap(other.in_use);
-//
-//          return *this;
-//        };
-        explicit ObjectPool(ObjectPool<poolLT, T>&& other) = delete;
-        ObjectPool<poolLT, T>& operator=(ObjectPool<poolLT, T>&& other) = delete;
+        /**
+         * @brief      Move constructor.  Delegates to the Move constructor that locks access on the source.
+         * @param other    source ObjectPool object to move.
+         */
+        explicit ObjectPool(ObjectPool<poolLT, T>&& other) :
+          ObjectPool<poolLT, T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
+
+        /**
+         * @brief     move assignment operator.
+         * @param other   source ObjectPool object to move from.
+         * @return        self, with member variables moved from other.
+         */
+        ObjectPool<poolLT, T>& operator=(ObjectPool<poolLT, T>&& other) {
+          std::unique_lock<std::mutex> mylock(mutex, std::defer_lock),
+                                        otherlock(other.mutex, std::defer_lock);
+          std::lock(mylock, otherlock);
+
+          capacity = other.capacity; other.capacity = 0;
+          size_in_use = other.size_in_use; other.size_in_use = 0;
+          clear_storage();
+
+          available.swap(other.available);
+
+          return *this;
+        };
+//        explicit ObjectPool(ObjectPool<poolLT, T>&& other) = delete;
+//        ObjectPool<poolLT, T>& operator=(ObjectPool<poolLT, T>&& other) = delete;
 
         /**
          * @brief     default destructor
