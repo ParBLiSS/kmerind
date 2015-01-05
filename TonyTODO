@@ -467,13 +467,16 @@ TODO:
 	1. lockfree
 		1. queue - decorated concurrentqueue with size and enable/disable
 			for send/recv, has to be shared between threads - need to be lockfree, and is.
+			DONE
 			
-			my own imple?
-		2. object pool - need lockfree?
-		3. memory buffers - need lockfree?
-		4. buffer  - lockfree now.  need lockfree?  also needto change memory ordering.
+			my own imple? ??
+		2. object pool - need lockfree?  use lockfree queue, locking set only.  no significant performance gain.
+			naive version that always allocate and deallocate.
+		3. memory buffers - need lockfree?  depend on underlying classes, so DONE.
+		4. buffer  - lockfree now.  need lockfree?  SIGNIFICANT IMPROVEMENT. also needto change memory ordering.
+			DONE.
 	2. KmerIndex:
-		1. thread global, lockfree memorybuffer version.
+		1. thread global, lockfree memorybuffer version.  DONE
 		2. thread local memorybuffer-pool-buffer version.
 		3. query interface
 		

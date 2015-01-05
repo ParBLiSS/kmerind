@@ -76,6 +76,7 @@ namespace bliss
 
         /// Internal BufferPool Type.  typedefed only to shorten the usage.
         typedef typename bliss::io::ObjectPool<PoolLT, BufferType>  BufferPoolType;
+
       public:
         /// IdType of a Buffer, aliased from BufferPool
         typedef typename BufferPoolType::ObjectPtrType            BufferPtrType;
@@ -212,7 +213,7 @@ namespace bliss
       public:
         /// Id type of the Buffers
         using BufferType = typename MessageBuffers<PoolLT, BufferLT, BufferCapacity>::BufferType;
-        //using BufferPtrType = typename MessageBuffers<PoolLT, BufferLT, BufferCapacity>::BufferPtrType;
+        using BufferPtrType = typename MessageBuffers<PoolLT, BufferLT, BufferCapacity>::BufferPtrType;
 
         /// the BufferPoolType from parent class
         using BufferPoolType = typename MessageBuffers<PoolLT, BufferLT, BufferCapacity>::BufferPoolType;
@@ -358,7 +359,15 @@ namespace bliss
           }
         }
 
-        virtual void releaseBuffer(BufferType * ptr) {
+        /** thread safety:
+         * called by commlayer's send/recv thread, so single threaded there
+         * called by sendMessageBuffer's swapInEmptyBuffer
+         *    if threadsafe version of sendMessageBuffer, then the pointer to buffer to be released will be unique.
+         *    if not threadsafe version, then the sendMessageBuffer should be used by a single threaded program, so buffer to release should be unique.
+         *
+         *    overall, do not need to worry about multiple threads releasing the same buffer.
+         */
+        virtual void releaseBuffer(BufferPtrType ptr) {
           if (ptr) {
             ptr->block_and_flush();  // if already blocked and flushed, no op.
 

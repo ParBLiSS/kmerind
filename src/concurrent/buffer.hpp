@@ -402,7 +402,7 @@ namespace bliss
         template<bliss::concurrent::LockType LT = LockType>
         const typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE2, bool>::type isEmpty() const
         {
-          return (getWrittenSize() == 0);
+          return (getWrittenSize<LT>() == 0);
         }
 
         // TODO:  make this more clear.

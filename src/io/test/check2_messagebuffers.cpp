@@ -16,7 +16,7 @@
 #include <unistd.h>  // for usleep
 
 #include "io/message_buffers.hpp"
-#include "concurrent/threadsafe_queue.hpp"
+#include "concurrent/lockfree_queue.hpp"
 #include "omp.h"
 #include <cassert>
 #include <chrono>

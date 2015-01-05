@@ -44,7 +44,7 @@
 #include "index/kmer_index_element.hpp"
 #include "index/kmer_index_functors.hpp"
 #include "index/kmer_index_generation.hpp"
-#include "concurrent/threadsafe_queue.hpp"
+#include "concurrent/lockfree_queue.hpp"
 
 /*
  * TYPE DEFINITIONS

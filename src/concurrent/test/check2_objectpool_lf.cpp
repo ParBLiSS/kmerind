@@ -25,7 +25,7 @@
 #include "concurrent/buffer.hpp"
 
 
-#include "concurrent/object_pool.hpp"
+#include "concurrent/single_releaser_object_pool.hpp"
 
 
 template<typename PoolType>
@@ -197,18 +197,21 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   mx = pool.isUnlimited() ? 100 : pool.getCapacity();
   // and create some dummy buffers to insert
   std::vector<typename PoolType::ObjectPtrType> temp;
+  std::vector<typename PoolType::ObjectPtrType> temp2;
   // first drain the pool
   for (i = 0; i < mx; ++i) {
     typename PoolType::ObjectPtrType ptr = pool.tryAcquireObject();
+    ptr->block_and_flush();
     temp.push_back(ptr);
-    temp.push_back(ptr);
+    temp2.push_back(ptr);
   }
+  temp.insert(temp.end(), temp2.begin(), temp2.end());
+  temp2.clear();
 #pragma omp parallel for num_threads(pool_threads) default(none) shared(pool, mx, temp) private(i) reduction(+ : count)
   for (i = 0; i < mx * 2; ++i) {
 
     typename PoolType::ObjectPtrType ptr = temp[i];
     if (ptr) {
-      ptr->block_and_flush();
       if (! pool.releaseObject(ptr)) {
         ++count; // failed release
       }
@@ -342,10 +345,10 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 int main(int argc, char** argv) {
 
   // construct, acquire, access, release
-#if defined( BLISS_MUTEX )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
-#else // #ifdef BLISS_SPINLOCK
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
+#if defined( BLISS_NONE )
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::NONE;
+#else // #ifdef BLISS_LOCKFREE
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCKFREE;
 #endif
 
 

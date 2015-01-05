@@ -14,11 +14,9 @@
 #include <iostream>
 #include <cstdio>
 #include <unistd.h>
-#include <queue>
-
 
 #if defined( BLISS_MUTEX)
-#include "concurrent/threadsafe_queue.hpp"
+#include "concurrent/mutexlock_queue.hpp"
 #elif defined( BLISS_SPINLOCK )
 #include "concurrent/spinlock_queue.hpp"
 #else   //if defined( BLISS_LOCKFREE )
@@ -345,200 +343,6 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
 
 
-template<typename T>
-void timeSTDQueueSerial(const std::string &message, std::queue<T>&& q, const int entries) {
-  printf("=== %s, capacity unlimited, single thread enqueue dequeue test: ", message.c_str());
-
-  int count = 0;
-
-  T output;
-  T result = 0;
-  for (int i = 0; i < entries; ++i) {
-
-    if (i % 3 == 0)
-      q.push(T(i));
-    else {
-      if (!q.empty()) {
-        output = q.front();
-        q.pop();
-        result ^= output;
-        ++count;
-      }
-    }
-  }
-  if (count != entries / 3) printf("FAIL: entries %d, numPopped: %d, expected: %d", entries, count, entries/3);
-  else printf("PASS");
-
-  printf(" result = %d\n", result);
-
-};
-
-template<typename T>
-void timeSTDQueueThreaded(const std::string &message, std::queue<T>&& q, const int entries, const int nProducer, const int nConsumer) {
-  printf("=== %s, capacity unlimited, multithread tests:", message.c_str());
-
-  int count = 0, count2 = 0;
-  volatile T result = 0;
-
-  omp_lock_t lock;
-  omp_init_lock(&lock);
-
-  volatile bool done = false;
-
-#pragma omp parallel sections num_threads(2) shared(q, done, result)
-  {
-#pragma omp section
-    {
-      volatile int localCount = entries-2;
-      // insert
-#pragma omp parallel num_threads(nProducer) shared(q, localCount) reduction(+:count)
-      {
-        int id;
-
-        while (true) {
-#pragma omp atomic capture
-          {
-            id = localCount;
-            --localCount;
-          }
-
-          if (id < 0) break;
-
-          omp_set_lock(&lock);
-          q.push(std::move(T(id)));
-          omp_unset_lock(&lock);
-          ++count;
-        }
-      }
-
-#pragma omp critical
-      done = true;
-    }
-
-
-#pragma omp section
-    {
-      // insert
-#pragma omp parallel num_threads(nConsumer) shared(q, done) reduction(+:count2) reduction(^:result)
-      {
-        while (!done || !q.empty()) {
-
-          omp_set_lock(&lock);
-          if (!q.empty()) {
-            result ^= q.front();
-            q.pop();
-            ++count2;
-          }
-          omp_unset_lock(&lock);
-
-        }
-      }
-
-
-    }
-  }
-
-  if ((count != entries-1) || (count2 != entries-1)) printf("FAIL: entries %d, numPushed = %d, numPopped= %d, expected= %d", entries-1, count, count2, entries-1);
-  else printf("PASS");
-
-  printf(" result = %d\n", result);
-
-  omp_destroy_lock(&lock);
-};
-
-
-
-
-template<typename T>
-void timeTSQueueSingleThread(const std::string &message, bliss::concurrent::ThreadSafeQueue<T>&& q, const int entries) {
-  printf("=== %s, capacity %lu, single thread enqueue dequeue test: ", message.c_str(), q.getCapacity());
-
-  int count = 0;
-  T result = 0;
-
-  for (int i = 0; i < entries; ++i) {
-
-    if (i % 3 == 0)
-      q.tryPush(std::move(T(i)));
-    else
-    {
-      auto r2 = q.tryPop();
-      if (r2.first) {
-        result ^= r2.second;
-        ++count;
-      }
-    }
-  }
-  if (count != entries / 3) printf("FAIL: entries %d, numPopped: %d, expected: %d", entries, count, entries/3);
-  else printf("PASS");
-
-  printf(" result = %d\n", result);
-
-
-};
-
-
-template<typename T>
-void timeTSQueueThreaded(const std::string &message, bliss::concurrent::ThreadSafeQueue<T>&& q, const int entries, const int nProducer, const int nConsumer) {
-  printf("=== %s, capacity %lu, multithread tests:", message.c_str(), q.getCapacity());
-
-  int count = 0, count2 = 0;
-  volatile T result = 0;
-
-
-#pragma omp parallel sections num_threads(2) shared(q, count, count2, result)
-  {
-#pragma omp section
-    {
-      // push
-#pragma omp parallel for default(none) num_threads(nProducer) shared(q) reduction(+:count)
-      for (int i = 0; i < entries-1; ++i) {
-        q.tryPush(std::move(T(i)));
-        ++count;
-      }
-
-      q.disablePush();
-
-
-    }
-
-#pragma omp section
-    {
-      T results[nConsumer];
-      // pop
-#pragma omp parallel num_threads(nConsumer) default(none) shared(q, results) reduction(+: count2)
-      {
-        results[omp_get_thread_num()] = 0;
-
-        while (q.canPop()) {
-          auto r2 = q.tryPop();
-
-          if (r2.first) {
-            results[omp_get_thread_num()] ^= r2.second;
-            ++count2;
-          }
-        }
-      }
-
-
-    #pragma omp parallel for default(none) num_threads(nConsumer) shared(results) reduction(^:result)
-      for (int i = 0; i < nConsumer; ++i) {
-          result = results[omp_get_thread_num()];
-      }
-
-    }
-  }
-
-  if ((count != entries-1) || (count2 != entries-1)) printf("FAIL: entries %d, numPushed = %d, numPopped= %d, expected= %d", entries-1, count, count2, entries-1);
-  else printf("PASS");
-
-  printf(" result = %d\n", result);
-
-};
-
-
-
-
 int main(int argc, char** argv) {
 
   std::chrono::high_resolution_clock::time_point t1, t2;
@@ -549,9 +353,6 @@ int main(int argc, char** argv) {
 
   typedef bliss::concurrent::ThreadSafeQueue<int> QueueType;
 
-
-  timeTSQueueSingleThread("TSQ 1 thread growable", std::move(QueueType()),1000000);
-  timeTSQueueSingleThread("TSQ 1 thread 10 element", std::move(QueueType(10)), 1000000);
 
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 1);
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 1);
@@ -575,58 +376,5 @@ int main(int argc, char** argv) {
   testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 3);
   testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 2);
 
-  int count = 10000000;
-
-  t1 = std::chrono::high_resolution_clock::now();
-  timeTSQueueSingleThread("TIME TSQ 1 thread ", std::move(QueueType()), count);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  printf("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
-
-
-  t1 = std::chrono::high_resolution_clock::now();
-  timeTSQueueThreaded("TIME TSQ 4 threads ", std::move(QueueType()), count, 4, 1);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  printf("  time: entries %d nthread %d,%d time %f\n", count, 4, 1, time_span.count());
-
-
-  t1 = std::chrono::high_resolution_clock::now();
-  timeTSQueueThreaded("TIME TSQ 4 threads ", std::move(QueueType()), count, 1, 4);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  printf("  time: entries %d nthread %d,%d time %f\n", count, 1, 4, time_span.count());
-
-  t1 = std::chrono::high_resolution_clock::now();
-  timeTSQueueThreaded("TIME TSQ 4 threads ", std::move(QueueType()), count, 4, 4);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-  printf("  time: entries %d nthread %d,%d time %f\n", count, 4, 4, time_span.count());
-
-  //========= STD VERSION
-
-//  t1 = std::chrono::high_resolution_clock::now();
-//  timeSTDQueueSerial("TIME STD 1 thread", std::move(std::queue<int>()), count);
-//  t2 = std::chrono::high_resolution_clock::now();
-//  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-//  printf("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
-//
-//  t1 = std::chrono::high_resolution_clock::now();
-//  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), count, 4, 1);
-//  t2 = std::chrono::high_resolution_clock::now();
-//  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-//  printf("  time: entries %d nthread %d,%d time %f\n", count, 4, 1, time_span.count());
-//
-//  t1 = std::chrono::high_resolution_clock::now();
-//  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), count, 1, 4);
-//  t2 = std::chrono::high_resolution_clock::now();
-//  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-//  printf("  time: entries %d nthread %d,%d time %f\n", count, 1, 4, time_span.count());
-//
-//  t1 = std::chrono::high_resolution_clock::now();
-//  timeSTDQueueThreaded("TIME STD 4 thread", std::move(std::queue<int>()), count, 4, 4);
-//  t2 = std::chrono::high_resolution_clock::now();
-//  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-//  printf("  time: entries %d nthread %d,%d time %f\n", count, 4, 4, time_span.count());
 
 };

@@ -94,7 +94,6 @@ namespace bliss
          * @details   Using set instead of ThreadSafeQueue to ensure uniqueness of Object Ids.
          */
         bliss::concurrent::ThreadSafeQueue<ObjectPtrType>  available;
-        std::unordered_set<ObjectPtrType>                  in_use;
 
         std::atomic<int64_t>  size_in_use;
 
@@ -102,7 +101,6 @@ namespace bliss
          * @brief     mutex to control access.
          */
         mutable std::mutex mutex;
-        mutable std::atomic_flag spinlock = ATOMIC_FLAG_INIT;
 
         /**
          * NOT thread safe, so need to be wrapped in synchronized calls.
@@ -111,19 +109,9 @@ namespace bliss
           ObjectPtrType ptr;
           auto entry = available.tryPop();
           while (entry.first) {
-             delete entry.second;
+             if (entry.second) delete entry.second;
              entry = available.tryPop();
           }
-
-
-          std::unique_lock<std::mutex> lock(mutex);
-          for (auto ptr : in_use) {
-            delete ptr;
-          }
-          in_use.clear();
-          lock.unlock();
-
-          size_in_use.store(0, std::memory_order_release);
         }
 
 
@@ -167,7 +155,7 @@ namespace bliss
          */
         explicit ObjectPool(const int64_t _pool_capacity = std::numeric_limits<int64_t>::max()) :
           capacity(_pool_capacity),
-          available(_pool_capacity), in_use(), size_in_use(0)
+          available(_pool_capacity), size_in_use(0)
           {};
 
 
@@ -208,6 +196,7 @@ namespace bliss
         virtual ~ObjectPool() {
           // delete all the objects
           capacity = 0;
+          size_in_use.store(0, std::memory_order_relaxed);
 
           clear_storage();
         };
@@ -245,15 +234,6 @@ namespace bliss
          *            however, care must be taken to ensure that all other threads have completed their work, else data loss is likely.
          */
         void reset() {
-          std::lock_guard<std::mutex> lock(mutex);
-
-          // move all from in_use to available
-          for (auto iter = in_use.begin(); iter != in_use.end(); ++iter) {
-            available.tryPush(*iter);
-          }
-
-          // TODO: clear the objects somehow?
-          in_use.clear();
           size_in_use.store(0, std::memory_order_release);
         }
 
@@ -262,8 +242,7 @@ namespace bliss
          * @brief     Get the next available Object by id.  if none available, return false in the first argument of the pair.
          * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the ObjectId if successful.
          */
-        template<bliss::concurrent::LockType LT = LockType>
-                typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, ObjectPtrType>::type tryAcquireObject() {
+        ObjectPtrType tryAcquireObject() {
 
 
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
@@ -285,79 +264,13 @@ namespace bliss
               // has available for reuse.
               sptr = available.tryPop().second;
             }
-            std::unique_lock<std::mutex> lock(mutex);
-
-            // get the object ready for use.
-            in_use.insert(sptr);  // store the shared pointer.
-
-            lock.unlock();
           }
 
           return sptr;
 
         }
 
-        /**
-         * @brief     Get the next available Object by id.  if none available, return false in the first argument of the pair.
-         * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the ObjectId if successful.
-         */
-        template<bliss::concurrent::LockType LT = LockType>
-                typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, ObjectPtrType>::type tryAcquireObject() {
 
-
-          ObjectPtrType sptr = nullptr;  // default is a null ptr.
-
-          int64_t prev_size = size_in_use.fetch_add(1, std::memory_order_relaxed);
-          if (prev_size >= capacity) {
-            size_in_use.fetch_sub(1, std::memory_order_relaxed);
-            // leave ptr as nullptr.
-          } else {
-
-            // now get or create
-            if (available.isEmpty()) {
-
-                // none available for reuse
-                // but has room to allocate, so do it.
-                sptr = new T();
-
-            } else {
-              // has available for reuse.
-              sptr = available.tryPop().second;
-            }
-            while (spinlock.test_and_set());
-
-            // get the object ready for use.
-            in_use.insert(sptr);  // store the shared pointer.
-
-            spinlock.clear();
-          }
-
-          return sptr;
-        }
-
-
-        /**
-         * @brief     Release a buffer back to pool, by id.  if id is incorrect, throw std exception.  clears object before release back into available.
-         * @note      THREAD SAFE
-         * @param ptr weak_ptr to object.
-         */
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type releaseObject(ObjectPtrType ptr) {
-
-          std::unique_lock<std::mutex> lock(mutex);
-          int count = in_use.erase(ptr);
-          lock.unlock();
-
-          bool res = false;            // nullptr would not be in in_use.
-
-          if (count > 0) { // object is in in_use.  if not in use, release could double count the entry.
-            // now make object available.  make sure push_back is done one thread at a time.
-            res = available.tryPush(ptr);
-            size_in_use.fetch_sub(count, std::memory_order_release);
-          } // else return false.
-
-          return res;
-        }
 
 
         /**
@@ -365,23 +278,18 @@ namespace bliss
          * @note      THREAD SAFE
          * @param objectId    The id of the Object to be released.
          */
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, bool>::type releaseObject(ObjectPtrType ptr) {
+        bool releaseObject(ObjectPtrType ptr) {
+          if (!ptr) return false;
 
-          while (spinlock.test_and_set());
-          int count = in_use.erase(ptr);
-          spinlock.clear();
-
-          bool res = false;            // nullptr would not be in in_use.
-
-          if (count > 0) { // object is in in_use.  if not in use, release could double count the entry.
-            // now make object available.  make sure push_back is done one thread at a time.
-            res = available.tryPush(ptr);
-            size_in_use.fetch_sub(count, std::memory_order_release);
-
-          } // else return false.
-
-          return res;
+          // now make object available.  make sure push_back is done one thread at a time.
+          int64_t prev = size_in_use.fetch_sub(1, std::memory_order_relaxed);
+          if (prev <= 0) {
+            //delete ptr;  // this is a ptr that is beyond capacity of the internal queue, delete it and don't decrement.
+            size_in_use.fetch_add(1, std::memory_order_release);
+            return false;
+          } else {
+            return available.tryPush(ptr);    // push it onto the queue.
+          }
 
         }
     };
@@ -415,7 +323,8 @@ namespace bliss
          * @details   Using set instead of ThreadSafeQueue to ensure uniqueness of Object Ids.
          */
         std::deque<ObjectPtrType>                          available;
-        std::unordered_set<ObjectPtrType>                  in_use;
+
+        int64_t size_in_use;
 
         /**
          * NOT thread safe, so need to be wrapped in synchronized calls.
@@ -428,11 +337,6 @@ namespace bliss
            delete ptr;
           }
           available.clear();
-
-          for (auto ptr : in_use) {
-            delete ptr;
-          }
-          in_use.clear();
 
         }
 
@@ -477,7 +381,7 @@ namespace bliss
          */
         explicit ObjectPool(const int64_t _pool_capacity = std::numeric_limits<int64_t>::max()) :
           capacity(_pool_capacity),
-          available(), in_use()
+          available(), size_in_use(0)
           {};
 
 
@@ -516,6 +420,7 @@ namespace bliss
         virtual ~ObjectPool() {
           // delete all the objects
           capacity = 0;
+          size_in_use = 0;
 
           clear_storage();
         };
@@ -526,7 +431,7 @@ namespace bliss
          * @return  size, type IdType (aka int).
          */
         int64_t getAvailableCount() const  {
-          return (isUnlimited() ? capacity : (capacity - in_use.size()));
+          return (isUnlimited() ? capacity : (capacity - size_in_use));
         }
 
         /**
@@ -553,54 +458,66 @@ namespace bliss
          */
         void reset() {
 
-          // move all from in_use to available
-          available.insert(available.end(), in_use.begin(), in_use.end());
-          // TODO: clear the objects somehow?
-          in_use.clear();
+          size_in_use = 0;
+
 
         }
 
 
+        /**
+         * @brief     Get the next available Object by id.  if none available, return false in the first argument of the pair.
+         * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the ObjectId if successful.
+         */
         ObjectPtrType tryAcquireObject() {
+
+
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
-          // now get or create
-          if (available.empty()) {
-            if (getAvailableCount() > 0) {
-
-              // none available for reuse
-              // but has room to allocate, so do it.
-              sptr = new T();
-            }  // else already nullptr.
+          if (size_in_use >= capacity) {
+            // leave ptr as nullptr.
           } else {
-            // has available for reuse.
-            sptr = available.front();
-            available.pop_front();
+            ++size_in_use;
+            // now get or create
+            if (available.empty()) {
+
+                // none available for reuse
+                // but has room to allocate, so do it.
+                sptr = new T();
+
+            } else {
+              // has available for reuse.
+              sptr = available.front();
+              available.pop_front();
+            }
           }
 
-          // get the object ready for use.
-          if (sptr) in_use.insert(sptr);  // store the shared pointer.
-
           return sptr;
+
         }
+
+
+
 
         /**
          * @brief     Release a object back to pool, by id.  if id is incorrect, throw std exception.  clears object before release back into available.
-         * @note      THREAD UNSAFE
+         * @note      THREAD SAFE
          * @param objectId    The id of the Object to be released.
          */
         bool releaseObject(ObjectPtrType ptr) {
+          if (!ptr) return false;
 
-          bool res = false;            // nullptr would not be in in_use.
+          // now make object available.  make sure push_back is done one thread at a time.
+          if (size_in_use <= 0) {
+            // this is a ptr that is beyond capacity of the internal queue, don't decrement.
+            return false;
+          } else {
+            --size_in_use;
+            available.push_back(ptr);    // push it onto the queue.
+            return true;
+          }
 
-          if (in_use.erase(ptr) > 0) { // object is in in_use.  if not in use, release could double count the entry.
-            // now make object available.  make sure push_back is done one thread at a time.
-            available.push_back(ptr);
-            res = true;
-          } // else return false.
-
-          return res;
         }
+
     };
 
     template<bliss::concurrent::LockType LockType, class T>

@@ -38,10 +38,10 @@ namespace bliss
         constexpr copyable_atomic(T desired) noexcept : base(desired) {}
 
         // initialization is not atomic
-        copyable_atomic(const base& other) noexcept : base(other.load()) {}
+        copyable_atomic(const base& other) noexcept : base(other.load(std::memory_order_relaxed)) {}
 
         // initialization is not atomic.  required copy constructor
-        copyable_atomic(const copyable_atomic& other) noexcept : base(other.load()) {}
+        copyable_atomic(const copyable_atomic<T>& other) noexcept : base(other.load(std::memory_order_relaxed)) {}
 
         // nonvirtual destructor, since atomic does not have a virtual destructor.
         ~copyable_atomic() noexcept {
@@ -49,29 +49,29 @@ namespace bliss
         }
 
         T operator=(T desired) noexcept {
-          base::store(desired);
+          base::store(desired, std::memory_order_relaxed);
           return desired;
         }
         T operator=(T desired) volatile noexcept {
-          base::store(desired);
+          base::store(desired, std::memory_order_relaxed);
           return desired;
         }
 
         copyable_atomic& operator=(const base& other) noexcept {
-          base::store(other.load());
+          base::store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;
         }
         copyable_atomic& operator=(const base& other) volatile noexcept {
-          base::store(other.load());
+          base::store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;
         }
 
-        copyable_atomic& operator=(const copyable_atomic& other) noexcept {
-          base::store(other.load());
+        copyable_atomic& operator=(const copyable_atomic<T>& other) noexcept {
+          base::store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;
         }
-        copyable_atomic& operator=(const copyable_atomic& other) volatile noexcept {
-          base::store(other.load());
+        copyable_atomic& operator=(const copyable_atomic<T>& other) volatile noexcept {
+          base::store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;
         }
 

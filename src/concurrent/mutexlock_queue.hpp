@@ -1,5 +1,5 @@
 /**
- * @file		threadsafe_queue.hpp
+ * @file		mutexlock_queue.hpp
  * @ingroup bliss::concurrent
  * @author	tpan
  * @brief   Thread Safe Queue Implementation

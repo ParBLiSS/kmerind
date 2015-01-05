@@ -32,7 +32,7 @@
 
 // BLISS includes
 #include "utils/logging.h"
-#include "concurrent/threadsafe_queue.hpp"
+#include "concurrent/lockfree_queue.hpp"
 #include "concurrent/copyable_atomic.hpp"
 #include "concurrent/concurrent.hpp"
 #include "io/message_buffers.hpp"
