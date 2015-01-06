@@ -1584,16 +1584,17 @@ protected:
       // flush buffers in a circular fashion, starting with the next neighbor
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 
-      auto bufPtr = buffers.at(tag).load()->flushBufferForRank(target_rank);
+      for (auto bufPtr : buffers.at(tag).load()->flushBufferForRank(target_rank) ) {
       // flush/send all remaining non-empty buffers
-      if ((bufPtr) && !(bufPtr->isEmpty())) {
-        std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(bufPtr), tag, target_rank));
+        if ((bufPtr) && !(bufPtr->isEmpty())) {
+          std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(bufPtr), tag, target_rank));
 
-//        if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for flushBuffers\n", commRank);
+  //        if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for flushBuffers\n", commRank);
 
-        if (!sendQueue.waitAndPush(std::move(msg)).first) {
-//          ctrlMsgProperties.at(tag).unlock();
-          throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
+          if (!sendQueue.waitAndPush(std::move(msg)).first) {
+  //          ctrlMsgProperties.at(tag).unlock();
+            throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
+          }
         }
       }
     }
