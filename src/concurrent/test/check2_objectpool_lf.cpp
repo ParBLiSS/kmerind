@@ -167,6 +167,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 	  auto ptr = pool.tryAcquireObject();
     if (! ptr) {
       ++count;
+      delete ptr;  // clean up since we are not tracking what was acquired.
     }
   }
   expected = 0;
@@ -183,13 +184,12 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 		auto ptr = pool.tryAcquireObject();
 	    if (! ptr) {
 	      ++count;
+	      delete ptr;  // clean up since we are not tracking what was acquired.
 	    }
   }
   expected = pool.isUnlimited() ? 0 : 1;
   if (count != expected) printf("FAIL: number of failed attempt to acquire buffer should be %d, actual %d.  pool remaining: %lu \n", expected, count, pool.getAvailableCount());
   else printf("PASSED.\n");
-
-
   pool.reset();
 
   printf("TEST release: ");
@@ -197,16 +197,18 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   mx = pool.isUnlimited() ? 100 : pool.getCapacity();
   // and create some dummy buffers to insert
   std::vector<typename PoolType::ObjectPtrType> temp;
-  std::vector<typename PoolType::ObjectPtrType> temp2;
   // first drain the pool
   for (i = 0; i < mx; ++i) {
     typename PoolType::ObjectPtrType ptr = pool.tryAcquireObject();
     ptr->block_and_flush();
     temp.push_back(ptr);
-    temp2.push_back(ptr);
   }
-  temp.insert(temp.end(), temp2.begin(), temp2.end());
-  temp2.clear();
+  pool.reset();  // reset so can get another 100 or up to capacity.
+  for (i = 0; i < mx; ++i) {
+    typename PoolType::ObjectPtrType ptr = pool.tryAcquireObject();
+    ptr->block_and_flush();
+    temp.push_back(ptr);
+  }
 #pragma omp parallel for num_threads(pool_threads) default(none) shared(pool, mx, temp) private(i) reduction(+ : count)
   for (i = 0; i < mx * 2; ++i) {
 
@@ -214,6 +216,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     if (ptr) {
       if (! pool.releaseObject(ptr)) {
         ++count; // failed release
+        delete ptr;
       }
     }
   }
@@ -223,8 +226,10 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   pool.reset();
   temp.clear();
 
-  printf("TEST access by multiple threads, each a separate buffer: ");
 
+  // NOTE THAT WE CAN'T RELEASE THE SAME OBJECT more than 1x
+
+  printf("TEST access by multiple threads, each a separate buffer: ");
 
   count = 0;
   int count1 = 0;
@@ -261,8 +266,6 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   pool.reset();
 
   printf("TEST access by multiple threads, all to same buffer: ");
-
-
   auto ptr = pool.tryAcquireObject();
   ptr->clear_and_unblock_writes();
 
@@ -278,7 +281,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   }
   if (!same) printf("FAIL: inserted not same\n");
   else printf("PASSED.\n");
-
+  pool.releaseObject(ptr);
   pool.reset();
 
 

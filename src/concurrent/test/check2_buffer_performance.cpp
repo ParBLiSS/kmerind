@@ -82,10 +82,10 @@ int main(int argc, char** argv) {
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
 #elif defined(BLISS_SPINLOCK)
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
-#elif defined(BLISS_LOCKFREE)
+//#elif defined(BLISS_LOCKFREE)
+//  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCKFREE;
+#else //if defined(BLISS_LOCKFREE)
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCKFREE;
-#else //if defined(BLISS_LOCKFREE2)
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCKFREE2;
 #endif
 
     // timing tests

@@ -109,7 +109,10 @@ namespace bliss
           ObjectPtrType ptr;
           auto entry = available.tryPop();
           while (entry.first) {
-             if (entry.second) delete entry.second;
+             if (entry.second) {
+               //printf("ptr to delete : %p\n", entry.second);
+               delete entry.second;
+             }
              entry = available.tryPop();
           }
         }
@@ -201,6 +204,8 @@ namespace bliss
          * @brief     default destructor
          */
         virtual ~ObjectPool() {
+          printf("calling object pool destructor\n");
+
           // delete all the objects
           capacity = 0;
           size_in_use.store(0, std::memory_order_relaxed);

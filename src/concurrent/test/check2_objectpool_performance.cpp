@@ -43,15 +43,12 @@ void timeAppendMultipleBuffers(const int NumThreads, const int total_count, blis
   int data = 12;
   unsigned int result = 0;
 
-  int success = 0;
-  int failure = 0;
-  int swap = 0;
   int i = 0;
 
   auto buf_ptr = pool.tryAcquireObject();
   buf_ptr->clear_and_unblock_writes();
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, pool) private(i, data, result) reduction(+:success, failure, swap)
+#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, pool) private(i, data, result)
   for (i = 0; i < total_count; ++i) {
 
     auto sptr = buf_ptr;
@@ -64,13 +61,8 @@ void timeAppendMultipleBuffers(const int NumThreads, const int total_count, blis
       result = 0x0;
     }
 
-    if (result & 0x1) {
-      ++success;
-    }
-    else ++failure;
 
     if (result & 0x2) {
-      ++swap;
 
       // swap in a new one.
       auto new_buf_ptr = pool.tryAcquireObject();

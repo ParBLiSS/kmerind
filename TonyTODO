@@ -471,13 +471,17 @@ TODO:
 			
 			my own imple? ??
 		2. object pool - need lockfree?  use lockfree queue, locking set only.  no significant performance gain.
-			naive version that always allocate and deallocate.
+			single releaser version allows lockfree, but this makes no difference in performance test since
+			most of the time is spent in buffer class when doing lockfree atomic updates.
+			spinlock version is faster.
+			
+			Honestly, the lockfree version is limiting and there is no checking multiple release for the same  object.
 		3. memory buffers - need lockfree?  depend on underlying classes, so DONE.
 		4. buffer  - lockfree now.  need lockfree?  SIGNIFICANT IMPROVEMENT. also needto change memory ordering.
-			DONE.
+			DONE.  improved by removing CAS in loop during reserve.
 	2. KmerIndex:
 		1. thread global, lockfree memorybuffer version.  DONE
-		2. thread local memorybuffer-pool-buffer version.
+		2. thread local memorybuffer-pool-buffer version.  
 		3. query interface
 		
 	3. Memory ordering in buffer and Lockfree Queue

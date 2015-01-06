@@ -95,19 +95,23 @@ namespace bliss
         mutable std::shared_ptr<uint8_t> start_ptr; // const, does not change
 
 
-        /// pointer to current head of reservation
+        /// pointer to current head of reservation.
+        /// capacity + 1 indicates buffer is blocked/full.  other values indicate that buffer is unblocked.
+        /// exchanges with size.
         volatile typename std::conditional<
-            LockType == bliss::concurrent::LockType::LOCKFREE || LockType == bliss::concurrent::LockType::LOCKFREE2,
+            LockType == bliss::concurrent::LockType::LOCKFREE2 || LockType == bliss::concurrent::LockType::LOCKFREE,
             std::atomic<int64_t>, int64_t>::type reserved;
 
         /// pointer to FINAL  end of data.   only updated when buffer is blocked or when full (from reserved)
+        /// capacity + 1 indicates buffer is unblocked.  other values indicate that buffer is blocked or full.
+        ///  exchanges with reserved
         mutable typename std::conditional<
-            LockType == bliss::concurrent::LockType::LOCKFREE || LockType == bliss::concurrent::LockType::LOCKFREE2,
+            LockType == bliss::concurrent::LockType::LOCKFREE2 || LockType == bliss::concurrent::LockType::LOCKFREE,
             std::atomic<int64_t>, int64_t>::type size;
 
         /// represent amount of data written.  will not update beyond the FINAL size
         volatile typename std::conditional<
-            LockType == bliss::concurrent::LockType::LOCKFREE || LockType == bliss::concurrent::LockType::LOCKFREE2,
+            LockType == bliss::concurrent::LockType::LOCKFREE2 || LockType == bliss::concurrent::LockType::LOCKFREE,
             std::atomic<int64_t>, int64_t>::type written;
 
         /// mutex for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
@@ -219,12 +223,12 @@ namespace bliss
          * @return    current size
          */
         template<bliss::concurrent::LockType LT = LockType>
-        const typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2, int64_t>::type getSize() const
+        const typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE, int64_t>::type getSize() const
         {
           return size.load(std::memory_order_relaxed);
         }
         template<bliss::concurrent::LockType LT = LockType>
-        const typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE2, int64_t>::type getSize() const
+        const typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE, int64_t>::type getSize() const
         {
           return (int64_t)size;
         }
@@ -237,12 +241,12 @@ namespace bliss
          */
 // need to fine tune the memory order so this method may not be useful
         template<bliss::concurrent::LockType LT = LockType>
-        const typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2, int64_t>::type getApproximateSize() const
+        const typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE, int64_t>::type getApproximateSize() const
         {
           return reserved.load(std::memory_order_relaxed);
         }
         template<bliss::concurrent::LockType LT = LockType>
-        const typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE2, int64_t>::type getApproximateSize() const
+        const typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE, int64_t>::type getApproximateSize() const
         {
           return (int64_t)reserved;
         }
@@ -253,54 +257,54 @@ namespace bliss
          */
 // need to fine tune the memory order so this method may not be useful
         template<bliss::concurrent::LockType LT = LockType>
-        const typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2, int64_t>::type getWrittenSize() const
+        const typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE, int64_t>::type getWrittenSize() const
         {
           return written.load(std::memory_order_relaxed);
         }
         template<bliss::concurrent::LockType LT = LockType>
-        const typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE2, int64_t>::type getWrittenSize() const
+        const typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE, int64_t>::type getWrittenSize() const
         {
           return (int64_t)written;
         }
 
 
 
-
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_full() const
-        {
-          std::lock_guard<std::mutex> lock(mutex);
-          return is_full<bliss::concurrent::LockType::NONE>();
-        }
-
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
-            bool>::type is_full() const
-        {
-          while (spinlock.test_and_set())
-            ;
-          bool res = is_full<bliss::concurrent::LockType::NONE>();
-          spinlock.clear();
-          return res;
-        }
-
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, bool>::type is_full() const
-        {
-          return reserved > Capacity;
-        }
-
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
-            bool>::type is_full() const
-        {
-          std::atomic_thread_fence(std::memory_order_seq_cst);
-          return (int64_t)reserved > Capacity;
-        }
-
         // not used externally.
+//
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_full() const
+//        {
+//          std::lock_guard<std::mutex> lock(mutex);
+//          return is_full<bliss::concurrent::LockType::NONE>();
+//        }
+//
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
+//            bool>::type is_full() const
+//        {
+//          while (spinlock.test_and_set())
+//            ;
+//          bool res = is_full<bliss::concurrent::LockType::NONE>();
+//          spinlock.clear();
+//          return res;
+//        }
+//
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, bool>::type is_full() const
+//        {
+//          return reserved > Capacity;
+//        }
+
 //        template<bliss::concurrent::LockType LT = LockType>
 //        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+//            bool>::type is_full() const
+//        {
+//          std::atomic_thread_fence(std::memory_order_seq_cst);
+//          return (int64_t)reserved > Capacity;
+//        }
+
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
 //            bool>::type is_full() const
 //        {
 //          return (int64_t)reserved > Capacity;
@@ -330,15 +334,15 @@ namespace bliss
           return (reserved > Capacity) && (written < size);
         }
 
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
-            bool>::type is_flushing() const
-        {
-          return (is_full<LT>()) && (is_writing<LT>());
-        }
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+//            bool>::type is_flushing() const
+//        {
+//          return (is_full<LT>()) && (is_writing<LT>());
+//        }
 
         template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
             bool>::type is_flushing() const
         {
           // is read only - really only for debugging external to this class
@@ -393,14 +397,14 @@ namespace bliss
          */
         // is this used?
         template<bliss::concurrent::LockType LT = LockType>
-        const typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2, bool>::type isEmpty() const
+        const typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE, bool>::type isEmpty() const
         {
           // if not empty, then need to do some work on the data, e.g. write to stream.  so want side effect visibility
           return written.load(std::memory_order_acquire) == 0;
         }
 
         template<bliss::concurrent::LockType LT = LockType>
-        const typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE2, bool>::type isEmpty() const
+        const typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE, bool>::type isEmpty() const
         {
           return (getWrittenSize<LT>() == 0);
         }
@@ -479,24 +483,24 @@ namespace bliss
         //                is_flushing (MSB==1 && counter> 0)
         //                is_read_only ( MSB==1 && counter == 0)
 
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
-            bool>::type is_writing() const
-        {
-          std::atomic_thread_fence(std::memory_order_seq_cst);
-          return (int64_t)written < (int64_t)size;
-        }
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+//            bool>::type is_writing() const
+//        {
+//          std::atomic_thread_fence(std::memory_order_seq_cst);
+//          return (int64_t)written < (int64_t)size;
+//        }
+//
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+//            bool>::type is_read_only() const
+//        {
+//          return (is_full<LT>()) && (!is_writing<LT>());
+//        }
+
 
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
-            bool>::type is_read_only() const
-        {
-          return (is_full<LT>()) && (!is_writing<LT>());
-        }
-
-
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
             bool>::type is_writing() const
         {
           // is writing - really only for debugging external to this class
@@ -506,7 +510,7 @@ namespace bliss
 
 
         template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
             bool>::type is_read_only() const
         {
           // is read only - really only for debugging external to this class
@@ -593,6 +597,48 @@ namespace bliss
           return curr;
         }
 
+//        /**
+//         * @brief       reserves a position in the buffer at which to insert the count number of bytes.
+//         * @details     increment only if we have room (so done via atomic CAS.).  if full, return nullptr. if becoming full, set the size.  else return the insertion point
+//         * @param count
+//         * @return      pointer at which to insert.
+//         */
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+//            int64_t>::type reserve(const uint32_t count)
+//        {
+//
+//          // this part reduces likelihood of accessing freed memory (a different thread tries to reserve to a freed region, i.e. )
+//          // does not prevent ABA problem (if the memory is reallocated.)
+//          std::atomic_thread_fence(std::memory_order_seq_cst);
+//          int64_t curr = reserved.load();
+//
+//          // increment
+//          bool exchanged = false;
+//          while (curr <= Capacity && !exchanged)
+//          {
+//            exchanged = reserved.compare_exchange_weak(curr, curr + count);
+//          }
+//          std::atomic_thread_fence(std::memory_order_seq_cst);
+//
+//          if (curr > Capacity)
+//          {  // full.  another thread saved to size
+//            return -1;
+//          }
+//          else
+//          { //if curr == Capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
+//            if (curr + count > Capacity)
+//            {  // just filled.  set size.  reserved is already set.
+//              // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
+//
+//              // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
+//              size.store(curr);
+//
+//            }  // else normal append
+//          }
+//          return curr;
+//        }
+
         /**
          * @brief       reserves a position in the buffer at which to insert the count number of bytes.
          * @details     increment only if we have room (so done via atomic CAS.).  if full, return nullptr. if becoming full, set the size.  else return the insertion point
@@ -604,76 +650,70 @@ namespace bliss
             int64_t>::type reserve(const uint32_t count)
         {
 
-          // this part reduces likelihood of accessing freed memory (a different thread tries to reserve to a freed region, i.e. )
-          // does not prevent ABA problem (if the memory is reallocated.)
-          std::atomic_thread_fence(std::memory_order_seq_cst);
-          int64_t curr = reserved.load();
-
-          // increment
-          bool exchanged = false;
-          while (curr <= Capacity && !exchanged)
-          {
-            exchanged = reserved.compare_exchange_weak(curr, curr + count);
-          }
-          std::atomic_thread_fence(std::memory_order_seq_cst);
-
-          if (curr > Capacity)
-          {  // full.  another thread saved to size
+          // blocked buffer, from full or explicit block call..
+          if (size.load(std::memory_order_relaxed) != (Capacity + 1)) {
             return -1;
-          }
-          else
-          { //if curr == Capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
-            if (curr + count > Capacity)
-            {  // just filled.  set size.  reserved is already set.
-              // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
+          } else {
+            // not yet full, so reserve
 
-              // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
-              size.store(curr);
+            int64_t curr = reserved.fetch_add(count, std::memory_order_acquire);
 
-            }  // else normal append
+            if (curr > Capacity) return -1;
+            else
+            { //if curr == Capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
+              if (curr + count > Capacity)
+              {  // just filled.  set size.  reserved is already set.
+                // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
+
+                // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
+                size.store(curr, std::memory_order_release);
+
+              }  // else normal append
+            }
+            return curr;
           }
-          return curr;
         }
 
-        /**
-         * @brief       reserves a position in the buffer at which to insert the count number of bytes.
-         * @details     increment only if we have room (so done via atomic CAS.).  if full, return nullptr. if becoming full, set the size.  else return the insertion point
-         * @param count
-         * @return      pointer at which to insert.
-         */
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
-            int64_t>::type reserve(const uint32_t count)
-        {
-
-          // this part reduces likelihood of accessing freed memory (a different thread tries to reserve to a freed region, i.e. )
-          // does not prevent ABA problem (if the memory is reallocated.)
-          int64_t curr = reserved.load(std::memory_order_relaxed);
-
-          // increment
-          bool exchanged = false;
-          while (curr <= Capacity && !exchanged)
-          {
-            exchanged = reserved.compare_exchange_weak(curr, curr + count, std::memory_order_relaxed);
-          }
-
-          if (curr > Capacity)
-          {  // full.  another thread saved to size
-            return -1;
-          }
-          else
-          { //if curr == Capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
-            if (curr + count > Capacity)
-            {  // just filled.  set size.  reserved is already set.
-              // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
-
-              // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
-              size.store(curr, std::memory_order_release);
-
-            }  // else normal append
-          }
-          return curr;
-        }
+// older version with CAS in loop
+//        /**
+//         * @brief       reserves a position in the buffer at which to insert the count number of bytes.
+//         * @details     increment only if we have room (so done via atomic CAS.).  if full, return nullptr. if becoming full, set the size.  else return the insertion point
+//         * @param count
+//         * @return      pointer at which to insert.
+//         */
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
+//            int64_t>::type reserve(const uint32_t count)
+//        {
+//
+//          // this part reduces likelihood of accessing freed memory (a different thread tries to reserve to a freed region, i.e. )
+//          // does not prevent ABA problem (if the memory is reallocated.)
+//          int64_t curr = reserved.load(std::memory_order_relaxed);
+//
+//          // increment
+//          bool exchanged = false;
+//          while (curr <= Capacity && !exchanged)
+//          {
+//            exchanged = reserved.compare_exchange_weak(curr, curr + count, std::memory_order_relaxed);
+//          }
+//
+//          if (curr > Capacity)
+//          {  // full.  another thread saved to size
+//            return -1;
+//          }
+//          else
+//          { //if curr == Capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
+//            if (curr + count > Capacity)
+//            {  // just filled.  set size.  reserved is already set.
+//              // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
+//
+//              // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
+//              size.store(curr, std::memory_order_release);
+//
+//            }  // else normal append
+//          }
+//          return curr;
+//        }
 
 
         template<bliss::concurrent::LockType LT = LockType>
@@ -721,18 +761,18 @@ namespace bliss
           spinlock.clear();
         }
 
-        /// marked write as completed.
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
-            void>::type complete_write(const int count)
-        {
-          std::atomic_thread_fence(std::memory_order_seq_cst);
-          written += count;
-        }
+//        /// marked write as completed.
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+//            void>::type complete_write(const int count)
+//        {
+//          std::atomic_thread_fence(std::memory_order_seq_cst);
+//          written += count;
+//        }
 
         /// marked write as completed.
         template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
             void>::type complete_write(const int count)
         {
           written.fetch_add(count, std::memory_order_release);
@@ -779,7 +819,32 @@ namespace bliss
           spinlock.clear();
         }
 
-        //===== read lock trumps write.
+//        //===== read lock trumps write.
+//        /**
+//         * @brief  read lock prevents future writes.  read lock can be turned on while there are writes in progress.  once read lock is on, reserve will returns nullptr.
+//         *
+//         * @details purpose of this method is to swap the size and reserved, so that reserved is at max+1, and size is the smallest of all locking thread's pointers
+//         */
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+//            void>::type block_writes(int64_t _curr = -1)
+//        { // not using xor since it toggles and complete_write is not going to change the sign bit (so we don't need xor)
+//          // disable reserved and put the content in size
+//          int64_t end = (int64_t)size;
+//          int64_t curr = reserved.exchange(Capacity + 1);
+//
+//          std::atomic_thread_fence(std::memory_order_seq_cst); // make sure all writes are done.
+//
+//          curr = (_curr >= 0 ? _curr : curr);
+//          bool stop = false;
+//
+//          while (end > curr && !stop)
+//          {
+//            stop = size.compare_exchange_weak(end, curr); // get smallest, indicating the first one to reach block_writes
+//          }
+//          std::atomic_thread_fence(std::memory_order_seq_cst); // make sure all updates are done.
+//        }
+
         /**
          * @brief  read lock prevents future writes.  read lock can be turned on while there are writes in progress.  once read lock is on, reserve will returns nullptr.
          *
@@ -787,31 +852,6 @@ namespace bliss
          */
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
-            void>::type block_writes(int64_t _curr = -1)
-        { // not using xor since it toggles and complete_write is not going to change the sign bit (so we don't need xor)
-          // disable reserved and put the content in size
-          int64_t end = (int64_t)size;
-          int64_t curr = reserved.exchange(Capacity + 1);
-
-          std::atomic_thread_fence(std::memory_order_seq_cst); // make sure all writes are done.
-
-          curr = (_curr >= 0 ? _curr : curr);
-          bool stop = false;
-
-          while (end > curr && !stop)
-          {
-            stop = size.compare_exchange_weak(end, curr); // get smallest, indicating the first one to reach block_writes
-          }
-          std::atomic_thread_fence(std::memory_order_seq_cst); // make sure all updates are done.
-        }
-
-        /**
-         * @brief  read lock prevents future writes.  read lock can be turned on while there are writes in progress.  once read lock is on, reserve will returns nullptr.
-         *
-         * @details purpose of this method is to swap the size and reserved, so that reserved is at max+1, and size is the smallest of all locking thread's pointers
-         */
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
             void>::type block_writes(int64_t _curr = -1)
         {
           int64_t curr = reserved.exchange(Capacity + 1, std::memory_order_relaxed);
@@ -876,6 +916,29 @@ namespace bliss
 
         }
 
+//        /**
+//         * @brief  read lock prevents future writes.  read lock can be turned on while there are writes in progress.  once read lock is on, reserve will returns nullptr.
+//         *
+//         * @details purpose of this method is to swap the size and reserved, so that reserved is at max+1, and size is the smallest of all locking thread's pointers
+//         */
+//        template<bliss::concurrent::LockType LT = LockType>
+//        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+//            void>::type unblock_writes()
+//        {
+//          // put the size into curr if it hasn't been done.
+//          int64_t curr = (int64_t)reserved;
+//          int64_t end = size.exchange(Capacity + 1);
+//          std::atomic_thread_fence(std::memory_order_seq_cst); // make sure all writes are done.
+//
+//          bool stop = false;
+//          while (curr > Capacity && !stop)
+//          {
+//            stop = reserved.compare_exchange_weak(curr, end);
+//          }
+//          std::atomic_thread_fence(std::memory_order_seq_cst); // make sure all writes are done.
+//
+//        }
+
         /**
          * @brief  read lock prevents future writes.  read lock can be turned on while there are writes in progress.  once read lock is on, reserve will returns nullptr.
          *
@@ -883,29 +946,6 @@ namespace bliss
          */
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
-            void>::type unblock_writes()
-        {
-          // put the size into curr if it hasn't been done.
-          int64_t curr = (int64_t)reserved;
-          int64_t end = size.exchange(Capacity + 1);
-          std::atomic_thread_fence(std::memory_order_seq_cst); // make sure all writes are done.
-
-          bool stop = false;
-          while (curr > Capacity && !stop)
-          {
-            stop = reserved.compare_exchange_weak(curr, end);
-          }
-          std::atomic_thread_fence(std::memory_order_seq_cst); // make sure all writes are done.
-
-        }
-
-        /**
-         * @brief  read lock prevents future writes.  read lock can be turned on while there are writes in progress.  once read lock is on, reserve will returns nullptr.
-         *
-         * @details purpose of this method is to swap the size and reserved, so that reserved is at max+1, and size is the smallest of all locking thread's pointers
-         */
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
             void>::type unblock_writes()
         {
           // put the size into curr if it hasn't been done.
@@ -958,7 +998,7 @@ namespace bliss
         }
 
         template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
             void>::type clear_and_block_writes()
         {
           // blocked
@@ -969,7 +1009,7 @@ namespace bliss
 
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT != bliss::concurrent::LockType::SPINLOCK &&
-            LT != bliss::concurrent::LockType::LOCKFREE2,
+            LT != bliss::concurrent::LockType::LOCKFREE,
             void>::type clear_and_block_writes()
         {
           std::lock_guard<std::mutex> lock(mutex);
@@ -993,7 +1033,7 @@ namespace bliss
         }
 
         template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE2,
+        typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE,
             void>::type clear_and_unblock_writes()
         {
           written.store(0, std::memory_order_relaxed);
@@ -1004,7 +1044,7 @@ namespace bliss
 
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT != bliss::concurrent::LockType::SPINLOCK &&
-        LT != bliss::concurrent::LockType::LOCKFREE2,
+        LT != bliss::concurrent::LockType::LOCKFREE,
             void>::type clear_and_unblock_writes()
         {
           std::lock_guard<std::mutex> lock(mutex);
