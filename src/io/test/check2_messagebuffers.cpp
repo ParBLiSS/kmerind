@@ -181,38 +181,34 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
       }
     }
   }
-  bool updating = false;
-  if (buffers.at(id)) {
-    buffers.at(id)->block_and_flush();
-    updating = buffers.at(id)->is_writing();
-    if (updating) printf("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
-  }
 
-  for (BufferPtrType final : buffers.flushBufferForRank(id) ) {
-    count5 += (final) ? final->getSize() : 0;
-    buffers.releaseBuffer(std::move(final));
-  }
+  buffers.at(id)->block_and_flush();
+  bool updating = buffers.at(id)->is_writing();
+  if (updating) printf("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
+
+  BufferPtrType final = buffers.flushBufferForRank(id);
+  count5 = (final == nullptr) ? 0 : final->getSize();
   if (count != count6) printf("\nFAIL: number of bytes written %d and number of bytes in FinalSize %d are not the same", count6, count);
   if ((count + count5) != count1 * data.length()) {
     printf("\nFAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.\n", (count + count5), count , count5, (count + count5)/data.length(), count1);
 
-//    printf("    content length %ld\n", (final == nullptr) ? 0 : strlen(final->operator char*())); //, final->operator char*());
+    printf("    content length %ld\n", (final == nullptr) ? 0 : strlen(final->operator char*())); //, final->operator char*());
   }
-
-  //if (count7 != count/data.length()) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
-
-
-  for (BufferPtrType final : buffers.flushBufferForRank(id) ) {
-    count5 += (final == nullptr) ? 0 : final->getSize();
-    buffers.releaseBuffer(std::move(final));
-  }
-  if (count5 > 0) printf("\nFAIL: received %d data after flush.", count5);
-
-
   if ((count + count5)/data.length() + 1 < count1) {
     printf("\nFAIL: missing %ld entries, expected 1", count1 -(count + count5)/data.length());
     throw std::logic_error("missing more than 1 entry.");
   }
+  buffers.releaseBuffer(std::move(final));
+
+  //if (count7 != count/data.length()) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
+
+
+  final = buffers.flushBufferForRank(id);
+  count5 = (final == nullptr) ? 0 : final->getSize();
+  if (count5 > 0) printf("\nFAIL: received %d data after flush.", count5);
+  buffers.releaseBuffer(std::move(final));
+
+
 
 
   expectedFull = (count1 - 1 + (bufferSize/data.length())) / (bufferSize/data.length()) - (count1 % (bufferSize/data.length()) == 0 ? 1 : 0);
