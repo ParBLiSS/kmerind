@@ -314,41 +314,15 @@ endif(DOXYGEN_FOUND)
 
 ###### STLFilt support
 OPTION(ENABLE_STLFILT "Enable use of STLFilt to post process compilation errors" OFF)
-            set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
-            set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/utils/stlfilt/gfilt")
-
-function(update_stlfilt_options varname cacheaccess varval) 
-       message(STATUS "${varname} changed to ${varval} with access: ${cacheaccess}.")
-
-
-    if (${cacheaccess} STREQUAL READ_ACCESS AND
-        ${varname} STREQUAL ENABLE_STLFILT)
-
-        if(${varval})
-            
-            set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
-            set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/utils/stlfilt/gfilt")
-            
-            
-            message(STATUS "${varname} changed to ${varval} with read access: ${cacheaccess}.")
-            
-        else(${varval})
-            set_property(GLOBAL PROPERTY RULE_MESSAGES ON)
-            set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "")
-        
-            message(STATUS "${varname} changed to ${varval} with read access: ${cacheaccess}.")
-        endif(${varval})
-    else(${cacheaccess} STREQUAL READ_ACCESS AND
-        ${varname} STREQUAL ENABLE_STLFILT)
-        
-       message(WARNING "${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
-        
-    endif(${cacheaccess} STREQUAL READ_ACCESS AND
-        ${varname} STREQUAL ENABLE_STLFILT)
-                
-endfunction(update_stlfilt_options varname cacheaccess varval)
-
-variable_watch(ENABLE_STLFILT update_stlfilt_options)
+if (ENABLE_STLFILT)
+    set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/utils/gccfilter/gccfilter -c -a")
+#    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/utils/gccfilter/gccfilter -c -r -w -n -i")
+#    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/utils/stlfilt/gfilt")
+else (ENABLE_STLFILT)
+    set_property(GLOBAL PROPERTY RULE_MESSAGES ON)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "")
+endif(ENABLE_STLFILT)
 
 
 ###### TESTING

@@ -46,7 +46,7 @@ COMPILER=$1                            # Your g++ compiler command
 STLFILT="`dirname $0`/gSTLFilt.pl"      # Assumes gSTLFilt.pl is in same dir as gfilt
 
                                         # default options to Decryptor script:
-DOPTS="/banner:N /hdr:m /cand:s /iter:L /path:L /meta:Y ${GFILTOPTS:-}"
+DOPTS="-banner:N -cand:L -iter:S -with:S -path:L -meta:Y -lognative ${GFILTOPTS:-}"
 #DOPTS="/banner:N /hdr:m /break:D /cbreak:A /cand:L /iter:L /path:L ${GFILTOPTS:-}"
 PAGER=                              # pager of choice, or leave blank for no paging
 COPTS=                                  # compiler options

@@ -34,6 +34,7 @@
 #define MESSAGEBUFFERS_HPP_
 
 #include <vector>
+#include <unordered_map>
 #include <type_traits>
 #include <typeinfo>
 #include <iostream>
@@ -45,9 +46,13 @@
 #include "config.hpp"
 #include "concurrent/buffer.hpp"
 #include "concurrent/object_pool.hpp"
+#include "concurrent/copyable_atomic.hpp"
+
 #include <atomic>
 
 #include <iterator> // for ostream_iterator
+
+#include "omp.h"
 
 namespace bliss
 {
@@ -168,9 +173,7 @@ namespace bliss
         /**
          * @brief Convenience method to release and clear all current Buffers in the pool.
          */
-        virtual void reset() {
-          pool.reset();
-        }
+        virtual void reset() = 0;
     };
 
 
@@ -302,6 +305,7 @@ namespace bliss
          * @brief default destructor
          */
         virtual ~SendMessageBuffers() {
+          // when pool destructs, all buffers will be destroyed.
           buffers.clear();
         };
 
@@ -631,8 +635,11 @@ namespace bliss
 
         /// Vector of pointers (atomic).  Provides a mapping from process id (0 to vector size), to bufferPtr (from BufferPool)
         /// using vector of atomic pointers allows atomic swap of each pointer, without array of mutex or atomic_flags.
-        typedef typename std::conditional<PoolLT == bliss::concurrent::LockType::NONE, BufferType*, std::atomic<BufferType*> >::type BufferPtrTypeInternal;
-        std::vector< BufferPtrTypeInternal > buffers;
+        typedef typename std::conditional<PoolLT == bliss::concurrent::LockType::NONE, BufferType*,
+            bliss::concurrent::copyable_atomic<BufferType*> >::type BufferPtrTypeInternal;
+
+        /// buffers, one set per target, and in each set, as many as there are local threads.
+        std::vector< std::unordered_map<size_t, BufferPtrTypeInternal > > buffers;
 
         /// for synchronizing access to buffers (and pool).
         mutable std::mutex mutex;
@@ -671,9 +678,15 @@ namespace bliss
          * @param bufferCapacity   The capacity of the individual buffers.  default 8192.
          * @param poolCapacity     The capacity of the pool.  default unbounded.
          */
-        explicit SendMessageBuffers(const int & numDests) :
-          BaseType(), buffers(numDests)
+        explicit SendMessageBuffers(const int & numDests, int numThreads = 0) :
+          BaseType(), buffers()
         {
+          int nThreads = (numThreads == 0 ? omp_get_max_threads() : numThreads);
+
+          for (int i = 0; i < numDests; ++i) {
+            buffers.push_back(std::unordered_map<size_t, BufferPtrTypeInternal>(nThreads));
+          }
+
           this->reset();
         };
 
@@ -698,7 +711,7 @@ namespace bliss
           std::lock(mine, hers);
 
           this->pool = std::move(other.pool);
-          buffers.clear(); std::swap(buffers, other.buffers);
+          buffers.clear(); buffers = std::move(other.buffers);
 
           return *this;
         }
@@ -707,6 +720,8 @@ namespace bliss
          * @brief default destructor
          */
         virtual ~SendMessageBuffers() {
+          // when pool destructs, all buffers will be destroyed.
+
           buffers.clear();
         };
 
@@ -719,7 +734,7 @@ namespace bliss
         }
 
         /**
-         * @brief get a raw pointer to the the BufferId that a messaging target maps to.
+         * @brief get a raw pointer to the the BufferId that a messaging target maps to (FOR THE CALLING THREAD)
          * @details for simplicity, not distinguishing between thread safe and unsafe versions
          *
          * @param targetRank   the target id for the messages.
@@ -729,10 +744,22 @@ namespace bliss
 //        const typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type at(const int targetRank) const {
 //          return buffers.at(targetRank).load();   // can use reference since we made pool unlimited, so never get nullptr
 //        }
-        BufferType* at(const int targetRank) const {
-          return (BufferType*)(buffers.at(targetRank));   // if atomic pointer, then will do load()
+        BufferType* at(const int targetRank, int srcThread = -1) const {
+          int tid = (srcThread == -1 ? omp_get_thread_num() : srcThread);
+
+          // insert a new one if none there.   note that the entry is initialize to nullptr
+          BufferType* ptr = (BufferType*)(buffers.at(targetRank)[tid]);
+          if (!ptr) {
+            swapInEmptyBuffer<PoolLT>(targetRank, tid);
+            return (BufferType*)(buffers.at(targetRank).at(tid));   // if atomic pointer, then will do load()
+          } else
+            return ptr;
         }
 
+
+        /**
+         * @brief get a raw pointer to the the BufferId that a messaging target maps to (FOR THE CALLING THREAD)
+         */
         BufferType* operator[](const int targetRank) const {
           return at(targetRank);
         }
@@ -746,25 +773,33 @@ namespace bliss
 
           std::lock_guard<std::mutex> lock(mutex);
           int count = buffers.size();
+          int nthreads;
+          BufferType* ptr;
+          int tid;
           // release all buffers back to pool
           for (int i = 0; i < count; ++i) {
-            if (this->at(i)) {
-              this->at(i)->block_and_flush();
-              this->pool.releaseObject(this->at(i));
-              buffers.at(i) = nullptr;
+
+            for (auto iter = buffers.at(i).begin(); iter != buffers.at(i).end(); ++iter) {
+              tid = iter->first;
+              // get pointer to it (not using iter's copy of it, avoid changing the iterator)
+              ptr = this->at(i, tid);
+              if (ptr) {
+                ptr->block_end_flush();
+                this->pool.releaseObject(ptr);
+                buffers.at(i).at(tid) = nullptr;
+              }
             }
           }
           // reset the pool. local vector should contain a bunch of nullptrs.
           this->pool.reset();
-//          buffers.clear();
-//          buffers.resize(count);
 
           // populate the buffers from the pool
           for (int i = 0; i < count; ++i) {
-            printf("initializing buffer %p \n", this->at(i));
-            swapInEmptyBuffer<PoolLT>(i);
-            printf("initialized buffer %p blocked? %s, empty? %s\n", this->at(i), this->at(i)->is_read_only()? "y" : "n", this->at(i)->isEmpty() ? "y" : "n");
 
+            for (auto iter = buffers.at(i).begin(); iter != buffers.at(i).end(); ++iter) {
+              tid = iter->first;
+              swapInEmptyBuffer<PoolLT>(i, tid);
+            }
           }
         }
 
@@ -818,7 +853,7 @@ namespace bliss
          * @param[in] dest    messaging target for the data, decides which buffer to append into.
          * @return            std::pair containing the status of the append (boolean success/fail), and the id of a full buffer if there is one.
          */
-        std::pair<bool, BufferType*> append(const void* data, const size_t count, const int targetProc) {
+        std::pair<bool, BufferType*> append(const void* data, const size_t count, const int targetProc, int thread_id = -1) {
 
           //== if data being set is null, throw error
           if (data == nullptr || count <= 0) {
@@ -835,6 +870,7 @@ namespace bliss
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
 
+          int tid = (thread_id < 0 ? omp_get_thread_num() : thread_id);
 
 
           // NOTE: BufferPool is unlimited in size, so don't need to check for nullptr, can just append directly.   is append really atomic?
@@ -843,7 +879,9 @@ namespace bliss
           // or flushing, so lock_read() would have been set for the full case.  now it depends on what happens in append.
           // if flush, then block is set just before swap, so it's more likely this thread enters append without a block.
 
-          unsigned int appendResult = this->at(targetProc)->append(data, count);
+          unsigned int appendResult = 0x0;
+          BufferType* ptr = this->at(targetProc, thread_id);
+          if (ptr) appendResult = ptr->append(data, count);
 
 //          printf("buffer blocked? %s, empty? %s\n", this->at(targetProc)->is_read_only()? "y" : "n", this->at(targetProc)->isEmpty() ? "y" : "n");
 
@@ -854,7 +892,7 @@ namespace bliss
 
           if (appendResult & 0x2) { // only 1 thread gets 0x2 result for a buffer.  all other threads either writes successfully or fails.
 
-            return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer<PoolLT>(targetProc) ) );
+            return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer<PoolLT>(targetProc, tid) ) );
 
 
           } else {
@@ -873,22 +911,40 @@ namespace bliss
          * @param targetProc
          * @return
          */
-        BufferType* flushBufferForRank(const int targetProc) {
+        std::vector<BufferType*> flushBufferForRank(const int targetProc) {
           //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
 
-//          // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-//          this->at(targetProc)->block_and_flush();  // this part can be concurrent.
-//
-          // passing in getBufferIdForRank result to ensure atomicity.
-          // may return ABSENT if there is no available buffer to use.
-          auto old = swapInEmptyBuffer<PoolLT>(targetProc);
-          if (old) old->block_and_flush();
-          return old;
-        }
+          size_t tid;
+          BufferType* old;
+          std::vector<BufferType*> result;
+          for (auto iter = buffers.at(targetProc).begin(); iter != buffers.at(targetProc).end(); ++iter) {
+            tid = iter->first;
+            old = swapInEmptyBuffer<PoolLT>(targetProc, tid);
+            if (old) {
+              old->block_and_flush();
+              result.push_back(old);
+            }
+          }
 
+          return result;
+        }
+        BufferType* flushBufferForRank(const int targetProc, int thread_id) {
+          //== if targetProc is outside the valid range, throw an error
+          if (targetProc < 0 || targetProc > getSize()) {
+            throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
+          }
+
+          size_t tid = (thread_id < 0 ? omp_get_thread_num() : thread_id);
+
+          BufferType* old = swapInEmptyBuffer<PoolLT>(targetProc, tid);
+          if (old) {
+            old->block_and_flush();
+            return old;
+          }
+        }
 
       protected:
 
@@ -923,11 +979,13 @@ namespace bliss
          * @return        the BufferId that was swapped out.
          */
         template<bliss::concurrent::LockType LT = PoolLT>
-        typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest) {
+        typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest, int thread_id = -1) {
+
+          int tid = thread_id < 0 ? omp_get_thread_num() : thread_id;
 
           auto ptr = this->pool.tryAcquireObject();
           ptr->clear_and_unblock_writes();
-          auto oldbuf = buffers.at(dest).exchange(ptr);
+          auto oldbuf = buffers.at(dest)[tid].exchange(ptr);
           if (oldbuf && oldbuf->isEmpty()) {
 //            printf("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
             releaseBuffer(oldbuf);
@@ -965,11 +1023,12 @@ namespace bliss
          * @return        the BufferId that was swapped out.
          */
         template<bliss::concurrent::LockType LT = PoolLT>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest) {
+        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest, int thread_id = -1) {
+
+          int tid = thread_id < 0 ? omp_get_thread_num() : thread_id;
 
           auto oldbuf = this->at(dest);
-          buffers.at(dest) = this->pool.tryAcquireObject();
-          buffers.at(dest)->clear_and_unblock_writes();
+          buffers.at(dest)[tid] = this->pool.tryAcquireObject();
           if (oldbuf && oldbuf->isEmpty()) {
 //            printf("oldbuf %p, empty? %s\n", oldbuf, oldbuf->isEmpty() ? "y" : "n");
 
