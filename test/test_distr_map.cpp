@@ -30,7 +30,7 @@ void receiveAnswer(std::pair<int, bliss::index::count_t>& answer)
   std::cerr << std::flush;
 }
 
-
+template<bool ThreadLocal = false>
 void test_map(MPI_Comm& comm)
 {
   int p, rank;
@@ -39,7 +39,7 @@ void test_map(MPI_Comm& comm)
   glCommSize = p;
 
   //printf("INIT COUNTING MAP\n");
-  bliss::index::distributed_counting_map<int, bliss::io::CommunicationLayer> counting_map(comm, p);
+  bliss::index::distributed_counting_map<int, bliss::io::CommunicationLayer<ThreadLocal> > counting_map(comm, p);
   //printf("REGISTER COUNTING MAP CALLBACK\n");
   counting_map.setLookupAnswerCallback(std::function<void(std::pair<int, bliss::index::count_t>&)>(&receiveAnswer));
 
@@ -81,9 +81,18 @@ int main(int argc, char *argv[])
   MPI_Comm_rank(comm, &rank);
 
   /* code */
-  test_map(comm);
+  {
+  test_map<false>(comm);
 
   MPI_Barrier(comm);
+  }
+
+  {
+  test_map<true>(comm);
+
+  MPI_Barrier(comm);
+  }
+
 
   // finalize MPI
   MPI_Finalize();

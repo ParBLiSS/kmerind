@@ -328,11 +328,11 @@ namespace bliss
 //        const typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type at(const int targetRank) const {
 //          return buffers.at(targetRank).load();   // can use reference since we made pool unlimited, so never get nullptr
 //        }
-        BufferType* at(const int targetRank) const {
+        BufferType* at(const int targetRank) {
           return (BufferType*)(buffers.at(targetRank));   // if atomic pointer, then will do load()
         }
 
-        BufferType* operator[](const int targetRank) const {
+        BufferType* operator[](const int targetRank) {
           return at(targetRank);
         }
 
@@ -472,7 +472,36 @@ namespace bliss
          * @param targetProc
          * @return
          */
-        BufferType* flushBufferForRank(const int targetProc) {
+        std::vector<BufferType*> flushBufferForRank(const int targetProc) {
+          //== if targetProc is outside the valid range, throw an error
+          if (targetProc < 0 || targetProc > getSize()) {
+            throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
+          }
+
+          std::vector<BufferType*> result;
+//          // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
+//          this->at(targetProc)->block_and_flush();  // this part can be concurrent.
+//
+          // passing in getBufferIdForRank result to ensure atomicity.
+          // may return ABSENT if there is no available buffer to use.
+          auto old = swapInEmptyBuffer<PoolLT>(targetProc);
+          if (old) {
+            old->block_and_flush();
+            result.push_back(old);
+          }
+          return result;
+        }
+
+        /**
+         * flushes the buffer at rank targetProc.
+         *
+         * @note  only 1 thread should call this per proc.
+         *        multiple calls to this may be needed to get all data that are written to the new empty buffer.
+         *
+         * @param targetProc
+         * @return
+         */
+        BufferType* threadFlushBufferForRank(const int targetProc, int thread_id = 0) {
           //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
@@ -487,6 +516,7 @@ namespace bliss
           if (old) old->block_and_flush();
           return old;
         }
+
 
 
       protected:
@@ -639,7 +669,7 @@ namespace bliss
             bliss::concurrent::copyable_atomic<BufferType*> >::type BufferPtrTypeInternal;
 
         /// buffers, one set per target, and in each set, as many as there are local threads.
-        std::vector< std::unordered_map<size_t, BufferPtrTypeInternal > > buffers;
+        std::vector< std::unordered_map<int, BufferPtrTypeInternal > > buffers;
 
         /// for synchronizing access to buffers (and pool).
         mutable std::mutex mutex;
@@ -684,7 +714,7 @@ namespace bliss
           int nThreads = (numThreads == 0 ? omp_get_max_threads() : numThreads);
 
           for (int i = 0; i < numDests; ++i) {
-            buffers.push_back(std::unordered_map<size_t, BufferPtrTypeInternal>(nThreads));
+            buffers.push_back(std::unordered_map<int, BufferPtrTypeInternal>(nThreads));
           }
 
           this->reset();
@@ -744,9 +774,8 @@ namespace bliss
 //        const typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type at(const int targetRank) const {
 //          return buffers.at(targetRank).load();   // can use reference since we made pool unlimited, so never get nullptr
 //        }
-        BufferType* at(const int targetRank, int srcThread = -1) const {
+        BufferType* at(const int targetRank, int srcThread = -1) {
           int tid = (srcThread == -1 ? omp_get_thread_num() : srcThread);
-
           // insert a new one if none there.   note that the entry is initialize to nullptr
           BufferType* ptr = (BufferType*)(buffers.at(targetRank)[tid]);
           if (!ptr) {
@@ -760,7 +789,7 @@ namespace bliss
         /**
          * @brief get a raw pointer to the the BufferId that a messaging target maps to (FOR THE CALLING THREAD)
          */
-        BufferType* operator[](const int targetRank) const {
+        BufferType* operator[](const int targetRank) {
           return at(targetRank);
         }
 
@@ -773,7 +802,6 @@ namespace bliss
 
           std::lock_guard<std::mutex> lock(mutex);
           int count = buffers.size();
-          int nthreads;
           BufferType* ptr;
           int tid;
           // release all buffers back to pool
@@ -784,7 +812,7 @@ namespace bliss
               // get pointer to it (not using iter's copy of it, avoid changing the iterator)
               ptr = this->at(i, tid);
               if (ptr) {
-                ptr->block_end_flush();
+                ptr->block_and_flush();
                 this->pool.releaseObject(ptr);
                 buffers.at(i).at(tid) = nullptr;
               }
@@ -917,7 +945,7 @@ namespace bliss
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
 
-          size_t tid;
+          int tid;
           BufferType* old;
           std::vector<BufferType*> result;
           for (auto iter = buffers.at(targetProc).begin(); iter != buffers.at(targetProc).end(); ++iter) {
@@ -931,13 +959,14 @@ namespace bliss
 
           return result;
         }
-        BufferType* flushBufferForRank(const int targetProc, int thread_id) {
+
+        BufferType* threadFlushBufferForRank(const int targetProc, int thread_id) {
           //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
 
-          size_t tid = (thread_id < 0 ? omp_get_thread_num() : thread_id);
+          int tid = (thread_id < 0 ? omp_get_thread_num() : thread_id);
 
           BufferType* old = swapInEmptyBuffer<PoolLT>(targetProc, tid);
           if (old) {

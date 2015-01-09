@@ -481,7 +481,7 @@ TODO:
 			DONE.  improved by removing CAS in loop during reserve.
 	2. KmerIndex:
 		1. thread global, lockfree memorybuffer version.  DONE
-		2. thread local memorybuffer-pool-buffer version.  
+		2. thread local memorybuffer-pool-buffer version.  DONE. testing
 		3. query interface
 		
 	3. Memory ordering in buffer and Lockfree Queue
@@ -503,3 +503,5 @@ TODO:
 		writing.
 		
 	7. documentation and testing.
+		gcc message formatting.
+	

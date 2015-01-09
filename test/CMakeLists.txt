@@ -13,9 +13,16 @@ add_executable(test_iterator_and_function_traits test_iterator_and_function_trai
 target_link_libraries(test_iterator_and_function_traits ${EXTRA_LIBS})
 
 ## EXECUTABLES
-add_executable(testCommLayer test_commlayer.cpp)
-target_link_libraries(testCommLayer ${EXTRA_LIBS})
-target_link_libraries(testCommLayer bliss-common)
+add_executable(testCommLayer_THREADLOCAL test_commlayer.cpp)
+SET_TARGET_PROPERTIES(testCommLayer_THREADLOCAL PROPERTIES COMPILE_FLAGS -DTHREADLOCAL)
+target_link_libraries(testCommLayer_THREADLOCAL ${EXTRA_LIBS})
+target_link_libraries(testCommLayer_THREADLOCAL bliss-common)
+
+## EXECUTABLES
+add_executable(testCommLayer_THREADSHARED test_commlayer.cpp)
+target_link_libraries(testCommLayer_THREADSHARED ${EXTRA_LIBS})
+target_link_libraries(testCommLayer_THREADSHARED bliss-common)
+
 
 add_executable(testDistrMap test_distr_map.cpp)
 target_link_libraries(testDistrMap ${EXTRA_LIBS})

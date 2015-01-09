@@ -1008,8 +1008,7 @@ namespace bliss
         }
 
         template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT != bliss::concurrent::LockType::SPINLOCK &&
-            LT != bliss::concurrent::LockType::LOCKFREE,
+        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX,
             void>::type clear_and_block_writes()
         {
           std::lock_guard<std::mutex> lock(mutex);
@@ -1018,6 +1017,16 @@ namespace bliss
           size = 0;
           written = 0;
         }
+        template<bliss::concurrent::LockType LT = LockType>
+        typename std::enable_if<LT == bliss::concurrent::LockType::NONE,
+            void>::type clear_and_block_writes()
+        {
+          // blocked
+          reserved = Capacity + 1;
+          size = 0;
+          written = 0;
+        }
+
         /**
          * @brief Clears the buffer. (set the size to 0, leaving the Capacity and the memory allocation intact)
          * @note  const because the caller will have a const reference to the buffer.
@@ -1043,11 +1052,20 @@ namespace bliss
 
 
         template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT != bliss::concurrent::LockType::SPINLOCK &&
-        LT != bliss::concurrent::LockType::LOCKFREE,
+        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX,
             void>::type clear_and_unblock_writes()
         {
           std::lock_guard<std::mutex> lock(mutex);
+          // blocked
+          reserved = 0;
+          size = Capacity + 1;
+          written = 0;
+        }
+
+        template<bliss::concurrent::LockType LT = LockType>
+        typename std::enable_if<LT == bliss::concurrent::LockType::NONE,
+            void>::type clear_and_unblock_writes()
+        {
           // blocked
           reserved = 0;
           size = Capacity + 1;

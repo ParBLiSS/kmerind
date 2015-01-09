@@ -304,8 +304,9 @@ sub col_m {
 }
 
 sub colorize {
-    $data{'file'} = col ('file');
-    $data{'line'} = col ('line');
+    #colored file and line breaks IDE compatibility.
+    #$data{'file'} = col ('file');
+    #$data{'line'} = col ('line');
 
     if ($_ = $data{keyw}){
         $data{keyw} = col_k ($_);
@@ -323,7 +324,12 @@ sub remove_template_arg {
 
 sub remove_namespace {
     my $re = join ('|', @opt_namespaces);
-    $data{'mesg'} =~ s/(?:$re):://g if $re;
+    print "NAMESPACES = $re\n";
+    if ($re eq '') {  # TCP:  was NOT handling case where namespace is not specified.
+    	$data{'mesg'} =~ s/\w+:://g;  # remove all namespace.  namespace names only are alphanumeric.
+    } else {
+    	$data{'mesg'} =~ s/(?:$re):://g;
+    }
 }
 
 sub remove_path {
@@ -340,13 +346,13 @@ sub expand_templates {
 sub build_with {
     return unless defined $data{'templates'} && %{$data{'templates'}};
     if ($opt_colorize){
-        $data{'with'} = " with " . join ('; ', 
+        $data{'with'} = "\nwith\t" . join (";\n\t", 
             map { 
                 colored ($_, $color{with}) . " = " . 
                 colored ($data{'templates'}{$_}, $color{'with'}) 
             } keys %{$data{'templates'}});
     } else {
-        $data{'with'} = " with " . join ('; ', 
+        $data{'with'} = "\nwith\t" . join (";\n\t", 
             map { "$_ = $data{'templates'}{$_}" } keys %{$data{'templates'}});
     }
 }
@@ -358,9 +364,29 @@ sub remove_instanciated {
             @data{'mesg', 'file', 'line', 'with', 'keyw'} = ('');
             return;
         }
-        @data{'file', 'line', 'with', 'keyw', 'mesg'} = ("(instantiation chain skipped)");
+        @data{'file', 'line', 'with', 'keyw', 'mesg'} = (" (instantiation chain skipped)");
         $on = 1;
         return;
+        # stuff below is to support newer gcc messages 
+    } elsif ($data{'mesg'} =~ /\s+In instantiation of '/){
+#        if ($on) {
+#            @data{'mesg', 'with', 'keyw'} = (" (Instantiation)");
+#            return;
+#        }
+        @data{'with', 'keyw', 'mesg'} = (" (Instantiation)");
+        $on = 1;
+        return;
+        # stuff below is to support newer gcc messages 
+            
+    } elsif ($data{'mesg'} =~ /\s+required from /){
+#        if ($on) {
+#            @data{'mesg', 'with', 'keyw'} = (" (Required from)");
+#            return;
+#        }
+        @data{'with', 'keyw', 'mesg'} = (" (Required from)");
+        $on = 1;
+        return;
+        # stuff below is to support newer gcc messages 
     }
     $on = 0;
 }
@@ -373,19 +399,23 @@ sub parse_with_clause {
     my %data;
     my $last_key = '';
     
-    print "WITH CLAUSE: $str1\n";
+    
     
     my @tokens = split(/;/, $str1);   # TCP with clause has types or values separated by ;
     foreach my $str (@tokens) {
     	$str =~ s/^\s+|\s+$//g;
     
-    	#print "$str\n";
+    	# replace == if any with $$$$. replace back when done.
+    	$str =~ s/==/\$\$\$\$/g;
     
+    	#print "WITH CLAUSE TOKEN $str\n";
+    	
     	# TCP each token contains key = value. 
     	if ( $str =~ s/([^=]+) = ([^=]+)// ) {
     		#print "\t$1 : $2\n";
-    		my $v = $2;
+    		(my $v = $2) =~ s/\$\$\$\$/==/g;
     	    (my $k = $1) =~ s/[: \w]+ (\w+)/$1/;
+    	    $k =~ s/\$\$\$\$/==/g;
     		$data{$k} = $v;
     		#print "\t\t$k : $v\n"
  	   	} else {
@@ -407,7 +437,7 @@ sub parse_with_clause {
 #	        for (;;){  # this loop may leave behind stuff that causes infinite loop.
 #             last if $str eq '' || $str =~ /^,/;      		# stop when leading ,
 #             $str =~ s/[\w\*&:]+(?:$RE{balanced}{-parens=>'<>'})?\s?//;  
-#             print "$str ,, $&\n";
+#             #print "$str ,, $&\n";
 #             $v .= $&;
 #	        }
 #	        $data{$k} = $v;
@@ -442,11 +472,13 @@ for (@output){
         #TCP with clause should not go out of matching []. use re balanced parens
         # previous code does not support parsing "... discards qualifiers [-fpermissive]"
         # so need to extract "... [with ... ] discards qualifiers ..." using balanced parens.
-        # first replace " [with " with " with [ "
+        # first replace " [with " with " with [ ", then extract
         $rest =~ s/ \[with / with \[/;
         if ($rest =~ s/ with (?:$RE{balanced}{-parens=>'[]'})//) {
+       		(my $with = $1) =~ s/^\s+|\s+$//g;
+       		$with =~ s/^\[|\]$//g;	
         #if ($rest =~ s/ \[with (.+)\]//) {          
-            my $with = $1;
+        #    my $with = $1;
             $data{'templates'} = parse_with_clause ($with);
         }
         $data{'mesg'} = $rest;

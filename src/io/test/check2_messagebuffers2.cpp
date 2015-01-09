@@ -198,19 +198,24 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
   }
 
 
-  BufferPtrType final = buffers.flushBufferForRank(id);  // flush blocks buffer and waits for all updates., but need to set final size.
-  count5 = (final == nullptr) ? 0 : final->getSize();
-  if (final) {
-    allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize() / sizeof(int));
+  std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id);  // flush blocks buffer and waits for all updates., but need to set final size.
+  for (auto final : finals) {
+    count5 += (final == nullptr) ? 0 : final->getSize();
+    if (final) {
+      allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize() / sizeof(int));
+      buffers.releaseBuffer(std::move(final));
+    }
+    //if (count7 != count/sizeof(int)) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/sizeof(int) );
+  }
+  finals.clear();
+
+  finals = buffers.flushBufferForRank(id);
+  for (auto final : finals) {
+    count6 += (final == nullptr) ? 0 : final->getSize();
+    if (count6 > 0) printf("\nFAIL: received %d data after flush.", count6);
     buffers.releaseBuffer(std::move(final));
   }
-  //if (count7 != count/sizeof(int)) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/sizeof(int) );
-
-  final = buffers.flushBufferForRank(id);
-  count6 = (final == nullptr) ? 0 : final->getSize();
-  if (count6 > 0) printf("\nFAIL: received %d data after flush.", count6);
-  buffers.releaseBuffer(std::move(final));
-
+  finals.clear();
 
   // now sort it an check to see if we are missing anything
   std::sort(allstored.begin(), allstored.end());
@@ -271,19 +276,30 @@ int main(int argc, char** argv) {
     repeats = atoi(argv[1]);
   }
 
-#if defined( BLISS_MUTEX )
+#if defined( BLISS_MUTEX_LOCKFREE )
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
-#else // #ifdef BLISS_SPINLOCK
+  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::LOCKFREE;
+#elif defined( BLISS_SPINLOCK_LOCKFREE )
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
+  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::LOCKFREE;
+#elif defined( BLISS_MUTEX_NONE )
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
+  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
+#elif defined( BLISS_SPINLOCK_NONE )
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
+  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
 #endif
+
   /// thread unsafe.  test in single thread way.
 //while(true) {
 
   for (int i = 1; i <= 8; ++i) {
-    testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
+   // testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
 
     for (int j = 1; j <= 8; ++j) {
-      testPool(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::LockType::LOCKFREE, 2047>(i)), lt, bliss::concurrent::LockType::LOCKFREE, j);
+      testPool(std::move(bliss::io::SendMessageBuffers<lt, lt2, 2047>(i)), lt, lt2, j);
+
+
     }
   }
 

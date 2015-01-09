@@ -16,6 +16,7 @@ std::atomic<int> lookup_received(0);
 std::atomic<int> answers_received(0);
 int elems;
 
+template <bool ThreadLocal = false>
 struct Tester
 {
   const int ANSWER_TAG = 12;
@@ -153,7 +154,7 @@ struct Tester
     {
 //      ERROR("ERROR: wrong amount of messages received in phase 1");
 //      ERROR("received: " << msgs_received.load() << ", should: " << repeat_sends * commLayer.getCommSize() * iters);
-      std::cerr << "ERROR: wrong amount of messages received in phase 1" << std::endl;
+      std::cerr << "FAIL: wrong amount of messages received in phase 1" << std::endl;
       std::cerr << "received: " << msgs_received.load() << ", should: " << repeat_sends * commLayer.getCommSize() * iters << std::endl;
       exit(EXIT_FAILURE);
     }
@@ -187,7 +188,7 @@ struct Tester
     // check that all messages have been received correctly
     if (answers_received != repeat_sends * commSize)
     {
-      std::cerr << "ERROR: wrong amount of messages received in phase 2" << std::endl;
+      std::cerr << "FAIL: wrong amount of messages received in phase 2" << std::endl;
       std::cerr << "received: " << answers_received.load() << ", should: " << repeat_sends * commSize << std::endl;
       exit(EXIT_FAILURE);
     }
@@ -214,7 +215,7 @@ struct Tester
     //commLayer.startThreads();
   }
 
-  bliss::io::CommunicationLayer commLayer;
+  bliss::io::CommunicationLayer<ThreadLocal> commLayer;
 
   int commSize;
 };
@@ -242,11 +243,20 @@ int main(int argc, char *argv[])
 
   /* code */
   {
-  Tester tester(comm, p);
-  tester.test_comm_layer(elems, nthreads);
+    msgs_received.store(0);
+    lookup_received.store(0);
+    answers_received.store(0);
 
-  MPI_Barrier(comm);
+#if defined(THREADLOCAL)
+    Tester<true> tester(comm, p);
+#else
+    Tester<false> tester(comm, p);
+#endif
+    tester.test_comm_layer(elems, nthreads);
+
+    MPI_Barrier(comm);
   }
+
   // finalize MPI
   MPI_Finalize();
   return 0;

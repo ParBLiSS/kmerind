@@ -268,13 +268,16 @@ namespace io
  * TODO - replace uint8_t by typedef
  *
  */
+template<bool ThreadLocal = false>
 class CommunicationLayer
 {
 
 
 protected:
    /// alias MessageBuffersType to Use the thread safe version of the SendMessageBuffers
-   using MessageBuffersType = SendMessageBuffers<bliss::concurrent::LockType::SPINLOCK, bliss::concurrent::LockType::LOCKFREE, 8192>;
+   using MessageBuffersType = typename std::conditional<ThreadLocal,
+       SendMessageBuffers<bliss::concurrent::LockType::SPINLOCK, bliss::concurrent::LockType::NONE, 8192>,
+       SendMessageBuffers<bliss::concurrent::LockType::SPINLOCK, bliss::concurrent::LockType::LOCKFREE, 8192> >::type;
 
    /// alias BufferPoolType to MessageBuffersType's
    using BufferPoolType = typename MessageBuffersType::BufferPoolType;
@@ -358,7 +361,7 @@ protected:
            char* mpiBuf = (char*)malloc(mpiBufSize);
            MPI_Buffer_attach(mpiBuf, mpiBufSize);
 
-           td = std::move(std::thread(&bliss::io::CommunicationLayer::CommThread<BufferPtrType>::run, this));
+           td = std::move(std::thread(&bliss::io::CommunicationLayer<ThreadLocal>::CommThread<BufferPtrType>::run, this));
          } // else already started the thread.
        }
 
@@ -860,7 +863,7 @@ protected:
         }
 
         void start() {
-          if (!td.joinable()) td = std::move(std::thread(&bliss::io::CommunicationLayer::CallbackThread::run, this));
+          if (!td.joinable()) td = std::move(std::thread(&bliss::io::CommunicationLayer<ThreadLocal>::CallbackThread::run, this));
         }
 
         void finish() {
@@ -1584,18 +1587,21 @@ protected:
       // flush buffers in a circular fashion, starting with the next neighbor
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 
-      auto bufPtr = buffers.at(tag).load()->flushBufferForRank(target_rank);
+      auto ptrs = buffers.at(tag).load()->flushBufferForRank(target_rank);  // returns vector of buffer pointers
       // flush/send all remaining non-empty buffers
-      if ((bufPtr) && !(bufPtr->isEmpty())) {
-        std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(bufPtr), tag, target_rank));
+      for (auto bufPtr : ptrs) {
+        if ((bufPtr) && !(bufPtr->isEmpty())) {
+          std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(bufPtr), tag, target_rank));
 
-//        if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for flushBuffers\n", commRank);
+  //        if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for flushBuffers\n", commRank);
 
-        if (!sendQueue.waitAndPush(std::move(msg)).first) {
-//          ctrlMsgProperties.at(tag).unlock();
-          throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
+          if (!sendQueue.waitAndPush(std::move(msg)).first) {
+  //          ctrlMsgProperties.at(tag).unlock();
+            throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
+          }
         }
       }
+      ptrs.clear();
     }
 
 //    ctrlMsgProperties.at(tag).unlock();
