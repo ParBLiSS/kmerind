@@ -20,6 +20,7 @@
 
 #include "common/base_types.hpp"
 #include "io/file_loader.hpp"
+#include "boost/mpi/datatype.hpp"
 
 // include MPI
 #if defined(USE_MPI)
@@ -52,7 +53,10 @@ namespace bliss
 
         /// Type of range object.
         typedef bliss::partition::range<size_t>     RangeType;
-        typedef std::vector <std::pair<std::size_t, std::size_t>>   vectorType;
+
+        //Type of offsets and corresponding location vector
+        typedef std::size_t  offSetType;
+        typedef std::vector <std::pair<offSetType, offSetType>>   vectorType;
 
       protected:
         /**
@@ -148,7 +152,7 @@ namespace bliss
       public:
         /**
          * @brief   Keep track of all '>' and the following EOL character to save the positions of the fasta record headers for each fasta record in the local block
-         * @tparam  Iterator      type of iterator for data to traverse.  raw pointer if no L2Buffering, or vector's iterator if buffering.
+         * @tparam      Iterator      type of iterator for data to traverse.  raw pointer if no L2Buffering, or vector's iterator if buffering.
          * @param[in]   _data         start of iterator.
          * @param[in]   parentRange   the "full" range to which the inMemRange belongs.  used to determine if the target is a "first" block and last block.  has to start and end with valid delimiters (@)
          * @param[in]   inMemRange    the portion of the "full" range that's loaded in memory (e.g. in DataBlock).  does NOT have to start and end with @
@@ -184,6 +188,7 @@ namespace bliss
               std::size_t storeI = i;
               changeFirstStartLocation = false;
               bool EOLfound = findEOL(data, t.end, i);
+              std::cout << "Pushing to localstore 1 : " << storeI << " , " << i << std::endl;
               localStartLocStore.push_back(std::make_pair(storeI,i));
               //Case if first character is '>' and there is no EOL following it in the search space
               if (!EOLfound)
@@ -216,10 +221,10 @@ namespace bliss
 #ifdef USE_MPI
             ///1. Each block who doesn't see the start '>' of the first fasta record needs to fetch it from previous blocks
             //MPI Collective operation can help here
-            int localMaximum = localStartLocStore.back().first;
-            int newFirstStartLocation;
+            offSetType localMaximum = localStartLocStore.back().first;
+            offSetType newFirstStartLocation;
 
-            MPI_Allreduce(&localMaximum, &newFirstStartLocation, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+            MPI_Allreduce(&localMaximum, &newFirstStartLocation, 1, boost::mpi::get_mpi_datatype(newFirstStartLocation), MPI_MAX, MPI_COMM_WORLD);
 
             //Update the first starting location (first element in the pair)
             if (changeFirstStartLocation == true)
@@ -232,7 +237,7 @@ namespace bliss
             MPICommForward<bool>(&lastBrokenHeader, &resolveLastBrokenHeader, MPI_BYTE);
             
             //2.2 Find the position of EOL if resolveLastBrokenHeader is TRUE
-            std::size_t iCpy = 0;
+            offSetType iCpy = 0;
             if(resolveLastBrokenHeader)
             {
               Iterator dataCpy(_data);
@@ -241,8 +246,8 @@ namespace bliss
             }
 
             //2.3 Send the EOL index back to the neighbour        
-            std::size_t nextBlockEOLIndex;
-            MPICommBackward<std::size_t>(&iCpy, &nextBlockEOLIndex, MPI_INT);
+            offSetType nextBlockEOLIndex;
+            MPICommBackward<offSetType>(&iCpy, &nextBlockEOLIndex, boost::mpi::get_mpi_datatype(nextBlockEOLIndex));
 
             //2.4 Update the local vector
             if (lastBrokenHeader == true)
@@ -250,9 +255,9 @@ namespace bliss
 
             ///3. Each block should know the end '\n' of the header of the last fasta record in the previous block
             localMaximum = localStartLocStore.back().second;
-            int newFirstHeaderEndLocation;
+            offSetType newFirstHeaderEndLocation;
 
-            MPI_Allreduce(&localStartLocStore, &newFirstHeaderEndLocation, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+            MPI_Allreduce(&localStartLocStore, &newFirstHeaderEndLocation, 1, boost::mpi::get_mpi_datatype(newFirstHeaderEndLocation), MPI_MAX, MPI_COMM_WORLD);
 
             //Update the first starting location (first element in the pair)
             if (changeFirstStartLocation == true)

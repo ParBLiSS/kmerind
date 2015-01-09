@@ -31,7 +31,9 @@ class sliding_window_iterator : public std::iterator<
     // 2) value type = return type of the getValue function in the Window class
     typename std::remove_reference<decltype(std::declval<Window>().getValue())>::type,
     // 3) difference_type = same as base iterator
-    typename std::iterator_traits<BaseIterator>::difference_type>
+    typename std::iterator_traits<BaseIterator>::difference_type,
+    typename std::remove_reference<decltype(std::declval<Window>().getValue())>::type*,
+    typename std::remove_reference<decltype(std::declval<Window>().getValue())>::type>
 {
 protected:
   // the base iterator traits
@@ -47,11 +49,11 @@ protected:
 
   // input iterators, _base is used for comparison and represents the current
   // position, while _next reads ahead in order to fill the sliding window.
-  BaseIterator _base;
-  BaseIterator _next;
+  mutable BaseIterator _base;
+  mutable BaseIterator _next;
 
   // the window
-  Window _window;
+  mutable Window _window;
 
   /// The std::iterator_traits of this iterator
   typedef std::iterator_traits<type> traits;
@@ -190,7 +192,7 @@ public:
    *
    * @return    The value at the current position.
    */
-  inline value_type operator*()
+  inline value_type operator*() const
   {
     // in case the current element has not been read yet: do so now
     if (this->_base == this->_next)

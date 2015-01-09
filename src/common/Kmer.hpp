@@ -547,6 +547,10 @@ public:
     return rev;
   }
 
+  static unsigned int getKmerSize()
+  {
+    return size;
+  }
 
   // for debug purposes
   /**
