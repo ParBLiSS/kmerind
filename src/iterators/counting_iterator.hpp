@@ -2,7 +2,7 @@
  * @file    counting_iterator.hpp
  * @ingroup bliss::iterators
  * @author  tpan
- * @brief   contains a counting iterator, which iterates over a range from start to end.
+ * @brief   contains a counting iterator
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -12,10 +12,10 @@
 #ifndef COUNTING_ITERATOR_HPP_
 #define COUNTING_ITERATOR_HPP_
 
+#include <cstddef>
+
 #include <type_traits>
 #include <iterator>
-
-#include "partition/range.hpp"
 
 
 namespace bliss
@@ -28,87 +28,96 @@ namespace bliss
      * @brief    iterator that iterates from start to end in specified steps size
      * @details  counting iterator counts from the start to the end in regular steps.
      *           this is useful to establish index values for some other array.
-     * @tparam RangeType  the type of range to iterate over.
+     * @tparam T the type of data to over.
      */
-    template<typename RangeType>
-    class CountingIterator :  public std::iterator<std::random_access_iterator_tag,
-                                                   typename RangeType::ValueType,
-                                                   typename std::conditional<std::is_integral<typename RangeType::ValueType>::value,
-                                                     int64_t, typename RangeType::ValueType>::type>
+    template<typename T>
+    class CountingIterator :  public std::iterator<std::random_access_iterator_tag, T>
     {
       protected:
-        /// output value type
-        using T = typename std::iterator_traits<CountingIterator<RangeType> >::value_type;
 
         /// difference type
-        using D = typename std::iterator_traits<CountingIterator<RangeType> >::difference_type;
+        using D = std::ptrdiff_t;
 
-        /// the range within which to iterate over
-        const RangeType range;
+        /// the start of the iterator
+        mutable T start;
 
         /// the stride for each iteration.
-        const T stride;
+        mutable T stride;
 
-        /// current position in range;
-        const T val;
+        /// current value;
+        T val;
 
       public:
 
         /**
          * constructor
-         * @param _range    range to iterate over
+         * @param _start      first value
          * @param _stride     the distance traversed during each call to the increment/decrement method.
          */
-        CountingIterator(const RangeType& _range, const T &_stride) : range(_range), stride(_stride), val(_range.start) {};
+        CountingIterator(const T& _start, const T &_stride) : start(_start), stride(_stride), val(_start) {};
 
         /**
          * constructor, with stride defaults to 1.
-         * @param _range    range to iterate over
+         * @param _start    first value
          */
-        CountingIterator(const RangeType& _range) : range(_range), stride(1), val(_range.start) {};
+        CountingIterator(const T& _start) : start(_start), stride(1), val(_start) {};
 
         /**
-         * default constructor, sets range to empty, stride to 1
+         * default constructor, sets start to 0, stride to 1
          */
-        CountingIterator() : range(), stride(1), val(0) {};
+        CountingIterator() : start(0), stride(1), val(0) {};
 
         /**
          * default copy constructor
          * @param other  instance of CountingIterator to copy from
          */
-        CountingIterator(const CountingIterator<RangeType> & other) = default;
+        CountingIterator(const CountingIterator<T> & other) : start(other.start), stride(other.stride), val(other.val) {};
 
         /**
          * default copy assignment operator
          * @param other  instance of CountingIterator to copy from
          * @return reference to self
          */
-        CountingIterator<RangeType>& operator=(const CountingIterator<RangeType> & other) = default;
+        CountingIterator<T>& operator=(const CountingIterator<T> & other) {
+          start = other.start;
+          stride = other.stride;
+          val = other.val;
+          return *this;
+        }
 
         /**
          * default move constructor
          * @param other  instance of CountingIterator to move from
          */
-        CountingIterator(CountingIterator<RangeType> && other) = default;
+        CountingIterator(CountingIterator<T> && other) : start(other.start), stride(other.stride), val(other.val) {
+          other.start = 0;
+          other.stride = 1;
+          other.val = 0;
+        };
 
         /**
          * default move assignment operator
          * @param other  instance of CountingIterator to move from
          * @return reference to self
          */
-        CountingIterator<RangeType>& operator=(CountingIterator<RangeType> && other) = default;
+        CountingIterator<T>& operator=(CountingIterator<T> && other) {
+          start = other.start;     other.start = 0;
+          stride = other.stride;   other.stride = 1;
+          val = other.val;         other.val = 0;
+          return *this;
+        };
 
         /**
          * default destructor
          */
-        virtual ~CountingIterator();
+        virtual ~CountingIterator() {};
 
 
         /**
          * @brief   pre-increment operator: ++iter
          * @return  reference to incremented iterator
          */
-        CountingIterator<RangeType>& operator++() {
+        CountingIterator<T>& operator++() {
           val += stride;
           return *this;
         }
@@ -118,18 +127,18 @@ namespace bliss
          * @param   dummy for c++ to identify this as post increment.
          * @return  incremented copy of iterator
          */
-        CountingIterator<RangeType> operator++(int) {
-          CountingIterator<RangeType> out(*this);
+        CountingIterator<T> operator++(int) {
+          CountingIterator<T> out(*this);
           ++out;
           return out;
         }
 
         /**
-         * @brief compare to other iterator for equality.  only inspect the val (position in range)
+         * @brief compare to other iterator for equality.  only inspect the val
          * @param other   iterator to compare to.
          * @return  bool, true if equal, false otherwise.
          */
-        bool operator==(const CountingIterator<RangeType>& other) {
+        bool operator==(const CountingIterator<T>& other) {
           return val == other.val;
         }
 
@@ -138,31 +147,23 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if not equal, false otherwise.
          */
-        bool operator!=(const CountingIterator<RangeType>& other) {
+        bool operator!=(const CountingIterator<T>& other) {
           return !(this->operator==(other));
         }
 
         /**
          * @brief dereference function, *iter
-         * @return  current value (position in range)
+         * @return  current value
          */
         const T operator*() const {
           return val;
         }
 
         /**
-         * @brief pointer access function, iter->val
-         * @return  current value (position in range)
-         */
-        const T* operator->() const {
-          return &val;
-        }
-
-        /**
          * @brief   pre-decrement operator: --iter
          * @return  reference to decremented iterator
          */
-        CountingIterator<RangeType>& operator--() {
+        CountingIterator<T>& operator--() {
           val -= stride;
           return *this;
         }
@@ -172,8 +173,8 @@ namespace bliss
          * @param   dummy for c++ to identify this as post decrement.
          * @return  decremented copy of iterator
          */
-        CountingIterator<RangeType> operator--(int) {
-          CountingIterator<RangeType> out(*this);
+        CountingIterator<T> operator--(int) {
+          CountingIterator<T> out(*this);
           --out;
           return out;
         }
@@ -183,8 +184,8 @@ namespace bliss
          * @param diff    number of steps to increment by
          * @return  incremented copy of iterator
          */
-        CountingIterator<RangeType> operator+(const D& diff) {
-          CountingIterator<RangeType> out(*this);
+        CountingIterator<T> operator+(const D& diff) {
+          CountingIterator<T> out(*this);
           out += diff;
           return out;
         }
@@ -195,12 +196,20 @@ namespace bliss
          * @param diff    number of steps to decrement by
          * @return  decremented copy of iterator
          */
-        CountingIterator<RangeType> operator-(const D& diff) {
-          CountingIterator<RangeType> out(*this);
+        CountingIterator<T> operator-(const D& diff) {
+          CountingIterator<T> out(*this);
           out -= diff;
           return out;
         }
 
+        /**
+         * @brief difference between 2 iterators;
+         * @param other         the iterator to subtract by
+         * @return              distance between the iterators
+         */
+        D operator-(const CountingIterator<T>& other) {
+          return (val - other.val) / stride;
+        }
 
 
         /**
@@ -208,7 +217,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if greater than, false otherwise.
          */
-        bool operator>(const CountingIterator<RangeType>& other) {
+        bool operator>(const CountingIterator<T>& other) {
           return val > other.val;
         }
 
@@ -217,7 +226,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if less than, false otherwise.
          */
-        bool operator<(const CountingIterator<RangeType>& other) {
+        bool operator<(const CountingIterator<T>& other) {
           return val < other.val;
         }
 
@@ -226,7 +235,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if greater than or equal to, false otherwise.
          */
-        bool operator>=(const CountingIterator<RangeType>& other) {
+        bool operator>=(const CountingIterator<T>& other) {
           return val >= other.val;
         }
 
@@ -235,7 +244,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if less than or equal to, false otherwise.
          */
-        bool operator<=(const CountingIterator<RangeType>& other) {
+        bool operator<=(const CountingIterator<T>& other) {
           return val <= other.val;
         }
 
@@ -244,7 +253,7 @@ namespace bliss
          * @param diff    number of steps to increment by
          * @return  reference to incremented iterator
          */
-        CountingIterator<RangeType>& operator+=(const D& diff) {
+        CountingIterator<T>& operator+=(const D& diff) {
           val += diff * stride;
           return *this;
         }
@@ -254,7 +263,7 @@ namespace bliss
          * @param diff    number of steps to decrement by
          * @return  reference to decremented iterator
          */
-        CountingIterator<RangeType>& operator-=(const D& diff) {
+        CountingIterator<T>& operator-=(const D& diff) {
           val -= diff * stride;
           return *this;
         }
@@ -262,25 +271,27 @@ namespace bliss
         /**
          * @brief   offset dereference operator
          * @param i offset at which the value is retrieved.
-         * @return  value (position in range) for ith offset
+         * @return  value for ith offset
          */
         T operator[](const D& i) {
-          return range.start + stride * i;
+          return val + stride * i;
         }
 
     };
 
     /**
      * @brief increment operator, with first operand being a number and second being an iterator  n + iter;
-     * @tparam RangeType    Range type for which to perform the increment operation
+     * @tparam T    value type for which to perform the increment operation
      * @param diff          number of steps to increment by
      * @param self          iterator to increment
      * @return              copy of incremented iterator
      */
-    template<typename RangeType>
-    CountingIterator<RangeType> operator+(const typename std::iterator_traits<CountingIterator<RangeType> >::difference_type& diff, CountingIterator<RangeType>& self) {
+    template<typename T>
+    CountingIterator<T> operator+(const typename std::iterator_traits<CountingIterator<T> >::difference_type& diff, CountingIterator<T>& self) {
       return self + diff;
     }
+
+
 
 
   } /* namespace iterator */
