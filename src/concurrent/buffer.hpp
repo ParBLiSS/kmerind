@@ -538,25 +538,38 @@ namespace bliss
           // does not prevent ABA problem (if the memory is reallocated.)
           int64_t curr = reserved;
 
-          if (curr > Capacity)
+          if (curr >= Capacity)
           {  // full.  another thread saved to size
+            reserved = Capacity + 1;
             lock.unlock();
-            return -1;
+            curr = -1;
           }
-          else
-          { //if curr == Capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
-            reserved += count;
-            lock.unlock();
-            if (curr + count > Capacity)
-            {  // just filled.  set size.  reserved is already set.
-              // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
+          else  {  // normal case
 
-              // since only 1 thread reaching here, just set size, no need to lock
-              size = curr;
+            if (curr + count > Capacity) { // FILLED in this cycle.  but not valid ptr.
+              reserved = Capacity + 1;
+              lock.unlock();
+                // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
+                // since only 1 thread reaching here, just set size, no need to lock
+                size = curr;
+                curr = -2;
+            } else if (curr + count == Capacity) { // filled in this cycle, valid curr.
+              reserved = Capacity + 1;
+              lock.unlock();
+                // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
+                // since only 1 thread reaching here, just set size, no need to lock
+                size = Capacity;
+            } else {
+              // else normal case.
+              reserved += count;
+              lock.unlock();
 
-            }  // else normal append
+
+            }
+
           }
           return curr;
+
         }
         /**
          * @brief       reserves a position in the buffer at which to insert the count number of bytes.
@@ -576,23 +589,36 @@ namespace bliss
           // does not prevent ABA problem (if the memory is reallocated.)
           int64_t curr = reserved;
 
-          if (curr > Capacity)
+          if (curr >= Capacity)
           {  // full.  another thread saved to size
             spinlock.clear();
-            return -1;
+            curr = -1;
           }
           else
           { //if curr == Capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
-            reserved += count;
-            spinlock.clear();
             if (curr + count > Capacity)
             {  // just filled.  set size.  reserved is already set.
+              reserved = Capacity + 1;
+              spinlock.clear();
+
+
               // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
 
               // since only 1 thread reaching here, just set size, no need to lock
               size = curr;
+              curr = -2;
+            } else if (curr + count == Capacity) {
+              reserved = Capacity + 1;
+              spinlock.clear();
 
-            }  // else normal append
+
+              size = Capacity;
+            } else {
+              reserved += count;
+              spinlock.clear();
+
+              // else normal append
+            }
           }
           return curr;
         }
@@ -650,27 +676,36 @@ namespace bliss
             int64_t>::type reserve(const uint32_t count)
         {
 
-          // blocked buffer, from full or explicit block call..
-          if (size.load(std::memory_order_relaxed) != (Capacity + 1)) {
+          // blocked buffer, from full or explicit block call.
+          if (reserved.load(std::memory_order_relaxed) > Capacity) {
+            // have this here to minimize fetch_add calls.
+
             return -1;
           } else {
             // not yet full, so reserve
 
             int64_t curr = reserved.fetch_add(count, std::memory_order_acquire);
 
-            if (curr > Capacity) return -1;
-            else
-            { //if curr == Capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
-              if (curr + count > Capacity)
-              {  // just filled.  set size.  reserved is already set.
-                // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
-
-                // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
-                size.store(curr, std::memory_order_release);
-
-              }  // else normal append
+            if (curr >= Capacity) {
+              return -1;
             }
-            return curr;
+            else if (curr + count > Capacity) {
+              reserved.store(Capacity + 1, std::memory_order_relaxed);
+                // just filled. curr position not valid.
+
+              // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
+              // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
+              size.store(curr, std::memory_order_release);
+              return -2;
+            } else if (curr + count == Capacity) {
+              reserved.store(Capacity + 1, std::memory_order_relaxed);
+              // just filled.  curr position valid.
+
+              // multiple threads could reach here if they have different counts? NO. because of CAS is atomic.
+              // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
+              size.store(Capacity, std::memory_order_release);
+              return curr;
+            } else return curr;
           }
         }
 
@@ -721,19 +756,30 @@ namespace bliss
             const uint32_t count)
         {
           int64_t curr = reserved;
-          if (curr > Capacity)
+          if (curr >= Capacity)
           {
-            return -1;
+            curr = -1;
           }
           else
           { //if ptr == Capacity, buffer must be FILLED in this cycle.  need to process it as if not full yet.
-            reserved += count;
+
             if (curr + count > Capacity)
             {
-              // again, only 1 thread eaches here, so
+              reserved = Capacity + 1 ;
+              // again, only 1 thread reaches here, so
 
               size = curr;
+              curr = -2;
+
+            } else if (curr + count == Capacity)
+            {
+              reserved = Capacity + 1 ;
+              // again, only 1 thread reaches here, so
+
+              size = Capacity;
             }  // else normal append
+            else
+              reserved += count;
 
           }
           return curr;
@@ -976,9 +1022,13 @@ namespace bliss
          */
         void block_and_flush()
         {
+          //printf("INFO:  set block start:  reserved %ld, size %ld, written %ld \n", (int64_t)reserved, (int64_t)size, (int64_t)written);
           block_writes<LockType>();
-          while (is_writing<LockType>())
+          //printf("INFO:  set block end:  reserved %ld, size %ld, written %ld \n", (int64_t)reserved, (int64_t)size, (int64_t)written);
+          while (is_writing<LockType>()) {
+            //printf("INFO:  wait for writes:  reserved %ld, size %ld, written %ld \n", (int64_t)reserved, (int64_t)size, (int64_t)written);
             _mm_pause();
+          }
         }
 
 
@@ -1112,26 +1162,33 @@ namespace bliss
 
             return 0x0;  // full and not swapping.
           }
+          else if (pos == -2)
+          { // filled to beyond capacity
+
+            while (is_writing<LockType>())  // wait for write to complete
+              _mm_pause();
+            return 0x2;  // full, swapping.
+          }
           else
-          {  // pos starts inside allocated buffer range.
+          { // valid position returned, so can write.
 
-            if ((pos + count) > Capacity)
-            { // thread that filled the buffer
+            // write
+            std::memcpy(start_ptr.get() + pos, _data, count);
+            complete_write<LockType>(count); // all full buffers lock the read and unlock the writer
 
+            if ((pos + count) == Capacity)
+            { // thread that JUST filled the buffer
+
+              // wait for other threads to finish
               while (is_writing<LockType>())
                 _mm_pause();
 
-              return 0x2;  // was not full, now full.
-
+              return 0x3;  // write to full, swapping, and success
             }
-            else
-            { // can insert.  may make buffer full
+            else  // no case for pos + count > Capacity.
+            { // not filled.
 
-              // write
-              std::memcpy(start_ptr.get() + pos, _data, count);
-              complete_write<LockType>(count); // all full buffers lock the read and unlock the writer
-
-              return 0x1;   // not full, successfully inserted.
+              return 0x1;   // not full, not swapping, successfully inserted.
             }
 
           }

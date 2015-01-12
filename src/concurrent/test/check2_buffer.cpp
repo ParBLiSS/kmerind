@@ -81,6 +81,7 @@ void appendTest() {
   b1.clear_and_unblock_writes();
 
   int nelems = CAP / sizeof(int);
+  int remainder = CAP % sizeof(int);
 
   int success = 0;
   int failure = 0;
@@ -139,7 +140,9 @@ void appendTest() {
 
   append(NumThreads, b1, 0, nelems, success, failure, swap, gold);
 
-  if (success == 0 || (success != nelems) || failure != 0 || swap != 0) printf("FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)\n", success, nelems, failure, 0, swap, 0);
+  int swap_exp = (remainder > 0 ? 0 : 1);
+
+  if (success == 0 || (success != nelems) || failure != 0 || swap != swap_exp) printf("FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)\n", success, nelems, failure, 0, swap, swap_exp);
   else {
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
@@ -203,7 +206,7 @@ void appendTest() {
 
   append(NumThreads, b1, 0, nelems, success, failure, swap, gold);
 
-  if (success == 0 || (success != nelems) || failure != 0 || swap != 0) printf("FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)\n", success, nelems, failure, 0, swap, 0);
+  if (success == 0 || (success != nelems) || failure != 0 || swap != swap_exp) printf("FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)\n", success, nelems, failure, 0, swap, swap_exp);
   else {
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), gold.begin(), success)) {
@@ -265,7 +268,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count) {
       _mm_pause();  // slow it down a little.
     }
 
-    if (result & 0x2 || result & 0x4) {
+    if (result & 0x2) {
 
 //      if (result & 0x4) std::cout << "SWAPPING: " << *(buf) << std::endl << std::flush;
 //
@@ -383,7 +386,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count) {
 //       _mm_pause();  // slow it down a little.
     }
 
-    if (res & 0x2 || res & 0x4) {
+    if (res & 0x2) {
 
 //      if (res & 0x4) std::cout << "SWAPPING: " << *(buf) << std::endl << std::flush;
 //    	// TODO: issue here:  if a large number of threads call append, and most of them are rescheduled, so that we reach calc
@@ -534,5 +537,20 @@ int main(int argc, char** argv) {
   testAppendMultipleBuffersAtomicPtrs<lt, 8191, 7>(1000000);
   testAppendMultipleBuffersAtomicPtrs<lt, 8191, 8>(1000000);
 
+
+
+  // multiple buffer swap test.
+
+  ////////////// timing.  the insert before this is to warm up.
+  testAppendMultipleBuffersAtomicPtrs<bliss::concurrent::LockType::NONE, 8192, 1>(1000000);
+
+  testAppendMultipleBuffersAtomicPtrs<lt, 8192, 1>(1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 8192, 2>(1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 8192, 3>(1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 8192, 4>(1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 8192, 5>(1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 8192, 6>(1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 8192, 7>(1000000);
+  testAppendMultipleBuffersAtomicPtrs<lt, 8192, 8>(1000000);
 
 }

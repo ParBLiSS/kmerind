@@ -777,12 +777,12 @@ namespace bliss
         BufferType* at(const int targetRank, int srcThread = -1) {
           int tid = (srcThread == -1 ? omp_get_thread_num() : srcThread);
           // insert a new one if none there.   note that the entry is initialize to nullptr
-          BufferType* ptr = (BufferType*)(buffers.at(targetRank)[tid]);
-          if (!ptr) {
+
+          if (buffers.at(targetRank).count(tid) == 0) {
+            printf("WARNING: buffer for threadid %d at target %d is initialized to nullptr.  swapping in. \n", tid, targetRank);
             swapInEmptyBuffer<PoolLT>(targetRank, tid);
-            return (BufferType*)(buffers.at(targetRank).at(tid));   // if atomic pointer, then will do load()
-          } else
-            return ptr;
+          }
+          return (BufferType*)(buffers.at(targetRank).at(tid));   // if atomic pointer, then will do load()
         }
 
 
@@ -1014,13 +1014,27 @@ namespace bliss
 
           auto ptr = this->pool.tryAcquireObject();
           ptr->clear_and_unblock_writes();
-          auto oldbuf = buffers.at(dest)[tid].exchange(ptr);
-          if (oldbuf && oldbuf->isEmpty()) {
-//            printf("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
-            releaseBuffer(oldbuf);
-            return nullptr;
+          BufferType* oldbuf = nullptr;
+
+          if (buffers.at(dest).count(tid) == 0) {
+
+            std::unique_lock<std::mutex> lock(mutex);
+            buffers.at(dest).emplace(tid, ptr);
+            lock.unlock();
+            printf("INFO: new buffer %p for thread %d: target rank %d of %lu, curr size %lu\n", ptr, tid, dest, buffers.size(), buffers.at(dest).size());
+          } else {
+//            std::unique_lock<std::mutex> lock(mutex);
+            oldbuf = buffers.at(dest).at(tid).exchange(ptr);
+//            lock.unlock();
+            printf("INFO: swap old %p, new %p, for thread %d: target rank %d of %lu, curr size %lu\n", oldbuf, ptr, tid, dest, buffers.size(), buffers.at(dest).size());
+
+            if (oldbuf && oldbuf->isEmpty()) {
+  //            printf("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
+              releaseBuffer(oldbuf);
+              oldbuf = nullptr;
+            }
           }
-          else return oldbuf;
+          return oldbuf;
         }
 
 
@@ -1056,15 +1070,20 @@ namespace bliss
 
           int tid = thread_id < 0 ? omp_get_thread_num() : thread_id;
 
-          auto oldbuf = this->at(dest);
-          buffers.at(dest)[tid] = this->pool.tryAcquireObject();
-          if (oldbuf && oldbuf->isEmpty()) {
-//            printf("oldbuf %p, empty? %s\n", oldbuf, oldbuf->isEmpty() ? "y" : "n");
+          BufferType* oldbuf = nullptr;
+          if (buffers.at(dest).count(tid) == 0) {
+            printf("INFO: newbuffer for thread: target rank %d of %lu, thread %d, curr size %lu\n", dest, buffers.size(), tid, buffers.at(dest).size());
 
-            releaseBuffer(oldbuf);
-            return nullptr;
+            buffers.at(dest)[tid] = this->pool.tryAcquireObject();
+          } else {
+            oldbuf = buffers.at(dest).at(tid);
+            buffers.at(dest).at(tid) = this->pool.tryAcquireObject();
+            if (oldbuf && oldbuf->isEmpty()) {
+              releaseBuffer(oldbuf);
+              oldbuf = nullptr;
+            }
           }
-          else return oldbuf;  // swap the pointer to Buffer object, not Buffer's internal "data" pointer
+          return oldbuf;
         }
 
 
