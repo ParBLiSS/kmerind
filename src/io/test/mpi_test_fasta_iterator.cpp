@@ -21,6 +21,7 @@
 #include "io/fasta_loader.hpp"
 #include "io/file_loader.hpp"
 #include "common/Kmer.hpp"
+#include "common/alphabets.hpp"
 #include "io/fasta_iterator.hpp"
 
 using namespace bliss::io;
@@ -134,7 +135,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks)
   //Begin iteration
   const int len = 35;
   typedef bliss::Kmer<len, 2, uint32_t> KmerType;
-  FASTAParser<typename FILELoaderType::L1BlockType::iterator, KmerType> FASTAIterObj(d.begin(), d.end(), loader.getFileRange(), vectorReturned);
+  FASTAParser<typename FILELoaderType::L1BlockType::iterator, KmerType, DNA> FASTAIterObj(d.begin(), d.end(), loader.getFileRange(), vectorReturned);
   ValueType* gold;
   gold = new ValueType[len];
 
@@ -149,24 +150,26 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks)
 
   auto iter=startIter;
   int i = 1;
+
+  //For crosschecking the contents
+  typedef bliss::KmerGenerationIterator<typename FILELoaderType::L1BlockType::iterator, KmerType> KmerGenIterator;
+  
   for(auto iter=startIter; iter != endIter; iter++)
   {
-    std::cout << FASTAIterObj.getOffset(iter) << ", Kmer# " << i++ << " :  " << FASTAIterObj.getKmer(iter).toString() << std::endl; 
-    /*
+    std::cout << FASTAIterObj.getOffset(iter) << ", Kmer# " << i++ << " :  " << FASTAIterObj.getKmer(iter).toString_binary() << std::endl; 
     auto offset = FASTAIterObj.getOffset(iter);
-    auto thisKmer = FASTAIterObj.getKmer(iter);
+    //auto thisKmer = FASTAIterObj.getKmer(iter);
 
     //Fetch Kmer using simple file reading 
     FASTAIteratorTest<TypeParam>::readFilePOSIX(this->fileName, offset, len, gold);
 
     //Compare the contents, by constructing a new kmer and equating
-    KmerType otherKmer;  
-    otherKmer.fillFromChars(gold);
+    KmerGenIterator beginIter = KmerGenIterator(gold, true);
+    std::cout << "Should match with " << " :  " << (*beginIter).toString_binary() << std::endl; 
 
-    bool comp = (thisKmer == otherKmer);
-    ASSERT_EQ(true, comp);
-    std::cout << "Check successful" << std::endl;
-    */
+    //bool comp = (thisKmer == *beginIter);
+    //ASSERT_EQ(true, comp);
+    //std::cout << "Check successful" << std::endl;
   }
   delete [] gold;
 }
@@ -183,7 +186,6 @@ int main(int argc, char* argv[]) {
     int result = 0;
 
     ::testing::InitGoogleTest(&argc, argv);
-
 
 #if defined(USE_MPI)
     MPI_Init(&argc, &argv);

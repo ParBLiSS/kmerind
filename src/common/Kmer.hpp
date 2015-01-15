@@ -21,11 +21,14 @@
 #include <sstream>
 #include <algorithm>
 #include <utility>
+#include <bitset>
+#include <climits>
 
 // own includes
 #include <common/base_types.hpp>
 #include <common/bit_ops.hpp>
 #include <common/padding.hpp>
+#include <common/alphabets.hpp>
 
 namespace bliss
 {
@@ -571,6 +574,48 @@ public:
     }
     ss << "]";
     return ss.str();
+  }
+
+  // for debug purposes
+  /**
+   * @brief Returns a string representation of this k-mer.
+   *
+   * Usage: for debugging and testing.
+   *
+   * @returns   A std::string representing this k-mer.
+   */
+  std::string toString_binary() const
+  {
+    /* return the hex representation of the data array values */
+    //std::stringstream ss;
+    //ss << "k-mer of size " << size << ": [";
+    //int tmpNumberofChars = size;
+    std::string result;
+    result.resize(size);
+    Kmer cpy(*this);
+    for (unsigned int i = 0; i < size; ++i)
+    {
+       result[size-i-1] = DNA::TO_ASCII[static_cast<size_t>(0x3 & cpy.data[0])];
+       cpy.do_right_shift(2);
+    }
+    /*
+    for (unsigned int i = 0; i < nWords; ++i)
+    {
+      std::bitset<sizeof(word_type) * CHAR_BIT> binary(data[i]);
+      for(int i=0; i<sizeof(word_type) * CHAR_BIT/2 && i < tmpNumberofChars;i++)
+      {
+        size_t tmp = binary[2*i];
+        tmp = tmp << 1;
+        tmp |= binary[2*i + 1];
+        //Hard coded to DNA alphabet type
+        ss << DNA::TO_ASCII[static_cast<size_t>(tmp)]; 
+      }
+      tmpNumberofChars -= sizeof(word_type) * CHAR_BIT/2;
+    }
+    ss << "]";
+    return ss.str();
+    */
+    return result;
   }
 
 

@@ -32,6 +32,7 @@
 #include <iterators/function_traits.hpp>
 #include <partition/range.hpp>
 #include <common/kmer_iterators.hpp>
+#include <common/alphabets.cpp>
 #include <io/fasta_loader.hpp>
 
 // boost iterators used
@@ -59,11 +60,11 @@ namespace bliss
      *            This class requires a vector of positions containing the positions of all the 
      *            FASTA sequence headers relevant to the local block
      *
-     * @tparam    Iterator    The underlying iterator to be traversed to generate a Sequence
-     * @tparam    Alphabet    allows interpretation of the sequence
-     * @tparam    Kmer        bliss::Kmer type
+     * @tparam    Iterator      The underlying iterator to be traversed to generate a Sequence
+     * @tparam    Kmer          bliss::Kmer type
+     * @tparam    AlphabetType  allows interpretation of the sequence (Example : DNA, DNA5)
      */
-    template<typename Iterator, typename Kmer>
+    template<typename Iterator, typename Kmer, typename AlphabetType>
     class FASTAParser
     {
       protected:
@@ -78,8 +79,13 @@ namespace bliss
         typedef boost::transform_iterator <std::function<offSetType(const offSetType&)> , count_iterator> 
           offset_transform_iterator;
 
+        //Tranform iterator on top of sequence iterator
+        typedef typename std::iterator_traits<Iterator>::value_type Iterator_valueType;
+        typedef boost::transform_iterator <std::function<Iterator_valueType(const Iterator_valueType&)> , Iterator> 
+          transformed_seq_iterator;
+
         //Converting raw character Iterator to Kmer Iterator (filtering later)
-        typedef bliss::KmerGenerationIterator<Iterator, Kmer> KmerIncompleteIterator;
+        typedef bliss::KmerGenerationIterator<transformed_seq_iterator, Kmer> KmerIncompleteIterator;
 
         //Tuple of two iterators id and Kmer iterator over raw data
         typedef boost::tuple<offset_transform_iterator, KmerIncompleteIterator> 
@@ -189,9 +195,15 @@ namespace bliss
           offset_transform_iterator idBeginCorrect = offset_transform_iterator(countBegin, transformFunctor);
           offset_transform_iterator idEndCorrect = offset_transform_iterator(countEnd, transformFunctor);
 
+          //Converted sequence iterator from ascii to concise format 
+          //Functor for the tranformation
+          returnSeqVal seqtransformFunctor;
+          transformed_seq_iterator trSequenceBegin = transformed_seq_iterator(sequenceBegin, seqtransformFunctor);
+          transformed_seq_iterator trSequenceEnd = transformed_seq_iterator(sequenceEnd, seqtransformFunctor);
+
           //Initialise the begin and end of raw kmer iterator
-          KmerIncompleteIterator kmer_raw_begin_iterator = KmerIncompleteIterator(sequenceBegin, true);
-          KmerIncompleteIterator kmer_raw_end_iterator = KmerIncompleteIterator(sequenceEnd, true);
+          KmerIncompleteIterator kmer_raw_begin_iterator = KmerIncompleteIterator(trSequenceBegin, true);
+          KmerIncompleteIterator kmer_raw_end_iterator = KmerIncompleteIterator(trSequenceEnd, true);
 
           //Construct the tuple of ids and kmer iterators
           the_offset_rawkmer_tuple idKmerStart = the_offset_rawkmer_tuple(idBeginCorrect, kmer_raw_begin_iterator);
@@ -229,8 +241,13 @@ namespace bliss
           returnOffset<offSetType> transformFunctor(_localStartLocStoreBeginIter, _localStartLocStoreEndIter, _offsetRange);
           offset_transform_iterator idEndCorrect = offset_transform_iterator(countEnd, transformFunctor);
 
+          //Converted sequence iterator from ascii to concise format 
+          //Functor for the tranformation
+          returnSeqVal seqtransformFunctor;
+          transformed_seq_iterator trSequenceEnd = transformed_seq_iterator(sequenceEnd, seqtransformFunctor);
+
           //Initialise the begin and end of raw kmer iterator
-          KmerIncompleteIterator kmer_raw_end_iterator = KmerIncompleteIterator(sequenceEnd, true);
+          KmerIncompleteIterator kmer_raw_end_iterator = KmerIncompleteIterator(trSequenceEnd, true);
 
           //Construct the tuple of ids and kmer iterators
           the_offset_rawkmer_tuple idKmerEnd = the_offset_rawkmer_tuple(idEndCorrect, kmer_raw_end_iterator);
@@ -323,6 +340,19 @@ namespace bliss
           }
         };
 
+        /**
+         * @brief   converting sequence values to a more packed representation 
+         * @return  converted value 
+         * @param   rawOffset the offset value which needs to be transformed
+         * @tparam  eleType   the type definition of offset 
+         */
+        struct returnSeqVal 
+        {
+          Iterator_valueType operator()(const Iterator_valueType& inValue)
+          {
+            return AlphabetType::FROM_ASCII[static_cast<size_t>(inValue)];
+          }
+        };
     };
   }
 }

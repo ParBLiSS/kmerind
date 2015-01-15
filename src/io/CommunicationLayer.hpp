@@ -995,7 +995,7 @@ protected:
       } else {
         // remote: initiate async MPI message
         MPI_Request req;
-        MPI_Isend(data, count, MPI_UINT8_T, se.dst, se.tag, comm, &req);
+        MPI_Isend(data, count, MPI_UNSIGNED_CHAR, se.dst, se.tag, comm, &req);
         sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElementType>(std::move(req), std::move(se))));
       }
     }
