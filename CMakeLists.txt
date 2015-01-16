@@ -268,6 +268,7 @@ if (MPI_FOUND)
   set(EXTRA_LIBS ${EXTRA_LIBS} ${MPI_LIBRARIES})
   set(ENV{OMPI_CC} ${CMAKE_C_COMPILER})
   set(ENV{OMPI_CXX} ${CMAKE_CXX_COMPILER})
+  mark_as_advanced(MPI_EXTRA_LIBRARY MPI_LIBRARY)
   
 else (MPI_FOUND)
   set(MPI_DEFINE "")
@@ -312,31 +313,6 @@ if(DOXYGEN_FOUND)
   )
 endif(DOXYGEN_FOUND)
 
-###### STLFilt support, using my fixed version of gccfilter.
-OPTION(STLFILT_IN_IDE "If compiling from an IDE, turn off colorization" OFF)
-if (STLFILT_IN_IDE)
-    set(STLFILT_COLORIZE_FLAG "" CACHE INTERNAL "gccfilter flag for colorization" FORCE)
-else ()
-    set(STLFILT_COLORIZE_FLAG "-c" CACHE INTERNAL "gccfilter flag for colorization" FORCE)
-endif()
-
-SET(STLFILT_LEVEL 0 CACHE STRING "G++ STL message condensation level:  0, 1, 2, 3, 4, 5.  Higher is more terse, 0 is unmodified.")
-if("${STLFILT_LEVEL}" STREQUAL "1")
-    set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/utils/gccfilter/gccfilter ${STLFILT_COLORIZE_FLAG}")
-elseif("${STLFILT_LEVEL}" STREQUAL "2")
-    set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/utils/gccfilter/gccfilter ${STLFILT_COLORIZE_FLAG} -r -w")
-elseif("${STLFILT_LEVEL}" STREQUAL "3")
-    set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/utils/gccfilter/gccfilter ${STLFILT_COLORIZE_FLAG} -r -w -i")
-elseif("${STLFILT_LEVEL}" STREQUAL "4")
-    set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/utils/gccfilter/gccfilter ${STLFILT_COLORIZE_FLAG} -a -i")
-elseif("${STLFILT_LEVEL}" STREQUAL "5")
-    set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/utils/gccfilter/gccfilter ${STLFILT_COLORIZE_FLAG} -a -w -i")    
-endif()
 
 
 ###### TESTING
@@ -347,6 +323,7 @@ CMAKE_DEPENDENT_OPTION(ENABLE_COVERAGE "Enable Code Coverage Reporting" OFF
 CMAKE_DEPENDENT_OPTION(ENABLE_SANITIZER "Enable Sanitizer.  Choose via SANITIZER_STYLE" OFF
                         "ENABLE_TESTING;SUPPORTS_SANITIZER" OFF)
                         
+include("${CMAKE_SOURCE_DIR}/GCCFilter.cmake")
 
 ## LOGGING ENGINE configuration
 #function(update_test_options varname cacheaccess varval) 
