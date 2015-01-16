@@ -481,14 +481,32 @@ TODO:
 			DONE.  improved by removing CAS in loop during reserve.
 	2. KmerIndex:
 		1. thread global, lockfree memorybuffer version.  DONE
-		2. thread local memorybuffer-pool-buffer version.  DONE. testing
-		3. query interface
+		2. thread local memorybuffer-pool-buffer version.  DONE. using vector instead of unordered map to map thread to buffer.  20% slower compared to lockfree for test cases.
+		3. thread coordination in commlayer when flushing:  
+			as long as control message occurs after data message in an epoch, okay to have control message occur during the next epoch's data messaging.
+			when we require that all messages of a particular tag are completed before another tag:
+				need strict barrier 
+			when we have a query/response session and need to mark the end of the entire session:
+				need strict barrier
+				
+			unordered map is very much not thread safe.
+				distributed map may have problems because of that.
+			changing CommunicationLayer to minimize use of unordered map, and when do, use lock.
+				also lock access to unordered map.
+			
+		4. multithread callback functions.
+		5. query interface
 		
 	3. Memory ordering in buffer and Lockfree Queue
+		buffer: DONE
+		lockfree queue - default okay.
+		
 	4. KmerIndex construction:  
-		1. AllToAll version for construction - performance comparison
+		1. MPI collective version for construction and query - performance comparison
 		2. suffix array byproduct.
+		
 	5. other types of kmer indices
+		quality based.
 	
 	6. paper: 
 		performance comparison:

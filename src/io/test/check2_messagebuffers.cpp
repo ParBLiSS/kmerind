@@ -22,15 +22,15 @@
 #include <chrono>
 #include <cstdlib>   // for rand
 
-int nelems = 11;
+int nelems = 100;
 int bufferSize = 2048;
 std::string data("this is a test.  this a test of the emergency broadcast system.  this is only a test. ");
 
 
 template<typename BuffersType>
-void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int nthreads) {
+void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int nthreads) {
 
-  printf("*** TESTING pool lock %d buffer lock %d: ntargets = %lu, pool threads %d\n", poollt, bufferlt, buffers.getSize(), nthreads);
+  printf("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %d\n", poollt, bufferlt, buffers.getSize(), nthreads);
 
 
   printf("TEST append until full: ");
@@ -77,12 +77,12 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
 
   // compute 2 expected since append returns full buffer only on failed insert and if there are n inserts that brings it to just before full, then it depends on timing
   // as to when the buffer becomes full.  (other threads will fail on append until swap happens, but not return a full buffer.)
-  int expectedFull = success / (bufferSize/data.length()) - (success % (bufferSize/data.length()) == 0 ? 1 : 0);
-  int expectedFull2 = success / (bufferSize/data.length());
+  int expectedFullMax = success / (bufferSize/data.length());
+  int expectedFullMin = success / (bufferSize/data.length()) - nthreads;
 
   if (fullBuffers.getSize() != sswap + fswap) printf("\nFAIL: number of full Buffers do not match: fullbuffer size %ld  full count %d + %d", fullBuffers.getSize(), sswap, fswap);
   // buffer at 23 entries (86 bytes each, 2048 bytes per buffer) will not show as full until the next iterator.
-  else if (fswap + sswap != expectedFull && sswap + fswap != expectedFull2) printf("\nFAIL: number of full Buffers is not right: %d+%d should be %d or %d", sswap, fswap, expectedFull, expectedFull2);
+  else if (((fswap + sswap) > expectedFullMax) || ((sswap + fswap) < expectedFullMin)) printf("\nFAIL: number of full Buffers is not right: %d+%d should be between %d and %d", sswap, fswap, expectedFullMin, expectedFullMax);
   //else if (count4 != 0) printf("\nFAIL: number of failed insert due to no buffer should be 0. actual %d", count4);
   else printf("PASS");
   printf("\n");
@@ -119,13 +119,10 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
     }
   }
 
-  expectedFull = success / (bufferSize/data.length()) - (success % (bufferSize/data.length()) == 0 ? 1 : 0);
-  expectedFull2 = success / (bufferSize/data.length());
 
   if (error != 0) printf("\nFAIL: invalid argument exception during pop.  count = %d", error);
   else if (over != 10) printf("\nFAIL: failed on pop %d times, expected 10", over);
   else if (fswap2 != 0) printf("\nFAIL: succeeded in pop but not full buffer. %d", fswap2);
-  else if (sswap2 != expectedFull && sswap2 != expectedFull2) printf("FAIL: expected %d or %d full buffers, but received %d", expectedFull, expectedFull2, sswap2);
   else if (sswap2 != (sswap + fswap)) printf("\nFAIL: successful pops. expected %d.  actual %d", (sswap+fswap), sswap2);
   else
     printf("PASS");
@@ -136,7 +133,7 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
 
   printf("TEST all operations together: ");
   int success3 = 0, failure3 = 0, sswap3 = 0, fswap3 = 0, bytes3 = 0, chars3 = 0;
-  int gbytes = 0, gchars = 0;
+  int gbytes = 0;
   //printf("full buffer: ");
   id = 0;
 #pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, data, nelems, bufferSize) reduction(+ : success3, failure3, sswap3, fswap3, bytes3, chars3)
@@ -178,7 +175,7 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
   if (updating) printf("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
 
   std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id);
-  if (finals.size() != nthreads) printf("\nFAIL: expected %d threads have %lu actual.\n", nthreads, finals.size());
+  if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) printf("\nFAIL: expected %d threads have %lu actual.\n", nthreads, finals.size());
   for (auto final : finals) {
     gbytes += (final == nullptr) ? 0 : final->getSize();
     buffers.releaseBuffer(std::move(final));
@@ -224,6 +221,97 @@ void testPool(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss:
 };
 
 
+
+template<typename BuffersType>
+void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int nthreads) {
+
+  printf("*** TESTING Buffers WaitForInsert  lock %d buffer lock %d: ntargets = %lu, pool threads %d\n", poollt, bufferlt, buffers.getSize(), nthreads);
+
+  typedef typename BuffersType::BufferPtrType BufferPtrType;
+  bool op_suc = false;
+  BufferPtrType ptr = nullptr;
+  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType> fullBuffers;
+
+  //printf("test string is \"%s\", length %lu\n", data.c_str(), data.length());
+  int id = 0;
+
+  int i;
+  int swap = 0;
+
+  buffers.reset();
+
+  printf("TEST all operations together: ");
+  int bytes= 0;
+  int gbytes = 0, gbytes2 = 0;
+  //printf("full buffer: ");
+  id = 0;
+  int attempts = 0;
+#pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, data, nelems, bufferSize) reduction(+ : swap, bytes, attempts)
+  for (i = 0; i < nelems; ++i) {
+
+    bool twice = false;
+    do {
+      std::tie(op_suc, ptr) = buffers.append(data.c_str(), data.length(), id);
+      ++attempts;
+
+//      if (twice) {
+//        WARNINGF("WARNING: attempting to insert more than once: size %lu.  full buffer returned is %p", data.length(), ptr);
+//      }
+//      twice = true;
+
+      if (ptr) {
+        ++swap;
+//        count7 = count1;  // save the number of successful inserts so far.
+        bool updating = ptr->is_writing();
+        if (updating) printf("  FULLBUFFER1: size %ld updating? %s, blocked? %s\n", ptr->getSize(), (updating ? "Y" : "N"), (ptr->is_read_only() ? "Y" : "N"));
+
+        bytes += ptr->getSize();
+        buffers.releaseBuffer(std::move(ptr));
+      }
+
+
+    } while (!op_suc);
+
+  }
+
+  ptr = buffers.at(id);
+  ptr->block_and_flush();
+  bool updating = ptr->is_writing();
+  if (updating) printf("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
+
+  std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id);
+  if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) printf("\nFAIL: expected %d threads have %lu actual.\n", nthreads, finals.size());
+  for (auto final : finals) {
+    gbytes += (final == nullptr) ? 0 : final->getSize();
+    buffers.releaseBuffer(std::move(final));
+  }
+  finals.clear();
+
+  if ((bytes + gbytes) != nelems * data.length()) {
+    printf("\nFAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.\n", (bytes + gbytes), bytes, gbytes, (bytes + gbytes)/data.length(), nelems);
+  }
+
+  //if (count7 != count/data.length()) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
+  finals = buffers.flushBufferForRank(id);
+  for (auto final : finals) {
+    gbytes2 += (final == nullptr) ? 0 : final->getSize();
+    buffers.releaseBuffer(std::move(final));
+  }
+  finals.clear();
+
+  if (gbytes2 != 0) {
+    printf("\nFAIL: number of bytes STILL in message buffers is %d\n",gbytes2);
+  }
+
+  printf("PASS");
+  printf("\n");
+
+  //printf("\n");
+  printf("Number appended to buffer is %d, total attempts is %d. full buffers size: %lu.  success swapped = %d. total bytes %d + %d = %d\n", nelems, attempts, fullBuffers.getSize(), swap, bytes, gbytes, (bytes + gbytes));
+
+
+};
+
 int main(int argc, char** argv) {
 
   // construct, acquire, access, release
@@ -252,10 +340,13 @@ int main(int argc, char** argv) {
 //while(true) {
 
   for (int i = 1; i <= 8; ++i) {  // num targets
-    //testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
+    //testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i,1)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
 
     for (int j = 1; j <= 8; ++j) {  // num threads
-      testPool(std::move(bliss::io::SendMessageBuffers<lt, lt2, 2047>(i)), lt, lt2, j);
+      testBuffers(std::move(bliss::io::SendMessageBuffers<lt, lt2, 2047>(i, j)), lt, lt2, j);
+
+      testBuffersWaitForInsert(std::move(bliss::io::SendMessageBuffers<lt, lt2, 2047>(i, j)), lt, lt2, j);
+
     }
   }
 

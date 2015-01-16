@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
   {
   // initialize index
   printf("***** initializing index.\n");
-  bliss::index::KmerPositionIndex<21, DNA, bliss::io::FASTQ, false> kmer_index(comm, nprocs);
+  bliss::index::KmerPositionIndex<21, DNA, bliss::io::FASTQ, false> kmer_index(comm, nprocs, nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   printf("***** building index first pass.\n");
@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
   {
   // initialize index
   printf("***** initializing index.\n");
-  bliss::index::KmerCountIndex<21, DNA, bliss::io::FASTQ, false> kmer_index(comm, nprocs);
+  bliss::index::KmerCountIndex<21, DNA, bliss::io::FASTQ, false> kmer_index(comm, nprocs, nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   printf("***** building index first pass.\n");
@@ -177,7 +177,7 @@ int main(int argc, char** argv) {
   {
   // initialize index
   printf("***** initializing index.\n");
-  bliss::index::KmerPositionIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs);
+  bliss::index::KmerPositionIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   printf("***** building index first pass.\n");
@@ -215,7 +215,7 @@ int main(int argc, char** argv) {
   {
   // initialize index
   printf("***** initializing index.\n");
-  bliss::index::KmerCountIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs);
+  bliss::index::KmerCountIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   printf("***** building index first pass.\n");

@@ -286,8 +286,8 @@ protected:
    * @param hashFunction    The hash function to use for distributing elements
    *                        accross processors. Defaults to std::hash<K>().
    */
-  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, RemoteHasher hashFunction = RemoteHasher())
-      : commLayer(mpi_comm, comm_size), comm(mpi_comm), hashFunct(hashFunction),
+  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, int num_threads = 1, RemoteHasher hashFunction = RemoteHasher())
+      : commLayer(mpi_comm, comm_size, num_threads), comm(mpi_comm), hashFunct(hashFunction),
         has_pending_inserts(false), has_pending_lookups(false)
   {
 	  MPI_Comm_rank(comm, &commRank);
@@ -522,9 +522,9 @@ public:
    * @param hashFunction    The hash function to use for distributing elements
    *                        accross processors. Defaults to std::hash<K>().
    */
-  distributed_multimap (MPI_Comm mpi_comm, int comm_size,
+  distributed_multimap (MPI_Comm mpi_comm, int comm_size, int num_threads = 1,
         RemoteHasher hashFunction = RemoteHasher())
-      : _base_class(mpi_comm, comm_size, hashFunction)
+      : _base_class(mpi_comm, comm_size, num_threads, hashFunction)
   {
     // add comm layer receive callbacks
     using namespace std::placeholders;
@@ -688,9 +688,9 @@ public:
    * @param hashFunction    The hash function to use for distributing elements
    *                        accross processors. Defaults to std::hash<K>().
    */
-  distributed_counting_map (MPI_Comm mpi_comm, int comm_size,
+  distributed_counting_map (MPI_Comm mpi_comm, int comm_size, int num_threads = 1,
           RemoteHasher hashFunction = RemoteHasher())
-      : _base_class(mpi_comm, comm_size, hashFunction)
+      : _base_class(mpi_comm, comm_size, num_threads, hashFunction)
   {
     // add comm layer receive callbacks
     using namespace std::placeholders;

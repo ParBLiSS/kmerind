@@ -101,7 +101,7 @@ struct Tester
     }
   }
 
-  void test_comm_layer(int repeat_sends=10000, int nthreads = 1)
+  void test_comm_layer(int repeat_sends=10000)
   {
     DEBUG("Testing Comm Layer");
     DEBUG("Size: " << commLayer.getCommSize());
@@ -117,18 +117,19 @@ struct Tester
     commLayer.initCommunication();
 
     int iters = 2;
+    int nthreads = numThreads;
 
     for (int it = 0; it < iters; ++it) {
 
       // start sending one message to each:
-#pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank)
+#pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank, it, stdout)
       for (int i = 0; i < repeat_sends; ++i)
       {
 
         for (int j = 0; j < commSize; ++j)
         {
           int msg = generate_message(my_rank, j);
-          if (i % 1000 == 0) DEBUG("Rank " << my_rank << ", " << i << " of " << repeat_sends << " Sending " << msg << " to Rank " << j);
+          if (i % 1000 == 0) DEBUG("Iter " << it << " Rank " << my_rank << "." << omp_get_thread_num() << ", " << i << " of " << repeat_sends << " Sending " << msg << " to Rank " << j);
           commLayer.sendMessage(&msg, sizeof(int), j, FIRST_TAG);
         }
       }
@@ -137,25 +138,26 @@ struct Tester
 //        sleep(1);
 //      }
 
-      DEBUG("thread " << omp_get_thread_num() << " messages received = " << msgs_received.load());
+      DEBUG("Iter " << it << " Rank " << commRank << " thread " << omp_get_thread_num() << " FLUSH. so far messages received = " << msgs_received.load());
 
       // call the flush function for this tag
       commLayer.flush(FIRST_TAG);
 
       //=== debug messages show that there are no messages waiting.  so where are the missing messages?
-      DEBUG("thread " << omp_get_thread_num() << " flushed. messages received = " << msgs_received.load());
+      DEBUG("Iter " << it << " Rank " << commRank << " thread " << omp_get_thread_num() << " flushed. messages received = " << msgs_received.load());
 
 
     }
-
-
+    // call the finish function for this tag  //
+    commLayer.finish(FIRST_TAG);
+    INFO("Rank " << commRank << " COMM LAYER TAG 1 FINISHED.\n")
     // check that all messages have been received
-    if (msgs_received.load() != repeat_sends * commLayer.getCommSize() * iters)
+    if (msgs_received.load() != repeat_sends * commSize * iters)
     {
 //      ERROR("ERROR: wrong amount of messages received in phase 1");
 //      ERROR("received: " << msgs_received.load() << ", should: " << repeat_sends * commLayer.getCommSize() * iters);
-      std::cerr << "FAIL: wrong amount of messages received in phase 1" << std::endl;
-      std::cerr << "received: " << msgs_received.load() << ", should: " << repeat_sends * commLayer.getCommSize() * iters << std::endl;
+      std::cerr << "rank " << commRank << " FAIL: wrong amount of messages received in phase 1" << std::endl;
+      std::cerr << "rank " << commRank << " received: " << msgs_received.load() << ", should be: " << repeat_sends * commSize * iters << std::endl;
       exit(EXIT_FAILURE);
     }
     //std::cerr << "INDEX: " << msgs_received << std::endl;
@@ -164,34 +166,57 @@ struct Tester
     /* phase 2 communication */
 
     // sending one message to each:
-#pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank)
+#pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank, stdout)
     for (int i = 0; i < repeat_sends; ++i)
     {
 
       for (int j = 0; j < commSize; ++j)
       {
-        int msg = (my_rank+1)*(j+1);
-        if (i % 1000 == 0) DEBUG("Rank " << my_rank << " " << i << " of " << repeat_sends << " Querying " << msg << " at Rank " << i);
+        int msg = generate_message(my_rank, j);
+        if (i % 1000 == 0) DEBUG("Rank " << my_rank << "." << omp_get_thread_num() << " " << i << " of " << repeat_sends << " Querying " << msg);
         commLayer.sendMessage(&msg, sizeof(int), j, LOOKUP_TAG);
       }
     }
 
     // flush both tags
-    DEBUG("thread " << omp_get_thread_num() << " query messages received = " << msgs_received.load());
+    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " query messages received = " << lookup_received.load());
     commLayer.flush(LOOKUP_TAG);
-    DEBUG("thread " << omp_get_thread_num() << " query messages received = " << msgs_received.load());
+    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " query messages received = " << lookup_received.load());
 
-    DEBUG("thread " << omp_get_thread_num() << " answer messages received = " << msgs_received.load());
+    // flush both tags
+    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " query messages received = " << lookup_received.load());
+    commLayer.flush(LOOKUP_TAG);
+    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " query messages received = " << lookup_received.load());
+
+    //======== call flush twice helps to avoid error below.  HACK
+    // check that all messages have been received correctly
+    if (lookup_received != repeat_sends * commSize)
+    {
+      std::cerr << "rank " << commRank << " FAIL: wrong amount of lookup messages received in phase 2" << std::endl;
+      std::cerr << "rank " << commRank << " received: " << lookup_received.load() << ", should: " << repeat_sends * commSize << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " answer messages received = " << answers_received.load());
     commLayer.flush(ANSWER_TAG);
-    DEBUG("thread " << omp_get_thread_num() << " answer messages received = " << msgs_received.load());
+    DEBUG("rank " << commRank << "thread " << omp_get_thread_num() << " answer messages received = " << answers_received.load());
 
+    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " answer messages received = " << answers_received.load());
+    commLayer.flush(ANSWER_TAG);
+    DEBUG("rank " << commRank << "thread " << omp_get_thread_num() << " answer messages received = " << answers_received.load());
+
+    //======== call flush twice helps to avoid error below.  HACK
     // check that all messages have been received correctly
     if (answers_received != repeat_sends * commSize)
     {
-      std::cerr << "FAIL: wrong amount of messages received in phase 2" << std::endl;
-      std::cerr << "received: " << answers_received.load() << ", should: " << repeat_sends * commSize << std::endl;
+      std::cerr << "rank " << commRank << " FAIL: wrong amount of answer messages received in phase 2" << std::endl;
+      std::cerr << "rank " << commRank << " received: " << answers_received.load() << ", should: " << repeat_sends * commSize << std::endl;
       exit(EXIT_FAILURE);
     }
+
+    INFO("Rank " << commRank << " DONE DONE DONE. ");
+
+
 
 //    commLayer.finish(FIRST_TAG);
 //    commLayer.finishTag(LOOKUP_TAG);
@@ -206,18 +231,20 @@ struct Tester
 //    sleep(1);
     DEBUG("It's hard to overstate my satisfaction.");
 
-    std::cout << "DONE." << std::endl;
-
-    fflush(stdout);
+    INFO("DONE.");
   }
 
-  Tester(MPI_Comm comm, int comm_size) : commLayer(comm, comm_size), commSize(comm_size) {
+  Tester(MPI_Comm comm, int comm_size, int num_threads) :
+    commLayer(comm, comm_size, num_threads), commSize(comm_size), numThreads(num_threads) {
     //commLayer.startThreads();
+    MPI_Comm_rank(comm, &commRank);
   }
 
   bliss::io::CommunicationLayer<ThreadLocal> commLayer;
 
   int commSize;
+  int commRank;
+  int numThreads;
 };
 
 int main(int argc, char *argv[])
@@ -248,11 +275,11 @@ int main(int argc, char *argv[])
     answers_received.store(0);
 
 #if defined(THREADLOCAL)
-    Tester<true> tester(comm, p);
+    Tester<true> tester(comm, p, nthreads);
 #else
-    Tester<false> tester(comm, p);
+    Tester<false> tester(comm, p, nthreads);
 #endif
-    tester.test_comm_layer(elems, nthreads);
+    tester.test_comm_layer(elems);
 
     MPI_Barrier(comm);
   }

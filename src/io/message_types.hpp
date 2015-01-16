@@ -66,8 +66,6 @@ namespace bliss
      */
     struct ControlMessage : public MPIMessage
     {
-       using MessageTypeInfo = bliss::io::MessageTypeInfo;
-       using TaggedEpoch = typename MessageTypeInfo::TaggedEpoch;
       /// The received data
        TaggedEpoch tagged_epoch;
 
@@ -80,7 +78,7 @@ namespace bliss
        * @param src       the MPI source process rank
        */
       ControlMessage(TaggedEpoch _control, int rank)
-        : MPIMessage(MessageTypeInfo::CONTROL_TAG, rank), tagged_epoch(_control) {}
+        : MPIMessage(CONTROL_TAG, rank), tagged_epoch(_control) {}
 
       /**
        * @brief Constructs a new instance of this struct and sets all members as given.
@@ -91,7 +89,7 @@ namespace bliss
        * @param _dst  destination of the message
        */
       ControlMessage(int _tag, int _epoch, int rank)
-        : MPIMessage(MessageTypeInfo::CONTROL_TAG, rank), tagged_epoch(static_cast<TaggedEpoch>(_tag) << 32 | static_cast<TaggedEpoch>(_epoch)) {}
+        : MPIMessage(CONTROL_TAG, rank), tagged_epoch(static_cast<TaggedEpoch>(_tag) << 32 | static_cast<TaggedEpoch>(_epoch)) {}
 
 
       /// default constructor
