@@ -1133,17 +1133,14 @@ public:
     bool suc;
     BufferPtrType ptr;
 
-    bool twice = false;
+    int i = 0;
     do {
       // try append.  append fails if there is no buffer or no room
       //std::shared_ptr<MessageBuffersType> tptr = taginfo.getBuffer();
       //printf(" append:  ref count is %ld\n", buffers.at(tag).use_count());
       std::tie(suc, ptr) = taginfo.getBuffer()->append(data, nbytes, dst_rank);
+      ++i;
 
-      if (twice) {
-        WARNINGF("WARNING: attempting to insert more than once: data %p, size %lu, target %d, tag %d.  buffer returned is %p", data, nbytes, dst_rank, tag, ptr);
-      }
-      twice = true;
       //if (result.first != 0) printf("result = %d\n", result.first);
 
       if (ptr) {        // have a full buffer.  implies !result.first
@@ -1165,6 +1162,13 @@ public:
 
       // repeat until success;
     } while (!suc);
+
+
+    if (i > 1) {
+      WARNINGF("WARNING: insert took %d iterations: data %p, size %lu, target %d, tag %d", i, data, nbytes, dst_rank, tag);
+    }
+
+
   }
 
 
@@ -1448,6 +1452,7 @@ protected:
 
     if (ctrlMsgProperties.count(tag) == 0) {
       //lock.unlock();
+      ERRORF("W ERROR: invalid tag: tag has not been registered %d", tag);
       throw std::out_of_range("W invalid tag: tag has not been registered");
     }
     return ctrlMsgProperties.at(tag);

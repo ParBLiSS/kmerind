@@ -104,7 +104,7 @@ struct Tester
     }
   }
 
-  void test_comm_layer(int repeat_sends=10000)
+  void test_comm_layer(int iters, int repeat_sends)
   {
     DEBUG("Testing Comm Layer");
     DEBUG("Size: " << commLayer.getCommSize());
@@ -121,7 +121,6 @@ struct Tester
 
     int nthreads = numThreads;
     int it = 0;
-    int max_it = 1000;
     int i = 0;
 //    for (; it < max_it; ++it) {
 //
@@ -189,7 +188,7 @@ struct Tester
 
 
     /* phase 2 communication */
-    for (; it < max_it; ++it) {
+    for (; it < iters; ++it) {
       // sending one message to each:
   #pragma omp parallel for default(none) num_threads(nthreads) shared(repeat_sends, my_rank, it, after, stdout)
       for (i = 0; i < repeat_sends; ++i)
@@ -229,17 +228,17 @@ struct Tester
 
     //======== call flush twice helps to avoid error below.  HACK
     // check that all messages have been received correctly
-    if (lookup_received != repeat_sends * commSize * max_it)
+    if (lookup_received != repeat_sends * commSize * iters)
     {
-      ERRORF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti  ,\tM ,\tL%d, \tFAIL: expected %d", my_rank, LOOKUP_TAG, lookup_received.load(), repeat_sends * commSize * max_it);
+      ERRORF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti  ,\tM ,\tL%d, \tFAIL: expected %d", my_rank, LOOKUP_TAG, lookup_received.load(), repeat_sends * commSize * iters);
 //      exit(EXIT_FAILURE);
     }
 
     //======== call flush twice helps to avoid error below.  HACK
     // check that all messages have been received correctly
-    if (answers_received != repeat_sends * commSize * max_it)
+    if (answers_received != repeat_sends * commSize * iters)
     {
-      ERRORF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti  ,\tM ,\tL%d, \tFAIL: expected %d", my_rank, ANSWER_TAG, answers_received.load(), repeat_sends * commSize * max_it);
+      ERRORF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti  ,\tM ,\tL%d, \tFAIL: expected %d", my_rank, ANSWER_TAG, answers_received.load(), repeat_sends * commSize * iters);
 //      exit(EXIT_FAILURE);
     }
 
@@ -283,10 +282,16 @@ int main(int argc, char *argv[])
     nthreads = atoi(argv[1]);
   }
 
-  elems = 1536 * nthreads;
+  int elems = 1536 * nthreads;
   if (argc > 2) {
     elems = atoi(argv[2]);
   }
+
+  int iters = 10;
+  if (argc > 3) {
+    iters = atoi(argv[3]);
+  }
+
 
   // set up MPI
   MPI_Init(&argc, &argv);
@@ -308,7 +313,7 @@ int main(int argc, char *argv[])
 #else
     Tester<false> tester(comm, p, nthreads);
 #endif
-    tester.test_comm_layer(elems);
+    tester.test_comm_layer(iters, elems);
 
     MPI_Barrier(comm);
   }
