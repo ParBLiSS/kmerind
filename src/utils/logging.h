@@ -85,12 +85,12 @@
 
 #include <iostream>
 
-#define FATAL(MSG)      std::cerr << "[fatal] " << MSG << std::endl;
-#define ERROR(MSG)      std::cerr << "[error] " << MSG << std::endl;
-#define WARNING(MSG)    std::cerr << "[warn ] " << MSG << std::endl;
-#define INFO(MSG)       std::cerr << "[info ] " << MSG << std::endl;
-#define DEBUG(MSG)      std::cerr << "[debug] " << MSG << std::endl;
-#define TRACE(MSG)      std::cerr << "[trace] " << MSG << std::endl;
+#define FATAL(MSG)      std::cerr << "[fatal] " << MSG << std::endl << std::flush;
+#define ERROR(MSG)      std::cerr << "[error] " << MSG << std::endl << std::flush;
+#define WARNING(MSG)    std::cerr << "[warn ] " << MSG << std::endl << std::flush;
+#define INFO(MSG)       std::cerr << "[info ] " << MSG << std::endl << std::flush;
+#define DEBUG(MSG)      std::cerr << "[debug] " << MSG << std::endl << std::flush;
+#define TRACE(MSG)      std::cerr << "[trace] " << MSG << std::endl << std::flush;
 
 
 /*********************************************************************
@@ -103,12 +103,12 @@
 // NOTE: this is not thread safe
 #include <sstream>
 
-#define FATAL(MSG)    { std::stringstream ss; ss << MSG; printf("[fatal] %s\n", ss.str().c_str()); }
-#define ERROR(MSG)    { std::stringstream ss; ss << MSG; printf("[error] %s\n", ss.str().c_str()); }
-#define WARNING(MSG)  { std::stringstream ss; ss << MSG; printf("[warn ] %s\n", ss.str().c_str()); }
-#define INFO(MSG)     { std::stringstream ss; ss << MSG; printf("[info ] %s\n", ss.str().c_str()); }
-#define DEBUG(MSG)    { std::stringstream ss; ss << MSG; printf("[debug] %s\n", ss.str().c_str()); }
-#define TRACE(MSG)    { std::stringstream ss; ss << MSG; printf("[trace] %s\n", ss.str().c_str()); }
+#define FATAL(MSG)    { std::stringstream ss; ss << MSG; printf("[fatal] %s\n", ss.str().c_str()); fflush(stdout); }
+#define ERROR(MSG)    { std::stringstream ss; ss << MSG; printf("[error] %s\n", ss.str().c_str()); fflush(stdout); }
+#define WARNING(MSG)  { std::stringstream ss; ss << MSG; printf("[warn ] %s\n", ss.str().c_str()); fflush(stdout); }
+#define INFO(MSG)     { std::stringstream ss; ss << MSG; printf("[info ] %s\n", ss.str().c_str()); fflush(stdout); }
+#define DEBUG(MSG)    { std::stringstream ss; ss << MSG; printf("[debug] %s\n", ss.str().c_str()); fflush(stdout); }
+#define TRACE(MSG)    { std::stringstream ss; ss << MSG; printf("[trace] %s\n", ss.str().c_str()); fflush(stdout); }
 
 
 
@@ -260,7 +260,7 @@ void init()
 
 // macro to add file and line
 //#define _LOG_MSG(MSG) MSG << "\t(" << __FILE__ << ":" << __LINE__ << ")"
-#define _LOG_MSG(MSG) __FILE__ << ":" << __LINE__ << ":\t" << MSG
+#define _LOG_MSG(MSG) __FILE__ << ":" << __LINE__ << ":\t" << MSG ;
 
 
 #define FATAL(MSG)      BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::fatal) << _LOG_MSG(MSG);
@@ -294,6 +294,45 @@ void init()
 #define INFOF(MSG, ...)
 #define DEBUGF(MSG, ...)
 #define TRACEF(MSG, ...)
+
+#elif USE_LOGGER == BLISS_LOGGING_PRINTF
+
+#define FATALF(msg, ...) {\
+        printf("[fatal] ");\
+        printf(msg, ##__VA_ARGS__);\
+        printf("\n"); fflush(stdout); \
+        }
+
+#define ERRORF(msg, ...) {\
+        printf("[error] ");\
+        printf(msg, ##__VA_ARGS__);\
+        printf("\n"); fflush(stdout); \
+        }
+
+#define WARNINGF(msg, ...) {\
+        printf("[warn ] ");\
+        printf(msg, ##__VA_ARGS__);\
+        printf("\n"); fflush(stdout); \
+        }
+
+#define INFOF(msg, ...) {\
+        printf("[info ] ");\
+        printf(msg, ##__VA_ARGS__);\
+        printf("\n"); fflush(stdout); \
+        }
+
+#define DEBUGF(msg, ...) {\
+        printf("[debug] ");\
+        printf(msg, ##__VA_ARGS__);\
+        printf("\n"); fflush(stdout); \
+        }
+
+#define TRACEF(msg, ...) {\
+        printf("[trace] "); \
+        printf(msg, ##__VA_ARGS__);\
+        printf("\n"); fflush(stdout); \
+        }
+
 
 #else
 #define BLISS_SPRINTF_BUFFER_SIZE 256
