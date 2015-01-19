@@ -274,8 +274,8 @@ namespace bliss
             // leave ptr as nullptr.
             if (this->isUnlimited()) {
               ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", prev_size);
-            } else {
-              WARNINGF("WARNING: pool is full. prev size %lu.", prev_size);
+//            } else {
+//              WARNINGF("WARNING: mutex locked pool is full. prev size %lu.", prev_size);
             }
           } else {
 
@@ -326,8 +326,8 @@ namespace bliss
 
             if (this->isUnlimited()) {
               ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", prev_size);
-            } else {
-              WARNINGF("WARNING: pool is full. prev size %lu.", prev_size);
+//            } else {
+//              WARNINGF("WARNING: spinlock pool is full. prev size %lu.", prev_size);
             }
 
             // leave ptr as nullptr.
@@ -372,8 +372,9 @@ namespace bliss
 
           if (!ptr)
           {
-            ERRORF("ERROR pool releasing a nullptr.");
-            throw std::logic_error("ERROR pool releasing a nullptr.");
+            WARNINGF("WARNING: pool releasing a nullptr.");
+            //throw std::logic_error("ERROR pool releasing a nullptr.");
+            return true;
           }
 
           std::unique_lock<std::mutex> lock(mutex);
@@ -402,8 +403,9 @@ namespace bliss
 
           if (!ptr)
           {
-            ERRORF("ERROR pool releasing a nullptr.");
-            throw std::logic_error("ERROR pool releasing a nullptr.");
+            WARNINGF("WARNING: pool releasing a nullptr.");
+            //throw std::logic_error("ERROR pool releasing a nullptr.");
+            return true;
           }
 
           while (spinlock.test_and_set());
@@ -604,11 +606,11 @@ namespace bliss
 
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
-          size_t size = 0;
+          size_t size = in_use.size();
 
             // now get or create
             if (available.empty()) {
-              if ((size = getAvailableCount()) > 0) {
+              if (size < capacity) {
 
                 // none available for reuse
                 // but has room to allocate, so do it.
@@ -617,8 +619,8 @@ namespace bliss
                 // else already nullptr.
                 if (this->isUnlimited()) {
                   ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", size);
-                } else {
-                  WARNINGF("WARNING: pool is full. prev size %lu.", size);
+//                } else {
+//                  WARNINGF("WARNING: nonConcurrent pool is full. prev size %lu.", size);
                 }
               }
             } else {
@@ -645,8 +647,9 @@ namespace bliss
 
           if (!ptr)
           {
-            ERRORF("ERROR pool releasing a nullptr.");
-            throw std::logic_error("ERROR pool releasing a nullptr.");
+            WARNINGF("WARNING: pool releasing a nullptr.");
+            //throw std::logic_error("ERROR pool releasing a nullptr.");
+            return true;
           }
 
           bool res = false;            // nullptr would not be in in_use.

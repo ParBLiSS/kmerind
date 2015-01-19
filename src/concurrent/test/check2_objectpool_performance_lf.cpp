@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
 #if defined( BLISS_NONE )
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::NONE;
 #else
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::NONE;
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCKFREE;
 #endif
 
   std::chrono::high_resolution_clock::time_point t1, t2;
