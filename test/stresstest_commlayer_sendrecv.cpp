@@ -41,15 +41,19 @@ struct Tester
     bool error = false;
 
     // for all received requests, send the value from the lookup
+    int v;
+    int u;
     for (size_t i = 0; i < msg_count; ++i)
     {
+      v = msgs[i];
+
       if (after) {
           ERRORF("ERROR: Rank %d message received from %d after finish: %d, count %lu / %lu", my_rank, fromRank, msgs[i], i, msg_count);
           error = true;
       }
 
       // check that the message is as expected
-      if(msgs[i] != expected)
+      if(v != expected)
       {
         ERRORF("ERROR: LOOKUP message not as expected: %d expected %d, count %lu / %lu", msgs[i], expected, i, msg_count);
         error = true;
@@ -58,8 +62,12 @@ struct Tester
         lookup_received.fetch_add(1);
 
       }
-      int msg = msgs[i] + 1000;
-      commLayer.sendMessage(&msg, sizeof(int), fromRank, ANSWER_TAG);
+      u = v + 1000;
+
+
+      if ((u / 100000 != fromRank + 1) || (u % 1000 != my_rank + 1)) ERRORF("ERROR: DEBUG: ANSWER message not correct: %d <- %d u= %d", fromRank, my_rank, u);
+
+      commLayer.sendMessage(&u, sizeof(int), fromRank, ANSWER_TAG);
     }
     if (error) exit(EXIT_FAILURE);
   }
@@ -133,6 +141,10 @@ struct Tester
           int msg = generate_message(my_rank, j);
           if (i == 0 || i == els - 1 || after)
             DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, LOOKUP_TAG, i, els, msg);
+
+          if ((msg / 100000 != my_rank + 1) || (msg % 1000 != j + 1)) ERRORF("ERROR: DEBUG: LOOKUP response not correct: %d -> %d u= %d", my_rank, j, msg);
+
+
           commLayer.sendMessage(&msg, sizeof(int), j, LOOKUP_TAG);
         }
       }

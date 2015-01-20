@@ -540,6 +540,7 @@ protected:
 
                auto pair = std::make_pair(std::move(req), std::move(ptr));
                assert(ptr.get() == nullptr);
+
                assert(pair.second.get() != nullptr);
 
                sendInProgress.push_back(std::move(pair));
@@ -733,7 +734,8 @@ protected:
            assert(recvInProgress.front().second.get() != nullptr);
 
 
-           // check if MPI request has completed.
+           // check if MPI request has completed.      if (tptr->)
+
            if (recvInProgress.front().first == MPI_REQUEST_NULL) {  // locla message
              // this is a control message since it has no "request".
              mpi_finished = 1;
@@ -1132,13 +1134,20 @@ public:
     // along the way, if a full buffer's id is returned, queue it for sendQueue.
     bool suc;
     BufferPtrType ptr;
+    std::shared_ptr<MessageBuffersType> tptr;
+
+    // DEBUG ONLY
+    int m = *((int*)data);
+    if ((m/100000 != commRank + 1) || (m % 1000 != dst_rank + 1)) ERRORF("ERROR: DEBUG: CommLayer send wrong message: %d -> %d, msg %d", commRank, dst_rank, m);
+
 
     int i = 0;
     do {
       // try append.  append fails if there is no buffer or no room
       //std::shared_ptr<MessageBuffersType> tptr = taginfo.getBuffer();
       //printf(" append:  ref count is %ld\n", buffers.at(tag).use_count());
-      std::tie(suc, ptr) = taginfo.getBuffer()->append(data, nbytes, dst_rank);
+      tptr = taginfo.getBuffer();
+      std::tie(suc, ptr) = tptr->append(data, nbytes, dst_rank);
       ++i;
 
       //if (result.first != 0) printf("result = %d\n", result.first);

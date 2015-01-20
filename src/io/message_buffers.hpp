@@ -443,6 +443,12 @@ namespace bliss
 
           unsigned int appendResult = 0x0;
           auto ptr = this->at(targetProc);
+
+          // DEBUG ONLY
+          int m = *((int*)data);
+          if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong message: %d to proc %d", m, targetProc);
+
+
           if (ptr) appendResult = ptr->append(data, count);
           else {
             ERRORF("ERROR: Append: shared Buffer ptr is null and no way to swap in a different one.");
