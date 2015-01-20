@@ -446,8 +446,12 @@ namespace bliss
 
           // DEBUG ONLY
           int m = *((int*)data);
-          if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong message: %d to proc %d", m, targetProc);
-
+          if ((m / 1000) % 10 == 1) {
+            if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong message: %d to proc %d", m, targetProc);
+          }
+          else {
+            if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong message: %d to proc %d", m, targetProc);
+          }
 
           if (ptr) appendResult = ptr->append(data, count);
           else {

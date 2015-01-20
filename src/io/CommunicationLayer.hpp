@@ -1138,7 +1138,12 @@ public:
 
     // DEBUG ONLY
     int m = *((int*)data);
-    if ((m/100000 != commRank + 1) || (m % 1000 != dst_rank + 1)) ERRORF("ERROR: DEBUG: CommLayer send wrong message: %d -> %d, msg %d", commRank, dst_rank, m);
+    if ((m / 1000) % 10 == 1) {
+      if ((m % 1000 != commRank + 1) || (m / 100000 != dst_rank + 1)) ERRORF("ERROR: DEBUG: CommLayer send wrong message: %d -> %d, msg %d", commRank, dst_rank, m);
+    }
+    else {
+      if ((m/100000 != commRank + 1) || (m % 1000 != dst_rank + 1)) ERRORF("ERROR: DEBUG: CommLayer send wrong message: %d -> %d, msg %d", commRank, dst_rank, m);
+    }
 
 
     int i = 0;
