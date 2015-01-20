@@ -1045,7 +1045,7 @@ public:
    */
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size, const int num_src_threads)
     : sendQueue(), recvQueue(),
-      ctrlMsgProperties(), activeEpochCount(0),
+      ctrlMsgProperties(1), activeEpochCount(0),
       commThread(communicator, *this), callbackThread(*this), numSrcThreads(num_src_threads), initialized(false)
   {
     // init communicator rank and size
@@ -1090,6 +1090,12 @@ public:
 //      for (auto el : buffers) {
 //        delete el.second.load();
 //      }
+      for (int i = ctrlMsgProperties.size() - 1; i >= 0; --i) {
+        if( ctrlMsgProperties[i]) {
+          delete ctrlMsgProperties[i];
+          ctrlMsgProperties[i] = nullptr;
+        }
+      }
       ctrlMsgProperties.clear();
     }
   };
@@ -1220,14 +1226,18 @@ public:
 
     //== if there isn't already a tag listed, add the MessageBuffers for that tag.
     // multiple threads may call this.
-    if (ctrlMsgProperties.count(tag) == 0) {
+//    if (ctrlMsgProperties.count(tag) == 0) {
+    if (ctrlMsgProperties.size() <= tag) {
+      ctrlMsgProperties.resize(2 * tag);
+    }
+
       // create new message buffer and set it.
-      ctrlMsgProperties[tag] = std::move(MessageInfo(tag,
-                                                           std::shared_ptr<MessageBuffersType>(new MessageBuffersType(commSize, numSrcThreads)),
-                                                           commSize));
+      ctrlMsgProperties[tag] = new MessageInfo(tag,
+                                               std::shared_ptr<MessageBuffersType>(new MessageBuffersType(commSize, numSrcThreads)),
+                                               commSize);
 
       callbackThread.addReceiveCallback(tag, callbackFunction);
-    }
+//    }
 
     // now tell the callback thread to register the callbacks.
     lock.unlock();   // can unlock after this call because we are using recursive_mutex.
@@ -1357,20 +1367,22 @@ public:
 
     std::unique_lock<std::recursive_mutex> lock(mutex);
 
-    if (ctrlMsgProperties.count(CONTROL_TAG) > 0) {
-      lock.unlock();
-      throw std::logic_error("W initCommunication called multiple times");
-      //return;
-    }
+//    if (ctrlMsgProperties.count(CONTROL_TAG) > 0) {
+//      lock.unlock();
+//      throw std::logic_error("W initCommunication called multiple times");
+//      //return;
+//    }
+
+    assert(ctrlMsgProperties.size() > 0);
 
     //== init with control_tag only.  only 1 thread uses this.
-    ctrlMsgProperties[CONTROL_TAG] = std::move(MessageInfo(CONTROL_TAG,
+    ctrlMsgProperties[CONTROL_TAG] = new MessageInfo(CONTROL_TAG,
                                                                  std::shared_ptr<MessageBuffersType>(new MessageBuffersType(commSize, 1)),
-                                                                 commSize));
+                                                                 commSize);
     lock.unlock();
 
 
-    ctrlMsgProperties.at(CONTROL_TAG).acquireEpoch();
+    getTagInfo(CONTROL_TAG).acquireEpoch();
     activeEpochCount.fetch_add(1, std::memory_order_release);
 
     // TODO: deal with where to put the std::threads.
@@ -1407,19 +1419,23 @@ public:
     std::unique_lock<std::recursive_mutex> lock(mutex);  // not okay to use global mutex.
 
     // go through all tags and "finish" them, except for the final control tag.
-    std::vector<int> keys;   // get a list of keys, so we're not deleting from ctrlMsgProperties while iterating.
-    int key;
-    for (auto ctrlMsgIter = ctrlMsgProperties.begin(); ctrlMsgIter != ctrlMsgProperties.end(); ++ctrlMsgIter) {
-      key = ctrlMsgIter->first;
-      if (key != CONTROL_TAG && key >= 0) {
-         keys.push_back(key);
-      }
+//    std::vector<int> keys;   // get a list of keys, so we're not deleting from ctrlMsgProperties while iterating.
+//    int key;
+//    for (auto ctrlMsgIter = ctrlMsgProperties.begin(); ctrlMsgIter != ctrlMsgProperties.end(); ++ctrlMsgIter) {
+//      key = ctrlMsgIter->first;
+//      if (key != CONTROL_TAG && key >= 0) {
+//         keys.push_back(key);
+//      }
+//    }
+//    lock.unlock();
+//    // now delete.
+//	  for (int k : keys) {
+//	    finish(k);
+//    }
+    for (int i = 0; i < ctrlMsgProperties.size(); ++i) {
+      if (i != CONTROL_TAG && ctrlMsgProperties[i]) finish(i);
     }
-    lock.unlock();
-    // now delete.
-	  for (int k : keys) {
-	    finish(k);
-    }
+
 
     // send the control message for the final control tag.
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
@@ -1458,18 +1474,18 @@ public:
 protected:
 
   MessageTypeInfo<MessageBuffersType>& getTagInfo(int tag) throw (std::out_of_range) {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
-    //== check to see if the target tag is still accepting
-    // modification to ctrlMsgProperties only at finish, and finishCommunications, both are after sendMessage
-    //  after sendControlMessageAndWait.  these should be single threaded, so we don't need a lock here.
-    //std::unique_lock<std::recursive_mutex> lock(mutex);
+//    std::lock_guard<std::recursive_mutex> lock(mutex);
+//    //== check to see if the target tag is still accepting
+//    // modification to ctrlMsgProperties only at finish, and finishCommunications, both are after sendMessage
+//    //  after sendControlMessageAndWait.  these should be single threaded, so we don't need a lock here.
+//    //std::unique_lock<std::recursive_mutex> lock(mutex);
 
-    if (ctrlMsgProperties.count(tag) == 0) {
+    if (ctrlMsgProperties[tag] == nullptr) {
       //lock.unlock();
       ERRORF("W ERROR: invalid tag: tag has not been registered %d", tag);
       throw std::out_of_range("W invalid tag: tag has not been registered");
     }
-    return ctrlMsgProperties.at(tag);
+    return *(ctrlMsgProperties.at(tag));
   }
   void deleteTagInfo(int tag) throw (std::invalid_argument){
     std::lock_guard<std::recursive_mutex> lock(mutex);
@@ -1478,11 +1494,12 @@ protected:
     //  after sendControlMessageAndWait.  these should be single threaded, so we don't need a lock here.
     //std::unique_lock<std::recursive_mutex> lock(mutex);
 
-    if (ctrlMsgProperties.count(tag) == 0) {
+    if (ctrlMsgProperties[tag] == nullptr) {
       //lock.unlock();
       throw std::invalid_argument("W invalid tag: tag has not been registered");
     }
-    ctrlMsgProperties.erase(tag);
+    delete ctrlMsgProperties[tag];
+    ctrlMsgProperties[tag] = nullptr;
   }
 
 //  // TODO: convert to use try-catch of out-of-range exception.
@@ -1676,7 +1693,7 @@ protected:
    *
    *  require mutex.
    */
-  std::unordered_map<int, MessageInfo > ctrlMsgProperties;
+  std::vector< MessageInfo* > ctrlMsgProperties;
 
   // total count of active epochs.
   std::atomic<int> activeEpochCount;

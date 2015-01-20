@@ -90,16 +90,17 @@ struct Tester
 #pragma omp parallel for default(none) num_threads(nthreads) shared(els, my_rank, it, stdout)
       for (i = 0; i < els; ++i)
       {
-        int msg;
+        std::vector<int> msgs(commSize);
         for (int j = 0; j < commSize; ++j)
         {
-          msg = generate_message(my_rank, j);
+          msgs[j] = generate_message(my_rank, j);
+          commLayer.sendMessage(&(msgs[j]), sizeof(int), j, FIRST_TAG);
+          commLayer.sendMessage(&(msgs[j]), sizeof(int), j, FIRST_TAG);
           if (i == 0 || i == els - 1)
-            DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, FIRST_TAG, i, els, msg);
+            DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, FIRST_TAG, i, els, msgs[j]);
 
-          if ((msg / 100000 != my_rank + 1) || (msg % 1000 != j + 1)) ERRORF("ERROR: DEBUG: build not correct: %d -> %d u= %d", my_rank, j, msg);
+          if ((msgs[j] / 100000 != my_rank + 1) || (msgs[j] % 1000 != j + 1)) ERRORF("ERROR: DEBUG: build not correct: %d -> %d u= %d", my_rank, j, msgs[j]);
 
-          commLayer.sendMessage(&msg, sizeof(int), j, FIRST_TAG);
         }
       }
 

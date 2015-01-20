@@ -41,11 +41,9 @@ struct Tester
     bool error = false;
 
     // for all received requests, send the value from the lookup
-    int v;
-    int u;
+    std::vector<int> u(msg_count);
     for (size_t i = 0; i < msg_count; ++i)
     {
-      v = msgs[i];
 
       if (after) {
           ERRORF("ERROR: Rank %d message received from %d after finish: %d, count %lu / %lu", my_rank, fromRank, msgs[i], i, msg_count);
@@ -53,7 +51,7 @@ struct Tester
       }
 
       // check that the message is as expected
-      if(v != expected)
+      if(msgs[i] != expected)
       {
         ERRORF("ERROR: LOOKUP message not as expected: %d expected %d, count %lu / %lu", msgs[i], expected, i, msg_count);
         error = true;
@@ -62,12 +60,13 @@ struct Tester
         lookup_received.fetch_add(1);
 
       }
-      u = v + 1000;
+      u[i] = msgs[i] + 1000;
 
 
-      if ((u / 100000 != fromRank + 1) || (u % 1000 != my_rank + 1)) ERRORF("ERROR: DEBUG: ANSWER message not correct: %d <- %d u= %d", fromRank, my_rank, u);
+      if ((u[i] / 100000 != fromRank + 1) || (u[i] % 1000 != my_rank + 1)) ERRORF("ERROR: DEBUG: ANSWER message not correct: %d <- %d u= %d", fromRank, my_rank, u[i]);
 
-      commLayer.sendMessage(&u, sizeof(int), fromRank, ANSWER_TAG);
+      commLayer.sendMessage(&(u[i]), sizeof(int), fromRank, ANSWER_TAG);
+      commLayer.sendMessage(&(u[i]), sizeof(int), fromRank, ANSWER_TAG);
     }
     if (error) exit(EXIT_FAILURE);
   }
@@ -135,17 +134,19 @@ struct Tester
   #pragma omp parallel for default(none) num_threads(nthreads) shared(els, my_rank, it, after, stdout)
       for (i = 0; i < els; ++i)
       {
-
+        std::vector<int> msgs(commSize);
         for (int j = 0; j < commSize; ++j)
         {
-          int msg = generate_message(my_rank, j);
+          msgs[j] = generate_message(my_rank, j);
+          commLayer.sendMessage(&(msgs[j]), sizeof(int), j, LOOKUP_TAG);
+          commLayer.sendMessage(&(msgs[j]), sizeof(int), j, LOOKUP_TAG);
+
           if (i == 0 || i == els - 1 || after)
-            DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, LOOKUP_TAG, i, els, msg);
+            DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, LOOKUP_TAG, i, els, msgs[j]);
 
-          if ((msg / 100000 != my_rank + 1) || (msg % 1000 != j + 1)) ERRORF("ERROR: DEBUG: LOOKUP response not correct: %d -> %d u= %d", my_rank, j, msg);
+          if ((msgs[j] / 100000 != my_rank + 1) || (msgs[j] % 1000 != j + 1)) ERRORF("ERROR: DEBUG: LOOKUP response not correct: %d -> %d u= %d", my_rank, j, msgs[j]);
 
 
-          commLayer.sendMessage(&msg, sizeof(int), j, LOOKUP_TAG);
         }
       }
 
