@@ -569,7 +569,10 @@ namespace bliss
           }
           if (i > 200) WARNINGF("NOTICE: Concurrent Pool shared Buffer ptr took %d iterations to acquire, %d threads.", i, omp_get_num_threads());
 
-          if (ptr) ptr->clear_and_unblock_writes();
+          if (ptr) {
+            ptr->clear_and_unblock_writes();
+            memset(ptr->operator int*(), 0, ptr->getCapacity());
+          }
 
           auto oldbuf = buffers.at(dest).exchange(ptr);
           if (oldbuf && oldbuf->isEmpty()) {
@@ -621,7 +624,10 @@ namespace bliss
           }
           if (i > 200) WARNINGF("NOTICE: non Concurrent Pool shared Buffer ptr took %d iterations to acquire, %d threads.", i, omp_get_num_threads());
 
-          if (ptr) ptr->clear_and_unblock_writes();
+          if (ptr) {
+            ptr->clear_and_unblock_writes();
+            memset(ptr->operator int*(), 0, ptr->getCapacity());
+          }
 
           buffers.at(dest) = ptr;
           if (oldbuf && oldbuf->isEmpty()) {
@@ -1106,7 +1112,10 @@ namespace bliss
           if (i > 200) WARNINGF("NOTICE: non-Concurrent Pool threadlocal Buffer ptr took %d iterations to acquire, %d threads.", i, omp_get_num_threads());
 
 
-          if (ptr) ptr->clear_and_unblock_writes();
+          if (ptr) {
+            ptr->clear_and_unblock_writes();
+            memset(ptr->operator int*(), 0, ptr->getCapacity());
+          }
 
           buffers.at(dest).at(tid) = ptr;
           if (oldbuf && oldbuf->isEmpty()) {
