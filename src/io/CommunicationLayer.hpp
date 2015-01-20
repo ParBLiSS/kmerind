@@ -1111,7 +1111,7 @@ public:
    * @param dst_rank    The rank of the destination processor.
    * @param tag         The tag (type) of the message.
    */
-  void sendMessage(const void* data, std::size_t nbytes, int dst_rank, int tag)
+  void sendMessage(const void* data, const std::size_t nbytes, const int dst_rank, const int tag)
   {
     //== don't send control tag.
     assert(tag != CONTROL_TAG && tag >= 0);
@@ -1164,8 +1164,8 @@ public:
     } while (!suc);
 
 
-    if (i > 1) {
-      WARNINGF("WARNING: insert took %d iterations: data %p, size %lu, target %d, tag %d", i, data, nbytes, dst_rank, tag);
+    if (i > 200) {  // majority is small.
+      WARNINGF("NOTICE: insert took %d iterations: data %p, size %lu, target %d, tag %d, workers %d", i, data, nbytes, dst_rank, tag, omp_get_num_threads());
     }
 
 

@@ -22,29 +22,32 @@ struct Tester
   const int FIRST_TAG = 1;
   const int LOOKUP_TAG = 13;
 
-  int generate_message(int srcRank, int dstRank)
+  int generate_message(const int srcRank, const int dstRank)
   {
     return (srcRank + 1) * 100000 + (dstRank + 1);
   }
 
-  void receivedCallback(uint8_t* msg, std::size_t count, int fromRank)
+  void receivedCallback(uint8_t* msg, std::size_t count, const int fromRank)
   {
     //DEBUG("Rank " << my_rank << " received " << count << " message from process: " << fromRank);
 
     // first: deserialize
     int* msgs = reinterpret_cast<int*>(msg);
-    int msg_count = count / sizeof(int);
+    size_t msg_count = count / sizeof(int);
 
+    int expected = generate_message(fromRank, my_rank);
+    bool error = false;
     // for all received requests, send the value from the lookup
-    for (int i = 0; i < msg_count; ++i)
+    for (size_t i = 0; i < msg_count; ++i)
     {
       // check that the message is as expected
-      if(msgs[i] != generate_message(fromRank, my_rank))
+      if(msgs[i] != expected)
       {
-        ERRORF("ERROR: message not as expected.  Expected: %d Actual: %d", generate_message(fromRank, my_rank), msgs[i]);
-        ERRORF("\tmy rank: %d from rank %d message id = %d", my_rank, fromRank, msgs_received.load());
+        ERRORF("ERROR: message not as expected.  Expected: %d Actual: %d, my rank: %d from rank %d message id = %d, count %lu / %lu",
+        		expected, msgs[i], my_rank, fromRank, msgs_received.load(), i, msg_count);
 
-        exit(EXIT_FAILURE);
+        //exit(EXIT_FAILURE);
+        error = true;
       }
       else
       {
@@ -52,48 +55,8 @@ struct Tester
         msgs_received.fetch_add(1);
       }
     }
-  }
 
-  void lookup_callback(uint8_t* msg, std::size_t count, int fromRank)
-  {
-    // first: deserialize
-    int* msgs = reinterpret_cast<int*>(msg);
-    int msg_count = count / sizeof(int);
-
-    // for all received requests, send the value from the lookup
-    for (int i = 0; i < msg_count; ++i)
-    {
-      // check that the message is as expected
-      if(msgs[i] != (fromRank+1)* (my_rank+1))
-      {
-        ERRORF("ERROR: LOOKUP message not as expected: %d expected %d", msgs[i], generate_message(fromRank, my_rank));
-        exit(EXIT_FAILURE);
-      } else {
-        // DEBUG("SUCCESS: message received");
-        lookup_received.fetch_add(1);
-
-      }
-      int msg = msgs[i] + 13;
-      commLayer.sendMessage(&msg, sizeof(int), fromRank, ANSWER_TAG);
-    }
-  }
-
-  void answer_callback(uint8_t* msg, std::size_t count, int fromRank)
-  {
-    // first: deserialize
-    int* msgs = reinterpret_cast<int*>(msg);
-    int msg_count = count / sizeof(int);
-
-    for (int i = 0; i < msg_count; ++i)
-    {
-      // check that the message is as expected
-      if(msgs[i] != (fromRank+1)* (my_rank+1) + 13)
-      {
-        ERRORF("ERROR: ANSWER message not as expected: %d expected %d", msgs[i], generate_message(my_rank, fromRank) + 1000);
-        exit(EXIT_FAILURE);
-      }
-      answers_received.fetch_add(1);
-    }
+    if (error) exit(EXIT_FAILURE);
   }
 
   void test_comm_layer(int iters, int els)
@@ -106,8 +69,6 @@ struct Tester
     my_rank = commLayer.getCommRank();
     using namespace std::placeholders;
     commLayer.addReceiveCallback(FIRST_TAG, std::bind(&Tester::receivedCallback, this, _1, _2, _3));
-//    commLayer.addReceiveCallback(LOOKUP_TAG, std::bind(&Tester::lookup_callback, this, _1, _2, _3));
-//    commLayer.addReceiveCallback(ANSWER_TAG, std::bind(&Tester::answer_callback, this, _1, _2, _3));
 
     commLayer.initCommunication();
 
@@ -170,64 +131,10 @@ struct Tester
     //std::cerr << "INDEX: " << msgs_received << std::endl;
 
 
-    /* phase 2 communication */
-
-//    // sending one message to each:
-//#pragma omp parallel for default(none) num_threads(nthreads) shared(els, my_rank)
-//    for (int i = 0; i < els; ++i)
-//    {
-//
-//      for (int j = 0; j < commSize; ++j)
-//      {
-//        int msg = generate_message(my_rank, j);
-//        if (i % 1000 == 0) DEBUG("Rank " << my_rank << "." << omp_get_thread_num() << " " << i << " of " << els << " Querying " << msg);
-//        commLayer.sendMessage(&msg, sizeof(int), j, LOOKUP_TAG);
-//      }
-//    }
-//
-//    // flush both tags
-//    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " query messages received = " << lookup_received.load());
-//    commLayer.flush(LOOKUP_TAG);
-//    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " query messages received = " << lookup_received.load());
-//
-//    // flush both tags
-//    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " query messages received = " << lookup_received.load());
-//    commLayer.flush(LOOKUP_TAG);
-//    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " query messages received = " << lookup_received.load());
-//
-//    //======== call flush twice helps to avoid error below.  HACK
-//    // check that all messages have been received correctly
-//    if (lookup_received != els * commSize)
-//    {
-//      std::cerr << "rank " << commRank << " FAIL: wrong amount of lookup messages received in phase 2" << std::endl;
-//      std::cerr << "rank " << commRank << " received: " << lookup_received.load() << ", should: " << els * commSize << std::endl;
-//      exit(EXIT_FAILURE);
-//    }
-//
-//    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " answer messages received = " << answers_received.load());
-//    commLayer.flush(ANSWER_TAG);
-//    DEBUG("rank " << commRank << "thread " << omp_get_thread_num() << " answer messages received = " << answers_received.load());
-//
-//    DEBUG("rank " << commRank << " thread " << omp_get_thread_num() << " answer messages received = " << answers_received.load());
-//    commLayer.flush(ANSWER_TAG);
-//    DEBUG("rank " << commRank << "thread " << omp_get_thread_num() << " answer messages received = " << answers_received.load());
-//
-//    //======== call flush twice helps to avoid error below.  HACK
-//    // check that all messages have been received correctly
-//    if (answers_received != els * commSize)
-//    {
-//      std::cerr << "rank " << commRank << " FAIL: wrong amount of answer messages received in phase 2" << std::endl;
-//      std::cerr << "rank " << commRank << " received: " << answers_received.load() << ", should: " << els * commSize << std::endl;
-//      exit(EXIT_FAILURE);
-//    }
-
     INFOF("M R %d, SEND DONE. ", commRank);
 
 
 
-//    commLayer.finish(FIRST_TAG);
-//    commLayer.finishTag(LOOKUP_TAG);
-//    commLayer.finishTag(ANSWER_TAG);
     commLayer.finishCommunication();
 
     //std::cerr << "LOOKUP: " << lookup_received << " ANSWERS: " << answers_received << std::endl;

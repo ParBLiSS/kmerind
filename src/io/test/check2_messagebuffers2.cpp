@@ -306,18 +306,10 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
 #pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, nelems, bufferSize) reduction(+ : swap, bytes, attempts)
   for (i = 0; i < nelems; ++i) {
 
-    bool twice = false;
-
     do {
       int data = i;
       std::tie(op_suc, ptr) = buffers.append(&data, sizeof(int), id);
       ++attempts;
-
-
-//      if (twice) {
-//        WARNINGF("WARNING: attempting to insert more than once: size %lu.  full buffer returned is %p", sizeof(int), ptr);
-//      }
-//      twice = true;
 
       if (ptr) {
         ++swap;

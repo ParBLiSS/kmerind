@@ -567,7 +567,7 @@ namespace bliss
             ptr = this->pool.tryAcquireObject();
             ++i;
           }
-          if (i > 1) WARNINGF("WARNING: Concurrent Pool shared Buffer ptr took %d iterations to acuire.", i);
+          if (i > 200) WARNINGF("NOTICE: Concurrent Pool shared Buffer ptr took %d iterations to acquire, %d threads.", i, omp_get_num_threads());
 
           if (ptr) ptr->clear_and_unblock_writes();
 
@@ -619,7 +619,7 @@ namespace bliss
             ptr = this->pool.tryAcquireObject();
             ++i;
           }
-          if (i > 1) WARNINGF("WARNING: non Concurrent Pool shared Buffer ptr took %d iterations to acuire.", i);
+          if (i > 200) WARNINGF("NOTICE: non Concurrent Pool shared Buffer ptr took %d iterations to acquire, %d threads.", i, omp_get_num_threads());
 
           if (ptr) ptr->clear_and_unblock_writes();
 
@@ -1046,7 +1046,7 @@ namespace bliss
             ptr = this->pool.tryAcquireObject();
             ++i;
           }
-          if (i > 1) WARNINGF("WARNING: Concurrent Pool threadlocal Buffer ptr took %d iterations to acuire.", i);
+          if (i > 200) WARNINGF("NOTICE: Concurrent Pool threadlocal Buffer ptr took %d iterations to acquire, %d threads.", i, omp_get_num_threads());
 
           if (ptr) ptr->clear_and_unblock_writes();
 
@@ -1103,7 +1103,7 @@ namespace bliss
             ptr = this->pool.tryAcquireObject();
             ++i;
           }
-          if (i > 1) WARNINGF("WARNING: non-Concurrent Pool threadlocal Buffer ptr took %d iterations to acuire.", i);
+          if (i > 200) WARNINGF("NOTICE: non-Concurrent Pool threadlocal Buffer ptr took %d iterations to acquire, %d threads.", i, omp_get_num_threads());
 
 
           if (ptr) ptr->clear_and_unblock_writes();
