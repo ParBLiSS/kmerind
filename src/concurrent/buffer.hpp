@@ -1201,10 +1201,16 @@ namespace bliss
 /// DEBUG WRAPPER
         unsigned int append(const void* _data, const uint32_t count)  // _inserted is for DEBUGGING only.
         {
-          void* output;
+          void* output = nullptr;
           unsigned int result = append(_data, count, output);
 
-          if (std::memcmp(_data, output, count) != 0) ERRORF("ERROR: input not same as what was memcpy'd.");
+          if (result & 0x1) {
+            if (output == nullptr) {
+              ERRORF("ERROR: successful insert but result pointer is null.");
+            } else if (std::memcmp(_data, output, count) != 0) {
+              ERRORF("ERROR: successful insert but input not same as what was memcpy'd.");
+            }
+          }
 
           return result;
         }

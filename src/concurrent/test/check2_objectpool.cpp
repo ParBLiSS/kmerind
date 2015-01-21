@@ -148,6 +148,118 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 
 
 template<typename PoolType>
+void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_count, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, const int64_t buffer_cap) {
+
+
+  printf("TESTING: stress. %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %lu total counts from unlimited pool\n",
+         NumThreads, poollt, bufferlt, buffer_cap, total_count);
+
+
+  PoolType pool;
+
+  constexpr size_t elSize = sizeof(size_t);
+  size_t capInEl = buffer_cap / elSize;
+
+  int success = 0;
+  int failure = 0;
+  int failure2 = 0;
+  int failure3 = 0;
+  int swap = 0;
+  int i = 0;
+
+
+  auto buf_ptr = pool.tryAcquireObject();
+  if (buf_ptr) buf_ptr->clear_and_unblock_writes();
+
+
+#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, stdout, pool, capInEl) reduction(+:success, failure, failure2,failure3,swap)
+  for (i = 0; i < total_count; ++i) {
+
+    size_t data = i;
+    void* out = nullptr;
+
+    auto sptr = buf_ptr;
+    unsigned int result = 0x0;
+
+    if (sptr) {  // valid ptr
+      result = sptr->append(&data, sizeof(int), out);
+    }
+
+    if (result & 0x1) {
+      ++success;
+
+      if (out == nullptr) {
+        printf("ERROR: successful append but no pointer returned.\n");
+        fflush(stdout);
+        ++failure2;
+      } else {
+        size_t od = *((size_t*)out);
+        if (od != data) {
+          printf("ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. buffer %p data ptr %p, offset %ld\n",
+                 omp_get_thread_num(), data, od, sptr, sptr->operator char*(), (char*)out - sptr->operator char*());
+          fflush(stdout);
+          ++failure3;
+        }
+      }
+
+
+    }
+    else {
+      ++failure;
+      _mm_pause();  // slow it down a little.
+    }
+
+    if (result & 0x2) {
+
+      // swap in a new one.
+      auto new_buf_ptr = pool.tryAcquireObject();
+      if (new_buf_ptr) new_buf_ptr->clear_and_unblock_writes();
+
+      sptr = buf_ptr;
+      buf_ptr = new_buf_ptr;
+#pragma omp flush(buf_ptr)
+      //printf("SWAP: old buf %p, new buf %p\n", buf_ptr, sptr);
+
+      // this is showing a possible spurious wakeup...
+      int oldsize = sptr ? sptr->getSize() / elSize : 0;
+      if (oldsize != capInEl) {
+        fprintf(stdout, "FAIL atomic DID NOT GET 2047 elements 1. local swap = %d, i = %d. oldbuf %p, newbuf %p\n", swap, i, sptr, buf_ptr);
+      }
+
+      pool.releaseObject(sptr);
+      ++swap;
+
+    }
+
+  }
+
+
+  auto sptr = buf_ptr;
+  int last = 0;
+  if (sptr) {
+    sptr->block_and_flush();
+    last = sptr->getSize();
+    if (last == (capInEl)) {
+      ++swap;
+    }
+  }
+  pool.releaseObject(buf_ptr);
+
+  if (failure2 > 0 || failure3 > 0 ) {
+    printf("FAIL: bad inserts present: count of nullptr returned %d, count of bad value %d\n", failure2, failure3);
+  }
+
+  if (success == 0 || swap != success / (capInEl))
+    printf("FAIL atomic: success (%d), failure (%d,%d,%d), swap(%d/%ld), last buf size %d.\n", success, failure, failure2, failure3, swap, success / (capInEl), last);
+  else {
+    printf("PASS: atomic success %d, failure %d/%d/%d, swap %d, total %lu\n", success, failure, failure2, failure3, swap, total_count);
+
+  }
+}
+
+
+
+template<typename PoolType>
 void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int pool_threads, int buffer_threads) {
 
 
@@ -382,6 +494,10 @@ int main(int argc, char** argv) {
 
     testAppendMultipleBuffers<bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192> > >(i, 1000000, lt, bliss::concurrent::LockType::LOCKFREE, 8192);
 
+    // no swap.  insert 10M elements into 100MB buffer.
+    stresstestAppendMultipleBuffers<bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 100000000> > >(i, 10000000, lt, bliss::concurrent::LockType::LOCKFREE, 2048);
+
+    stresstestAppendMultipleBuffers<bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 2048> > >(i, 1000000000, lt, bliss::concurrent::LockType::LOCKFREE, 2048);
 
     // no multithread pool single thread buffer test right now.
     //testPool(std::move(bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >()), lt, bliss::concurrent::LockType::NONE, i, 1);
