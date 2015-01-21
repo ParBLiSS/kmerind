@@ -1146,7 +1146,7 @@ namespace bliss
          * @param[in] count   number of bytes to be copied into the Buffer
          * @return            unsigned char, bit 0 indicated whether operation succeeded, bit 1 indicating whether buffer swap is needed.
          */
-        unsigned int append(const void* _data, const uint32_t count)
+        unsigned int append(const void* _data, const uint32_t count, void* &_inserted)  // _inserted is for DEBUGGING only.
         {
 
           if (count == 0 || _data == nullptr)
@@ -1154,6 +1154,7 @@ namespace bliss
 
           // reserve a spot.
           int64_t pos = reserve<LockType>(count);
+          _inserted = nullptr;
 
           // if fails, then already full
           if (pos == -1)
@@ -1176,6 +1177,9 @@ namespace bliss
             std::memcpy(start_ptr.get() + pos, _data, count);
             complete_write<LockType>(count); // all full buffers lock the read and unlock the writer
 
+            // for DEBUGGING.
+            _inserted = start_ptr.get() + pos;
+
             if ((pos + count) == Capacity)
             { // thread that JUST filled the buffer
 
@@ -1194,6 +1198,16 @@ namespace bliss
           }
         }
 
+/// DEBUG WRAPPER
+        unsigned int append(const void* _data, const uint32_t count)  // _inserted is for DEBUGGING only.
+        {
+          void* output;
+          unsigned int result = append(_data, count, output);
+
+          if (std::memcmp(_data, output, count) != 0) ERRORF("ERROR: input not same as what was memcpy'd.");
+
+          return result;
+        }
     };
 
     /**

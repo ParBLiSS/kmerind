@@ -444,20 +444,40 @@ namespace bliss
           unsigned int appendResult = 0x0;
           auto ptr = this->at(targetProc);
 
-          // DEBUG ONLY
-          int m = *((int*)data);
-          if ((m / 1000) % 10 == 1) {
-            if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong message: %d to proc %d", m, targetProc);
-          }
-          else {
-            if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong message: %d to proc %d", m, targetProc);
-          }
+          if (ptr) {
+            // DEBUGGING ONLY
+            int m = *((int*)data);
+            if ((m / 1000) % 10 == 1) {
+              if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
+            }
+            else {
+              if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
+            }
+            void * result = nullptr;
 
-          if (ptr) appendResult = ptr->append(data, count);
+            appendResult = ptr->append(data, count, result);  //DEBUGGING FORM
+
+            // DEBUGGING ONLY
+            if (result != nullptr) {
+              m = *((int*)result);
+              if ((m / 1000) % 10 == 1) {
+                if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong outputmessage: %d to proc %d", m, targetProc);
+              }
+              else {
+                if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
+              }
+            } else {
+              if (appendResult & 0x1) {
+                ERRORF("ERROR: successful append but result ptr is null!");
+              }
+            }
+          }
           else {
             ERRORF("ERROR: Append: shared Buffer ptr is null and no way to swap in a different one.");
             throw std::logic_error("ERROR: Append: Shared Buffer ptr is null and no way to swap in a different one.");
           }
+
+
 //          unsigned int appendResult = this->at(targetProc)->append(data, count);
 
 //          printf("buffer blocked? %s, empty? %s\n", this->at(targetProc)->is_read_only()? "y" : "n", this->at(targetProc)->isEmpty() ? "y" : "n");
@@ -470,8 +490,6 @@ namespace bliss
           if (appendResult & 0x2) { // only 1 thread gets 0x2 result for a buffer.  all other threads either writes successfully or fails.
 
             return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer<PoolLT>(targetProc) ) );
-
-
           } else {
             //if (preswap != postswap) printf("ERROR: NOSWAP: preswap %p and postswap %p are not the same.\n", preswap, postswap);
             return std::move(std::make_pair(appendResult & 0x1, nullptr));
@@ -948,7 +966,35 @@ namespace bliss
 
           unsigned int appendResult = 0x0;
           BufferType* ptr = this->at(targetProc, thread_id);
-          if (ptr) appendResult = ptr->append(data, count);
+
+          if (ptr) {
+            // DEBUGGING ONLY
+            int m = *((int*)data);
+            if ((m / 1000) % 10 == 1) {
+              if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
+            }
+            else {
+              if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
+            }
+            void * result = nullptr;
+
+            appendResult = ptr->append(data, count, result);  //DEBUGGING FORM
+
+            // DEBUGGING ONLY
+            if (result != nullptr) {
+              m = *((int*)result);
+              if ((m / 1000) % 10 == 1) {
+                if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong outputmessage: %d to proc %d", m, targetProc);
+              }
+              else {
+                if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
+              }
+            } else {
+              if (appendResult & 0x1) {
+                ERRORF("ERROR: successful append but result ptr is null!");
+              }
+            }
+          }
           else {
             // do NOT swap in one here, since access here is concurrent, multiple threads may try to swap.
             ERRORF("ERROR: Append: threadlocal Buffer ptr is null and no way to swap in a different one.");
