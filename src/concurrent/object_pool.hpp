@@ -268,6 +268,7 @@ namespace bliss
 
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
+          // okay to add before compare, since object pool is long lasting.
           int64_t prev_size = size_in_use.fetch_add(1, std::memory_order_relaxed);
           if (prev_size >= capacity) {
             size_in_use.fetch_sub(1, std::memory_order_relaxed);
@@ -319,6 +320,7 @@ namespace bliss
 
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
+          // okay to add before compare, since object pool is long lasting.
           int64_t prev_size = size_in_use.fetch_add(1, std::memory_order_relaxed);
           if (prev_size >= capacity) {
 

@@ -57,7 +57,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
   int i = 0;
 
 
-
+  // TODO make this an atomic pointer.
   auto buf_ptr = pool.tryAcquireObject();
   if (buf_ptr) buf_ptr->clear_and_unblock_writes();
 
@@ -167,7 +167,7 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
   int swap = 0;
   int i = 0;
 
-
+  // TODO make this an atomic pointer.
   auto buf_ptr = pool.tryAcquireObject();
   if (buf_ptr) buf_ptr->clear_and_unblock_writes();
 
@@ -193,7 +193,7 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
         fflush(stdout);
         ++failure2;
       } else {
-        size_t od = *((size_t*)out);
+        size_t od = *(reinterpret_cast<size_t*>(out));
         if (od != data) {
           printf("ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. buffer %p data ptr %p, offset %ld\n",
                  omp_get_thread_num(), data, od, sptr, sptr->operator char*(), (char*)out - sptr->operator char*());
@@ -201,8 +201,6 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
           ++failure3;
         }
       }
-
-
     }
     else {
       ++failure;
@@ -497,7 +495,8 @@ int main(int argc, char** argv) {
     // no swap.  insert 10M elements into 100MB buffer.
     stresstestAppendMultipleBuffers<bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 100000000> > >(i, 10000000, lt, bliss::concurrent::LockType::LOCKFREE, 2048);
 
-    stresstestAppendMultipleBuffers<bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 2048> > >(i, 1000000000, lt, bliss::concurrent::LockType::LOCKFREE, 2048);
+//    // SWAP a lot - DATA RACE, but should not be resolved with mutex lock.
+//    stresstestAppendMultipleBuffers<bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 2048> > >(i, 1000000000, lt, bliss::concurrent::LockType::LOCKFREE, 2048);
 
     // no multithread pool single thread buffer test right now.
     //testPool(std::move(bliss::io::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >()), lt, bliss::concurrent::LockType::NONE, i, 1);

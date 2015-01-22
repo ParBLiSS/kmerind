@@ -18,10 +18,10 @@ SET_TARGET_PROPERTIES(testCommLayer_THREADLOCAL PROPERTIES COMPILE_FLAGS -DTHREA
 target_link_libraries(testCommLayer_THREADLOCAL ${EXTRA_LIBS})
 target_link_libraries(testCommLayer_THREADLOCAL bliss-common)
 
-## EXECUTABLES
-add_executable(testCommLayer_THREADSHARED test_commlayer.cpp)
-target_link_libraries(testCommLayer_THREADSHARED ${EXTRA_LIBS})
-target_link_libraries(testCommLayer_THREADSHARED bliss-common)
+### EXECUTABLES
+#add_executable(testCommLayer_THREADSHARED test_commlayer.cpp)
+#target_link_libraries(testCommLayer_THREADSHARED ${EXTRA_LIBS})
+#target_link_libraries(testCommLayer_THREADSHARED bliss-common)
 
 
 ## EXECUTABLES
@@ -30,10 +30,10 @@ SET_TARGET_PROPERTIES(stressTestCommLayer_sendonly_THREADLOCAL PROPERTIES COMPIL
 target_link_libraries(stressTestCommLayer_sendonly_THREADLOCAL ${EXTRA_LIBS})
 target_link_libraries(stressTestCommLayer_sendonly_THREADLOCAL bliss-common)
 
-## EXECUTABLES
-add_executable(stressTestCommLayer_sendonly_THREADSHARED stresstest_commlayer_sendonly.cpp)
-target_link_libraries(stressTestCommLayer_sendonly_THREADSHARED ${EXTRA_LIBS})
-target_link_libraries(stressTestCommLayer_sendonly_THREADSHARED bliss-common)
+### EXECUTABLES
+#add_executable(stressTestCommLayer_sendonly_THREADSHARED stresstest_commlayer_sendonly.cpp)
+#target_link_libraries(stressTestCommLayer_sendonly_THREADSHARED ${EXTRA_LIBS})
+#target_link_libraries(stressTestCommLayer_sendonly_THREADSHARED bliss-common)
 
 ## EXECUTABLES
 add_executable(stressTestCommLayer_sendrecv_THREADLOCAL stresstest_commlayer_sendrecv.cpp)
@@ -41,10 +41,10 @@ SET_TARGET_PROPERTIES(stressTestCommLayer_sendrecv_THREADLOCAL PROPERTIES COMPIL
 target_link_libraries(stressTestCommLayer_sendrecv_THREADLOCAL ${EXTRA_LIBS})
 target_link_libraries(stressTestCommLayer_sendrecv_THREADLOCAL bliss-common)
 
-## EXECUTABLES
-add_executable(stressTestCommLayer_sendrecv_THREADSHARED stresstest_commlayer_sendrecv.cpp)
-target_link_libraries(stressTestCommLayer_sendrecv_THREADSHARED ${EXTRA_LIBS})
-target_link_libraries(stressTestCommLayer_sendrecv_THREADSHARED bliss-common)
+### EXECUTABLES
+#add_executable(stressTestCommLayer_sendrecv_THREADSHARED stresstest_commlayer_sendrecv.cpp)
+#target_link_libraries(stressTestCommLayer_sendrecv_THREADSHARED ${EXTRA_LIBS})
+#target_link_libraries(stressTestCommLayer_sendrecv_THREADSHARED bliss-common)
 
 
 add_executable(testDistrMap test_distr_map.cpp)

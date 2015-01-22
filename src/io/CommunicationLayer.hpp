@@ -268,8 +268,13 @@ namespace io
  * TODO - replace uint8_t by typedef
  *
  */
-template<bool ThreadLocal = false>
-class CommunicationLayer
+/// DISABLED COMMLAYER THAT USES SHARED BUFFER - SWAPPING BUFFER PTR in MULTITHREADED CODE IS NOT SAFE.
+template<bool ThreadLocal>
+class CommunicatorLayer;
+
+
+template<>
+class CommunicationLayer<true>
 {
 
 

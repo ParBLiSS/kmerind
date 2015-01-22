@@ -371,18 +371,21 @@ int main(int argc, char** argv) {
     nelems = atoi(argv[1]);
   }
 
-#if defined( BLISS_MUTEX_LOCKFREE )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
-  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::LOCKFREE;
-#elif defined( BLISS_SPINLOCK_LOCKFREE )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
-  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::LOCKFREE;
-#elif defined( BLISS_MUTEX_NONE )
+
+#if defined( BLISS_MUTEX_NONE )
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
   constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
 #elif defined( BLISS_SPINLOCK_NONE )
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
   constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
+
+/// DISABLED BECAUSE SWAPPING THREADSAFE BUFFER PTRS IN MUTLITHREADED ENVIRONMENT IS NOT SAFE.
+//#elif defined( BLISS_MUTEX_LOCKFREE )
+//  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
+//  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::LOCKFREE;
+//#elif defined( BLISS_SPINLOCK_LOCKFREE )
+//  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
+//  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::LOCKFREE;
 #endif
 
   /// thread unsafe.  test in single thread way.

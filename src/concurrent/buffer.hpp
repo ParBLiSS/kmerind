@@ -1166,7 +1166,7 @@ namespace bliss
           else if (pos == -2)
           { // filled to beyond capacity
 
-            while (is_writing<LockType>())  // wait for write to complete
+            while (is_writing<LockType>())  // wait for other writes to complete
               _mm_pause();
             return 0x2;  // full, swapping.
           }

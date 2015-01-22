@@ -479,6 +479,20 @@ TODO:
 		3. memory buffers - need lockfree?  depend on underlying classes, so DONE.
 		4. buffer  - lockfree now.  need lockfree?  SIGNIFICANT IMPROVEMENT. also needto change memory ordering.
 			DONE.  improved by removing CAS in loop during reserve.
+			
+			
+		issue: swapping buffer ptrs in multithreaded code remains a problem - race conditions.
+				consequence is sporadic wrong values inserted.
+				if we don't swap, no problem.
+				
+		alternative:  single buffer with concurrentqueue backend.  enqueue multithreaded, dequeue in bulk by the comm thread.
+			no need for buffer pool in that case as well.  no swapping buffer (rely on concurrentqueue's internal memory management)
+			
+		
+			
+		Buffer ptr swap is NOT a good thing, so avoid it - in code and in tests.			
+			
+			
 	2. KmerIndex:
 		1. thread global, lockfree memorybuffer version.  DONE
 		2. thread local memorybuffer-pool-buffer version.  DONE. using vector instead of unordered map to map thread to buffer.  20% slower compared to lockfree for test cases.
@@ -493,7 +507,7 @@ TODO:
 				distributed map may have problems because of that.
 			changing CommunicationLayer to minimize use of unordered map, and when do, use lock.
 				also lock access to unordered map.
-			
+				
 		4. multithread callback functions.
 		5. query interface
 		
