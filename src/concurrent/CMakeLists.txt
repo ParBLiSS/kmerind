@@ -13,12 +13,10 @@ if (IS_DIRECTORY ./test)
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_buffer.cpp )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check2_buffer.cpp )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_LOCKFREE test/check2_buffer.cpp )
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_LOCKFREE2 test/check2_buffer.cpp )
 
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_buffer_performance.cpp )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check2_buffer_performance.cpp )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_LOCKFREE test/check2_buffer_performance.cpp )
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_LOCKFREE2 test/check2_buffer_performance.cpp )
 
     
     
