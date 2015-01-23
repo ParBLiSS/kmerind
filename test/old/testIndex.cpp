@@ -247,7 +247,7 @@ typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss
 typedef CharType* BaseIterType;
 
 typedef DNA Alphabet;
-typedef bliss::io::Sequence<BaseIterType, Alphabet>  SequenceType;
+typedef bliss::io::Sequence<BaseIterType>  SequenceType;
 
 typedef bliss::index::generate_kmer<SequenceType, KmerIndexType> kmer_op_type;
 typedef bliss::index::generate_qual<SequenceType, KmerSize, bliss::index::SangerToLogProbCorrect<double>, QualityType> qual_op_type;
@@ -345,7 +345,7 @@ int main(int argc, char* argv[])
     for (; fastq_start != fastq_end; ++fastq_start)
     {
 
-      id ^= (*fastq_start).id.composite;
+      id ^= (*fastq_start).id.file_pos;
       ++readCount;
     }
     t2 = std::chrono::high_resolution_clock::now();

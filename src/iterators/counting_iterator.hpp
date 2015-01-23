@@ -38,9 +38,6 @@ namespace bliss
         /// difference type
         using D = std::ptrdiff_t;
 
-        /// the start of the iterator
-        mutable T start;
-
         /// the stride for each iteration.
         mutable T stride;
 
@@ -54,24 +51,24 @@ namespace bliss
          * @param _start      first value
          * @param _stride     the distance traversed during each call to the increment/decrement method.
          */
-        CountingIterator(const T& _start, const T &_stride) : start(_start), stride(_stride), val(_start) {};
+        CountingIterator(const T& _start, const T &_stride) : stride(_stride), val(_start) {};
 
         /**
          * constructor, with stride defaults to 1.
          * @param _start    first value
          */
-        CountingIterator(const T& _start) : start(_start), stride(1), val(_start) {};
+        CountingIterator(const T& _start) : stride(1), val(_start) {};
 
         /**
          * default constructor, sets start to 0, stride to 1
          */
-        CountingIterator() : start(0), stride(1), val(0) {};
+        CountingIterator() : stride(1), val(0) {};
 
         /**
          * default copy constructor
          * @param other  instance of CountingIterator to copy from
          */
-        CountingIterator(const CountingIterator<T> & other) : start(other.start), stride(other.stride), val(other.val) {};
+        CountingIterator(const CountingIterator<T> & other) : stride(other.stride), val(other.val) {};
 
         /**
          * default copy assignment operator
@@ -79,7 +76,6 @@ namespace bliss
          * @return reference to self
          */
         CountingIterator<T>& operator=(const CountingIterator<T> & other) {
-          start = other.start;
           stride = other.stride;
           val = other.val;
           return *this;
@@ -89,8 +85,7 @@ namespace bliss
          * default move constructor
          * @param other  instance of CountingIterator to move from
          */
-        CountingIterator(CountingIterator<T> && other) : start(other.start), stride(other.stride), val(other.val) {
-          other.start = 0;
+        CountingIterator(CountingIterator<T> && other) : stride(other.stride), val(other.val) {
           other.stride = 1;
           other.val = 0;
         };
@@ -101,7 +96,6 @@ namespace bliss
          * @return reference to self
          */
         CountingIterator<T>& operator=(CountingIterator<T> && other) {
-          start = other.start;     other.start = 0;
           stride = other.stride;   other.stride = 1;
           val = other.val;         other.val = 0;
           return *this;
@@ -138,7 +132,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if equal, false otherwise.
          */
-        bool operator==(const CountingIterator<T>& other) {
+        bool operator==(const CountingIterator<T>& other) const {
           return val == other.val;
         }
 
@@ -147,7 +141,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if not equal, false otherwise.
          */
-        bool operator!=(const CountingIterator<T>& other) {
+        bool operator!=(const CountingIterator<T>& other) const {
           return !(this->operator==(other));
         }
 
@@ -217,7 +211,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if greater than, false otherwise.
          */
-        bool operator>(const CountingIterator<T>& other) {
+        bool operator>(const CountingIterator<T>& other) const {
           return val > other.val;
         }
 
@@ -226,7 +220,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if less than, false otherwise.
          */
-        bool operator<(const CountingIterator<T>& other) {
+        bool operator<(const CountingIterator<T>& other) const {
           return val < other.val;
         }
 
@@ -235,7 +229,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if greater than or equal to, false otherwise.
          */
-        bool operator>=(const CountingIterator<T>& other) {
+        bool operator>=(const CountingIterator<T>& other) const {
           return val >= other.val;
         }
 
@@ -244,7 +238,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if less than or equal to, false otherwise.
          */
-        bool operator<=(const CountingIterator<T>& other) {
+        bool operator<=(const CountingIterator<T>& other) const {
           return val <= other.val;
         }
 
@@ -273,7 +267,7 @@ namespace bliss
          * @param i offset at which the value is retrieved.
          * @return  value for ith offset
          */
-        T operator[](const D& i) {
+        T operator[](const D& i) const {
           return val + stride * i;
         }
 

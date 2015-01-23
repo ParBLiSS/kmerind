@@ -13,47 +13,76 @@
 #define BLISS_COMMON_BIT_OPS_H
 
 #include <limits>
+#include <type_traits>
 
 #include <common/base_types.hpp>
 
-constexpr WordType getWordBitMask(const BitSizeType nBits)
-{
-  return static_cast<WordType>((0x1 << nBits) - 1);
-}
-
-constexpr WordType getWordBitMask(const BitSizeType nBits, const BitSizeType offset)
-{
-  return static_cast<WordType>(static_cast<WordType>((0x1 << nBits) - 1) << (offset));
-}
-
-constexpr CharType getCharBitMask(const BitSizeType nBits)
-{
-  return static_cast<CharType>((0x1 << nBits) - 1);
-}
-
-constexpr WordType getCharBitMask(const BitSizeType nBits, const BitSizeType offset)
-{
-  return static_cast<CharType>(static_cast<CharType>((0x1 << nBits) - 1) << (offset));
-}
-
 template <typename T>
-constexpr T getBitMask(const BitSizeType nBits)
+constexpr T getLeastSignificantBitsMask(const BitSizeType nBits)
 {
+  // unsigned integer type:  fine.
+  // max for signed integer has sign bit (msb) == 0, but digits does not count sign bit.
+  // this does not make sense for floating or any other type, so assert.
+  static_assert(std::is_integral<T>::value, "getBitMask only accepts primitive, integral type.");
   return static_cast<T>(std::numeric_limits<T>::max() >> (std::numeric_limits<T>::digits - nBits));
   //return static_cast<T>((static_cast<T>(0x1) << nBits) - static_cast<T>(1));
 }
 
 template <typename T>
+constexpr T getMostSignificantBitsMask(const BitSizeType nBits)
+{
+  // unsigned integer type:  fine.
+  // max for signed integer has sign bit (msb) == 0, but digits does not count sign bit.
+  // this does not make sense for floating or any other type, so assert.
+  static_assert(std::is_integral<T>::value, "getBitMask only accepts primitive, integral type.");
+  return static_cast<T>(std::numeric_limits<T>::max() << (std::numeric_limits<T>::digits - nBits));
+  //return static_cast<T>((static_cast<T>(0x1) << nBits) - static_cast<T>(1));
+}
+
+template <typename T>
+constexpr T getBitsMask(const BitSizeType nBits, const BitSizeType leastSignficantBitsOffset)
+{
+  return getLeastSignificantBitsMask<T>(nBits) << leastSignficantBitsOffset;
+}
+
+
+constexpr WordType getWordBitMask(const BitSizeType nBits)
+{
+  //return static_cast<WordType>((0x1 << nBits) - 1);
+  return getLeastSignificantBitsMask<WordType>(nBits);
+}
+
+constexpr WordType getWordBitMask(const BitSizeType nBits, const BitSizeType offset)
+{
+  //return static_cast<WordType>(static_cast<WordType>((0x1 << nBits) - 1) << (offset));
+  return getBitsMask<WordType>(nBits, offset);
+}
+
+constexpr CharType getCharBitMask(const BitSizeType nBits)
+{
+  return getLeastSignificantBitsMask<CharType>(nBits);
+}
+
+constexpr CharType getCharBitMask(const BitSizeType nBits, const BitSizeType offset)
+{
+  return getBitsMask<CharType>(nBits, offset);
+}
+
+
+
+
+
+template <typename T>
 void copyBits(T& to, const T& from, const BitSizeType bits)
 {
-  const T mask = getBitMask<T>(bits);
+  const T mask = getLeastSignificantBitsMask<T>(bits);
   to = ((~mask) & to) | (mask & from);
 }
 
 template <typename T, unsigned int bits>
 void copyBitsFixed(T& to, const T& from)
 {
-  constexpr T mask = getBitMask<T>(bits);
+  constexpr T mask = getLeastSignificantBitsMask<T>(bits);
   to = ((~mask) & to) | (mask & from);
 }
 

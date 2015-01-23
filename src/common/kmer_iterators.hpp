@@ -39,12 +39,12 @@ template <class BaseIterator, class Kmer>
 class KmerSlidingWindow {};
 
 template <typename BaseIterator, unsigned int KMER_SIZE,
-          unsigned int BITS_PER_CHAR, typename word_type>
-class KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> >
+          typename ALPHABET, typename word_type>
+class KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> >
 {
 public:
   /// The Kmer type (same as the `value_type` of this iterator)
-  typedef bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> kmer_type;
+  typedef bliss::Kmer<KMER_SIZE, ALPHABET, word_type> kmer_type;
   /// The value_type of the underlying iterator
   typedef typename std::iterator_traits<BaseIterator>::value_type base_value_type;
 
@@ -104,23 +104,23 @@ template <class BaseIterator, class Kmer>
 class KmerGenerationIterator {};
 
 // template specialization for bliss::Kmer as kmer type
-// The template parameters KMER_SIZE, BITS_PER_CHAR and word_type are
+// The template parameters KMER_SIZE, ALPHABET and word_type are
 // set to the appropriate template parameters of bliss::Kmer and do not
 // have to be explicitly stated when creating this class.
-template <typename BaseIterator, unsigned int KMER_SIZE, unsigned int BITS_PER_CHAR, typename word_type>
-class KmerGenerationIterator<BaseIterator, bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> >
-: public iterator::sliding_window_iterator<BaseIterator, KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> > >
+template <typename BaseIterator, unsigned int KMER_SIZE, typename ALPHABET, typename word_type>
+class KmerGenerationIterator<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> >
+: public iterator::sliding_window_iterator<BaseIterator, KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> > >
 {
 protected:
   /// The type of the base class
-  typedef iterator::sliding_window_iterator<BaseIterator, KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> > >
+  typedef iterator::sliding_window_iterator<BaseIterator, KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> > >
  base_class_t;
 
   /// The difference_type of character offsets
   typedef typename std::iterator_traits<base_class_t>::difference_type diff_type;
 
   /// The type of the sliding window.
-  typedef KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> > functor_t;
+  typedef KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> > functor_t;
 
 public:
   /// Default constructor.
@@ -197,16 +197,16 @@ template <class BaseIterator, class Kmer>
 class PackedKmerSlidingWindow {};
 
 template <typename BaseIterator, unsigned int KMER_SIZE,
-          unsigned int BITS_PER_CHAR, typename word_type>
-class PackedKmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> >
+          typename ALPHABET, typename word_type>
+class PackedKmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> >
 {
 public:
   /// The Kmer type (same as the `value_type` of this iterator)
-  typedef bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> kmer_type;
+  typedef bliss::Kmer<KMER_SIZE, ALPHABET, word_type> kmer_type;
   /// The value_type of the underlying iterator
   typedef typename std::iterator_traits<BaseIterator>::value_type base_value_type;
   /// The padding traits of the underlying stream
-  typedef PaddingTraits<base_value_type, BITS_PER_CHAR> padtraits;
+  typedef PackingTraits<base_value_type, bliss::AlphabetTraits<ALPHABET>::getBitsPerChar()> padtraits;
 
   /**
    * @brief Initializes the sliding window.
@@ -228,7 +228,7 @@ public:
     // fill kmer from the given packed and padded stream
     // this leaves the iterator and the offset ON the last read position
     // and NOT AFTER this (i.e. NOT on the position to be read NEXT)
-    offset = kmer.fillFromPaddedStream(it, true);
+    offset = kmer.fillFromPackedStream(it, offset, true);
   }
 
   /**
@@ -247,7 +247,7 @@ public:
   template<typename offset_t>
   inline void next(BaseIterator& it, offset_t& offset)
   {
-    kmer.nextFromPaddedStream(it, offset);
+    kmer.nextFromPackedStream(it, offset);
   }
 
   /**
@@ -308,27 +308,27 @@ template <class BaseIterator, class Kmer>
 class PackedKmerGenerationIterator {};
 
 // template specialization for bliss::Kmer as kmer type
-// The template parameters KMER_SIZE, BITS_PER_CHAR and word_type are
+// The template parameters KMER_SIZE, ALPHABET and word_type are
 // set to the appropriate template parameters of bliss::Kmer and do not
 // have to be explicitly stated when creating this class.
 template <typename BaseIterator, unsigned int KMER_SIZE,
-          unsigned int BITS_PER_CHAR, typename word_type>
+          typename ALPHABET, typename word_type>
 class PackedKmerGenerationIterator<BaseIterator,
-      bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> >
+      bliss::Kmer<KMER_SIZE, ALPHABET, word_type> >
 : public iterator::one2many_sliding_window_iterator<BaseIterator,
           PackedKmerSlidingWindow<BaseIterator,
-                bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> > >
+                bliss::Kmer<KMER_SIZE, ALPHABET, word_type> > >
 {
 protected:
   /// The type of the base class
-  typedef iterator::one2many_sliding_window_iterator<BaseIterator, PackedKmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> > >
+  typedef iterator::one2many_sliding_window_iterator<BaseIterator, PackedKmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> > >
  base_class_t;
 
   /// The difference_type of character offsets
   typedef typename std::iterator_traits<base_class_t>::difference_type diff_type;
 
   /// The type of the sliding window.
-  typedef PackedKmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, BITS_PER_CHAR, word_type> > functor_t;
+  typedef PackedKmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> > functor_t;
 
 public:
   /// Default constructor

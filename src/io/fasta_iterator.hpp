@@ -64,12 +64,12 @@ namespace bliss
      * @tparam    Kmer          bliss::Kmer type
      * @tparam    AlphabetType  allows interpretation of the sequence (Example : DNA, DNA5)
      */
-    template<typename Iterator, typename Kmer, typename AlphabetType>
+    template<typename Iterator, typename KmerType>
     class FASTAParser
     {
       protected:
         //Type for the offset
-        typedef typename FASTALoader<Iterator>::offSetType offSetType;
+        typedef typename FASTALoader<Iterator,KmerType>::offSetType offSetType;
 
         //Counting iterator
         typedef typename boost::counting_iterator<offSetType> 
@@ -85,7 +85,7 @@ namespace bliss
           transformed_seq_iterator;
 
         //Converting raw character Iterator to Kmer Iterator (filtering later)
-        typedef bliss::KmerGenerationIterator<transformed_seq_iterator, Kmer> KmerIncompleteIterator;
+        typedef bliss::KmerGenerationIterator<transformed_seq_iterator, KmerType> KmerIncompleteIterator;
 
         //Tuple of two iterators id and Kmer iterator over raw data
         typedef boost::tuple<offset_transform_iterator, KmerIncompleteIterator> 
@@ -101,13 +101,13 @@ namespace bliss
           corrected_offset_Kmer_zip;
 
         //Vector containing positions of fasta record start
-        typedef typename FASTALoader<Iterator>::vectorType vectorType;
+        typedef typename FASTALoader<Iterator,KmerType>::vectorType vectorType;
 
         /// iterator for the vector 
         typedef typename vectorType::iterator vectorIteratorType;
 
         //Type for specifying file range
-        typedef typename FASTALoader<Iterator>::RangeType RangeType;
+        typedef typename FASTALoader<Iterator,KmerType>::RangeType RangeType;
 
         /// iterator at the current starting point in the input data from where the current FASTQ record was parsed.
         Iterator _curr;
@@ -122,6 +122,11 @@ namespace bliss
          * @brief     the offset of start and end of the search range.  This is used for generating the sequenceId.
          */
         RangeType _offsetRange;
+
+        /**
+         * @brief     the offset of start and end of the complete file range.  This is used for generating the sequenceId.
+         */
+        RangeType _parentRange;
 
         // Iterator to iterate over the vector of tuples
         vectorIteratorType _localStartLocStoreBeginIter;
@@ -152,23 +157,25 @@ namespace bliss
          *
          * @param start                 beginning of the data to be parsed
          * @param end                   end of the data to be parsed.
-         * @param offset                position number relative to the file being processed.
+         * @param searchRange           offset range local to this execution
+         * @param parentRange           offset range for the whole file
          * @param localStartLocStore    vector of tuples that stores fasta sequence header's begin and index offset 
          */
         FASTAParser(const Iterator& start, const Iterator& end, 
-            const RangeType &offsetRange, const vectorType &localStartLocStore)
+            const RangeType &searchRange, const RangeType &parentRange, const vectorType &localStartLocStore)
         {
           _curr = start;
           _end = end;
-          _offsetRange = offsetRange;
+          _offsetRange = searchRange;
+          _parentRange = parentRange;
           _localStartLocStore = localStartLocStore;
           _localStartLocStoreBeginIter = _localStartLocStore.begin();
           _localStartLocStoreEndIter = _localStartLocStore.end();
 
-          //DEBUG
-          std::cout << "Printing start tuple values \n" ;
-          for(auto iter=_localStartLocStore.begin(); iter!= _localStartLocStore.end(); iter++)
-            std::cout << (*iter).first << ", " << (*iter).second << "\n";
+          //For DEBUG
+          //std::cout << "Printing start tuple values \n" ;
+          //for(auto iter=_localStartLocStore.begin(); iter!= _localStartLocStore.end(); iter++)
+            //std::cout << (*iter).first << ", " << (*iter).second << "\n";
         }
 
         FASTAParser() = delete; 
@@ -178,8 +185,6 @@ namespace bliss
          * @return  start FASTA iterator as zip iterator (id, kmer)
          */
         corrected_offset_Kmer_zip begin(){
-          std::cout << "Start of the begin function" << std::endl;
-
           //Initialise the begin and end of the base sequence iterator
           Iterator sequenceBegin = _curr;
           Iterator sequenceEnd = _end;
@@ -190,7 +195,7 @@ namespace bliss
 
           //Transform counter elements to ids by using transform iterator
           //Functor for the tranformation
-          returnOffset<offSetType> transformFunctor(_localStartLocStoreBeginIter, _localStartLocStoreEndIter, _offsetRange);
+          returnOffset<offSetType> transformFunctor(_localStartLocStoreBeginIter, _localStartLocStoreEndIter, _offsetRange, _parentRange);
 
           offset_transform_iterator idBeginCorrect = offset_transform_iterator(countBegin, transformFunctor);
           offset_transform_iterator idEndCorrect = offset_transform_iterator(countEnd, transformFunctor);
@@ -213,12 +218,8 @@ namespace bliss
           the_offset_rawkmer_zip idKmerZipStart = the_offset_rawkmer_zip(idKmerStart);
           the_offset_rawkmer_zip idKmerZipEnd = the_offset_rawkmer_zip(idKmerEnd);
 
-          std::cout << "Beginning filtering" << std::endl;
           //Filter the zip iterator using filter iterator; need both start and end iterators for the constructor
           corrected_offset_Kmer_zip idSeqZipStartCorrect = corrected_offset_Kmer_zip(filterFunctor, idKmerZipStart, idKmerZipEnd);
-          std::cout << "Ending filtering" << std::endl;
-
-          std::cout << "End of the begin function" << std::endl;
 
           return idSeqZipStartCorrect;
         }
@@ -228,7 +229,6 @@ namespace bliss
          * @return  end FASTA iterator as zip iterator (id, kmer)
          */
         corrected_offset_Kmer_zip end(){
-          std::cout << "Begin of the end function" << std::endl;
 
           //Initialise the end of the base sequence iterator
           Iterator sequenceEnd = _end;
@@ -238,7 +238,7 @@ namespace bliss
 
           //Transform counter elements to ids by using transform iterator
           //Functor for the tranformation
-          returnOffset<offSetType> transformFunctor(_localStartLocStoreBeginIter, _localStartLocStoreEndIter, _offsetRange);
+          returnOffset<offSetType> transformFunctor(_localStartLocStoreBeginIter, _localStartLocStoreEndIter, _offsetRange, _parentRange);
           offset_transform_iterator idEndCorrect = offset_transform_iterator(countEnd, transformFunctor);
 
           //Converted sequence iterator from ascii to concise format 
@@ -255,12 +255,8 @@ namespace bliss
           //Zip the tuple 
           the_offset_rawkmer_zip idKmerZipEnd = the_offset_rawkmer_zip(idKmerEnd);
 
-          std::cout << "Beginning filtering" << std::endl;
           //Filter the zip iterator using filter iterator; need both start and end iterators for the constructor
           corrected_offset_Kmer_zip idSeqZipEndCorrect = corrected_offset_Kmer_zip(filterFunctor, idKmerZipEnd, idKmerZipEnd);
-          std::cout << "Ending filtering" << std::endl;
-
-          std::cout << "End of the end function" << std::endl;
 
           return idSeqZipEndCorrect;
         }
@@ -270,7 +266,7 @@ namespace bliss
           return boost::get<0>(*e);
         }
 
-        Kmer getKmer(corrected_offset_Kmer_zip &e)
+        KmerType getKmer(corrected_offset_Kmer_zip &e)
         {
           return boost::get<1>(*e);
         }
@@ -291,15 +287,17 @@ namespace bliss
           eleType leftIndex;
           eleType rightIndex;
           RangeType offsetRange; 
+          RangeType parentRange;
 
           //Constructor (mandatory to use this)
-          returnOffset(vectorIteratorType &_localStartLocStoreBeginIter, vectorIteratorType &_localStartLocStoreEndIter, const RangeType &_offsetRange)
+          returnOffset(vectorIteratorType &_localStartLocStoreBeginIter, vectorIteratorType &_localStartLocStoreEndIter, const RangeType &_offsetRange, const RangeType &_parentRange)
           {
             localStartLocStoreIter = _localStartLocStoreBeginIter;
             localStartLocStoreEndIter = _localStartLocStoreEndIter;
             leftIndex = std::numeric_limits<eleType>::min();
             rightIndex = std::numeric_limits<eleType>::min();
             offsetRange = _offsetRange;
+            parentRange = _parentRange;
           }
 
           //Transform functor
@@ -314,20 +312,22 @@ namespace bliss
               leftIndex = (*localStartLocStoreIter).first;
               rightIndex = (*localStartLocStoreIter).second;
               localStartLocStoreIter ++;
-              std::cout << "Shifting to new header vector : " << leftIndex << ", " << rightIndex << "\n";
             }
 
-            //If there is no FASTA sequence header ahead
+            //If there is no FASTA sequence header ahead, we assume left and right indices.
+            //This makes sure that we avoid reading incomplete kmers near the end of the file(or buffer)
             if(rawOffset > rightIndex)
             {
-              //Assume a dummy header
-              leftIndex = offsetRange.end;
-              rightIndex = offsetRange.end + 1;
+              //Assume a dummy header (This takes care of the extra characters we might need from next partition)
+              //leftIndex should point to two extra offsets from the last alphabet we are interested in
+              //TODO: What if we encounter a header in the overlap?
+              leftIndex = std::min(offsetRange.end + KmerType::getKmerSize(), parentRange.end);
+              rightIndex = leftIndex + 1;
             }
 
             //Current offset should not overlap with the header
             //Aso make sure we have atleast KMER_SIZE characters ahead (also consider eol after them)
-            if(rawOffset < leftIndex && leftIndex - rawOffset > Kmer::getKmerSize())
+            if(rawOffset < leftIndex && leftIndex - rawOffset > KmerType::getKmerSize())
             {
               return rawOffset;
             }
@@ -350,7 +350,7 @@ namespace bliss
         {
           Iterator_valueType operator()(const Iterator_valueType& inValue)
           {
-            return AlphabetType::FROM_ASCII[static_cast<size_t>(inValue)];
+            return KmerType::AlphabetType::FROM_ASCII[static_cast<size_t>(inValue)];
           }
         };
     };

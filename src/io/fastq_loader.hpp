@@ -25,6 +25,9 @@ namespace bliss
 {
   namespace io
   {
+    /// dummy class to indicate FASTQ format.
+    struct FASTQ {};
+
 
     //==== subclass of FileLoader.  using static polymorphism via CRTP.
 
@@ -164,7 +167,7 @@ namespace bliss
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
 
           //== range checking
-          assert(parentRange.contains(inMemRange));
+          if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
           RangeType t = RangeType::intersect(searchRange, inMemRange); // intersection to bound target to between parent's ends.
           if (t.start == t.end) return t.start;
 
@@ -295,42 +298,45 @@ namespace bliss
           // get the right shifted range
           size_t length = hint.size();
 
-          RangeType next = RangeType::shiftRight(hint, length);
-          next.intersect(this->fileRange);
-
-          // get the combined ranges
-          RangeType loadRange = RangeType::merge(hint, next);
-
-          // memmap the content
-          auto block_start = RangeType::align_to_page(loadRange, this->pageSize);
-          auto mappedData = this->map(loadRange);  // this is page aligned.
-          auto searchData = mappedData + (loadRange.start - block_start);
-
           // output data structure
           RangeType output(hint);
 
-          // search for new start and end using findStart
-          try {
-            output.start = findStart(searchData, this->fileRange, loadRange, hint);
-            output.end = findStart(searchData, this->fileRange, loadRange, next);
+          if (length > 0) {
 
-          } catch (IOException& ex) {
-            // either start or end are not found so return an empty range.
+            RangeType next = RangeType::shiftRight(hint, length);
+            next.intersect(this->fileRange);
 
-            // TODO: need to handle this scenario better - should keep search until end.
-            WARNINGF("%s\n", ex.what());
+            // get the combined ranges
+            RangeType loadRange = RangeType::merge(hint, next);
 
-            WARNINGF("curr range: partition hint %lu-%lu, next %lu-%lu, file_range %lu-%lu\n",
-                   hint.start, hint.end, next.start, next.end, this->fileRange.start, this->fileRange.end);
-            WARNINGF("got an exception search for partition:  %s \n", ex.what());
+            // memmap the content
+            auto block_start = RangeType::align_to_page(loadRange, this->pageSize);
+            auto mappedData = this->map(loadRange);  // this is page aligned.
+            auto searchData = mappedData + (loadRange.start - block_start);
 
-            output.start = hint.end;
-            output.end = hint.end;
+
+            // search for new start and end using findStart
+            try {
+              output.start = findStart(searchData, this->fileRange, loadRange, hint);
+              output.end = findStart(searchData, this->fileRange, loadRange, next);
+
+            } catch (IOException& ex) {
+              // either start or end are not found so return an empty range.
+
+              // TODO: need to handle this scenario better - should keep search until end.
+              WARNINGF("%s\n", ex.what());
+
+              WARNINGF("curr range: partition hint %lu-%lu, next %lu-%lu, file_range %lu-%lu\n",
+                     hint.start, hint.end, next.start, next.end, this->fileRange.start, this->fileRange.end);
+              WARNINGF("got an exception search for partition:  %s \n", ex.what());
+
+              output.start = hint.end;
+              output.end = hint.end;
+            }
+
+            // clean up and unmap
+            this->unmap(mappedData, loadRange);
           }
-
-          // clean up and unmap
-          this->unmap(mappedData, loadRange);
-
           return output;
         }
 
@@ -351,7 +357,8 @@ namespace bliss
         RangeType getNextL2BlockRangeImpl(const size_t tid) {
 
           // data has to be loaded
-          assert(this->loaded);
+          if (!this->loaded) throw std::logic_error("ERROR: getting L2Block range before file is loaded");
+
 
           // get the parent range
           RangeType parentRange = this->L1Block.getRange();
@@ -414,7 +421,8 @@ namespace bliss
          */
         size_t getRecordSizeImpl(int iterations = 3) {
 
-          assert(this->loaded);
+          if (!this->loaded) throw std::logic_error("ERROR: getting record's size before file is loaded");
+
 
           std::size_t s, e;
           std::size_t ss = 1;

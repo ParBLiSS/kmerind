@@ -173,7 +173,7 @@ TEST_F(PackingTest, TestKmerGeneration1) {
     packit_t packItEnd(dna.end());
 
     // TODO generate Kmers
-    typedef bliss::Kmer<21, 2, uint8_t> Kmer;
+    typedef bliss::Kmer<21, DNA, uint8_t> Kmer;
     typedef bliss::PackedKmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
     if (dna.size() >= 21)
     {

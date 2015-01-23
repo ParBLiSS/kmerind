@@ -1,6 +1,7 @@
 project(bliss-index)
+include("${CMAKE_SOURCE_DIR}/Sanitizer.cmake")
 
-
+if (ENABLE_TESTING)
 #add_subdirectory(testlib)
 # TODO: add .cpp files (if we have some)
 #add_library(${PROJECT_NAME}
@@ -15,4 +16,5 @@ if (IS_DIRECTORY ./test)
     # get all mpi test files from ./test
     FILE(GLOB MPI_TEST_FILES test/mpi_test_*.cpp)
     bliss_add_mpi_test(${PROJECT_NAME} FALSE ${MPI_TEST_FILES})
+endif()
 endif()

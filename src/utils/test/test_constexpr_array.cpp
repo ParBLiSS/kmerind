@@ -47,6 +47,12 @@ struct sqrt_fn {
       return sqrt(x);
     }
 };
+
+struct inverse_fn {
+    constexpr double operator()(size_t x) {
+      return 1.0/static_cast<double>(x + 1);
+    }
+};
 struct log_fn {
     constexpr double operator()(size_t x) {
       return x == 0 ? std::numeric_limits<double>::lowest() : log(x);
@@ -83,5 +89,5 @@ REGISTER_TYPED_TEST_CASE_P(ConstexprArrayTest, compute);
 
 //////////////////// RUN the tests with different types.
 
-typedef ::testing::Types<square_fn, sqrt_fn, log_fn> ConstexprArrayTestTypes;
+typedef ::testing::Types<square_fn, inverse_fn, log_fn, sqrt_fn> ConstexprArrayTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, ConstexprArrayTest, ConstexprArrayTestTypes);

@@ -19,14 +19,82 @@
 #include <utility>
 
 #include <utils/constexpr_array.hpp>      // for precomputing the quality scores
+#include <common/alphabets.hpp>
 #include <common/AlphabetTraits.hpp>      // for mapping char to alphabet value
 #include <io/fastq_iterator.hpp>          // for Id.
 #include <index/kmer_index_element.hpp>   // for the basic kmer index element structures.
+#include <common/sequence.hpp>
 
 namespace bliss
 {
   namespace index
   {
+
+
+    template<typename Sequence, typename Alphabet, typename KmerType>
+    class generate_kmer_simple {
+      public:
+        typedef Sequence                            SequenceType;
+        typedef typename Sequence::IteratorType     BaseIterType;
+        typedef KmerType    KmerValueType;
+        typedef std::pair<KmerValueType, KmerValueType> OutputType;       // key-value pair.
+
+      protected:
+        typedef Alphabet               AlphabetType;
+        /// Current Kmer buffer (k-mer + index + quality)
+        KmerValueType kmer;
+        /// Current reverse complement (just k-mer)
+        KmerValueType revcomp;
+
+      protected:
+
+
+        static constexpr BitSizeType nBits =
+            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
+        static constexpr BitSizeType shift =
+            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerValueType::size - 1);
+        static constexpr AlphabetSizeType max =
+            bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
+
+        static constexpr int word_size = sizeof(KmerValueType) * 8;
+//        static constexpr KmerValueType mask_reverse = ~(KmerValueType());
+//            >> (word_size - shift - nBits);
+
+        //.constructor taking the fastq sequence id for a read
+      public:
+
+        /// generates one k-mer per call from the underlying read
+        size_t operator()(BaseIterType &iter)
+        {
+          // store the kmer information.
+          uint8_t val = AlphabetType::FROM_ASCII[static_cast<size_t>(*iter)];
+          kmer.nextFromChar(val);
+//          kmer >>= nBits;
+//          kmer |= (static_cast<KmerValueType>(val) << shift);
+
+          // generate the rev complement
+
+          revcomp.nextReverseFromChar(AlphabetType::TO_COMPLEMENT[val]);
+//          revcomp <<= nBits;
+//          revcomp |= static_cast<KmerValueType>(complement);
+//          //revcomp &= mask_reverse;
+
+          ++iter;
+
+          return 1;
+        }
+
+        /**
+         *
+         */
+        OutputType operator()()
+        {
+          return OutputType(kmer, revcomp);   // constructing a new result.
+        }
+
+    };
+
+
     // TODO: this is all deprecated, but some parts of it might be useful
 
     // KmerIndex = KmerIndexElement or KmerIndexElementWithQuality, ...
@@ -64,7 +132,7 @@ namespace bliss
 
         //.constructor taking the fastq sequence id for a read
       public:
-        generate_kmer(const bliss::io::FASTQSequenceId &_rid)
+        generate_kmer(const bliss::common::FASTQSequenceId &_rid)
           : kmer(), revcomp(0)
         {}  // not setting kmer.id here because this class does not have kmer id.
 
@@ -104,7 +172,7 @@ namespace bliss
 
     /**
      * kmer generator operator type
-     * The third template parameter acts as a member checker to make sure there is an id field and it's of type bliss::io::FASTQSequenceId
+     * The third template parameter acts as a member checker to make sure there is an id field and it's of type bliss::common::FASTQSequenceId
      */
     template<typename Sequence, typename KmerIndex>
     class generate_kmer<Sequence, KmerIndex,
@@ -130,7 +198,7 @@ namespace bliss
 
       public:
 
-        generate_kmer(const bliss::io::FASTQSequenceId &_rid)
+        generate_kmer(const bliss::common::FASTQSequenceId &_rid)
             : BaseClassType(_rid), pos(0)
         {
           this->kmer.id = _rid;
@@ -140,7 +208,7 @@ namespace bliss
         {
           size_t count = BaseClassType::operator()(iter);
 
-          this->kmer.id.components.pos = pos;
+          this->kmer.id.pos = pos;
           ++pos;
 
           return count;
@@ -232,29 +300,29 @@ namespace bliss
      *
      *  This functor is only available if KmerIndex has Quality Score.
      */
-    template<typename Sequence, typename KmerSize, typename Quality, typename Encoding>
+    template<typename Sequence, unsigned int KmerSize, typename Encoding>
     struct generate_qual
     {
         typedef typename Sequence::IteratorType BaseIterType;
         typedef Sequence                        SequenceType;
-        typedef Quality                         QualityType;
+        typedef typename Encoding::ValueType    QualityType;
 
         int kmer_pos;
         QualityType internal;
-        QualityType terms[KmerSize::size];
+        QualityType terms[KmerSize];
 
 
         int pos;
-        int zeroCount;
+        unsigned int zeroCount;
 
         generate_qual()
             : kmer_pos(0), pos(0)
         {
-          for (int i = 0; i < KmerSize::size; ++i)
+          for (unsigned int i = 0; i < KmerSize; ++i)
           {
             terms[i] = std::numeric_limits<QualityType>::lowest();
           }
-          zeroCount = KmerSize::size;
+          zeroCount = KmerSize;
 
     //      for (int i = 0; i < Encoding::size; ++i)
     //      {
@@ -273,7 +341,7 @@ namespace bliss
           // add the new value,       // update the position  - circular queue
           QualityType newval = Encoding::lut[*iter - Encoding::offset]; // this is for Sanger encoding.
           terms[pos] = newval;
-          pos = (pos + 1) % KmerSize::size;
+          pos = (pos + 1) % KmerSize;
 
           // save the old zero count.
           int oldZeroCount = zeroCount;
@@ -303,7 +371,7 @@ namespace bliss
               //printf("HAD ZEROS!\n");
               // removed a zero.  so recalculate.
               internal = 0.0;
-              for (int i = 0; i < KmerSize::size; ++i)
+              for (unsigned int i = 0; i < KmerSize; ++i)
               {
                 internal += terms[i];
               }

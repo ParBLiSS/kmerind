@@ -37,13 +37,9 @@ namespace bliss
      * @brief     basic struct for storing a kmer (no position or quality).
      * @details   K is a typename so that we do not use memory.
      */
-    template<typename K, typename Kmer>
+    template<typename Kmer>
     struct KmerIndexElement
     {
-        /**
-         * size of kmer
-         */
-        typedef K SizeType;
         /**
          * kmer type
          */
@@ -62,10 +58,9 @@ namespace bliss
      * @details   K is a typename so that we do not use memory.
      *            inherits from KmerIndexElement, which has a kmer member variable.
      */
-    template<typename K, typename Kmer, typename Id>
-    struct KmerIndexElementWithId : public KmerIndexElement<K, Kmer>
+    template<typename Kmer, typename Id>
+    struct KmerIndexElementWithId : public KmerIndexElement<Kmer>
     {
-        typedef K SizeType;
         typedef Kmer KmerType;
         typedef Id PositionType;
 
@@ -82,10 +77,9 @@ namespace bliss
      * @details   K is a typename so that we do not use memory.
      *            inherits from KmerIndexElementWithId, which has kmer and id member variables.
      */
-    template<typename K, typename Kmer, typename Id, typename Qual>
-    struct KmerIndexElementWithIdAndQuality : public KmerIndexElementWithId<K, Kmer, Id>
+    template<typename Kmer, typename Id, typename Qual>
+    struct KmerIndexElementWithIdAndQuality : public KmerIndexElementWithId<Kmer, Id>
     {
-        typedef K SizeType;
         typedef Kmer KmerType;
         typedef Id PositionType;
         typedef Qual QualityType;

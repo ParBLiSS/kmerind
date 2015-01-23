@@ -18,6 +18,7 @@
 // C++ STL includes:
 #include <iterator>
 #include <limits>
+#include <type_traits>
 
 // own includes
 #include <common/bit_ops.hpp>
@@ -27,29 +28,31 @@ namespace bliss
 
 
 template <typename T, unsigned int BITS_PER_CHAR>
-struct PaddingTraits
+struct PackingTraits
 {
-  /// The number of bits per data word
+  static_assert(std::is_integral<T>::value && !std::is_signed<T>::value, "Only supports unsigned integral types");
+  /// The number of bits per data word (== number of bits when unsigned integral type)
   static constexpr unsigned int bits_per_word = std::numeric_limits<T>::digits;
   /// The number of bits per alphabet character (this is equal to the template
   /// parameter)
   static constexpr unsigned int bits_per_char = BITS_PER_CHAR;
-  /// The number of bits used as padding at the end of each data word.
-  static constexpr unsigned int padding_bits = bits_per_word - roundDownToMultiple<unsigned int>(bits_per_word, bits_per_char);
   /// The number of data bits (bits per word minus padding bits) per storage word
-  static constexpr unsigned int data_bits = bits_per_word - padding_bits;
+  static constexpr unsigned int data_bits = roundDownToMultiple<unsigned int>(bits_per_word, bits_per_char);
+  /// The number of bits used as padding at the end of each data word.
+  static constexpr unsigned int padding_bits = bits_per_word - data_bits;
   /// The number of characters inside of each storage/data word
   static constexpr unsigned int chars_per_word =  bits_per_word / bits_per_char;
 };
 
 /**
  * For stream of bits that is only padded at the very end of the stream
- * in case the number of total bits is not perfectly divisable by the
+ * in case the number of total bits is not perfectly divisible by the
  * bits per word (of type T).
  */
 template <typename T, unsigned int NUM_TOTAL_BITS>
 struct UnpaddedStreamTraits
 {
+    static_assert(std::is_integral<T>::value && !std::is_signed<T>::value, "Only supports unsigned integral types");
 public:
   /// The number of total bits in the stream
   static constexpr unsigned int nBits = NUM_TOTAL_BITS;
@@ -130,7 +133,7 @@ unsigned int removePaddingSameType(InputIterator& begin,
     // get the number of bits to read in this iteration:
     unsigned int readBits = std::min<unsigned int>(bitsPerWord, bitsToRead);
     // mask the next word with the number of bits to be read
-    base_type nextWord = getBitMask<base_type>(readBits) & *begin;
+    base_type nextWord = getLeastSignificantBitsMask<base_type>(readBits) & *begin;
 
     // write out the masked word
     if (cur_offset == 0)
@@ -147,7 +150,7 @@ unsigned int removePaddingSameType(InputIterator& begin,
       // increase output iterator
       ++out;
       // write out the cut off bits up to the next offset
-      *out = nextWord >> static_cast<base_type>(readBits - cur_offset);
+      if (cur_offset > 0) *out = nextWord >> static_cast<base_type>(readBits - cur_offset);
     }
     else
     {

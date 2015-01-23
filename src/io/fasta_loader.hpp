@@ -31,13 +31,11 @@ namespace bliss
 {
   namespace io
   {
-
-
     /**
      * @class FASTALoader
      * @brief FileLoader subclass specialized for the FASTA file format
      */
-    template<typename Iterator>
+    template<typename Iterator, typename KmerType>
     class FASTALoader
     {
       protected:
@@ -46,7 +44,7 @@ namespace bliss
         static const typename std::iterator_traits<Iterator>::value_type eol = '\n';
 
         /// alias for this type, for use inside this class.
-        using type = FASTALoader<Iterator>;
+        using type = FASTALoader<Iterator, KmerType>;
 
       public:
         //==== exposing types from base class
@@ -103,7 +101,7 @@ namespace bliss
             if (myRank > 0)
             {
               const int rank_src = myRank - 1;
-              const int msg_tag_recv = 1000 + rank_src;
+              const int msg_tag_recv = 1000 + myRank;
               MPI_Irecv(recvInfo, 1, datatype, rank_src, msg_tag_recv, MPI_COMM_WORLD, &request_recv);
             }
             MPI_Status stat;   
@@ -140,7 +138,7 @@ namespace bliss
             if (myRank < noProcs - 1)
             {
               const int rank_src = myRank + 1;
-              const int msg_tag_recv = 1000 + rank_src;
+              const int msg_tag_recv = 1000 + myRank;
               MPI_Irecv(recvInfo, 1, datatype, rank_src, msg_tag_recv, MPI_COMM_WORLD, &request_recv);
             }
             MPI_Status stat;   
@@ -188,7 +186,6 @@ namespace bliss
               std::size_t storeI = i;
               changeFirstStartLocation = false;
               bool EOLfound = findEOL(data, t.end, i);
-              std::cout << "Pushing to localstore 1 : " << storeI << " , " << i << std::endl;
               localStartLocStore.push_back(std::make_pair(storeI,i));
               //Case if first character is '>' and there is no EOL following it in the search space
               if (!EOLfound)
@@ -224,7 +221,7 @@ namespace bliss
             offSetType localMaximum = localStartLocStore.back().first;
             offSetType newFirstStartLocation;
 
-            MPI_Allreduce(&localMaximum, &newFirstStartLocation, 1, boost::mpi::get_mpi_datatype(newFirstStartLocation), MPI_MAX, MPI_COMM_WORLD);
+            MPI_Exscan(&localMaximum, &newFirstStartLocation, 1, boost::mpi::get_mpi_datatype(newFirstStartLocation), MPI_MAX, MPI_COMM_WORLD);
 
             //Update the first starting location (first element in the pair)
             if (changeFirstStartLocation == true)
@@ -255,13 +252,28 @@ namespace bliss
 
             ///3. Each block should know the end '\n' of the header of the last fasta record in the previous block
             localMaximum = localStartLocStore.back().second;
+
             offSetType newFirstHeaderEndLocation;
 
-            MPI_Allreduce(&localStartLocStore, &newFirstHeaderEndLocation, 1, boost::mpi::get_mpi_datatype(newFirstHeaderEndLocation), MPI_MAX, MPI_COMM_WORLD);
+            MPI_Exscan(&localMaximum, &newFirstHeaderEndLocation, 1, boost::mpi::get_mpi_datatype(newFirstHeaderEndLocation), MPI_MAX, MPI_COMM_WORLD);
 
             //Update the first starting location (first element in the pair)
             if (changeFirstStartLocation == true)
               localStartLocStore.front().second = newFirstHeaderEndLocation;
+
+            //Due to overlap in the search range, its crucial to know if there is nearby header in the next block
+            offSetType extendedEnd = std::min(parentRange.end, t.end + KmerType::getKmerSize() -1);
+            while (i < extendedEnd) {
+              if(*data == '>') 
+              {
+                std::size_t storeI = i;
+                findEOL(data, extendedEnd , i);
+                //Push the position i 
+                localStartLocStore.push_back(std::make_pair(storeI,i));
+              }
+              ++data;
+              ++i;
+            }
 #endif
           }
     };

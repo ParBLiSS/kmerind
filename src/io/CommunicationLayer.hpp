@@ -22,22 +22,27 @@
 
 // STL includes
 #include <queue>
+#include <atomic>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <thread>
+#include <functional>
 #include <utility>    // std::move
 
 // BLISS includes
-#include <utils/logging.h>
-#include <concurrent/threadsafe_queue.hpp>
-#include <concurrent/concurrent.hpp>
-#include <io/message_buffers.hpp>
-#include <io/io_exception.hpp>
-
+#include "utils/logging.h"
+#include "concurrent/lockfree_queue.hpp"
+#include "concurrent/copyable_atomic.hpp"
+#include "concurrent/concurrent.hpp"
+#include "io/message_buffers.hpp"
+#include "io/io_exception.hpp"
+#include "io/message_type_info.hpp"
+#include "io/message_types.hpp"
 
 namespace bliss
 {
+
 namespace io
 {
 
@@ -58,15 +63,21 @@ namespace io
  *        Design and Implementation  (MORE DETAILS BELOW)
  *        1. support application where there are different message types (e.g. query-response).
  *          each data message type is assigned an id ranging from 1 to MAX_INT.
- *          FOC messages have id 0, but carries in payload the id of the message type that is being controlled.
+ *          FOC messages have tag 0, but carries in payload the tag of the message type that is being controlled.
+ *          in addition, FOC messages have an additional, sequentially assigned id for each message type to
+ *          disambiguate multiple FOC messages with the same tag
  *
- *        2. support collectively, blocking flushing all messages of a particular type.
+ *        2. support collective, blocking flushing of all messages of a particular type.
  *          To indicate to the system that there is no further messages of a particular type, collective flush
- *          operations have been implemented.  There are 2 types:
- *          a. "flush":  flush a single message type
- *          b. "finish": flush all message types (and mark end of application)
+ *          operations have been implemented.  There are 3 types:
+ *          a. "flush":  flush a single message type, allow future messages of this type
+ *          b. "finish": flush a single message type, disallow future messages of this type
+ *          c. "finish communication":  flush all message types, and mark end of application communication)
  *
- *          All processes need to call these functions together.  When called, the function blocks the calling thread
+ *          As these are collective functions, all MPI processes need to make matching calls.
+ *          The timing of the calls need not be synchronous, but they need to preserve the order of the calls
+ *
+ *          The functions form barriers, and blocks the calling thread
  *          until all processes have completely processed all matching FOC messages from all senders
  *
  *        3. provide flexible way of handling received messages based on message type
@@ -75,14 +86,19 @@ namespace io
  *
  *        4. Thread Safe, non-blocking send (allow overlap of computation with communication)
  *          A compute thread can call sendMessage on the Communication Layer object.  each invocation
- *          atomically gets a location to insert the message into a batching buffer via CAS operation.
- *          (thread safe insert)
+ *          atomically gets a location to insert the message into a batching buffer via thread safe insert/
  *
- *          When a buffer is full and sent, it is inserted into a thread-safe send queue for the comm thread to
+ *          When a buffer is full and sent, it is inserted into a thread-safe send queue for the sending comm thread to
  *          send via MPI  (non-blocking).
  *
- *        5. Thread Safe processing of received messages
- *          Multiple receive threads can process the received messages in the receive queue, which is thread safe.
+ *        5. Thread Safe, non-blocking receive
+ *          A dedicated thread checks for MPI messages to receive remote messages and populate the recvQueue. Separation
+ *          of sender and receiver communication threads avoids deadlock when the receiving process is blocked by a full
+ *          recvQueue, thus blocking the sending function.
+ *
+ *
+ *        6. Thread Safe processing of received messages
+ *          Multiple callback threads can process the received messages in the receive queue, which is thread safe.
  *
  *        6. single threaded control of the Communication Layer (flush messages, finish, etc)
  *          flush and finish functions are collectively called by the control thread (owner of Communication Layer object)
@@ -93,7 +109,8 @@ namespace io
  *          The following are the intended threading pattern:
  *          * single control thread (owner of Communication Layer instance.  can be one of the compute threads)
  *          * one or more compute threads (producer of messages to be sent)
- *          * single MPI communication thread (internal)
+ *          * single MPI communication thread for send (internal)
+ *          * single MPI communication thread for recv (internal)
  *          * one or more receive threads (consumers of messages received, internal)
  *
  *        The choice of using a single MPI communication thread is based on
@@ -129,6 +146,7 @@ namespace io
  *          Collective operations (flush, finish; for requirement 2) are implemented using Point to Point communication of FOC messages.
  *          The messaging pattern is peer-to-peer (no master-slave relationship).
  *            as a consequence, collective operations require all to send to all (in a non-blocking way)
+ *          not using MPI AllToAllv because that blocks the compute threads
  *            TODO: perhaps use master-slave, with rotating master based on epoch id.  reduces comm from p^2 for each epoch to 2p.
  *
  *          flush requires:
@@ -169,7 +187,7 @@ namespace io
  *          The CommThread loop terminates when both sending and receiving are complete.
  *            a. sending is completed when finishCommunication has been called and all pending messages are sent,
  *               and all in-progress send requests are completed.
- *            b. receiving is completed when no Application Termination FOC messages (tag == CONTROL_TAG, the last control messages)
+ *            b. receiving is completed when no Application Termination FOC messages (tag == bliss::io::MessageTypeInfo::CONTROL_TAG, the last control messages)
  *                are left to receive.  At init, we set the number of Application Termination FOC messages
  *                to the communication size, which are only decremented after finishCommunication is called.
  *
@@ -245,142 +263,762 @@ namespace io
  *
  *          control thread call finishCommunication()
  *
+ *          Control thread call finalize (TO MAKE SURE ALL THREADS ARE FINISHED)
+ *
  * TODO - replace uint8_t by typedef
  *
  */
 class CommunicationLayer
 {
-  protected:
-    //==== type definitions
 
 
-    /// alias MessageBuffersType to Use the thread safe version of the SendMessageBuffers
-    using MessageBuffersType = SendMessageBuffers<bliss::concurrent::THREAD_SAFE>;
+protected:
+   /// alias MessageBuffersType to Use the thread safe version of the SendMessageBuffers
+   using MessageBuffersType = SendMessageBuffers<bliss::concurrent::LockType::SPINLOCK, bliss::concurrent::LockType::LOCKFREE, 8192>;
 
-    /// alias BufferPoolType to MessageBuffersType's
-    using BufferPoolType = typename MessageBuffersType::BufferPoolType;
+   /// alias BufferPoolType to MessageBuffersType's
+   using BufferPoolType = typename MessageBuffersType::BufferPoolType;
 
-    /// alias BufferIdType to MessageBuffersType's
-    using BufferIdType = typename MessageBuffersType::BufferIdType;
+   /// alias BufferPtrType to MessageBuffersType's
+   using BufferPtrType = typename MessageBuffersType::BufferType*;
+
+    //==== Message type aliases for convenience.
+   using SendDataElementType = typename bliss::io::DataMessageToSend<BufferPtrType>;
 
 
-    /**
-     * @brief Structure to hold all associated information of a received MPI message.
-     * @details tag is used to annotate the message type/format.  The message is processed according to this tag.
-     *
-     *        tag == CONTROL_TAG:  control message indicating the last of a type of data messages for a synchronization epoch (period between synchronizations)
-     *                    data contains the tag for the data message type that is ending, as well as an identifier for a synchronization epoch.
-     *                    if data contains a tag of 0, then the application is ending.
-     *        otherwise:  data messages, with data containing payload.
-     *
-     *        Here we need to rely on non-overtaking behavior of MPI to preserve order between data messages (tag > 0) and control messages (tag == 0).
-     *
-     *        The control messages are used to flush the receiver's queue of a particular message type.  "flush" is considered
-     *        a collective operation, with synchronization barrier satisfied when control messages for the same message type are received from all sources.
-     *
-     */
-    struct MessageReceived
+   // ==== send comm thread class.  for organization.
+   // TODO: group the code for comm thread
+   template <typename BufferPtrType>
+   class CommThread
+   {
+     protected:
+
+
+       using TaggedEpoch = typename bliss::io::MessageTypeInfo::TaggedEpoch;
+
+
+       CommThread() = delete;
+
+
+       /// The MPI Communicator object for this communication layer
+       MPI_Comm comm;
+
+       CommunicationLayer& commLayer;
+
+
+       /// Atomic status variable: set to true if `finishing` and if all sends are
+       /// completed.
+       bool sendDone;
+
+       /// Atomic status variable: set to true if `finishing` and if all receives
+       /// are completed.
+       bool recvDone;
+
+
+       /// Queue of pending MPI send operations
+       std::deque<std::pair<MPI_Request, std::unique_ptr<MPIMessage> > > sendInProgress;
+
+       // pending mpi messages.  also holds local messages (send to self) between send thread and recv thread.
+       //   (2 producers, 1 consumer) thread.
+       /// Queue of pending MPI receive operations
+       //bliss::concurrent::ThreadSafeQueue<std::pair<MPI_Request, std::unique_ptr<MPIMessage> > > recvInProgress;
+       std::deque<std::pair<MPI_Request, std::unique_ptr<MPIMessage> > > recvInProgress;
+
+       std::thread td;
+       int commRank;
+       int commSize;
+
+     public:
+
+
+
+       CommThread(const MPI_Comm& communicator, CommunicationLayer & comm_layer) :
+         comm(communicator), commLayer(comm_layer),
+         sendDone(false),
+         recvDone(false),
+         sendInProgress(),
+         recvInProgress(),
+         td(), commRank(0), commSize(1)
+       {
+         MPI_Comm_size(comm, &commSize);
+         MPI_Comm_rank(comm, &commRank);
+       };
+
+       virtual ~CommThread() {}
+
+       void start() {
+
+         if (!td.joinable()) {
+
+           //===== initialize the mpi buffer for control messaging, for MPI_Bsend
+           int mpiBufSize = 0;
+           // arbitrary, 4X commSize, each has 2 ints, one for tag, one for epoch id,.
+           MPI_Pack_size(commSize * 4, MPI_LONG, comm, &mpiBufSize);
+           mpiBufSize += commSize * 4 * MPI_BSEND_OVERHEAD;
+           char* mpiBuf = (char*)malloc(mpiBufSize);
+           MPI_Buffer_attach(mpiBuf, mpiBufSize);
+
+           td = std::move(std::thread(&bliss::io::CommunicationLayer::CommThread<BufferPtrType>::run, this));
+         } // else already started the thread.
+       }
+
+       void finish() {
+         if (td.joinable()) {
+           td.join();
+
+           DEBUGF("C CommThread finished, thread joined.  about to detach mpi buffer.");
+
+           // detach the buffer for Bsend.
+           int mpiBufSize;
+           char* mpiBuf;
+           MPI_Buffer_detach(&mpiBuf, &mpiBufSize);
+           free(mpiBuf);
+         } // else already joined.
+       }
+
+     protected:
+
+
+       /**
+        * @brief The function for the dedicated communicator thread.
+        * @details  loops until all sending and all receiving are done.
+        *    these are atomic variables since we have multiple threads.
+        *
+        *    completes pending send and recv requests, then receive any new and send any queued messages.
+        *
+        * @note  There should be only 1 thread calling this function.
+        */
+       void run()
+       {
+         DEBUGF("C THREAD STARTED:  send comm-thread on %d", commRank);
+
+         // TODO: use thread lock mutex and cond var to help reduce load.
+
+         bool worked = false;
+         // while there's still work to be done:
+         while (!sendDone || !recvDone)
+         {
+           worked = false;
+           // first clean up finished operations
+           worked |= finishSends();
+           worked |= finishReceives();
+
+           // start pending sends
+           worked |= tryStartSend();
+
+           // start pending recvs
+           worked |= tryStartReceive();
+
+           //if (!worked) _mm_pause();
+
+         }
+         DEBUGF("C THREAD FINISHED:  send comm-thread on %d", commRank);
+       }
+
+
+
+
+       /**
+        * @brief Takes queued messages and initiates MPI_ISends for them.
+        *
+        * @throw bliss::io::IOException
+        */
+       bool tryStartSend() throw (bliss::io::IOException)
+       {
+         // quit if no more sends are to be expected
+         if (sendDone) return false;
+
+         //DEBUGF("rank %d sendDone? %s, finishing %s sendqueue %ld sendInProgress %ld", commRank, (sendDone ? "true":"false"), (finishing.load() ? "true": "false"), commLayer.sendQueue.getSize(), sendInProgress.size());
+
+
+
+         // try to get the send element
+
+         auto el = std::move(commLayer.sendQueue.tryPop());  // type: std::pair<bool, std::unique_ptr<MPIMessage>>
+         if (!el.first) {  // no valid entry in the queue
+           return false;
+         }
+         // else there is a valid entry from sendQueue
+         assert(el.second);
+
+         bool worked = false;
+
+         // second is a pointer to ControlMessage
+         if (el.second->tag == bliss::io::MessageTypeInfo::CONTROL_TAG) {
+           // if control message,
+
+           // ControlMessage ownership is maintained by el.
+           ControlMessage* se = dynamic_cast<ControlMessage*>(el.second.get());  // MPIMessage*
+           TaggedEpoch te = se->tagged_epoch;
+
+           DEBUGF("C SEND %d -> %d, termination signal for tag %d epoch %ld", commRank, se->rank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
+
+           // termination message for this tag and destination
+           if (se->rank == commRank) {
+             // local, directly handle by creating an byte array and directly
+             // insert into the recvInProgress (needed by the receiver decrement
+             // logic in "finishReceive", so can't put into receive queue)
+             MPI_Request req = MPI_REQUEST_NULL;
+//              uint8_t *array = new uint8_t[sizeof(TaggedEpoch)];
+//              memcpy(array, &(te), sizeof(TaggedEpoch));
+
+
+
+             // now move ControlMessage ownership to recvInProgress
+             auto pair = std::make_pair(std::move(req),
+                                        std::move(el.second));
+             assert(el.second == nullptr);
+             assert(pair.second != nullptr);
+
+             recvInProgress.push_back(std::move(pair));
+             assert(pair.second.get() == nullptr);
+             assert(recvInProgress.back().second.get() != nullptr);
+
+
+             DEBUGF("C rank %d tag %d epoch %ld local send control message to rank %d", commRank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF, commRank);
+           } else {
+
+
+//               remote control message.  send a terminating message with tag CONTROL_TAG
+//               payload is the message type and epoch.  Message Ordering is guaranteed by MPI.
+//               Bsend to allow use of preallocated buffer, so don't have to clean up allocated messages.
+             MPI_Bsend(&(te), 1, MPI_LONG, se->rank, bliss::io::MessageTypeInfo::CONTROL_TAG, comm);
+
+
+             DEBUGF("C rank %d tag %d epoch %ld remote send control message to rank %d", commRank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF, se->rank);
+           }
+
+           worked = true;
+         } else {
+           // data message.
+
+           SendDataElementType* se = dynamic_cast<SendDataElementType*>(el.second.get());  // MPIMessage*
+
+           // get message data and it's size
+           uint8_t* data = se->ptr->operator uint8_t*();  // BufferPtrType then getData
+           auto count = se->ptr->getSize();
+
+           if (count > 0) {
+
+             if (se->rank == commRank) {
+               // local, directly handle by creating an output object and directly
+               // insert into the recv queue (thread safe)
+
+               // since the send buffer memory is managed by Buffer, and the receiveMessage expects to manage memory as well, need to copy.
+               std::unique_ptr<uint8_t[]> array(new uint8_t[count]);
+               memcpy(array.get(), data, count);
+
+               // pointer here to allow dynamic cast.
+               std::unique_ptr<DataMessageReceived> dmr(new DataMessageReceived(std::move(array), count, se->tag, commRank));
+
+
+               // put into recvInProgress queue instead of recvQueue to minimize out of order (early) receive.
+               MPI_Request req = MPI_REQUEST_NULL;
+
+               auto pair = std::make_pair(std::move(req), std::move(dmr));
+               assert(dmr == nullptr);
+               assert(pair.second != nullptr);
+
+               recvInProgress.push_back(std::move(pair));
+               assert(pair.second.get() == nullptr);
+
+               assert(recvInProgress.back().second.get() != nullptr);
+
+               // finished inserting directly to local RecvInProgress.  release the buffer
+
+               // TODO:  don't release the buffer for local transmit.  do it after callback thread is done with it.
+               commLayer.buffers.at(se->tag).load()->releaseBuffer(std::move(se->ptr));
+             } else {
+
+
+               // remote: initiate async MPI message
+               MPI_Request req;
+               MPI_Isend(data, count, MPI_UNSIGNED_CHAR, se->rank, se->tag, comm, &req);
+
+               auto pair = std::make_pair(std::move(req), std::move(el.second));
+               assert(el.second.get() == nullptr);
+               assert(pair.second.get() != nullptr);
+
+               sendInProgress.push_back(std::move(pair));
+               assert(pair.second.get() == nullptr);
+
+               assert(sendInProgress.back().second.get() != nullptr);
+
+             }
+//            } else {
+//              WARNINGF("C WARNING: NOT SEND %d -> %d: 0 byte message for tag %d, ptr = %d.", commRank, se->rank, se->tag, se->bufferId);
+             worked = true;
+           }
+
+         }
+         return worked;
+       }
+
+
+
+       /**
+        * @brief Initiates async MPI receives.
+        */
+       bool tryStartReceive()
+       {
+
+         // if no more are expected, then done
+         if (recvDone) return false;
+
+         // probe for messages
+         int hasMessage = 0;
+         MPI_Status status;
+
+         if (commSize > 1)
+           MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
+
+         // if have message to receive,
+         if (hasMessage > 0) {
+           // get some message details
+           int src = status.MPI_SOURCE;
+           int tag = status.MPI_TAG;
+           int received_count;
+           MPI_Request req;
+
+
+           // receive the message data bytes into a vector of bytes
+           if (tag == bliss::io::MessageTypeInfo::CONTROL_TAG) {  // control messages
+             MPI_Get_count(&status, MPI_LONG, &received_count);
+             assert(received_count == 1);
+
+             std::unique_ptr<ControlMessage> msg(new ControlMessage(bliss::io::MessageTypeInfo::CONTROL_TAGGED_EPOCH, src));
+
+             // receive data or FOC messages.  use finishReceive to handle the
+             // FOC messages and count decrement
+
+             MPI_Irecv(&(msg->tagged_epoch), received_count, MPI_LONG, src, tag, comm, &req);
+
+             DEBUGF("R RECV %d -> %d, termination signal", src, commRank);
+
+             // insert into the received InProgress queue.
+             auto pair = std::make_pair(std::move(req), std::move(msg));
+             assert(msg.get() == nullptr);
+             assert(pair.second.get() != nullptr);
+
+             recvInProgress.push_back(std::move(pair));
+             assert(pair.second.get() == nullptr);
+             assert(recvInProgress.back().second.get() != nullptr);
+
+
+           } else {  // data messages
+             MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &received_count);
+
+             // have to receive even if count is 0.
+             uint8_t* msg_data = (received_count == 0) ? nullptr : new uint8_t[received_count];
+             std::unique_ptr<DataMessageReceived> msg(new DataMessageReceived(msg_data, received_count, tag, src));
+             // owner of msg-data is now msg.
+
+
+             MPI_Irecv(msg_data, received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
+
+             auto pair = std::make_pair(std::move(req), std::move(msg));
+             assert(msg.get() == nullptr);
+             assert(pair.second.get() != nullptr);
+
+             // insert into the received InProgress queue.
+             recvInProgress.push_back(std::move(pair));
+
+             assert(pair.second.get() == nullptr);
+             assert(recvInProgress.back().second.get() != nullptr);
+
+           }
+           return true;
+         }
+         else return false;
+       }
+
+
+       /**
+        * @brief Finishes pending MPI_Send requests.  stops at first unfinished request, left unfinished requests finish in next iteration's call.
+        */
+       bool finishSends()
+       {
+         // no more messages to send or being sent, so done.
+         if (sendDone) return false;
+
+         int mpi_finished = 0;
+
+         bool worked = false;
+         // while there is some in progress MPI_send requests,
+         while(!sendInProgress.empty())
+         {
+           // get the first request to check - ONLY 1 THREAD CHECKING sendInProgress.
+           assert(sendInProgress.front().second != nullptr);
+
+
+           // check if MPI request has completed.
+           if (sendInProgress.front().first == MPI_REQUEST_NULL) {
+             // this is a control message since it has no "request".
+             mpi_finished = 1;
+           } else {
+             // has request.  check for finished
+             MPI_Test(&(sendInProgress.front().first), &mpi_finished, MPI_STATUS_IGNORE);
+           }
+
+           // if finished, then clean up.
+           if (mpi_finished)
+           {
+             // if there is a buffer, then release it.
+             if (sendInProgress.front().second->tag != bliss::io::MessageTypeInfo::CONTROL_TAG) {
+               SendDataElementType* msg = dynamic_cast<SendDataElementType*>(sendInProgress.front().second.get());
+               if (msg->ptr) {
+                 // cleanup, i.e., release the buffer back into the pool
+                 commLayer.buffers.at(msg->tag).load()->releaseBuffer(std::move(msg->ptr));
+               }
+             }  // control tag, and mpi send finished, so nothing to clean up.
+
+
+             // remove the entry from the in-progress queue.  object destruction will clean up data associated with tthe pointer.
+             sendInProgress.pop_front();
+
+             worked = true;
+           }
+           else
+           {
+             // the head of the queue is not finished, so break and get it later.
+             //DEBUGF("not done sending!");
+             break;
+           }
+         }
+
+         // all sending is done when "finishing" is set, and no more messages are pending send,
+         // and no messages are being sent.
+         //if (finishing.load() && sendQueue.isEmpty() && sendInProgress.empty()) {
+         if (!commLayer.sendQueue.canPop() && sendInProgress.empty()) {
+           // not using sendAccept as check - sendAccept is cleared BEFORE the last
+           // tag end messages starts to be sent, and definitely before the app end
+           // message starts to be sent so sendDone may be set to true too early,
+           // and elements for the last tag, or tag 0 (termination) may be added to
+           // the sendQueue or sendInProfess queue after the empty check here.
+           sendDone = true;
+           //
+           //commLayer.sendQueue.disablePush();
+         }
+         return worked;
+       }
+
+
+       /**
+        * @brief Finishes pending receive requests.
+        * @details   if control message, count down from the total number of possible senders for an epoch
+        *            when reaching 0, then enqueue 1 control message for callback handling to process
+        *
+        *            if data message, then enqueue for callback handling to process.
+        *
+        *
+        * @throw bliss::io::IOException
+        */
+       bool finishReceives() throw (bliss::io::IOException)
+       {
+
+         // no more to receive or pending receive requests, so don.
+         if (recvDone) return false;
+
+         int mpi_finished = 0;
+
+         bool worked = false;
+
+         // if there are pending receive requests
+         while(!recvInProgress.empty())
+         {
+           assert(recvInProgress.front().second.get() != nullptr);
+
+
+           // check if MPI request has completed.
+           if (recvInProgress.front().first == MPI_REQUEST_NULL) {  // locla message
+             // this is a control message since it has no "request".
+             mpi_finished = 1;
+           } else {
+             // has request.  check for finished
+             MPI_Test(&(recvInProgress.front().first), &mpi_finished, MPI_STATUS_IGNORE);
+           }
+
+
+           // if finished, then clean up.
+           if (mpi_finished)
+           {
+             // finished request, so enqueue the message for processing.
+
+             // get the request
+             auto front = std::move(recvInProgress.front());
+             // remove pending receive element
+             recvInProgress.pop_front();
+
+
+             // if it's a control message, then need to count down
+             if (front.second.get()->tag == bliss::io::MessageTypeInfo::CONTROL_TAG)  {
+
+               // get the control message
+               ControlMessage* msg = dynamic_cast<ControlMessage*>(front.second.get());
+               TaggedEpoch te = msg->tagged_epoch;
+
+//                DEBUGF("C rank %d received control message for tag %d epoch %ld.  recvRemaining has %ld tags", commRank, tag, epoch, recvRemaining.size());
+
+               //==== handle case where local process is not yet listening for tagged epoch.
+               // if this process is not yet waiting for this epoch, that means it has not flushed or finished that tag,
+               // then we need to push this message back into recvInProgress.
+               // need to construct a new message with a NULL request.
+               // then skip over the remaining of this branch and leave the message in recvInProgress.
+               if (commLayer.ctrlMsgRemainingForEpoch.count(te) == 0) {
+                 //if (iters %100 == 0) WARNINGF("WARN: RANK %d not yet waiting for control message tag %d epoch %ld.  cycle through again.", commRank, te.tag, te.epoch);
+
+                 front.first = MPI_REQUEST_NULL;
+                 assert(front.second.get() != nullptr);
+                 recvInProgress.push_back(std::move(front));
+                 assert(front.second.get() == nullptr);
+                 assert(recvInProgress.back().second.get() != nullptr);
+
+                 break;  // gives the worker threads a chance to call sendControlMessagesAndWait
+
+                 // this delays the processing, which hopefully does not create deadlock.
+                 // Better for worker thread to wait via  sendControlMessagesAndWait, instead
+                 // of comm thread waiting for the taggedepoch to become present.
+               }
+
+
+               //== now decrement the count of control messages for a epoch
+//                DEBUGF("C RECV PRE rank %d receiving END signal tag %d epoch %ld from %d, recvRemaining size: %ld",
+//                     commRank, te.tag, te.epoch, front.second->rank, commLayer.ctrlMsgRemainingForEpoch.size());
+               auto v = --(commLayer.ctrlMsgRemainingForEpoch.at(te));
+//                DEBUGF("C RECV rank %d receiving END signal tag %d epoch %ld from %d, num senders remaining is %d",
+//                     commRank, te.tag, te.epoch, front.second->rank, commLayer.ctrlMsgRemainingForEpoch.at(te));
+
+
+               //== if after decrement the count is 0 for the ep,
+               if (v == 0) {
+
+                 //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
+
+
+                 // and enqueue ONE FOC message for this tag to be handled by callback.  (reduction from commSize to 1)
+                 if (!commLayer.recvQueue.waitAndPush(std::move(front.second)).first) {
+                   throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
+                 }
+
+               } else if (v < 0) {
+                 // count decremented to negative.  should not happen.  throw exception.
+
+                 std::stringstream ss;
+                 ss << "R ERROR: number of remaining receivers for tag " << bliss::io::MessageTypeInfo::getTag(te) << " epoch " << (te & 0x00000000FFFFFFFF) << " is now NEGATIVE";
+                 throw bliss::io::IOException(ss.str());
+               }
+
+               worked = true;
+
+
+             } else {  // data message
+
+
+               //==== Data message.  add the received messages into the recvQueue
+               if (!commLayer.recvQueue.waitAndPush(std::move(front.second)).first) {
+                 throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
+               }
+             }
+           }
+           else
+           {  // mpi message is not finished yet.
+
+             // the recv request is not done, so stop and wait for the next cycle.
+             break;
+           }
+         } // end while loop for processing recvInProgress.
+
+         //== see if we are done with all pending receives and all Application Termination FOC messages are received.
+         if (commLayer.ctrlMsgRemainingForEpoch.empty()) { //&& !recvInProgress.canPop()) {
+           // if completely done, epoch=CONTROL_TAGGED_EPOCH would have been erased from recvRemaining.
+           recvDone = true;
+           commLayer.recvQueue.disablePush();
+         }
+
+         return worked;
+       }
+
+   };
+
+
+
+    // callback thread,  for organization.
+    // TODO: group the code for callback thread.
+    class CallbackThread
     {
-      /// The received data
-      uint8_t* data;
 
-      /// The number of bytes received
-      std::size_t count;
+      public:
+        CallbackThread(CommunicationLayer& _comm_layer) :
+          commLayer(_comm_layer), callbackFunctions(),
+          td() {
 
-      /// The message tag, indicates the type of message (how to interpret the message)
-      int tag;
+        };
+        CallbackThread() = delete;
 
-      /// The message source id
-      int src;
+        virtual ~CallbackThread() {
+          callbackFunctions.clear();
+        }
 
-      /**
-       * @brief constructor using a pre-existing memory block
-       *
-       * @param data      in memory block of data (received from remote proc, to be processed here)
-       * @param count     number of bytes in the data block
-       * @param tag       the MPI message tag, indicating the type of message
-       * @param src       the MPI source process rank
-       */
-      MessageReceived(uint8_t* data, std::size_t count, int tag, int src)
-        : data(data), count(count), tag(tag), src(src) {}
+        void start() {
+          if (!td.joinable()) td = std::move(std::thread(&bliss::io::CommunicationLayer::CallbackThread::run, this));
+        }
 
-      /// default constructor
-      MessageReceived() = default;
+        void finish() {
+          if (td.joinable()) td.join();
+        }
 
-      /**
-       * @brief   accessor to get the tag of the data.  returns only data message tag types.
-       * @details if tag != CONTROL_TAG, then it's returned (data message type).
-       *          if tag == CONTROL_TAG, then this is a control message, the tag is the first integer element in the payload.
-       *
-       * @return  the (data) message tag associated with this MessageReceived.
-       */
-      int getTag() const {
-        if (tag == CommunicationLayer::CONTROL_TAG)
-          return ((int*)data)[0];
-        else
-          return tag;
-      }
+        /**
+         * @brief Registers a callback function for the given message tag.
+         * @details
+         *      The registered callback function will be called for each received message
+         *      of the given type (tag). A callback function has to be registered for each
+         *      message type sent. Only one callback function can be registered for each
+         *      tag, adding more than one results in a `invalid_argument` exception.
+         *
+         *      A callback function has the signature:
+         *         void(uint8_t* msg, std::size_t count, int fromRank)
+         *
+         * @note  It is STRONGLY ENCOURAGED that the function be THREAD SAFE, as there may be
+         *      more than 1 receive thread calling the functions.
+         *
+         * @param tag                 The message tag for which the callback function
+         *                            is registered. Has to be > 0.
+         * @param callbackFunction    The callback-function.
+         *
+         * @throw std::invalid_argument   If `tag <= 0` or if a callback function has
+         *                                already been registered for the given tag.
+         */
+        void addReceiveCallback(int tag, std::function<void(uint8_t*, std::size_t, int)> callbackFunction) throw (std::invalid_argument)
+        {
 
-      /**
-       * @brief   accessor to get the epoch id of a data message flush.
-       * @note    See Rationale above for detail about Epoch.
-       *
-       * @return  the synchronization epoch id.  data messages do not have epoch number so -1 is returned.
-       */
-      int getEpoch() const {
-        if (tag == CommunicationLayer::CONTROL_TAG)
-          return ((int*)data)[1];
-        else
-          return -1;
-      }
+          // check for valid arguments
+          assert(tag != bliss::io::MessageTypeInfo::CONTROL_TAG && tag >= 0);
+
+          // one thread calls this at a time.
+          std::unique_lock<std::recursive_mutex> lock(commLayer.mutex);
+
+          if (callbackFunctions.count(tag) > 0) {
+            lock.unlock();
+            throw std::invalid_argument("M callback function already registered for given tag");
+          }
+
+          // add the callback function to a lookup table
+          callbackFunctions[tag] = callbackFunction;
+          lock.unlock();
+        }
+
+      protected:
+        /// parent (containing) class for this thread.
+        CommunicationLayer& commLayer;
+
+        /// Registry of callback functions, mapped to by the associated tags
+        std::unordered_map<int, std::function<void(uint8_t*, std::size_t, int)> > callbackFunctions;
+
+        /// std::thread object for the dedicated callback-handler thread
+        std::thread td;
+
+        /**
+         * @brief The function for the dedicated callback-handler thread.
+         * @details   loops until all received messages in queue are processed, and no more possibility of receiving messages.
+         *
+         *        Control messages are added in the queue if receiver has received that message from all senders, so it marks the
+         *        completion of flush or finish or finishCommunication, which are unblocked.
+         *
+         *        Data messages are processed directly via callbacks according to the message type (in tag).
+         *
+         * @note  can have multiple instances of this.
+         */
+        void run()
+        {
+          DEBUGF("B THREAD STARTED:  callback-thread on %d", commLayer.commRank);
+
+
+          // TODO: use thread lock mutex and cond var to help reduce load.
+
+
+          // while there are messages to process, or we are still receiving
+          while (commLayer.recvQueue.canPop() )  // same as !recvDone || !recvQueue.isEmpty()
+          {
+            // get next element from the queue, wait if none is available.
+            // waitAndPop will exit out of wait when termination flag is set on the recvQueue
+            auto result = std::move(commLayer.recvQueue.waitAndPop());
+            if (!result.first) {
+              // no valid result, we must be done with receiving
+
+              assert(!commLayer.recvQueue.canPush());
+              break;
+            }
+
+            // get the message (data or control)
+
+            // if the message is a control message (enqueued ONE into RecvQueue only after all control messages
+            //  for a tag have been received.)
+            if (result.second.get()->tag == bliss::io::MessageTypeInfo::CONTROL_TAG) {   // Control message
+
+
+              ControlMessage* msg = dynamic_cast<ControlMessage*>(result.second.get());
+
+              // get control message's target tag.
+              bliss::io::MessageTypeInfo::TaggedEpoch te = msg->tagged_epoch;
+
+
+              //===== and unblock the flush/finish/finishCommunication call.
+              // getting to here means that all control messages for a tag have been received from all senders.
+              // this means the local "sendControlMessages" has been called.  now, look at order of calls in waitForControlMessage
+              //
+              // main thread:  lock; flushing = notag->tag; flushing==tag?; cv_wait;
+              // callback thread:  lock; flushing = tag->notag ? cv_notify_all : return message to front of queue
+              // to ensure the flushing is modified by 1 thread at a time, and notify_all does not get interleaved to before wait,
+              // lock is used to enclose the entire sequence on each thread.
+              // also if callback thread's block is called before the main thread, we don't want to discard the control message - requeue.
+              auto lock = std::move(commLayer.ctrlMsgProperties.at(bliss::io::MessageTypeInfo::getTag(te)).lock());
+
+              // if flushing is not tag, then some other tag is being processed, or flushing == notag.
+              // if notag - this block is called before waitForControlMessages.  need to requeue
+              // if some other tag (tag1), that means we received all tag2 messages in comm thread before receiving all tag1 messages
+              // therefore recv thread is processing tag2 before tag1 control message.
+              // if the delayed tag1 message is from remote process, and assume that process called sendControlMessages tag1 before tag2,
+              //  then strict ordering of MPI messages is violated.
+              // if the delayed tag1 message is from local process, because in mem message movement, tag1 is always before tag2.
+              // so tag2 cannot come before tag1, provided that all MPI processes call sendControlMessage and waitForControlMessages in the same order
+              //  including requirement that callers of sendControlMessage and waitForControlMessages reside in 1 thread only.
+
+              // to deal with multiple threads that can use control messages, we'd need to have an array of "flushing" variables, array of mutices (sharing would render the threads serial),
+              // and array of lock and condition variables (maybe)
+              // also, it may be good to set "flushing" when first control message arrives.  perhaps recvRemaining is a good substitute.
+              // finally, do we still need to have a UnPop function on the queue? - probably not.
+              // even when multiple threads creating control messages, a tag can be handled by 1 thread at a time.
+
+              // here only when all ctrlMsg for the tagged_epoch is complete.
+              commLayer.ctrlMsgRemainingForEpoch.erase(te);
+              DEBUGF("B Rank %d tag %d epoch %ld start waiting", commLayer.commRank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
+
+
+              // TODO: probably won't work - need multiple worker threads may call lock.  using recrusive is okay but condvar only unlock once.
+              commLayer.ctrlMsgProperties.at(bliss::io::MessageTypeInfo::getTag(te)).unlock(std::move(lock));
+
+              // so unset 'flushing', and unblock flush() via condition variable.
+
+              commLayer.ctrlMsgProperties.at(bliss::io::MessageTypeInfo::getTag(te)).notifyAll();
+
+
+              DEBUGF("B rank %d tag %d epoch %ld notified all.", commLayer.commRank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
+            } else {
+
+              DataMessageReceived* msg = dynamic_cast<DataMessageReceived*>(result.second.get());
+              // data message.  process it.
+              (callbackFunctions[msg->tag])(msg->data.get(), msg->count, msg->rank);
+              // delete [] msg.data;  using unique_ptr, don't need to delete msg data.
+            }
+            // clean up message data
+          }
+          DEBUGF("B THREAD FINISHED: callback-thread on %d", commLayer.commRank);
+        }
     };
-
-    /**
-     * @brief Structure to hold all associated information of a message to be sent via MPI.
-     * @details MessageToSend is a small metadata stucture to be used for message queuing (to be sent)
-     *          MessageToSend does not actually hold any data.  it points to a in-memory Buffer by id.
-     *
-     *          control message is NOT sent this way, since there is no Buffer associated with a control message.
-     *
-     * @tparam  BufferIdType  type of Buffer id.  Obtained from SendMessageBuffer, parameterized by Thread Safety.
-     */
-    template<typename BufferIdType>
-    struct MessageToSend
-    {
-      /// The id of the message buffer
-      BufferIdType bufferId;
-
-      /// Tag (type) of the message
-      int tag;
-
-      /// Destination rank, i.e., id of the process where the message is to be sent
-      int dst;
-
-      /**
-       * @brief Constructs a new instance of this struct and sets all members as given.
-       *
-       * @param _id   Id of MessageBuffer that will be sent
-       * @param _tag  type of the message being sent
-       * @param _dst  destination of the message
-       */
-      MessageToSend(BufferIdType _id, int _tag, int _dst)
-        : bufferId(_id), tag(_tag), dst(_dst) {}
-
-      /// default constructor
-      MessageToSend() = default;
-    };
-
-
-    /// alias SendQueueElementType to MessageToSend, for convenience.
-    using SendQueueElementType = MessageToSend<BufferIdType>;
-
-
-    /// constant indicating message type is control (FOC) message.
-    static const int CONTROL_TAG = 0;
 
 
 public:
-
+    // TODO: leave only code for CommLayer public api
 
   /**
    * @brief Constructor for the CommLayer.
@@ -391,22 +1029,15 @@ public:
    * @param comm_size       The size of the MPI Communicator.
    */
   CommunicationLayer (const MPI_Comm& communicator, const int comm_size)
-    : sendQueue(3 * comm_size), recvQueue(3 * comm_size), sendAccept(),
-      flushing(-1), finishing(false), sendDone(false), recvDone(false),
-      comm(communicator), epoch(0)
+    : sendQueue(), recvQueue(), buffers(),
+      ctrlMsgProperties(), ctrlMsgRemainingForEpoch(),
+      commThread(communicator, *this), callbackThread(*this)
   {
     // init communicator rank and size
-    MPI_Comm_size(comm, &commSize);
+    MPI_Comm_size(communicator, &commSize);
     assert(comm_size == commSize);
-    MPI_Comm_rank(comm, &commRank);
+    MPI_Comm_rank(communicator, &commRank);
 
-    // initialize the mpi buffer for control messaging
-    int mpiBufSize = 0;
-    // arbitrary, 4X commSize, each has 2 ints, one for tag, one for epoch id,.
-    MPI_Pack_size(commSize * 4 * 2, MPI_INT, comm, &mpiBufSize);
-    mpiBufSize += commSize * 4 * MPI_BSEND_OVERHEAD;
-    char* mpiBuf = (char*)malloc(mpiBufSize);
-    MPI_Buffer_attach(mpiBuf, mpiBufSize);
   }
 
   /**
@@ -415,37 +1046,35 @@ public:
    * @note    If finish() was not called for all used tags, this will block forever.
    */
   virtual ~CommunicationLayer () {
-    // TODO: check that we are finished??
-	  finishCommunication();
-
-    // wait for both threads to quit
-    comm_thread.join();
-    callback_thread.join();
-
-    // detach the buffer
-    int mpiBufSize;
-    char* mpiBuf;
-    MPI_Buffer_detach(&mpiBuf, &mpiBufSize);
-    free(mpiBuf);
-  };
-
+    finalize();
+  }
 
   /**
-   * @brief Initializes all communication and starts the communication and
-   *        callback threads.
-   *
-   * @note Must be called before any other functions can be called.
+   * @brief waits for all threads to finish.  this provides a mechanism to ensure all communications
+   *    are complete before subsequent MPI calls are made, such as MPI_FINALIZE.
    */
-  void initCommunication()
-  {
-    sendDone.store(false);
-    recvDone.store(false);
-    finishing.store(false);
-    flushing.store(-1);
-    recvRemaining[-1] = commSize;
-    comm_thread = std::thread(&CommunicationLayer::commThread, this);
-    callback_thread = std::thread(&CommunicationLayer::callbackThread, this);
-  }
+  void finalize() {
+    // only 1 thread does this.
+//    std::unique_lock<std::recursive_mutex> lock(mutex);
+
+    DEBUGF("M FINALIZING COMMLAYER");
+
+    // TODO: check that we are finished in finishCommunication (turn off sendQueue asap)
+	  finishCommunication();
+
+	  // TODO: properly handle this part.
+    // wait for both threads to quit
+    commThread.finish();
+    callbackThread.finish();
+
+    // final cleanup
+    if (!buffers.empty()) {
+      ERRORF("BUFFER was not cleared by finish Communication\n");
+      for (auto el : buffers) {
+        delete el.second.load();
+      }
+    }
+  };
 
 
   /**
@@ -466,50 +1095,68 @@ public:
    * @param dst_rank    The rank of the destination processor.
    * @param tag         The tag (type) of the message.
    */
-  void sendMessage(const void* data, std::size_t count, int dst_rank, int tag)
+  void sendMessage(const void* data, std::size_t nbytes, int dst_rank, int tag)
   {
-    //== check to see if the target tag is still accepting
-    if (sendAccept.find(tag) == sendAccept.end()) {
-      throw std::invalid_argument("invalid tag: tag has been finished already");
+    //== don't send control tag.
+    assert(tag != bliss::io::MessageTypeInfo::CONTROL_TAG && tag >= 0);
+    assert(initialized.load());
+
+    //check to see if sendQueue is still accepting (if not, then comm is finished)
+    if (!sendQueue.canPush()) {
+      throw std::logic_error("W sendMessage called after finishCommunication");
     }
 
-    //== don't send control tag.
-    assert(tag != CONTROL_TAG && tag >= 0);
+    //== check to see if the target tag is still accepting
+    // modification to ctrlMsgProperties only at finish, and finishCommunications, both are after sendMessage
+    //  after sendControlMessageAndWait.  these should be single threaded, so we don't need a lock here.
+    //std::unique_lock<std::recursive_mutex> lock(mutex);
 
-    //== if there isn't already a tag listed, add the MessageBuffers for that tag.
-    // multiple threads may call this.
-    if (buffers.find(tag) == buffers.end()) {
-      std::unique_lock<std::mutex> lock(buffers_mutex);
-      if (buffers.find(tag) == buffers.end()) {
-        // create new message buffer
-        buffers[tag] = std::move(MessageBuffersType(commSize, 8192));
-      }
+    if (ctrlMsgProperties.count(tag) == 0) {
+      //lock.unlock();
+      throw std::invalid_argument("W invalid tag: tag has not been registered");
+    }
+
+
+    //bliss::io::MessageTypeInfo&  tagprop = ctrlMsgProperties.at(tag);
+    //auto l = std::move(tagprop.lock());
+    //lock.unlock();
+    //printf("tagprop: tagprop buffers %p, in array %p\n", tagprop.getBuffers(), ctrlMsgProperties.at(tag).getBuffers());
+
+    //if (tagprop.isFinished()) {  //atomic, don't need to lock.
+    if (ctrlMsgProperties.at(tag).isFinished()) {  //atomic, don't need to lock.
+      //tagprop.unlock(std::move(l));
+      throw std::invalid_argument("W invalid tag: tag is already FINISHED");
     }
 
     //== try to append the new data - repeat until successful.
     // along the way, if a full buffer's id is returned, queue it for sendQueue.
-    BufferIdType fullId = BufferPoolType::ABSENT;
-    std::pair<bool, BufferIdType> result;
+    std::pair<bool, BufferPtrType> result;
     do {
       // try append.  append fails if there is no buffer or no room
-      result = buffers.at(tag).append(data, count, dst_rank);
+      result = buffers.at(tag).load()->append(data, nbytes, dst_rank);
+      //if (result.first != 0) printf("result = %d\n", result.first);
 
-      fullId = result.second;
-
-      if (fullId != BufferPoolType::ABSENT) {        // have a full buffer
+      if (result.second) {        // have a full buffer.  implies !result.first
         // verify that the buffer is not empty (may change because of threading)
-        if (!(buffers.at(tag).getBackBuffer(fullId).isEmpty())) {
+        if (!(result.second->isEmpty())) {
           // have a non-empty buffer - put in send queue.
-          if (!sendQueue.waitAndPush(std::move(SendQueueElementType(fullId, tag, dst_rank)))) {
-            throw bliss::io::IOException("ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
-          }
-        }
-        // full buffer enqueued, reset it.
-        fullId = BufferPoolType::ABSENT;
+//        	DEBUGF("Rank %d has full buffer at %p.  enqueue for send.", commRank, result.second);
+          std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(result.second), tag, dst_rank));
+
+//          if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for data msgs\n", commRank);
+
+          if (!sendQueue.waitAndPush(std::move(msg)).first) {
+            ERROR("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
+            //tagprop.unlock(std::move(l));
+            throw bliss::io::IOException("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
+          } // else successfully pushed into sendQueue.
+        }  // else empty buffer
+
       } // else don't have a full buffer.
 
       // repeat until success;
     } while (!result.first);
+    //tagprop.unlock(std::move(l));
   }
 
 
@@ -537,17 +1184,32 @@ public:
   void addReceiveCallback(int tag, std::function<void(uint8_t*, std::size_t, int)> callbackFunction) throw (std::invalid_argument)
   {
     // check for valid arguments
-    assert(tag != CONTROL_TAG && tag >= 0);
+    assert(tag != bliss::io::MessageTypeInfo::CONTROL_TAG && tag >= 0);
 
-    if (callbackFunctions.find(tag) != callbackFunctions.end()) {
-      throw std::invalid_argument("callback function already registered for given tag");
+    // single thread calls this at a time.
+    std::unique_lock<std::recursive_mutex> lock(mutex);
+
+    //=======  reigster the tag.
+//    if (ctrlMsgProperties.find(tag) == ctrlMsgProperties.end()) {
+//      // register a new tag.
+//      ctrlMsgProperties[tag] = std::move(MessageTypeInfo());
+//    }
+
+    //== if there isn't already a tag listed, add the MessageBuffers for that tag.
+    // multiple threads may call this.
+    if (buffers.count(tag) == 0) {
+      // create new message buffer
+      buffers[tag] = std::move(bliss::concurrent::copyable_atomic<MessageBuffersType*>(new MessageBuffersType(commSize)));
+      //buffers.at(tag).load()->reset();
+      ctrlMsgProperties[tag] = std::move(bliss::io::MessageTypeInfo(tag));
     }
+//    int64_t te = ctrlMsgProperties[tag].getNextEpoch();
+//    printf("DONE ADD RECV CALLBACK for tag %d, tagProp tagged_epoch %ld, stored tag %d, epoch %ld\n", tag, te, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
 
-    // add the callback function to a lookup table
-    callbackFunctions[tag] = callbackFunction;
+    // now tell the callback thread to register the callbacks.
+    callbackThread.addReceiveCallback(tag, callbackFunction);
+    lock.unlock();   // can unlock after this call because we are using recursive_mutex.
 
-    // register the tag so that messages of this type is now accepted by the CommLayer.
-    sendAccept.insert(tag);
   }
 
   /**
@@ -569,38 +1231,47 @@ public:
    */
   void flush(int tag) throw (bliss::io::IOException)
   {
-    // cannot flush control tag.
-    assert(tag != CONTROL_TAG && tag >= 0);
+    // multiple threads allowed
 
-    if (sendAccept.find(tag) == sendAccept.end()) {
-      // already finished, no need for further flushing
-      // DEBUGF("NO FLUSHing: already finished tag: %d", tag);
-      return;
+    // can only flush data tag.
+    assert(tag != bliss::io::MessageTypeInfo::CONTROL_TAG && tag >= 0);
+    assert(initialized.load());
+
+    if (!sendQueue.canPush()) {
+      throw std::logic_error("W flush called after finishCommunication");
     }
 
-    INFOF("FLUSHing tag %d, epoch %d", tag, epoch);
+    //== check to see if the target tag is still accepting
+    std::unique_lock<std::recursive_mutex> lock(mutex);
+
+    if (ctrlMsgProperties.count(tag) == 0) {
+      lock.unlock();
+      throw std::invalid_argument("W invalid tag: tag has not been registered");
+    }
+
+
+    bliss::io::MessageTypeInfo& tagprop = ctrlMsgProperties.at(tag);
+    auto l = std::move(tagprop.lock());
+    lock.unlock();
+
+    if (tagprop.isFinished()) {
+      tagprop.unlock(std::move(l));
+      throw std::invalid_argument("W tag not registered, or already finished. cannot FLUSH");
+    }
+
+    DEBUGF("M FLUSH Rank %d tag %d", commRank, tag);
 
     // flush all data buffers (put them into send queue)
     flushBuffers(tag);
 
-
-    // track the tag that is undergoing flush in a thread safe way
-    // control thread (calling flush) sets it, while receive thread
-    // unsets it in the callback function
-    // can only set it if nothing else is flushing.
-    int t = -1;
-    if (!flushing.compare_exchange_strong(t, tag)) {
-      // TODO throw exception?
-      std::stringstream ss;
-      ss << "ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << tag;
-      throw bliss::io::IOException(ss.str());
-    }
-
-    // send the control message
-    sendControlMessages(tag);
-
+    // send the control message - generates an unique epoch for the tag as well.
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
-    waitForControlMessages(tag);
+    DEBUGF("M FLUSH Rank %d tag %d, waiting for control messages to complete", commRank, tag);
+    sendControlMessagesAndWait(tag, l);
+    DEBUGF("M FLUSH DONE Rank %d tag %d, finished wait for control messages\n", commRank, tag);
+
+    tagprop.unlock(std::move(l));
+
   }
 
   /**
@@ -617,40 +1288,96 @@ public:
    */
   void finish(int tag) throw (bliss::io::IOException)
   {
-    assert(tag != CONTROL_TAG && tag >= 0);
+    assert(tag != bliss::io::MessageTypeInfo::CONTROL_TAG && tag >= 0);
+    assert(initialized.load());
 
-    if (sendAccept.find(tag) == sendAccept.end()) {
-      // already finished.
-      //DEBUGF("ERROR:  NO FINISHing: already finished tag: %d", tag);
+    if (!sendQueue.canPush()) {
+      //throw std::logic_error("W finish called after finishCommunication");
       return;
     }
 
-    INFOF("FINISHing tag %d, epoch %d", tag, epoch);
+    // Mark tag as finished in the metadata.
+    // TODO: see if we can change to no lock - at() throws exception, and finish() returns prev value.
+    //== check to see if the target tag is still accepting
+    std::unique_lock<std::recursive_mutex> lock(mutex);
+
+    if (ctrlMsgProperties.count(tag) == 0) {
+      lock.unlock();
+      throw std::invalid_argument("W tag not registered. cannot FINISH");
+    }
+
+
+    bliss::io::MessageTypeInfo& tagprop = ctrlMsgProperties.at(tag);
+    auto l = std::move(tagprop.lock());
+    lock.unlock();
+
+    if (tagprop.finish()) {  // internally using atomic exchange, so can check to see if already finished.
+      tagprop.unlock(std::move(l));
+      //throw std::invalid_argument("W tag not registered, or already finished. cannot FINISH");
+      return;
+    }
+
+    DEBUGF("M FINISH Rank %d tag %d", commRank, tag);
 
     // flush all buffers (put them into send queue)
     flushBuffers(tag);
 
+    // send the control message
+    // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
+    DEBUGF("M FINISH Rank %d tag %d, waiting for control messages to complete", commRank, tag);
+    sendControlMessagesAndWait(tag, l);
+    DEBUGF("M FINISH Rank %d tag %d, finished wait for control messages", commRank, tag);
 
-    // track the tag that is undergoing flush in a thread safe way
-    // control thread (calling flush) sets it, while receive thread
-    // unsets it in the callback function
-    // can only set it if nothing else is flushing.
-    int t = -1;
-    if (!flushing.compare_exchange_strong(t, tag)) {
-      // TODO throw exception?
-      std::stringstream ss;
-      ss << "ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << tag;
-      throw bliss::io::IOException(ss.str());
+
+    lock.lock();
+    tagprop.unlock(std::move(l));
+
+    delete buffers.at(tag).load();
+    buffers.erase(tag);
+    ctrlMsgProperties.erase(tag);
+
+    lock.unlock();
+  }
+
+
+  /**
+   * @brief Initializes all communication and starts the communication and
+   *        callback threads.
+   *
+   * @note Must be called before any other functions can be called.
+   */
+  void initCommunication()
+  {
+    assert(!initialized.load());
+
+
+    // one thread calls this
+    if (!sendQueue.canPush()) {
+      throw std::logic_error("W initCommunication called after finishCommunication");
     }
 
-    // send the control message
-    sendControlMessages(tag);
+    std::unique_lock<std::recursive_mutex> lock(mutex);
 
-    // mark as no more coming in for this tag.  ONE THREAD ONLY modifies this.
-    sendAccept.erase(tag);
+    if (ctrlMsgProperties.count(bliss::io::MessageTypeInfo::CONTROL_TAG) > 0) {
+      lock.unlock();
+      throw std::logic_error("W initCommunication called multiple times");
+      //return;
+    }
 
-    // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
-    waitForControlMessages(tag);
+
+    //== init with control_tag only.
+    buffers[bliss::io::MessageTypeInfo::CONTROL_TAG] = std::move(bliss::concurrent::copyable_atomic<MessageBuffersType*>(new MessageBuffersType(commSize)));
+    //buffers.at(bliss::io::MessageTypeInfo::CONTROL_TAG).load()->reset();
+    ctrlMsgRemainingForEpoch.emplace(bliss::io::MessageTypeInfo::CONTROL_TAGGED_EPOCH, bliss::concurrent::copyable_atomic<int>(commSize));
+    ctrlMsgProperties[bliss::io::MessageTypeInfo::CONTROL_TAG] = std::move(bliss::io::MessageTypeInfo(bliss::io::MessageTypeInfo::CONTROL_TAG));
+
+    lock.unlock();
+
+    // TODO: deal with where to put the std::threads.
+    callbackThread.start();
+    commThread.start();
+
+    initialized.store(true);
   }
 
 
@@ -666,65 +1393,44 @@ public:
    */
   void finishCommunication() throw (bliss::io::IOException)
   {
+    DEBUGF("M FINISH COMM rank %d", commRank);
+    assert(initialized.load());
+
+
 	  // already finishing.
-	  if (finishing.load() == true) return;
+    if (!sendQueue.canPush()) {
+      return;
+      //throw std::logic_error("W finishCommunication called after finishCommunication");
+    }
+    std::unique_lock<std::recursive_mutex> lock(mutex);  // not okay to use global mutex.
+    auto l = std::move(ctrlMsgProperties.at(bliss::io::MessageTypeInfo::CONTROL_TAG).lock());   // okay to lock wuith control tag, since "finish" uses a different tag.
 
-
-	  std::unordered_set<int> temp(sendAccept);
-
-
-	  for (auto tag : temp) {
-
-      if (tag != CONTROL_TAG && tag >= 0) {
-        INFOF("FINISHing tag %d, epoch %d", tag, epoch);
-
-        // flush all buffers (put them into send queue)
-        flushBuffers(tag);
-
-
-        // track the tag that is undergoing flush in a thread safe way
-        // control thread (calling flush) sets it, while receive thread
-        // unsets it in the callback function
-        // can only set it if nothing else is flushing.
-        int t = -1;
-        if (!flushing.compare_exchange_strong(t, tag)) {
-          // TODO throw exception?
-          std::stringstream ss;
-          ss << "ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << tag;
-          throw bliss::io::IOException(ss.str());
-        }
-
-        // send the control message
-        sendControlMessages(tag);
-
-        // mark as no more coming in for this tag.  ONE THREAD ONLY modifies this.
-        sendAccept.erase(tag);
-
-        // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
-        waitForControlMessages(tag);
+    // not deleting entries from ctrlMsgProperties, so no need to lock whole thing.
+    // go through all tags and "finish" them, except for the final control tag.
+    std::vector<int> keys;   // get a list of keys, so we're not deleting from ctrlMsgProperties while iterating.
+    for (auto ctrlMsgIter = ctrlMsgProperties.begin(); ctrlMsgIter != ctrlMsgProperties.end(); ++ctrlMsgIter) {
+      if (ctrlMsgIter->first != bliss::io::MessageTypeInfo::CONTROL_TAG && ctrlMsgIter->first >= 0) {
+         keys.push_back(ctrlMsgIter->first);
       }
     }
-
-    // track the tag that is undergoing flush in a thread safe way
-    // control thread (calling flush) sets it, while receive thread
-    // unsets it in the callback function
-    // can only set it if nothing else is flushing.
-    int t = -1;
-    if (!flushing.compare_exchange_strong(t, CONTROL_TAG)) {
-      // TODO throw exception?
-      std::stringstream ss;
-      ss << "ERROR:  another tag is being flushed: " << t << ". attempt to flush tag " << CONTROL_TAG;
-      throw bliss::io::IOException(ss.str());
+	  for (auto key : keys) {
+	    finish(key);
     }
 
-    // send the control message
-    sendControlMessages(CONTROL_TAG);
-
-    // mark as finishing.
-    finishing.store(true);
-
+    // send the control message for the final control tag.
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
-    waitForControlMessages(CONTROL_TAG);
+    DEBUGF("M FINISH COMM Rank %d tag %d, waiting for CONTROL messages to complete", commRank, bliss::io::MessageTypeInfo::CONTROL_TAG);
+    // ctrlMsgProperties.at(bliss::io::MessageTypeInfo::CONTROL_TAG).finish();
+    sendControlMessagesAndWait(bliss::io::MessageTypeInfo::CONTROL_TAG, l);  // only 1 control message needs to be sent.
+    DEBUGF("M FINISH COMM Rank %d tag %d, finished wait for CONTROL messages", commRank, bliss::io::MessageTypeInfo::CONTROL_TAG);
+
+    ctrlMsgProperties.at(bliss::io::MessageTypeInfo::CONTROL_TAG).unlock(std::move(l));
+
+    delete buffers.at(bliss::io::MessageTypeInfo::CONTROL_TAG).load();
+    buffers.erase(bliss::io::MessageTypeInfo::CONTROL_TAG);
+    ctrlMsgProperties.erase(bliss::io::MessageTypeInfo::CONTROL_TAG);
+
+    lock.unlock();
 
   }
 
@@ -753,135 +1459,103 @@ public:
 protected:
 
 
-  /**
-   * @brief The function for the dedicated communicator thread.
-   * @details  loops until all sending and all receiving are done.
-   *    these are atomic variables since we have multiple threads.
-   *
-   *    completes pending send and recv requests, then receive any new and send any queued messages.
-   *
-   * @note  There should be only 1 thread calling this function.
-   */
-  void commThread()
-  {
-    DEBUGF("THREAD STARTED:  comm-thread on %d", commRank);
+  // TODO: convert to use try-catch of out-of-range exception.
+  bool isTagActive(int tag) {
+    // single threaded
+    std::unique_lock<std::recursive_mutex> lock(mutex);
 
-    // while there's still work to be done:
-    while (!sendDone.load() || !recvDone.load())
-    {
-      // first clean up finished operations
-      finishSends();
-      finishReceives();
-
-      // start pending receives
-      tryStartReceive();
-      // start pending sends
-      tryStartSend();
-    }
-    DEBUGF("THREAD FINISHED:  comm-thread on %d", commRank);
+    return isTagActive(tag, lock);
   }
+  bool isTagActive(int tag, std::unique_lock<std::recursive_mutex>& lock) {
 
-  /**
-   * @brief The function for the dedicated callback-handler thread.
-   * @details   loops until all received messages in queue are processed, and no more possibility of receiving messages.
-   *
-   *        Control messages are added in the queue if receiver has received that message from all senders, so it marks the
-   *        completion of flush or finish or finishCommunication, which are unblocked.
-   *
-   *        Data messages are processed directly via callbacks according to the message type (in tag).
-   *
-   * @note  can have multiple instances of this.
-   */
-  void callbackThread()
-  {
-    INFOF("THREAD STARTED:  recv-thread on %d", commRank);
-    MessageReceived msg;
-
-    // while there are messages to process, or we are still receiving
-    while (!recvDone.load() || !recvQueue.isEmpty() )
-    {
-      // get next element from the queue, wait if none is available.
-      // waitAndPop will exit out of wait when termination flag is set on the recvQueue
-      auto result = std::move(recvQueue.waitAndPop());
-      if (!result.first) {
-        // no valid result, we must be done with receiving
-        assert(recvDone.load());
-        break;
-      }
-
-      // get the message
-      msg = result.second;
-
-      // if the message is a control message (enqueued ONE into RecvQueue only after all control messages
-      //  for a tag have been received.)
-      if (msg.tag == CONTROL_TAG) {
-        // get control message's target tag.
-        int tag = msg.getTag();
-
-        // and unblock the flush/finish/finishCommunication call.
-        // getting to here means that all control messages for a tag have been received from all senders.
-        if (flushing.compare_exchange_strong(tag, -1)) {
-          // so unset 'flushing', and unblock flush() via condition variable.
-          flushBarrier.notify_all();
-        } else {
-          ERRORF("control message with tag=%d, but flushing contained %d", msg.tag, tag);
-        }
-      } else {
-        // data message.  process it.
-        (callbackFunctions[msg.tag])(msg.data, msg.count, msg.src);
-        // clean up message data
-        delete [] msg.data;
-      }
+    //== check to see if the target tag is still accepting
+    if (ctrlMsgProperties.count(tag) == 0) {
+      throw std::invalid_argument("W invalid tag: tag has not been registered.");
     }
-    INFOF("THREAD FINISHED: recv-thread on %d", commRank);
+    return !(ctrlMsgProperties.at(tag).isFinished());
   }
-
 
   /**
    * @brief Sends FOC message for the given tag to every MPI process
+   *        Blocks till the flusing of the given tag is completed (i.e., all
+   *        FOC messages have been received).
    *
    * @param tag     The MPI tag to end.
    * @throw bliss::io::IOException  If the sendQueue has been disabled.
+   * @return bool indicating if control messages were successfully sent.
    */
-  void sendControlMessages(int tag) throw (bliss::io::IOException)
+  bool sendControlMessagesAndWait(int tag, std::unique_lock<std::mutex>& l) throw (bliss::io::IOException)
   {
+    assert(initialized.load());
+
+
+    if (!sendQueue.canPush())
+      throw bliss::io::IOException("M ERROR: sendControlMessagesAndWait already called with bliss::io::MessageTypeInfo::CONTROL_TAG");
+
+
+
+    // since each tag has unique epoch for each call to this function, we don't need global lock as much.
+    bliss::io::MessageTypeInfo::TaggedEpoch te = ctrlMsgProperties.at(tag).getNextEpoch();
+
+    //ctrlMsgProperties.at(tag).lock();   // for loop may get out of order.  is that okay? yes.  but sendQueue being disabled should be critical.
+    if (tag != bliss::io::MessageTypeInfo::CONTROL_TAG) {
+      // not a control tag, so don't need to add to recvRemaining.
+
+      // lock it for the tag - no multiple concurrent calls with the same tag.
+      ctrlMsgRemainingForEpoch.emplace(te, bliss::concurrent::copyable_atomic<int>(commSize));  // insert new, and proceed to sending messages
+      DEBUGF("M Rank %d tag %d epoch %ld added tag to recvRemaining.", commRank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
+    } // else there is only one epoch for bliss::io::MessageTypeInfo::CONTROL_TAG, and it's already added to the list.
+
+
+    // should be only 1 thread executing this code below with the provided tag.
+
     for (int i = 0; i < getCommSize(); ++i) {
       // send end tags in circular fashion, send tag to self last
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 
-      DEBUGF("Rank %d sendEndTags %d epoch %d target_rank = %d ", commRank, tag, epoch, target_rank );
+      //DEBUGF("M Rank %d sendEndTags %d epoch %d target_rank = %d ", commRank, te.tag, te.epoch, target_rank );
 
       // send the end message for this tag.
-      if (!sendQueue.waitAndPush(std::move(SendQueueElementType(BufferPoolType::ABSENT, tag, target_rank)))) {
-        throw bliss::io::IOException("ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
+      std::unique_ptr<ControlMessage> msg(new ControlMessage(te, target_rank));
+
+
+     // if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for control msgs\n", commRank);
+      if (!sendQueue.waitAndPush(std::move(msg)).first) {
+        //ctrlMsgProperties.at(tag).unlock();
+        throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
       }
     }
-  }
 
 
-  /**
-   * @brief Blocks till the flusing of the given tag is completed (i.e., all
-   *        FOC messages have been received).
-   *
-   * @param tag The tag to wait for.
-   */
-  void waitForControlMessages(int tag) throw (bliss::io::IOException)
-  {
+    // if we are sending the control tag, then afterward we are done.  mixed bliss::io::MessageTypeInfo::CONTROL_TAG and others could cause sendQueue to be prematurely disabled.
+    if (tag == bliss::io::MessageTypeInfo::CONTROL_TAG)
+      sendQueue.disablePush();
+//    ctrlMsgProperties.at(tag).unlock();
+
+
+    //============= now wait.
+
+    // CONCERN:  tracking the tag being flushed using a shared "flushing" opens up the possible problem
+    // when out-of-order calls to flush, finish, and finishCommunications.
+
+
     // waiting for all messages of this tag to flush.
-    if (flushing.load() == tag) {  // precheck before locking.
-      std::unique_lock<std::mutex> lock(flushMutex);
-      do {
-        // condition variable waits for notification, which is generated by recv thread
-        // when all FOC messages with this tag are received.
-        flushBarrier.wait(lock);
-      } while (flushing.load() == tag);
+    //DEBUGF("M Rank %d Waiting for tag %d", commRank, te.tag);
 
-    } else {
-      throw bliss::io::IOException("ERROR: waitForEndTags called but currently flushing a different tag.");
+
+    // TODO:  possible to have ctrlMsgRemainingForEpoch be atomic and use atomic load and fetch_sub to avoid the lock here?
+//    ctrlMsgProperties.at(tag).lock();
+    while (ctrlMsgRemainingForEpoch.count(te) > 0) {
+      // condition variable waits for notification, which is generated by recv thread
+      // when all FOC messages with this tag are received.
+      DEBUGF("M PRE WAIT Rank %d Waiting for tag %d epoch %ld, currently flushing", commRank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
+      ctrlMsgProperties.at(tag).wait(l);
+      DEBUGF("M END WAIT Rank %d Waiting for tag %d epoch %ld, currently flushing", commRank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
     }
+//    ctrlMsgProperties.at(tag).unlock();
 
-    DEBUGF("Rank %d WAITED FOR END TAG.  flushing= %d, tag= %d, epoch = %d", commRank, flushing.load(), tag, epoch);
-    ++epoch;
+    DEBUGF("M Rank %d received all END message for TAG %d, epoch = %ld", commRank, bliss::io::MessageTypeInfo::getTag(te), te & 0x00000000FFFFFFFF);
+    return true;
   }
 
 
@@ -895,331 +1569,45 @@ protected:
    */
   void flushBuffers(int tag) throw (bliss::io::IOException)
   {
-    // no MessageBuffers with the associated tag.  end.
-    if (buffers.find(tag) == buffers.end())
-    {
-      DEBUGF("NO BUFFERS for tag: %d", tag);
-      return;
+    assert(initialized.load());
+
+    if (!sendQueue.canPush()) {
+      throw std::logic_error("W cannot flush buffer: cannot push to sendQueue.");
     }
-    //DEBUGF("Active Buffer Ids in message buffer: %s", buffers.at(tag).bufferIdsToString().c_str());
+    if (ctrlMsgProperties.count(tag) == 0) {
+      throw std::logic_error("W cannot flush buffer: unknown tag.");
+    }
 
-    // flush out all the send buffers matching a particular tag.
-    int idCount = buffers.at(tag).getBufferIds().size();
-    assert(idCount == commSize);
+    //ctrlMsgProperties.at(tag).lock();
 
-    for (int i = 0; i < idCount; ++i) {
+    for (int i = 0; i < commSize; ++i) {
       // flush buffers in a circular fashion, starting with the next neighbor
       int target_rank = (i + getCommRank() + 1) % getCommSize();
 
-      auto id = buffers.at(tag).getBufferId(target_rank);
+      auto bufPtr = buffers.at(tag).load()->flushBufferForRank(target_rank);
       // flush/send all remaining non-empty buffers
-      if ((id != BufferPoolType::ABSENT) && !(buffers.at(tag).getBackBuffer(id).isEmpty())) {
-        if (!sendQueue.waitAndPush(std::move(SendQueueElementType(id, tag, target_rank)))) {
-          throw bliss::io::IOException("ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
+      if ((bufPtr) && !(bufPtr->isEmpty())) {
+        std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(bufPtr), tag, target_rank));
+
+//        if (sendQueue.isFull()) fprintf(stderr, "Rank %d sendQueue is full for flushBuffers\n", commRank);
+
+        if (!sendQueue.waitAndPush(std::move(msg)).first) {
+//          ctrlMsgProperties.at(tag).unlock();
+          throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
         }
       }
     }
+
+//    ctrlMsgProperties.at(tag).unlock();
   }
 
 
-
-
-
-  /**
-   * @brief Takes queued messages and initiates MPI_ISends for them.
-   *
-   * @throw bliss::io::IOException
-   */
-  void tryStartSend() throw (bliss::io::IOException)
-  {
-    // quit if no more sends are to be expected
-    if (sendDone.load()) return;
-
-    // try to get the send element
-    SendQueueElementType se;
-    auto el = std::move(sendQueue.tryPop());
-    if (!el.first) {  // no valid entry in the queue
-      return;
-    }
-    // else there is a valid entry from sendQueue
-
-    se = el.second;
-    if (se.bufferId == BufferPoolType::ABSENT) {
-      // Is this a control message?  if control message, SendQueueElement will have the
-      // "ABSENT" buffer id, while tag is the message type to control
-
-      //DEBUGF("SEND %d -> %d, termination signal for tag %d", commRank, se.dst, se.tag);
-
-      // termination message for this tag and destination
-      if (se.dst == commRank) {
-        // local, directly handle by creating an byte array and directly
-        // insert into the recvInProgress (needed by the receiver decrement
-        // logic in "finishReceive", so can't put into receive queue)
-        MPI_Request req = MPI_REQUEST_NULL;
-        uint8_t *array = new uint8_t[2 * sizeof(int)];
-        memcpy(array, &(se.tag), sizeof(int));
-        memcpy(array + sizeof(int), &(epoch), sizeof(int));
-        recvInProgress.push(std::move(std::pair<MPI_Request,
-              MessageReceived>(std::move(req),
-                std::move(MessageReceived(array, 2 * sizeof(int), CONTROL_TAG, commRank)))));
-      } else {
-        // remote.  send a terminating message with tag CONTROL_TAG
-        // payload is the message type and epoch.  Message Ordering is guaranteed by MPI.
-        // Bsend to allow use of preallocated buffer.
-        int stat[2] = {se.tag, epoch};
-        MPI_Bsend(stat, 2, MPI_INT, se.dst, CONTROL_TAG, comm);
-      }
-    } else {
-      // this is an actual data message:
-
-      // get message data and it's size
-      void* data = const_cast<void*>(buffers.at(se.tag).getBackBuffer(se.bufferId).getData());
-      auto count = buffers.at(se.tag).getBackBuffer(se.bufferId).getSize();
-
-      if (count == 0) {
-        ERRORF("ERROR: SEND %d -> %d, trying to send 0 byte message as data for tag %d.", commRank, se.dst, se.tag);
-      }
-
-      if (se.dst == commRank) {
-        // local, directly handle by creating an output object and directly
-        // insert into the recv queue (thread safe)
-        uint8_t* array = new uint8_t[count];
-        memcpy(array, data, count);
-
-        // out of order receive, but can only be early, so okay.
-        if (!recvQueue.waitAndPush(std::move(MessageReceived(array, count, se.tag, commRank)))) {
-          throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
-        }
-        // finished inserting directly to local RecvQueue.  release the buffer
-        buffers.at(se.tag).releaseBuffer(se.bufferId);
-      } else {
-        // remote: initiate async MPI message
-        MPI_Request req;
-        MPI_Isend(data, count, MPI_UNSIGNED_CHAR, se.dst, se.tag, comm, &req);
-        sendInProgress.push(std::move(std::pair<MPI_Request, SendQueueElementType>(std::move(req), std::move(se))));
-      }
-    }
-
-  }
-
-  /**
-   * @brief Finishes pending MPI_Send requests.  stops at first unfinished request, left unfinished requests finish in next iteration's call.
-   */
-  void finishSends()
-  {
-    // no more messages to send or being sent, so done.
-    if (sendDone.load()) return;
-
-    int finished = 0;
-
-    // whiel there is some in progress MPI_send requests,
-    while(!sendInProgress.empty())
-    {
-      // get the first request to check
-      std::pair<MPI_Request, SendQueueElementType>& front = sendInProgress.front();
-
-      // check if MPI request has completed.
-      if (front.first == MPI_REQUEST_NULL) {
-        // this is a control message since it has no "request".
-        finished = 1;
-      } else {
-        // has request.  check for finished
-        MPI_Test(&front.first, &finished, MPI_STATUS_IGNORE);
-      }
-
-      if (finished)
-      {
-        // if there is a buffer, then release it.
-        if (front.second.bufferId != BufferPoolType::ABSENT) {
-          // cleanup, i.e., release the buffer back into the pool
-          buffers.at(front.second.tag).releaseBuffer(front.second.bufferId);
-        }
-        // remove the entry from the in-progress queue.
-        sendInProgress.pop();
-      }
-      else
-      {
-        // the head of the queue is not finished, so break and get it later.
-        break;
-      }
-    }
-
-    // all sending is done when "finishing" is set, and no more messages are pending send,
-    // and no messages are being sent.
-    if (finishing.load() && sendQueue.isEmpty() && sendInProgress.empty()) {
-      // not using sendAccept as check - sendAccept is cleared BEFORE the last
-      // tag end messages starts to be sent, and definitely before the app end
-      // message starts to be sent so sendDone may be set to true too early,
-      // and elements for the last tag, or tag 0 (termination) may be added to
-      // the sendQueue or sendInProfess queue after the empty check here.
-      sendDone.store(true);
-      //DEBUGF("send Done!");
-      //sendQueue.disablePush();
-    }
-  }
-
-
-  /**
-   * @brief Initiates async MPI receives.
-   */
-  void tryStartReceive()
-  {
-    // if no more are expected, then done
-    if (recvDone.load()) return;
-
-    // probe for messages
-    int hasMessage = 0;
-    MPI_Status status;
-    MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
-
-    // if have message to receive,
-    if (hasMessage > 0) {
-      // get some message details
-      int src = status.MPI_SOURCE;
-      int tag = status.MPI_TAG;
-      int received_count;
-      MPI_Request req;
-      uint8_t* msg_data;
-
-
-      // receive the message data bytes into a vector of bytes
-      if (tag == CONTROL_TAG) {  // control messages
-        MPI_Get_count(&status, MPI_INT, &received_count);
-
-        // receive data or FOC messages.  use finishReceive to handle the
-        // FOC messages and count decrement
-
-        msg_data = (received_count == 0) ? nullptr : new uint8_t[received_count * sizeof(int)];
-        MPI_Irecv(msg_data, received_count, MPI_INT, src, tag, comm, &req);
-
-      } else {  // data messages
-        MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &received_count);
-
-        msg_data = (received_count == 0) ? nullptr : new uint8_t[received_count];
-        MPI_Irecv(msg_data, received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
-      }
-
-      // insert into the received InProgress queue.
-      recvInProgress.push(std::pair<MPI_Request, MessageReceived>(req,
-            MessageReceived(msg_data, received_count, tag, src)));
-    }
-  }
-
-  /**
-   * @brief Finishes pending receive requests.
-   * @details   if control message, count down from the total number of possible senders for an epoch
-   *            when reaching 0, then enqueue 1 control message for callback handling to process
-   *
-   *            if data message, then enqueue for callback handling to process.
-   *
-   *
-   * @throw bliss::io::IOException
-   */
-  void finishReceives() throw (bliss::io::IOException)
-  {
-    // no more to receive or pending receive requests, so don.
-    if (recvDone.load()) return;
-
-    int finished = 0;
-
-
-    // if there are pending receive requests
-    while(!recvInProgress.empty())
-    {
-      // get the request
-      std::pair<MPI_Request, MessageReceived>& front = recvInProgress.front();
-
-      if (front.first == MPI_REQUEST_NULL) {  // if local messages
-        finished = 1;  // then this request is complete
-      } else {
-        // test if the MPI request for receive has been completed.
-        MPI_Test(&front.first, &finished, MPI_STATUS_IGNORE);
-      }
-
-      if (finished)
-      {
-        // finished request, so enqueue the message for processing.
-
-
-        // if it's a control message, then need to count down
-        if (front.second.tag == CONTROL_TAG)  {
-
-          // get the message type being controlled, and the epoch
-          int tag = front.second.getTag();
-          int epoch = front.second.getEpoch();
-
-          //== if the message type is same as CONTROL_TAG, then this is a Application Termination FOC message.
-          if (tag == CONTROL_TAG) {
-            epoch = -1;  // then use special epoch -1, which has counter set at commlayer init.
-          } else {
-            // else we are controlling a data message type
-
-            // if we haven't seen this epoch, add a new entry.
-            if (recvRemaining.find(epoch) == recvRemaining.end())
-              recvRemaining[epoch] = commSize;  // insert new.
-          }
-
-          //== now decrement the count of control messages for a epoch
-          --recvRemaining.at(epoch);
-          DEBUGF("RECV rank %d receiving END signal tag %d epoch %d from %d, num senders remaining is %d",
-                 commRank, tag, epoch, front.second.src, recvRemaining.at(epoch));
-
-          //== if after decrement the count is 0 for the epoch,
-          if (recvRemaining.at(epoch) == 0) {
-            // then we've received all end messages for this epoch.  remove it from tracking.
-            recvRemaining.erase(epoch);
-
-            //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
-
-            // and enqueue ONE FOC message for this tag to be handled by callback.  (reduction from commSize to 1)
-            if (!recvQueue.waitAndPush(std::move(front.second))) {
-              throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
-            }
-
-          } else if (recvRemaining.at(epoch) < 0) {
-            // count decremented to negative.  should not happen.  throw exception.
-            std::stringstream ss;
-            ss << "ERROR: number of remaining receivers for tag " << tag << " epoch " << epoch << " is now NEGATIVE";
-            throw bliss::io::IOException(ss.str());
-          }
-        } else {
-          // Data message.  add the received messages into the recvQueue
-          if (!recvQueue.waitAndPush(std::move(front.second))) {
-            throw bliss::io::IOException("ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
-          }
-        }
-        // remove pending receive element
-        recvInProgress.pop();
-      }
-      else
-      {
-        // the recv request is not done, so stop and wait for the next cycle.
-        break;
-      }
-    }
-
-    // see if we are done with all pending receives and all Application Termination FOC messages are received.
-    if ((recvRemaining.size() == 0) && recvInProgress.empty()) {
-      // if completely done, epoch=-1 would have been erased from recvRemaining.
-      recvDone.store(true);
-      //DEBUGF("recv Done!");
-      recvQueue.disablePush();
-    }
-  }
 
 
 protected:
 /******************************************************************************
  *                           Protected member fields                            *
  ******************************************************************************/
-
-  /* Queues of pending MPI operations (MPI_Requests)
-   * Used ONLY by the comm-thread, purely internal and purely single thread.
-   */
-  /// Queue of pending MPI receive operations
-  std::queue<std::pair<MPI_Request, MessageReceived> > recvInProgress;
-  /// Queue of pending MPI send operations
-  std::queue<std::pair<MPI_Request, SendQueueElementType> > sendInProgress;
 
 
   /* Thread-safe queues for posting sends and getting received messages,
@@ -1228,63 +1616,60 @@ protected:
    * and the callback handler thread for the receives
    */
 
+  /// Mutex for adding/removing from local arrays and maps.
+  mutable std::recursive_mutex mutex;
+
+  /// atomic variable indicating if the CommLayer has been finalized (all communications are completed, ready for destruction.)
+//  std::atomic<bool> finalized;
+
+
   // Outbound message data structure, Multiple-Producer-Single-Consumer queue
-  // consumed by the internal MPI-comm-thread
+  // consumed by the internal MPI-comm-thread, produced from worker threads
   /// message queue between sendMessage calling threads (src) and comm-thread
   /// (sink)
-  bliss::concurrent::ThreadSafeQueue<SendQueueElementType> sendQueue;
+  bliss::concurrent::ThreadSafeQueue<std::unique_ptr<MPIMessage> > sendQueue;
 
   // Inbound message data structure, Single-Producer-Multiple-Consumer queue
-  // produced by the internal MPI-comm-thread
+  // produced by the internal MPI-comm-thread, consumed by one or more callback threads
   /// message queue between comm thread (src) and callback thread (sink)
-  bliss::concurrent::ThreadSafeQueue<MessageReceived> recvQueue;
+  bliss::concurrent::ThreadSafeQueue<std::unique_ptr<MPIMessage> > recvQueue;
 
 
   /* information per message tag */
 
-  /// Message buffers per message tag (maps each tag to a set of buffers, one buffer for each target rank)
-  std::unordered_map<int, MessageBuffersType> buffers;
-  /// Mutex for adding new tags to the buffers map (since inserts can be multi-threaded)
-  mutable std::mutex buffers_mutex;
+  // TODO: comments about when they are used.
 
-  // sending threads read, comm-thread modifies
-  /// set of active message tags (still accepting new messages)
-  std::unordered_set<int> sendAccept;
+  /**
+   *  Message buffers per message tag (maps each tag to a set of buffers, one buffer for each target rank)
+   *  only destroyed at the end, after all sends are done.
+   */
+  std::unordered_map<int, bliss::concurrent::copyable_atomic<MessageBuffersType*> > buffers;
 
-  // compute thread set during initialization and setting callbacks, callback-thread read and modify.
+
+  /**
+   *  map between tag and MessageTypeInfo, which contains info about next epoch id,
+   *  mutex, and condition variables.  Also has flag to indicate if tag is "finished"
+   *
+   *  use the flag instead of deleting the MessageTypeInfo because it's easier for other threads to check the flag.
+   *
+   *  Ensures that during sendControlMessageAndWait, a single thread is changing the condition for the wait.
+   *
+   */
+  std::unordered_map<int, bliss::io::MessageTypeInfo > ctrlMsgProperties;
+
+  // each tag-epoch pair has a count, so each MPI process can check to see how many from that epoch is still remaining.
   /// Per tag: number of processes that haven't sent the END-TAG message yet
-  std::unordered_map<int, int> recvRemaining;
+  //std::unordered_map<TaggedEpoch, int, TaggedEpochHash, TaggedEpochEqual> ctrlMsgRemainingForEpoch;
+  std::unordered_map<bliss::io::MessageTypeInfo::TaggedEpoch, bliss::concurrent::copyable_atomic<int> > ctrlMsgRemainingForEpoch;
 
+  // send thread and recv thread should be separate, else we could have a race condition.
+  // e.g. send locally, recvInProgres queue is full, so send function blocks,
+  // but recv function can be called only after send function returns, so queue can't clear.
+  // also, it's just cleaner.
+  CommThread<BufferPtrType> commThread;
 
-  /// condition variable to make "flush" and "finish" blocking.
-  std::condition_variable flushBarrier;
-  /// Associated mutex for the flushBarrier condition variable
-  mutable std::mutex flushMutex;
-
-  /// Atomic status variable, -1: no flushing, otherwise holds the value of the
-  /// tag which is currently flushed
-  std::atomic<int> flushing;
-
-  /// Atomic status variable: whether the commlayer is finishing (after all
-  /// tags have been finished).
-  std::atomic<bool> finishing;
-
-  /// Atomic status variable: set to true if `finishing` and if all sends are
-  /// completed.
-  std::atomic<bool> sendDone;
-  /// Atomic status variable: set to true if `finishing` and if all receives
-  /// are completed.
-  std::atomic<bool> recvDone;
-
-  /// std::thread object for the dedicated communication thread
-  std::thread comm_thread;
-  /// std::thread object for the dedicated callback-handler thread
-  std::thread callback_thread;
-  /// The MPI Communicator object for this communication layer
-  MPI_Comm comm;
-
-  /// Registry of callback functions, mapped to by the associated tags
-  std::unordered_map<int,std::function<void(uint8_t*, std::size_t, int)> > callbackFunctions;
+  // call back thread to process the received objects.
+  CallbackThread callbackThread;
 
   /// The MPI Communicator size
   int commSize;
@@ -1292,12 +1677,12 @@ protected:
   /// The MPI Communicator rank
   int commRank;
 
-  /// id of the epochs.  aka the periods between barrier/synchronization.  each epoch is associated with a single flush/finish, thus to 1 tag.
-  int epoch;
+  std::atomic<bool> initialized;
 };
 
-/// CONTROL_TAG definition.  (declaration and initialization inside class).
-const int CommunicationLayer::CONTROL_TAG;
+
+
+
 
 } // namespace io
 } // namespace bliss

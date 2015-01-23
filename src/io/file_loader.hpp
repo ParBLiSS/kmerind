@@ -22,7 +22,6 @@
 #include "omp.h"
 #endif
 
-#include <cassert>
 
 #include <string>
 #include <cstring>      // memcpy, strerror
@@ -323,10 +322,9 @@ namespace io
               L1Partitioner(), mmapData(nullptr), L1Block(),
               nConsumingThreads(_nThreads), L2BlockSize(_L2BlockSize), L2Partitioner(), L2Blocks(nullptr)
         {
-          // TODO: remove asserts.
-          assert(_filename.length() > 0);
-          assert(_nThreads > 0);
-          assert(_L2BlockSize > 0);
+          if (_filename.length() <= 0) throw std::invalid_argument("ERROR: Filename Length is less than 1");
+          if (_nThreads <= 0) throw std::invalid_argument("ERROR: Number of threads is less than 1");
+          if (_L2BlockSize <= 0) throw std::invalid_argument("ERROR: L2Blocksize is less than 1");
 
           // open the file
           fileHandle = openFile(_filename);
@@ -388,11 +386,11 @@ namespace io
               loaderId(_loaderId), L1Partitioner(), mmapData(nullptr), L1Block(),
               nConsumingThreads(_nThreads), L2BlockSize(_L2BlockSize), L2Partitioner(), L2Blocks(nullptr)
         {
-          assert(_filename.length() > 0);
-          assert(_nThreads > 0);
-          assert(_L2BlockSize > 0);
-          assert(_loaderId >= 0);
-          assert(_nConcurrentLoaders > _loaderId);
+          if (_filename.length() <= 0) throw std::invalid_argument("ERROR: Filename Length is less than 1");
+          if (_nThreads <= 0) throw std::invalid_argument("ERROR: Number of threads is less than 1");
+          if (_L2BlockSize <= 0) throw std::invalid_argument("ERROR: L2Blocksize is less than 1");
+          if (_loaderId < 0) throw std::invalid_argument("ERROR: Loader ID is less than 0");
+          if (_nConcurrentLoaders <= _loaderId) throw std::invalid_argument("ERROR: Loader ID is greater than number of loaders");
 
           // open the file
           fileHandle = openFile(_filename);
@@ -521,8 +519,7 @@ namespace io
          * @return  DataBlock (buffered or unbuffered) wrapping the data mapped/read from the file.
          */
         L1BlockType& getCurrentL1Block() {
-          // TODO: remove assert.
-          assert(loaded);
+          if (!loaded) throw std::logic_error("ERROR: getting L1Block before file is loaded");
 
           return L1Block;
         }
@@ -538,8 +535,7 @@ namespace io
          * @return  DataBlock (buffered or unbuffered) wrapping the data mapped/read from the file.
          */
         L2BlockType& getCurrentL2Block(const size_t &tid) {
-          // TODO: remove assert.
-          assert(loaded);
+          if (!loaded) throw std::logic_error("ERROR: getting L2Block before file is loaded");
 
           return L2Blocks[tid];
         }
@@ -560,9 +556,7 @@ namespace io
           // first get the Range
           RangeType r = getNextL1BlockRange<Derived>();
 
-          loadL1DataForRange(r);
-
-          return L1Block;
+          return loadL1DataForRange(r);
         }
 
 
@@ -582,9 +576,7 @@ namespace io
 
           RangeType r = getNextL2BlockRange<Derived>(tid);
 
-          getL2DataForRange(tid, r);
-
-          return L2Blocks[tid];
+          return getL2DataForRange(tid, r);
         }
 
 
@@ -672,6 +664,9 @@ namespace io
           // clean up any previous runs.
           unloadL1Data();
 
+          // don't do anything if range is empty.
+          if (range.size() == 0) return L1Block;
+
           // make sure the mmapRange is within the file range, and page align it.
           RangeType mmapRange = RangeType::intersect(range, fileRange);
           size_t block_start = RangeType::align_to_page(mmapRange.start, pageSize);
@@ -755,8 +750,7 @@ namespace io
          */
         template <typename D = Derived>
         typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextL2BlockRange(const size_t tid) {
-          // TODO: remove assert
-          assert(loaded);
+          if (!loaded) throw std::logic_error("ERROR: getting L2Block range before file is loaded");
           return L2Partitioner.getNext(tid);
         }
 
@@ -771,8 +765,7 @@ namespace io
          */
         template <typename D = Derived>
         typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextL2BlockRange(const size_t tid) {
-          // TODO: remove assert
-          assert(loaded);
+          if (!loaded) throw std::logic_error("ERROR: getting L2Block range before file is loaded");
           return static_cast<Derived*>(this)->getNextL2BlockRangeImpl(tid);
         }
 
@@ -785,8 +778,7 @@ namespace io
          * @return    reference to loaded L2Block for the specified thread id and range.
          */
         L2BlockType& getL2DataForRange(const size_t tid, const RangeType &L2BlockRange) {
-          // TODO: remove assert
-          assert(loaded);
+          if (!loaded) throw std::logic_error("ERROR: getting L2Block data before file is loaded");
 
           // make sure the range is within the mmaped region.
           RangeType r = RangeType::intersect(L2BlockRange, L1Block.getRange());

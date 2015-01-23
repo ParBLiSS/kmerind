@@ -44,7 +44,7 @@ struct PackingItFunctor
 {
   /// the properties of potential padding in the storage words, given
   /// the storage type and the bits per character.
-  typedef PaddingTraits<PackedStorageType, BITS_PER_CHAR> padtraits;
+  typedef PackingTraits<PackedStorageType, BITS_PER_CHAR> padtraits;
   /// The number of characters packed into each word
   static constexpr unsigned int m = padtraits::chars_per_word;
 
@@ -88,7 +88,7 @@ struct PackingItFunctor
       //for (BitSizeType i = 1; i <= numChars; ++i)
     {
       buffer <<= padtraits::bits_per_char;
-      buffer |= getBitMask<PackedStorageType>(padtraits::bits_per_char) & word_cache[i-1];
+      buffer |= getLeastSignificantBitsMask<PackedStorageType>(padtraits::bits_per_char) & word_cache[i-1];
     }
 
     return buffer;
@@ -116,7 +116,7 @@ class PackingIterator
   /// class
   typedef PackingItFunctor<bits_per_char, PackedStorageType> functor_t;
   /// The padding traits (number of padding bits and data bits, etc)
-  typedef PaddingTraits<PackedStorageType, bits_per_char> padtraits;
+  typedef PackingTraits<PackedStorageType, bits_per_char> padtraits;
 
 public:
   /// Default constructor
@@ -173,7 +173,7 @@ struct UnpackingFunctor
   unpacked_type operator()(const T& value, const diff_type& offset)
   {
     // directly access the according position, no need to buffer
-    T mask = getBitMask<T>(bits_per_char);
+    T mask = getLeastSignificantBitsMask<T>(bits_per_char);
     // shift and mask to get the value
     T x = mask & (value >> (offset*bits_per_char));
     // cast to target type
@@ -204,7 +204,7 @@ class UnpackingIterator
   /// The type of the functor used for unpacking
   typedef UnpackingFunctor<bits_per_char, UnpackedStorageType> functor_t;
   /// The padding properties (data bits, padding bits, etc)
-  typedef PaddingTraits<base_value_type, bits_per_char> padtraits;
+  typedef PackingTraits<base_value_type, bits_per_char> padtraits;
 
 public:
   /// Default constructor

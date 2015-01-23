@@ -19,6 +19,8 @@
 
 #include "io/fasta_loader.hpp"
 #include "io/file_loader.hpp"
+#include "common/Kmer.hpp"
+#include "common/alphabets.hpp"
 
 using namespace bliss::io;
 
@@ -74,7 +76,12 @@ TYPED_TEST_CASE_P(FASTALoaderTest);
 TYPED_TEST_P(FASTALoaderTest, OpenWithRange)
 {
   typedef FileLoader<TypeParam, false, false> FILELoaderType;
-  typedef FASTALoader<typename FILELoaderType::InputIteratorType> FASTALoaderType;
+
+  //Define Kmer type
+  const int len = 35;
+  typedef bliss::Kmer<len, DNA5, uint32_t> KmerType;
+
+  typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
   typedef typename FILELoaderType::RangeType RangeType;
 
   int rank = 3;

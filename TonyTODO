@@ -448,3 +448,58 @@ TODO:
 	Doing Count Index exposed several problems - insert interface for the maps are not uniform.
 	root problem is what is the data structure for kmer element to be inserted?
 	next problem is whether kmer should be stored with its metadata (pos and quality).
+
+	
+	
+9/2/2014
+	position iterator for the zip iterator
+	keep current File -FASTQLoader-> L1Block -FASTQLoader-> L2Block -FASTQIterator-> Sequence -KmerGenerator-> kmer + id + quality
+		but now make the last part based on zip iterator.
+	top level interfaces for FASTQ with/without quality, FASTQ without id, 
+	
+	
+	
+12/3/2014
+	convert pair's first/second to use std::tie(var1, var2) for readability.
+	
+	
+12/11/2014
+	1. lockfree
+		1. queue - decorated concurrentqueue with size and enable/disable
+			for send/recv, has to be shared between threads - need to be lockfree, and is.
+			DONE
+			
+			my own imple? ??
+		2. object pool - need lockfree?  use lockfree queue, locking set only.  no significant performance gain.
+			single releaser version allows lockfree, but this makes no difference in performance test since
+			most of the time is spent in buffer class when doing lockfree atomic updates.
+			spinlock version is faster.
+			
+			Honestly, the lockfree version is limiting and there is no checking multiple release for the same  object.
+		3. memory buffers - need lockfree?  depend on underlying classes, so DONE.
+		4. buffer  - lockfree now.  need lockfree?  SIGNIFICANT IMPROVEMENT. also needto change memory ordering.
+			DONE.  improved by removing CAS in loop during reserve.
+	2. KmerIndex:
+		1. thread global, lockfree memorybuffer version.  DONE
+		2. thread local memorybuffer-pool-buffer version.  
+		3. query interface
+		
+	3. Memory ordering in buffer and Lockfree Queue
+	4. KmerIndex construction:  
+		1. AllToAll version for construction - performance comparison
+		2. suffix array byproduct.
+	5. other types of kmer indices
+	
+	6. paper: 
+		performance comparison:
+		1. best sequential algo.  suffix array based?
+		2. async kmer generation vs AllToAll.
+			minimize comm, or hide comm?
+		3. parallel suffix array based.
+			should beat 17 sec by a lot.  please.
+		4. memory usage
+			sorting version?
+			
+		writing.
+		
+	7. documentation and testing.

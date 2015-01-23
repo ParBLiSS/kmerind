@@ -27,104 +27,17 @@
 #include <type_traits>
 
 // own includes
-#include <io/io_exception.hpp>
-#include <utils/logging.h>
-#include <iterators/function_traits.hpp>
-#include <partition/range.hpp>
+#include "common/sequence.hpp"
+#include "io/io_exception.hpp"
+#include "utils/logging.h"
+#include "iterators/function_traits.hpp"
+#include "partition/range.hpp"
 
 namespace bliss
 {
 
   namespace io
   {
-    /**
-     * @class     bliss::io::FASTQSequenceId
-     * @brief     represents a fastq sequence's id, also used for id of the FASTQ file, and for position inside a FASTQ sequence..
-     * @detail    this is set up as a union to allow easy serialization
-     *            and parsing of the content.
-     *            this keeps a 40 bit sequence ID, broken up into a 32 bit id and 8 bit significant bit id
-     *                       an 8 bit file id
-     *                       a 16 bit position within the sequence.
-     *
-     *            A separate FASTA version will have a different fields but keeps the same 64 bit total length.
-     *
-     *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
-     */
-    union FASTQSequenceId
-    {
-        /// the concatenation of the id components as a single unsigned 64 bit field
-        uint64_t composite;
-
-        /// the id field components
-        struct
-        {
-            /// sequence's id, lower 32 of 40 bits (potentially as offset in the containing file)
-            uint32_t seq_id;
-            /// sequence's id, upper 8 of 40 bits (potentially as offset in the containing file)
-            uint8_t seq_msb;
-            /// id of fastq file
-            uint8_t file_id;
-            /// offset within the read.  Default 0 refers to the whole sequence
-            uint16_t pos;      // position value
-        } components;
-    };
-
-
-    /**
-     * @class     bliss::io::Sequence
-     * @brief     represents a biological sequence, and provides iterators for traversing the sequence.
-     * @details   internally we store 2 iterators, start and end, instead of start + length.
-     *            reason is that using length is best for random access iterators and we don't have guaranty of that.
-     * @tparam Iterator   allows walking through the sequence data.
-     * @tparam Alphabet   allows interpretation of the sequence
-     * @tparam IdType     the format and components of the id of a sequence. Differs from FASTA to FASTQ and based on length of reads.  defaults to FASTQSequenceId
-     */
-    template<typename Iterator, typename Alphabet, typename IdType=FASTQSequenceId>
-    struct Sequence
-    {
-        /// Type of the sequence elements
-        using ValueType = typename std::iterator_traits<Iterator>::value_type;
-        /// The alphabet this sequence uses
-        typedef Alphabet AlphabetType;
-        /// Iterator type for traversing the sequence.
-        typedef Iterator IteratorType;
-
-        /// begin iterator for the sequence
-        Iterator seqBegin;
-        /// end iterator for the sequence.
-        Iterator seqEnd;
-        /// id of the sequence.
-        IdType id;
-    };
-
-    /**
-     * @class     bliss::io::SequenceWithQuality
-     * @brief     extension of bliss::io::Sequence to include quality scores for each position.
-     *
-     * @tparam Iterator   allows walking through the sequence data.
-     * @tparam Alphabet   allows interpretation of the sequence
-     * @tparam Quality    data type for quality scores for each base
-     * @tparam IdType     the format and components of the id of a sequence. Differs from FASTA to FASTQ and based on length of reads.  defaults to FASTQSequenceId
-     */
-    template<typename Iterator, typename Alphabet, typename Quality, typename IdType=FASTQSequenceId>
-    struct SequenceWithQuality : public Sequence<Iterator, Alphabet, IdType>
-    {
-        /// Type of the sequence elements
-        using ValueType = typename std::iterator_traits<Iterator>::value_type;
-        /// The alphabet this sequence uses
-        typedef Alphabet AlphabetType;
-        /// Iterator type for traversing the sequence.
-        typedef Iterator IteratorType;
-        /// the desired quality score's type, e.g. double
-        typedef Quality ScoreType;
-
-        /// begin iterator for the quality scores
-        Iterator qualBegin;
-        /// end iterator for the quality scores
-        Iterator qualEnd;
-    };
-
-
 
     /**
      * @class bliss::io::FASTQParser
@@ -141,10 +54,9 @@ namespace bliss
      * @note  NOT THREAD SAFE.
      *
      * @tparam Iterator   The underlying iterator to be traversed to generate a Sequence
-     * @tparam Alphabet   allows interpretation of the sequence
      * @tparam Quality    data type for quality scores for each base.  defaults to void to mean No Quality Score.
      */
-    template<typename Iterator, typename Alphabet, typename Quality = void>
+    template<typename Iterator, typename Quality = void>
     class FASTQParser
     {
 
@@ -153,14 +65,17 @@ namespace bliss
         static const typename std::iterator_traits<Iterator>::value_type eol = '\n';
 
         /// alias for this type, for use inside this class.
-        using type = FASTQParser<Iterator, Alphabet, Quality>;
+        using type = FASTQParser<Iterator, Quality>;
 
       public:
+        /// base iterator type for the source data that this parser operates on.
+        typedef Iterator  BaseIteratorType;
+
 
         /// Sequence type, conditionally set based on Quality template param to either normal Sequence or SequenceWithQuality.
         typedef typename std::conditional<std::is_void<Quality>::value,
-              Sequence<Iterator, Alphabet>,
-              SequenceWithQuality<Iterator, Alphabet, Quality> >::type      SequenceType;
+              bliss::common::Sequence<Iterator>,
+              bliss::common::SequenceWithQuality<Iterator> >::type      SequenceType;
 
 
         /// default constructor.
@@ -179,7 +94,7 @@ namespace bliss
          * @return        iterator at the new position, where the Non EOL char is found, or end.
          */
         inline Iterator& findNonEOL(Iterator& iter, const Iterator& end, size_t &offset) {
-          while ((*iter == type::eol)  &&  (iter != end)) {
+          while ((iter != end) && (*iter == type::eol)) {
             ++iter;
             ++offset;
           }
@@ -195,7 +110,7 @@ namespace bliss
          * @return        iterator at the new position, where the EOL char is found, or end.
          */
         inline Iterator& findEOL(Iterator& iter, const Iterator& end, size_t &offset) {
-          while ((*iter != type::eol)  &&  (iter != end)) {
+          while ((iter != end) && (*iter != type::eol) ) {
             ++iter;
             ++offset;
           }
@@ -225,6 +140,25 @@ namespace bliss
         template <typename Q = Quality>
         inline typename std::enable_if<std::is_void<Q>::value>::type
         setQualityIterators(const Iterator & start, const Iterator & end, SequenceType& output) {}
+
+        /**
+         * @brief check if quality iterator is at end.
+         * @param sequence
+         * @return
+         */
+        template <typename Q = Quality>
+        inline typename std::enable_if<!std::is_void<Q>::value, bool>::type
+        isQualityIteratorAtEnd(SequenceType& seq) {
+          return seq.qualBegin == seq.qualEnd;
+        }
+
+        /**
+         * @brief check if quality iterator is at end.
+         * @param[in] seq
+         */
+        template <typename Q = Quality>
+        inline typename std::enable_if<std::is_void<Q>::value, bool>::type
+        isQualityIteratorAtEnd(SequenceType& seq) { return false; }
 
 
         /**
@@ -256,6 +190,19 @@ namespace bliss
           throw bliss::io::IOException(ss.str());
 
         }
+
+        /**
+         * @brief print out an Warning, for example when there is malformed partial data.
+         * @param errType     string indicating the source of the error.  user choice
+         * @param start       iterator pointing to beginning of the data in question
+         * @param end         iterator pointing to end of the data in question
+         * @param startOffset offset for the beginning of the data in question
+         * @param endOffset   offset for the end of the data in question
+         */
+        void handleWarning(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
+          WARNING("WARNING: " << "did not find "<< errType << " in " << startOffset << " to " << endOffset);
+        }
+
 
       public:
         /**
@@ -294,7 +241,7 @@ namespace bliss
           // find start of line, \nX or end.
           findNonEOL(iter, end, offset);
           // offset pointing to first start, save it as the id.  - either \n or end
-          output.id.composite = offset;
+          output.id.file_pos = offset;
           // then find the end of that line  - either \n or end.
           findEOL(iter, end, offset);
 
@@ -324,11 +271,15 @@ namespace bliss
           //== now check for error conditions.
           // if either sequence or if required quality score were not found, then failed parsing
           if (output.seqBegin == output.seqEnd) {
-            handleError("sequence", orig_iter, iter, orig_offset, offset);
-          }
-          if (!std::is_void<Quality>::value && (output.qualBegin == output.qualEnd)) {
-            output.seqBegin = output.seqEnd;  // force seq data not to be used.
-            handleError("required quality score", orig_iter, iter, orig_offset, offset);
+            // if nothing is found, throw a warning.
+
+            handleWarning("sequence", orig_iter, iter, orig_offset, offset);
+          } else {
+            // sequence parsing is fine.  now check quality parsing.  if quality is not parsed, then this is an error.
+            if (!std::is_void<Quality>::value && isQualityIteratorAtEnd(output)) {
+              output.seqBegin = output.seqEnd;  // force seq data not to be used.
+              handleError("required quality score", orig_iter, iter, orig_offset, offset);
+            }
           }
           // leave iter and offset advanced.
 
@@ -339,8 +290,10 @@ namespace bliss
     };
 
     /// template class' static variable definition (declared and initialized in class)
-    template<typename Iterator, typename Alphabet, typename Quality>
-    const typename std::iterator_traits<Iterator>::value_type bliss::io::FASTQParser<Iterator, Alphabet, Quality>::eol;
+    template<typename Iterator, typename Quality>
+    const typename std::iterator_traits<Iterator>::value_type bliss::io::FASTQParser<Iterator, Quality>::eol;
+
+
 
     /**
      * @class bliss::io::SequencesIterator
@@ -377,48 +330,46 @@ namespace bliss
      * @note this iterator is not a forward or bidirectional iterator, as traversing in reverse is not implemented.
      *
      * @tparam Parser     Functoid type to supply specific logic for increment and dereference functionalities.
-     * @tparam Iterator   Type of the input iterator to parse/traverse
-     * @tparam base_traits  default to std::iterator_traits of Iterator, defined for convenience.
      */
-    template<typename Parser, typename Iterator >
+    template<typename Parser>
     class SequencesIterator :
         public std::iterator<
             typename std::conditional<
-                  std::is_same<typename std::iterator_traits<Iterator>::iterator_category, std::random_access_iterator_tag>::value ||
-                  std::is_same<typename std::iterator_traits<Iterator>::iterator_category, std::bidirectional_iterator_tag>::value,
+                  std::is_same<typename std::iterator_traits<typename Parser::BaseIteratorType>::iterator_category, std::random_access_iterator_tag>::value ||
+                  std::is_same<typename std::iterator_traits<typename Parser::BaseIteratorType>::iterator_category, std::bidirectional_iterator_tag>::value,
                   std::forward_iterator_tag,
-                  typename std::iterator_traits<Iterator>::iterator_category
+                  typename std::iterator_traits<typename Parser::BaseIteratorType>::iterator_category
                 >::type,
             typename Parser::SequenceType,
-            typename std::iterator_traits<Iterator>::difference_type
+            typename std::iterator_traits<typename Parser::BaseIteratorType>::difference_type
           >
     {
       public:
 
         /// type of data elements in the input iterator
-        typedef typename std::iterator_traits<Iterator>::value_type BaseValueType;
+        typedef typename std::iterator_traits<typename Parser::BaseIteratorType>::value_type BaseValueType;
 
         /// type of data elements in the input iterator
-        typedef typename std::iterator_traits<SequencesIterator<Parser, Iterator> >::value_type ValueType;
+        typedef typename std::iterator_traits<SequencesIterator<Parser> >::value_type ValueType;
 
       protected:
-        /// type of SequencesIterator class
-        typedef SequencesIterator<Parser, Iterator> type;
+        /// type of iterator
+        typedef typename Parser::BaseIteratorType BaseIteratorType;
 
-        /// type traits of SequencesIterator class.
-        typedef std::iterator_traits<type> traits;
+        /// type of SequencesIterator class
+        typedef SequencesIterator<Parser> type;
 
         /// cache of the current result.
         ValueType seq;
 
         /// iterator at the current starting point in the input data from where the current FASTQ record was parsed.
-        Iterator _curr;
+        BaseIteratorType _curr;
 
         /// iterator at the next starting point in the input data from where the next FASTQ record should be parsed.
-        Iterator _next;
+        BaseIteratorType _next;
 
         /// iterator pointing to the end of the input data, not to go beyond.
-        Iterator _end;
+        BaseIteratorType _end;
 
         /// instance of the parser functoid, used during record parsing.
         Parser parser;
@@ -442,8 +393,8 @@ namespace bliss
          * @param end     end of the data to be parsed.
          * @param _range  the Range associated with the start and end of the source data.  coordinates relative to the file being processed.
          */
-        SequencesIterator(const Parser & f, const Iterator& start,
-                       const Iterator& end, const size_t &_offset)
+        SequencesIterator(const Parser & f, const BaseIteratorType& start,
+                       const BaseIteratorType& end, const size_t &_offset)
             : seq(), _curr(start), _next(start), _end(end), parser(f), offset(_offset)
         {
           // parse the first entry, if start != end.
@@ -459,7 +410,7 @@ namespace bliss
          *          this instance therefore does not traverse and only serves as marker for comparing to the traversing SequencesIterator.
          * @param end     end of the data to be parsed.
          */
-        SequencesIterator(const Iterator& end)
+        explicit SequencesIterator(const BaseIteratorType& end)
             : seq(), _curr(end), _next(end), _end(end), parser(), offset(std::numeric_limits<size_t>::max())
         {
         }
@@ -468,7 +419,7 @@ namespace bliss
          * @brief default copy constructor
          * @param Other   The SequencesIterator to copy from
          */
-        SequencesIterator(const type& Other)
+        explicit SequencesIterator(const type& Other)
             : seq(Other.seq), _curr(Other._curr), _next(Other._next), _end(Other._end),
               parser(Other.parser),  offset(Other.offset)
         {}
@@ -510,6 +461,8 @@ namespace bliss
           //== at end of the data block, can't parse any further, no movement.  (also true for end iterator)
           if (_next == _end)
           {
+            //DEBUG("no more.  seq should be empty: " << (seq.seqBegin == seq.seqEnd));
+
             //== check if reaching _end for the first time
             if (_curr != _end) {
               // advance to end
@@ -525,6 +478,7 @@ namespace bliss
 
             //== then try parsing.  this advances _next and offset, ready for next ++ call, and updates output cache.
             parser.increment(_next, _end, offset, seq);
+            //if (_next == _end) DEBUG("did not find one.  at end of block.  sequence should be empty: " << (seq.seqBegin == seq.seqEnd));
           }
 
           //== states updated.  return self.
@@ -554,7 +508,7 @@ namespace bliss
          * @brief   accessor for the internal base iterator, pointing to the current position
          * @return  base iterator
          */
-        Iterator& getBaseIterator()
+        BaseIteratorType& getBaseIterator()
         {
           return _curr;
         }
@@ -562,7 +516,7 @@ namespace bliss
          * @brief   const accessor for the internal base iterator, pointing to the current position
          * @return  const base iterator
          */
-        const Iterator& getBaseIterator() const
+        const BaseIteratorType& getBaseIterator() const
         {
           return _curr;
         }

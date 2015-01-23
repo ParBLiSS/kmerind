@@ -28,6 +28,10 @@ namespace bliss
      * @details  zip iterator simultaneously traverses 2 iterators during increment,
      *           and returns a std::pair of the current elements from the 2 iterators.
      *
+     *           first iterator specified is the "primary", on which equality is tested, e.g. for end condition.
+     *
+     * @note     This is a forward iterator only.
+     *
      * @tparam FirstIter    Type of first iterator to zip
      * @tparam SecondIter   Type of second iterator to zip
      *
@@ -45,7 +49,7 @@ namespace bliss
         /// difference type
         using D = std::ptrdiff_t;
 
-        /// first iterator to zip
+        /// first iterator to zip, "primary" iterator that's used for testing stopping criteria.
         FirstIter iter1;
 
         /// second iterator to zip
@@ -95,7 +99,7 @@ namespace bliss
         ZipIterator(ZipIterator<FirstIter, SecondIter> && other) : iter1(std::move(other.iter1)), iter2(std::move(other.iter2)), val(std::move(other.val)) {};
 
         /**
-         * default move assignment operator, deleted.
+         * default move assignment operator.
          * @param other  instance of ZipIterator to move from
          * @return reference to self
          */
@@ -140,8 +144,8 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if equal, false otherwise.
          */
-        bool operator==(const ZipIterator<FirstIter, SecondIter>& other) {
-          return iter1 == other.iter1 && iter2 == other.iter2;
+        bool operator==(const ZipIterator<FirstIter, SecondIter>& other) const {
+          return iter1 == other.iter1;
         }
 
         /**
@@ -149,7 +153,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if not equal, false otherwise.
          */
-        bool operator!=(const ZipIterator<FirstIter, SecondIter>& other) {
+        bool operator!=(const ZipIterator<FirstIter, SecondIter>& other) const {
           return !(this->operator==(other));
         }
 
@@ -157,7 +161,7 @@ namespace bliss
          * @brief dereference function, *iter
          * @return  current value
          */
-        const T operator*() const {
+        T operator*() {
           val.first = *iter1;
           val.second = *iter2;
           return val;
@@ -167,7 +171,7 @@ namespace bliss
          * @brief dereference function, iter->
          * @return  pointer to current value, so can access internal members
          */
-        const T* operator->() const {
+        T* operator->() {
           this->operator*();
           return &val;
         }

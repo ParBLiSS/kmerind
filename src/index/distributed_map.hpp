@@ -44,7 +44,7 @@ typedef uint32_t count_t;
  *                              unodered_multimap)
  */
 template<typename K, typename T, typename CommunicationLayer,
-         typename LocalContainer>
+         typename LocalContainer, typename RemoteHasher>
 class _distributed_map_base
 {
 public:
@@ -52,6 +52,7 @@ public:
   typedef typename LocalContainer::iterator local_iterator;
   /// The constant iterator type of the local container type
   typedef typename LocalContainer::const_iterator local_const_iterator;
+
 
   /// MPI message tag for inserts
   static constexpr int INSERT_MPI_TAG = 13;
@@ -86,9 +87,9 @@ public:
    *
    * @return Iterator to the first local element.
    */
-  local_const_iterator begin() const
+  local_const_iterator cbegin() const
   {
-    return local_map.begin();
+    return local_map.cbegin();
   }
 
   /**
@@ -97,9 +98,9 @@ public:
    *
    * @return Iterator the the element following the last local element.
    */
-  local_const_iterator end() const
+  local_const_iterator cend() const
   {
-    return local_map.end();
+    return local_map.cend();
   }
 
   /**
@@ -120,17 +121,23 @@ public:
    */
   void flush()
   {
-    if (has_pending_inserts)
+    DEBUGF("FLUSH DISTR MAP");
+    std::unique_lock<std::mutex> lock(mutex);
+    if (has_pending_inserts.load())
     {
       this->commLayer.flush(INSERT_MPI_TAG);
-      has_pending_inserts = false;
-    }
-    if (has_pending_lookups)
-    {
+       has_pending_inserts.store(false);
+     }
+     lock.unlock();
+
+     lock.lock();
+     if (has_pending_lookups.load())
+     {
       this->commLayer.flush(LOOKUP_MPI_TAG);
       this->commLayer.flush(LOOKUP_ANSWER_MPI_TAG);
-      has_pending_lookups = false;
+      has_pending_lookups.store(false);
     }
+    lock.unlock();
   }
 
   /**
@@ -150,8 +157,11 @@ public:
     }
 
     const int targetRank = this->getTargetRank(key);
+
+    DEBUG("Rank " << commRank << " LOOKUP " << key << " at rank " << targetRank);
+
     this->sendKey(key, targetRank, LOOKUP_MPI_TAG);
-    has_pending_lookups = true;
+    has_pending_lookups.store(true);
   }
 
   /**
@@ -176,7 +186,7 @@ public:
    * @param count   The key count threshold. Everything lower than this will be
    *                removed.
    */
-  void filter(const std::size_t count)
+  void filter(const std::size_t lower_threshold)
   {
     // iterate through all keys
     for (auto iter = this->local_map.begin(); iter!=this->local_map.end();)
@@ -184,7 +194,7 @@ public:
       // get end of the range of identical key
       auto cur_end_iter = this->local_map.equal_range(iter->first)->second;
       std::size_t cur_count = getLocalCount(local_map, iter);
-      if (cur_count < count)
+      if (cur_count < lower_threshold)
       {
         // remove all entries with this key, this will invalidate the `iter`
         // iterator
@@ -246,6 +256,25 @@ public:
     return count_hist;
   }
 
+
+  void init() {
+    DEBUG("initialize distributed multimap's communication");
+    // start the threads in the comm layer (if not already running)
+    this->commLayer.initCommunication();
+  }
+
+
+  /**
+   * finalize waits for commLayer to finish, which guarantees that all communications are done (to avoid timing issue with MPI_FINALIZE and distributed map object clean up.
+   */
+  void finalize() {
+    this->commLayer.finish(INSERT_MPI_TAG);
+    this->commLayer.finish(LOOKUP_MPI_TAG);
+    this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
+
+    this->commLayer.finalize();
+  }
+
 protected:
   /**
    * @brief Constructs the shared base class.
@@ -257,16 +286,20 @@ protected:
    * @param hashFunction    The hash function to use for distributing elements
    *                        accross processors. Defaults to std::hash<K>().
    */
-  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, std::function<std::size_t(K)> hashFunction = std::hash<K>())
+  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, RemoteHasher hashFunction = RemoteHasher())
       : commLayer(mpi_comm, comm_size), comm(mpi_comm), hashFunct(hashFunction),
         has_pending_inserts(false), has_pending_lookups(false)
   {
+	  MPI_Comm_rank(comm, &commRank);
   }
 
   /**
    * @brief
    */
-  virtual ~_distributed_map_base() {}
+  virtual ~_distributed_map_base() {
+    this->finalize();
+  }
+
 
   /**
    * @brief Helper function to send the given key to the given rank.
@@ -431,7 +464,7 @@ protected:
   MPI_Comm comm;
 
   /// The hash function used for distributing input accross processors
-  std::function<std::size_t(K)> hashFunct;
+  RemoteHasher hashFunct;
 
   /// The local container data-structure. For most cases this is either
   /// a std::unordered_map or std::unordered_multimap
@@ -445,6 +478,11 @@ protected:
   /// The async callback function, which is called when an answer to a
   /// lookup query is received
   std::function<void(std::pair<K, T>&)> lookupAnswerCallbackFunc;
+
+  std::mutex mutex;
+
+  int commRank;
+
 };
 
 
@@ -457,15 +495,15 @@ protected:
  * @tparam T                    The value type.
  * @tparam CommunicationLayer   The CommunicationLayer class type.
  */
-template<typename K, typename T, typename CommunicationLayer>
+template<typename K, typename T, typename CommunicationLayer, typename LocalHasher = std::hash<K>, typename RemoteHasher = std::hash<K> >
 class distributed_multimap
   : public _distributed_map_base<K, T,
-              CommunicationLayer,std::unordered_multimap<K, T> >
+              CommunicationLayer, std::unordered_multimap<K, T, LocalHasher>, RemoteHasher >
 {
 public:
   /// The baseclass type
   typedef _distributed_map_base<K, T, CommunicationLayer,
-                                std::unordered_multimap<K,T> > _base_class;
+                                std::unordered_multimap<K, T, LocalHasher>, RemoteHasher > _base_class;
   /// The iterator type of the local container type
   typedef typename _base_class::local_iterator local_iterator;
   /// The constant iterator type of the local container type
@@ -485,7 +523,7 @@ public:
    *                        accross processors. Defaults to std::hash<K>().
    */
   distributed_multimap (MPI_Comm mpi_comm, int comm_size,
-        std::function<std::size_t(K)> hashFunction = std::hash<K>())
+        RemoteHasher hashFunction = RemoteHasher())
       : _base_class(mpi_comm, comm_size, hashFunction)
   {
     // add comm layer receive callbacks
@@ -500,19 +538,13 @@ public:
         std::bind(&distributed_multimap::receivedLookupAnswerCallback,
                   this, _1, _2, _3));
 
-    // start the threads in the comm layer (if not already running)
-    this->commLayer.initCommunication();
   }
 
   /**
    * @brief Destructor.
    */
   virtual ~distributed_multimap() {
-    // finish all three tags in order
-//    this->commLayer.finishTag(_base_class::INSERT_MPI_TAG);
-//    this->commLayer.finishTag(_base_class::LOOKUP_MPI_TAG);
-//    this->commLayer.finishTag(_base_class::LOOKUP_ANSWER_MPI_TAG);
-	  this->commLayer.finishCommunication();
+    // finishCommunication called in base class dtor
   }
 
   /**
@@ -627,15 +659,15 @@ protected:
  * @tparam K                    The key type.
  * @tparam CommunicationLayer   The CommunicationLayer class type.
  */
-template<typename K, typename CommunicationLayer>
+template<typename K, typename CommunicationLayer, typename LocalHasher = std::hash<K>, typename RemoteHasher = std::hash<K>>
 class distributed_counting_map
  : public _distributed_map_base<K, count_t, CommunicationLayer,
-                                std::unordered_map<K, count_t> >
+                                std::unordered_map<K, count_t, LocalHasher>, RemoteHasher >
 {
 public:
   /// The baseclass type
   typedef _distributed_map_base<K, count_t, CommunicationLayer,
-                                std::unordered_map<K,count_t> > _base_class;
+                                std::unordered_map<K,count_t, LocalHasher>, RemoteHasher > _base_class;
   /// The iterator type of the local container type
   typedef typename _base_class::local_iterator local_iterator;
   /// The constant iterator type of the local container type
@@ -657,7 +689,7 @@ public:
    *                        accross processors. Defaults to std::hash<K>().
    */
   distributed_counting_map (MPI_Comm mpi_comm, int comm_size,
-          std::function<std::size_t(K)> hashFunction = std::hash<K>())
+          RemoteHasher hashFunction = RemoteHasher())
       : _base_class(mpi_comm, comm_size, hashFunction)
   {
     // add comm layer receive callbacks
@@ -672,19 +704,18 @@ public:
         std::bind(&distributed_counting_map::receivedLookupAnswerCallback,
                   this, _1, _2, _3));
 
-    // start the threads in the comm layer (if not already running)
-    this->commLayer.initCommunication();
   }
+
 
   /**
    * @brief Destructor.
    */
   virtual ~distributed_counting_map()
   {
-//    this->commLayer.finishTag(_base_class::INSERT_MPI_TAG);
-//    this->commLayer.finishTag(_base_class::LOOKUP_MPI_TAG);
-//    this->commLayer.finishTag(_base_class::LOOKUP_ANSWER_MPI_TAG);
-	  this->commLayer.finishCommunication();
+//    this->commLayer.finish(_base_class::INSERT_MPI_TAG);
+//    this->commLayer.finish(_base_class::LOOKUP_MPI_TAG);
+//    this->commLayer.finish(_base_class::LOOKUP_ANSWER_MPI_TAG);
+//	  this->commLayer.finishCommunication();
   }
 
   /**
@@ -700,6 +731,7 @@ public:
     int targetRank = this->getTargetRank(key);
     this->sendKey(key, targetRank, _base_class::INSERT_MPI_TAG);
     this->has_pending_inserts = true;
+    //DEBUG("inserted key " << key);
   }
 
   /**

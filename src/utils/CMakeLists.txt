@@ -1,11 +1,12 @@
 project(bliss-utils)
+include("${CMAKE_SOURCE_DIR}/Sanitizer.cmake")
 
 
 ## EXECUTABLES
 add_library(${PROJECT_NAME} logging.cpp)
 target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS})
 
-
+if (ENABLE_TESTING)
 
 # load the testing:
 if (IS_DIRECTORY ./test)
@@ -23,4 +24,6 @@ if (IS_DIRECTORY ./test)
     FILE(GLOB CHECK_FILES test/check_*.cpp)
     
     bliss_add_non_google_test(${PROJECT_NAME} FALSE ${CHECK_FILES})
+endif()
+
 endif()

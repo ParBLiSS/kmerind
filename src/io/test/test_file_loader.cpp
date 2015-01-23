@@ -373,93 +373,99 @@ TYPED_TEST_P(FileLoaderBufferTest, BufferingChunks)
 // now register the test cases
 REGISTER_TYPED_TEST_CASE_P(FileLoaderBufferTest, BufferingChunks);
 
-
-template <typename T>
-class FileLoaderDeathTest : public ::testing::Test
-{
-  protected:
-    virtual void SetUp()
-    {
-    }
-
-};
-
-// indicate this is a typed test
-TYPED_TEST_CASE_P(FileLoaderDeathTest);
-
-
-// TODO negative test cases
-TYPED_TEST_P(FileLoaderDeathTest, NoFilename)
-{
-  typedef TestableFileLoader<TypeParam> FileLoaderType;
-
-  std::string fileName;
-
-  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  EXPECT_EXIT(new FileLoaderType(1, 0, fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
-
-}
-
-TYPED_TEST_P(FileLoaderDeathTest, BadFilename)
-{
-  typedef TestableFileLoader<TypeParam> FileLoaderType;
-
-  std::string fileName;
-  fileName.assign("bad");
-
-  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
-  ASSERT_THROW(new FileLoaderType(1, 0, fileName), bliss::io::IOException);
-}
-
-TYPED_TEST_P(FileLoaderDeathTest, BadNProcs)
-{
-  typedef TestableFileLoader<TypeParam> FileLoaderType;
-
-  std::string fileName;
-  fileName.append("/test/data/test.fastq");
-
+//
+//template <typename T>
+//class FileLoaderDeathTest : public ::testing::Test
+//{
+//  protected:
+//    virtual void SetUp()
+//    {
+//    }
+//
+//};
+//
+//// indicate this is a typed test
+//TYPED_TEST_CASE_P(FileLoaderDeathTest);
+//
+//
+//// TODO negative test cases
+//TYPED_TEST_P(FileLoaderDeathTest, NoFilename)
+//{
+//  typedef TestableFileLoader<TypeParam> FileLoaderType;
+//
+//  std::string fileName;
+//
+////  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
+////  EXPECT_EXIT(new FileLoaderType(1, 0, fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
+//  std::string err_regex = "ERROR: Filename Length is less than 1";
+//  ASSERT_THROW(new FileLoaderType(1, 0, fileName), bliss::io::IOException);
+//
+//}
+//
+//TYPED_TEST_P(FileLoaderDeathTest, BadFilename)
+//{
+//  typedef TestableFileLoader<TypeParam> FileLoaderType;
+//
+//  std::string fileName;
+//  fileName.assign("bad");
+//
 //  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
-  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  ASSERT_EXIT(new FileLoaderType(0 , 0, fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
-}
-
-TYPED_TEST_P(FileLoaderDeathTest, BadRank)
-{
-  typedef TestableFileLoader<TypeParam> FileLoaderType;
-
-  std::string fileName;
-  fileName.append("/test/data/test.fastq");
-
-  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  ASSERT_EXIT(new FileLoaderType(1, -1, fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
-}
-
-TYPED_TEST_P(FileLoaderDeathTest, BadNThreads)
-{
-  typedef TestableFileLoader<TypeParam> FileLoaderType;
-
-  std::string fileName;
-  fileName.append("/test/data/test.fastq");
-
-  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  ASSERT_EXIT(new FileLoaderType(1, 0, fileName, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
-}
-
-TYPED_TEST_P(FileLoaderDeathTest, BadChunkSize)
-{
-  typedef TestableFileLoader<TypeParam> FileLoaderType;
-
-  std::string fileName;
-  fileName.append("/test/data/test.fastq");
-
-  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
-  ASSERT_EXIT(new FileLoaderType(1, 0, fileName, 0, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
-}
-
-
-
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(FileLoaderDeathTest, NoFilename, BadFilename, BadNProcs, BadRank, BadNThreads, BadChunkSize);
+//  ASSERT_THROW(new FileLoaderType(1, 0, fileName), bliss::io::IOException);
+//}
+//
+//TYPED_TEST_P(FileLoaderDeathTest, BadNProcs)
+//{
+//  typedef TestableFileLoader<TypeParam> FileLoaderType;
+//
+//  std::string fileName;
+//  fileName.assign(PROJ_SRC_DIR);
+//  fileName.append("/test/data/test.fastq");
+//
+////  std::string err_regex = ".*file_loader.hpp.* Exception .* ERROR .* error 2: No such file or directory";
+//  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
+//  ASSERT_EXIT(new FileLoaderType(0 , 0, fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
+//}
+//
+//TYPED_TEST_P(FileLoaderDeathTest, BadRank)
+//{
+//  typedef TestableFileLoader<TypeParam> FileLoaderType;
+//
+//  std::string fileName;
+//  fileName.assign(PROJ_SRC_DIR);
+//  fileName.append("/test/data/test.fastq");
+//
+//  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
+//  ASSERT_EXIT(new FileLoaderType(1, -1, fileName), ::testing::KilledBySignal(SIGABRT), err_regex);
+//}
+//
+//TYPED_TEST_P(FileLoaderDeathTest, BadNThreads)
+//{
+//  typedef TestableFileLoader<TypeParam> FileLoaderType;
+//
+//  std::string fileName;
+//  fileName.assign(PROJ_SRC_DIR);
+//  fileName.append("/test/data/test.fastq");
+//
+//  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
+//  ASSERT_EXIT(new FileLoaderType(1, 0, fileName, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
+//}
+//
+//TYPED_TEST_P(FileLoaderDeathTest, BadChunkSize)
+//{
+//  typedef TestableFileLoader<TypeParam> FileLoaderType;
+//
+//  std::string fileName;
+//  fileName.assign(PROJ_SRC_DIR);
+//  fileName.append("/test/data/test.fastq");
+//
+//  std::string err_regex = ".*file_loader.hpp.* Assertion .* failed.*";
+//  ASSERT_EXIT(new FileLoaderType(1, 0, fileName, 0, 0), ::testing::KilledBySignal(SIGABRT), err_regex);
+//}
+//
+//
+//
+//// now register the test cases
+//REGISTER_TYPED_TEST_CASE_P(FileLoaderDeathTest, NoFilename, BadFilename, BadNProcs, BadRank, BadNThreads, BadChunkSize);
 
 
 
@@ -467,7 +473,7 @@ REGISTER_TYPED_TEST_CASE_P(FileLoaderDeathTest, NoFilename, BadFilename, BadNPro
 typedef ::testing::Types<unsigned char, char, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t>
     FileLoaderTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderTest, FileLoaderTestTypes);
-INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderDeathTest, FileLoaderTestTypes);
+//INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileLoaderDeathTest, FileLoaderTestTypes);
 
 
 typedef ::testing::Types<TestableFileLoader<unsigned char, false, false>,
