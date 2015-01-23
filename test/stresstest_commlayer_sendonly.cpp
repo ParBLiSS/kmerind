@@ -15,7 +15,7 @@ std::atomic<int> msgs_received(0);
 std::atomic<int> lookup_received(0);
 std::atomic<int> answers_received(0);
 
-template <bool ThreadLocal = false>
+template <bool ThreadLocal = true>
 struct Tester
 {
   const int ANSWER_TAG = 12;

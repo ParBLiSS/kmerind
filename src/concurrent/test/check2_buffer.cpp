@@ -800,30 +800,6 @@ int main(int argc, char** argv) {
   testAppendMultipleBuffersAtomicPtrs<lt, 8192, 8>(1000000);
 
 
-//  // no swapping.  - insert 10M elements into buffer of 100MB.
-//  stressTestAppendMultipleBuffersSharedPtrs<bliss::concurrent::LockType::NONE, 100000000, 1>(10000000);
-//
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 100000000, 1>(10000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 100000000, 2>(10000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 100000000, 3>(10000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 100000000, 4>(10000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 100000000, 5>(10000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 100000000, 6>(10000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 100000000, 7>(10000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 100000000, 8>(10000000);
-//
-//  // swapping a lot.
-//  stressTestAppendMultipleBuffersSharedPtrs<bliss::concurrent::LockType::NONE, 2048, 1>(1000000000);
-//
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 2048, 1>(1000000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 2048, 2>(1000000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 2048, 3>(1000000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 2048, 4>(1000000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 2048, 5>(1000000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 2048, 6>(1000000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 2048, 7>(1000000000);
-//  stressTestAppendMultipleBuffersSharedPtrs<lt, 2048, 8>(1000000000);
-
 
   // no swapping.  - insert 10M elements into buffer of 100MB.
   stressTestAppendMultipleBuffersAtomicPtrs<bliss::concurrent::LockType::NONE, 100000000, 1>(10000000);

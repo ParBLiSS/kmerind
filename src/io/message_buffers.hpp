@@ -449,32 +449,32 @@ namespace bliss
 //          auto ptr = this->at(targetProc);
 //
 //          if (ptr) {
-//            // DEBUGGING ONLY
-//            int m = *((int*)data);
-//            if ((m / 1000) % 10 == 1) {
-//              if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
-//            }
-//            else {
-//              if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
-//            }
+////            // DEBUGGING ONLY - for testCommLayer only.  test if call from CommLayer appended the wrong message to MessageBuffers.  Buffer has test for before and after as well.
+////            int m = *((int*)data);
+////            if ((m / 1000) % 10 == 1) {
+////              if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
+////            }
+////            else {
+////              if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
+////            }
 //            void * result = nullptr;
 //
 //            appendResult = ptr->append(data, count, result);  //DEBUGGING FORM
 //
-//            // DEBUGGING ONLY
-//            if (result != nullptr) {
-//              m = *((int*)result);
-//              if ((m / 1000) % 10 == 1) {
-//                if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong outputmessage: %d to proc %d", m, targetProc);
-//              }
-//              else {
-//                if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
-//              }
-//            } else {
-//              if (appendResult & 0x1) {
-//                ERRORF("ERROR: successful append but result ptr is null!");
-//              }
-//            }
+////            // DEBUGGING ONLY - for testCommLayer only.  test if call from CommLayer appended the wrong message to MessageBuffers.  Buffer has test for before and after as well.
+////            if (result != nullptr) {
+////              m = *((int*)result);
+////              if ((m / 1000) % 10 == 1) {
+////                if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong outputmessage: %d to proc %d", m, targetProc);
+////              }
+////              else {
+////                if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
+////              }
+////            } else {
+////              if (appendResult & 0x1) {
+////                ERRORF("ERROR: successful append but result ptr is null!");
+////              }
+////            }
 //          }
 //          else {
 //            ERRORF("ERROR: Append: shared Buffer ptr is null and no way to swap in a different one.");
@@ -972,32 +972,32 @@ namespace bliss
           BufferType* ptr = this->at(targetProc, thread_id);
 
           if (ptr) {
-            // DEBUGGING ONLY
-            int m = *((int*)data);
-            if ((m / 1000) % 10 == 1) {
-              if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
-            }
-            else {
-              if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
-            }
+//            // DEBUGGING ONLY - for testCommLayer only.  test if call from CommLayer appended the wrong message to MessageBuffers.  Buffer has test for before and after as well.
+//            int m = *((int*)data);
+//            if ((m / 1000) % 10 == 1) {
+//              if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
+//            }
+//            else {
+//              if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
+//            }
             void * result = nullptr;
 
             appendResult = ptr->append(data, count, result);  //DEBUGGING FORM
 
-            // DEBUGGING ONLY
-            if (result != nullptr) {
-              m = *((int*)result);
-              if ((m / 1000) % 10 == 1) {
-                if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong outputmessage: %d to proc %d", m, targetProc);
-              }
-              else {
-                if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
-              }
-            } else {
-              if (appendResult & 0x1) {
-                ERRORF("ERROR: successful append but result ptr is null!");
-              }
-            }
+//            // DEBUGGING ONLY - for testCommLayer only.  test if call from CommLayer appended the wrong message to MessageBuffers.  Buffer has test for before and after as well.
+//            if (result != nullptr) {
+//              m = *((int*)result);
+//              if ((m / 1000) % 10 == 1) {
+//                if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
+//              }
+//              else {
+//                if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
+//              }
+//            } else {
+//              if (appendResult & 0x1) {
+//                ERRORF("ERROR: successful append but result ptr is null!");
+//              }
+//            }
           }
           else {
             // do NOT swap in one here, since access here is concurrent, multiple threads may try to swap.

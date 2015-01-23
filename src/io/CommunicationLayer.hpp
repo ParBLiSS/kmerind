@@ -270,13 +270,9 @@ namespace io
  */
 /// DISABLED COMMLAYER THAT USES SHARED BUFFER - SWAPPING BUFFER PTR in MULTITHREADED CODE IS NOT SAFE.
 template<bool ThreadLocal>
-class CommunicatorLayer;
-
-
-template<>
-class CommunicationLayer<true>
+class CommunicationLayer
 {
-
+	 static_assert(ThreadLocal, "Communication Layer only supports ThreadLocal mode. (template param set to true)");
 
 protected:
    /// alias MessageBuffersType to Use the thread safe version of the SendMessageBuffers
@@ -1147,14 +1143,14 @@ public:
     BufferPtrType ptr;
     std::shared_ptr<MessageBuffersType> tptr;
 
-    // DEBUG ONLY
-    int m = *((int*)data);
-    if ((m / 1000) % 10 == 1) {
-      if ((m % 1000 != commRank + 1) || (m / 100000 != dst_rank + 1)) ERRORF("ERROR: DEBUG: CommLayer send wrong message: %d -> %d, msg %d", commRank, dst_rank, m);
-    }
-    else {
-      if ((m/100000 != commRank + 1) || (m % 1000 != dst_rank + 1)) ERRORF("ERROR: DEBUG: CommLayer send wrong message: %d -> %d, msg %d", commRank, dst_rank, m);
-    }
+    // DEBUG ONLY to verify that the correct message was passed in to sendMessage.  for testCommLayer only.
+//    int m = *((int*)data);
+//    if ((m / 1000) % 10 == 1) {
+//      if ((m % 1000 != commRank + 1) || (m / 100000 != dst_rank + 1)) ERRORF("ERROR: DEBUG: CommLayer send wrong message: %d -> %d, msg %d", commRank, dst_rank, m);
+//    }
+//    else {
+//      if ((m/100000 != commRank + 1) || (m % 1000 != dst_rank + 1)) ERRORF("ERROR: DEBUG: CommLayer send wrong message: %d -> %d, msg %d", commRank, dst_rank, m);
+//    }
 
 
     int i = 0;
@@ -1727,7 +1723,6 @@ protected:
 
   std::atomic<bool> initialized;
 };
-
 
 
 

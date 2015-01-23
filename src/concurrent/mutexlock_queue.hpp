@@ -48,6 +48,8 @@ namespace bliss
     template <typename T>
     class ThreadSafeQueue
     {
+    	static_assert(false, "Mutex Locking Thread Safe Queue encounters deadlock from time to time.  also slow.  Please do not use.");
+
       protected:
 
         /// mutex for locking access to the queue

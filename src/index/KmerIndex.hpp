@@ -64,7 +64,7 @@ namespace bliss
      * @details
      *
      */
-    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = false>
+    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerCountIndex {
       protected:
         //==================== COMMON TYPES
@@ -377,7 +377,7 @@ namespace bliss
      * @details
      *
      */
-    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = false>
+    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerPositionIndex {
       protected:
         //==================== COMMON TYPES

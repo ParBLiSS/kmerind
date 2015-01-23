@@ -17,7 +17,7 @@ std::atomic<int> answers_received(0);
 volatile bool after = false;
 int elems;
 
-template <bool ThreadLocal = false>
+template <bool ThreadLocal = true>
 struct Tester
 {
   const int ANSWER_TAG = 12;

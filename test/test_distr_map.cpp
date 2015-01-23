@@ -30,7 +30,7 @@ void receiveAnswer(std::pair<int, bliss::index::count_t>& answer)
   std::cerr << std::flush;
 }
 
-template<bool ThreadLocal = false>
+template<bool ThreadLocal = true>
 void test_map(MPI_Comm& comm, int nthreads)
 {
   int p, rank;
@@ -86,11 +86,11 @@ int main(int argc, char *argv[])
   MPI_Comm_rank(comm, &rank);
 
   /* code */
-  {
-  test_map<false>(comm, nthreads);
-
-  MPI_Barrier(comm);
-  }
+//  {
+//  test_map<false>(comm, nthreads);
+//
+//  MPI_Barrier(comm);
+//  }
 
   {
   test_map<true>(comm, nthreads);
