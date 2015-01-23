@@ -1087,12 +1087,12 @@ public:
 
     // final cleanup
     if (!ctrlMsgProperties.empty()) {
-      ERRORF("BUFFER was not cleared by finish Communication\n");
 //      for (auto el : buffers) {
 //        delete el.second.load();
 //      }
       for (int i = ctrlMsgProperties.size() - 1; i >= 0; --i) {
         if( ctrlMsgProperties[i]) {
+          ERRORF("tagInfo %d was not cleared prior to finalize\n", i);
           delete ctrlMsgProperties[i];
           ctrlMsgProperties[i] = nullptr;
         }
