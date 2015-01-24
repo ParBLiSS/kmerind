@@ -312,6 +312,10 @@ namespace bliss
               leftIndex = (*localStartLocStoreIter).first;
               rightIndex = (*localStartLocStoreIter).second;
               localStartLocStoreIter ++;
+
+              //A sanity check (important in multithreaded version)
+              leftIndex = std::min(offsetRange.end + KmerType::getKmerSize(), std::min(parentRange.end, leftIndex));
+              rightIndex = std::min(offsetRange.end + KmerType::getKmerSize(), std::min(parentRange.end, rightIndex));
             }
 
             //If there is no FASTA sequence header ahead, we assume left and right indices.

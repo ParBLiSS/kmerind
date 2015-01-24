@@ -23,6 +23,8 @@
 #include "common/Kmer.hpp"
 #include "common/alphabets.hpp"
 #include "io/fasta_iterator.hpp"
+#include "partition/partitioner.hpp"
+#include "partition/range.hpp"
 
 using namespace bliss::io;
 
@@ -167,7 +169,6 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiProc)
   typedef typename FILELoaderType::RangeType RangeType;
   typename FILELoaderType::L1BlockType d;
 
-
   //Set the rank and number of processors using MPI
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -217,16 +218,111 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiProc)
     ASSERT_EQ(totalKmerCountSUM, FASTAIteratorTest<TypeParam>::totalKmerCount_seq);
 
   delete [] gold;
+  MPI_Barrier(MPI_COMM_WORLD);
 }
 #endif
+
+// Single process, multiple threads
+TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiThreaded)
+{
+  //Define L2 partitioner type to be block partition
+  typedef bliss::partition::BlockPartitioner<bliss::partition::range<size_t>> blockPartitionerType;
+  typedef FileLoader<TypeParam, false, false, blockPartitionerType> FILELoaderType;
+  typedef typename FILELoaderType::InputIteratorType InputIterType;
+  typedef typename std::iterator_traits<InputIterType>::value_type ValueType;
+
+  //Define Kmer type
+  const int len = 35;
+  typedef bliss::Kmer<len, DNA5, uint32_t> KmerType;
+
+  typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
+  typename FASTALoaderType::vectorType vectorReturned;
+
+  typedef typename FILELoaderType::RangeType RangeType;
+  typename FILELoaderType::L1BlockType d;
+
+  int rank = 0;
+  int nprocs = 1;
+  int nthreads = 4;
+
+#ifdef USE_MPI
+  //This test is supposed to be run on a single core only
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  if(rank==0)
+  {
+#endif
+
+  //Load the file in FILE Loader
+  FILELoaderType loader(nprocs, rank, this->fileName, nthreads);
+
+  d = loader.getNextL1Block();
+  RangeType r = d.getRange();
+
+  //Get the vector of fasta headers from FASTA Loader
+  FASTALoaderType obj;
+  obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
+  ASSERT_LT(0 , vectorReturned.size());
+
+  int totalKmerCount = 0;
+  bool comp = true;
+
+#pragma omp parallel num_threads(4) shared(totalKmerCount, comp)
+  {
+    //Get L2 block for this thread
+    typename FILELoaderType::L2BlockType d2;
+#ifdef USE_OPENMP
+    d2 = loader.getNextL2Block(omp_get_thread_num());
+#endif
+#ifndef  USE_OPENMP
+    d2 = loader.getNextL2Block(0);
+#endif
+
+    RangeType r2 = d2.getRange();
+
+    //Begin iteration
+    FASTAParser<typename FILELoaderType::L1BlockType::iterator, KmerType> FASTAIterObj(d2.begin(), d2.end(), r2, loader.getFileRange(), vectorReturned);
+    ValueType* gold;
+    gold = new ValueType[len];
+
+    //For crosschecking the contents
+    for(auto iter=FASTAIterObj.begin(); iter != FASTAIterObj.end(); iter++)
+    {
+      std::string KmertoString = FASTAIterObj.getKmer(iter).toAlphabets();
+      //std::cout << FASTAIterObj.getOffset(iter) << ", RANK#,Kmer# " << rank << "," << totalKmerCount+1 << " :  " << KmertoString << std::endl; 
+      auto offset = FASTAIterObj.getOffset(iter);
+
+      //Fetch Kmer using simple file reading 
+      FASTAIteratorTest<TypeParam>::readFilePOSIX(this->fileName, offset, len, gold);
+
+      //Compare the contents, by constructing a new kmer and equating
+      std::string directFromFile((char *)gold, len);
+      //std::cout << "Should match with " << " :  " << directFromFile << std::endl; 
+#pragma omp atomic
+      totalKmerCount++;
+
+      comp = (KmertoString == directFromFile) && comp;
+    }
+    delete [] gold;
+  }
+
+  //Total kmers discovered should match with #kmers found in sequential test
+  ASSERT_EQ(comp, true);
+  ASSERT_EQ(totalKmerCount, FASTAIteratorTest<TypeParam>::totalKmerCount_seq);
+
+#ifdef USE_MPI
+  MPI_Barrier(MPI_COMM_WORLD);
+  }
+#endif
+}
+
 
 // now register the test cases
 //REGISTER_TYPED_TEST_CASE_P(FASTAIteratorTest, FASTAIteration, BufferingChunks);
 #ifdef USE_MPI
-REGISTER_TYPED_TEST_CASE_P(FASTAIteratorTest, BufferingChunks, BufferingChunks_MultiProc);
+REGISTER_TYPED_TEST_CASE_P(FASTAIteratorTest, BufferingChunks, BufferingChunks_MultiThreaded, BufferingChunks_MultiProc);
 #endif
 #ifndef USE_MPI
-REGISTER_TYPED_TEST_CASE_P(FASTAIteratorTest, BufferingChunks);
+REGISTER_TYPED_TEST_CASE_P(FASTAIteratorTest, BufferingChunks, BufferingChunks_MultiThreaded);
 #endif
 
 
