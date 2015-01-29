@@ -523,6 +523,11 @@ TODO:
 		quality based.					quality generation code tested and merged to trunk
 		approximate quality based (if needed for performance reason.  we mostly do decode, and not encode, so LUT works well)
 	
+	6. reduce latency and improve concurrency:
+		a. non-atomic flag to indicate that there is data in queue to work on
+		b. multiple single threaded queues
+		
+	
 	6. paper: 
 		performance comparison:
 		1. best sequential algo.  suffix array based?

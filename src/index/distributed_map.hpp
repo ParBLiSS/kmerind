@@ -103,6 +103,10 @@ public:
     return local_map.cend();
   }
 
+  void reserve(size_t size_hint) {
+    local_map.reserve(size_hint);
+  }
+
   /**
    * @brief   Returns the local map's size.  primarily for debugging.
    * @return  size of the local map.
@@ -640,10 +644,11 @@ protected:
     int element_count = count / sizeof(std::pair<K, T>);
 
     // insert all elements into the hash table
-    for (int i = 0; i < element_count; ++i)
-    {
-      this->local_map.insert(elements[i]);
-    }
+//    for (int i = 0; i < element_count; ++i)
+//    {
+//      this->local_map.insert(elements[i]);
+//    }
+    this->local_map.insert(elements, elements + element_count);
   }
 
 };

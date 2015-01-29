@@ -189,6 +189,7 @@ namespace bliss
             typename FileLoaderType::L1BlockType partition;
 
             partition = loader.getNextL1Block();
+            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
             //===  repeatedly load the next L1 Block.
             while (partition.getRange().size() > 0) {
 
@@ -496,6 +497,8 @@ namespace bliss
 
             partition = loader.getNextL1Block();
             //===  repeatedly load the next L1 Block.
+            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
+
             while (partition.getRange().size() > 0) {
 
 
@@ -809,6 +812,8 @@ namespace bliss
             typename FileLoaderType::L1BlockType partition;
 
             partition = loader.getNextL1Block();
+            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
+
             //===  repeatedly load the next L1 Block.
             while (partition.getRange().size() > 0) {
 
@@ -1120,6 +1125,8 @@ namespace bliss
             typename FileLoaderType::L1BlockType partition;
 
             partition = loader.getNextL1Block();
+            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
+
             //===  repeatedly load the next L1 Block.
             while (partition.getRange().size() > 0) {
 
@@ -1445,6 +1452,8 @@ namespace bliss
             typename FileLoaderType::L1BlockType partition;
 
             partition = loader.getNextL1Block();
+            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
+
             //===  repeatedly load the next L1 Block.
             while (partition.getRange().size() > 0) {
 
@@ -1770,6 +1779,8 @@ namespace bliss
             typename FileLoaderType::L1BlockType partition;
 
             partition = loader.getNextL1Block();
+            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
+
             //===  repeatedly load the next L1 Block.
             while (partition.getRange().size() > 0) {
 

@@ -1320,7 +1320,7 @@ public:
   {
 
     assert(tag != CONTROL_TAG && tag >= 0);
-    assert(initialized.load());
+    if (!initialized.load()) return;
 
     if (!sendQueue.canPush()) {
       //throw std::logic_error("W finish called after finishCommunication");

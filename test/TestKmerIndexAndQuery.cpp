@@ -190,49 +190,49 @@ int main(int argc, char** argv) {
 //  }
 //
 //
-//  {
-//    t1 = std::chrono::high_resolution_clock::now();
-//  // initialize index
-//  printf("***** initializing index.\n");
-//  bliss::index::KmerPositionIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
-//
-//  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-//  printf("***** building index first pass.\n");
-//
-//  kmer_index.build(filename, nthreads, chunkSize);
-//  //kmer_index.flush();
-//
-////  MPI_Barrier(comm);
-//  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-//  std::cout << "COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size() << std::endl;
-//  std::cout << std::flush;
-//
-//  fprintf(stderr, "COUNT %d index built pass 1 with index size: %ld\n", rank, kmer_index.local_size());
-//
-//  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-//  printf("***** building index second pass.\n");
-//  kmer_index.build(filename, nthreads, chunkSize);
-//  //kmer_index.flush();
-//
-////  MPI_Barrier(comm);
-////  sleep(5);
-//  //INFO("COUNT " << rank << " Index Building 2 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-//  std::cout << "COUNT " << rank << " Index Building 2 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size() << std::endl;
-//  std::cout << std::flush;
-//  //// query:  use the same file as input.  walk through and generate kmers as before.  send query
-//
-//  fprintf(stderr, "COUNT %d index built pass 2 with index size: %ld\n", rank, kmer_index.local_size());
-//
-//
-//  kmer_index.finalize();
+  {
+    t1 = std::chrono::high_resolution_clock::now();
+  // initialize index
+  printf("***** initializing index.\n");
+  bliss::index::KmerPositionIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
+
+  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+  printf("***** building index first pass.\n");
+
+  kmer_index.build(filename, nthreads, chunkSize);
+  //kmer_index.flush();
+
 //  MPI_Barrier(comm);
-//  t2 = std::chrono::high_resolution_clock::now();
-//  time_span =
-//      std::chrono::duration_cast<std::chrono::duration<double>>(
-//          t2 - t1);
-//  std::cout << "new position index: time " << time_span.count() << std::endl;
-//
-//  }
+  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+  std::cout << "COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size() << std::endl;
+  std::cout << std::flush;
+
+  fprintf(stderr, "COUNT %d index built pass 1 with index size: %ld\n", rank, kmer_index.local_size());
+
+  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+  printf("***** building index second pass.\n");
+  kmer_index.build(filename, nthreads, chunkSize);
+  //kmer_index.flush();
+
+//  MPI_Barrier(comm);
+//  sleep(5);
+  //INFO("COUNT " << rank << " Index Building 2 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+  std::cout << "COUNT " << rank << " Index Building 2 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size() << std::endl;
+  std::cout << std::flush;
+  //// query:  use the same file as input.  walk through and generate kmers as before.  send query
+
+  fprintf(stderr, "COUNT %d index built pass 2 with index size: %ld\n", rank, kmer_index.local_size());
+
+
+  kmer_index.finalize();
+  MPI_Barrier(comm);
+  t2 = std::chrono::high_resolution_clock::now();
+  time_span =
+      std::chrono::duration_cast<std::chrono::duration<double>>(
+          t2 - t1);
+  std::cout << "new position index: time " << time_span.count() << std::endl;
+
+  }
 //
 //
 //  {
@@ -280,51 +280,51 @@ int main(int argc, char** argv) {
 //  }
 //
 //
-  // with quality score....
-  {
-    t1 = std::chrono::high_resolution_clock::now();
-  // initialize index
-  printf("***** initializing index.\n");
-  bliss::index::KmerPositionAndQualityIndexOld<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
-
-  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  printf("***** building index first pass.\n");
-
-  kmer_index.build(filename, nthreads, chunkSize);
-  //kmer_index.flush();
-
+//  // with quality score....
+//  {
+//    t1 = std::chrono::high_resolution_clock::now();
+//  // initialize index
+//  printf("***** initializing index.\n");
+//  bliss::index::KmerPositionAndQualityIndexOld<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
+//
+//  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+//  printf("***** building index first pass.\n");
+//
+//  kmer_index.build(filename, nthreads, chunkSize);
+//  //kmer_index.flush();
+//
+////  MPI_Barrier(comm);
+//  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+//  std::cout << "COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size() << std::endl;
+//  std::cout << std::flush;
+//
+//  fprintf(stderr, "COUNT %d index built pass 1 with index size: %ld\n", rank, kmer_index.local_size());
+//
+//  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+//  printf("***** building index second pass.\n");
+//  kmer_index.build(filename, nthreads, chunkSize);
+//  //kmer_index.flush();
+//
+////  MPI_Barrier(comm);
+////  sleep(5);
+//  //INFO("COUNT " << rank << " Index Building 2 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+//  std::cout << "COUNT " << rank << " Index Building 2 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size() << std::endl;
+//  std::cout << std::flush;
+//  //// query:  use the same file as input.  walk through and generate kmers as before.  send query
+//
+//  fprintf(stderr, "COUNT %d index built pass 2 with index size: %ld\n", rank, kmer_index.local_size());
+//
+//
+//  kmer_index.finalize();
 //  MPI_Barrier(comm);
-  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-  std::cout << "COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size() << std::endl;
-  std::cout << std::flush;
-
-  fprintf(stderr, "COUNT %d index built pass 1 with index size: %ld\n", rank, kmer_index.local_size());
-
-  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  printf("***** building index second pass.\n");
-  kmer_index.build(filename, nthreads, chunkSize);
-  //kmer_index.flush();
-
-//  MPI_Barrier(comm);
-//  sleep(5);
-  //INFO("COUNT " << rank << " Index Building 2 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-  std::cout << "COUNT " << rank << " Index Building 2 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size() << std::endl;
-  std::cout << std::flush;
-  //// query:  use the same file as input.  walk through and generate kmers as before.  send query
-
-  fprintf(stderr, "COUNT %d index built pass 2 with index size: %ld\n", rank, kmer_index.local_size());
-
-
-  kmer_index.finalize();
-  MPI_Barrier(comm);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-          t2 - t1);
-  std::cout << "old position/quality index: time " << time_span.count() << std::endl;
-
-  }
-
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span =
+//      std::chrono::duration_cast<std::chrono::duration<double>>(
+//          t2 - t1);
+//  std::cout << "old position/quality index: time " << time_span.count() << std::endl;
+//
+//  }
+//
 //
 //  {
 //    t1 = std::chrono::high_resolution_clock::now();
