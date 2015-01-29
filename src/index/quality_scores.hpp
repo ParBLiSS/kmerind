@@ -35,6 +35,9 @@ namespace index
  *  only supports double as output format.  float representation of probability starts to fail at Q of 98
  *  in Sangar encoding of raw base reads (0 to 93).  For kmer composite scores, this values needs to be more precise
  *
+ * creating a look up table instead of computing (by calling std::log, exp, etc.).
+ * saves about 3 seconds on a 35MB read file.
+ *
  */
 template<typename OutT, unsigned char MinInput, unsigned char MaxInput, char MinScore >
 struct QualityScoreCodec

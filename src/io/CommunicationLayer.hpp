@@ -434,6 +434,10 @@ protected:
          //DEBUGF("rank %d sendDone? %s, finishing %s sendqueue %ld sendInProgress %ld", commRank, (sendDone ? "true":"false"), (finishing.load() ? "true": "false"), commLayer.sendQueue.getSize(), sendInProgress.size());
 
 
+         if (commLayer.sendQueue.isEmpty()) {
+           _mm_pause();
+           return false;
+         }
 
          // try to get the send element
          bool suc;
@@ -650,8 +654,8 @@ protected:
          int mpi_finished = 0;
 
          bool worked = false;
-         // while there is some in progress MPI_send requests,
-         while(!sendInProgress.empty())
+         // while there is some in progress MPI_send requests,  don't use loop - delay here propagates to all nodes.
+         if(!sendInProgress.empty())
          {
            // get the first request to check - ONLY 1 THREAD CHECKING sendInProgress.
            assert(sendInProgress.front().second != nullptr);
@@ -688,7 +692,8 @@ protected:
            {
              // the head of the queue is not finished, so break and get it later.
              //DEBUGF("not done sending!");
-             break;
+             worked = false;
+             // break;
            }
          }
 
@@ -730,7 +735,7 @@ protected:
          bool worked = false;
 
          // if there are pending receive requests
-         while(!recvInProgress.empty())
+         if(!recvInProgress.empty())
          {
            assert(recvInProgress.front().second.get() != nullptr);
 
@@ -783,7 +788,8 @@ protected:
                  assert(front.second.get() == nullptr);
                  assert(recvInProgress.back().second.get() != nullptr);
 
-                 break;  // gives the worker threads a chance to call sendControlMessagesAndWait
+                 //break;  // gives the worker threads a chance to call sendControlMessagesAndWait
+                 worked = false;
 
                  // this delays the processing, which hopefully does not create deadlock.
                  // Better for worker thread to wait via  sendControlMessagesAndWait, instead
@@ -833,7 +839,8 @@ protected:
            {  // mpi message is not finished yet.
 
              // the recv request is not done, so stop and wait for the next cycle.
-             break;
+             //break;
+             worked = false;
            }
          } // end while loop for processing recvInProgress.
 
@@ -948,6 +955,7 @@ protected:
           // while there are messages to process, or we are still receiving
           while (commLayer.recvQueue.canPop() )  // same as !recvDone || !recvQueue.isEmpty()
           {
+
             // get next element from the queue, wait if none is available.
             // waitAndPop will exit out of wait when termination flag is set on the recvQueue
             bool succ;

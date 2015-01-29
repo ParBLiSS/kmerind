@@ -22,7 +22,7 @@
 #include "io/file_loader.hpp"
 #include "io/fastq_loader.hpp"
 #include "common/alphabets.hpp"
-#include "io/fastq_iterator.hpp"
+#include "io/sequence_iterator.hpp"
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readMMap {

@@ -53,10 +53,13 @@ template <typename BaseIterator, unsigned int KMER_SIZE,
           typename Encoder = bliss::index::Illumina18QualityScoreCodec<float> >
 class QualityScoreSlidingWindow
 {
-private:
-  /// Type of the internal sum is equal to the floating point type
-  /// returned by the encoding
-  typedef typename Encoder::value_type QualityType;
+  public:
+
+    /// Type of the internal sum is equal to the floating point type
+    /// returned by the encoding
+    typedef typename Encoder::value_type QualityType;
+
+  private:
 
   /// The current sum of base-correct probabilities in the current window
   QualityType current_sum = 0;
@@ -162,6 +165,56 @@ public:
   }
 };
 
+/**
+ * compute kmer quality based on phred quality score.
+ *
+ * Q = -10 log_10 P
+ *
+ * where P is probability of error.
+ *
+ * probability of kmer being correct is: (1-p_1)(1-p_2)...(1-p_k)  - this is the computation used via log2.
+ * probability of kmer being incorrect then is 1 - (p(correct...))
+ *
+ * Phrad adds the Phred score, which amounts to p_1 * p_2 * ... * p_k because of the logarithm.
+ *  (probability that all bases in the sequence are incorrect.)
+ * Quake is computes a kmer score based on probability in the phred score.  not clear exactly how.
+ *
+ * value range is in ascii from !(33) to ~(126), using sanger encoding.
+ *
+ * one possible approximation
+ * // now computing k-correct with approximation gives
+ * //    1 - sum_1..k(p_i) + 1/2 sum_1..k sum_1..k (p_i)(p_j) - 3rd order term + 4th order term ...
+ * //
+ * //   p(incorrect) is sum_1..k(p_i) - 1/2 sum_1..k sum_1..k (p_i)(p_j) + 3rd order term - 4th order term ...
+ * //
+ * // =====>>>  p(incorrect) < sum_1..k(p_i).
+  * //
+ * // approximate with linear terms.  (i.e. probability of 2 or more bases being called incorrectly is low).  bound is not that tight.
+ * //
+ * // =====>>>  max_1..k(p_i) < p(incorrect)  - is this always true?
+ * // this would be the lower bound.
+ * // max_1..k(p_i) ~= min_1..k(q_i)
+ * // can also look for top x values, but then it becomes a search
+ * //
+ * // =====>>>  sum_1..k(p_i) - 1/2 sum_1..k sum_1..k (p_i)(p_j) < p(incorrect)
+ * // if track s = sum_1..k(p_i), then can compute
+ *        p(incorrect) ~= (s - p_(j-k) + p_j) + (p_(j-k) * s - 0.5 * p_(j-k)^2) - (p_j * s' - 0.5* p_j^2)
+ *        we can save the 2nd order term in array (col-wise partial sum), the 1st order term in array,
+ *        and s.
+ *
+ *
+ *  each term in (1-p_i) is (1- 10^(q/-10)) = (1 - e ^ ((log 10)(q/-10)))
+ *  accumulate using sum(log(term))., expand using e^(sum(log(term))), calculate -10 log_10(1-cumulative).
+ *
+ *
+ *  approximation may not be needed, since we mostly decode, and that uses a LUT table. so only a exp2 is needed.
+ */
+template <typename BaseIterator, unsigned int KMER_SIZE,
+          typename Encoder = bliss::index::Illumina18QualityScoreCodec<float> >
+class ApproximateQualityScoreSlidingWindow;
+
+
+
 
 
 /**
@@ -191,6 +244,8 @@ protected:
   typedef QualityScoreSlidingWindow<BaseIterator, KMER_SIZE, Encoder > functor_t;
 
 public:
+  typedef typename Encoder::value_type QualityType;
+
   /// Default constructor.
   QualityScoreGenerationIterator() : base_class_t() {}
 
@@ -252,7 +307,6 @@ protected:
   QualityScoreGenerationIterator(const BaseIterator& baseBegin, const functor_t& window, bool initialize_window)
     : base_class_t(baseBegin, window, initialize_window)  {}
 };
-
 
 
 

@@ -520,7 +520,8 @@ TODO:
 		2. suffix array byproduct.
 		
 	5. other types of kmer indices
-		quality based.
+		quality based.					quality generation code tested and merged to trunk
+		approximate quality based (if needed for performance reason.  we mostly do decode, and not encode, so LUT works well)
 	
 	6. paper: 
 		performance comparison:

@@ -1174,7 +1174,7 @@ namespace bliss
 
           if (ptr) {
             ptr->clear_and_unblock_writes();
-            memset(ptr->operator int*(), 0, ptr->getCapacity());
+            //memset(ptr->operator int*(), 0, ptr->getCapacity());
           }
 
           buffers.at(dest).at(tid) = ptr;

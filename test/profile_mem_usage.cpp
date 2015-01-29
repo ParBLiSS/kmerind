@@ -23,9 +23,10 @@
 #include "common/alphabets.hpp"
 #include "common/AlphabetTraits.hpp"
 
-#include "index/kmer_index_element.hpp"
-#include "io/fastq_iterator.hpp"
+#include "retired/kmer_index_element.hpp"
+#include "io/sequence_iterator.hpp"
 #include "common/sequence.hpp"
+#include "io/fastq_loader.hpp"
 
 
 using namespace std;
@@ -37,9 +38,9 @@ typedef bliss::Kmer<21, DNA, uint64_t> KmerType;
 
 
 typedef KmerIndexElement<KmerType > KmerIndexType1;
-typedef KmerIndexElementWithId<KmerType, bliss::common::FASTQSequenceId > KmerIndexType2;
-typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::common::FASTQSequenceId, float > KmerIndexType3;
-typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::common::FASTQSequenceId, double > KmerIndexType4;
+typedef KmerIndexElementWithId<KmerType, bliss::io::FASTQSequenceId > KmerIndexType2;
+typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::io::FASTQSequenceId, float > KmerIndexType3;
+typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::io::FASTQSequenceId, double > KmerIndexType4;
 
 
 void checkMemUsed(long long &phyMemUsed, long long &swapUsed, bool print) {
