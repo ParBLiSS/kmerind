@@ -53,9 +53,9 @@ namespace bliss
     template<typename KmerType>
     void receiveCountAnswer(std::pair<KmerType, bliss::index::count_t>& answer)
     {
-      auto key = answer.first;
-      auto val = answer.second;
-
+      KmerType key;
+      bliss::index::count_t val;
+      std::tie(key, val) = answer;
     }
 
     /**
@@ -64,7 +64,7 @@ namespace bliss
      * @details
      *
      */
-    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ>
+    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = false>
     class KmerCountIndex {
       protected:
         //==================== COMMON TYPES
@@ -105,7 +105,7 @@ namespace bliss
 
         /// define the index storage type.  using an infix of kmer since prefix is used for distributing to processors.
         typedef bliss::index::distributed_counting_map<KmerType,
-                                                   bliss::io::CommunicationLayer,
+                                                   bliss::io::CommunicationLayer<ThreadLocal>,
                                                    bliss::KmerSuffixHasher<KmerType>,
                                                    bliss::KmerPrefixHasher<KmerType> > IndexType;
 
@@ -118,13 +118,17 @@ namespace bliss
         /// MPI rank within the communicator
         int rank;
 
+        int nThreads;
+
       public:
         /**
          * initializes the index
          * @param comm
          * @param comm_size
          */
-        KmerCountIndex(MPI_Comm _comm, int _comm_size) : index(_comm, _comm_size, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm) {
+        KmerCountIndex(MPI_Comm _comm, int _comm_size, int num_threads = 1) :
+          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))),
+          comm(_comm), nThreads(num_threads) {
           MPI_Comm_rank(comm, &rank);
 
           index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, bliss::index::count_t>&)>(&receiveCountAnswer<KmerType>));
@@ -360,8 +364,9 @@ namespace bliss
     template<typename KmerType, typename IdType>
     void receivePositionAnswer(std::pair<KmerType, IdType>& answer)
     {
-      auto key = answer.first;
-      auto val = answer.second;
+      KmerType key;
+      IdType val;
+      std::tie(key, val) = answer;
 
     }
 
@@ -372,7 +377,7 @@ namespace bliss
      * @details
      *
      */
-    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ>
+    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = false>
     class KmerPositionIndex {
       protected:
         //==================== COMMON TYPES
@@ -418,7 +423,7 @@ namespace bliss
         /// define the index storage type.  using an infix of kmer since prefix is used for distributing to processors.
         typedef bliss::index::distributed_multimap<KmerType,
                                                    IdType,
-                                                   bliss::io::CommunicationLayer,
+                                                   bliss::io::CommunicationLayer<ThreadLocal>,
                                                    bliss::KmerSuffixHasher<KmerType>,
                                                    bliss::KmerPrefixHasher<KmerType> > IndexType;
 
@@ -437,7 +442,8 @@ namespace bliss
          * @param comm
          * @param comm_size
          */
-        KmerPositionIndex(MPI_Comm _comm, int _comm_size) : index(_comm, _comm_size, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm) {
+        KmerPositionIndex(MPI_Comm _comm, int _comm_size, int num_threads = 1) :
+          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm) {
           MPI_Comm_rank(comm, &rank);
 
           index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, IdType>&)>(&receivePositionAnswer<KmerType, IdType>));

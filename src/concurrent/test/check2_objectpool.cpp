@@ -32,8 +32,6 @@ template<typename PoolType>
 void testAppendMultipleBuffers(const int NumThreads, const int total_count, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, const int64_t buffer_cap) {
   omp_lock_t writelock;
   omp_init_lock(&writelock);
-  omp_lock_t writelock2;
-  omp_init_lock(&writelock2);
   omp_lock_t writelock3;
   omp_init_lock(&writelock3);
 //  std::atomic_flag writelock = ATOMIC_FLAG_INIT;
@@ -64,7 +62,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
   if (buf_ptr) buf_ptr->clear_and_unblock_writes();
 
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, writelock, writelock2, writelock3, pool) private(i, data, result) reduction(+:success, failure, swap)
+#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, writelock, writelock3, pool) private(i, data, result) reduction(+:success, failure, swap)
   for (i = 0; i < total_count; ++i) {
 
 //    while (writelock2.test_and_set());
@@ -111,8 +109,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 //      while (writelock3.test_and_set());
       //sptr = new_buf_ptr;
       omp_set_lock(&writelock3);
-      if (sptr)
-      stored.insert(stored.end(), sptr->operator int*(), sptr->operator int*() + sptr->getSize() / sizeof(int));
+      if (sptr) stored.insert(stored.end(), sptr->operator int*(), sptr->operator int*() + sptr->getSize() / sizeof(int));
       omp_unset_lock(&writelock3);
 //      writelock3.clear();
 
@@ -146,7 +143,6 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
     }
   }
   omp_destroy_lock(&writelock);
-  omp_destroy_lock(&writelock2);
   omp_destroy_lock(&writelock3);
 }
 

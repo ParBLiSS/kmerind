@@ -272,6 +272,11 @@ namespace bliss
           if (prev_size >= capacity) {
             size_in_use.fetch_sub(1, std::memory_order_relaxed);
             // leave ptr as nullptr.
+            if (this->isUnlimited()) {
+              ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", prev_size);
+//            } else {
+//              WARNINGF("WARNING: mutex locked pool is full. prev size %lu.", prev_size);
+            }
           } else {
 
             // now get or create
@@ -284,13 +289,20 @@ namespace bliss
             } else {
               // has available for reuse.
               sptr = available.tryPop().second;
+              // available may return null because it's concurrent queue.
+              // cannot wait for available to return non-null, because available could be empty at this point.
             }
-            std::unique_lock<std::mutex> lock(mutex);
 
-            // get the object ready for use.
-            in_use.insert(sptr);  // store the shared pointer.
+            if (sptr) {
 
-            lock.unlock();
+              std::unique_lock<std::mutex> lock(mutex);
+
+              // get the object ready for use.
+              in_use.insert(sptr);  // store the shared pointer.
+
+              lock.unlock();
+
+            }
           }
 
           return sptr;
@@ -299,7 +311,7 @@ namespace bliss
 
         /**
          * @brief     Get the next available Object by id.  if none available, return false in the first argument of the pair.
-         * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the ObjectId if successful.
+         * @return    object pointer. if null, acquire was not successful.
          */
         template<bliss::concurrent::LockType LT = LockType>
                 typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, ObjectPtrType>::type tryAcquireObject() {
@@ -309,7 +321,15 @@ namespace bliss
 
           int64_t prev_size = size_in_use.fetch_add(1, std::memory_order_relaxed);
           if (prev_size >= capacity) {
+
             size_in_use.fetch_sub(1, std::memory_order_relaxed);
+
+            if (this->isUnlimited()) {
+              ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", prev_size);
+//            } else {
+//              WARNINGF("WARNING: spinlock pool is full. prev size %lu.", prev_size);
+            }
+
             // leave ptr as nullptr.
           } else {
 
@@ -323,13 +343,19 @@ namespace bliss
             } else {
               // has available for reuse.
               sptr = available.tryPop().second;
+
+              // available may return null because it's concurrent queue.
+              // cannot wait for available to return non-null, because available could be empty at this point.
             }
-            while (spinlock.test_and_set());
 
-            // get the object ready for use.
-            in_use.insert(sptr);  // store the shared pointer.
+            if (sptr) {
+              while (spinlock.test_and_set());
 
-            spinlock.clear();
+              // get the object ready for use.
+              in_use.insert(sptr);  // store the shared pointer.
+
+              spinlock.clear();
+            }
           }
 
           return sptr;
@@ -343,6 +369,13 @@ namespace bliss
          */
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type releaseObject(ObjectPtrType ptr) {
+
+          if (!ptr)
+          {
+            WARNINGF("WARNING: pool releasing a nullptr.");
+            //throw std::logic_error("ERROR pool releasing a nullptr.");
+            return true;
+          }
 
           std::unique_lock<std::mutex> lock(mutex);
           int count = in_use.erase(ptr);
@@ -367,6 +400,13 @@ namespace bliss
          */
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, bool>::type releaseObject(ObjectPtrType ptr) {
+
+          if (!ptr)
+          {
+            WARNINGF("WARNING: pool releasing a nullptr.");
+            //throw std::logic_error("ERROR pool releasing a nullptr.");
+            return true;
+          }
 
           while (spinlock.test_and_set());
           int count = in_use.erase(ptr);
@@ -562,25 +602,39 @@ namespace bliss
 
 
         ObjectPtrType tryAcquireObject() {
+
+
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
-          // now get or create
-          if (available.empty()) {
-            if (getAvailableCount() > 0) {
+          size_t size = in_use.size();
 
-              // none available for reuse
-              // but has room to allocate, so do it.
-              sptr = new T();
-            }  // else already nullptr.
-          } else {
-            // has available for reuse.
-            sptr = available.front();
-            available.pop_front();
-          }
+            // now get or create
+            if (available.empty()) {
+              if (size < capacity) {
 
-          // get the object ready for use.
-          if (sptr) in_use.insert(sptr);  // store the shared pointer.
+                // none available for reuse
+                // but has room to allocate, so do it.
+                sptr = new T();
+              }  else {
+                // else already nullptr.
+                if (this->isUnlimited()) {
+                  ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", size);
+//                } else {
+//                  WARNINGF("WARNING: nonConcurrent pool is full. prev size %lu.", size);
+                }
+              }
+            } else {
+              // has available for reuse.
+              sptr = available.front();
+              available.pop_front();
 
+
+              // available may return null because it's concurrent queue.
+              // cannot wait for available to return non-null, because available could be empty at this point.
+            }
+
+            // get the object ready for use.
+            if (sptr) in_use.insert(sptr);  // store the shared pointer.
           return sptr;
         }
 
@@ -590,6 +644,13 @@ namespace bliss
          * @param objectId    The id of the Object to be released.
          */
         bool releaseObject(ObjectPtrType ptr) {
+
+          if (!ptr)
+          {
+            WARNINGF("WARNING: pool releasing a nullptr.");
+            //throw std::logic_error("ERROR pool releasing a nullptr.");
+            return true;
+          }
 
           bool res = false;            // nullptr would not be in in_use.
 

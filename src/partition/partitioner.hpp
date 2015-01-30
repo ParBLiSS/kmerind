@@ -264,15 +264,15 @@ namespace bliss
 
         /**
          * @var curr
-         * @brief the result range.  cached here for speed
+         * @brief internal cache of subrange objects that each partition last retrieved.
          */
-        Range curr;
+        Range* curr;
 
         /**
          * @var done
-         * @brief boolean indicating that partition has already been done.
+         * @brief boolean indicating that partition has already been done. THREAD SAFE
          */
-        bool done;
+        bool* done;
 
         /**
          * @var rem
@@ -283,13 +283,15 @@ namespace bliss
 
       public:
 
-        BlockPartitioner() : BaseClassType(), curr(), done(false), rem(0) {};
-
+        BlockPartitioner() : BaseClassType(), curr(nullptr), done(nullptr), rem(0) {};
 
         /**
          * @brief default destructor
          */
-        virtual ~BlockPartitioner() {};
+        virtual ~BlockPartitioner() {
+          if (curr != nullptr) delete [] curr;
+          if (done != nullptr) delete [] done;
+        };
 
         /**
          * @brief configures the partitioner with the source range, number of partitions
@@ -303,14 +305,17 @@ namespace bliss
                        const ChunkSizeType &_chunkSize = 0, const RangeValueType &_overlapSize = 0) {
           this->BaseClassType::configure(_src, _nPartitions, _chunkSize, _overlapSize);
 
-          // compute the size of partitions and number of partitions that have size larger than others by 1.
-          // if chunkSize to be 0 - rem would be more than 0, so the first rem partitions will have size of 1.
+          //We need as many chunks as nPartitions
+          curr = new Range[this->nPartitions];
+
+          //Array of booleans for each partition
+          done = new bool[this->nPartitions];
 
           // first compute the chunkSize excluding the overlap region
           this->chunkSize = this->src.size() / static_cast<ChunkSizeType>(this->nPartitions);
 
           // next figure out the remainder using chunkSize that excludes overlap region size.
-          // not using modulus since we RangeValueType may be float.
+          // not using modulus since we RangeValueType may be float
           rem = this->src.size() - this->chunkSize * static_cast<ChunkSizeType>(this->nPartitions);
 
           resetImpl();
@@ -329,13 +334,14 @@ namespace bliss
           // param validation already done.
 
           // if previously computed, then return end object, signalling no more chunks.
-          if (done) return this->end;  // can only call this once.
+          if (done[partId]) return this->end;  // can only call this once.
+          done[partId] = true;
 
           // if just 1 partition, return.
           if (this->nPartitions == 1) {
-            done = true;
-            curr = this->src;
-            return curr;
+
+            curr[partId] = this->src;
+            return curr[partId];
           }
 
           // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
@@ -353,11 +359,9 @@ namespace bliss
           }
 
           // compute the new range
-          BaseClassType::computeRangeForChunkId(curr, this->src, startOffset, partId, cs, this->overlapSize);
+          BaseClassType::computeRangeForChunkId(curr[partId], this->src, startOffset, partId, cs, this->overlapSize);
 
-          // block partitioning only allows calling this once.
-          done = true;
-          return curr;
+          return curr[partId];
         }
 
 
@@ -374,20 +378,19 @@ namespace bliss
           // param validation already done.
 
           // if previously computed, then return end object, signalling no more chunks.
-          if (done) return this->end;  // can only call this once.
+          if (done[partId]) return this->end;  // can only call this once.
+          done[partId] = true;
 
           // if just 1 partition, return.
           if (this->nPartitions == 1) {
-            done = true;
-            curr = this->src;
-            return curr;
+            curr[partId] = this->src;
+            return curr[partId];
           }
 
           // compute the subrange's start and end, spreading out the remainder to the first rem chunks/partitions.
-          BaseClassType::computeRangeForChunkId(curr, this->src, 0, partId, this->chunkSize, this->overlapSize);
+          BaseClassType::computeRangeForChunkId(curr[partId], this->src, 0, partId, this->chunkSize, this->overlapSize);
 
-          done = true;
-          return curr;
+          return curr[partId];
         }
 
 
@@ -395,8 +398,11 @@ namespace bliss
          * @brief reset size to full range, mark the done to false.
          */
         void resetImpl() {
-          curr = this->src;
-          done = false;
+          for(int i=0 ; i< this->nPartitions ; i++)
+          {
+            done[i] = false;
+            curr[i] = this->src;
+          }
         }
 
     };

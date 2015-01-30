@@ -313,12 +313,12 @@ namespace bliss
               rightIndex = (*localStartLocStoreIter).second;
               localStartLocStoreIter ++;
 
-              //A sanity check (important in multithreaded version)
-              leftIndex = std::min(offsetRange.end + KmerType::getKmerSize(), std::min(parentRange.end, leftIndex));
-              rightIndex = std::min(offsetRange.end + KmerType::getKmerSize(), std::min(parentRange.end, rightIndex));
+              //A sanity check (important in multithreaded version because here we might have headers ahead that we should ignore)
+              leftIndex = std::min(offsetRange.end + KmerType::getKmerSize(), leftIndex);
+              rightIndex = std::min(offsetRange.end + KmerType::getKmerSize(), rightIndex);
             }
 
-            //If there is no FASTA sequence header ahead, we assume left and right indices.
+            //If there is no FASTA sequence header ahead, we assume left and right indices at the end.
             //This makes sure that we avoid reading incomplete kmers near the end of the file(or buffer)
             if(rawOffset > rightIndex)
             {
@@ -330,11 +330,12 @@ namespace bliss
             }
 
             //Current offset should not overlap with the header
-            //Aso make sure we have atleast KMER_SIZE characters ahead (also consider eol after them)
+            //Also make sure we have atleast KMER_SIZE characters ahead (also consider eol after them)
             if(rawOffset < leftIndex && leftIndex - rawOffset > KmerType::getKmerSize())
             {
               return rawOffset;
             }
+
             //The offset points doesn't point to sequence data but the header
             else
             {

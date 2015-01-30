@@ -30,8 +30,8 @@ void receiveAnswer(std::pair<int, bliss::index::count_t>& answer)
   std::cerr << std::flush;
 }
 
-
-void test_map(MPI_Comm& comm)
+template<bool ThreadLocal = false>
+void test_map(MPI_Comm& comm, int nthreads)
 {
   int p, rank;
   MPI_Comm_size(comm, &p);
@@ -39,7 +39,7 @@ void test_map(MPI_Comm& comm)
   glCommSize = p;
 
   //printf("INIT COUNTING MAP\n");
-  bliss::index::distributed_counting_map<int, bliss::io::CommunicationLayer> counting_map(comm, p);
+  bliss::index::distributed_counting_map<int, bliss::io::CommunicationLayer<ThreadLocal> > counting_map(comm, p, nthreads);
   //printf("REGISTER COUNTING MAP CALLBACK\n");
   counting_map.setLookupAnswerCallback(std::function<void(std::pair<int, bliss::index::count_t>&)>(&receiveAnswer));
 
@@ -67,6 +67,11 @@ void test_map(MPI_Comm& comm)
 
 int main(int argc, char *argv[])
 {
+  int nthreads = 1;
+  if (argc > 1) {
+    nthreads = atoi(argv[1]);
+  }
+
   // set up MPI
   MPI_Init(&argc, &argv);
 
@@ -81,9 +86,18 @@ int main(int argc, char *argv[])
   MPI_Comm_rank(comm, &rank);
 
   /* code */
-  test_map(comm);
+  {
+  test_map<false>(comm, nthreads);
 
   MPI_Barrier(comm);
+  }
+
+  {
+  test_map<true>(comm, nthreads);
+
+  MPI_Barrier(comm);
+  }
+
 
   // finalize MPI
   MPI_Finalize();
