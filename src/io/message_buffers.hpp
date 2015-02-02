@@ -209,16 +209,16 @@ namespace bliss
      *
      *  @tparam LockType    determines if this class should be thread safe
      */
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT = PoolLT, int64_t BufferCapacity = 8192>
+    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity = 8192>
     class SendMessageBuffers;
 
     /// DISABLED BECAUSE SWAPPING BUFFER PTR IS NOT SAFE in multiple threaded code.
-//    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT = PoolLT, int64_t BufferCapacity = 8192>
+//    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity = 8192>
 //    class SendMessageBuffers : public MessageBuffers<PoolLT, BufferLT, BufferCapacity>
 //    {
 //      protected:
 //        using BaseType = MessageBuffers<PoolLT, BufferLT, BufferCapacity>;
-//        using MyType = SendMessageBuffers<PoolLT, BufferLT, BufferCapacity>;
+//        using MyType = SendMessageBuffers<ArrayLT, PoolLT, BufferLT, BufferCapacity>;
 //
 //      public:
 //        /// Id type of the Buffers
@@ -708,13 +708,13 @@ namespace bliss
      *
      *  @tparam LockType    determines if this class should be thread safe
      */
-    template<bliss::concurrent::LockType PoolLT, int64_t BufferCapacity>
-    class SendMessageBuffers<PoolLT, bliss::concurrent::LockType::NONE, BufferCapacity> :
-    public MessageBuffers<PoolLT, bliss::concurrent::LockType::NONE, BufferCapacity>
+    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity>
+    class SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, PoolLT, BufferLT, BufferCapacity> :
+    public MessageBuffers<PoolLT, BufferLT, BufferCapacity>
     {
       protected:
-        using BaseType = MessageBuffers<PoolLT, bliss::concurrent::LockType::NONE, BufferCapacity>;
-        using MyType = SendMessageBuffers<PoolLT, bliss::concurrent::LockType::NONE, BufferCapacity>;
+        using BaseType = MessageBuffers<PoolLT, BufferLT, BufferCapacity>;
+        using MyType = SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, PoolLT, BufferLT, BufferCapacity>;
 
       public:
         /// Id type of the Buffers
@@ -728,20 +728,17 @@ namespace bliss
 
         /// Vector of pointers (atomic).  Provides a mapping from process id (0 to vector size), to bufferPtr (from BufferPool)
         /// using vector of atomic pointers allows atomic swap of each pointer, without array of mutex or atomic_flags.
-        typedef typename std::conditional<PoolLT == bliss::concurrent::LockType::NONE, BufferType*,
-            std::atomic<BufferType*> >::type BufferPtrTypeInternal;
+        typedef BufferType* BufferPtrTypeInternal;
 
         /// buffers, one set per target, and in each set, as many as there are local threads.
         std::vector< std::vector< BufferPtrTypeInternal > > buffers;
 
         /// for synchronizing access to buffers (and pool).
         mutable std::mutex mutex;
-        mutable std::atomic_flag spinlock;
-
       private:
 
         // private copy contructor
-        SendMessageBuffers(SendMessageBuffers&& other, const std::lock_guard<std::mutex>&) :
+        SendMessageBuffers(MyType&& other, const std::lock_guard<std::mutex>&) :
           BaseType(std::move(other)), buffers(std::move(other.buffers))
           {};
 
@@ -790,7 +787,7 @@ namespace bliss
          * @param other   source SendMessageBuffers to move from.
          */
         explicit SendMessageBuffers(MyType && other) :
-            SendMessageBuffers(std::forward<MyType >(other), std::lock_guard<std::mutex>(other.mutex)) {};
+            SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, PoolLT, BufferLT, BufferCapacity>(std::forward<MyType >(other), std::lock_guard<std::mutex>(other.mutex)) {};
 
 
         /**
@@ -887,7 +884,7 @@ namespace bliss
             nthreads = buffers.at(i).size();
 
             for (tid = 0; tid < nthreads; ++tid) {
-              swapInEmptyBuffer<PoolLT>(i, tid);
+              swapInEmptyBuffer(i, tid);
             }
           }
         }
@@ -1014,7 +1011,7 @@ namespace bliss
 
           if (appendResult & 0x2) { // only 1 thread gets 0x2 result for a buffer.  all other threads either writes successfully or fails.
 
-            return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer<PoolLT>(targetProc, tid) ) );
+            return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer(targetProc, tid) ) );
 
           } else {
             //if (preswap != postswap) printf("ERROR: NOSWAP: preswap %p and postswap %p are not the same.\n", preswap, postswap);
@@ -1043,7 +1040,7 @@ namespace bliss
           int tid = omp_get_thread_num();
           int nthreads = buffers.at(targetProc).size();
           for (int t = 0; t < nthreads; ++t) {
-            old = swapInEmptyBuffer<PoolLT>(targetProc, (t + tid) % nthreads);
+            old = swapInEmptyBuffer(targetProc, (t + tid) % nthreads);
             if (old) {
               old->block_and_flush();
               result.push_back(old);
@@ -1061,7 +1058,7 @@ namespace bliss
 
           int tid = (thread_id < 0 ? omp_get_thread_num() : thread_id);
 
-          BufferType* old = swapInEmptyBuffer<PoolLT>(targetProc, tid);
+          BufferType* old = swapInEmptyBuffer(targetProc, tid);
           if (old) {
             old->block_and_flush();
             return old;
@@ -1070,63 +1067,6 @@ namespace bliss
 
       protected:
 
-        /**
-         * @brief  Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
-         * @details The new buffer may be BufferPoolType::ABSENT (invalid buffer, when there is no available Buffer from pool)
-         *
-         * Effect:  bufferIdForProcId[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
-         *
-         * This is the THREAD SAFE version.   Uses std::compare_exchange_strong to ensure that another thread hasn't swapped in a new Empty one already.
-         *
-         * @note we make the caller get the new bufferIdForProcId[dest] directly instead of returning by reference in the method parameter variable
-         *  because this way there is less of a chance of race condition if a shared "old" variable was accidentally used.
-         *    and the caller will likely prefer the most up to date bufferIdForProcId[dest] anyway.
-         *
-         * @note  below is now relevant any more now that message buffer hold buffer ptrs and pool is unlimited.. we only have line 5 here.
-         *  old is    old assignment  action
-         *    ABSENT      available     not a valid case
-         *    ABSENT      at dest       swap, return ABS
-         *    ABSENT      not at dest   dest is already swapped.  no op, return ABS
-         *    not ABS     available     not used.  block old, no swap. return ABS
-         *    not ABS     at dest       swap, block old.  return old
-         *    not ABS     not at dest   being used.  no op. return ABS
-         *
-         *
-         * @note:  exchanges buffer at dest atomically.
-         * @note:  because only thread that just fills a buffer will do exchange, only 1 thread does exchange at a time.  can rely on pool's Lock to get one new buffer
-         *          can be assured that each acquired new buffer will be  used, and can ascertain that no 2 threads will replace the same full buffer.
-         *
-         * @tparam        used to choose thread safe vs not verfsion of the method.
-         * @param dest    position in bufferIdForProcId array to swap out
-         * @return        the BufferId that was swapped out.
-         */
-        template<bliss::concurrent::LockType LT = PoolLT>
-        typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest, int thread_id = -1) {
-
-          int tid = thread_id < 0 ? omp_get_thread_num() : thread_id;
-
-          auto ptr = this->pool.tryAcquireObject();
-          int i = 1;
-          while (!ptr) {
-            _mm_pause();
-            ptr = this->pool.tryAcquireObject();
-            ++i;
-          }
-          if (i > 200) WARNINGF("NOTICE: Concurrent Pool threadlocal Buffer ptr took %d iterations to acquire, %d threads.", i, omp_get_num_threads());
-
-          if (ptr) ptr->clear_and_unblock_writes();
-
-
-          BufferType* oldbuf = buffers.at(dest).at(tid).exchange(ptr);
-          //printf("INFO: swap old %p, new %p, for thread %d: target rank %d of %lu, curr size %lu\n", oldbuf, ptr, tid, dest, buffers.size(), buffers.at(dest).size());
-
-          if (oldbuf && oldbuf->isEmpty()) {
-//            printf("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
-            releaseBuffer(oldbuf);
-            oldbuf = nullptr;
-          }
-          return oldbuf;
-        }
 
 
         /**
@@ -1156,8 +1096,7 @@ namespace bliss
          * @param dest    position in bufferIdForProcId array to swap out
          * @return        the BufferId that was swapped out.
          */
-        template<bliss::concurrent::LockType LT = PoolLT>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, BufferType*>::type swapInEmptyBuffer(const int dest, int thread_id = -1) {
+        BufferType* swapInEmptyBuffer(const int dest, int thread_id = -1) {
 
           int tid = thread_id < 0 ? omp_get_thread_num() : thread_id;
 

@@ -276,9 +276,7 @@ class CommunicationLayer
 
 protected:
    /// alias MessageBuffersType to Use the thread safe version of the SendMessageBuffers
-   using MessageBuffersType = typename std::conditional<ThreadLocal,
-       SendMessageBuffers<bliss::concurrent::LockType::SPINLOCK, bliss::concurrent::LockType::NONE, 8192>,
-       SendMessageBuffers<bliss::concurrent::LockType::SPINLOCK, bliss::concurrent::LockType::LOCKFREE, 8192> >::type;
+   using MessageBuffersType = SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, bliss::concurrent::LockType::SPINLOCK, bliss::concurrent::LockType::NONE, 8192>;
 
    /// alias BufferPoolType to MessageBuffersType's
    using BufferPoolType = typename MessageBuffersType::BufferPoolType;

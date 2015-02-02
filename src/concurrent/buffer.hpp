@@ -90,6 +90,9 @@ namespace bliss
 
 
       protected:
+        // need reserved size and completed write size.  since we allow locked reserve and concurrent write, we need this as 2 separate variables.
+        // use size's value to indicate "block"
+
 
         /// internal data storage
         mutable uint8_t* start_ptr; // const, does not change
@@ -244,7 +247,7 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_flushing() const
         {
           std::lock_guard<std::mutex> lock(mutex);
-          return is_flushing<bliss::concurrent::LockType::NONE>();
+          return (reserved > Capacity) && (written < size);
         }
 
         template<bliss::concurrent::LockType LT = LockType>
@@ -253,17 +256,10 @@ namespace bliss
         {
           while (spinlock.test_and_set())
             ;
-          bool res = is_flushing<bliss::concurrent::LockType::NONE>();
+          bool res = (reserved > Capacity) && (written < size);
           spinlock.clear();
           return res;
         }
-
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, bool>::type is_flushing() const
-        {
-          return (reserved > Capacity) && (written < size);
-        }
-
 
 
       public:
@@ -332,14 +328,14 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_writing() const
         {
           std::lock_guard<std::mutex> lock(mutex);
-          return is_writing<bliss::concurrent::LockType::NONE>();
+          return written < size;
         }
 
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_read_only() const
         {
           std::lock_guard<std::mutex> lock(mutex);
-          return is_read_only<bliss::concurrent::LockType::NONE>();
+          return (reserved > Capacity) && (written >= size);
         }
 
         template<bliss::concurrent::LockType LT = LockType>
@@ -348,7 +344,7 @@ namespace bliss
         {
           while (spinlock.test_and_set())
             ;
-          bool res = is_writing<bliss::concurrent::LockType::NONE>();
+          bool res = written < size;
           spinlock.clear();
           return res;
         }
@@ -359,21 +355,9 @@ namespace bliss
         {
           while (spinlock.test_and_set())
             ;
-          bool res = is_read_only<bliss::concurrent::LockType::NONE>();
+          bool res = (reserved > Capacity) && (written >= size);
           spinlock.clear();
           return res;
-        }
-
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, bool>::type is_writing() const
-        {
-          return written < size;
-        }
-
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, bool>::type is_read_only() const
-        {
-          return (reserved > Capacity) && (written >= size);
         }
 
         // TODO:  make this more clear.
@@ -399,48 +383,7 @@ namespace bliss
          * @param count
          * @return      pointer at which to insert.
          */
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX,
-            int64_t>::type reserve(const uint32_t count)
-        {
-
-          std::unique_lock<std::mutex> lock(mutex);
-
-          int64_t curr = reserve<bliss::concurrent::LockType::NONE>(count);
-
-          lock.unlock();
-          return curr;
-
-        }
-        /**
-         * @brief       reserves a position in the buffer at which to insert the count number of bytes.
-         * @details     increment only if we have room (so done via atomic CAS.).  if full, return nullptr. if becoming full, set the size.  else return the insertion point
-         * @param count
-         * @return      pointer at which to insert.
-         */
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
-            int64_t>::type reserve(const uint32_t count)
-        {
-
-          while (spinlock.test_and_set());
-
-          int64_t curr = reserve<bliss::concurrent::LockType::NONE>(count);
-
-          spinlock.clear();
-          return curr;
-        }
-
-
-        /**
-         * @brief       reserves a position in the buffer at which to insert the count number of bytes.
-         * @details     increment only if we have room (so done via atomic CAS.).  if full, return nullptr. if becoming full, set the size.  else return the insertion point
-         * @param count
-         * @return      pointer at which to insert.
-         */
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, int64_t>::type reserve(
-            const uint32_t count)
+        int64_t internal_reserve(const uint32_t count)
         {
           int64_t curr = reserved;
 
@@ -471,6 +414,47 @@ namespace bliss
           return curr;
         }
 
+
+        /**
+         * @brief       reserves a position in the buffer at which to insert the count number of bytes.
+         * @details     increment only if we have room (so done via atomic CAS.).  if full, return nullptr. if becoming full, set the size.  else return the insertion point
+         * @param count
+         * @return      pointer at which to insert.
+         */
+        template<bliss::concurrent::LockType LT = LockType>
+        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX,
+            int64_t>::type reserve(const uint32_t count)
+        {
+
+          std::unique_lock<std::mutex> lock(mutex);
+
+          int64_t curr = internal_reserve(count);
+
+          lock.unlock();
+          return curr;
+
+        }
+        /**
+         * @brief       reserves a position in the buffer at which to insert the count number of bytes.
+         * @details     increment only if we have room (so done via atomic CAS.).  if full, return nullptr. if becoming full, set the size.  else return the insertion point
+         * @param count
+         * @return      pointer at which to insert.
+         */
+        template<bliss::concurrent::LockType LT = LockType>
+        typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
+            int64_t>::type reserve(const uint32_t count)
+        {
+
+          while (spinlock.test_and_set());
+
+          int64_t curr = internal_reserve(count);
+
+          spinlock.clear();
+          return curr;
+        }
+
+
+
         /// marked write as completed.
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, void>::type complete_write(
@@ -478,7 +462,7 @@ namespace bliss
         {
           std::lock_guard<std::mutex> lock(mutex);
 
-          complete_write<bliss::concurrent::LockType::NONE>(count);
+          written += count;
         }
 
         /// marked write as completed.
@@ -489,17 +473,10 @@ namespace bliss
           while (spinlock.test_and_set())
             ;
 
-          complete_write<bliss::concurrent::LockType::NONE>(count);
+          written += count;
           spinlock.clear();
         }
 
-
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, void>::type complete_write(
-            const int count)
-        {
-          written += count;
-        }
 
       public:
 
@@ -516,7 +493,13 @@ namespace bliss
           // disable reserved and set the size
           std::lock_guard<std::mutex> lock(mutex);
 
-          block_writes<bliss::concurrent::LockType::NONE>(_curr);
+          int64_t curr = (_curr >= 0 ? _curr : reserved);
+          reserved = Capacity + 1;
+
+          if (size > curr)
+          {
+            size = curr;
+          }
         }
         //===== read lock trumps write.
         /**
@@ -531,16 +514,6 @@ namespace bliss
           // disable reserved and set the size
           while (spinlock.test_and_set())
             ;
-          block_writes<bliss::concurrent::LockType::NONE>(_curr);
-          spinlock.clear();
-        }
-
-//        //===== read lock trumps write.
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, void>::type block_writes(
-            int64_t _curr = -1)
-        {
-          // disable reserved and set the size
           int64_t curr = (_curr >= 0 ? _curr : reserved);
           reserved = Capacity + 1;
 
@@ -548,7 +521,9 @@ namespace bliss
           {
             size = curr;
           }
+          spinlock.clear();
         }
+
 
         /**
          * @brief  read lock prevents future writes.  read lock can be turned on while there are writes in progress.  once read lock is on, reserve will returns nullptr.
@@ -560,7 +535,10 @@ namespace bliss
         {
           std::lock_guard<std::mutex> lock(mutex);
 
-          unblock_writes<bliss::concurrent::LockType::NONE>();
+          if (reserved > Capacity)
+            reserved = size;
+          // then reset size to max
+          size = Capacity + 1;
 
         }
 
@@ -576,22 +554,15 @@ namespace bliss
           while (spinlock.test_and_set())
             ;
 
-          unblock_writes<bliss::concurrent::LockType::NONE>();
+          if (reserved > Capacity)
+            reserved = size;
+          // then reset size to max
+          size = Capacity + 1;
           spinlock.clear();
 
         }
 
 
-
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE, void>::type unblock_writes()
-        {
-          // put the size into curr if it hasn't been done.
-          if (reserved > Capacity)
-            reserved = size;
-          // then reset size to max
-          size = Capacity + 1;
-        }
 
         /**
          * @brief   Sets the buffer as read only and wait for all pending writes.
@@ -619,7 +590,9 @@ namespace bliss
         {
           while (spinlock.test_and_set())
             ;
-          clear_and_block_writes<bliss::concurrent::LockType::NONE>();
+          reserved = Capacity + 1;
+          size = 0;
+          written = 0;
           spinlock.clear();
         }
 
@@ -628,15 +601,6 @@ namespace bliss
             void>::type clear_and_block_writes()
         {
           std::lock_guard<std::mutex> lock(mutex);
-          // blocked
-          reserved = Capacity + 1;
-          size = 0;
-          written = 0;
-        }
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE,
-            void>::type clear_and_block_writes()
-        {
           // blocked
           reserved = Capacity + 1;
           size = 0;
@@ -653,7 +617,9 @@ namespace bliss
         {
           while (spinlock.test_and_set())
             ;
-          clear_and_unblock_writes<bliss::concurrent::LockType::NONE>();
+          reserved = 0;
+          size = Capacity + 1;
+          written = 0;
           spinlock.clear();
         }
 
@@ -669,15 +635,6 @@ namespace bliss
           written = 0;
         }
 
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::NONE,
-            void>::type clear_and_unblock_writes()
-        {
-          // blocked
-          reserved = 0;
-          size = Capacity + 1;
-          written = 0;
-        }
 
         /**
          * @brief Append data to the buffer, THREAD SAFE, LOCK FREE.
@@ -1253,6 +1210,7 @@ namespace bliss
 
 
 
+
     /**
      * @brief Thread safe/unsafe Memory Buffer, which is a fixed size allocated block of memory where data can be appended to, and read from via pointer.
      * @details this class uses unique_ptr internally to manage the memory, and supports only MOVE semantics.
@@ -1308,6 +1266,8 @@ namespace bliss
         using BufferType = Buffer<bliss::concurrent::LockType::LOCKFREE, Capacity>;
 
       protected:
+        // need reserved size and completed write size.  since we allow locked reserve and concurrent write, we need this as 2 separate variables.
+        // use size's value to indicate "block"
 
         /// internal data storage
         mutable uint8_t* start_ptr; // const, does not change
@@ -1787,6 +1747,10 @@ namespace bliss
           return result;
         }
     };
+
+
+
+
 
     /**
      * @brief << operator to write out DataBlock object's actual data.

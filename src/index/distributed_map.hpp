@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <algorithm> // for std::max
 #include <atomic>
+#include <tuple>
 
 // include MPI
 #include <mpi.h>
@@ -333,8 +334,8 @@ protected:
   void sendPair(const K& key, const T& value, const int dstRank, const int tag)
   {
     // create the pair and call the overloaded function
-    std::pair<K, T> keyElement(key, value);
-    this->sendPair(keyElement, dstRank, tag);
+    //std::pair<K, T> keyElement(key, value);
+    this->sendPair(std::make_pair(key, value), dstRank, tag);
   }
 
   /**
