@@ -5,10 +5,15 @@
  *      Author: tpan
  */
 
+#include <config.hpp>
 #include <gtest/gtest.h>
 #include <cstdint>  // for uint64_t, etc.
 #include <vector>
 #include <limits>
+
+#ifdef USE_OPENMP
+#include <omp.h>
+#endif
 
 #include "partition/range.hpp"
 #include "partition/partitioner.hpp"
@@ -38,7 +43,7 @@ TYPED_TEST_CASE_P(PartitionTest);
 
 
 
-// test the block partitioning operation.  Only testing the base function that all other overloaded functions calls
+//test the block partitioning operation.  Only testing the base function that all other overloaded functions calls
 TYPED_TEST_P(PartitionTest, blockPartition){
   typedef bliss::partition::range<TypeParam> RangeType;
   typedef bliss::partition::BlockPartitioner<range<TypeParam> > PartitionerType;
@@ -58,7 +63,7 @@ TYPED_TEST_P(PartitionTest, blockPartition){
   { 0, 1, 2};
 
   std::vector<size_t> partitionCount =
-  { 1, 2, std::numeric_limits<size_t>::max()};
+  { 1, 2};
 
   PartitionerType part;
   for (auto start : starts)
@@ -72,7 +77,6 @@ TYPED_TEST_P(PartitionTest, blockPartition){
 //        if (len < i)
 //          continue;
         part.configure(src, p);
-
 
         auto div = len / static_cast<SizeType>(p);
         auto rem = len - div * static_cast<SizeType>(p);
@@ -119,6 +123,63 @@ TYPED_TEST_P(PartitionTest, blockPartition){
   }
 }
 
+#ifdef USE_OPENMP
+// test the block partitioning operation. (With openmp threads)
+TYPED_TEST_P(PartitionTest, blockPartition_openmp){
+  typedef bliss::partition::range<TypeParam> RangeType;
+  typedef bliss::partition::BlockPartitioner<range<TypeParam> > PartitionerType;
+
+  typedef decltype(std::declval<RangeType>().size()) SizeType;
+
+  RangeType src;
+
+
+  std::vector<TypeParam> starts =
+  { std::numeric_limits<TypeParam>::min(), std::numeric_limits<TypeParam>::lowest(),
+    0, 1, 2,
+    std::numeric_limits<TypeParam>::max()-2, (std::numeric_limits<TypeParam>::max() / 2) + 1};
+
+  std::vector<SizeType> lens =
+  { 0, 1, 2};
+
+  //std::vector<size_t> partitionCount =
+  //{ 1, 2, std::numeric_limits<size_t>::max()};
+
+  PartitionerType part;
+  for (auto start : starts)
+  {
+    for (auto len : lens)
+    {
+      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= len) ? start + len : std::numeric_limits<TypeParam>::max());
+
+      part.configure(src, omp_get_max_threads());
+      #pragma omp parallel
+      {
+//        if (len < i)
+//          continue;
+        TypeParam e;
+        RangeType r;
+
+        int p = omp_get_num_threads();
+        int block = omp_get_thread_num();
+
+        auto div = len / static_cast<SizeType>(p);
+        auto rem = len - div * static_cast<SizeType>(p);
+
+        //Fetch the block for this thread
+        r = part.getNext(block);
+        e = (rem == 0 ? block * div :
+            ( block >= rem ? block * div + rem : block * (div + 1))) + start;
+        EXPECT_EQ(e, r.start);
+        e = (rem == 0 ? (block + 1) * div :
+            ( (block + 1) >= rem ? (block + 1) * div + rem : (block + 1) * (div + 1))) + start;
+        EXPECT_EQ(std::min(e,src.end), r.end);
+
+      }
+    }
+  }
+}
+#endif
 
 TYPED_TEST_P(PartitionTest, cyclicPartition){
   typedef bliss::partition::range<TypeParam> RangeType;
@@ -138,7 +199,7 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
   { 0, 1, 2, 8 };
 
   std::vector<size_t> partitionCount =
-  { 1, 2, 4, std::numeric_limits<size_t>::max()};
+  { 1, 2, 4};
 
   PartitionerType part;
   for (auto start : starts)
@@ -200,6 +261,64 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
   }
 }
 
+//test the cyclic partitioning operation. (With openmp threads)
+TYPED_TEST_P(PartitionTest, cyclicPartition_openmp){
+  typedef bliss::partition::range<TypeParam> RangeType;
+  typedef bliss::partition::CyclicPartitioner<range<TypeParam> > PartitionerType;
+  typedef decltype(std::declval<RangeType>().size()) SizeType;
+
+  RangeType src;
+
+  std::vector<TypeParam> starts =
+  { std::numeric_limits<TypeParam>::min(), std::numeric_limits<TypeParam>::lowest(),
+    0, 1, 2,
+    std::numeric_limits<TypeParam>::max()-2, (std::numeric_limits<TypeParam>::max() / 2) + 1};
+
+  std::vector<SizeType> lens =
+  { 0, 1, 2, 8 };
+
+  //std::vector<size_t> partitionCount =
+  //{ 1, 2, 4, std::numeric_limits<size_t>::max()};
+
+  PartitionerType part;
+  for (auto start : starts)
+  {
+    for (auto len : lens)
+    {
+      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= len) ? start + len : std::numeric_limits<TypeParam>::max());
+
+      part.configure(src, omp_get_max_threads(), 1);
+      #pragma omp parallel
+      {
+        SizeType div = 1;
+        RangeType r;
+        TypeParam e;
+
+        size_t nChunks = std::ceil(src.size() / div);
+
+        //Block for this thread
+        size_t block = omp_get_thread_num();
+        r = part.getNext(block);
+        e = std::min(static_cast<SizeType>(src.end),
+                     static_cast<SizeType>(std::min(nChunks, block) * div + start));
+        EXPECT_EQ(e, r.start);
+        e = std::min(static_cast<SizeType>(src.end),
+                     static_cast<SizeType>(std::min(nChunks, block + 1) * div + start));
+        EXPECT_EQ(e, r.end);
+
+
+        //Get next block for this thread
+        r = part.getNext(block);
+        e = std::min(static_cast<SizeType>(src.end),
+                     static_cast<SizeType>(std::min(nChunks, block + omp_get_num_threads()) * div + start));
+        EXPECT_EQ(e, r.start);
+        e = std::min(static_cast<SizeType>(src.end),
+                     static_cast<SizeType>(std::min(nChunks, block + omp_get_num_threads() + 1) * div + start));
+        EXPECT_EQ(e, r.end);
+      }
+    }
+  }
+}
 
 TYPED_TEST_P(PartitionTest, demandPartition){
   typedef bliss::partition::range<TypeParam> RangeType;
@@ -219,7 +338,7 @@ TYPED_TEST_P(PartitionTest, demandPartition){
   { 0, 1, 2, 8};
 
   std::vector<size_t> partitionCount =
-  { 1, 2, 4, std::numeric_limits<size_t>::max()};
+  { 1, 2, 4};
 
   PartitionerType part;
   for (auto start : starts)
@@ -277,6 +396,77 @@ TYPED_TEST_P(PartitionTest, demandPartition){
   }
 }
 
+//test the demand partitioning operation. (With openmp threads)
+TYPED_TEST_P(PartitionTest, demandPartition_openmp){
+  typedef bliss::partition::range<TypeParam> RangeType;
+  typedef bliss::partition::DemandDrivenPartitioner<range<TypeParam> > PartitionerType;
+  typedef decltype(std::declval<RangeType>().size()) SizeType;
+
+  RangeType src;
+
+
+  std::vector<TypeParam> starts =
+  { std::numeric_limits<TypeParam>::min(), std::numeric_limits<TypeParam>::lowest(),
+    0, 1, 2,
+    std::numeric_limits<TypeParam>::max()-2, (std::numeric_limits<TypeParam>::max() / 2) + 1};
+
+  std::vector<SizeType> lens =
+  { 0, 1, 2, 8};
+
+  //Store the block ranges in a vector
+  std::vector<std::pair<SizeType, SizeType>> logRanges;
+
+  PartitionerType part;
+  for (auto start : starts)
+  {
+    for (auto len : lens)
+    {
+      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= len) ? start + len : std::numeric_limits<TypeParam>::max());
+
+      part.configure(src, omp_get_max_threads(), 1);
+#pragma omp parallel
+      {
+        RangeType r;
+        TypeParam e;
+
+        SizeType div = 1;
+
+        size_t block = omp_get_thread_num();
+
+        //Get a block for this thread
+        r = part.getNext(block);
+
+        //Check if a valid chunk is obtained
+        if(r.end - r.start > 0)
+        {
+#pragma omp critical
+          logRanges.push_back(std::make_pair(r.start, r.end));
+        }
+
+        //Get next block for this thread
+        r = part.getNext(block);
+
+        //Check if a valid chunk is obtained
+        if(r.end - r.start > 0)
+        {
+#pragma omp critical
+          logRanges.push_back(std::make_pair(r.start, r.end));
+        }
+      }
+      std::sort(logRanges.begin(), logRanges.end());
+
+      bool comp = true;
+
+      //Validate the ranges by checking the neigbouring chunks are adjacent
+      for(auto it = logRanges.begin(); it != logRanges.end() && std::next(it) != logRanges.end(); it++)
+        comp = comp || (std::get<1>(*it) == std::get<0>(*(std::next(it))));
+
+      EXPECT_EQ(true, comp);
+
+      logRanges.clear();
+    }
+  }
+}
 
 // failed partitions due to asserts.
 TYPED_TEST_P(PartitionTest, badPartitionId){
@@ -321,7 +511,7 @@ TYPED_TEST_P(PartitionTest, badPartitionId){
 
 
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(PartitionTest, badPartitionId, blockPartition, cyclicPartition, demandPartition);
+REGISTER_TYPED_TEST_CASE_P(PartitionTest, badPartitionId, blockPartition, blockPartition_openmp, cyclicPartition, cyclicPartition_openmp, demandPartition, demandPartition_openmp);
 
 
 

@@ -26,7 +26,7 @@ namespace bliss
   namespace partition
   {
 
-    /**
+    /** 
      * @class			Partitioner
      * @brief     base class to partition a range.
      * @details   operates without knowledge of the data that the range refers to,  so no "search" type of partitioning
@@ -194,6 +194,9 @@ namespace bliss
         void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize, const RangeValueType &_overlapSize) {
 
           if (_nPartitions == 0)
+            throw std::invalid_argument("ERROR: partitioner c'tor: nPartitions is 0");
+
+          if (_nPartitions == std::numeric_limits<size_t>::max()) 
             throw std::invalid_argument("ERROR: partitioner c'tor: nPartitions is 0");
           nPartitions = _nPartitions;
 
@@ -582,7 +585,7 @@ namespace bliss
     };
 
 
-    /**
+    /** 
      * @class DemandDrivenPartitioner
      * @brief a partitioner that assigns chunks to partition in the order that the getNext function is called.
      * @tparam Range  type of the range object to be partitioned.
@@ -692,6 +695,7 @@ namespace bliss
 
           // if there are more partitions than chunks, then the array represents mapping from chunkId to subrange
           // else if there are more chunks than partitions, then the array represents the most recent chunk assigned to a partition.
+//          std::cout << "curr Allocation : " << std::min(nChunks, this->nPartitions) << "\n";
           curr = new Range[std::min(nChunks, this->nPartitions)];
 
           resetImpl();
@@ -700,7 +704,7 @@ namespace bliss
 
 
 
-        /**
+         /**
          * @brief       get the next chunk in the partition.  for DemandDrivenPartition, keep getting until done.
          * @details     each call to this function gets the next chunk in the range and assign it to a partition.
          *              the sequence of partition ids depends on call order.
@@ -711,10 +715,14 @@ namespace bliss
          * @param partId   partition id for the sub range.
          * @return      range of the partition
          */
-        inline Range& getNextImpl(const size_t& partId) {
+         inline Range& getNextImpl(const size_t& partId) {
+
           // all done, so return end
           if (done.load(std::memory_order_seq_cst)) return this->end;
-
+          if (partId >= std::min(nChunks, this->nPartitions)) {
+            done.store(true, std::memory_order_seq_cst); 
+            return this->end;
+          }
           // call internal function (so integral and floating point types are handled properly)
           RangeValueType s = getNextOffset<ChunkSizeType>();
 
@@ -723,13 +731,16 @@ namespace bliss
           size_t id = chunkId.fetch_add(1, std::memory_order_seq_cst);
           // if there are more partitions than chunks, then the array represents mapping from chunkId to subrange
           // else if there are more chunks than partitions, then the array represents the most recent chunk assigned to a partition.
-          id = (nChunks < this->nPartitions ? id : partId);
+        //  size_t id = partId;
 
-          if (s >= this->src.end) {
+
+          if (s >= this->src.end || id >= nChunks) {
             done.store(true, std::memory_order_seq_cst);
             return this->end;
           } else {
 
+            id = (nChunks < this->nPartitions ? id : partId);
+            //std::cout << "Current Id : " << id << "\n";
             curr[id].start = s;
                 // use comparison to avoid overflow.
             if (this->src.end - s > this->chunkSize + this->overlapSize) {
@@ -763,6 +774,12 @@ namespace bliss
           done.store(false, std::memory_order_seq_cst);
 
           // range will be completely recomputed, so don't have to do much here.
+
+          for (int i = std::min(nChunks, this->nPartitions)-1 ; i >= 0; --i) {
+            curr[i] = this->end;
+          }
+
+
         }
 
 
