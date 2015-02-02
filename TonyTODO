@@ -510,6 +510,9 @@ TODO:
 				
 		4. multithread callback functions.
 		5. query interface
+			API is sequential, implementation is parallel/distributed/overlapped.
+				ie. use message handlers to allow overlapped communication and io, but functions return when all's complete.
+		
 		
 	3. Memory ordering in buffer and Lockfree Queue
 		buffer: DONE
@@ -517,10 +520,11 @@ TODO:
 		
 	4. KmerIndex construction:  
 		1. MPI collective version for construction and query - performance comparison
-		2. suffix array byproduct.
 		
 	5. other types of kmer indices
-		quality based.					quality generation code tested and merged to trunk
+		quality based.					
+			quality generation code tested and merged to trunk  DONE
+			quality index - 
 		approximate quality based (if needed for performance reason.  we mostly do decode, and not encode, so LUT works well)
 	
 	6. reduce latency and improve concurrency:
@@ -541,5 +545,5 @@ TODO:
 		writing.
 		
 	7. documentation and testing.
-		gcc message formatting.
+		gcc message formatting.  DONE
 	

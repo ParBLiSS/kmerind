@@ -14,10 +14,9 @@
 
 
 #include <cassert>
-#include <vector>
+#include <deque>
 
-#include "config.hpp"
-#include "concurrent/runner.hpp"
+#include "wip/runner.hpp"
 
 namespace bliss
 {
@@ -26,36 +25,45 @@ namespace concurrent
 
 /**
  * @class     bliss::concurrent::SequentialRunner
- * @brief
+ * @brief     runs a sequence of tasks
  * @details   can have multiple tasks, run in order of adding.
+ *            MORE than just a compound task, since this does NOT just have a single input and output.
  *
  */
 class SequentialRunner : public Runner
 {
+  protected:
+    std::deque<std::unique_ptr<Runnable> > q;
+
   public:
     SequentialRunner() : Runner() {};
 
-    virtual ~SequentialRunner() {};
+    virtual ~SequentialRunner() {
 
-    virtual void addTask(Runnable &t)
+    };
+
+    void operator()()
     {
-      q.push_back(t);
+      while (!q.empty())
+      {
+        q.front()->operator()();
+        q.pop_front();
+      }
     }
 
-    virtual void run()
+    virtual bool addTask(std::unique_ptr<Runnable> &&t)
     {
-      for (Runnable t : q)
-      {
-        t.run();
+      bool b = !blocked;
+      if (b) {
+        q.push_back(std::forward<std::unique_ptr<Runnable> >(t));
       }
+      return b;
     }
 
     virtual void synchronize()
     {
     }
 
-  protected:
-    std::vector<Runnable> q;
 };
 
 } /* namespace concurrent */

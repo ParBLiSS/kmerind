@@ -38,7 +38,7 @@ class Runnable
 
     virtual ~Runnable() {};
 
-    virtual void run() {};
+    virtual void operator()() = 0;
 };
 
 } /* namespace concurrent */

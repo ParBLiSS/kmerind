@@ -12,7 +12,9 @@
 #ifndef RUNNER_HPP_
 #define RUNNER_HPP_
 
-#include "concurrent/runnable.hpp"
+#include "wip/runnable.hpp"
+#include <atomic>
+#include <memory>
 
 namespace bliss
 {
@@ -44,28 +46,33 @@ namespace concurrent
 
 class Runner : public Runnable
 {
+
   protected:
-    int id;
-    int groupSize;
+    std::atomic<bool> blocked;
 
   public:
-    Runner() : id(0), groupSize(1) {};
-    Runner(const int _id, const int _groupSize) : id(_id), groupSize(_groupSize) {};
-    virtual ~Runner() {};
+    Runner() : blocked(false) {};
+    virtual ~Runner() {
+      blocked = true;
+    };
 
-    virtual void addTask(Runnable &_t) {};
+    // function to run
+    virtual void operator()() = 0;
 
-    virtual void run() {};
+    virtual bool addTask(std::unique_ptr<Runnable> &&_t) = 0;
 
-    virtual void synchronize() {};
+    /// flush currently queued tasks and disallow further new tasks
+    void blockAdd() {
+      blocked.store(true, std::memory_order_relaxed);
+    };
 
-    int getId() {
-      return id;
-    }
+    /// flush currently queued tasks and disallow further new tasks
+    void unblockAdd() {
+      blocked.store(false, std::memory_order_relaxed);
+    };
 
-    int getGroupSize() {
-      return groupSize;
-    }
+    virtual void synchronize() = 0;
+
 
 };
 

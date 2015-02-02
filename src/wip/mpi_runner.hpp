@@ -16,7 +16,7 @@
 #include "cassert"
 
 #include "config.hpp"
-#include "concurrent/runner.hpp"
+#include "wip/runner.hpp"
 
 namespace bliss
 {
@@ -30,10 +30,14 @@ namespace concurrent
  *            space. We need to assign a single task to it based on its
  *            rank.
  *
+ *            NOT USED.
+ *
  */
 template <bool threaded>
 class MPIRunner : public Runner
 {
+    static_assert(false, "no good usecase for this class.  do not use.");
+
   protected:
     Runnable r;
 
