@@ -14,9 +14,10 @@
 
 #include "omp.h"
 #include <cassert>
-#include "concurrent/lockfree_queue.hpp"
 
 #include "config.hpp"
+#include "concurrent/lockfree_queue.hpp"
+
 #include "wip/runner.hpp"
 
 
@@ -35,7 +36,7 @@ namespace concurrent
 class DynamicOMPRunner : public Runner
 {
   protected:
-    bliss::concurrent::ThreadSafeQueue<std::unique_ptr<Runnable> > q;
+    bliss::concurrent::ThreadSafeQueue<Runnable* > q;
 
     const int nThreads;
 
@@ -43,8 +44,8 @@ class DynamicOMPRunner : public Runner
     DynamicOMPRunner(int num_threads) : Runner(), nThreads(num_threads)
     {
 #ifdef USE_OPENMP
-//      omp_set_num_threads(num_threads);
-      omp_set_nested(1);
+      if (omp_get_nested() <= 0) omp_set_nested(1);
+      if (omp_get_dynamic() <= 0) omp_set_dynamic(1);
 #else
       static_assert(false, "OMPRunner Used When compilation is not set to use OpenMP");
 #endif
@@ -55,38 +56,51 @@ class DynamicOMPRunner : public Runner
 
     void operator()()
     {
+
 #pragma omp parallel num_threads(nThreads) default(none)
       {
 #pragma omp single nowait
-        {
-          while (!q.isEmpty())
+        {  // one thread to do this
+//#pragma omp task untied default(none)
+//          {  // untied so can move to different threads
+          while (q.canPop())  // flush the queue now.
           {
-#pragma omp task
+#pragma omp task default(none)
             {
               auto v = std::move(q.waitAndPop());
-              if (v.first)
+              if (v.first) {
                 (v.second)->operator()();
+//              } else {
+//                printf("blocked nothing in queue\n");
+              }
             }
           }
+
+          printf("tid %d done generating tasks.\n", omp_get_thread_num());
+//          }
         }
       }
     }
 
-    virtual bool addTask(std::unique_ptr<Runnable> &&t)
+
+
+    virtual bool addTask(Runnable* t)
     {
-      auto result = q.waitAndPush(std::forward<std::unique_ptr<Runnable> >(t));
-      return result.first;
+        auto result = q.waitAndPush(std::forward<Runnable* >(t));
+
+        return result.first;
     }
 
     /// flush currently queued tasks and disallow further new tasks
-    void blockAdd() {
+    virtual void disableAdd() {
       q.disablePush();
     };
 
-    /// flush currently queued tasks and disallow further new tasks
-    void unblockAdd() {
-      q.enablePush();
-    };
+//    /// flush currently queued tasks and disallow further new tasks
+//    virtual void unblockAdd() {
+//      Runner::disableAdd();
+//      q.enablePush();
+//    };
 
     virtual void synchronize()
     {

@@ -60,7 +60,7 @@ namespace bliss
         mutable int64_t capacity;
 
         /// size encodes 2 things:  sign bit encodes whether a calling thread can push into this queue.  use when suspending or terminating a queue.  rest is size of current queue.
-        std::atomic<int64_t> size;
+        volatile std::atomic<int64_t> size;
 
       private:
         /**
@@ -213,8 +213,7 @@ namespace bliss
          * @return    boolean - queue pop is allowed or not.
          */
         inline bool canPop() {
-          // canPush == first bit is 0, OR has some elements (not 0 for remaining bits).  so basically, not 1000000000...
-
+          // canPop == first bit is 0, OR has some elements (not 0 for remaining bits).  so basically, not 1000000000...
 
           // popping thread should have visibility of all changes to the queue
           return size.load(std::memory_order_acquire) != std::numeric_limits<int64_t>::lowest();

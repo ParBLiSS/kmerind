@@ -49,6 +49,7 @@ void testWaitAndPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int ent
   else printf("PASS,");
 };
 
+
 template<typename T>
 void testTryPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int entries, const int nProducer) {
   //usleep(1000);
@@ -296,6 +297,24 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   }
   printf("\n");
 
+  printf("  CHECK waitAndPush, and disablePush: ");
+  queue.clear();
+  queue.enablePush();
+#pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
+  {
+#pragma omp section
+    {
+      testWaitAndPush(queue, entries, nProducer);
+    }
+
+#pragma omp section
+    {
+	sleep(1);
+	queue.disablePush();
+#pragma omp flush(queue)
+    }
+  }
+  printf("\n");
   //TODO: can have !done, waitAndPop, and done=true in other thread, so pop thread never gets to check "done" ->  deadlock.
 
     // not testing this with more than 1 consumer thread.  there could be a lot more consumer tasks generated than

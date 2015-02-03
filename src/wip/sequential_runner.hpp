@@ -14,7 +14,8 @@
 
 
 #include <cassert>
-#include <deque>
+
+#include "concurrent/lockfree_queue.hpp"
 
 #include "wip/runner.hpp"
 
@@ -33,31 +34,37 @@ namespace concurrent
 class SequentialRunner : public Runner
 {
   protected:
-    std::deque<std::unique_ptr<Runnable> > q;
+    bliss::concurrent::ThreadSafeQueue<Runnable* > q;
 
   public:
     SequentialRunner() : Runner() {};
 
-    virtual ~SequentialRunner() {
-
-    };
+    virtual ~SequentialRunner() {};
 
     void operator()()
     {
-      while (!q.empty())
+      // should q be allowed to be changed?
+
+      while (q.canPop())
       {
-        q.front()->operator()();
-        q.pop_front();
+        auto v = std::move(q.waitAndPop());
+        if (v.first) {
+          (v.second)->operator()();
+//              } else {
+//                printf("blocked nothing in queue\n");
+        }
       }
     }
 
-    virtual bool addTask(std::unique_ptr<Runnable> &&t)
+    virtual bool addTask(Runnable* t)
     {
-      bool b = !blocked;
-      if (b) {
-        q.push_back(std::forward<std::unique_ptr<Runnable> >(t));
-      }
-      return b;
+      auto result = q.waitAndPush(std::forward<Runnable* >(t));
+
+      return result.first;
+    }
+
+    virtual void disableAdd() {
+      q.disablePush();
     }
 
     virtual void synchronize()
