@@ -34,7 +34,8 @@ namespace concurrent
 class SequentialRunner : public Runner
 {
   protected:
-    bliss::concurrent::ThreadSafeQueue<Runnable* > q;
+    // using thread safe queue because other threads could be calling addTask.
+    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> > q;
 
   public:
     SequentialRunner() : Runner() {};
@@ -43,24 +44,34 @@ class SequentialRunner : public Runner
 
     void operator()()
     {
-      // should q be allowed to be changed?
-
       while (q.canPop())
       {
         auto v = std::move(q.waitAndPop());
         if (v.first) {
           (v.second)->operator()();
-//              } else {
-//                printf("blocked nothing in queue\n");
+//          counter2.fetch_add(1);
         }
       }
+      printf("Sequential runner completed.\n");
+
     }
 
-    virtual bool addTask(Runnable* t)
+    virtual bool addTask(std::shared_ptr<Runnable> &&t)
     {
-      auto result = q.waitAndPush(std::forward<Runnable* >(t));
+//      counter.fetch_add(1);
+
+      auto result = q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t));
+//      printf("add to Sequential runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
 
       return result.first;
+    }
+
+    virtual size_t getTaskCount() {
+      return q.getSize();
+    }
+
+    virtual bool isAddDisabled() {
+      return !(q.canPush());
     }
 
     virtual void disableAdd() {

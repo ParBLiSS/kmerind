@@ -169,7 +169,7 @@ OT MasterSlave(OP &op, const int &nthreads, size_t &_count) {
 // wait or nowait?
 #pragma omp single
     {
-#pragma omp task untied
+//#pragma omp task untied
       for (size_t i = r.start; i < r.end; i += step)
       {
 #pragma omp task
@@ -223,7 +223,7 @@ OT MasterSlaveNoWait(OP &op, const int &nthreads, size_t &_count) {
 // wait or nowait?
 #pragma omp single nowait
     {
-#pragma omp task untied
+//#pragma omp task untied
       for (size_t i = r.start; i < r.end; i += step)
       {
 #pragma omp task

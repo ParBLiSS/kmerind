@@ -34,8 +34,8 @@ namespace concurrent
 class UniformOMPRunner : public Runner
 {
   protected:
-    /// The task
-    std::vector<bliss::concurrent::ThreadSafeQueue<Runnable* > > qs;
+    // since each thread executes the same tasks we need an array of queues
+    std::vector<bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> > > qs;
 
     const int nThreads;
 
@@ -47,7 +47,7 @@ class UniformOMPRunner : public Runner
      *
      * @param nThreads The number of OpenMP threads to use.
      */
-    UniformOMPRunner(int num_threads) : Runner(), qs(num_threads), nThreads(num_threads) {
+    UniformOMPRunner(const int num_threads) : Runner(), qs(num_threads), nThreads(num_threads) {
 #ifdef USE_OPENMP
       if (omp_get_nested() <= 0) omp_set_nested(1);
       if (omp_get_dynamic() <= 0) omp_set_dynamic(1);
@@ -57,7 +57,7 @@ class UniformOMPRunner : public Runner
 
       qs.clear();
       for (int i = 0; i < nThreads; ++i) {
-        qs.push_back(std::move(bliss::concurrent::ThreadSafeQueue<Runnable* >()));
+        qs.push_back(std::move(bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> >()));
       }
     }
 
@@ -75,17 +75,18 @@ class UniformOMPRunner : public Runner
       {
         // iterator for list is valid during append (no insertion in middle, no deletion).
         // no deletion since this is shared.
-        bliss::concurrent::ThreadSafeQueue<Runnable* >& q = qs[omp_get_thread_num()];
+        bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> >& q = qs[omp_get_thread_num()];
         while (q.canPop())
         {
           auto v = std::move(q.waitAndPop());
           if (v.first) {
             (v.second)->operator()();
-  //              } else {
-  //                printf("blocked nothing in queue\n");
+//            counter2.fetch_add(1);
           }
         }
       }
+      printf("Uniform runner completed.\n");
+
     }
 
     /**
@@ -93,26 +94,56 @@ class UniformOMPRunner : public Runner
      *
      * @param t
      */
-    virtual bool addTask(Runnable* t) {
+    virtual bool addTask(std::shared_ptr<Runnable> &&t) {
+//      counter.fetch_add(1);
       bool out = true;
       int id;
-      for (int i = 0; i < nThreads; ++i) {
+      int i = 0;
+      // make copy and insert
+      for (; i < nThreads-1; ++i) {
         id = (omp_get_thread_num() + i) % nThreads;
-        bliss::concurrent::ThreadSafeQueue<Runnable* >& q = qs[id];
-        auto result = q.waitAndPush(std::forward<Runnable* >(t));
+        bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> >& q = qs[id];
+        auto result = q.waitAndPush(std::move(std::shared_ptr<Runnable>(t)));
 
         out &= result.first;
       }
+      // insert the real thing.
+      id = (omp_get_thread_num() + nThreads-1) % nThreads;
+      bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> >& q = qs[id];
+      auto result = q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t));
+      out &= result.first;
+
+//      printf("add to Uniform runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
+
       return out;
 
+    }
+
+    virtual size_t getTaskCount() {
+      size_t max = 0;
+      int id;
+      for (int i = 0; i < nThreads; ++i) {
+        id = (omp_get_thread_num() + i) % nThreads;
+        max = std::max(max, qs[id].getSize());
+      }
+      return max;
+    }
+
+    virtual bool isAddDisabled() {
+      bool canPush = true;
+      int id;
+      for (int i = 0; i < nThreads; ++i) {
+        id = (omp_get_thread_num() + i) % nThreads;
+        canPush &= qs[id].canPush();
+      }
+      return !canPush;
     }
 
     virtual void disableAdd() {
       int id;
       for (int i = 0; i < nThreads; ++i) {
         id = (omp_get_thread_num() + i) % nThreads;
-        bliss::concurrent::ThreadSafeQueue<Runnable* >& q = qs[id];
-        q.disablePush();
+        qs[id].disablePush();
       }
     }
 
