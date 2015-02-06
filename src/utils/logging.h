@@ -69,7 +69,7 @@
 
 #ifndef LOGGER_VERBOSITY
 // set the default logger to the std::cerr logger
-#define LOGGER_VERBOSITY BLISS_LOGGER_VERBOSITY_ERROR
+#define LOGGER_VERBOSITY BLISS_LOGGER_VERBOSITY_WARNING
 #endif
 
 

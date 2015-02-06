@@ -97,7 +97,10 @@ endif()
 
 ###### LOGGING ENGINE configuration
 SET(LOGGER_VERBOSITY "WARNING" CACHE STRING "Logger verbosity.  Valid entries are ERROR, WARNING, INFO, DEBUG, TRACE.  Each level includes all levels with smaller value")  
-SET(LOGGER_VERBOSITY_DEFINE "#define LOGGER_VERBOSITY BLISS_LOGGER_VERBOSITY_${LOGGER_VERBOSITY}")
+#function(update_logger_verbosity varname cacheaccess varval) 
+#    SET(LOGGER_VERBOSITY_DEFINE "#define LOGGER_VERBOSITY BLISS_LOGGER_VERBOSITY_${LOGGER_VERBOSITY}")
+#endfunction(update_logger_verbosity varname cacheaccess varval)
+#variable_watch(LOGGER_VERBOSITY update_logger_verbosity)
 
 function(update_logging_engine varname cacheaccess varval) 
 #       message(STATUS "${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
@@ -173,13 +176,14 @@ function(update_logging_engine varname cacheaccess varval)
         
     # set the log engine in the logger_config.hpp file.
     set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
-    configure_file(
-        "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
-        "${PROJECT_BINARY_DIR}/logger_config.hpp"
-        @ONLY
-        )
-        
+#    configure_file(
+#        "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+#        "${PROJECT_BINARY_DIR}/logger_config.hpp"
+#        @ONLY
+#        )
+#        
 endfunction(update_logging_engine varname cacheaccess varval)
+
 
 
 # if OMP_DEBUGGING is enabled, default(none) is set in the omp pragmas.   this means that only NO_LOG and PRINTF logging are compatible.
@@ -225,11 +229,11 @@ if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
         message(WARNING "Did not find boost.  Default Log Engine set to NO_LOG")
         
         set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
-        configure_file(
-            "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
-            "${PROJECT_BINARY_DIR}/logger_config.hpp"
-            @ONLY
-            )
+#        configure_file(
+#            "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+#            "${PROJECT_BINARY_DIR}/logger_config.hpp"
+#            @ONLY
+#            )
     endif(Boost_FOUND)
     
     # need this flag for boost log
@@ -565,6 +569,12 @@ configure_file(
     "${PROJECT_BINARY_DIR}/config.hpp"
     @ONLY
     )
+configure_file(
+    "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+    "${PROJECT_BINARY_DIR}/logger_config.hpp"
+    @ONLY
+    )
+
 
 # add the binary tree to the search path for include files
 # so that we will find TutorialConfig.h
@@ -583,13 +593,13 @@ add_subdirectory(src/utils)
 
 set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)
 
+add_subdirectory(src/taskrunner)
 add_subdirectory(src/partition)
 add_subdirectory(src/common)
 add_subdirectory(src/concurrent)
 add_subdirectory(src/io)
 add_subdirectory(src/index)
 add_subdirectory(src/iterators)
-add_subdirectory(src/wip)
 add_subdirectory(test)
 add_subdirectory(utils)
 
