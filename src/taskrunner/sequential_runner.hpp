@@ -17,7 +17,7 @@
 
 #include "concurrent/lockfree_queue.hpp"
 
-#include "wip/runner.hpp"
+#include "taskrunner/runner.hpp"
 
 namespace bliss
 {
@@ -44,26 +44,24 @@ class SequentialRunner : public Runner
 
     void operator()()
     {
+      size_t proc = 0;
       while (q.canPop())
       {
         auto v = std::move(q.waitAndPop());
         if (v.first) {
           (v.second)->operator()();
-//          counter2.fetch_add(1);
+          ++proc;
         }
       }
-      printf("Sequential runner completed.\n");
+      INFOF("Sequential runner completed %lu tasks.\n", proc);
 
     }
 
     virtual bool addTask(std::shared_ptr<Runnable> &&t)
     {
-//      counter.fetch_add(1);
+      DEBUGF("add to Sequential runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
 
-      auto result = q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t));
-//      printf("add to Sequential runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
-
-      return result.first;
+      return q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t)).first;
     }
 
     virtual size_t getTaskCount() {

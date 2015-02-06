@@ -16,7 +16,7 @@
 #include "cassert"
 
 #include "config.hpp"
-#include "wip/runner.hpp"
+#include "taskrunner/runner.hpp"
 
 namespace bliss
 {

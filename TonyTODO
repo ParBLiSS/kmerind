@@ -532,7 +532,7 @@ TODO:
 	
 	6. reduce latency and improve concurrency:
 		a. non-atomic flag to indicate that there is data in queue to work on
-		b. multiple single threaded queues
+		b. multiple single threaded queues?
 		
 	
 	7. paper: 
@@ -561,9 +561,10 @@ RELEASE TASKS
 			kmer generation,
 			kmer distribution
 			kmer query
-		b. change all tests to gtest format
+		b. change as many tests as possible to gtest format
 		
 	10. build process
 		a. tests need to return non-zero error codes
-		b. gcc message formatting.  DONE
+		b. gcc error message formatting. - DONE
 		c. logging - conditionally return messages.  - DONE.
+		d. docker container

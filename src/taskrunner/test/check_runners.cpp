@@ -15,11 +15,11 @@
 #include <chrono>
 
 //#include "concurrent/mpi_runner.hpp"
-#include "wip/uniform_omp_runner.hpp"
-#include "wip/personalized_omp_runner.hpp"
-#include "wip/dynamic_omp_runner.hpp"
-#include "wip/sequential_runner.hpp"
-#include "wip/task.hpp"
+#include "taskrunner/uniform_omp_runner.hpp"
+#include "taskrunner/personalized_omp_runner.hpp"
+#include "taskrunner/dynamic_omp_runner.hpp"
+#include "taskrunner/sequential_runner.hpp"
+#include "taskrunner/task.hpp"
 
 static const int iter = 100000;
 std::atomic<int> cc;
@@ -298,7 +298,7 @@ int main(int argc, char** argv) {
 
   std::chrono::high_resolution_clock::time_point t1, t2;
   std::chrono::duration<double> time_span;
-/*
+
 
   {
     t1 = std::chrono::high_resolution_clock::now();
@@ -602,7 +602,7 @@ int main(int argc, char** argv) {
 
       std::shared_ptr<bliss::concurrent::Runner> sr2(new bliss::concurrent::DynamicOMPRunner(2));
       sr2->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test3("control", sr))));
-      sr2->addTask(sr->shared_from_this());
+      sr2->addTask(std::move(sr->shared_from_this()));
       sr2->disableAdd();
 
       t2 = std::chrono::high_resolution_clock::now();
@@ -637,7 +637,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<bliss::concurrent::Runner> sr2(new bliss::concurrent::DynamicOMPRunner(2));
     sr2->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test3("control", sr))));
-    sr2->addTask(sr->shared_from_this());
+    sr2->addTask(std::move(sr->shared_from_this()));
     sr2->disableAdd();
 
 
@@ -676,7 +676,7 @@ int main(int argc, char** argv) {
       std::shared_ptr<bliss::concurrent::Runner> sr2(new bliss::concurrent::DynamicOMPRunner(2));
 
       sr2->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test3("control", sr))));
-      sr2->addTask(sr->shared_from_this());
+      sr2->addTask(std::move(sr->shared_from_this()));
       sr2->disableAdd();
 
       t2 = std::chrono::high_resolution_clock::now();
@@ -695,7 +695,7 @@ int main(int argc, char** argv) {
               t2 - t1);
       std::cout << "run: time " << time_span.count() << std::endl;
     }
-*/
+
     {
       t1 = std::chrono::high_resolution_clock::now();
 
@@ -715,8 +715,8 @@ int main(int argc, char** argv) {
 
 
       bliss::concurrent::PersonalizedOMPRunner appRunner(2);
-      appRunner.addTask(commRunner->shared_from_this());
-      appRunner.addTask(workRunner->shared_from_this());
+      appRunner.addTask(std::move(commRunner->shared_from_this()));
+      appRunner.addTask(std::move(workRunner->shared_from_this()));
       appRunner.disableAdd();
 
 
@@ -758,8 +758,8 @@ int main(int argc, char** argv) {
 
       bliss::concurrent::PersonalizedOMPRunner appRunner(2);
 
-      appRunner.addTask(commRunner->shared_from_this());
-      appRunner.addTask(workRunner->shared_from_this());
+      appRunner.addTask(std::move(commRunner->shared_from_this()));
+      appRunner.addTask(std::move(workRunner->shared_from_this()));
       appRunner.disableAdd();
 
 

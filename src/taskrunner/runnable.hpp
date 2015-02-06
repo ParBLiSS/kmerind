@@ -13,6 +13,7 @@
 #define RUNNABLE_HPP_
 
 #include <memory>
+#include "utils/logging.h"
 
 namespace bliss
 {

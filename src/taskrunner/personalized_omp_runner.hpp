@@ -17,7 +17,7 @@
 
 #include "concurrent/lockfree_queue.hpp"
 
-#include "wip/runner.hpp"
+#include "taskrunner/runner.hpp"
 
 namespace bliss
 {
@@ -58,33 +58,31 @@ class PersonalizedOMPRunner : public Runner
       // get the size, use it for parallel for.
       size_t count = q.getSize();
 
-#pragma omp parallel for num_threads(nThreads) default(none) schedule(dynamic) shared(count)
+      size_t proc = 0;
+
+#pragma omp parallel for num_threads(nThreads) default(none) schedule(dynamic) shared(count) reduction(+: proc)
       for (size_t i = 0; i < count; ++i)
       {
         auto v = std::move(q.tryPop());
         if (v.first) {
           (v.second)->operator()();
-//          counter2.fetch_add(1);
-
+          ++proc;
         }
       }
-      printf("Personalized runner completed.\n");
+      INFOF("Personalized runner generated %lu tasks and completed %lu tasks.\n", count, proc);
     }
 
     virtual bool addTask(std::shared_ptr<Runnable> &&t)
     {
-   //   counter.fetch_add(1);
 
-      auto result = q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t));
-//      printf("add to Personalized runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
+      DEBUGF("add to Personalized runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
 
-      return result.first;
+      return q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t)).first;
     }
 
     virtual size_t getTaskCount() {
       return q.getSize();
     }
-
     virtual bool isAddDisabled() {
       return !(q.canPush());
     }

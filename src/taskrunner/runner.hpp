@@ -15,7 +15,7 @@
 #include <atomic>
 #include <memory>
 
-#include "wip/runnable.hpp"
+#include "taskrunner/runnable.hpp"
 
 namespace bliss
 {
@@ -95,16 +95,9 @@ namespace concurrent
 
 class Runner : public Runnable
 {
-  protected:
- //   std::atomic<size_t> counter;
- //   std::atomic<size_t> counter2;
-
   public:
-//    Runner() : counter(0), counter2(2) {};
     Runner() {};
-    virtual ~Runner() {
- //     printf("DESTRUCTOR: added %d tasks, processed %d tasks\n", counter.load(), counter2.load());
-    };
+    virtual ~Runner() {};
 
     // function to run
     virtual void operator()() = 0;

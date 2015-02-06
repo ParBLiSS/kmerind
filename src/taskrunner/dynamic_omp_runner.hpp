@@ -18,7 +18,7 @@
 #include "config.hpp"
 #include "concurrent/lockfree_queue.hpp"
 
-#include "wip/runner.hpp"
+#include "taskrunner/runner.hpp"
 
 
 namespace bliss
@@ -56,43 +56,48 @@ class DynamicOMPRunner : public Runner
 
     void operator()()
     {
-
-#pragma omp parallel num_threads(nThreads) default(none)
+      size_t *proc = new size_t[nThreads];
+#pragma omp parallel num_threads(nThreads) default(none) shared(proc)
       {
 #pragma omp single nowait
         {  // one thread to do this
 //#pragma omp task untied default(none)                     // this slows it down by ORDERS OF MAGNITUDE.  DO NOT USE
 //          {  // untied so can move to different threads
+            size_t gen = 0;
             while (q.canPop())  // flush the queue now.
             {
-#pragma omp task default(none)
+              ++gen;
+#pragma omp task default(none) shared(proc)
               {
                 auto v = std::move(q.waitAndPop());
                 if (v.first) {
                   (v.second)->operator()();
-//                  counter2.fetch_add(1);
-
+                  ++(proc[omp_get_thread_num()]);
                 }
               } // omp task
             } // while
 
-            printf("tid %d done generating tasks.\n", omp_get_thread_num());
+            INFOF("tid %d done generating %lu tasks.\n", omp_get_thread_num(), gen);
 //          } // omp task untied.
         } // omp single
       } // omp parallel
-      printf("Dynamic runner completed.\n");
 
+      size_t sum = 0;
+      for (int i = 0; i < nThreads; ++i) {
+        sum += proc[i];
+      }
+
+      INFOF("Dynamic runner completed %lu tasks.\n", sum);
+
+      delete [] proc;
     }  // operator()
 
 
 
     virtual bool addTask(std::shared_ptr<Runnable> &&t)
     {
-//      counter.fetch_add(1);
-
-        auto result = q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t));
-//        printf("add to Dynamic runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
-        return result.first;
+      DEBUGF("add to Dynamic runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
+      return q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t)).first;
     }
 
     virtual size_t getTaskCount() {

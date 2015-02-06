@@ -16,7 +16,7 @@
 #include <cassert>
 
 #include "config.hpp"
-#include "wip/runner.hpp"
+#include "taskrunner/runner.hpp"
 #include "concurrent/lockfree_queue.hpp"
 #include <vector>
 
@@ -70,8 +70,8 @@ class UniformOMPRunner : public Runner
      * @brief Runs all tasks.
      */
     void operator()() {
-
-#pragma omp parallel num_threads(nThreads) default(none)
+      size_t proc = 0;
+#pragma omp parallel num_threads(nThreads) default(none) reduction(+: proc)
       {
         // iterator for list is valid during append (no insertion in middle, no deletion).
         // no deletion since this is shared.
@@ -81,11 +81,11 @@ class UniformOMPRunner : public Runner
           auto v = std::move(q.waitAndPop());
           if (v.first) {
             (v.second)->operator()();
-//            counter2.fetch_add(1);
+            ++proc;
           }
         }
       }
-      printf("Uniform runner completed.\n");
+      INFOF("Uniform Runner completed %lu tasks.\n", proc);
 
     }
 
@@ -95,7 +95,6 @@ class UniformOMPRunner : public Runner
      * @param t
      */
     virtual bool addTask(std::shared_ptr<Runnable> &&t) {
-//      counter.fetch_add(1);
       bool out = true;
       int id;
       int i = 0;
@@ -113,7 +112,7 @@ class UniformOMPRunner : public Runner
       auto result = q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t));
       out &= result.first;
 
-//      printf("add to Uniform runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
+      DEBUGF("add to Uniform runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
 
       return out;
 
