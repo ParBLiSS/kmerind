@@ -7,5 +7,6 @@ file comment
 
 // logger
 @LOGGER_DEFINE@
+@LOGGER_VERBOSITY_DEFINE@
 
 #endif /* CONFIG_H */

@@ -95,7 +95,10 @@ endif()
 
 
 
-# LOGGING ENGINE configuration
+###### LOGGING ENGINE configuration
+SET(LOGGER_VERBOSITY "WARNING" CACHE STRING "Logger verbosity.  Valid entries are ERROR, WARNING, INFO, DEBUG, TRACE.  Each level includes all levels with smaller value")  
+SET(LOGGER_VERBOSITY_DEFINE "#define LOGGER_VERBOSITY BLISS_LOGGER_VERBOSITY_${LOGGER_VERBOSITY}")
+
 function(update_logging_engine varname cacheaccess varval) 
 #       message(STATUS "${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
 
@@ -155,6 +158,11 @@ function(update_logging_engine varname cacheaccess varval)
         endif(USE_OPENMP)
 
     else(${cacheaccess} STREQUAL READ_ACCESS AND
+
+
+
+
+    
         ${varname} STREQUAL USE_OPENMP)
         
        message(WARNING "${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
@@ -543,10 +551,6 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output director
 
 #link_directories( ${LIBRARY_OUTPUT_PATH} )
 
-
-#SET(LOGGER_DEFINE  CACHE STRING
-#      "Choose logging engine, options are: N."
-#      FORCE)
 
 
 # Check if the user want to build test applications

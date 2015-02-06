@@ -38,17 +38,27 @@
 #ifndef BLISS_LOGGING_H
 #define BLISS_LOGGING_H
 
-/// Disable logging
+/// LOG ENGINE TYPES
+// Disable logging
 #define BLISS_LOGGING_NO_LOG         1
-/// Use std::cerr output for logging (not thread safe)
+// Use std::cerr output for logging (not thread safe)
 #define BLISS_LOGGING_CERR           2
-/// Use boost::log::trivial for logging
+// Use boost::log::trivial for logging
 #define BLISS_LOGGING_BOOST_TRIVIAL  3
-/// Use BLISS's customized boost logging wrapper for logging
+// Use BLISS's customized boost logging wrapper for logging
 #define BLISS_LOGGING_BOOST_CUSTOM   4
-/// using printf
-#define BLISS_LOGGING_PRINTF        5
+// using printf
+#define BLISS_LOGGING_PRINTF         5
 
+/// logger verbosity.  these are listed in increasing verbosity. each level include all before it.
+#define BLISS_LOGGER_VERBOSITY_FATAL   0
+#define BLISS_LOGGER_VERBOSITY_ERROR   1
+#define BLISS_LOGGER_VERBOSITY_WARNING 2
+#define BLISS_LOGGER_VERBOSITY_INFO    3
+#define BLISS_LOGGER_VERBOSITY_DEBUG   4
+#define BLISS_LOGGER_VERBOSITY_TRACE   5
+
+/// include logger_config.hpp to get the cmake configured logger settings.
 #include "logger_config.hpp"
 
 // set default logger (in case none is specified via compiler flags)
@@ -56,6 +66,29 @@
 // set the default logger to the std::cerr logger
 #define USE_LOGGER BLISS_LOGGING_PRINTF
 #endif
+
+#ifndef LOGGER_VERBOSITY
+// set the default logger to the std::cerr logger
+#define LOGGER_VERBOSITY BLISS_LOGGER_VERBOSITY_ERROR
+#endif
+
+
+/// blank version of functions
+#define NOPRINT_FATAL(msg) { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(-1); }
+#define NOPRINT_ERROR(msg)
+#define NOPRINT_WARNING(msg)
+#define NOPRINT_INFO(msg)
+#define NOPRINT_DEBUG(msg)
+#define NOPRINT_TRACE(msg)
+
+#define NOPRINT_FATALF(msg, ...) { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(-1); }
+#define NOPRINT_ERRORF(msg, ...)
+#define NOPRINT_WARNINGF(msg, ...)
+#define NOPRINT_INFOF(msg, ...)
+#define NOPRINT_DEBUGF(msg, ...)
+#define NOPRINT_TRACEF(msg, ...)
+
+
 
 
 /*********************************************************************
@@ -65,12 +98,12 @@
 #if USE_LOGGER == BLISS_LOGGING_NO_LOG
 
 // empty logging macros (no overhead)
-#define FATAL(MSG)
-#define ERROR(MSG)
-#define WARNING(MSG)
-#define INFO(MSG)
-#define DEBUG(MSG)
-#define TRACE(MSG)
+#define PRINT_FATAL(msg) { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(-1); }
+#define PRINT_ERROR(msg)
+#define PRINT_WARNING(msg)
+#define PRINT_INFO(msg)
+#define PRINT_DEBUG(msg)
+#define PRINT_TRACE(msg)
 
 
 
@@ -85,12 +118,12 @@
 
 #include <iostream>
 
-#define FATAL(MSG)      std::cerr << "[fatal] " << MSG << std::endl << std::flush;
-#define ERROR(MSG)      std::cerr << "[error] " << MSG << std::endl << std::flush;
-#define WARNING(MSG)    std::cerr << "[warn ] " << MSG << std::endl << std::flush;
-#define INFO(MSG)       std::cerr << "[info ] " << MSG << std::endl << std::flush;
-#define DEBUG(MSG)      std::cerr << "[debug] " << MSG << std::endl << std::flush;
-#define TRACE(MSG)      std::cerr << "[trace] " << MSG << std::endl << std::flush;
+#define PRINT_FATAL(msg)      { std::cerr << "[fatal] " << msg << std::endl << std::flush; exit(-1); }
+#define PRINT_ERROR(msg)      { std::cerr << "[error] " << msg << std::endl << std::flush; }
+#define PRINT_WARNING(msg)    { std::cerr << "[warn ] " << msg << std::endl << std::flush; }
+#define PRINT_INFO(msg)       { std::cerr << "[info ] " << msg << std::endl << std::flush; }
+#define PRINT_DEBUG(msg)      { std::cerr << "[debug] " << msg << std::endl << std::flush; }
+#define PRINT_TRACE(msg)      { std::cerr << "[trace] " << msg << std::endl << std::flush; }
 
 
 /*********************************************************************
@@ -103,12 +136,12 @@
 // NOTE: this is not thread safe
 #include <sstream>
 
-#define FATAL(MSG)    { std::stringstream ss; ss << MSG; printf("[fatal] %s\n", ss.str().c_str()); fflush(stdout); }
-#define ERROR(MSG)    { std::stringstream ss; ss << MSG; printf("[error] %s\n", ss.str().c_str()); fflush(stdout); }
-#define WARNING(MSG)  { std::stringstream ss; ss << MSG; printf("[warn ] %s\n", ss.str().c_str()); fflush(stdout); }
-#define INFO(MSG)     { std::stringstream ss; ss << MSG; printf("[info ] %s\n", ss.str().c_str()); fflush(stdout); }
-#define DEBUG(MSG)    { std::stringstream ss; ss << MSG; printf("[debug] %s\n", ss.str().c_str()); fflush(stdout); }
-#define TRACE(MSG)    { std::stringstream ss; ss << MSG; printf("[trace] %s\n", ss.str().c_str()); fflush(stdout); }
+#define PRINT_FATAL(msg)    { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(-1); }
+#define PRINT_ERROR(msg)    { std::stringstream ss; ss << msg; printf("[error] %s\n", ss.str().c_str());  }
+#define PRINT_WARNING(msg)  { std::stringstream ss; ss << msg; printf("[warn ] %s\n", ss.str().c_str());  }
+#define PRINT_INFO(msg)     { std::stringstream ss; ss << msg; printf("[info ] %s\n", ss.str().c_str());  }
+#define PRINT_DEBUG(msg)    { std::stringstream ss; ss << msg; printf("[debug] %s\n", ss.str().c_str());  }
+#define PRINT_TRACE(msg)    { std::stringstream ss; ss << msg; printf("[trace] %s\n", ss.str().c_str());  }
 
 
 
@@ -122,12 +155,12 @@
 // using boost trival logging
 #include <boost/log/trivial.hpp>
 
-#define FATAL(MSG)      BOOST_LOG_TRIVIAL(fatal) << MSG;
-#define ERROR(MSG)      BOOST_LOG_TRIVIAL(error) << MSG;
-#define WARNING(MSG)    BOOST_LOG_TRIVIAL(warning) << MSG;
-#define INFO(MSG)       BOOST_LOG_TRIVIAL(info) << MSG;
-#define DEBUG(MSG)      BOOST_LOG_TRIVIAL(debug) << MSG;
-#define TRACE(MSG)      BOOST_LOG_TRIVIAL(trace) << MSG;
+#define PRINT_FATAL(msg)      { BOOST_LOG_TRIVIAL(fatal) << msg;  exit(-1);  }
+#define PRINT_ERROR(msg)      { BOOST_LOG_TRIVIAL(error) << msg;   }
+#define PRINT_WARNING(msg)    { BOOST_LOG_TRIVIAL(warning) << msg; }
+#define PRINT_INFO(msg)       { BOOST_LOG_TRIVIAL(info) << msg;    }
+#define PRINT_DEBUG(msg)      { BOOST_LOG_TRIVIAL(debug) << msg;   }
+#define PRINT_TRACE(msg)      { BOOST_LOG_TRIVIAL(trace) << msg;   }
 
 
 /*********************************************************************
@@ -259,16 +292,15 @@ void init()
 
 
 // macro to add file and line
-//#define _LOG_MSG(MSG) MSG << "\t(" << __FILE__ << ":" << __LINE__ << ")"
-#define _LOG_MSG(MSG) __FILE__ << ":" << __LINE__ << ":\t" << MSG ;
+#define _LOG_MSG(msg) __FILE__ << ":" << __LINE__ << ":\t" << msg ;
 
 
-#define FATAL(MSG)      BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::fatal) << _LOG_MSG(MSG);
-#define ERROR(MSG)      BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::error) << _LOG_MSG(MSG);
-#define WARNING(MSG)    BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::warning) << _LOG_MSG(MSG);
-#define INFO(MSG)       BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::info) << _LOG_MSG(MSG);
-#define DEBUG(MSG)      BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::debug) << _LOG_MSG(MSG);
-#define TRACE(MSG)      BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::trace) << _LOG_MSG(MSG);
+#define PRINT_FATAL(msg)      { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::fatal) << _LOG_MSG(msg); exit(-1);   }
+#define PRINT_ERROR(msg)      { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::error) << _LOG_MSG(msg);   }
+#define PRINT_WARNING(msg)    { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::warning) << _LOG_MSG(msg); }
+#define PRINT_INFO(msg)       { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::info) << _LOG_MSG(msg);    }
+#define PRINT_DEBUG(msg)      { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::debug) << _LOG_MSG(msg);   }
+#define PRINT_TRACE(msg)      { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::trace) << _LOG_MSG(msg);   }
 
 #define LOG_INIT() bliss::log::init()
 
@@ -282,97 +314,131 @@ void init()
 #error "Invalid value of USE_LOGGER: logger not found."
 #endif
 
+
+
+
+
+
+
 /*******************************
  *  printf style debug macros  *
  *******************************/
 #if USE_LOGGER == BLISS_LOGGING_NO_LOG
 
 // empty logging macros (no overhead)
-#define FATALF(MSG, ...)
-#define ERRORF(MSG, ...)
-#define WARNINGF(MSG, ...)
-#define INFOF(MSG, ...)
-#define DEBUGF(MSG, ...)
-#define TRACEF(MSG, ...)
+#define PRINT_FATALF(msg, ...) { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(-1); }
+#define PRINT_ERRORF(msg, ...)
+#define PRINT_WARNINGF(msg, ...)
+#define PRINT_INFOF(msg, ...)
+#define PRINT_DEBUGF(msg, ...)
+#define PRINT_TRACEF(msg, ...)
 
 #elif USE_LOGGER == BLISS_LOGGING_PRINTF
 
-#define FATALF(msg, ...) {\
-        printf("[fatal] ");\
-        printf(msg, ##__VA_ARGS__);\
-        printf("\n"); fflush(stdout); \
-        }
-
-#define ERRORF(msg, ...) {\
-        printf("[error] ");\
-        printf(msg, ##__VA_ARGS__);\
-        printf("\n"); fflush(stdout); \
-        }
-
-#define WARNINGF(msg, ...) {\
-        printf("[warn ] ");\
-        printf(msg, ##__VA_ARGS__);\
-        printf("\n"); fflush(stdout); \
-        }
-
-#define INFOF(msg, ...) {\
-        printf("[info ] ");\
-        printf(msg, ##__VA_ARGS__);\
-        printf("\n"); fflush(stdout); \
-        }
-
-#define DEBUGF(msg, ...) {\
-        printf("[debug] ");\
-        printf(msg, ##__VA_ARGS__);\
-        printf("\n"); fflush(stdout); \
-        }
-
-#define TRACEF(msg, ...) {\
-        printf("[trace] "); \
-        printf(msg, ##__VA_ARGS__);\
-        printf("\n"); fflush(stdout); \
-        }
+// C automatically concatenate c string literals, so "blah "msg"\n" where msg is "BLAH", becomes "blah BLAH\n"
+// C++11 requires space in between:  "blah " msg "\n".
+#define PRINT_FATALF(msg, ...)   { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(-1); }
+#define PRINT_ERRORF(msg, ...)   { printf("[error] " msg "\n", ##__VA_ARGS__); }
+#define PRINT_WARNINGF(msg, ...) { printf("[warn ] " msg "\n", ##__VA_ARGS__); }
+#define PRINT_INFOF(msg, ...)    { printf("[info ] " msg "\n", ##__VA_ARGS__); }
+#define PRINT_DEBUGF(msg, ...)   { printf("[debug] " msg "\n", ##__VA_ARGS__); }
+#define PRINT_TRACEF(msg, ...)   { printf("[trace] " msg "\n", ##__VA_ARGS__); }
 
 
 #else
 #define BLISS_SPRINTF_BUFFER_SIZE 256
 
-#define FATALF(msg, ...) {\
+#define PRINT_FATALF(msg, ...) {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
-        FATAL(buffer);\
+        PRINT_FATAL(buffer);\
+        exit(-1); \
         }
 
-#define ERRORF(msg, ...) {\
+#define PRINT_ERRORF(msg, ...) {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
-        ERROR(buffer);\
+        PRINT_ERROR(buffer);\
         }
 
-#define WARNINGF(msg, ...) {\
+#define PRINT_WARNINGF(msg, ...) {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
-        WARNING(buffer);\
+        PRINT_WARNING(buffer);\
         }
 
-#define INFOF(msg, ...) {\
+#define PRINT_INFOF(msg, ...) {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
-        INFO(buffer);\
+        PRINT_INFO(buffer);\
         }
 
-#define DEBUGF(msg, ...) {\
+#define PRINT_DEBUGF(msg, ...) {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
-        DEBUG(buffer);\
+        PRINT_DEBUG(buffer);\
         }
 
-#define TRACEF(msg, ...) {\
+#define PRINT_TRACEF(msg, ...) {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
-        TRACE(buffer);\
+        PRINT_TRACE(buffer);\
         }
 #endif
+
+
+/********************************************
+ *  actual macros, conditioned on verbosity *
+ ********************************************/
+
+#if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_FATAL
+#define FATAL(msg)       PRINT_FATAL(msg)
+#define FATALF(msg, ...) PRINT_FATALF(msg, ##__VA_ARGS__)
+#else
+#define FATAL(msg)       NOPRINT_FATAL(msg)
+#define FATALF(msg, ...) NOPRINT_FATALF(msg, ##__VA_ARGS__)
+#endif
+
+#if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_ERROR
+#define ERROR(msg)       PRINT_ERROR(msg)
+#define ERRORF(msg, ...) PRINT_ERRORF(msg, ##__VA_ARGS__)
+#else
+#define ERROR(msg)       NOPRINT_ERROR(msg)
+#define ERRORF(msg, ...) NOPRINT_ERRORF(msg, ##__VA_ARGS__)
+#endif
+
+#if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_WARNING
+#define WARNING(msg)       PRINT_WARNING(msg)
+#define WARNINGF(msg, ...) PRINT_WARNINGF(msg, ##__VA_ARGS__)
+#else
+#define WARNING(msg)       NOPRINT_WARNING(msg)
+#define WARNINGF(msg, ...) NOPRINT_WARNINGF(msg, ##__VA_ARGS__)
+#endif
+
+#if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_INFO
+#define INFO(msg)       PRINT_INFO(msg)
+#define INFOF(msg, ...) PRINT_INFOF(msg, ##__VA_ARGS__)
+#else
+#define INFO(msg)       NOPRINT_INFO(msg)
+#define INFOF(msg, ...) NOPRINT_INFOF(msg, ##__VA_ARGS__)
+#endif
+
+#if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_DEBUG
+#define DEBUG(msg)       PRINT_DEBUG(msg)
+#define DEBUGF(msg, ...) PRINT_DEBUGF(msg, ##__VA_ARGS__)
+#else
+#define DEBUG(msg)       NOPRINT_DEBUG(msg)
+#define DEBUGF(msg, ...) NOPRINT_DEBUGF(msg, ##__VA_ARGS__)
+#endif
+
+#if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_TRACE
+#define TRACE(msg)       PRINT_TRACE(msg)
+#define TRACEF(msg, ...) PRINT_TRACEF(msg, ##__VA_ARGS__)
+#else
+#define TRACE(msg)       NOPRINT_TRACE(msg)
+#define TRACEF(msg, ...) NOPRINT_TRACEF(msg, ##__VA_ARGS__)
+#endif
+
 
 // in case a logger doesn't define an init() function, supply an empty one
 #ifndef LOG_INIT

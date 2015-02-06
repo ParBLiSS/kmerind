@@ -513,7 +513,10 @@ TODO:
 			API is sequential, implementation is parallel/distributed/overlapped.
 				ie. use message handlers to allow overlapped communication and io, but functions return when all's complete.
 		
-		
+		6. verify correctness - generation,
+			distribution
+			query
+			
 	3. Memory ordering in buffer and Lockfree Queue
 		buffer: DONE
 		lockfree queue - default okay.
@@ -532,7 +535,7 @@ TODO:
 		b. multiple single threaded queues
 		
 	
-	6. paper: 
+	7. paper: 
 		performance comparison:
 		1. best sequential algo.  suffix array based?
 		2. async kmer generation vs AllToAll.
@@ -544,6 +547,23 @@ TODO:
 			
 		writing.
 		
-	7. documentation and testing.
-		gcc message formatting.  DONE
-	
+		
+RELEASE TASKS
+		
+	8. documentation
+		a. code comments
+		b. install documentation
+		c. usage documentation
+		d. example code
+		
+	9. Testing.
+		a. verify correctness - 
+			kmer generation,
+			kmer distribution
+			kmer query
+		b. change all tests to gtest format
+		
+	10. build process
+		a. tests need to return non-zero error codes
+		b. gcc message formatting.  DONE
+		c. logging - conditionally return messages.  - DONE.
