@@ -372,6 +372,16 @@ int main(int argc, char** argv) {
 
   typedef bliss::concurrent::ThreadSafeQueue<int> QueueType;
 
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 1);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 1);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 1);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 4, 1);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 2);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 3);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 4);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 2);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 3);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 2);
 
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 1);
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 1);
@@ -384,16 +394,6 @@ int main(int argc, char** argv) {
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 3);
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 3, 2);
 
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 4, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 2);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 3);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 4);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 2);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 3);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 2);
 
 
 };

@@ -170,11 +170,16 @@ namespace bliss
          */
         void clear()
         {
-          std::lock_guard<std::mutex> lock(mutex);
+//          std::lock_guard<std::mutex> lock(mutex);
+          // clear is done by 1, so don't need strong mem ordering.
+
+          // first clear the size, so threads' don't try to dequeue
+          size.fetch_and(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed);  // keep the push bit, and set size to 0
+
           T val;
           while (q.try_dequeue(val)) ;
 
-          // clear is done by 1, so don't need strong mem ordering.
+          // clear it again to catch all that have been enqueued.
           size.fetch_and(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed);  // keep the push bit, and set size to 0
 
         }
@@ -199,11 +204,14 @@ namespace bliss
         }
 
         /**
-         * check if the thread safe queue is accepting new elements. (full or not)
+         * check if the thread safe queue can accept new elements. (full or not)
          * @return    boolean - queue insertion allowed or not.
          */
         inline bool canPush() {
           // pushing thread does not immediately are what other threads did before this
+          // size is >= 0 (not disabled), and less than capacity.
+          // note that if we reinterpret_cast size to size_t, then disabled (< 0) will have MSB set to 1, so > max(int64_t).
+
           return size.load(std::memory_order_relaxed) >= 0;   // int highest bit set means negative, and means cannot push
         }
 
@@ -246,6 +254,15 @@ namespace bliss
          */
         bool tryPush (T const& data) {
 
+//          // race condition causes extra items to be pushed.
+//          int64_t v = size.load(std::memory_order_relaxed);
+//          if ( reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity) ) {
+//            if (q.enqueue(data)) {
+//              size.fetch_add(1, std::memory_order_relaxed);
+//              return true;
+//            }
+//          }
+
           int64_t v = size.fetch_add(1, std::memory_order_relaxed);
           if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
             if (q.enqueue(data)) return true;
@@ -269,6 +286,16 @@ namespace bliss
          * @return        whether push was successful.
          */
         std::pair<bool,T> tryPush (T && data) {
+//          // race condition causes extra items to be pushed.
+//          int64_t v = size.load(std::memory_order_relaxed);
+//          if ( reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity) ) {
+//            if (q.enqueue(std::forward<T>(data))) {   // depend on q not messing up data if enqueue fails
+//              size.fetch_add(1, std::memory_order_relaxed);
+//              return std::move(std::make_pair(true, std::forward<T>(data)));  // data already moved, so okay.
+//            }
+//          }
+
+
           int64_t v = size.fetch_add(1, std::memory_order_relaxed);
           if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
             if (q.enqueue(std::forward<T>(data)))
@@ -295,24 +322,46 @@ namespace bliss
          */
         bool waitAndPush (T const& data) {
 
-          // wait while size is greater than capacity.
-        	volatile int64_t v;;
-        	while ((v = size.fetch_add(1, std::memory_order_relaxed)) >= capacity) {
-        		size.fetch_sub(1, std::memory_order_relaxed);
-        		_mm_pause();               // full q.  wait for someone to signal (not full && canPush, or !canPush).
-        	}
-            // to get here, have to have one of these conditions changed:  pushEnabled, !full
+          int64_t v;
+          bool first = true;
+          do {  // loop forever, unless queue is disabled, or insert succeeded.
+            if (first) {
+              v  = size.fetch_add(1, std::memory_order_relaxed);
+              first = false;
+            } else {
+              v = size.load(std::memory_order_relaxed);
+            }
+            if (v < 0) {
+              size.fetch_sub(1, std::memory_order_relaxed);
+              return false;  // disabled so return false
+            }
+            else if (v < capacity) {  // else under capacity, enqueue
+              if (q.enqueue(data)) {  // successfully enqueued.
+                return true;
+              } // else failed enqueue, try again.
+            } // else over capacity
+          } while (true);
 
-
-        	if ( v >= 0 )
-        		if (q.enqueue(data))
-        			return true;  //  0 <= v < capacity
-
-
-        	// else v < 0. push disabled., or enqueue failed for other reasons
-          size.fetch_sub(1, std::memory_order_relaxed);
           return false;
-        	// no v >= capacity case.  would still be in loop.
+
+//          // wait while size is greater than capacity.
+//        	volatile int64_t v;
+//        	while ((v = size.fetch_add(1, std::memory_order_relaxed)) >= capacity) {
+//        		size.fetch_sub(1, std::memory_order_relaxed);
+//        		_mm_pause();               // full q.  wait for someone to signal (not full && canPush, or !canPush).
+//        	}
+//            // to get here, have to have one of these conditions changed:  pushEnabled, !full
+//
+//
+//        	if ( v >= 0 )
+//        		if (q.enqueue(data))
+//        			return true;  //  0 <= v < capacity
+//
+//
+//        	// else v < 0. push disabled., or enqueue failed for other reasons
+//          size.fetch_sub(1, std::memory_order_relaxed);
+//          return false;
+//        	// no v >= capacity case.  would still be in loop.
         }
 
         /**
@@ -330,24 +379,46 @@ namespace bliss
          */
         std::pair<bool,T> waitAndPush (T && data) {
 
-            // wait while size is greater than capacity.
-          	volatile int64_t v;;
-          	while ((v = size.fetch_add(1, std::memory_order_relaxed)) >= capacity) {
-          	  size.fetch_sub(1, std::memory_order_relaxed);
-          		_mm_pause();               // full q.  wait for someone to signal (not full && canPush, or !canPush).
-          	}
-              // to get here, have to have one of these conditions changed:  pushEnabled, !full
+          int64_t v;
+          bool first = true;
+          do {  // loop forever, unless queue is disabled, or insert succeeded.
+            if (first) {
+              v = size.fetch_add(1, std::memory_order_relaxed);
+              first = false;
+            } else {
+              v = size.load(std::memory_order_relaxed);
+            }
+            if (v < 0) {
+              size.fetch_sub(1, std::memory_order_relaxed);
+              return std::move(std::make_pair(false, std::forward<T>(data)));  // disabled so return false
+            }
+            else if (v < capacity) {  // else under capacity, enqueue
+              if (q.enqueue(std::forward<T>(data))) {  // successfully enqueued.
+                return std::move(std::make_pair(true, std::forward<T>(data)));
+              }  // else failed enqueue, try again.
+            } // else over capacity
+          } while (true);
 
+          return std::move(std::make_pair(false, std::forward<T>(data)));
 
-          	if (v >= 0 )
-          		if (q.enqueue(std::forward<T>(data)))
-          			return std::move(std::make_pair(true, std::forward<T>(data)));;  //  0 <= v < capacity
-
-          	// else v < 0. push disabled.  or enqueue failed for other reasons
-          	size.fetch_sub(1, std::memory_order_relaxed);
-          	// no v >= capacity case.  would still be in loop.
-            // at this point, if success, data should be empty.  else data should be untouched.
-          	return std::move(std::make_pair(false, std::forward<T>(data)));
+//            // wait while size is greater than capacity.
+//          	volatile int64_t v;;
+//          	while ((v = size.fetch_add(1, std::memory_order_relaxed)) >= capacity) {
+//          	  size.fetch_sub(1, std::memory_order_relaxed);
+//          		_mm_pause();               // full q.  wait for someone to signal (not full && canPush, or !canPush).
+//          	}
+//              // to get here, have to have one of these conditions changed:  pushEnabled, !full
+//
+//
+//          	if (v >= 0 )
+//          		if (q.enqueue(std::forward<T>(data)))
+//          			return std::move(std::make_pair(true, std::forward<T>(data)));;  //  0 <= v < capacity
+//
+//          	// else v < 0. push disabled.  or enqueue failed for other reasons
+//          	size.fetch_sub(1, std::memory_order_relaxed);
+//          	// no v >= capacity case.  would still be in loop.
+//            // at this point, if success, data should be empty.  else data should be untouched.
+//          	return std::move(std::make_pair(false, std::forward<T>(data)));
         }
 
 
