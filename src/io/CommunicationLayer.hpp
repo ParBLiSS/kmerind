@@ -878,7 +878,10 @@ protected:
         }
 
         void finish() {
-          if (td.joinable()) td.join();
+          if (td.joinable()) {
+            td.join();
+            DEBUGF("B CallbackThread finished, thread joined.");
+          }
         }
 
         /**
@@ -1069,6 +1072,7 @@ public:
    */
   virtual ~CommunicationLayer () {
     finalize();
+
   }
 
   /**
@@ -1087,9 +1091,6 @@ public:
 	  finishCommunication();
 
 	  // TODO: properly handle this part.
-    // wait for both threads to quit
-    commThread.finish();
-    callbackThread.finish();
 
     // final cleanup
     if (!ctrlMsgProperties.empty()) {
@@ -1105,6 +1106,11 @@ public:
       }
       ctrlMsgProperties.clear();
     }
+
+    // wait for both threads to quit
+    commThread.finish();
+    callbackThread.finish();
+
   };
 
 
