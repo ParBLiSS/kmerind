@@ -28,6 +28,10 @@
 #include <common/AlphabetTraits.hpp>
 #include <common/bit_ops.hpp>
 #include <common/padding.hpp>
+#include <utils/KmerUtils.hpp>
+
+// TODO: need convenience class that can transcode on the fly?
+// TODO: make KMER depend on bitsPerChar and K, but not Alphabet?
 
 namespace bliss
 {
@@ -74,27 +78,39 @@ namespace bliss
  * @tparam  KMER_SIZE   The size (number of characters) of the k-mer.
  * @tparam  ALPHABET    The Alphabet from which the characters in the k-mer are drawn.
  *                          E.g. DNA
- * @tparam  word_type       The unsigned integer type to be used as the
+ * @tparam  WORD_TYPE       The unsigned integer type to be used as the
  *                          storage type. This can be of any size from
  *                          uint8_t up to uint64_t. (default is uint64_t)
  */
-template <unsigned int KMER_SIZE, typename ALPHABET, typename word_type=WordType>
+template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE=WordType>
 class Kmer
 {
-private:
-  /// The size of the Kmer, i.e. the number of characters
+    friend std::string bliss::utils::KmerUtils::toASCIIString<Kmer>(const Kmer & kmer);
+
+
+ public:
+    /// The size of the Kmer, i.e. the number of characters
   static constexpr unsigned int size = KMER_SIZE;
   /// The number of bits of each character
   static constexpr unsigned int bitsPerChar = bliss::AlphabetTraits<ALPHABET>::getBitsPerChar();
+
+  typedef WORD_TYPE KmerWordType;
+  typedef ALPHABET KmerAlphabet;
+
+ private:
+
   /// The total number of bits
   static constexpr unsigned int nBits = size * bitsPerChar;
 
   /// The padding traits of an unpadded stream (i.e. the padding for the very
   /// last word)
-  typedef UnpaddedStreamTraits<word_type, nBits> bitstream;
+  typedef UnpaddedStreamTraits<WORD_TYPE, nBits> bitstream;
 
+ public:
   /// The number of stored words inside the Kmer
   static constexpr unsigned int nWords = bitstream::nWords;
+
+ private:
 
   /*
    * last character offsets (and whether or not it is split accord storage
@@ -103,16 +119,16 @@ private:
   /// Offset to the very last character in the k-mer
   static constexpr unsigned int lastCharOffset = nBits - bitsPerChar;
   /// Whether or not the last character is split across storage words
-  static constexpr bool lastCharIsSplit = (lastCharOffset < (nWords-1)*sizeof(word_type)*8);
+  static constexpr bool lastCharIsSplit = (lastCharOffset < (nWords-1)*sizeof(WORD_TYPE)*8);
   /// The offset to the very last character by word boundary
-  static constexpr unsigned int lastCharWordOffset = lastCharOffset % (sizeof(word_type)*8);
+  static constexpr unsigned int lastCharWordOffset = lastCharOffset % (sizeof(WORD_TYPE)*8);
   /// In case the last character is split: the number of bits of the last
   /// character in the previous from last word.
-  static constexpr unsigned int leftSplitSize = sizeof(word_type)*8 - lastCharWordOffset;
+  static constexpr unsigned int leftSplitSize = sizeof(WORD_TYPE)*8 - lastCharWordOffset;
 
 protected:
   /// The actual storage of the k-mer
-  word_type data[nWords];
+  WORD_TYPE data[nWords];
 
 public:
 
@@ -323,7 +339,11 @@ public:
     return offset;
   }
 
-
+/**
+ * Note that iterator has value domain consistent with the valid values in the alphabet
+ * @param begin
+ * @param stop_on_last
+ */
   template <typename InputIterator>
   void fillFromChars(InputIterator& begin, bool stop_on_last = false)
   {
@@ -348,6 +368,7 @@ public:
 
   /**
    * @brief fill kmer from InputIterator, where each element contains 1 single character.
+   * @note  input iterator has values that are valid for the alphabet.
    * @param begin
    * @param stop_on_last
    */
@@ -372,7 +393,6 @@ public:
     }
 
   }
-
 
   /**
    * @brief   Generates the next k-mer from the given sequence using a sliding
@@ -493,13 +513,17 @@ public:
   }
 
 
+  // TODO:  need a version of nextFromChar that takes an iterator and increments from the iterator.
+
+
   /**
    * @brief Creates the next k-mer by shifting and adding the given character.
    *
-   * Creates the next k-mer by the sliding window. This first leftt shifts the
+   * Creates the next k-mer by the sliding window. This first left shifts the
    * current k-mer and then adds the given character to the least significant
    * bits of this k-mer.
    *
+   * @note  input iterator has values that are valid for the alphabet.
    * Note: this is changing this k-mer in-place.
    *
    * @param c The character to be added to the k-mer.
@@ -524,6 +548,8 @@ public:
    * Creates the next k-mer by the sliding window. This first right shifts the
    * current k-mer and then adds the given character to the most significant
    * bits of this k-mer.
+   *
+   * @note  input iterator has values that are valid for the alphabet.
    *
    * Note: this is changing this k-mer in-place.
    *
@@ -580,7 +606,7 @@ public:
    */
   inline bool operator<(const Kmer& rhs) const
   {
-    std::pair<const word_type*, const word_type*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
+    std::pair<const WORD_TYPE*, const WORD_TYPE*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
     if (unequal.first == this->data + nWords)
     {
       // all elements are equal
@@ -602,7 +628,7 @@ public:
    */
   inline bool operator<=(const Kmer& rhs) const
   {
-    std::pair<const word_type*, const word_type*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
+    std::pair<const WORD_TYPE*, const WORD_TYPE*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
     if (unequal.first == this->data + nWords)
     {
       // all elements are equal
@@ -647,7 +673,7 @@ public:
    */
   inline Kmer& operator^=(const Kmer& rhs)
   {
-    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_xor<word_type>());
+    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_xor<WORD_TYPE>());
     return *this;
   }
   /**
@@ -665,7 +691,7 @@ public:
    */
   inline Kmer& operator&=(const Kmer& rhs)
   {
-    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_and<word_type>());
+    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_and<WORD_TYPE>());
     return *this;
   }
   /**
@@ -683,7 +709,7 @@ public:
    */
   inline Kmer& operator|=(const Kmer& rhs)
   {
-    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_or<word_type>());
+    std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_or<WORD_TYPE>());
     return *this;
   }
   /**
@@ -780,7 +806,7 @@ public:
    *
    * @returns   A std::string representing this k-mer.
    */
-  std::string toString() const
+  std::string toHexString() const
   {
     /* return the hex representation of the data array values */
     std::stringstream ss;
@@ -793,8 +819,49 @@ public:
     return ss.str();
   }
 
+
+  std::string toString() const
+  {
+    std::stringstream ss;
+
+    WordType w = 0;
+    int bit_pos = 0;
+    int word_pos = 0;
+    int bit_pos_in_word = 0;
+    int offset = 0;
+    for (int i = KMER_SIZE - 1; i >= 0; --i)
+    {
+      // start pos
+      bit_pos = i * bitsPerChar;
+      word_pos = bit_pos / (sizeof(WordType) * 8);
+      bit_pos_in_word = bit_pos % (sizeof(WordType) * 8);
+
+      w = (data[word_pos] >> bit_pos_in_word);
+
+      if (bit_pos_in_word + bitsPerChar > (sizeof(WordType) * 8)) {  // == means that there were just enough bits in the previous word.
+        offset = (sizeof(WordType) * 8) - bit_pos_in_word;
+        ++word_pos;
+
+        // now need to get the next part.
+        if (word_pos < nWords) w = w | (data[word_pos] << offset);
+
+      }
+      w = w & getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar);
+
+
+      ss << w << " ";
+
+    }
+
+    return ss.str();
+  }
+
+
+
+
+
   /// get 64 bit prefix.  for hashing.
-  uint64_t getPrefix(const unsigned int NumBits) const {
+  uint64_t getPrefix(const unsigned int NumBits = 64) const {
 
     if (bitstream::padBits + NumBits <= bitstream::bitsPerWord) {
       // word contains the NumBits bits and the padding bits.
@@ -814,7 +881,9 @@ public:
 
   }
 
-  uint64_t getInfix(const unsigned int NumBits, const unsigned int offsetFromMSB) const {
+
+
+  uint64_t getInfix(const unsigned int NumBits = 64, const unsigned int offsetFromMSB = 0) const {
     if (bitstream::nBits - NumBits > offsetFromMSB ) {
 
       // more than 64 bits to the right of offsetFromMSB.  so need to shift to right.
@@ -834,27 +903,27 @@ public:
 
   }
 
-  uint64_t getSuffix(const unsigned int NumBits) const {
-    if (sizeof(word_type) * 8 >= NumBits || bitstream::nWords == 1) {
+  uint64_t getSuffix(const unsigned int NumBits = 64) const {
+    if (sizeof(WORD_TYPE) * 8 >= NumBits || bitstream::nWords == 1) {
       // kmer composes of 1+ words that are larger or equal to 64 bits, or a single word.
       return static_cast<uint64_t>(data[0]) & getLeastSignificantBitsMask<uint64_t>(NumBits);
 
 
     } else {
       // kmer has multiple small words. compose it.
-      const size_t nwords = static_cast<size_t>(bitstream::nWords) <= ((NumBits + sizeof(word_type) * 8 - 1) / (sizeof(word_type) * 8) ) ?
+      const size_t nwords = static_cast<size_t>(bitstream::nWords) <= ((NumBits + sizeof(WORD_TYPE) * 8 - 1) / (sizeof(WORD_TYPE) * 8) ) ?
           static_cast<size_t>(bitstream::nWords) :
-          ((NumBits + sizeof(word_type) * 8 - 1) / (sizeof(word_type) * 8) );
+          ((NumBits + sizeof(WORD_TYPE) * 8 - 1) / (sizeof(WORD_TYPE) * 8) );
       uint64_t result = 0;
       for (int i = nwords - 1; i >= 0; --i) {
 
         // this is to avoid GCC compiler warning.  even though the case
-        // sizeof (word_type) >= sizeof(uint64_t) is already caught earlier, compiler
+        // sizeof (WORD_TYPE) >= sizeof(uint64_t) is already caught earlier, compiler
         // will still check this line and cause a warning to be thrown.
-        // so we artificially insert a conditional that caps word_type size to 7
+        // so we artificially insert a conditional that caps WORD_TYPE size to 7
         // of word type will never go above 7 (actually 4) at runtime (caught by branch earlier)
         // and most of this code will be optimized out as well during compilation.
-        result <<= ((sizeof(word_type) > 7 ? 7 : sizeof(word_type)) * 8);
+        result <<= ((sizeof(WORD_TYPE) > 7 ? 7 : sizeof(WORD_TYPE)) * 8);
         result |= data[i];
       }
       return result;
@@ -863,86 +932,12 @@ public:
 
 
 
-//  /// get 64 bit prefix.  for hashing.
-//  uint64_t getPrefix64() const {
-//
-//    if (bitstream::padBits + 64 <= bitstream::bitsPerWord) {
-//      // word contains the 64 bits and the padding bits.
-//      // need to shift to the right to get rid of extra bits
-//      return static_cast<uint64_t>(data[nWords - 1] >>
-//                                   (bitstream::bitsPerWord - 64 - bitstream::padBits));
-//
-//    } else {
-//      // padBits + 64 is larger than a word.
-//        // more than 1 word, so shift and get suffix
-//        Kmer temp = *this;
-//        if (bitstream::nBits > 64) {
-//          temp.do_right_shift(bitstream::nBits - 64);
-//        }
-//        return temp.getSuffix64();
-//    }
-//
-//  }
-//
-//  uint64_t getInfix64(const std::size_t offsetFromMSB) const {
-//    if (bitstream::nBits - 64 > offsetFromMSB ) {
-//
-//      // more than 64 bits to the right of offsetFromMSB.  so need to shift to right.
-//      Kmer temp = *this;
-//      temp.do_right_shift(bitstream::nBits - offsetFromMSB - 64);
-//      return temp.getSuffix64();
-//    } else if (bitstream::nBits - 64 == offsetFromMSB) {
-//      // exactly 64 bits left.  just use it.
-//      return getSuffix64();
-//    } else {
-//
-//      // less than 64 bits left at offset from MSB.  don't need to shift to right.
-//      // but do need to clear leading portion.
-//      return getSuffix64() & getLeastSignificantBitsMask<uint64_t>(bitstream::nBits - offsetFromMSB);
-//
-//    }
-//
-//  }
-//
-//  uint64_t getSuffix64() const {
-//    if (sizeof(word_type) * 8 >= 64) {
-//      // kmer composes of one or more words that are larger or equal to 64 bits.
-//      return static_cast<uint64_t>(data[0]);
-//
-//    } else if (bitstream::nWords == 1) {
-//
-//      // word is smaller than 64 bits but there is only 1.
-//      return static_cast<uint64_t>(data[0]);
-//    } else {
-//
-//
-//      // kmer has multiple small words. compose it.
-//      constexpr size_t nwords = static_cast<size_t>(bitstream::nWords) <= ((sizeof(uint64_t) + sizeof(word_type) - 1) / sizeof(word_type)) ?
-//          static_cast<size_t>(bitstream::nWords) :
-//          (sizeof(uint64_t) + sizeof(word_type) - 1) / sizeof(word_type);
-//      uint64_t result = 0;
-//      for (int i = nwords - 1; i >= 0; --i) {
-//
-//        // this is to avoid GCC compiler warning.  even though the case
-//        // sizeof (word_type) >= sizeof(uint64_t) is already caught earlier, compiler
-//        // will still check this line and cause a warning to be thrown.
-//        // so we artificially insert a conditional that caps word_type size to 7
-//        // of word type will never go above 7 (actually 4) at runtime (caught by branch earlier)
-//        // and most of this code will be optimized out as well during compilation.
-//        result <<= ((sizeof(word_type) > 7 ? 7 : sizeof(word_type)) * 8);
-//        result |= data[i];
-//      }
-//      return result;
-//    }
-//  }
-
-
 protected:
 
   template<typename WType>
   inline void setBitsAtPos(WType w, int bitPos, int numBits) {
     // get the value masked.
-    word_type charVal = static_cast<word_type>(w) & getLeastSignificantBitsMask<word_type>(numBits);
+    WORD_TYPE charVal = static_cast<WORD_TYPE>(w) & getLeastSignificantBitsMask<WORD_TYPE>(numBits);
 
     // determine which word in kmer it needs to go to
     int wordId = bitPos / bitstream::bitsPerWord;
@@ -977,8 +972,8 @@ protected:
     do_left_shift(shift);
 
     // add character to least significant end (requires least shifting)
-    *data |= static_cast<word_type>(w) &
-        getLeastSignificantBitsMask<word_type>(shift);
+    *data |= static_cast<WORD_TYPE>(w) &
+        getLeastSignificantBitsMask<WORD_TYPE>(shift);
   }
 
   /**
@@ -993,8 +988,8 @@ protected:
     do_right_shift(shift);
 
     // add character to least significant end (requires least shifting)
-    data[nWords - 1] |= (static_cast<word_type>(w) &
-        getLeastSignificantBitsMask<word_type>(shift)) << (bitstream::invPadBits - shift);
+    data[nWords - 1] |= (static_cast<WORD_TYPE>(w) &
+        getLeastSignificantBitsMask<WORD_TYPE>(shift)) << (bitstream::invPadBits - shift);
   }
 
 
@@ -1005,7 +1000,7 @@ protected:
   inline void do_sanitize()
   {
     // TODO use templated helper struct for <0> template specialization
-    data[nWords-1] &= getLeastSignificantBitsMask<word_type>(bitstream::invPadBits);
+    data[nWords-1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::invPadBits);
   }
 
   /**
@@ -1013,7 +1008,7 @@ protected:
    */
   inline void do_clear()
   {
-    std::fill(data, data + nWords, static_cast<word_type>(0));
+    std::fill(data, data + nWords, static_cast<WORD_TYPE>(0));
   }
 
   /**
@@ -1026,8 +1021,8 @@ protected:
   inline void do_left_shift(size_t shift)
   {
     // inspired by STL bitset implementation
-    const size_t word_shift = shift / (sizeof(word_type)*8);
-    const size_t offset = shift % (sizeof(word_type)*8);
+    const size_t word_shift = shift / (sizeof(WORD_TYPE)*8);
+    const size_t offset = shift % (sizeof(WORD_TYPE)*8);
 
     // all shifted away.
     if (word_shift >= nWords) {
@@ -1045,7 +1040,7 @@ protected:
     }
     else
     {
-      const size_t inv_offset = sizeof(word_type)*8 - offset;
+      const size_t inv_offset = sizeof(WORD_TYPE)*8 - offset;
       for (size_t i = nWords - 1; i > word_shift; --i)
       {
         data[i] = ((data[i - word_shift] << offset) | (data[i - word_shift - 1] >> inv_offset));
@@ -1054,7 +1049,7 @@ protected:
     }
 
     // set all others to 0
-    std::fill(data, data+word_shift, static_cast<word_type>(0));
+    std::fill(data, data+word_shift, static_cast<WORD_TYPE>(0));
   }
 
   /**
@@ -1067,8 +1062,8 @@ protected:
   inline void do_right_shift(size_t shift)
   {
     // inspired by STL bitset implementation
-    const size_t word_shift = shift / (sizeof(word_type)*8);
-    const size_t offset = shift % (sizeof(word_type)*8);
+    const size_t word_shift = shift / (sizeof(WORD_TYPE)*8);
+    const size_t offset = shift % (sizeof(WORD_TYPE)*8);
 
     // all shifted away.
     if (word_shift >= nWords) {
@@ -1086,7 +1081,7 @@ protected:
     }
     else
     {
-      const size_t inv_offset = sizeof(word_type)*8 - offset;
+      const size_t inv_offset = sizeof(WORD_TYPE)*8 - offset;
       for (size_t i = 0; i < nWords - word_shift - 1; ++i)
       {
         data[i] = ((data[i + word_shift] >> offset) | (data[i + word_shift + 1] << inv_offset));
@@ -1094,7 +1089,7 @@ protected:
       data[nWords - word_shift - 1] = data[nWords-1] >> offset;
     }
     // set all others to 0
-    std::fill(data + (nWords - word_shift), data + nWords, static_cast<word_type>(0));
+    std::fill(data + (nWords - word_shift), data + nWords, static_cast<WORD_TYPE>(0));
   }
 
   /**
@@ -1120,7 +1115,7 @@ protected:
       this->do_left_shift(bitsPerChar);   // shifting the whole thing, inefficient but correct,
                                           // especially for char that cross word boundaries.
       // copy `bitsperChar` least significant bits
-      copyBitsFixed<word_type, bitsPerChar>(this->data[0], tmp_copy.data[0]);
+      copyBitsFixed<WORD_TYPE, bitsPerChar>(this->data[0], tmp_copy.data[0]);
       tmp_copy.do_right_shift(bitsPerChar);
     }
 
@@ -1154,11 +1149,11 @@ protected:
     // type
     static_assert(std::is_same<
         typename std::iterator_traits<InputIterator>::value_type,
-        word_type>::value,
+        WORD_TYPE>::value,
         "Input iterator must have same value type as the Kmer storage");
 
     // copy all the data into this kmer
-    word_type* out = data;
+    WORD_TYPE* out = data;
     for (unsigned int i = 0; i < nWords; ++i)
     {
       *(out++) = *(begin++);

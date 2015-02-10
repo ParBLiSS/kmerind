@@ -25,6 +25,9 @@
 
 #include <iterators/sliding_window_iterator.hpp>
 
+// TODO: Need convenience functions to make start and end iterators (the true/false flags are not good.  else enforce that flag has no default value.)
+// TODO: Need convenience typedef to allow for reverse complement generation.
+
 namespace bliss
 {
 

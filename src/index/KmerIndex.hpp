@@ -51,6 +51,7 @@ namespace bliss
 
         KmerType operator()(const KmoleculeType& input) {
           return (input.first < input.second ? input.first : input.second);
+          //return input.first;
         }
     };
 
@@ -61,7 +62,7 @@ namespace bliss
       KmerType key;
       bliss::index::count_t val;
       std::tie(key, val) = answer;
-    }
+    };
 
     /**
      * @class    bliss::index::KmerIndex
@@ -148,6 +149,10 @@ namespace bliss
 
         size_t local_size() const {
           return index.local_size();
+        }
+
+        IndexType& getLocalIndex() {
+          return index;
         }
 
         void flush() {
@@ -366,7 +371,12 @@ namespace bliss
 
     };
 
-
+	template<typename Alphabet>
+	struct ASCII2 {
+		const uint8_t operator()(const unsigned char ascii) {
+			return Alphabet::FROM_ASCII[ascii];
+		}
+	};
 
 
     /**
@@ -409,7 +419,9 @@ namespace bliss
 //        typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
 //        typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
 
-        typedef bliss::KmerGenerationIterator<typename SeqType::IteratorType, KmerType>             KmerIterType;
+	using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, ASCII2<Alphabet> >;
+
+        typedef bliss::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
 
         /// combine kmer iterator and position iterator to create an index iterator type.
         using KmerIndexIterType = KmerIterType;
@@ -455,6 +467,9 @@ namespace bliss
 
         size_t local_size() const {
           return index.local_size();
+        }
+        IndexType& getLocalIndex() {
+          return index;
         }
 
         void flush() {
@@ -642,9 +657,13 @@ namespace bliss
 
           if (read.seqBegin == read.seqEnd) return;
 
+	 //== transform ascii to coded value
+	BaseCharIterator charStart(read.seqBegin, ASCII2<Alphabet>());
+	BaseCharIterator charEnd(read.seqEnd, ASCII2<Alphabet>());
+
           //== set up the kmer generating iterators.
-          KmerIterType start(read.seqBegin);
-          KmerIterType end(read.seqEnd);
+          KmerIterType start(charStart, true);
+          KmerIterType end(charEnd, false);
 
           // ==== set up the zip iterators
           KmerIndexIterType index_start = start;
@@ -656,11 +675,8 @@ namespace bliss
   //          int tid = omp_get_thread_num();
 
             // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-            unsigned int i = 0;
-  //          KmerType idx;
-            for (; i < (Kmer_Size - 1) && index_start != index_end; ++index_start, ++i);  // compute but discard the first K - 1.
-
-            for (; index_start != index_end; ++index_start, ++i)
+            // no need to discard first K-1
+            for (; index_start != index_end; ++index_start)
             {
               //kmer = *start;
               index.insert(*index_start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
@@ -771,6 +787,9 @@ namespace bliss
 
         size_t local_size() const {
           return index.local_size();
+        }
+        IndexType& getLocalIndex() {
+          return index;
         }
 
         void flush() {
@@ -1036,7 +1055,8 @@ namespace bliss
 //        typedef bliss::index::generate_kmer_simple<SeqType, DNA, KmerType>                                  KmoleculeOpType;
 //        typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
 //        typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
-        typedef bliss::KmerGenerationIterator<typename SeqType::IteratorType, KmerType>             KmerIterType;
+	using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, ASCII2<Alphabet> >;
+        typedef bliss::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
 
 
         /// kmer position iterator type
@@ -1080,6 +1100,9 @@ namespace bliss
 
         void finalize() {
           index.finalize();
+        }
+        IndexType& getLocalIndex() {
+          return index;
         }
 
         size_t local_size() const {
@@ -1272,8 +1295,8 @@ namespace bliss
           if (read.seqBegin == read.seqEnd) return;
 
           //== set up the kmer generating iterators.
-          KmerIterType start(read.seqBegin);
-          KmerIterType end(read.seqEnd);
+          KmerIterType start(BaseCharIterator(read.seqBegin, ASCII2<Alphabet>()), true);
+          KmerIterType end(BaseCharIterator(read.seqEnd, ASCII2<Alphabet>()), false);
 
           //== set up the position iterators
           IdIterType id_start(read.id);
@@ -1288,12 +1311,9 @@ namespace bliss
 
   //          int tid = omp_get_thread_num();
 
-            // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-            unsigned int i = 0;
-  //          KmerType idx;
-            for (; i < (Kmer_Size - 1) && index_start != index_end; ++index_start, ++i);  // compute but discard the first K - 1.
 
-            for (; index_start != index_end; ++index_start, ++i)
+          // no need to discard the first K-1.
+            for (; index_start != index_end; ++index_start)
             {
               //kmer = *start;
               index.insert(*index_start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
@@ -1411,6 +1431,9 @@ namespace bliss
 
         size_t local_size() const {
           return index.local_size();
+        }
+        IndexType& getLocalIndex() {
+          return index;
         }
 
         void flush() {
@@ -1684,7 +1707,8 @@ namespace bliss
 //        typedef bliss::index::generate_kmer_simple<SeqType, DNA, KmerType>                                  KmoleculeOpType;
 //        typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
 //        typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
-        typedef bliss::KmerGenerationIterator<typename SeqType::IteratorType, KmerType>             KmerIterType;
+        using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, ASCII2<Alphabet> >;
+        typedef bliss::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
 
         /// kmer position iterator type
         using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
@@ -1738,6 +1762,9 @@ namespace bliss
 
         size_t local_size() const {
           return index.local_size();
+        }
+        IndexType& getLocalIndex() {
+          return index;
         }
 
         void flush() {
@@ -1926,8 +1953,8 @@ namespace bliss
           if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) return;
 
           //== set up the kmer generating iterators.
-          KmerIterType start(read.seqBegin);
-          KmerIterType end(read.seqEnd);
+          KmerIterType start(BaseCharIterator(read.seqBegin, ASCII2<Alphabet>()), true);
+          KmerIterType end(BaseCharIterator(read.seqEnd, ASCII2<Alphabet>()), false);
 
           //== set up the position iterators
           IdIterType id_start(read.id);
@@ -1950,12 +1977,9 @@ namespace bliss
 
   //          int tid = omp_get_thread_num();
 
-            // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-            unsigned int i = 0;
-  //          KmerType idx;
-            for (; i < (Kmer_Size - 1) && index_start != index_end; ++index_start, ++i);  // compute but discard the first K - 1.
+            // no need to discard first K-1
 
-            for (; index_start != index_end; ++index_start, ++i)
+            for (; index_start != index_end; ++index_start)
             {
               //kmer = *start;
               index.insert(*index_start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)

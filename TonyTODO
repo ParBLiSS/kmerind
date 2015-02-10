@@ -493,6 +493,8 @@ TODO:
 		Buffer ptr swap is NOT a good thing, so avoid it - in code and in tests.			
 			
 			
+		concurrentqueue with threadlocal stuff does not work properly.  use commit 4671562.
+			
 	2. KmerIndex:
 		1. thread global, lockfree memorybuffer version.  DONE
 		2. thread local memorybuffer-pool-buffer version.  DONE. using vector instead of unordered map to map thread to buffer.  20% slower compared to lockfree for test cases.
@@ -509,13 +511,29 @@ TODO:
 				also lock access to unordered map.
 				
 		4. multithread callback functions.
+			task runner is working.
+			integration will involve a lot of code restructuring
+			most significantly, need **[ threadsafe hashtable ]**.
 		5. query interface
 			API is sequential, implementation is parallel/distributed/overlapped.
 				ie. use message handlers to allow overlapped communication and io, but functions return when all's complete.
 		
-		6. verify correctness - generation,
+		6. need KMolecule instead of kmer.
+			so that we don't have duplicates.
+		
+		6. verify correctness - 
+			generation - kmer (instead of kmolecule) count index reports 90 instead of 40 kmers.
+				kmer generation using iterator  should be from decoded value, not raw ascii.  - resulted in 91 kmers.
+				kmer generation using iterator  end iterator needs to be constructed with flag "false" - resulted in 20 kmers.q
+				kmer generation using iterator  should not skip first K-1 entries - result from 20 to 40.
+				verified the same between kmer_iterator and my own version.  performance is approximately the same now as well.
 			distribution
 			query
+			
+		7. optimization: specialized kmer for sizes that does not require arrays
+			
+			
+	MPI Error Handler.
 			
 	3. Memory ordering in buffer and Lockfree Queue
 		buffer: DONE
@@ -527,7 +545,7 @@ TODO:
 	5. other types of kmer indices
 		quality based.					
 			quality generation code tested and merged to trunk  DONE
-			quality index - 
+			quality index - DONE?
 		approximate quality based (if needed for performance reason.  we mostly do decode, and not encode, so LUT works well)
 	
 	6. reduce latency and improve concurrency:
