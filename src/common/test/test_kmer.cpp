@@ -926,20 +926,13 @@ TEST(KmerGeneration, TestKmerGenerationChar2)
 
 }
 
-template<typename I, typename Alphabet>
-struct ASCII2 {
-    const uint8_t operator()(I ascii) {
-      return Alphabet::FROM_ASCII[static_cast<size_t>(ascii)];
-    }
-};
-
 
 template<typename Alphabet, int K>
 void compute_kmer(std::string input) {
 
   using KmerType = bliss::Kmer<K, Alphabet>;
 
-  using Decoder = ASCII2<std::string::value_type, Alphabet>;
+  using Decoder = bliss::ASCII2<Alphabet, std::string::value_type>;
   using BaseCharIterator = bliss::iterator::transform_iterator<std::string::const_iterator, Decoder>;
   auto temp = BaseCharIterator(input.cbegin(), Decoder());
 
@@ -953,7 +946,7 @@ void compute_kmer(std::string input) {
 
     if (res != 0) {
       printf("%d iterator input %s\n", i, gold.c_str());
-      printf("kmer %s %s %s\n", kmer.toHexString().c_str(), kmer.toString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
+      printf("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
     }
 
     EXPECT_EQ(res, 0);
@@ -967,7 +960,7 @@ void compute_kmer(std::string input) {
 
   if (res != 0) {
     printf("%d iterator input %s\n", i, gold.c_str());
-    printf("kmer %s %s %s\n", kmer.toHexString().c_str(), kmer.toString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
+    printf("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
   }
 
   EXPECT_EQ(res, 0);

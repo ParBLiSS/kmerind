@@ -27,6 +27,146 @@
  * TYPE DEFINITIONS
  */
 
+template<typename KmerIndexType>
+void testQueryOld(MPI_Comm comm, const std::string & filename, const int nthreads, const int chunkSize, KmerIndexType& kmer_index) {
+  {
+//            t1 = std::chrono::high_resolution_clock::now();
+    // create FASTQ Loader
+
+    typename KmerIndexType::FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
+    typename KmerIndexType::FileLoaderType::L1BlockType partition;
+
+    partition = loader.getNextL1Block();
+
+    //===  repeatedly load the next L1 Block.
+    if (partition.getRange().size() > 0) {
+
+
+      // get L2Block from L1Block, spread work to all threads.
+      //== instantiate a local parser in each thread
+      typename KmerIndexType::ParserType parser;
+
+      int tid = 0;
+      //== local variables for loop
+      typename KmerIndexType::FileLoaderType::L2BlockType chunk;
+
+
+      //== process L2Blocks in a loop.  loader.getNextL2Block is atomic.  the work is shared by all threads.
+      chunk = loader.getNextL2Block(tid);
+      if (chunk.getRange().size() > 0) {
+
+
+        //== process the chunk of data
+        typename KmerIndexType::SeqType read;
+
+        //==  and wrap the chunk inside an iterator that emits Reads.
+        typename KmerIndexType::SeqIterType fastq_start(parser, chunk.begin(), chunk.end(), chunk.getRange().start);
+
+          // first get read
+          read = *fastq_start;
+
+          if (read.seqBegin != read.seqEnd) {
+
+            typename KmerIndexType::KmoleculeOpType kmer_op;
+            bliss::utils::KmoleculeToKmerFunctor<typename KmerIndexType::KmerType> transform;
+            typename KmerIndexType::KmerIterType start(typename KmerIndexType::KmoleculeIterType(read.seqBegin, kmer_op), transform);
+            typename KmerIndexType::KmerIterType end(typename KmerIndexType::KmoleculeIterType(read.seqEnd, kmer_op), transform);
+
+            unsigned int k = KmerIndexType::KmerType::size;
+//            int i = 0;
+//            for (; i < k; ++i, ++start) {};
+//            DEBUGF(" skip over first %d", i);
+//            for (; start != end; ++start) {};
+//            {
+//              DEBUGF(" kmer: %s", bliss::utils::KmerUtils::toASCIIString(*start).c_str());
+//              //kmer = *start;
+//              kmer_index.iAddQuery(*start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
+//                                    // then copy assign
+//            }
+            unsigned int i = 0;
+  //          KmerType idx;
+            for (; i < (k - 1) && start != end; ++start, ++i);  // compute but discard the first K - 1.
+
+            for (; start != end; ++start)
+            {
+//              DEBUGF(" kmer: %s", bliss::utils::KmerUtils::toASCIIString(*start).c_str());
+              //kmer = *start;
+              kmer_index.iAddQuery(*start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
+                                    // then copy assign
+            }
+          }
+      }
+    }
+    kmer_index.iFlushQuery();
+  }  // scope to ensure file loader is destroyed.
+}
+
+template<typename KmerIndexType>
+void testQuery(MPI_Comm comm, const std::string & filename, const int nthreads, const int chunkSize, KmerIndexType& kmer_index) {
+  {
+//            t1 = std::chrono::high_resolution_clock::now();
+    // create FASTQ Loader
+
+    typename KmerIndexType::FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
+    typename KmerIndexType::FileLoaderType::L1BlockType partition;
+
+    partition = loader.getNextL1Block();
+
+    //===  repeatedly load the next L1 Block.
+    if (partition.getRange().size() > 0) {
+
+
+      // get L2Block from L1Block, spread work to all threads.
+      //== instantiate a local parser in each thread
+      typename KmerIndexType::ParserType parser;
+
+      int tid = 0;
+      //== local variables for loop
+      typename KmerIndexType::FileLoaderType::L2BlockType chunk;
+
+
+      //== process L2Blocks in a loop.  loader.getNextL2Block is atomic.  the work is shared by all threads.
+      chunk = loader.getNextL2Block(tid);
+      if (chunk.getRange().size() > 0) {
+
+
+        //== process the chunk of data
+        typename KmerIndexType::SeqType read;
+
+        //==  and wrap the chunk inside an iterator that emits Reads.
+        typename KmerIndexType::SeqIterType fastq_start(parser, chunk.begin(), chunk.end(), chunk.getRange().start);
+
+          // first get read
+          read = *fastq_start;
+
+          if (read.seqBegin != read.seqEnd) {
+
+          //== set up the kmer generating iterators.
+          typename KmerIndexType::KmerIterType start(typename KmerIndexType::BaseCharIterator(read.seqBegin, bliss::ASCII2<DNA>()), true);
+          typename KmerIndexType::KmerIterType end(typename KmerIndexType::BaseCharIterator(read.seqEnd, bliss::ASCII2<DNA>()), false);
+
+  //          int kmerCount = 0;
+
+  //          int tid = omp_get_thread_num();
+
+            // no need to discard first K-1
+
+            for (; start != end; ++start)
+            {
+              //kmer = *start;
+              kmer_index.iAddQuery(*start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
+                                    // then copy assign
+            }
+
+          }
+      }
+
+
+    }
+    kmer_index.iFlushQuery();
+  }  // scope to ensure file loader is destroyed.
+
+}
 
 /**
  *
@@ -124,15 +264,27 @@ int main(int argc, char** argv) {
 
     INFOF("COUNT %d index built pass 1 with index size: %ld", rank, kmer_index.local_size());
 
+    t2 = std::chrono::high_resolution_clock::now();
+    time_span =
+        std::chrono::duration_cast<std::chrono::duration<double>>(
+            t2 - t1);
+    INFO("new count index: time " << time_span.count());
 
-    kmer_index.finalize();
+    // === test query.  make each node read 1.
+    // get the file ready for read
+    INFOF("******* query index");
+    t1 = std::chrono::high_resolution_clock::now();
 
+    testQueryOld(comm, filename, nthreads, chunkSize, kmer_index);
 
     t2 = std::chrono::high_resolution_clock::now();
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    INFO("old position index: time " << time_span.count());
+    INFO("new count index query: time " << time_span.count());
+
+    kmer_index.finalize();
+
   }
 #elif defined(KMERINDEX)
   {
@@ -154,164 +306,229 @@ int main(int argc, char** argv) {
 
   INFOF("COUNT %d index built pass 1 with index size: %ld", rank, kmer_index.local_size());
 
-
-  kmer_index.finalize();
-  MPI_Barrier(comm);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-          t2 - t1);
-  INFO("new position index: time " << time_span.count());
-
-  }
-
-
-#endif
-  MPI_Barrier(comm);
-
-#if defined(KMOLECULEINDEX)
-  {
-    t1 = std::chrono::high_resolution_clock::now();
-  // initialize index
-  INFOF("***** initializing index.");
-  bliss::index::KmerCountIndexOld<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
-
-  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  INFOF("***** building index first pass.");
-
-  kmer_index.build(filename, nthreads, chunkSize);
-  //kmer_index.flush();
-
-//  MPI_Barrier(comm);
-  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-  INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-
-  INFOF("COUNT %d index built pass 1 with index size: %ld", rank, kmer_index.local_size());
-
-
-
-  for (auto it = kmer_index.getLocalIndex().cbegin(); it != kmer_index.getLocalIndex().cend(); ++it) {
-    INFOF("Entry: Key=%s (%s), val = %d", it->first.toString().c_str(), bliss::utils::KmerUtils::toASCIIString(it->first).c_str(), it->second);
-  }
-
-
-  kmer_index.finalize();
-  MPI_Barrier(comm);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-          t2 - t1);
-  INFO("old count index: time " << time_span.count());
-
-  }
-#elif defined(KMERINDEX)
-  {
-    t1 = std::chrono::high_resolution_clock::now();
-  // initialize index
-  INFOF("***** initializing index.");
-  bliss::index::KmerCountIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
-
-  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  INFOF("***** building index first pass.");
-
-  kmer_index.build(filename, nthreads, chunkSize);
-  //kmer_index.flush();
-
-//  MPI_Barrier(comm);
-  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-  INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-
-
-  INFOF("COUNT %d index built pass 1 with index size: %ld", rank, kmer_index.local_size());
-
-  for (auto it = kmer_index.getLocalIndex().cbegin(); it != kmer_index.getLocalIndex().cend(); ++it) {
-    INFOF("Entry: Key=%s (%s), val = %d", it->first.toString().c_str(), bliss::utils::KmerUtils::toASCIIString(it->first).c_str(), it->second);
-  }
-
-
-  kmer_index.finalize();
-  MPI_Barrier(comm);
   t2 = std::chrono::high_resolution_clock::now();
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
   INFO("new count index: time " << time_span.count());
 
-  }
+  // === test query.  make each node read 1.
+  // get the file ready for read
+  INFOF("******* query index");
+  t1 = std::chrono::high_resolution_clock::now();
 
-#endif
-  MPI_Barrier(comm);
+  testQuery(comm, filename, nthreads, chunkSize, kmer_index);
 
-
-
-
-#if defined(KMOLECULEINDEX)
-
-  // with quality score....
-  {
-    t1 = std::chrono::high_resolution_clock::now();
-  // initialize index
-  INFOF("***** initializing index.");
-  bliss::index::KmerPositionAndQualityIndexOld<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
-
-  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  INFOF("***** building index first pass.");
-
-  kmer_index.build(filename, nthreads, chunkSize);
-  //kmer_index.flush();
-
-//  MPI_Barrier(comm);
-  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-  INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-
-
-  INFOF("COUNT %d index built pass 1 with index size: %ld", rank, kmer_index.local_size());
-
-
-
-  kmer_index.finalize();
-  MPI_Barrier(comm);
   t2 = std::chrono::high_resolution_clock::now();
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("old position/quality index: time " << time_span.count());
-
-  }
-#elif defined(KMERINDEX)
-
-  {
-    t1 = std::chrono::high_resolution_clock::now();
-  // initialize index
-  INFOF("***** initializing index.");
-  bliss::index::KmerPositionAndQualityIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
-
-  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  INFOF("***** building index first pass.");
-
-  kmer_index.build(filename, nthreads, chunkSize);
-  //kmer_index.flush();
-
-//  MPI_Barrier(comm);
-  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-  INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-
-
-  INFOF("COUNT %d index built pass 1 with index size: %ld", rank, kmer_index.local_size());
-
-
+  INFO("new count index query: time " << time_span.count());
   kmer_index.finalize();
-  MPI_Barrier(comm);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-          t2 - t1);
-  INFO("new positionAndQuality index: time " << time_span.count());
 
   }
+
 
 #endif
   MPI_Barrier(comm);
+
+//#if defined(KMOLECULEINDEX)
+//  {
+//    t1 = std::chrono::high_resolution_clock::now();
+//  // initialize index
+//  INFOF("***** initializing index.");
+//  using KmerIndexType = bliss::index::KmerCountIndexOld<21, DNA, bliss::io::FASTQ, true>;
+//  KmerIndexType kmer_index(comm, nprocs, nthreads);
+//
+//  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+//  INFOF("***** building index first pass.");
+//
+//  kmer_index.build(filename, nthreads, chunkSize);
+//  //kmer_index.flush();
+//
+////  MPI_Barrier(comm);
+//  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+//  INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+//
+//  INFOF("COUNT %d index built pass 1 with index size: %ld", rank, kmer_index.local_size());
+//
+//
+//
+//  for (auto it = kmer_index.getLocalIndex().cbegin(); it != kmer_index.getLocalIndex().cend(); ++it) {
+//    INFOF("Entry: Key=%s (%s), val = %d", it->first.toString().c_str(), bliss::utils::KmerUtils::toASCIIString(it->first).c_str(), it->second);
+//  }
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span =
+//      std::chrono::duration_cast<std::chrono::duration<double>>(
+//          t2 - t1);
+//  INFO("old count index: time " << time_span.count());
+//
+//  //=== query
+//  // get the file ready for read
+//
+//  INFOF("***** query index.");
+//  t2 = std::chrono::high_resolution_clock::now();
+//
+//  testQueryOld(comm, filename, nthreads, chunkSize, kmer_index);
+//
+//
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span =
+//      std::chrono::duration_cast<std::chrono::duration<double>>(
+//          t2 - t1);
+//  INFO("old count index query: time " << time_span.count());
+//  kmer_index.finalize();
+//
+//  }
+//
+//#elif defined(KMERINDEX)
+//
+//  {
+//    t1 = std::chrono::high_resolution_clock::now();
+//  // initialize index
+//  INFOF("***** initializing index.");
+//  using KmerIndexType = bliss::index::KmerCountIndex<21, DNA, bliss::io::FASTQ, true>;
+//    KmerIndexType  kmer_index(comm, nprocs, nthreads);
+//
+//  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+//  INFOF("***** building index first pass.");
+//
+//  kmer_index.build(filename, nthreads, chunkSize);
+//  //kmer_index.flush();
+//
+////  MPI_Barrier(comm);
+//  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+//  INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+//
+//
+//  INFOF("COUNT %d index built pass 1 with index size: %ld", rank, kmer_index.local_size());
+//
+//  for (auto it = kmer_index.getLocalIndex().cbegin(); it != kmer_index.getLocalIndex().cend(); ++it) {
+//    INFOF("Entry: Key=%s (%s), val = %d", it->first.toString().c_str(), bliss::utils::KmerUtils::toASCIIString(it->first).c_str(), it->second);
+//  }
+//
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span =
+//      std::chrono::duration_cast<std::chrono::duration<double>>(
+//          t2 - t1);
+//  INFO("new count index: time " << time_span.count());
+//
+//  // === test query.  make each node read 1.
+//  // get the file ready for read
+//  INFOF("******* query index");
+//  t1 = std::chrono::high_resolution_clock::now();
+//
+//  testQuery(comm, filename, nthreads, chunkSize, kmer_index);
+//
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span =
+//      std::chrono::duration_cast<std::chrono::duration<double>>(
+//          t2 - t1);
+//  INFO("new count index query: time " << time_span.count());
+//  kmer_index.finalize();
+//
+//
+//  }
+//
+//#endif
+//  MPI_Barrier(comm);
+//
+//
+//
+//
+//#if defined(KMOLECULEINDEX)
+//
+//  // with quality score....
+//  {
+//    t1 = std::chrono::high_resolution_clock::now();
+//  // initialize index
+//  INFOF("***** initializing index.");
+//  bliss::index::KmerPositionAndQualityIndexOld<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
+//
+//  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+//  INFOF("***** building index first pass.");
+//
+//  kmer_index.build(filename, nthreads, chunkSize);
+//  //kmer_index.flush();
+//
+////  MPI_Barrier(comm);
+//  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+//  INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+//
+//
+//  INFOF("COUNT %d index built pass 1 with index size: %ld", rank, kmer_index.local_size());
+//
+//
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span =
+//      std::chrono::duration_cast<std::chrono::duration<double>>(
+//          t2 - t1);
+//  INFO("new count index: time " << time_span.count());
+//
+//  // === test query.  make each node read 1.
+//  // get the file ready for read
+//  INFOF("******* query index");
+//  t1 = std::chrono::high_resolution_clock::now();
+//
+//  testQueryOld(comm, filename, nthreads, chunkSize, kmer_index);
+//
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span =
+//      std::chrono::duration_cast<std::chrono::duration<double>>(
+//          t2 - t1);
+//  INFO("new count index query: time " << time_span.count());
+//
+//  kmer_index.finalize();
+//
+//
+//  }
+//#elif defined(KMERINDEX)
+//
+//  {
+//    t1 = std::chrono::high_resolution_clock::now();
+//  // initialize index
+//  INFOF("***** initializing index.");
+//  bliss::index::KmerPositionAndQualityIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
+//
+//  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
+//  INFOF("***** building index first pass.");
+//
+//  kmer_index.build(filename, nthreads, chunkSize);
+//  //kmer_index.flush();
+//
+////  MPI_Barrier(comm);
+//  //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+//  INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+//
+//
+//  INFOF("COUNT %d index built pass 1 with index size: %ld", rank, kmer_index.local_size());
+//
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span =
+//      std::chrono::duration_cast<std::chrono::duration<double>>(
+//          t2 - t1);
+//  INFO("new count index: time " << time_span.count());
+//
+//  // === test query.  make each node read 1.
+//  // get the file ready for read
+//  INFOF("******* query index");
+//  t1 = std::chrono::high_resolution_clock::now();
+//
+//  testQuery(comm, filename, nthreads, chunkSize, kmer_index);
+//
+//  t2 = std::chrono::high_resolution_clock::now();
+//  time_span =
+//      std::chrono::duration_cast<std::chrono::duration<double>>(
+//          t2 - t1);
+//  INFO("new count index query: time " << time_span.count());
+//
+//  kmer_index.finalize();
+//
+//
+//  }
+//
+//#endif
+//  MPI_Barrier(comm);
 
   //////////////  clean up MPI.
   MPI_Finalize();

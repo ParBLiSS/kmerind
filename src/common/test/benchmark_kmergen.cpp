@@ -71,7 +71,7 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
   stop = std::chrono::high_resolution_clock::now();
 
   EXPECT_EQ(i, nKmers);
-  std::cerr << "kmer[0] = " << kmer_arr[0].toHexString() << std::endl;
+  std::cerr << "kmer[0] = " << kmer_arr[0].toString() << std::endl;
   std::cerr << "Duration of packing + kmer generation (i = " << i << "): " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" << std::endl;
 
 
@@ -99,7 +99,7 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
   stop = std::chrono::high_resolution_clock::now();
 
   EXPECT_EQ(i, nKmers);
-  std::cerr << "kmer[0] = " << kmer_arr2[0].toHexString() << std::endl;
+  std::cerr << "kmer[0] = " << kmer_arr2[0].toString() << std::endl;
   std::cerr << "Duration of direct kmer generation (i = " << i << "): " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" << std::endl;
 
 

@@ -20,6 +20,16 @@ namespace bliss
   namespace utils
   {
 
+    template<typename KmerType>
+    struct KmoleculeToKmerFunctor {
+        typedef std::pair<KmerType, KmerType> KmoleculeType;
+
+        KmerType operator()(const KmoleculeType& input) {
+          return (input.first < input.second ? input.first : input.second);
+          //return input.first;
+        }
+    };
+
     /**
      * @class    bliss::io::KmerUtils
      * @brief

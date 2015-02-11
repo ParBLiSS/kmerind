@@ -142,14 +142,19 @@ namespace bliss
         }
         int countdownEpoch(const TaggedEpoch & te) throw (std::out_of_range) {
           std::lock_guard<std::mutex> lock(mutex);
-          if (epoch_capacities.count(te) == 0)
-            throw std::out_of_range("ERROR: epoch does not exist.");
+          if (epoch_capacities.count(te) == 0) {
+            epoch_capacities[te] = maxEpochCapacity;
+//            ERRORF("epoch does not exist to count down: %d %d", getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
+//            throw std::out_of_range("ERROR: epoch does not exist.");
+          }
           return --epoch_capacities.at(te);
         }
         bool isEpochFinished(const TaggedEpoch & te) throw (std::out_of_range) {
           std::lock_guard<std::mutex> lock(mutex);
-          if (epoch_capacities.count(te) == 0)
+          if (epoch_capacities.count(te) == 0) {
+            ERRORF("epoch does not exist to check for Finished: %d %d", getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
             throw std::out_of_range("ERROR: epoch does not exist.");
+          }
           return epoch_capacities.at(te) <= 0;
         }
         bool isEpochPresent(const TaggedEpoch & te) {

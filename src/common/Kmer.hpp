@@ -87,6 +87,8 @@ class Kmer
 {
     friend std::string bliss::utils::KmerUtils::toASCIIString<Kmer>(const Kmer & kmer);
 
+    template<unsigned int K, typename ALPHA, typename WT>
+    friend std::ostream& operator<<(std::ostream& ost, const Kmer<K, ALPHA, WT> & kmer);
 
  public:
     /// The size of the Kmer, i.e. the number of characters
@@ -806,7 +808,7 @@ public:
    *
    * @returns   A std::string representing this k-mer.
    */
-  std::string toHexString() const
+  std::string toString() const
   {
     /* return the hex representation of the data array values */
     std::stringstream ss;
@@ -820,7 +822,7 @@ public:
   }
 
 
-  std::string toString() const
+  std::string toAlphabetString() const
   {
     std::stringstream ss;
 
@@ -1193,6 +1195,27 @@ struct KmerSuffixHasher {
     return kmer.getSuffix(NumBits);
   }
 };
+
+
+
+/**
+ * @brief << operator to write out DataBlock object's actual data.
+ * @tparam Iterator   Source data iterator type.
+ * @tparam Range      Range data type
+ * @tparam Container  container type for buffer.  defaults to std::vector.
+ * @param[in/out] ost   output stream to which the content is directed.
+ * @param[in]     db    BufferedDataBlock object to write out
+ * @return              output stream object
+ */
+template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE=WordType>
+std::ostream& operator<<(std::ostream& ost, const Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> & kmer)
+{
+  ost << "Kmer=" << kmer.toString() << " (ASCII: " << bliss::utils::KmerUtils::toASCIIString(kmer) << ")";
+
+  return ost;
+}
+
+
 
 } // namespace bliss
 

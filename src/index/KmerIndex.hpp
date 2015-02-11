@@ -45,16 +45,8 @@ namespace bliss
 {
   namespace index
   {
-    template<typename KmerType>
-    struct KmoleculeToKmerFunctor {
-        typedef std::pair<KmerType, KmerType> KmoleculeType;
 
-        KmerType operator()(const KmoleculeType& input) {
-          return (input.first < input.second ? input.first : input.second);
-          //return input.first;
-        }
-    };
-
+static size_t dummy = 0;
 
     template<typename KmerType>
     void receiveCountAnswer(std::pair<KmerType, bliss::index::count_t>& answer)
@@ -62,6 +54,9 @@ namespace bliss
       KmerType key;
       bliss::index::count_t val;
       std::tie(key, val) = answer;
+
+//      DEBUGF("count result:  %s <=> %d", key.toString().c_str(), val);
+      if (key.toString().length() > 1) dummy += val;
     };
 
     /**
@@ -72,7 +67,7 @@ namespace bliss
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerCountIndexOld {
-      protected:
+      public:
         //==================== COMMON TYPES
 
         /// DEFINE kmer index type, also used for reverse complement
@@ -102,7 +97,7 @@ namespace bliss
         /// define kmer iterator, and the functors for it.
         typedef bliss::index::generate_kmer_simple<SeqType, DNA, KmerType>                                  KmoleculeOpType;
         typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
-        typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
+        typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
 
 
         /// combine kmer iterator and position iterator to create an index iterator type.
@@ -115,7 +110,7 @@ namespace bliss
                                                    bliss::io::CommunicationLayer<ThreadLocal>,
                                                    bliss::KmerSuffixHasher<KmerType>,
                                                    bliss::KmerPrefixHasher<KmerType> > IndexType;
-
+      protected:
         /// index instance to store data
         IndexType index;
 
@@ -125,7 +120,7 @@ namespace bliss
         /// MPI rank within the communicator
         int rank;
 
-        int nThreads;
+        int commSize;
 
       public:
         /**
@@ -135,7 +130,7 @@ namespace bliss
          */
         KmerCountIndexOld(MPI_Comm _comm, int _comm_size, int num_threads = 1) :
           index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))),
-          comm(_comm), nThreads(num_threads) {
+          comm(_comm), commSize(_comm_size) {
           MPI_Comm_rank(comm, &rank);
 
           index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, bliss::index::count_t>&)>(&receiveCountAnswer<KmerType>));
@@ -144,7 +139,7 @@ namespace bliss
         virtual ~KmerCountIndexOld() {};
 
         void finalize() {
-          index.finalize();
+          index.finish();
         }
 
         size_t local_size() const {
@@ -155,8 +150,8 @@ namespace bliss
           return index;
         }
 
-        void flush() {
-          index.flush();
+        void flushInsert() {
+          index.flushInsert();
         }
 
         /**
@@ -191,11 +186,11 @@ namespace bliss
             // create FASTQ Loader
 
             FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
-            typename FileLoaderType::L1BlockType partition;
 
-            partition = loader.getNextL1Block();
-            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
-            //===  repeatedly load the next L1 Block.
+            // modifying the index here causes a thread safety issue, since callback thread is already running.
+            // index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
+
+            typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
             while (partition.getRange().size() > 0) {
 
 
@@ -216,7 +211,8 @@ namespace bliss
 //            std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
             }
-            index.flush();
+            index.flushInsert();
+
           }  // scope to ensure file loader is destroyed.
 
 
@@ -226,8 +222,38 @@ namespace bliss
 
 
 
-        //============== what makes sense as return types for results?
 
+        //============== Query API. all are blocking.  iAddQuery allows overlapped IO
+        /**
+         * @brief Add a new query asynchronously.  when the buffer is full, then the query is executed.  result is handled via callback
+         * @param kmer
+         */
+        void iAddQuery(const KmerType & kmer) {
+          index.asyncLookup(kmer);
+        }
+
+        /**
+         * @brief send all the queries to remote node.
+         * @return
+         */
+        void iFlushQuery() {
+          index.flushLookup();
+        }
+
+        /**
+         * @brief send a set of queries in a collective/blocking manner.
+         * @note  should only be used by a single thread.
+         * @param kmers
+         * @return
+         */
+        void query(const std::vector<KmerType>& kmers) {
+          // TODO: for now, use the async api
+          for (auto kmer : kmers) {
+            index.asyncLookup(kmer);
+          }
+          index.flushLookup();
+          // TODO: later, use MPI collective calls.
+        }
 
 
       protected:
@@ -289,7 +315,7 @@ namespace bliss
 
 //          /// this MPI process is done.  now flush the index to all other nodes.
 //          t1 = std::chrono::high_resolution_clock::now();
-//            index.flush();
+//            index.flushInsert();
 //          t2 = std::chrono::high_resolution_clock::now();
 //          time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //          INFO("flushIndex rank=" << rank << " elapsed time: " << time_span.count() << "s.");
@@ -341,7 +367,7 @@ namespace bliss
 
           //== set up the kmer generating iterators.
           KmoleculeOpType kmer_op;
-          KmoleculeToKmerFunctor<KmerType> transform;
+          bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
           KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
           KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
 
@@ -371,13 +397,6 @@ namespace bliss
 
     };
 
-	template<typename Alphabet>
-	struct ASCII2 {
-		const uint8_t operator()(const unsigned char ascii) {
-			return Alphabet::FROM_ASCII[ascii];
-		}
-	};
-
 
     /**
      * @class    bliss::index::KmerIndex
@@ -387,7 +406,7 @@ namespace bliss
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerCountIndex {
-      protected:
+      public:
         //==================== COMMON TYPES
 
         /// DEFINE kmer index type, also used for reverse complement
@@ -419,12 +438,14 @@ namespace bliss
 //        typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
 //        typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
 
-	using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, ASCII2<Alphabet> >;
+        using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::ASCII2<Alphabet> >;
 
         typedef bliss::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
 
         /// combine kmer iterator and position iterator to create an index iterator type.
         using KmerIndexIterType = KmerIterType;
+
+        using QueryResultElementType = typename KmerIterType::value_type;
 
         // TODO: to incorporate quality, use another zip iterator.
 
@@ -433,7 +454,7 @@ namespace bliss
                                                    bliss::io::CommunicationLayer<ThreadLocal>,
                                                    bliss::KmerSuffixHasher<KmerType>,
                                                    bliss::KmerPrefixHasher<KmerType> > IndexType;
-
+      protected:
         /// index instance to store data
         IndexType index;
 
@@ -443,7 +464,7 @@ namespace bliss
         /// MPI rank within the communicator
         int rank;
 
-        int nThreads;
+        int commSize;
 
       public:
         /**
@@ -453,7 +474,7 @@ namespace bliss
          */
         KmerCountIndex(MPI_Comm _comm, int _comm_size, int num_threads = 1) :
           index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))),
-          comm(_comm), nThreads(num_threads) {
+          comm(_comm), commSize(_comm_size) {
           MPI_Comm_rank(comm, &rank);
 
           index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, bliss::index::count_t>&)>(&receiveCountAnswer<KmerType>));
@@ -462,7 +483,7 @@ namespace bliss
         virtual ~KmerCountIndex() {};
 
         void finalize() {
-          index.finalize();
+          index.finish();
         }
 
         size_t local_size() const {
@@ -472,8 +493,8 @@ namespace bliss
           return index;
         }
 
-        void flush() {
-          index.flush();
+        void flushInsert() {
+          index.flushInsert();
         }
 
         /**
@@ -508,12 +529,11 @@ namespace bliss
             // create FASTQ Loader
 
             FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
-            typename FileLoaderType::L1BlockType partition;
 
-            partition = loader.getNextL1Block();
-            //===  repeatedly load the next L1 Block.
-            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
+            // modifying the index here causes a thread safety issue, since callback thread is already running.
+            // index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
 
+            typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
             while (partition.getRange().size() > 0) {
 
 
@@ -534,7 +554,8 @@ namespace bliss
 //            std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
             }
-            index.flush();
+            index.flushInsert();
+
           }  // scope to ensure file loader is destroyed.
 
 
@@ -544,8 +565,37 @@ namespace bliss
 
 
 
-        //============== what makes sense as return types for results?
+        //============== Query API. all are blocking.  iAddQuery allows overlapped IO
+        /**
+         * @brief Add a new query asynchronously.  when the buffer is full, then the query is executed.  result is handled via callback
+         * @param kmer
+         */
+        void iAddQuery(const KmerType & kmer) {
+          index.asyncLookup(kmer);
+        }
 
+        /**
+         * @brief send all the queries to remote node.
+         * @return
+         */
+        void iFlushQuery() {
+          index.flushLookup();
+        }
+
+        /**
+         * @brief send a set of queries in a collective/blocking manner.
+         * @note  should only be used by a single thread.
+         * @param kmers
+         * @return
+         */
+        void query(const std::vector<KmerType>& kmers) {
+          // TODO: for now, use the async api
+          for (auto kmer : kmers) {
+            index.asyncLookup(kmer);
+          }
+          index.flushLookup();
+          // TODO: later, use MPI collective calls.
+        }
 
 
       protected:
@@ -607,7 +657,7 @@ namespace bliss
 
 //          /// this MPI process is done.  now flush the index to all other nodes.
 //          t1 = std::chrono::high_resolution_clock::now();
-//            index.flush();
+//            index.flushInsert();
 //          t2 = std::chrono::high_resolution_clock::now();
 //          time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //          INFO("flushIndex rank=" << rank << " elapsed time: " << time_span.count() << "s.");
@@ -657,9 +707,9 @@ namespace bliss
 
           if (read.seqBegin == read.seqEnd) return;
 
-	 //== transform ascii to coded value
-	BaseCharIterator charStart(read.seqBegin, ASCII2<Alphabet>());
-	BaseCharIterator charEnd(read.seqEnd, ASCII2<Alphabet>());
+           //== transform ascii to coded value
+          BaseCharIterator charStart(read.seqBegin, bliss::ASCII2<Alphabet>());
+          BaseCharIterator charEnd(read.seqEnd, bliss::ASCII2<Alphabet>());
 
           //== set up the kmer generating iterators.
           KmerIterType start(charStart, true);
@@ -697,6 +747,10 @@ namespace bliss
       IdType val;
       std::tie(key, val) = answer;
 
+      if (key.toString().length() > 1) dummy ^= val.file_pos;
+
+//      DEBUGF("position result:  %s <=> [%d %d %d %d]", key.toString().c_str(), val.file_id, val.seq_id_msb, val.seq_id, val.pos);
+
     }
 
 
@@ -708,7 +762,7 @@ namespace bliss
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerPositionIndexOld {
-      protected:
+      public:
         //==================== COMMON TYPES
 
         /// DEFINE kmer index type, also used for reverse complement
@@ -739,7 +793,7 @@ namespace bliss
         /// define kmer iterator, and the functors for it.
         typedef bliss::index::generate_kmer_simple<SeqType, DNA, KmerType>                                  KmoleculeOpType;
         typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
-        typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
+        typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
 
 
         /// kmer position iterator type
@@ -756,7 +810,7 @@ namespace bliss
                                                    bliss::io::CommunicationLayer<ThreadLocal>,
                                                    bliss::KmerSuffixHasher<KmerType>,
                                                    bliss::KmerPrefixHasher<KmerType> > IndexType;
-
+      protected:
         /// index instance to store data
         IndexType index;
 
@@ -765,6 +819,7 @@ namespace bliss
 
         /// MPI rank within the communicator
         int rank;
+        int commSize;
 
       public:
         /**
@@ -773,7 +828,7 @@ namespace bliss
          * @param comm_size
          */
         KmerPositionIndexOld(MPI_Comm _comm, int _comm_size, int num_threads = 1) :
-          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm) {
+          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm), commSize(_comm_size) {
           MPI_Comm_rank(comm, &rank);
 
           index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, IdType>&)>(&receivePositionAnswer<KmerType, IdType>));
@@ -782,7 +837,7 @@ namespace bliss
         virtual ~KmerPositionIndexOld() {};
 
         void finalize() {
-          index.finalize();
+          index.finish();
         }
 
         size_t local_size() const {
@@ -792,8 +847,8 @@ namespace bliss
           return index;
         }
 
-        void flush() {
-          index.flush();
+        void flushInsert() {
+          index.flushInsert();
         }
 
         /**
@@ -828,12 +883,11 @@ namespace bliss
             // create FASTQ Loader
 
             FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
-            typename FileLoaderType::L1BlockType partition;
 
-            partition = loader.getNextL1Block();
-            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
+            // modifying the index here causes a thread safety issue, since callback thread is already running.
+            // index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
 
-            //===  repeatedly load the next L1 Block.
+            typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();            //===  repeatedly load the next L1 Block.
             while (partition.getRange().size() > 0) {
 
 
@@ -854,7 +908,8 @@ namespace bliss
 //            std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
             }
-            index.flush();
+            index.flushInsert();
+
           }  // scope to ensure file loader is destroyed.
 
 
@@ -865,6 +920,37 @@ namespace bliss
 
 
         //============== what makes sense as return types for results?
+        //============== Query API. all are blocking.  iAddQuery allows overlapped IO
+        /**
+         * @brief Add a new query asynchronously.  when the buffer is full, then the query is executed.  result is handled via callback
+         * @param kmer
+         */
+        void iAddQuery(const KmerType & kmer) {
+          index.asyncLookup(kmer);
+        }
+
+        /**
+         * @brief send all the queries to remote node.
+         * @return
+         */
+        void iFlushQuery() {
+          index.flushLookup();
+        }
+
+        /**
+         * @brief send a set of queries in a collective/blocking manner.
+         * @note  should only be used by a single thread.
+         * @param kmers
+         * @return
+         */
+        void query(const std::vector<KmerType>& kmers) {
+          // TODO: for now, use the async api
+          for (auto kmer : kmers) {
+            index.asyncLookup(kmer);
+          }
+          index.flushLookup();
+          // TODO: later, use MPI collective calls.
+        }
 
 
 
@@ -927,7 +1013,7 @@ namespace bliss
 
 //          /// this MPI process is done.  now flush the index to all other nodes.
 //          t1 = std::chrono::high_resolution_clock::now();
-//            index.flush();
+//            index.flushInsert();
 //          t2 = std::chrono::high_resolution_clock::now();
 //          time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //          INFO("flushIndex rank=" << rank << " elapsed time: " << time_span.count() << "s.");
@@ -979,7 +1065,7 @@ namespace bliss
 
           //== set up the kmer generating iterators.
           KmoleculeOpType kmer_op;
-          KmoleculeToKmerFunctor<KmerType> transform;
+          bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
           KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
           KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
 
@@ -1023,7 +1109,7 @@ namespace bliss
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerPositionIndex {
-      protected:
+      public:
         //==================== COMMON TYPES
 
         /// DEFINE kmer index type, also used for reverse complement
@@ -1055,7 +1141,7 @@ namespace bliss
 //        typedef bliss::index::generate_kmer_simple<SeqType, DNA, KmerType>                                  KmoleculeOpType;
 //        typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
 //        typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
-	using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, ASCII2<Alphabet> >;
+	using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::ASCII2<Alphabet> >;
         typedef bliss::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
 
 
@@ -1073,7 +1159,7 @@ namespace bliss
                                                    bliss::io::CommunicationLayer<ThreadLocal>,
                                                    bliss::KmerSuffixHasher<KmerType>,
                                                    bliss::KmerPrefixHasher<KmerType> > IndexType;
-
+      protected:
         /// index instance to store data
         IndexType index;
 
@@ -1082,6 +1168,7 @@ namespace bliss
 
         /// MPI rank within the communicator
         int rank;
+        int commSize;
 
       public:
         /**
@@ -1090,8 +1177,9 @@ namespace bliss
          * @param comm_size
          */
         KmerPositionIndex(MPI_Comm _comm, int _comm_size, int num_threads = 1) :
-          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm) {
+          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm), commSize(_comm_size) {
           MPI_Comm_rank(comm, &rank);
+
 
           index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, IdType>&)>(&receivePositionAnswer<KmerType, IdType>));
           index.init();
@@ -1099,8 +1187,9 @@ namespace bliss
         virtual ~KmerPositionIndex() {};
 
         void finalize() {
-          index.finalize();
+          index.finish();
         }
+
         IndexType& getLocalIndex() {
           return index;
         }
@@ -1109,8 +1198,8 @@ namespace bliss
           return index.local_size();
         }
 
-        void flush() {
-          index.flush();
+        void flushInsert() {
+          index.flushInsert();
         }
 
         /**
@@ -1145,11 +1234,11 @@ namespace bliss
             // create FASTQ Loader
 
             FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
-            typename FileLoaderType::L1BlockType partition;
 
-            partition = loader.getNextL1Block();
-            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
+            // modifying the index here causes a thread safety issue, since callback thread is already running.
+            // index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
 
+            typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
             //===  repeatedly load the next L1 Block.
             while (partition.getRange().size() > 0) {
 
@@ -1171,7 +1260,8 @@ namespace bliss
 //            std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
             }
-            index.flush();
+            index.flushInsert();
+
           }  // scope to ensure file loader is destroyed.
 
 
@@ -1180,8 +1270,39 @@ namespace bliss
 
 
 
-
         //============== what makes sense as return types for results?
+        //============== Query API. all are blocking.  iAddQuery allows overlapped IO
+        /**
+         * @brief Add a new query asynchronously.  when the buffer is full, then the query is executed.  result is handled via callback
+         * @param kmer
+         */
+        void iAddQuery(const KmerType & kmer) {
+          index.asyncLookup(kmer);
+        }
+
+        /**
+         * @brief send all the queries to remote node.
+         * @return
+         */
+        void iFlushQuery() {
+          index.flushLookup();
+        }
+
+        /**
+         * @brief send a set of queries in a collective/blocking manner.
+         * @note  should only be used by a single thread.
+         * @param kmers
+         * @return
+         */
+        void query(const std::vector<KmerType>& kmers) {
+          // TODO: for now, use the async api
+          for (auto kmer : kmers) {
+            index.asyncLookup(kmer);
+          }
+          index.flushLookup();
+          // TODO: later, use MPI collective calls.
+        }
+
 
 
 
@@ -1244,7 +1365,7 @@ namespace bliss
 
 //          /// this MPI process is done.  now flush the index to all other nodes.
 //          t1 = std::chrono::high_resolution_clock::now();
-//            index.flush();
+//            index.flushInsert();
 //          t2 = std::chrono::high_resolution_clock::now();
 //          time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //          INFO("flushIndex rank=" << rank << " elapsed time: " << time_span.count() << "s.");
@@ -1295,8 +1416,8 @@ namespace bliss
           if (read.seqBegin == read.seqEnd) return;
 
           //== set up the kmer generating iterators.
-          KmerIterType start(BaseCharIterator(read.seqBegin, ASCII2<Alphabet>()), true);
-          KmerIterType end(BaseCharIterator(read.seqEnd, ASCII2<Alphabet>()), false);
+          KmerIterType start(BaseCharIterator(read.seqBegin, bliss::ASCII2<Alphabet>()), true);
+          KmerIterType end(BaseCharIterator(read.seqEnd, bliss::ASCII2<Alphabet>()), false);
 
           //== set up the position iterators
           IdIterType id_start(read.id);
@@ -1326,6 +1447,7 @@ namespace bliss
 
 
 
+static double score = 0;
 
     template<typename KmerType, typename InfoType>
     void receivePositionAndQualityAnswer(std::pair<KmerType, InfoType>& answer)
@@ -1334,6 +1456,11 @@ namespace bliss
       InfoType val;
       std::tie(key, val) = answer;
 
+      if (key.toString().length() > 1) {
+        dummy ^= val.first.file_pos;
+        score += val.second;
+      }
+//      DEBUGF("position + quality result: %s <=> [%d %d %d %d] %f", key.toString().c_str(), val.first.file_id, val.first.seq_id_msb, val.first.seq_id, val.first.pos, val.second);
     }
 
 
@@ -1345,7 +1472,7 @@ namespace bliss
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerPositionAndQualityIndexOld {
-      protected:
+      public:
         //==================== COMMON TYPES
 
         /// DEFINE kmer index type, also used for reverse complement
@@ -1376,7 +1503,7 @@ namespace bliss
         /// define kmer iterator, and the functors for it.
         typedef bliss::index::generate_kmer_simple<SeqType, DNA, KmerType>                                  KmoleculeOpType;
         typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
-        typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
+        typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
 
 
         /// kmer position iterator type
@@ -1400,7 +1527,7 @@ namespace bliss
                                                    bliss::io::CommunicationLayer<ThreadLocal>,
                                                    bliss::KmerSuffixHasher<KmerType>,
                                                    bliss::KmerPrefixHasher<KmerType> > IndexType;
-
+      protected:
         /// index instance to store data
         IndexType index;
 
@@ -1409,6 +1536,7 @@ namespace bliss
 
         /// MPI rank within the communicator
         int rank;
+        int commSize;
 
       public:
         /**
@@ -1417,7 +1545,7 @@ namespace bliss
          * @param comm_size
          */
         KmerPositionAndQualityIndexOld(MPI_Comm _comm, int _comm_size, int num_threads = 1) :
-          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm) {
+          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm), commSize(_comm_size) {
           MPI_Comm_rank(comm, &rank);
 
           index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, KmerInfoType>&)>(&receivePositionAndQualityAnswer<KmerType, KmerInfoType>));
@@ -1426,7 +1554,7 @@ namespace bliss
         virtual ~KmerPositionAndQualityIndexOld() {};
 
         void finalize() {
-          index.finalize();
+          index.finish();
         }
 
         size_t local_size() const {
@@ -1436,8 +1564,8 @@ namespace bliss
           return index;
         }
 
-        void flush() {
-          index.flush();
+        void flushInsert() {
+          index.flushInsert();
         }
 
         /**
@@ -1472,11 +1600,11 @@ namespace bliss
             // create FASTQ Loader
 
             FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
-            typename FileLoaderType::L1BlockType partition;
 
-            partition = loader.getNextL1Block();
-            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
+            // modifying the index here causes a thread safety issue, since callback thread is already running.
+            // index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
 
+            typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
             //===  repeatedly load the next L1 Block.
             while (partition.getRange().size() > 0) {
 
@@ -1498,7 +1626,7 @@ namespace bliss
 //            std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
             }
-            index.flush();
+            index.flushInsert();
           }  // scope to ensure file loader is destroyed.
 
 
@@ -1509,6 +1637,38 @@ namespace bliss
 
 
         //============== what makes sense as return types for results?
+        //============== Query API. all are blocking.  iAddQuery allows overlapped IO
+        /**
+         * @brief Add a new query asynchronously.  when the buffer is full, then the query is executed.  result is handled via callback
+         * @param kmer
+         */
+        void iAddQuery(const KmerType & kmer) {
+          index.asyncLookup(kmer);
+        }
+
+        /**
+         * @brief send all the queries to remote node.
+         * @return
+         */
+        void iFlushQuery() {
+          index.flushLookup();
+        }
+
+        /**
+         * @brief send a set of queries in a collective/blocking manner.
+         * @note  should only be used by a single thread.
+         * @param kmers
+         * @return
+         */
+        void query(const std::vector<KmerType>& kmers) {
+          // TODO: for now, use the async api
+          for (auto kmer : kmers) {
+            index.asyncLookup(kmer);
+          }
+          index.flushLookup();
+          // TODO: later, use MPI collective calls.
+        }
+
 
 
 
@@ -1571,7 +1731,7 @@ namespace bliss
 
 //          /// this MPI process is done.  now flush the index to all other nodes.
 //          t1 = std::chrono::high_resolution_clock::now();
-//            index.flush();
+//            index.flushInsert();
 //          t2 = std::chrono::high_resolution_clock::now();
 //          time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //          INFO("flushIndex rank=" << rank << " elapsed time: " << time_span.count() << "s.");
@@ -1623,7 +1783,7 @@ namespace bliss
 
           //== set up the kmer generating iterators.
           KmoleculeOpType kmer_op;
-          KmoleculeToKmerFunctor<KmerType> transform;
+          bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
           KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
           KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
 
@@ -1675,7 +1835,7 @@ namespace bliss
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerPositionAndQualityIndex {
-      protected:
+      public:
         //==================== COMMON TYPES
 
         /// DEFINE kmer index type, also used for reverse complement
@@ -1707,7 +1867,7 @@ namespace bliss
 //        typedef bliss::index::generate_kmer_simple<SeqType, DNA, KmerType>                                  KmoleculeOpType;
 //        typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
 //        typedef bliss::iterator::transform_iterator<KmoleculeIterType, KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
-        using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, ASCII2<Alphabet> >;
+        using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::ASCII2<Alphabet> >;
         typedef bliss::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
 
         /// kmer position iterator type
@@ -1731,7 +1891,7 @@ namespace bliss
                                                    bliss::io::CommunicationLayer<ThreadLocal>,
                                                    bliss::KmerSuffixHasher<KmerType>,
                                                    bliss::KmerPrefixHasher<KmerType> > IndexType;
-
+      protected:
         /// index instance to store data
         IndexType index;
 
@@ -1740,6 +1900,7 @@ namespace bliss
 
         /// MPI rank within the communicator
         int rank;
+        int commSize;
 
       public:
         /**
@@ -1748,7 +1909,7 @@ namespace bliss
          * @param comm_size
          */
         KmerPositionAndQualityIndex(MPI_Comm _comm, int _comm_size, int num_threads = 1) :
-          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm) {
+          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))), comm(_comm), commSize(_comm_size) {
           MPI_Comm_rank(comm, &rank);
 
           index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, KmerInfoType>&)>(&receivePositionAndQualityAnswer<KmerType, KmerInfoType>));
@@ -1757,7 +1918,7 @@ namespace bliss
         virtual ~KmerPositionAndQualityIndex() {};
 
         void finalize() {
-          index.finalize();
+          index.finish();
         }
 
         size_t local_size() const {
@@ -1767,8 +1928,8 @@ namespace bliss
           return index;
         }
 
-        void flush() {
-          index.flush();
+        void flushInsert() {
+          index.flushInsert();
         }
 
         /**
@@ -1803,11 +1964,11 @@ namespace bliss
             // create FASTQ Loader
 
             FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
-            typename FileLoaderType::L1BlockType partition;
 
-            partition = loader.getNextL1Block();
-            index.reserve(std::max(partition.getRange().size(), 16UL *1024*1024));
+            // modifying the index here causes a thread safety issue, since callback thread is already running.
+            // index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
 
+            typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
             //===  repeatedly load the next L1 Block.
             while (partition.getRange().size() > 0) {
 
@@ -1829,7 +1990,8 @@ namespace bliss
 //            std::cout << "Compute rank " << rank << " elapsed time: " << time_span.count() << "s." << std::endl;
 
             }
-            index.flush();
+            index.flushInsert();
+
           }  // scope to ensure file loader is destroyed.
 
 
@@ -1838,8 +2000,39 @@ namespace bliss
 
 
 
-
         //============== what makes sense as return types for results?
+        //============== Query API. all are blocking.  iAddQuery allows overlapped IO
+        /**
+         * @brief Add a new query asynchronously.  when the buffer is full, then the query is executed.  result is handled via callback
+         * @param kmer
+         */
+        void iAddQuery(const KmerType & kmer) {
+          index.asyncLookup(kmer);
+        }
+
+        /**
+         * @brief send all the queries to remote node.
+         * @return
+         */
+        void iFlushQuery() {
+          index.flushLookup();
+        }
+
+        /**
+         * @brief send a set of queries in a collective/blocking manner.
+         * @note  should only be used by a single thread.
+         * @param kmers
+         * @return
+         */
+        void query(const std::vector<KmerType>& kmers) {
+          // TODO: for now, use the async api
+          for (auto kmer : kmers) {
+            index.asyncLookup(kmer);
+          }
+          index.flushLookup();
+          // TODO: later, use MPI collective calls.
+        }
+
 
 
 
@@ -1902,7 +2095,7 @@ namespace bliss
 
 //          /// this MPI process is done.  now flush the index to all other nodes.
 //          t1 = std::chrono::high_resolution_clock::now();
-//            index.flush();
+//            index.flushInsert();
 //          t2 = std::chrono::high_resolution_clock::now();
 //          time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //          INFO("flushIndex rank=" << rank << " elapsed time: " << time_span.count() << "s.");
@@ -1953,8 +2146,8 @@ namespace bliss
           if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) return;
 
           //== set up the kmer generating iterators.
-          KmerIterType start(BaseCharIterator(read.seqBegin, ASCII2<Alphabet>()), true);
-          KmerIterType end(BaseCharIterator(read.seqEnd, ASCII2<Alphabet>()), false);
+          KmerIterType start(BaseCharIterator(read.seqBegin, bliss::ASCII2<Alphabet>()), true);
+          KmerIterType end(BaseCharIterator(read.seqEnd, bliss::ASCII2<Alphabet>()), false);
 
           //== set up the position iterators
           IdIterType id_start(read.id);
