@@ -101,13 +101,20 @@ namespace bliss
         /// combine kmer iterator and position iterator to create an index iterator type.
         using KmerIndexIterType = KmerIterType;
 
-        // TODO: to incorporate quality, use another zip iterator.
+
+
+      public:
 
         /// define the index storage type.  using an infix of kmer since prefix is used for distributing to processors.
         typedef bliss::index::distributed_counting_map<KmerType,
                                                    bliss::io::CommunicationLayer<ThreadLocal>,
                                                    bliss::KmerSuffixHasher<KmerType>,
                                                    bliss::KmerPrefixHasher<KmerType> > IndexType;
+
+      protected:
+
+
+        // TODO: to incorporate quality, use another zip iterator.
 
         /// index instance to store data
         IndexType index;
@@ -121,6 +128,7 @@ namespace bliss
         int nThreads;
 
       public:
+
         /**
          * initializes the index
          * @param comm
@@ -138,6 +146,10 @@ namespace bliss
 
         void finalize() {
           index.finalize();
+        }
+
+        IndexType& getLocalIndex(){
+          return index;
         }
 
         size_t local_size() const {
@@ -212,11 +224,7 @@ namespace bliss
         }
 
 
-
-
         //============== what makes sense as return types for results?
-
-
 
       protected:
 

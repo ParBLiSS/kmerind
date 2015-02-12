@@ -114,6 +114,10 @@ add_executable(testKmerIndex TestKmerIndexAndQuery.cpp)
 target_link_libraries(testKmerIndex ${EXTRA_LIBS})
 target_link_libraries(testKmerIndex bliss-common)
 
+add_executable(testKmerCountCorrectness TestKmerCountCorrectness.cpp)
+target_link_libraries(testKmerCountCorrectness ${EXTRA_LIBS})
+target_link_libraries(testKmerCountCorrectness bliss-common)
+
 ## EXECUTABLES
 add_executable(profile_mem_usage profile_mem_usage.cpp)
 target_link_libraries(profile_mem_usage ${EXTRA_LIBS})
