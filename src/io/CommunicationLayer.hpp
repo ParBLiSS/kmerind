@@ -777,28 +777,24 @@ protected:
                // then we need to push this message back into recvInProgress.
                // need to construct a new message with a NULL request.
                // then skip over the remaining of this branch and leave the message in recvInProgress.
+               // note that if we were to just create a new epoch capacity entry for previously unseen epoch from remote source, we need to
+               //     increment the active epoch count, and make sure any existing entry is not reset to max (comm size).  The second part is handled
+               //     in messageTypeInfo class, while the first need to be done in coordination with the entry creation.
+               //     MessageTypeInfo therefore need to be passed a reference to the shared ActiveEpochCount entry.
+               // The benefit is that otherwise, we'd need to save the message back into RecvInProgress, thus changing message receive order.
 //               if (!taginfo.isEpochPresent(te)) {
-//                 //if (iters %100 == 0) WARNINGF("WARN: RANK %d not yet waiting for control message tag %d epoch %ld.  cycle through again.", commRank, te.tag, te.epoch);
-//
 //                 front.first = MPI_REQUEST_NULL;
-//                 assert(front.second.get() != nullptr);
 //                 recvInProgress.push_back(std::move(front));
-//                 assert(front.second.get() == nullptr);
-//                 assert(recvInProgress.back().second.get() != nullptr);
-//
-//                 //break;  // gives the worker threads a chance to call sendControlMessagesAndWait
 //                 worked = false;
-//
-//                 // this delays the processing, which hopefully does not create deadlock.
-//                 // Better for worker thread to wait via  sendControlMessagesAndWait, instead
-//                 // of comm thread waiting for the taggedepoch to become present.
-//               } else {
 
+                 // this delays the processing, which hopefully does not create deadlock.
+               //} else {  // for use when we push back onto recvInProgress queue, since we can't count down in that situation.
+//               }
 
                  //== now decrement the count of control messages for a epoch
   //                DEBUGF("C RECV PRE rank %d receiving END signal tag %d epoch %ld from %d, recvRemaining size: %ld",
   //                     commRank, te.tag, te.epoch, front.second->rank, commLayer.ctrlMsgRemainingForEpoch.size());
-                 TaggedEpoch v = taginfo.countdownEpoch(te);
+                 TaggedEpoch v = taginfo.countdownEpoch(te, std::ref(commLayer.activeEpochCount));
   //                DEBUGF("C RECV rank %d receiving END signal tag %d epoch %ld from %d, num senders remaining is %d",
   //                     commRank, te.tag, te.epoch, front.second->rank, commLayer.ctrlMsgRemainingForEpoch.at(te));
 
@@ -823,7 +819,7 @@ protected:
                  }
 
                  worked = true;
-//               }
+               //}  // for use when we push back onto recvInProgress queue, since we can't count down in that situation.
 
              } else {  // data message
 
@@ -1015,7 +1011,7 @@ protected:
               // here only when all ctrlMsg for the tagged_epoch is complete.
               MessageInfo& taginfo = commLayer.getTagInfo(getTagFromTaggedEpoch(te));
               
-              taginfo.releaseEpoch(te);
+              taginfo.releaseEpoch(te, std::ref(commLayer.activeEpochCount));
               //commLayer.finishEpoch(te);
               //DEBUGF("B Rank %d tag %d epoch %ld start waiting", commLayer.commRank, getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
 
@@ -1375,8 +1371,8 @@ public:
     }
 
 
-    getTagInfo(CONTROL_TAG).acquireEpoch();
-    activeEpochCount.fetch_add(1, std::memory_order_release);
+    getTagInfo(CONTROL_TAG).acquireEpoch(std::ref(activeEpochCount));
+    //activeEpochCount.fetch_add(1, std::memory_order_release);
 
     // TODO: deal with where to put the std::threads.
     callbackThread.start();
@@ -1548,8 +1544,8 @@ protected:
     // since each tag has unique epoch for each call to this function, we don't need global lock as much.
     TaggedEpoch te = CONTROL_TAGGED_EPOCH;
     if (tag != CONTROL_TAG) {
-    	te = taginfo.acquireEpoch();
-			activeEpochCount.fetch_add(1, std::memory_order_release);
+    	te = taginfo.acquireEpoch(std::ref(activeEpochCount));
+			//activeEpochCount.fetch_add(1, std::memory_order_release);
 		}
 
     // should be only 1 thread executing this code below with the provided tag-epoch.
@@ -1581,7 +1577,7 @@ protected:
     //============= now wait.
     DEBUGF("M PRE WAIT Rank %d Waiting for tag %d epoch %u, currently flushing", commRank, getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
     taginfo.waitForEpochRelease(te);
-    activeEpochCount.fetch_sub(1, std::memory_order_release);
+    //activeEpochCount.fetch_sub(1, std::memory_order_release);
     DEBUGF("M END WAIT Rank %d Waiting for tag %d epoch %u, currently flushing", commRank, getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
     // then clean up.
 

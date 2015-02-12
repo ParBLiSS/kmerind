@@ -133,18 +133,22 @@ namespace bliss
         }
 
 
-        TaggedEpoch acquireEpoch() {
+        TaggedEpoch acquireEpoch(std::atomic<int>& totalCount) {
           TaggedEpoch te = nextEpoch.fetch_add(1, std::memory_order_relaxed);
 
           std::lock_guard<std::mutex> lock(mutex);
-          epoch_capacities[te] = maxEpochCapacity;
+          if (epoch_capacities.count(te) == 0) {
+            epoch_capacities[te] = maxEpochCapacity;
+            totalCount.fetch_add(1, std::memory_order_release);
+          }
           return te;
         }
-        int countdownEpoch(const TaggedEpoch & te) throw (std::out_of_range) {
+        int countdownEpoch(const TaggedEpoch & te, std::atomic<int>& totalCount) throw (std::out_of_range) {
           std::lock_guard<std::mutex> lock(mutex);
           if (epoch_capacities.count(te) == 0) {
             epoch_capacities[te] = maxEpochCapacity;
-//            ERRORF("epoch does not exist to count down: %d %d", getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
+            totalCount.fetch_add(1, std::memory_order_release);
+            WARNINGF("epoch does not exist to count down. created: %d %d", getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
 //            throw std::out_of_range("ERROR: epoch does not exist.");
           }
           return --epoch_capacities.at(te);
@@ -168,9 +172,10 @@ namespace bliss
           }
           lock.unlock();
         }
-        void releaseEpoch(const TaggedEpoch & te) {
+        void releaseEpoch(const TaggedEpoch & te, std::atomic<int>& totalCount) {
           std::unique_lock<std::mutex> lock(mutex);
           epoch_capacities.erase(te);
+          totalCount.fetch_sub(1, std::memory_order_release);
           lock.unlock();
 
           condVar.notify_all();

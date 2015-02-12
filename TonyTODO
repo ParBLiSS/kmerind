@@ -518,8 +518,8 @@ TODO:
 			API is sequential, implementation is parallel/distributed/overlapped.
 				ie. use message handlers to allow overlapped communication and io, but functions return when all's complete.
 		
-		6. need KMolecule instead of kmer.
-			so that we don't have duplicates.
+		6. **need KMolecule instead of kmer.  - separate keys for rank and for local hash.
+			so that we don't have duplicates on different processors.
 		
 		6. verify correctness - 
 			generation - kmer (instead of kmolecule) count index reports 90 instead of 40 kmers.
@@ -528,10 +528,20 @@ TODO:
 				kmer generation using iterator  should not skip first K-1 entries - result from 20 to 40.
 				verified the same between kmer_iterator and my own version.  performance is approximately the same now as well.
 			distribution
+				appears working.
 			query
+				appears working.
+				
+			****functors for callback handler.
 			
 		7. optimization: specialized kmer for sizes that does not require arrays
+		   optimization: allow reserve size to be set in a thread safe way.
 			
+		9. MPI deadlocks and thread safety
+			reserve map size from index thread is problematic:  callback thread can be receiving before local worker finishes resizing the map.  since unorderedmap is not threadsafe, this causes problems
+			when receiving a control message for which epoch has not been created, either we create a new capacity entry for epoch or alternatively push the control messge to end of queue.
+				creating a new capacity entry means that when local flush is called it should not reset the capacity, and since we track total number of active epochs
+				we need to increment it within a critical section.  the second approach is taken.  see MessageTypeInfo
 			
 	MPI Error Handler.
 			
@@ -545,7 +555,7 @@ TODO:
 	5. other types of kmer indices
 		quality based.					
 			quality generation code tested and merged to trunk  DONE
-			quality index - DONE?
+			quality index - DONE
 		approximate quality based (if needed for performance reason.  we mostly do decode, and not encode, so LUT works well)
 	
 	6. reduce latency and improve concurrency:
