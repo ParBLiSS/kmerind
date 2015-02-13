@@ -11,7 +11,7 @@
 
 
 template<typename Alphabet, int K>
-void compute_kmer(std::string input) {
+void compute_kmer_iter(std::string input) {
 
   using KmerType = bliss::Kmer<K, Alphabet>;
 
@@ -42,7 +42,7 @@ void compute_kmer(std::string input) {
       printf("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
     }
 
-    EXPECT_EQ(res, 0);
+    EXPECT_EQ(0, res);
   }
 }
 
@@ -57,7 +57,7 @@ TEST(KmerIterator, TestKmerIterator)
                          "ATCGATCAAATAGTAAATCC"
                          "ATTTGTTCAACTCACAGTTT";
 
-  compute_kmer<DNA, 21>(input);
+  compute_kmer_iter<DNA, 21>(input);
 }
 
 /**
@@ -71,7 +71,7 @@ TEST(KmerIterator, TestKmerIteratorDNA5)
                          "ATTTGTTCAACTCACAGTTT";
 
 
-  compute_kmer<DNA5, 21>(input);
+  compute_kmer_iter<DNA5, 21>(input);
 
 }
 
@@ -85,7 +85,7 @@ TEST(KmerIterator, TestKmerIteratorMultiWord)
                          "ATCGATCAAATAGTAAATCC"
                          "ATTTGTTCAACTCACAGTTT";
 
-  compute_kmer<DNA, 33>(input);
+  compute_kmer_iter<DNA, 33>(input);
 
 }
 
@@ -98,7 +98,7 @@ TEST(KmerIterator, TestKmerIteratorDNA5MultiWord)
   std::string input = "GATTTGGGGTTCAAAGCAGT"
                          "ATCGATCAAATAGTAAATCC"
                          "ATTTGTTCAACTCACAGTTT";
-  compute_kmer<DNA5, 33>(input);
+  compute_kmer_iter<DNA5, 33>(input);
 
 
 }

@@ -937,7 +937,7 @@ void compute_kmer(std::string input) {
   auto temp = BaseCharIterator(input.cbegin(), Decoder());
 
   KmerType kmer;
-  kmer.fillFromChars(temp, true);
+  kmer.fillFromChars(temp, false);
   unsigned int i = K;
   for (; i < input.length(); ++i) {
     std::string gold = input.substr(i-K, K);

@@ -1351,8 +1351,8 @@ public:
 //    if (!sendQueue.canPush()) {
 //      throw std::logic_error("W initCommunication called after finishCommunication");
 //    }
-    assert(!sendQueue.canPush()); sendQueue.enablePush();
-    assert(!recvQueue.canPush()); recvQueue.enablePush();
+    if(!sendQueue.canPush()) sendQueue.enablePush();
+    if(!recvQueue.canPush()) recvQueue.enablePush();
 
 
 //    if (ctrlMsgProperties.count(CONTROL_TAG) > 0) {
