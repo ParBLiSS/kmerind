@@ -12,7 +12,7 @@
 #ifndef KMER_INDEX_GENERATOR_H_
 #define KMER_INDEX_GENERATOR_H_
 
-#include "iterators/buffered_transform_iterator.hpp"
+#include "retired/buffered_transform_iterator.hpp"
 
 
 namespace bliss

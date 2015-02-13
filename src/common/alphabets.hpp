@@ -69,7 +69,7 @@ struct DNA : BaseAlphabetChar
 
   static constexpr AlphabetSizeType SIZE = 4;
 
-  // lookup table for XYZ
+  // lookup table for DNA
   static constexpr uint8_t FROM_ASCII[256] =
   {
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -94,7 +94,7 @@ struct DNA : BaseAlphabetChar
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
   };
 
-  // reverse lookup table for XYZ
+  // reverse lookup table for DNA
   static constexpr char TO_ASCII[SIZE] =
   {
     'A',  // = 0
@@ -103,7 +103,7 @@ struct DNA : BaseAlphabetChar
     'T'  // = 3
   };
 
-  // reverse lookup table for DNA5
+  // reverse lookup table for DNA
   static constexpr uint8_t TO_COMPLEMENT[SIZE] =
   {
     3,  // = 0

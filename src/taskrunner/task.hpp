@@ -12,7 +12,7 @@
 #ifndef TASK_HPP_
 #define TASK_HPP_
 
-#include "concurrent/runnable.hpp"
+#include "taskrunner/runnable.hpp"
 
 namespace bliss
 {
@@ -37,24 +37,22 @@ namespace concurrent
    *            matched up.
    *
    */
-  template<typename Compute, typename Src, typename Dest>
+//  template<typename Compute, typename Input, typename Output>
   class Task : public Runnable
   {
-    protected:
-      Compute comp;
-      Src input;
-      Dest output;
+//    protected:
+//      Compute& comp;
+//      Input& input;
+//      Output& output;
 
     public:
-      Task(Compute &_comp, Src &_input, Dest &_output)
-        : comp(_comp), input(_input), output(_output) {};
+//      Task(Compute &_comp, Input &_input, Output &_output)
+//        : comp(_comp), input(_input), output(_output) {};
+      Task() {};
 
       virtual ~Task() {};
 
-      virtual void run()
-      {
-
-      }
+      virtual void operator()() = 0;
   };
 
 } /* namespace concurrent */

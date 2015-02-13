@@ -49,6 +49,7 @@ void testWaitAndPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int ent
   else printf("PASS,");
 };
 
+
 template<typename T>
 void testTryPush(bliss::concurrent::ThreadSafeQueue<T> &queue, const int entries, const int nProducer) {
   //usleep(1000);
@@ -296,6 +297,24 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   }
   printf("\n");
 
+  printf("  CHECK waitAndPush, and disablePush: ");
+  queue.clear();
+  queue.enablePush();
+#pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
+  {
+#pragma omp section
+    {
+      testWaitAndPush(queue, entries, nProducer);
+    }
+
+#pragma omp section
+    {
+	sleep(1);
+	queue.disablePush();
+#pragma omp flush(queue)
+    }
+  }
+  printf("\n");
   //TODO: can have !done, waitAndPop, and done=true in other thread, so pop thread never gets to check "done" ->  deadlock.
 
     // not testing this with more than 1 consumer thread.  there could be a lot more consumer tasks generated than
@@ -353,6 +372,16 @@ int main(int argc, char** argv) {
 
   typedef bliss::concurrent::ThreadSafeQueue<int> QueueType;
 
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 1);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 1);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 1);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 4, 1);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 2);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 3);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 4);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 2);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 3);
+  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 2);
 
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 1);
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 1);
@@ -365,16 +394,6 @@ int main(int argc, char** argv) {
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 3);
   testTSQueue("TSQ nthread growable", std::move(QueueType()), 3, 2);
 
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 4, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 2);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 3);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 4);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 2);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 3);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 2);
 
 
 };

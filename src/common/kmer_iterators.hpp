@@ -25,6 +25,9 @@
 
 #include <iterators/sliding_window_iterator.hpp>
 
+// TODO: Need convenience functions to make start and end iterators (the true/false flags are not good.  else enforce that flag has no default value.)
+// TODO: Need convenience typedef to allow for reverse complement generation.
+
 namespace bliss
 {
 
@@ -45,6 +48,7 @@ class KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type
 public:
   /// The Kmer type (same as the `value_type` of this iterator)
   typedef bliss::Kmer<KMER_SIZE, ALPHABET, word_type> kmer_type;
+  typedef BaseIterator  base_iterator_type;
   /// The value_type of the underlying iterator
   typedef typename std::iterator_traits<BaseIterator>::value_type base_value_type;
 
@@ -90,6 +94,70 @@ private:
   kmer_type kmer;
 };
 
+/**
+ * @brief The sliding window operator for reverse k-mer generation from character data.
+ * @note  to create reverse complement, use a transform iterator to change the char to complement
+ *
+ * @tparam BaseIterator Type of the underlying base iterator, which returns
+ *                      characters.
+ * @tparam Kmer         The k-mer type, must be of type bliss::Kmer
+ */
+template <class BaseIterator, class Kmer>
+class ReverseKmerSlidingWindow {};
+
+template <typename BaseIterator, unsigned int KMER_SIZE,
+          typename ALPHABET, typename word_type>
+class ReverseKmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> >
+{
+public:
+  /// The Kmer type (same as the `value_type` of this iterator)
+  typedef bliss::Kmer<KMER_SIZE, ALPHABET, word_type> kmer_type;
+  typedef BaseIterator  base_iterator_type;
+  /// The value_type of the underlying iterator
+  typedef typename std::iterator_traits<BaseIterator>::value_type base_value_type;
+
+  /**
+   * @brief Initializes the sliding window.
+   *
+   * @param it[in|out]  The current base iterator position. This will be set to
+   *                    the last read position.
+   */
+  inline void init(BaseIterator& it)
+  {
+    kmer.fillReverseFromChars(it, true);
+  }
+
+  /**
+   * @brief Slides the window by one character taken from the given iterator.
+   *
+   * This will read the current character of the iterator and then advance the
+   * iterator by one.
+   *
+   * @param it[in|out]  The underlying iterator position, this will be read
+   *                    and then advanced.
+   */
+  inline void next(BaseIterator& it)
+  {
+    kmer.nextReverseFromChar(*it);
+    ++it;
+  }
+
+  /**
+   * @brief Returns the value of the current sliding window, i.e., the current
+   *        k-mer value.
+   *
+   * @return The current k-mer value.
+   */
+  inline kmer_type getValue()
+  {
+    // return a copy of the current kmer
+    return this->kmer;
+  }
+private:
+  /// The kmer buffer (i.e. the window of the sliding window)
+  kmer_type kmer;
+};
+
 
 /**
  * @brief Iterator that generates k-mers from character data.
@@ -100,31 +168,26 @@ private:
  * @tparam Kmer             The type of the Kmer, this has to be of type
  *                          bliss::Kmer.
  */
-template <class BaseIterator, class Kmer>
-class KmerGenerationIterator {};
-
-// template specialization for bliss::Kmer as kmer type
-// The template parameters KMER_SIZE, ALPHABET and word_type are
-// set to the appropriate template parameters of bliss::Kmer and do not
-// have to be explicitly stated when creating this class.
-template <typename BaseIterator, unsigned int KMER_SIZE, typename ALPHABET, typename word_type>
-class KmerGenerationIterator<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> >
-: public iterator::sliding_window_iterator<BaseIterator, KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> > >
+template <class SlidingWindow>
+class KmerGenerationIteratorBase
+    : public iterator::sliding_window_iterator<typename SlidingWindow::base_iterator_type, SlidingWindow >
 {
 protected:
+    typedef typename SlidingWindow::base_iterator_type BaseIterator;
+
   /// The type of the base class
-  typedef iterator::sliding_window_iterator<BaseIterator, KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> > >
+  typedef iterator::sliding_window_iterator<BaseIterator, SlidingWindow >
  base_class_t;
 
   /// The difference_type of character offsets
   typedef typename std::iterator_traits<base_class_t>::difference_type diff_type;
 
   /// The type of the sliding window.
-  typedef KmerSlidingWindow<BaseIterator, bliss::Kmer<KMER_SIZE, ALPHABET, word_type> > functor_t;
+  typedef SlidingWindow functor_t;
 
 public:
   /// Default constructor.
-  KmerGenerationIterator() : base_class_t() {}
+  KmerGenerationIteratorBase() : base_class_t() {}
 
   /**
    * @brief   Constructor for the kmer generation iterator using the underlying
@@ -133,7 +196,7 @@ public:
    * @param   baseBegin   An iterator pointing to the first character of the
    *                      sequence to be used for generating k-mers.
    */
-  KmerGenerationIterator(const BaseIterator& baseBegin)
+  KmerGenerationIteratorBase(const BaseIterator& baseBegin)
     : base_class_t(baseBegin, true) {}
 
   /**
@@ -148,7 +211,7 @@ public:
    *                            `end` style iterators which would otherwise
    *                            read past the valid range.
    */
-  KmerGenerationIterator(const BaseIterator& baseBegin, bool initialize_window)
+  KmerGenerationIteratorBase(const BaseIterator& baseBegin, bool initialize_window)
     : base_class_t(baseBegin, initialize_window) {}
 
 protected:
@@ -165,7 +228,7 @@ protected:
    *                      sequence to be used for generating k-mers.
    * @param window        The sliding window object used by the iterator.
    */
-  KmerGenerationIterator(const BaseIterator& baseBegin, const functor_t& window)
+  KmerGenerationIteratorBase(const BaseIterator& baseBegin, const functor_t& window)
     : base_class_t(baseBegin, window, true)  {}
 
   /**
@@ -181,9 +244,17 @@ protected:
    *                            `end` style iterators which would otherwise
    *                            read past the valid range.
    */
-  KmerGenerationIterator(const BaseIterator& baseBegin, const functor_t& window, bool initialize_window)
+  KmerGenerationIteratorBase(const BaseIterator& baseBegin, const functor_t& window, bool initialize_window)
     : base_class_t(baseBegin, window, initialize_window)  {}
 };
+
+template <class BaseIterator, class Kmer>
+using KmerGenerationIterator = KmerGenerationIteratorBase<KmerSlidingWindow<BaseIterator, Kmer > >;
+
+template <class BaseIterator, class Kmer>
+using ReverseKmerGenerationIterator = KmerGenerationIteratorBase<ReverseKmerSlidingWindow<BaseIterator, Kmer > >;
+
+
 
 
 /**

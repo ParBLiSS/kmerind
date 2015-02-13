@@ -141,17 +141,14 @@ int main(int argc, char** argv) {
   for (auto iter=localIndex.cbegin(); iter!=localIndex.cend(); iter++)
   {
     //std::cout << (iter->first).toAlphabets() << " ";
-    std::string jellyFishQueryCommand = jellyFishExec + " query jellyFishoutput " + (iter->first).toAlphabets() + " |  sed 's/[^0-9]*//g'";
+    std::string jellyFishQueryCommand = jellyFishExec + " query jellyFishoutput " + bliss::utils::KmerUtils::toASCIIString(iter->first) + " |  sed 's/[^0-9]*//g'";
     std::string jellyFishResult = exec(&jellyFishQueryCommand[0]);
     //std::cout << iter->second << ", " << std::stoi(jellyFishResult) << "\n";
     assert(iter->second == (unsigned)std::stoi(jellyFishResult));
 
   }
 
-
-
-  //TODO: Uncomment this part after merging with Tony's code
-  //kmer_index.finalize();
+  kmer_index.finalize();
   MPI_Barrier(comm);
 
   }

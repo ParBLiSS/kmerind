@@ -128,7 +128,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks)
   //For crosschecking the contents
   for(auto iter=FASTAIterObj.begin(); iter != FASTAIterObj.end(); iter++)
   {
-    std::string KmertoString = FASTAIterObj.getKmer(iter).toAlphabets();
+    std::string KmertoString = bliss::utils::KmerUtils::toASCIIString(FASTAIterObj.getKmer(iter));
     //std::cout << FASTAIterObj.getOffset(iter) << ", Kmer# " << totalKmerCount+1 << " :  " << KmertoString << std::endl; 
     auto offset = FASTAIterObj.getOffset(iter);
 
@@ -193,7 +193,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiProc)
   //For crosschecking the contents
   for(auto iter=FASTAIterObj.begin(); iter != FASTAIterObj.end(); iter++)
   {
-    std::string KmertoString = FASTAIterObj.getKmer(iter).toAlphabets();
+    std::string KmertoString = bliss::utils::KmerUtils::toASCIIString(FASTAIterObj.getKmer(iter));
     //std::cout << FASTAIterObj.getOffset(iter) << ", RANK#,Kmer# " << rank << "," << totalKmerCount+1 << " :  " << KmertoString << std::endl; 
     auto offset = FASTAIterObj.getOffset(iter);
 
@@ -291,7 +291,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiThreaded_L2DemandPartition)
       //For crosschecking the contents
       for(auto iter=FASTAIterObj.begin(); iter != FASTAIterObj.end(); iter++)
       {
-        std::string KmertoString = FASTAIterObj.getKmer(iter).toAlphabets();
+        std::string KmertoString = bliss::utils::KmerUtils::toASCIIString(FASTAIterObj.getKmer(iter));
         //std::cout << FASTAIterObj.getOffset(iter) << ", Thread#,Kmer# " << omp_get_thread_num() << "," << totalKmerCount+1 << " :  " << KmertoString << std::endl; 
         auto offset = FASTAIterObj.getOffset(iter);
 
@@ -398,7 +398,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiThreaded_L2BlockPartition)
       //For crosschecking the contents
       for(auto iter=FASTAIterObj.begin(); iter != FASTAIterObj.end(); iter++)
       {
-        std::string KmertoString = FASTAIterObj.getKmer(iter).toAlphabets();
+        std::string KmertoString = bliss::utils::KmerUtils::toASCIIString(FASTAIterObj.getKmer(iter));
         //std::cout << FASTAIterObj.getOffset(iter) << ", Thread#,Kmer# " << omp_get_thread_num() << "," << totalKmerCount+1 << " :  " << KmertoString << std::endl; 
         auto offset = FASTAIterObj.getOffset(iter);
 

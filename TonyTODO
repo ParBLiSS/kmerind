@@ -479,6 +479,22 @@ TODO:
 		3. memory buffers - need lockfree?  depend on underlying classes, so DONE.
 		4. buffer  - lockfree now.  need lockfree?  SIGNIFICANT IMPROVEMENT. also needto change memory ordering.
 			DONE.  improved by removing CAS in loop during reserve.
+			
+			
+		issue: swapping buffer ptrs in multithreaded code remains a problem - race conditions.
+				consequence is sporadic wrong values inserted.
+				if we don't swap, no problem.
+				
+		alternative:  single buffer with concurrentqueue backend.  enqueue multithreaded, dequeue in bulk by the comm thread.
+			no need for buffer pool in that case as well.  no swapping buffer (rely on concurrentqueue's internal memory management)
+			
+		
+			
+		Buffer ptr swap is NOT a good thing, so avoid it - in code and in tests.			
+			
+			
+		concurrentqueue with threadlocal stuff does not work properly.  use commit 4671562.
+			
 	2. KmerIndex:
 		1. thread global, lockfree memorybuffer version.  DONE
 		2. thread local memorybuffer-pool-buffer version.  DONE. using vector instead of unordered map to map thread to buffer.  20% slower compared to lockfree for test cases.
@@ -493,22 +509,61 @@ TODO:
 				distributed map may have problems because of that.
 			changing CommunicationLayer to minimize use of unordered map, and when do, use lock.
 				also lock access to unordered map.
-			
+				
 		4. multithread callback functions.
+			task runner is working.
+			integration will involve a lot of code restructuring
+			most significantly, need **[ threadsafe hashtable ]**.
 		5. query interface
+			API is sequential, implementation is parallel/distributed/overlapped.
+				ie. use message handlers to allow overlapped communication and io, but functions return when all's complete.
 		
+		6. **need KMolecule instead of kmer.  - separate keys for rank and for local hash.
+			so that we don't have duplicates on different processors.
+		
+		6. verify correctness - 
+			generation - kmer (instead of kmolecule) count index reports 90 instead of 40 kmers.
+				kmer generation using iterator  should be from decoded value, not raw ascii.  - resulted in 91 kmers.
+				kmer generation using iterator  end iterator needs to be constructed with flag "false" - resulted in 20 kmers.q
+				kmer generation using iterator  should not skip first K-1 entries - result from 20 to 40.
+				verified the same between kmer_iterator and my own version.  performance is approximately the same now as well.
+			distribution
+				appears working.
+			query
+				appears working.
+				
+			****functors for callback handler.
+			
+		7. optimization: specialized kmer for sizes that does not require arrays
+		   optimization: allow reserve size to be set in a thread safe way.
+			
+		9. MPI deadlocks and thread safety
+			reserve map size from index thread is problematic:  callback thread can be receiving before local worker finishes resizing the map.  since unorderedmap is not threadsafe, this causes problems
+			when receiving a control message for which epoch has not been created, either we create a new capacity entry for epoch or alternatively push the control messge to end of queue.
+				creating a new capacity entry means that when local flush is called it should not reset the capacity, and since we track total number of active epochs
+				we need to increment it within a critical section.  the second approach is taken.  see MessageTypeInfo
+			
+	MPI Error Handler.
+			
 	3. Memory ordering in buffer and Lockfree Queue
 		buffer: DONE
 		lockfree queue - default okay.
 		
 	4. KmerIndex construction:  
 		1. MPI collective version for construction and query - performance comparison
-		2. suffix array byproduct.
 		
 	5. other types of kmer indices
-		quality based.
+		quality based.					
+			quality generation code tested and merged to trunk  DONE
+			quality index - DONE
+		approximate quality based (if needed for performance reason.  we mostly do decode, and not encode, so LUT works well)
 	
-	6. paper: 
+	6. reduce latency and improve concurrency:
+		a. non-atomic flag to indicate that there is data in queue to work on
+		b. multiple single threaded queues?
+		
+	
+	7. paper: 
 		performance comparison:
 		1. best sequential algo.  suffix array based?
 		2. async kmer generation vs AllToAll.
@@ -520,6 +575,24 @@ TODO:
 			
 		writing.
 		
-	7. documentation and testing.
-		gcc message formatting.
-	
+		
+RELEASE TASKS
+		
+	8. documentation
+		a. code comments
+		b. install documentation
+		c. usage documentation
+		d. example code
+		
+	9. Testing.
+		a. verify correctness - 
+			kmer generation,
+			kmer distribution
+			kmer query
+		b. change as many tests as possible to gtest format
+		
+	10. build process
+		a. tests need to return non-zero error codes
+		b. gcc error message formatting. - DONE
+		c. logging - conditionally return messages.  - DONE.
+		d. docker container

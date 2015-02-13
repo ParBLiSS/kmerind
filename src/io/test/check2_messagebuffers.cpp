@@ -314,18 +314,23 @@ int main(int argc, char** argv) {
   }
 
 
-#if defined( BLISS_MUTEX_LOCKFREE )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
-  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::LOCKFREE;
-#elif defined( BLISS_SPINLOCK_LOCKFREE )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
-  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::LOCKFREE;
-#elif defined( BLISS_MUTEX_NONE )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
+#if defined( BLISS_THREADLOCAL_MUTEX_NONE )
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::THREADLOCAL;
+  constexpr bliss::concurrent::LockType lt1 = bliss::concurrent::LockType::MUTEX;
   constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
-#elif defined( BLISS_SPINLOCK_NONE )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
+#elif defined( BLISS_THREADLOCAL_SPINLOCK_NONE )
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::THREADLOCAL;
+  constexpr bliss::concurrent::LockType lt1 = bliss::concurrent::LockType::SPINLOCK;
   constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
+
+
+/// DISABLED BECAUSE SWAPPING BUFFER PTRS IN MUTLITHREADED ENVIRONMENT IS NOT SAFE, because threads hold on to ptrs to perform tasks.
+//#elif defined( BLISS_MUTEX_LOCKFREE )
+//  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
+//  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::LOCKFREE;
+//#elif defined( BLISS_SPINLOCK_LOCKFREE )
+//  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
+//  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::LOCKFREE;
 #endif
 
 
@@ -337,9 +342,9 @@ int main(int argc, char** argv) {
     //testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i,1)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
 
     for (int j = 1; j <= 8; ++j) {  // num threads
-      testBuffers(std::move(bliss::io::SendMessageBuffers<lt, lt2, 2047>(i, j)), lt, lt2, j);
+      testBuffers(std::move(bliss::io::SendMessageBuffers<lt, lt1, lt2, 2047>(i, j)), lt, lt2, j);
 
-      testBuffersWaitForInsert(std::move(bliss::io::SendMessageBuffers<lt, lt2, 2047>(i, j)), lt, lt2, j);
+      testBuffersWaitForInsert(std::move(bliss::io::SendMessageBuffers<lt, lt1, lt2, 2047>(i, j)), lt, lt2, j);
 
     }
   }

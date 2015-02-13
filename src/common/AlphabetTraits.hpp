@@ -28,6 +28,13 @@
 namespace bliss
 {
 
+  template<typename Alphabet, typename I = unsigned char>
+  struct ASCII2 {
+      const uint8_t operator()(I ascii) {
+        return Alphabet::FROM_ASCII[static_cast<size_t>(ascii)];
+      }
+  };
+
 
 /**
  * @brief Templated class of static functions returning properties of the

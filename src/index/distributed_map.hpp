@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <algorithm> // for std::max
 #include <atomic>
+#include <tuple>
 
 // include MPI
 #include <mpi.h>
@@ -32,6 +33,8 @@ namespace index
 
 /// Type for the counting map
 typedef uint32_t count_t;
+
+// TODO: are the "have_pending_insert and have_pending_lookup necessary?
 
 /**
  * @brief A shared base class for the distributed_multimap and
@@ -103,6 +106,10 @@ public:
     return local_map.cend();
   }
 
+  void reserve(size_t size_hint) {
+    local_map.reserve(size_hint);
+  }
+
   /**
    * @brief   Returns the local map's size.  primarily for debugging.
    * @return  size of the local map.
@@ -112,32 +119,37 @@ public:
     return local_map.size();
   }
 
+  void flushInsert()
+  {
+    DEBUGF("FLUSH DISTR MAP Insert");
+    //std::lock_guard<std::mutex> lock(mutex);
+    if (has_pending_inserts.exchange(false, std::memory_order_acquire))
+    {
+      this->commLayer.flush(INSERT_MPI_TAG);
+     }
+  }
+  void flushLookup()
+  {
+    DEBUGF("FLUSH DISTR MAP Lookup");
+    //std::lock_guard<std::mutex> lock(mutex);
+   if (has_pending_lookups.exchange(false, std::memory_order_acquire))
+   {
+    this->commLayer.flush(LOOKUP_MPI_TAG);
+    this->commLayer.flush(LOOKUP_ANSWER_MPI_TAG);
+   }
+  }
+
   /**
    * @brief Flushes all pending operations.
-   *
+   * @note  SHOULD BE CALLED BY A SINGLE THREAD
    * Since all insert and lookup operations are executed asynchronosly,
    * calling this function ensures that all pending operations have been
    * executed, including that all pending lookups have returned an answer.
    */
   void flush()
   {
-    DEBUGF("FLUSH DISTR MAP");
-    std::unique_lock<std::mutex> lock(mutex);
-    if (has_pending_inserts.load())
-    {
-      this->commLayer.flush(INSERT_MPI_TAG);
-       has_pending_inserts.store(false);
-     }
-     lock.unlock();
-
-     lock.lock();
-     if (has_pending_lookups.load())
-     {
-      this->commLayer.flush(LOOKUP_MPI_TAG);
-      this->commLayer.flush(LOOKUP_ANSWER_MPI_TAG);
-      has_pending_lookups.store(false);
-    }
-    lock.unlock();
+    flushInsert();
+    flushLookup();
   }
 
   /**
@@ -167,6 +179,7 @@ public:
   /**
    * @brief Sets the callback function for received answers to asynchronously
    *        posted lookups.
+   * @note  previously set callback function will be replaced.
    *
    * @param callbackFunction    The function to call with all received answers
    *                            to lookups.
@@ -248,7 +261,7 @@ public:
       local_count_hist[count]++;
     }
 
-    // then accumulate accross all processors
+    // then accumulate across all processors
     std::vector<int> count_hist(all_max_count+1, 0);
     MPI_Allreduce(&local_count_hist[0], &count_hist[0], all_max_count+1,
                   MPI_INT, MPI_SUM, this->comm);
@@ -267,12 +280,12 @@ public:
   /**
    * finalize waits for commLayer to finish, which guarantees that all communications are done (to avoid timing issue with MPI_FINALIZE and distributed map object clean up.
    */
-  void finalize() {
+  void finish() {
     this->commLayer.finish(INSERT_MPI_TAG);
     this->commLayer.finish(LOOKUP_MPI_TAG);
     this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
 
-    this->commLayer.finalize();
+    this->commLayer.finishCommunication();
   }
 
 protected:
@@ -297,7 +310,7 @@ protected:
    * @brief
    */
   virtual ~_distributed_map_base() {
-    this->finalize();
+    this->finish();
   }
 
 
@@ -329,8 +342,8 @@ protected:
   void sendPair(const K& key, const T& value, const int dstRank, const int tag)
   {
     // create the pair and call the overloaded function
-    std::pair<K, T> keyElement(key, value);
-    this->sendPair(keyElement, dstRank, tag);
+    //std::pair<K, T> keyElement(key, value);
+    this->sendPair(std::make_pair(key, value), dstRank, tag);
   }
 
   /**
@@ -559,7 +572,7 @@ public:
   {
     int targetRank = this->getTargetRank(keyvalue.first);
     this->sendPair(keyvalue, targetRank, _base_class::INSERT_MPI_TAG);
-    this->has_pending_inserts = true;
+    this->has_pending_inserts.store(true, std::memory_order_release);
   }
 
   /**
@@ -575,7 +588,7 @@ public:
   {
     int targetRank = this->getTargetRank(key);
     this->sendPair(key, value, targetRank, _base_class::INSERT_MPI_TAG);
-    this->has_pending_inserts = true;
+    this->has_pending_inserts.store(true, std::memory_order_release);
   }
 
   /**
@@ -640,10 +653,11 @@ protected:
     int element_count = count / sizeof(std::pair<K, T>);
 
     // insert all elements into the hash table
-    for (int i = 0; i < element_count; ++i)
-    {
-      this->local_map.insert(elements[i]);
-    }
+//    for (int i = 0; i < element_count; ++i)
+//    {
+//      this->local_map.insert(elements[i]);
+//    }
+    this->local_map.insert(elements, elements + element_count);
   }
 
 };
@@ -730,7 +744,7 @@ public:
   {
     int targetRank = this->getTargetRank(key);
     this->sendKey(key, targetRank, _base_class::INSERT_MPI_TAG);
-    this->has_pending_inserts = true;
+    this->has_pending_inserts.store(true, std::memory_order_release);
     //DEBUG("inserted key " << key);
   }
 

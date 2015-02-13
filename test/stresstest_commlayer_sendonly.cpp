@@ -15,7 +15,7 @@ std::atomic<int> msgs_received(0);
 std::atomic<int> lookup_received(0);
 std::atomic<int> answers_received(0);
 
-template <bool ThreadLocal = false>
+template <bool ThreadLocal = true>
 struct Tester
 {
   const int ANSWER_TAG = 12;
@@ -200,11 +200,12 @@ int main(int argc, char *argv[])
     lookup_received.store(0);
     answers_received.store(0);
 
-#if defined(THREADLOCAL)
+/// SWAPPING BUFFER PTRS IN MULTITHREADED ENVIRONMENT IS NOT SAFE
+//#if defined(THREADLOCAL)
     Tester<true> tester(comm, p, nthreads);
-#else
-    Tester<false> tester(comm, p, nthreads);
-#endif
+//#else
+//    Tester<false> tester(comm, p, nthreads);
+//#endif
     tester.test_comm_layer(iters, elems);
 
     MPI_Barrier(comm);

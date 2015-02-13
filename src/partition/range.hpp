@@ -525,7 +525,7 @@ namespace bliss
         template<typename TT=T>
         typename std::enable_if<std::is_integral<TT>::value, size_t>::type size() const
         {
-          return end - start;
+          return static_cast<size_t>(end) - static_cast<size_t>(start);
         }
 
         /**

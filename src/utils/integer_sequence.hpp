@@ -1,7 +1,7 @@
 /**
- * @file		integer_sequence.hpp
+ * @file    integer_sequence.hpp
  * @ingroup bliss::utils
- * @author	tpan
+ * @author  tpan
  * @brief   templates to support generating a integer/index sequence
  * @details adapted from http://coliru.stacked-crooked.com/a/663dee82db2aef0a
  *
@@ -133,7 +133,7 @@ namespace bliss
      * @brief   specialization for index sequence. type is set to size_t
      * @tparam N  number of entries
      */
-    template<int N>
+    template<size_t N>
       using make_index_sequence = make_integer_sequence<std::size_t, N>;
 
 

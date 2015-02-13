@@ -20,6 +20,7 @@
 
 #include "common/base_types.hpp"
 #include "io/file_loader.hpp"
+#include "common/sequence.hpp"
 
 namespace bliss
 {
@@ -27,6 +28,332 @@ namespace bliss
   {
     /// dummy class to indicate FASTQ format.
     struct FASTQ {};
+
+
+    /**
+     * @class     bliss::io::FASTQSequenceId
+     * @brief     represents a fastq sequence's id, also used for id of the FASTQ file, and for position inside a FASTQ sequence..
+     * @details    this is set up as a union to allow easy serialization
+     *            and parsing of the content.
+     *            this keeps a 40 bit sequence ID, broken up into a 32 bit id and 8 bit significant bit id
+     *                       an 8 bit file id
+     *                       a 16 bit position within the sequence.
+     *
+     *            A separate FASTA version will have a different fields but keeps the same 64 bit total length.
+     *
+     *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
+     */
+    union FASTQSequenceId
+    {
+        /// the concatenation of the id components as a single unsigned 64 bit field.  should use only 40 bits
+        uint64_t file_pos;
+
+        /// the id field components.  anonymous struct
+        struct
+        {
+            /// sequence's id, lower 32 of 40 bits (potentially as offset in the containing file)
+            uint32_t seq_id;
+            /// sequence's id, upper 8 of 40 bits (potentially as offset in the containing file)
+            uint8_t seq_id_msb;
+            /// id of fastq file
+            uint8_t file_id;
+            /// offset within the read.  Default 0 refers to the whole sequence
+            uint16_t pos;
+        };
+    };
+
+//    /**
+//     * @class     bliss::io::FASTASequenceId
+//     * @brief     represents a fasta sequence's id, also used for id of the FASTA file, and for position inside a FASTA sequence..
+//     * @details   for FASTA sequences, a processor/thread may be reading a portion of a sequence.
+//     *            In order to assign an id to a sequence, communication between processes is necessary.
+//     *            therefore, there is no need to use the file position offset as sequence id.
+//     *
+//     *            however, for consistency of the logic, it may be best to keep it the same way as the FASTQ version.
+//     *
+//     *            8 bits for file id
+//     *            40 bits for sequence id
+//     *            40 bits for position within the sequence.
+//     *
+//     *            this is set up as a union of to allow easy serialization
+//     *            and parsing of the content.
+//     *
+//     *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
+//     */
+//    struct FASTASequenceId
+//    {
+//        /// the concatenation of the id components as a single unsigned 64 bit field for sequence position inside file.
+//        union {
+//            uint64_t file_pos;
+//
+//            /// the id field components.  anonymous struct
+//            struct
+//            {
+//                /// sequence's id, lower 32 of 40 bits (potentially as offset in the containing file)
+//                uint32_t seq_id;
+//                /// sequence's id, upper 8 of 40 bits (potentially as offset in the containing file)
+//                uint8_t seq_id_msb;
+//                /// id of fastq file
+//                uint8_t file_id;
+//            };
+//        };
+//        /// offset within the read.  Default 0 refers to the whole sequence
+//        uint64_t pos;
+//    };
+
+    /**
+     * @class bliss::io::FASTQParser
+     * @brief Functoid encapsulating increment functionality traversing data in an iterator record by record, by parsing and searching for record boundaries.
+     * @details   The purpose of this class is to abstract the increment operations in
+     *    an iterator that transforms a block of data into a collection of FASTQ records. Using this class allows us to reuse
+     *    an sequence parsing iterator, but potentially for different sequence record formats.
+     *
+     *    This class assumes that the iterator at start is pointing to the beginning of a FASTQ record already.
+     *    Increment is done by walking through the data and recording the positions of the start and end of each
+     *    of the 4 lines in a FASTQ record.  Because we are always searching to the end of a record (by reading 4 lines always),
+     *    successive calls to increment always are aligned correctly with record boundaries
+     *
+     * @note  NOT THREAD SAFE.
+     *
+     * @tparam Iterator   The underlying iterator to be traversed to generate a Sequence
+     * @tparam Quality    data type for quality scores for each base.  defaults to void to mean No Quality Score.
+     */
+    template<typename Iterator, typename Quality = void>
+    class FASTQParser
+    {
+
+      protected:
+        /// constant representing the EOL character
+        static const typename std::iterator_traits<Iterator>::value_type eol = '\n';
+
+        /// alias for this type, for use inside this class.
+        using type = FASTQParser<Iterator, Quality>;
+
+      public:
+        /// base iterator type for the source data that this parser operates on.
+        typedef Iterator  BaseIteratorType;
+
+
+        /// Sequence type, conditionally set based on Quality template param to either normal Sequence or SequenceWithQuality.
+        typedef typename std::conditional<std::is_void<Quality>::value,
+              bliss::common::Sequence<Iterator, FASTQSequenceId>,
+              bliss::common::SequenceWithQuality<Iterator, FASTQSequenceId> >::type      SequenceType;
+
+
+        /// default constructor.
+        FASTQParser() {};
+
+        /// default destructor
+        virtual ~FASTQParser() {};
+
+      protected:
+        /**
+         * @brief  search for first non-EOL character in a iterator, returns the stopping position as an iterator.  also records offset.
+         * @details       iter can point to the previous EOL, or a nonEOL character.
+         * @param[in/out] iter    iterator to advance
+         * @param[in]     end     position to stop the traversal
+         * @param[in/out] offset  the global offset of the sequence record within the file.  used as record id.
+         * @return        iterator at the new position, where the Non EOL char is found, or end.
+         */
+        inline Iterator& findNonEOL(Iterator& iter, const Iterator& end, size_t &offset) {
+          while ((iter != end) && (*iter == type::eol)) {
+            ++iter;
+            ++offset;
+          }
+          return iter;
+        }
+
+        /**
+         * @brief  search for first EOL character in a iterator, returns the stopping position as an iterator.  also records offset.
+         * @details       iter can point to a nonEOL char, or an EOL char.
+         * @param[in/out] iter    iterator to advance
+         * @param[in]     end     position to stop the traversal
+         * @param[in/out] offset  the global offset of the sequence record within the file.  used as record id.
+         * @return        iterator at the new position, where the EOL char is found, or end.
+         */
+        inline Iterator& findEOL(Iterator& iter, const Iterator& end, size_t &offset) {
+          while ((iter != end) && (*iter != type::eol) ) {
+            ++iter;
+            ++offset;
+          }
+          return iter;
+        }
+
+
+        /**
+         * @brief function to populate the quality score. defined only when Quality type is not void
+         * @param[in] start   beginning of the quality score character sequence.
+         * @param[in] end     end of the quality score character sequence.
+         * @param[out] output  The output sequence record type to modify
+         */
+        template <typename Q = Quality>
+        inline typename std::enable_if<!std::is_void<Q>::value>::type
+        setQualityIterators(const Iterator & start, const Iterator & end, SequenceType& output) {
+          output.qualBegin = start;
+          output.qualEnd = end;
+        }
+
+        /**
+         * @brief function to populate the quality score. defined only when Quality type is void
+         * @param[in] start   beginning of the quality score character sequence.
+         * @param[in] end     end of the quality score character sequence.
+         * @param[out] output  The output sequence record type to modify
+         */
+        template <typename Q = Quality>
+        inline typename std::enable_if<std::is_void<Q>::value>::type
+        setQualityIterators(const Iterator & start, const Iterator & end, SequenceType& output) {}
+
+        /**
+         * @brief check if quality iterator is at end.
+         * @param sequence
+         * @return
+         */
+        template <typename Q = Quality>
+        inline typename std::enable_if<!std::is_void<Q>::value, bool>::type
+        isQualityIteratorAtEnd(SequenceType& seq) {
+          return seq.qualBegin == seq.qualEnd;
+        }
+
+        /**
+         * @brief check if quality iterator is at end.
+         * @param[in] seq
+         */
+        template <typename Q = Quality>
+        inline typename std::enable_if<std::is_void<Q>::value, bool>::type
+        isQualityIteratorAtEnd(SequenceType& seq) { return false; }
+
+
+        /**
+         * @brief function to populate the sequence iterators.
+         * @param[in] start   beginning of the sequence.
+         * @param[in] end     end of the sequence.
+         * @param[out] output  The output sequence record type to modify
+         */
+        inline void setSequenceIterators(const Iterator & start, const Iterator & end, SequenceType& output) {
+          output.seqBegin = start;
+          output.seqEnd = end;
+        }
+
+        /**
+         * @brief constructs an IOException object with the relevant debug data.
+         * @param errType     string indicating the source of the error.  user choice
+         * @param start       iterator pointing to beginning of the data in question
+         * @param end         iterator pointing to end of the data in question
+         * @param startOffset offset for the beginning of the data in question
+         * @param endOffset   offset for the end of the data in question
+         */
+        void handleError(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
+          std::stringstream ss;
+          ss << "ERROR: did not find "<< errType << " in " << startOffset << " to " << endOffset << std::endl;
+          ss << "  offending string is \"" << std::endl;
+          std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
+          std::copy(start, end, oit);
+          ss << "\".";
+          throw bliss::io::IOException(ss.str());
+
+        }
+
+        /**
+         * @brief print out an Warning, for example when there is malformed partial data.
+         * @param errType     string indicating the source of the error.  user choice
+         * @param start       iterator pointing to beginning of the data in question
+         * @param end         iterator pointing to end of the data in question
+         * @param startOffset offset for the beginning of the data in question
+         * @param endOffset   offset for the end of the data in question
+         */
+        void handleWarning(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
+          WARNING("WARNING: " << "did not find "<< errType << " in " << startOffset << " to " << endOffset);
+        }
+
+
+      public:
+        /**
+         * @brief increments the iterator to the beginning of the next record, while saving the current record in memory and update the record id.
+         * @details   Called by the containing iterator during operator++ or operator+=
+         *            Internally, this function finds the begin and end of the text lines 4 times,
+         *            and populate the output sequence type with start and end positions of lines 2 and 4.
+         *
+         *            Each call to findNonEOL and findEOL may not move the iterator, if iter is already at end, or if iter already points to
+         *            a nonEOL or EOL character, respectively.  This means that the output may have Sequence or Quality Score start and end iterators
+         *            point to the block's end.  We check these conditions and throw an exception so the incomplete Sequence record does not get used
+         *            inadvertently.
+         *
+         *            Iterator can be a forward iterator or better.
+         *
+         * @param[in/out] iter          source iterator, pointing to data to traverse
+         * @param[in]     end           end of the source iterator - not to go past.
+         * @param[in/out] offset        starting position in units of source character types (e.g. char) from the beginning of the file.
+         * @param[in/out] output        updated sequence type, values updated.
+         * @throw IOException           if parse failed, throw exception
+         */
+        void increment(Iterator &iter, const Iterator &end, size_t &offset, SequenceType& output) throw (bliss::io::IOException)
+        {
+          //== first make a copy of iter so we can later use the original in exception handling.
+          Iterator orig_iter = iter;
+          size_t orig_offset = offset;
+
+          // local variables, temp storage.
+          Iterator lstart = end, lend = end;
+
+          //==== parse 4 lines (always, because FASTQ record has 4 lines) for start and end.
+          //==== okay to call findNonEOL or findEOL 4 times - if iter at end, won't advance. and okay for output to have end.
+          // each call to findNonEOL will find first char, and trim the leading \n
+
+          //== find 1st line, also the starting point.
+          // find start of line, \nX or end.
+          findNonEOL(iter, end, offset);
+          // offset pointing to first start, save it as the id.  - either \n or end
+          output.id.file_pos = offset;
+          // then find the end of that line  - either \n or end.
+          findEOL(iter, end, offset);
+
+          // == find 2nd line, and save it.
+          lstart = findNonEOL(iter, end, offset);
+          // then find the end of that line  - either \n or end.
+          lend = findEOL(iter, end, offset);
+          setSequenceIterators(lstart, lend, output);
+
+          // == find 3rd line, and discard it.
+          findNonEOL(iter, end, offset);
+          // then find the end of that line  - either \n or end.
+          findEOL(iter, end, offset);
+
+          // == find 4th line, and save it.  this depends on conditional definition of setQualityIterators.
+          lstart = findNonEOL(iter, end, offset);
+          // then find the end of that line  - either \n or end.
+          lend = findEOL(iter, end, offset);
+          // don't even bother to call if Quality type is void - avoids copy operations.
+          if (!std::is_void<Quality>::value) setQualityIterators(lstart, lend, output);
+
+          // lend at this point is pointing to the last \n or at end.
+          if (iter != end) {  // if at \n, advance it by 1 position
+            ++iter;  ++offset;
+          }
+
+          //== now check for error conditions.
+          // if either sequence or if required quality score were not found, then failed parsing
+          if (output.seqBegin == output.seqEnd) {
+            // if nothing is found, throw a warning.
+
+            handleWarning("sequence", orig_iter, iter, orig_offset, offset);
+          } else {
+            // sequence parsing is fine.  now check quality parsing.  if quality is not parsed, then this is an error.
+            if (!std::is_void<Quality>::value && isQualityIteratorAtEnd(output)) {
+              output.seqBegin = output.seqEnd;  // force seq data not to be used.
+              handleError("required quality score", orig_iter, iter, orig_offset, offset);
+            }
+          }
+          // leave iter and offset advanced.
+
+
+        }
+
+
+    };
+
+    /// template class' static variable definition (declared and initialized in class)
+    template<typename Iterator, typename Quality>
+    const typename std::iterator_traits<Iterator>::value_type bliss::io::FASTQParser<Iterator, Quality>::eol;
 
 
     //==== subclass of FileLoader.  using static polymorphism via CRTP.

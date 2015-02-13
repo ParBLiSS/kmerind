@@ -95,7 +95,13 @@ endif()
 
 
 
-# LOGGING ENGINE configuration
+###### LOGGING ENGINE configuration
+SET(LOGGER_VERBOSITY "WARNING" CACHE STRING "Logger verbosity.  Valid entries are ERROR, WARNING, INFO, DEBUG, TRACE.  Each level includes all levels with smaller value")  
+#function(update_logger_verbosity varname cacheaccess varval) 
+#    SET(LOGGER_VERBOSITY_DEFINE "#define LOGGER_VERBOSITY BLISS_LOGGER_VERBOSITY_${LOGGER_VERBOSITY}")
+#endfunction(update_logger_verbosity varname cacheaccess varval)
+#variable_watch(LOGGER_VERBOSITY update_logger_verbosity)
+
 function(update_logging_engine varname cacheaccess varval) 
 #       message(STATUS "${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
 
@@ -155,6 +161,11 @@ function(update_logging_engine varname cacheaccess varval)
         endif(USE_OPENMP)
 
     else(${cacheaccess} STREQUAL READ_ACCESS AND
+
+
+
+
+    
         ${varname} STREQUAL USE_OPENMP)
         
        message(WARNING "${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
@@ -165,13 +176,14 @@ function(update_logging_engine varname cacheaccess varval)
         
     # set the log engine in the logger_config.hpp file.
     set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
-    configure_file(
-        "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
-        "${PROJECT_BINARY_DIR}/logger_config.hpp"
-        @ONLY
-        )
-        
+#    configure_file(
+#        "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+#        "${PROJECT_BINARY_DIR}/logger_config.hpp"
+#        @ONLY
+#        )
+#        
 endfunction(update_logging_engine varname cacheaccess varval)
+
 
 
 # if OMP_DEBUGGING is enabled, default(none) is set in the omp pragmas.   this means that only NO_LOG and PRINTF logging are compatible.
@@ -223,6 +235,9 @@ endif(OPENMP_STRICT_SCOPING)
             @ONLY
             )
         endif(Boost_FOUND)
+    
+    # need this flag for boost log
+#else(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
     
     # need this flag for boost log
 #else(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
@@ -582,10 +597,6 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output director
 #link_directories( ${LIBRARY_OUTPUT_PATH} )
 
 
-#SET(LOGGER_DEFINE  CACHE STRING
-#      "Choose logging engine, options are: N."
-#      FORCE)
-
 
 # Check if the user want to build test applications
 CMAKE_DEPENDENT_OPTION(BUILD_TEST_APPLICATIONS "Inform whether test applications should be built" ON
@@ -599,6 +610,12 @@ configure_file(
     "${PROJECT_BINARY_DIR}/config.hpp"
     @ONLY
     )
+configure_file(
+    "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+    "${PROJECT_BINARY_DIR}/logger_config.hpp"
+    @ONLY
+    )
+
 
 # add the binary tree to the search path for include files
 # so that we will find TutorialConfig.h
@@ -617,6 +634,7 @@ add_subdirectory(src/utils)
 
 set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)
 
+add_subdirectory(src/taskrunner)
 add_subdirectory(src/partition)
 add_subdirectory(src/common)
 add_subdirectory(src/concurrent)

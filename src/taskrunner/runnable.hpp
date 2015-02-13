@@ -12,6 +12,9 @@
 #ifndef RUNNABLE_HPP_
 #define RUNNABLE_HPP_
 
+#include <memory>
+#include "utils/logging.h"
+
 namespace bliss
 {
 namespace concurrent
@@ -31,14 +34,14 @@ namespace concurrent
  *          Use dynamic polymorphism and restrict task to be coarse grain
  *          (NOT inside inner loop).
  */
-class Runnable
+class Runnable : public std::enable_shared_from_this<Runnable>
 {
   public:
     Runnable() {};
 
     virtual ~Runnable() {};
 
-    virtual void run() {};
+    virtual void operator()() = 0;
 };
 
 } /* namespace concurrent */

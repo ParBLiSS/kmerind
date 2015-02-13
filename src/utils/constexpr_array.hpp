@@ -52,7 +52,7 @@ namespace bliss {
      * @param f           constexpr functor to transform an index (integer) value to a output value.
      * @return            std::array with the computed constexpr values
      */
-    template<int N, class Functor>
+    template<size_t N, class Functor>
     constexpr auto make_array(Functor f)
     -> std::array<typename std::result_of<Functor(std::size_t)>::type, N>
     {

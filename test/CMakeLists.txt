@@ -4,6 +4,7 @@ include("${CMAKE_SOURCE_DIR}/Sanitizer.cmake")
 
 if(ENABLE_TESTING)
 
+
 ## EXECUTABLES
 add_executable(test_omp_patterns test_omp_patterns.cpp)
 target_link_libraries(test_omp_patterns ${EXTRA_LIBS})
@@ -13,38 +14,35 @@ add_executable(test_iterator_and_function_traits test_iterator_and_function_trai
 target_link_libraries(test_iterator_and_function_traits ${EXTRA_LIBS})
 
 ## EXECUTABLES
-add_executable(testCommLayer_THREADLOCAL test_commlayer.cpp)
-SET_TARGET_PROPERTIES(testCommLayer_THREADLOCAL PROPERTIES COMPILE_FLAGS -DTHREADLOCAL)
-target_link_libraries(testCommLayer_THREADLOCAL ${EXTRA_LIBS})
-target_link_libraries(testCommLayer_THREADLOCAL bliss-common)
+add_executable(testCommLayer test_commlayer.cpp)
+target_link_libraries(testCommLayer ${EXTRA_LIBS})
+target_link_libraries(testCommLayer bliss-common)
+
+### EXECUTABLES
+#add_executable(testCommLayer_THREADSHARED test_commlayer.cpp)
+#target_link_libraries(testCommLayer_THREADSHARED ${EXTRA_LIBS})
+#target_link_libraries(testCommLayer_THREADSHARED bliss-common)
+
 
 ## EXECUTABLES
-add_executable(testCommLayer_THREADSHARED test_commlayer.cpp)
-target_link_libraries(testCommLayer_THREADSHARED ${EXTRA_LIBS})
-target_link_libraries(testCommLayer_THREADSHARED bliss-common)
+add_executable(stressTestCommLayer_sendonly stresstest_commlayer_sendonly.cpp)
+target_link_libraries(stressTestCommLayer_sendonly ${EXTRA_LIBS})
+target_link_libraries(stressTestCommLayer_sendonly bliss-common)
 
-
-## EXECUTABLES
-add_executable(stressTestCommLayer_sendonly_THREADLOCAL stresstest_commlayer_sendonly.cpp)
-SET_TARGET_PROPERTIES(stressTestCommLayer_sendonly_THREADLOCAL PROPERTIES COMPILE_FLAGS -DTHREADLOCAL)
-target_link_libraries(stressTestCommLayer_sendonly_THREADLOCAL ${EXTRA_LIBS})
-target_link_libraries(stressTestCommLayer_sendonly_THREADLOCAL bliss-common)
+### EXECUTABLES
+#add_executable(stressTestCommLayer_sendonly_THREADSHARED stresstest_commlayer_sendonly.cpp)
+#target_link_libraries(stressTestCommLayer_sendonly_THREADSHARED ${EXTRA_LIBS})
+#target_link_libraries(stressTestCommLayer_sendonly_THREADSHARED bliss-common)
 
 ## EXECUTABLES
-add_executable(stressTestCommLayer_sendonly_THREADSHARED stresstest_commlayer_sendonly.cpp)
-target_link_libraries(stressTestCommLayer_sendonly_THREADSHARED ${EXTRA_LIBS})
-target_link_libraries(stressTestCommLayer_sendonly_THREADSHARED bliss-common)
+add_executable(stressTestCommLayer_sendrecv stresstest_commlayer_sendrecv.cpp)
+target_link_libraries(stressTestCommLayer_sendrecv ${EXTRA_LIBS})
+target_link_libraries(stressTestCommLayer_sendrecv bliss-common)
 
-## EXECUTABLES
-add_executable(stressTestCommLayer_sendrecv_THREADLOCAL stresstest_commlayer_sendrecv.cpp)
-SET_TARGET_PROPERTIES(stressTestCommLayer_sendrecv_THREADLOCAL PROPERTIES COMPILE_FLAGS -DTHREADLOCAL)
-target_link_libraries(stressTestCommLayer_sendrecv_THREADLOCAL ${EXTRA_LIBS})
-target_link_libraries(stressTestCommLayer_sendrecv_THREADLOCAL bliss-common)
-
-## EXECUTABLES
-add_executable(stressTestCommLayer_sendrecv_THREADSHARED stresstest_commlayer_sendrecv.cpp)
-target_link_libraries(stressTestCommLayer_sendrecv_THREADSHARED ${EXTRA_LIBS})
-target_link_libraries(stressTestCommLayer_sendrecv_THREADSHARED bliss-common)
+### EXECUTABLES
+#add_executable(stressTestCommLayer_sendrecv_THREADSHARED stresstest_commlayer_sendrecv.cpp)
+#target_link_libraries(stressTestCommLayer_sendrecv_THREADSHARED ${EXTRA_LIBS})
+#target_link_libraries(stressTestCommLayer_sendrecv_THREADSHARED bliss-common)
 
 
 add_executable(testDistrMap test_distr_map.cpp)
@@ -110,9 +108,22 @@ target_link_libraries(benchmark_concurrent_IO_FASTQIterNoQual ${EXTRA_LIBS})
 #target_link_libraries(testThreads ${EXTRA_LIBS})
 #target_link_libraries(testThreads bliss-common)
 
-add_executable(testKmerIndex TestKmerIndexAndQuery.cpp)
-target_link_libraries(testKmerIndex ${EXTRA_LIBS})
-target_link_libraries(testKmerIndex bliss-common)
+add_executable(testKmerIndex_KMOLECULE TestKmerIndexAndQuery.cpp)
+SET_TARGET_PROPERTIES(testKmerIndex_KMOLECULE PROPERTIES COMPILE_FLAGS -DKMOLECULEINDEX)
+target_link_libraries(testKmerIndex_KMOLECULE ${EXTRA_LIBS})
+target_link_libraries(testKmerIndex_KMOLECULE bliss-common)
+
+add_executable(testKmerIndex_KMER TestKmerIndexAndQuery.cpp)
+SET_TARGET_PROPERTIES(testKmerIndex_KMER PROPERTIES COMPILE_FLAGS -DKMERINDEX)
+target_link_libraries(testKmerIndex_KMER ${EXTRA_LIBS})
+target_link_libraries(testKmerIndex_KMER bliss-common)
+
+
+
+#add_executable(testKmerIndexNew TestKmerIndexAndQueryNew.cpp)
+#target_link_libraries(testKmerIndexNew ${EXTRA_LIBS})
+#target_link_libraries(testKmerIndexNew bliss-common)
+
 
 add_executable(testKmerCountCorrectness TestKmerCountCorrectness.cpp)
 target_link_libraries(testKmerCountCorrectness ${EXTRA_LIBS})

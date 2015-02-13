@@ -5,6 +5,8 @@
 // include classes to test
 #include <common/Kmer.hpp>
 #include <common/alphabets.hpp>
+#include <utils/KmerUtils.hpp>
+#include <iterators/transform_iterator.hpp>
 
 
 template<unsigned int KMER_SIZE, typename ALPHABET, typename word_type=WordType>
@@ -923,6 +925,101 @@ TEST(KmerGeneration, TestKmerGenerationChar2)
   test_kmers_unpacked(kmer_data, kmer_ex, 33);
 
 }
+
+
+template<typename Alphabet, int K>
+void compute_kmer(std::string input) {
+
+  using KmerType = bliss::Kmer<K, Alphabet>;
+
+  using Decoder = bliss::ASCII2<Alphabet, std::string::value_type>;
+  using BaseCharIterator = bliss::iterator::transform_iterator<std::string::const_iterator, Decoder>;
+  auto temp = BaseCharIterator(input.cbegin(), Decoder());
+
+  KmerType kmer;
+  kmer.fillFromChars(temp, true);
+  unsigned int i = K;
+  for (; i < input.length(); ++i) {
+    std::string gold = input.substr(i-K, K);
+
+    int res = strncmp(gold.c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str(), K);
+
+    if (res != 0) {
+      printf("%d iterator input %s\n", i, gold.c_str());
+      printf("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
+    }
+
+    EXPECT_EQ(res, 0);
+
+    kmer.nextFromChar(*temp);  ++temp;
+
+  }
+  std::string gold = input.substr(input.length()-K, K);
+
+  int res = strncmp(gold.c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str(), K);
+
+  if (res != 0) {
+    printf("%d iterator input %s\n", i, gold.c_str());
+    printf("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
+  }
+
+  EXPECT_EQ(res, 0);
+
+}
+
+
+/**
+ * Test k-mer generation with 2 bits for each character
+ */
+TEST(KmerGeneration, TestKmerGenerationRoundTrip)
+{
+  // test sequence: GATTTGGGGTTCAAAGCAGTATCGATCAAATAGTAAATCCATTTGTTCAACTCACAGTTT
+  std::string input = "GATTTGGGGTTCAAAGCAGT"
+                         "ATCGATCAAATAGTAAATCC"
+                         "ATTTGTTCAACTCACAGTTT";
+
+  compute_kmer<DNA, 21>(input);
+}
+
+/**
+ * Test k-mer generation with 2 bits for each character
+ */
+TEST(KmerGeneration, TestKmerGenerationRoundTripDNA5)
+{
+  // test sequence: GATTTGGGGTTCAAAGCAGTATCGATCAAATAGTAAATCCATTTGTTCAACTCACAGTTT
+  std::string input = "GATTTGGGGTTCAAAGCAGT"
+                         "ATCGATCAAATAGTAAATCC"
+                         "ATTTGTTCAACTCACAGTTT";
+
+  compute_kmer<DNA5, 21>(input);
+
+}
+
+/**
+ * Test k-mer generation with 2 bits for each character
+ */
+TEST(KmerGeneration, TestKmerGenerationRoundTripMultiWord)
+{
+  std::string input = "GATTTGGGGTTCAAAGCAGT"
+                         "ATCGATCAAATAGTAAATCC"
+                         "ATTTGTTCAACTCACAGTTT";
+
+  compute_kmer<DNA, 33>(input);
+
+}
+
+/**
+ * Test k-mer generation with 2 bits for each character
+ */
+TEST(KmerGeneration, TestKmerGenerationRoundTripDNA5MultiWord)
+{
+  std::string input = "GATTTGGGGTTCAAAGCAGT"
+                         "ATCGATCAAATAGTAAATCC"
+                         "ATTTGTTCAACTCACAGTTT";
+
+  compute_kmer<DNA5, 33>(input);
+}
+
 
 /**
  * Test k-mer generation with 3 bits and thus padded input
