@@ -41,60 +41,16 @@
 #include "retired/buffered_transform_iterator.hpp"
 
 
+
+
+
 namespace bliss
 {
   namespace index
   {
 
-static size_t dummy = 0;
-static size_t count = 0;
-
-    template<typename KmerType>
-    void receiveCountAnswer(std::pair<KmerType, bliss::index::count_t>& answer)
-    {
-      KmerType key;
-      bliss::index::count_t val;
-      std::tie(key, val) = answer;
-
-      if (key.toString().length() > 1) dummy += val;
-      ++count;
-            if ((count % 100000) == 0) INFOF("count result:  %s <=> %d", key.toString().c_str(), val);
-    };
 
 
-
-    template<typename KmerType, typename IdType>
-    void receivePositionAnswer(std::pair<KmerType, IdType>& answer)
-    {
-      KmerType key;
-      IdType val;
-      std::tie(key, val) = answer;
-
-      if (key.toString().length() > 1) dummy ^= val.file_pos;
-
-      ++count;
-            if ((count % 100000) == 0) INFOF("position result:  %s <=> [%d %d %d %d]", key.toString().c_str(), val.file_id, val.seq_id_msb, val.seq_id, val.pos);
-
-    }
-
-
-
-    static double score = 0;
-
-        template<typename KmerType, typename InfoType>
-        void receivePositionAndQualityAnswer(std::pair<KmerType, InfoType>& answer)
-        {
-          KmerType key;
-          InfoType val;
-          std::tie(key, val) = answer;
-
-          if (key.toString().length() > 1) {
-            dummy ^= val.first.file_pos;
-            score += val.second;
-          }
-          ++count;
-          if ((count % 100000) == 0) INFOF("position + quality result: %s <=> [%d %d %d %d] %f", key.toString().c_str(), val.first.file_id, val.first.seq_id_msb, val.first.seq_id, val.first.pos, val.second);
-        }
 
 
     /**
@@ -150,10 +106,17 @@ static size_t count = 0;
          * @param comm
          * @param comm_size
          */
-        KmerIndex(MPI_Comm _comm, int _comm_size, int num_threads = 1) :
-          index(_comm, _comm_size, num_threads, bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))),
+        KmerIndex(MPI_Comm _comm, int _comm_size,
+                  const std::function<void(std::pair<KmerType, ValueType>*, std::size_t)> &callbackFunction,
+                  int num_threads = 1) :
+          index(_comm, _comm_size, num_threads, 
+                bliss::KmerInfixHasher<KmerType>(ceilLog2(num_threads), ceilLog2(_comm_size)),
+                bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))
+          ),
           comm(_comm), commSize(_comm_size) {
           MPI_Comm_rank(comm, &rank);
+
+          this->index.setLookupAnswerCallback(callbackFunction);
 
         };
         virtual ~KmerIndex() {
@@ -172,9 +135,9 @@ static size_t count = 0;
           return index;
         }
 
-//        void flushInsert() {
-//          index.flushInsert();
-//        }
+        //        void flushInsert() {
+        //          index.flushInsert();
+        //        }
 
         /**
          * build index, default to num of threads = system PAGE SIZE
@@ -182,7 +145,7 @@ static size_t count = 0;
          * @param nthreads
          */
         void build(const std::string &filename, const int &nthreads) {
-           build(filename, nthreads, sysconf(_SC_PAGE_SIZE));
+          build(filename, nthreads, sysconf(_SC_PAGE_SIZE));
         }
 
         /**
@@ -247,22 +210,22 @@ static size_t count = 0;
       protected:
 
         void buildForL1Block(FileLoaderType &loader, MapType &index, const int& rank,
-                        const int& nthreads, const int& chunkSize)
+                             const int& nthreads, const int& chunkSize)
         {
           // local variables for information only.
           //int nReads = 0;    // read count
           //int nChunks = 0;    // chunk count
 
           // get L2Block from L1Block, spread work to all threads.
-          #pragma omp parallel num_threads(nthreads) shared(loader, nthreads, index, rank) OMP_SHARE_DEFAULT
+#pragma omp parallel num_threads(nthreads) shared(loader, nthreads, index, rank) OMP_SHARE_DEFAULT
           {
             //== instantiate a local parser in each thread
             ParserType parser;
 
             int tid = 0;
-            #ifdef USE_OPENMP
-                tid = omp_get_thread_num();
-            #endif
+#ifdef USE_OPENMP
+            tid = omp_get_thread_num();
+#endif
 
             //== local variables for loop
             typename FileLoaderType::L2BlockType chunk;
@@ -274,11 +237,11 @@ static size_t count = 0;
 
               //== get read for next loop iteration.
               chunk = loader.getNextL2Block(tid);
-//              ++nChunks;
+              //              ++nChunks;
             }
           }  // compute threads parallel
 
-//          DEBUG("buildIndex rank=" << rank << " nReads=" << nReads << " nChunks=" << nChunks << " elapsed time: " << time_span.count() << "s.");
+          //          DEBUG("buildIndex rank=" << rank << " nReads=" << nReads << " nChunks=" << nChunks << " elapsed time: " << time_span.count() << "s.");
 
         }
 
@@ -286,6 +249,8 @@ static size_t count = 0;
          * @brief processes a single L2Block to build the index.  results are inserted into index (atomic)
          * @details  parses a L2Block into short sequences (e.g. for FASTQ, reads)
          *           and then call buildForSequence to process each sequence.
+         *
+         * @note  fastq specific. fasta qould not have "SeqIterType"
          * @param chunk
          * @param parser
          * @param index
@@ -329,10 +294,11 @@ static size_t count = 0;
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerCountIndex : public KmerIndex<bliss::index::distributed_counting_map<bliss::Kmer<Kmer_Size, Alphabet>,
-                                                                                  bliss::io::CommunicationLayer<ThreadLocal>,
-                                                                                  bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-                                                                                  bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
-                                            FileFormat, void, ThreadLocal>
+    bliss::io::CommunicationLayer<ThreadLocal>,
+    bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+    bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+    bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+    FileFormat, void, ThreadLocal>
     {
       public:
         /// DEFINE kmer index type, also used for reverse complement
@@ -342,6 +308,7 @@ static size_t count = 0;
         using MapType = bliss::index::distributed_counting_map<KmerType,
             bliss::io::CommunicationLayer<ThreadLocal>,
             bliss::KmerSuffixHasher<KmerType>,
+            bliss::KmerInfixHasher<KmerType>,
             bliss::KmerPrefixHasher<KmerType> >;
 
         using ValueType = typename MapType::value_type;
@@ -374,12 +341,38 @@ static size_t count = 0;
          *
          * @param comm_size
          */
-        KmerCountIndex(MPI_Comm _comm, int _comm_size, int num_threads = 1) : BaseIndexType(_comm, _comm_size, num_threads)
-        {
-          this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, bliss::index::count_t>&)>(&receiveCountAnswer<KmerType>));
+        KmerCountIndex(MPI_Comm _comm, int _comm_size,
+                       const std::function<void(std::pair<KmerType, bliss::index::count_t>*, std::size_t)> &callbackFunction,
+                       int num_threads = 1) :
+                         BaseIndexType(_comm, _comm_size, callbackFunction, num_threads)
+      {
+         // this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, bliss::index::count_t>*, std::size_t)>(&receiveCountAnswer<KmerType>));
           this->index.init();
-        };
+      };
         virtual ~KmerCountIndex() {};
+
+
+
+        static void defaultReceiveCountAnswer(std::pair<KmerType, CountType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+        {
+          size_t count = 0;
+          size_t entries = 0;
+        #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: count, entries)
+          for (size_t i = 0; i < answer_count; ++i) {
+            KmerType key;
+            CountType val;
+            std::tie(key, val) = answers[i];
+
+            if (key.toString().length() > 1)
+              count += val;
+            ++entries;
+            if ((entries % 1000000) == 0) INFOF("count result:  %s <=> %d", key.toString().c_str(), val);
+          }
+
+          result += count;
+          total_entries += entries;
+        };
+
 
 
       protected:
@@ -394,7 +387,7 @@ static size_t count = 0;
 
           if (read.seqBegin == read.seqEnd) return;
 
-           //== transform ascii to coded value
+          //== transform ascii to coded value
           BaseCharIterator charStart(read.seqBegin, bliss::ASCII2<Alphabet>());
           BaseCharIterator charEnd(read.seqEnd, bliss::ASCII2<Alphabet>());
 
@@ -406,7 +399,7 @@ static size_t count = 0;
           for (; start != end; ++start)
           {
             index.insert(*start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
-                                  // then copy assign
+            // then copy assign
           }
         }
 
@@ -424,11 +417,12 @@ static size_t count = 0;
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerPositionIndex : public KmerIndex<bliss::index::distributed_multimap<bliss::Kmer<Kmer_Size, Alphabet>,
-                                                                                  bliss::io::FASTQSequenceId,
-                                                                                        bliss::io::CommunicationLayer<ThreadLocal>,
-                                                                                        bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-                                                                                        bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
-                                                FileFormat, void, ThreadLocal>
+    bliss::io::FASTQSequenceId,
+    bliss::io::CommunicationLayer<ThreadLocal>,
+    bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+    bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+    bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+    FileFormat, void, ThreadLocal>
     {
       public:
         /// DEFINE kmer index type, also used for reverse complement
@@ -439,6 +433,7 @@ static size_t count = 0;
             bliss::io::FASTQSequenceId,
             bliss::io::CommunicationLayer<ThreadLocal>,
             bliss::KmerSuffixHasher<KmerType>,
+            bliss::KmerInfixHasher<KmerType>,
             bliss::KmerPrefixHasher<KmerType> >;
 
         using ValueType = typename MapType::value_type;
@@ -474,12 +469,38 @@ static size_t count = 0;
          * @param comm
          * @param comm_size
          */
-        KmerPositionIndex(MPI_Comm _comm, int _comm_size, int num_threads = 1)  : BaseIndexType(_comm, _comm_size, num_threads)
-        {
-          this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, IdType>&)>(&receivePositionAnswer<KmerType, IdType>));
+        KmerPositionIndex(MPI_Comm _comm, int _comm_size,
+                          const std::function<void(std::pair<KmerType, IdType>*, std::size_t)> & callbackFunction,
+                          int num_threads = 1)  :
+                            BaseIndexType(_comm, _comm_size, callbackFunction, num_threads)
+      {
+         // this->index.setLookupAnswerCallback(callbackFunction);
+          //this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, IdType>*, std::size_t)>(&receivePositionAnswer<KmerType, IdType>));
           this->index.init();
-        };
+      };
         virtual ~KmerPositionIndex() {};
+
+
+
+        static void defaultReceivePositionAnswer(std::pair<KmerType, IdType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+        {
+          size_t res = 0;
+          size_t entries = 0;
+        #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: entries) reduction(^: res)
+          for (size_t i = 0; i < answer_count; ++i) {
+            KmerType key;
+            IdType val;
+            std::tie(key, val) = answers[i];
+
+            if (key.toString().length() > 1) res ^= val.file_pos;
+
+            ++entries;
+            if ((entries % 1000000) == 0) INFOF("position result:  %s <=> [%d %d %d %d]", key.toString().c_str(), val.file_id, val.seq_id_msb, val.seq_id, val.pos);
+          }
+
+          result ^= res;
+          total_entries += entries;
+        }
 
 
       protected:
@@ -509,7 +530,7 @@ static size_t count = 0;
           for (; index_start != index_end; ++index_start)
           {
             index.insert(*index_start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
-                                  // then copy assign
+            // then copy assign
           }
         }
 
@@ -525,11 +546,12 @@ static size_t count = 0;
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerPositionAndQualityIndex : public KmerIndex<bliss::index::distributed_multimap<bliss::Kmer<Kmer_Size, Alphabet>,
-                                                                                          std::pair<bliss::io::FASTQSequenceId, float>,
-                                                                                          bliss::io::CommunicationLayer<ThreadLocal>,
-                                                                                          bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-                                                                                          bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
-                                                       FileFormat, float, ThreadLocal>
+    std::pair<bliss::io::FASTQSequenceId, float>,
+    bliss::io::CommunicationLayer<ThreadLocal>,
+    bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+    bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+    bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+    FileFormat, float, ThreadLocal>
     {
       public:
         /// DEFINE kmer index type, also used for reverse complement
@@ -540,6 +562,7 @@ static size_t count = 0;
             std::pair<bliss::io::FASTQSequenceId, float>,
             bliss::io::CommunicationLayer<ThreadLocal>,
             bliss::KmerSuffixHasher<KmerType>,
+            bliss::KmerInfixHasher<KmerType>,
             bliss::KmerPrefixHasher<KmerType> >;
 
         using ValueType = typename MapType::value_type;
@@ -582,13 +605,43 @@ static size_t count = 0;
          * @param comm
          * @param comm_size
          */
-        KmerPositionAndQualityIndex(MPI_Comm _comm, int _comm_size, int num_threads = 1) : BaseIndexType(_comm, _comm_size, num_threads)
-        {
-
-          this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, KmerInfoType>&)>(&receivePositionAndQualityAnswer<KmerType, KmerInfoType>));
+        KmerPositionAndQualityIndex(MPI_Comm _comm, int _comm_size,
+                                    const std::function<void(std::pair<KmerType, KmerInfoType>*, std::size_t)>& callbackFunction,
+                                    int num_threads = 1) :
+                                      BaseIndexType(_comm, _comm_size, callbackFunction, num_threads)
+      {
+         //this->index.setLookupAnswerCallback(callbackFunction);
+          //this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, KmerInfoType>*, std::size_t)>(&receivePositionAndQualityAnswer<KmerType, KmerInfoType>));
           this->index.init();
-        };
+      };
         virtual ~KmerPositionAndQualityIndex() {};
+
+
+
+        static void defaultReceivePositionAndQualityAnswer(std::pair<KmerType, KmerInfoType>* answers, std::size_t answer_count, int nthreads, size_t& result, double& total_score, size_t& total_entries)
+        {
+          double score = 0;
+          size_t res = 0;
+          size_t entries = 0;
+        #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: entries, score) reduction(^: res)
+          for (size_t i = 0; i < answer_count; ++i) {
+
+            KmerType key;
+            KmerInfoType val;
+            std::tie(key, val) = answers[i];
+
+            if (key.toString().length() > 1) {
+              res ^= val.first.file_pos;
+              score += val.second;
+            }
+            ++entries;
+            if ((entries % 1000000) == 0) INFOF("position + quality result: %s <=> [%d %d %d %d] %f", key.toString().c_str(), val.first.file_id, val.first.seq_id_msb, val.first.seq_id, val.first.pos, val.second);
+          }
+
+          total_score += score;
+          result += res;
+          total_entries += entries;
+        }
 
 
       protected:
@@ -626,7 +679,7 @@ static size_t count = 0;
           for (; index_start != index_end; ++index_start)
           {
             index.insert(*index_start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
-                                  // then copy assign
+            // then copy assign
           }
         }
 
@@ -636,315 +689,394 @@ static size_t count = 0;
 
     namespace retired {
 
-    /**
-     * @class    bliss::index::KmerIndex
-     * @brief    base type  for Kmer Index
-     * @details  uses simple kmer generator
-     *
-     */
-    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
-    class KmerCountIndexOld : public KmerIndex<bliss::index::distributed_counting_map<bliss::Kmer<Kmer_Size, Alphabet>,
-                                                                                      bliss::io::CommunicationLayer<ThreadLocal>,
-                                                                                      bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-                                                                                      bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
-                                              FileFormat, void, ThreadLocal>
-    {
-
-      public:
-        using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
-
-        using MapType = bliss::index::distributed_counting_map<KmerType,
-            bliss::io::CommunicationLayer<ThreadLocal>,
-            bliss::KmerSuffixHasher<KmerType>,
-            bliss::KmerPrefixHasher<KmerType> >;
-
-        using ValueType = typename MapType::value_type;
-        using CountType = typename ValueType::second_type;
-
-        using BaseIndexType = KmerIndex<MapType, FileFormat, void, ThreadLocal>;
-        /// DEFINE kmer index type, also used for reverse complement
-
-        using RangeType = typename BaseIndexType::RangeType;
-
-        // once have ParserType, then get the sequence type and sequence id type
-        using SeqType = typename BaseIndexType::SeqType;
-
-        //==========below are to be redefined for each index type
-
-        ///////////// INDEX TYPES
-        /// define kmer iterator, and the functors for it.
-        typedef bliss::index::generate_kmer_simple<SeqType, Alphabet, KmerType>                                  KmoleculeOpType;
-        typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
-        typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
-
-        typedef KmerIterType KmerIndexIterType;
-
-      public:
-        /**
-         * initializes the index
-         * @param comm
-         * @param comm_size
-         */
-        KmerCountIndexOld(MPI_Comm _comm, int _comm_size, int num_threads = 1) : BaseIndexType(_comm, _comm_size, num_threads)
-        {
-          this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, bliss::index::count_t>&)>(&receiveCountAnswer<KmerType>));
-          this->index.init();
-        };
-        virtual ~KmerCountIndexOld() {};
-
-
-      protected:
-
-        /**
-         * @brief processes a single FASTQ read or sequence into index, and insert (atomic)
-         * @param read
-         * @param index
-         */
-        virtual void buildForSequence(SeqType &read, MapType& index) {
-
-          if (read.seqBegin == read.seqEnd) return;
-
-          //== set up the kmer generating iterators.
-          KmoleculeOpType kmer_op;
-          bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
-          KmerIndexIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
-          KmerIndexIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
-
-
-          // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-          unsigned int i = 0;
-          for (; i < (Kmer_Size - 1) && start != end; ++start, ++i);  // compute but discard the first K - 1.
-
-          for (; start != end; ++start, ++i)
-          {
-            index.insert(*start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
-                                  // then copy assign
-          }
-        }
-
-    };
-
-
-
-
-    /**
-     * @class    bliss::index::KmerIndex
-     * @brief    base type  for Kmer Index
-     * @details
-     *
-     */
-    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
-    class KmerPositionIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::Kmer<Kmer_Size, Alphabet>,
-                                                                                     bliss::io::FASTQSequenceId,
-                                                                                        bliss::io::CommunicationLayer<ThreadLocal>,
-                                                                                        bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-                                                                                        bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
-                                                  FileFormat, void, ThreadLocal>
-        {
+      /**
+       * @class    bliss::index::KmerIndex
+       * @brief    base type  for Kmer Index
+       * @details  uses simple kmer generator
+       *
+       */
+      template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
+      class KmerCountIndexOld : public KmerIndex<bliss::index::distributed_counting_map<bliss::Kmer<Kmer_Size, Alphabet>,
+      bliss::io::CommunicationLayer<ThreadLocal>,
+      bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+      bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+      bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+      FileFormat, void, ThreadLocal>
+      {
 
         public:
-        using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
+          using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
 
-        using MapType = bliss::index::distributed_multimap<KmerType,
-                                                           bliss::io::FASTQSequenceId,
-                                                            bliss::io::CommunicationLayer<ThreadLocal>,
-                                                            bliss::KmerSuffixHasher<KmerType>,
-                                                            bliss::KmerPrefixHasher<KmerType> >;
+          using MapType = bliss::index::distributed_counting_map<KmerType,
+              bliss::io::CommunicationLayer<ThreadLocal>,
+              bliss::KmerSuffixHasher<KmerType>,
+              bliss::KmerInfixHasher<KmerType>,
+              bliss::KmerPrefixHasher<KmerType> >;
 
-        using ValueType = typename MapType::value_type;
-        using IdType = typename ValueType::second_type;
+          using ValueType = typename MapType::value_type;
+          using CountType = typename ValueType::second_type;
 
+          using BaseIndexType = KmerIndex<MapType, FileFormat, void, ThreadLocal>;
+          /// DEFINE kmer index type, also used for reverse complement
 
-        using BaseIndexType = KmerIndex<MapType, FileFormat, void, ThreadLocal>;
-        /// DEFINE kmer index type, also used for reverse complement
+          using RangeType = typename BaseIndexType::RangeType;
 
-        using RangeType = typename BaseIndexType::RangeType;
+          // once have ParserType, then get the sequence type and sequence id type
+          using SeqType = typename BaseIndexType::SeqType;
 
-        // once have ParserType, then get the sequence type and sequence id type
-        using SeqType = typename BaseIndexType::SeqType;
+          //==========below are to be redefined for each index type
 
-        //==========below are to be redefined for each index type
+          ///////////// INDEX TYPES
+          /// define kmer iterator, and the functors for it.
+          typedef bliss::index::generate_kmer_simple<SeqType, Alphabet, KmerType>                                  KmoleculeOpType;
+          typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
+          typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
 
-        ///////////// INDEX TYPES
-        /// define kmer iterator, and the functors for it.
-        typedef bliss::index::generate_kmer_simple<SeqType, Alphabet, KmerType>                                  KmoleculeOpType;
-        typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
-        typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
+          typedef KmerIterType KmerIndexIterType;
 
-         /// kmer position iterator type
-        using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
-
-        /// combine kmer iterator and position iterator to create an index iterator type.
-        using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, IdIterType>;
-
-      public:
-        /**
-         * initializes the index
-         * @param comm
-         * @param comm_size
-         */
-        KmerPositionIndexOld(MPI_Comm _comm, int _comm_size, int num_threads = 1) : BaseIndexType(_comm, _comm_size, num_threads)
-      {
-          this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, IdType>&)>(&receivePositionAnswer<KmerType, IdType>));
-          this->index.init();
-        };
-        virtual ~KmerPositionIndexOld() {};
-
-
-      protected:
-
-
-        /**
-         * @brief processes a single FASTQ read or sequence into index, and insert (atomic)
-         * @param read
-         * @param index
-         */
-        virtual void buildForSequence(SeqType &read, MapType& index) {
-
-          if (read.seqBegin == read.seqEnd) return;
-
-          //== set up the kmer generating iterators.
-          KmoleculeOpType kmer_op;
-          bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
-          KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
-          KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
-
-          //== set up the position iterators
-          IdIterType id_start(read.id);
-          IdIterType id_end(read.id);
-
-          // ==== set up the zip iterators
-          KmerIndexIterType index_start(start, id_start);
-          KmerIndexIterType index_end(end, id_end);
-
-
-          unsigned int i = 0;
-          for (; i < (Kmer_Size - 1) && index_start != index_end; ++index_start, ++i);  // compute but discard the first K - 1.
-
-          for (; index_start != index_end; ++index_start, ++i)
-          {
-            index.insert(*index_start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
-                                  // then copy assign
-          }
-        }
-
-
-    };
-
-
-
-
-
-
-    /**
-     * @class    bliss::index::KmerIndex
-     * @brief    base type  for Kmer Index
-     * @details
-     *
-     */
-    template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
-    class KmerPositionAndQualityIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::Kmer<Kmer_Size, Alphabet>,
-                                                                                               std::pair<bliss::io::FASTQSequenceId, float>,
-                                                                                               bliss::io::CommunicationLayer<ThreadLocal>,
-                                                                                               bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-                                                                                               bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
-                                                            FileFormat, float, ThreadLocal>
-      {
-
-      public:
-        using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
-
-        using MapType = bliss::index::distributed_multimap<KmerType,
-            std::pair<bliss::io::FASTQSequenceId, float>,
-        bliss::io::CommunicationLayer<ThreadLocal>,
-        bliss::KmerSuffixHasher<KmerType>,
-        bliss::KmerPrefixHasher<KmerType> >;
-
-        using ValueType = typename MapType::value_type;
-
-
-        using IdType = typename ValueType::second_type::first_type;
-        using QualityType = typename ValueType::second_type::second_type;
-
-        using BaseIndexType = KmerIndex<MapType, FileFormat, float, ThreadLocal>;
-        /// DEFINE kmer index type, also used for reverse complement
-
-        using RangeType = typename BaseIndexType::RangeType;
-
-        // once have ParserType, then get the sequence type and sequence id type
-        using SeqType = typename BaseIndexType::SeqType;
-
-        //==========below are to be redefined for each index type
-
-        ///////////// INDEX TYPES
-        /// define kmer iterator, and the functors for it.
-        typedef bliss::index::generate_kmer_simple<SeqType, Alphabet, KmerType>                                  KmoleculeOpType;
-        typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
-        typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
-
-
-        /// kmer position iterator type
-        using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
-
-
-        using QualIterType = bliss::index::QualityScoreGenerationIterator<typename SeqType::IteratorType, Kmer_Size, bliss::index::Illumina18QualityScoreCodec<float> >;
-
-        using KmerInfoIterType = bliss::iterator::ZipIterator<IdIterType, QualIterType>;
-        using KmerInfoType = typename ValueType::second_type;
-
-
-        /// combine kmer iterator and position iterator to create an index iterator type.
-        using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, KmerInfoIterType>;
-
-
-      public:
-        /**
-         * initializes the index
-         * @param comm
-         * @param comm_size
-         */
-        KmerPositionAndQualityIndexOld(MPI_Comm _comm, int _comm_size, int num_threads = 1) : BaseIndexType(_comm, _comm_size, num_threads)
+        public:
+          /**
+           * initializes the index
+           * @param comm
+           * @param comm_size
+           */
+          KmerCountIndexOld(MPI_Comm _comm, int _comm_size,
+                            const std::function<void(std::pair<KmerType, bliss::index::count_t>*, std::size_t)> &callbackFunction,
+                             int num_threads = 1) :
+                               BaseIndexType(_comm, _comm_size, callbackFunction, num_threads)
         {
-
-          this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, KmerInfoType>&)>(&receivePositionAndQualityAnswer<KmerType, KmerInfoType>));
-          this->index.init();
+//            this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, bliss::index::count_t>*, std::size_t)>(&receiveCountAnswer<KmerType>));
+            this->index.init();
         };
-        virtual ~KmerPositionAndQualityIndexOld() {};
+          virtual ~KmerCountIndexOld() {};
 
 
-      protected:
+          static void defaultReceiveCountAnswer(std::pair<KmerType, CountType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+          {
+            size_t count = 0;
+            size_t entries = 0;
+          #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: count, entries)
+            for (size_t i = 0; i < answer_count; ++i) {
+              KmerType key;
+              CountType val;
+              std::tie(key, val) = answers[i];
+
+              if (key.toString().length() > 1)
+                count += val;
+              ++entries;
+              if ((entries % 1000000) == 0) INFOF("count result:  %s <=> %d", key.toString().c_str(), val);
+            }
+
+            result += count;
+            total_entries += entries;
+          };
+
+        protected:
+
+          /**
+           * @brief processes a single FASTQ read or sequence into index, and insert (atomic)
+           * @param read
+           * @param index
+           */
+          virtual void buildForSequence(SeqType &read, MapType& index) {
+
+            if (read.seqBegin == read.seqEnd) return;
+
+            //== set up the kmer generating iterators.
+            KmoleculeOpType kmer_op;
+            bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
+            KmerIndexIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
+            KmerIndexIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
 
 
-        /**
-         * @brief processes a single FASTQ read or sequence into index, and insert (atomic)
-         * @param read
-         * @param index
-         */
-        virtual void buildForSequence(SeqType &read, MapType& index) {
+            // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
+            unsigned int i = 0;
+            for (; i < (Kmer_Size - 1) && start != end; ++start, ++i);  // compute but discard the first K - 1.
 
-          if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) return;
+            for (; start != end; ++start, ++i)
+            {
+              index.insert(*start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
+              // then copy assign
+            }
+          }
 
-          //== set up the kmer generating iterators.
-          KmoleculeOpType kmer_op;
-          bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
-          KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
-          KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
-
-          //== set up the position iterators
-          IdIterType id_start(read.id);
-          IdIterType id_end(read.id);
-
-          // set up the quality iterator
-          QualIterType qual_start(read.qualBegin);
-          QualIterType qual_end(read.qualEnd);
-
-          KmerInfoIterType info_start(id_start, qual_start);
-          KmerInfoIterType info_end(id_end, qual_end);
+      };
 
 
-          // ==== set up the zip iterators
-          KmerIndexIterType index_start(start, info_start);
-          KmerIndexIterType index_end(end, info_end);
+
+
+      /**
+       * @class    bliss::index::KmerIndex
+       * @brief    base type  for Kmer Index
+       * @details
+       *
+       */
+      template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
+      class KmerPositionIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::Kmer<Kmer_Size, Alphabet>,
+      bliss::io::FASTQSequenceId,
+      bliss::io::CommunicationLayer<ThreadLocal>,
+      bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+      bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+      bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+      FileFormat, void, ThreadLocal>
+      {
+
+        public:
+          using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
+
+          using MapType = bliss::index::distributed_multimap<KmerType,
+              bliss::io::FASTQSequenceId,
+              bliss::io::CommunicationLayer<ThreadLocal>,
+              bliss::KmerSuffixHasher<KmerType>,
+              bliss::KmerInfixHasher<KmerType>,
+              bliss::KmerPrefixHasher<KmerType> >;
+
+          using ValueType = typename MapType::value_type;
+          using IdType = typename ValueType::second_type;
+
+
+          using BaseIndexType = KmerIndex<MapType, FileFormat, void, ThreadLocal>;
+          /// DEFINE kmer index type, also used for reverse complement
+
+          using RangeType = typename BaseIndexType::RangeType;
+
+          // once have ParserType, then get the sequence type and sequence id type
+          using SeqType = typename BaseIndexType::SeqType;
+
+          //==========below are to be redefined for each index type
+
+          ///////////// INDEX TYPES
+          /// define kmer iterator, and the functors for it.
+          typedef bliss::index::generate_kmer_simple<SeqType, Alphabet, KmerType>                                  KmoleculeOpType;
+          typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
+          typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
+
+          /// kmer position iterator type
+          using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
+
+          /// combine kmer iterator and position iterator to create an index iterator type.
+          using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, IdIterType>;
+
+        public:
+          /**
+           * initializes the index
+           * @param comm
+           * @param comm_size
+           */
+          KmerPositionIndexOld(MPI_Comm _comm, int _comm_size,
+                               const std::function<void(std::pair<KmerType, IdType>*, std::size_t)> & callbackFunction,
+                               int num_threads = 1)  :
+                                 BaseIndexType(_comm, _comm_size, callbackFunction, num_threads)
+        {
+            //this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, IdType>*, std::size_t)>(&receivePositionAnswer<KmerType, IdType>));
+            this->index.init();
+        };
+          virtual ~KmerPositionIndexOld() {};
+
+          static void defaultReceivePositionAnswer(std::pair<KmerType, IdType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+          {
+            size_t res = 0;
+            size_t entries = 0;
+          #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: entries) reduction(^: res)
+            for (size_t i = 0; i < answer_count; ++i) {
+              KmerType key;
+              IdType val;
+              std::tie(key, val) = answers[i];
+
+              if (key.toString().length() > 1) res ^= val.file_pos;
+
+              ++entries;
+              if ((entries % 1000000) == 0) INFOF("position result:  %s <=> [%d %d %d %d]", key.toString().c_str(), val.file_id, val.seq_id_msb, val.seq_id, val.pos);
+            }
+
+            result ^= res;
+            total_entries += entries;
+          }
+
+
+        protected:
+
+
+          /**
+           * @brief processes a single FASTQ read or sequence into index, and insert (atomic)
+           * @param read
+           * @param index
+           */
+          virtual void buildForSequence(SeqType &read, MapType& index) {
+
+            if (read.seqBegin == read.seqEnd) return;
+
+            //== set up the kmer generating iterators.
+            KmoleculeOpType kmer_op;
+            bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
+            KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
+            KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
+
+            //== set up the position iterators
+            IdIterType id_start(read.id);
+            IdIterType id_end(read.id);
+
+            // ==== set up the zip iterators
+            KmerIndexIterType index_start(start, id_start);
+            KmerIndexIterType index_end(end, id_end);
+
+
+            unsigned int i = 0;
+            for (; i < (Kmer_Size - 1) && index_start != index_end; ++index_start, ++i);  // compute but discard the first K - 1.
+
+            for (; index_start != index_end; ++index_start, ++i)
+            {
+              index.insert(*index_start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
+              // then copy assign
+            }
+          }
+
+
+      };
+
+
+
+
+
+
+      /**
+       * @class    bliss::index::KmerIndex
+       * @brief    base type  for Kmer Index
+       * @details
+       *
+       */
+      template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
+      class KmerPositionAndQualityIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::Kmer<Kmer_Size, Alphabet>,
+      std::pair<bliss::io::FASTQSequenceId, float>,
+      bliss::io::CommunicationLayer<ThreadLocal>,
+      bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+      bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
+      bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+      FileFormat, float, ThreadLocal>
+      {
+
+        public:
+          using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
+
+          using MapType = bliss::index::distributed_multimap<KmerType,
+              std::pair<bliss::io::FASTQSequenceId, float>,
+              bliss::io::CommunicationLayer<ThreadLocal>,
+              bliss::KmerSuffixHasher<KmerType>,
+              bliss::KmerInfixHasher<KmerType>,
+              bliss::KmerPrefixHasher<KmerType> >;
+
+          using ValueType = typename MapType::value_type;
+
+
+          using IdType = typename ValueType::second_type::first_type;
+          using QualityType = typename ValueType::second_type::second_type;
+
+          using BaseIndexType = KmerIndex<MapType, FileFormat, float, ThreadLocal>;
+          /// DEFINE kmer index type, also used for reverse complement
+
+          using RangeType = typename BaseIndexType::RangeType;
+
+          // once have ParserType, then get the sequence type and sequence id type
+          using SeqType = typename BaseIndexType::SeqType;
+
+          //==========below are to be redefined for each index type
+
+          ///////////// INDEX TYPES
+          /// define kmer iterator, and the functors for it.
+          typedef bliss::index::generate_kmer_simple<SeqType, Alphabet, KmerType>                                  KmoleculeOpType;
+          typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
+          typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
+
+
+          /// kmer position iterator type
+          using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
+
+
+          using QualIterType = bliss::index::QualityScoreGenerationIterator<typename SeqType::IteratorType, Kmer_Size, bliss::index::Illumina18QualityScoreCodec<float> >;
+
+          using KmerInfoIterType = bliss::iterator::ZipIterator<IdIterType, QualIterType>;
+          using KmerInfoType = typename ValueType::second_type;
+
+
+          /// combine kmer iterator and position iterator to create an index iterator type.
+          using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, KmerInfoIterType>;
+
+
+        public:
+          /**
+           * initializes the index
+           * @param comm
+           * @param comm_size
+           */
+          KmerPositionAndQualityIndexOld(MPI_Comm _comm, int _comm_size,
+                                         const std::function<void(std::pair<KmerType, KmerInfoType>*, std::size_t)>& callbackFunction,
+                                         int num_threads = 1) :
+                                           BaseIndexType(_comm, _comm_size, callbackFunction, num_threads)
+        {
+//            this->index.setLookupAnswerCallback(callbackFunction);
+//            this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, KmerInfoType>*, std::size_t)>(&receivePositionAndQualityAnswer<KmerType, KmerInfoType>));
+            this->index.init();
+        };
+          virtual ~KmerPositionAndQualityIndexOld() {};
+
+          static void defaultReceivePositionAndQualityAnswer(std::pair<KmerType, KmerInfoType>* answers, std::size_t answer_count, int nthreads, size_t& result, double& total_score, size_t& total_entries)
+          {
+            double score = 0;
+            size_t res = 0;
+            size_t entries = 0;
+          #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: entries, score) reduction(^: res)
+            for (size_t i = 0; i < answer_count; ++i) {
+
+              KmerType key;
+              KmerInfoType val;
+              std::tie(key, val) = answers[i];
+
+              if (key.toString().length() > 1) {
+                res ^= val.first.file_pos;
+                score += val.second;
+              }
+              ++entries;
+              if ((entries % 1000000) == 0) INFOF("position + quality result: %s <=> [%d %d %d %d] %f", key.toString().c_str(), val.first.file_id, val.first.seq_id_msb, val.first.seq_id, val.first.pos, val.second);
+            }
+
+            total_score += score;
+            result += res;
+            total_entries += entries;
+          }
+
+        protected:
+
+
+          /**
+           * @brief processes a single FASTQ read or sequence into index, and insert (atomic)
+           * @param read
+           * @param index
+           */
+          virtual void buildForSequence(SeqType &read, MapType& index) {
+
+            if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) return;
+
+            //== set up the kmer generating iterators.
+            KmoleculeOpType kmer_op;
+            bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
+            KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
+            KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
+
+            //== set up the position iterators
+            IdIterType id_start(read.id);
+            IdIterType id_end(read.id);
+
+            // set up the quality iterator
+            QualIterType qual_start(read.qualBegin);
+            QualIterType qual_end(read.qualEnd);
+
+            KmerInfoIterType info_start(id_start, qual_start);
+            KmerInfoIterType info_end(id_end, qual_end);
+
+
+            // ==== set up the zip iterators
+            KmerIndexIterType index_start(start, info_start);
+            KmerIndexIterType index_end(end, info_end);
 
             // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
             unsigned int i = 0;
@@ -953,12 +1085,12 @@ static size_t count = 0;
             for (; index_start != index_end; ++index_start, ++i)
             {
               index.insert(*index_start);  // right side either RVO assignment (if iterator/functor created the object) or copy (if returning a cached object)
-                                    // then copy assign
+              // then copy assign
             }
           }
 
 
-    };
+      };
 
 
 

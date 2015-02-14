@@ -23,6 +23,8 @@
 #include <atomic>
 #include <tuple>
 
+#include "iterators/concatenating_iterator.hpp"
+
 // include MPI
 #include <mpi.h>
 
@@ -47,14 +49,17 @@ typedef uint32_t count_t;
  *                              unodered_multimap)
  */
 template<typename K, typename T, typename CommunicationLayer,
-         typename LocalContainer, typename RemoteHasher>
+         typename LocalContainer, typename ThreadHasher, typename MPIHasher>
 class _distributed_map_base
 {
 public:
   /// The iterator type of the local container type
-  typedef typename LocalContainer::iterator local_iterator;
+  typedef typename LocalContainer::iterator local_thread_iterator;
   /// The constant iterator type of the local container type
-  typedef typename LocalContainer::const_iterator local_const_iterator;
+  typedef typename LocalContainer::const_iterator local_thread_const_iterator;
+
+  typedef typename bliss::iterator::ConcatenatingIterator<local_thread_iterator>  local_iterator;
+  typedef typename bliss::iterator::ConcatenatingIterator<local_thread_const_iterator>  local_const_iterator;
 
 
   /// MPI message tag for inserts
@@ -71,7 +76,10 @@ public:
    */
   local_iterator begin()
   {
-    return local_map.begin();
+    local_iterator it;
+    for (int i = 0; i < nThreads; ++i)
+	it.addRange(local_map[i].begin(), local_map[i].end());
+    return it;
   }
 
   /**
@@ -82,7 +90,7 @@ public:
    */
   local_iterator end()
   {
-    return local_map.end();
+    return local_iterator();
   }
 
   /**
@@ -92,7 +100,10 @@ public:
    */
   local_const_iterator cbegin() const
   {
-    return local_map.cbegin();
+    local_const_iterator it;
+    for (int i = 0; i < nThreads; ++i)
+	it.addRange(local_map[i].cbegin(), local_map[i].cend());
+    return it;
   }
 
   /**
@@ -103,11 +114,13 @@ public:
    */
   local_const_iterator cend() const
   {
-    return local_map.cend();
+    return local_const_iterator();
   }
 
   void reserve(size_t size_hint) {
-    local_map.reserve(size_hint);
+    for (int i = 0; i < nThreads; ++i) {
+      local_map[i].reserve(size_hint);
+    }
   }
 
   /**
@@ -116,7 +129,11 @@ public:
    */
   const size_t local_size() const
   {
-    return local_map.size();
+    size_t result = 0;
+    for (int i = 0; i < nThreads; ++i) {
+      result += local_map[i].size();
+    }
+    return result;
   }
 
   void flushInsert()
@@ -184,7 +201,7 @@ public:
    * @param callbackFunction    The function to call with all received answers
    *                            to lookups.
    */
-  void setLookupAnswerCallback(const std::function<void(std::pair<K, T>&)>& callbackFunction)
+  void setLookupAnswerCallback(const std::function<void(std::pair<K, T>*, std::size_t)>& callbackFunction)
   {
     lookupAnswerCallbackFunc = callbackFunction;
   }
@@ -201,20 +218,48 @@ public:
    */
   void filter(const std::size_t lower_threshold)
   {
-    // iterate through all keys
-    for (auto iter = this->local_map.begin(); iter!=this->local_map.end();)
+
+    int nt = this->nThreads;
+
+#pragma omp parallel default(none) num_threads(nt)
     {
-      // get end of the range of identical key
-      auto cur_end_iter = this->local_map.equal_range(iter->first)->second;
-      std::size_t cur_count = getLocalCount(local_map, iter);
-      if (cur_count < lower_threshold)
+    // iterate through all keys
+      int tid = omp_get_thread_num();
+
+      for (auto iter = this->local_map[tid].begin(); iter!=this->local_map[tid].end();)
       {
-        // remove all entries with this key, this will invalidate the `iter`
-        // iterator
-        this->local_map.erase(iter, cur_end_iter);
+        // get end of the range of identical key
+        auto cur_end_iter = this->local_map[tid].equal_range(iter->first)->second;
+        std::size_t cur_count = getLocalCount(local_map[tid], iter);  // note we're only operation on 1 map at a time.
+        if (cur_count < lower_threshold)
+        {
+          // remove all entries with this key, this will invalidate the `iter`
+          // iterator
+          this->local_map[tid].erase(iter, cur_end_iter);
+        }
+        // advance loop iterator
+        iter = cur_end_iter;
       }
-      // advance loop iterator
-      iter = cur_end_iter;
+    }
+  }
+  void sequentialFilter(const std::size_t lower_threshold)
+  {
+    for (int tid = 0; tid < nThreads; ++tid) {
+      // iterate through all keys
+      for (auto iter = this->local_map[tid].begin(); iter!=this->local_map[tid].end();)
+      {
+        // get end of the range of identical key
+        auto cur_end_iter = this->local_map[tid].equal_range(iter->first)->second;
+        std::size_t cur_count = getLocalCount(local_map[tid], iter);  // note we're only operation on 1 map at a time.
+        if (cur_count < lower_threshold)
+        {
+          // remove all entries with this key, this will invalidate the `iter`
+          // iterator
+          this->local_map[tid].erase(iter, cur_end_iter);
+        }
+        // advance loop iterator
+        iter = cur_end_iter;
+      }
     }
   }
 
@@ -234,11 +279,58 @@ public:
   {
     // first determine the maximum count
     uint64_t local_max_count = 0; // use uint64_t for all systems!
-    for (auto iter=this->local_map.begin(); iter!=this->local_map.end();
-         iter=this->local_map.equal_range(iter->first)->second)
+    int nt = this->nThreads;
+#pragma omp parallel default(none) num_threads(nt) reduction(max: local_max_count)
     {
-      std::size_t count = getLocalCount(local_map, *iter);
-      local_max_count = std::max<uint64_t>(local_max_count, count);
+      int tid = omp_get_thread_num();
+      for (auto iter=this->local_map[tid].begin(); iter!=this->local_map[tid].end();
+           iter=this->local_map[tid].equal_range(iter->first)->second)
+      {
+        std::size_t count = getLocalCount(local_map[tid], *iter);
+        local_max_count = std::max<uint64_t>(local_max_count, count);
+      }
+    }
+    // cast max count to int and check that it doesn't overflow
+    if (local_max_count >= std::numeric_limits<int>::max())
+    {
+      throw std::range_error("Histrogram of counts: maximum count exceeds integer range");
+    }
+    int max_count = static_cast<int>(local_max_count);
+
+    // get max accross all processors
+    int all_max_count;
+    MPI_Allreduce(&max_count, &all_max_count, 1, MPI_INT, MPI_MAX, this->comm);
+
+    // count the counts to create local histogram
+    std::vector<int> local_count_hist(all_max_count+1, 0);
+#pragma omp parallel default(none) num_threads(nt)
+    {
+      int tid = omp_get_thread_num();
+      for (auto iter=this->local_map[tid].begin(); iter!=this->local_map[tid].end();
+           iter=this->local_map[tid].equal_range(iter->first)->second)
+      {
+        std::size_t count = getLocalCount(local_map[tid], *iter);
+        local_count_hist[count]++;
+      }
+    }
+    // then accumulate across all processors
+    std::vector<int> count_hist(all_max_count+1, 0);
+    MPI_Allreduce(&local_count_hist[0], &count_hist[0], all_max_count+1,
+                  MPI_INT, MPI_SUM, this->comm);
+
+    return count_hist;
+  }
+  std::vector<int> sequentialCountHistrogram()
+  {
+    // first determine the maximum count
+    uint64_t local_max_count = 0; // use uint64_t for all systems!
+    for (int i = 0; i < nThreads; ++i) {
+      for (auto iter=this->local_map[i].begin(); iter!=this->local_map[i].end();
+           iter=this->local_map[i].equal_range(iter->first)->second)
+      {
+        std::size_t count = getLocalCount(local_map[i], *iter);
+        local_max_count = std::max<uint64_t>(local_max_count, count);
+      }
     }
 
     // cast max count to int and check that it doesn't overflow
@@ -254,11 +346,13 @@ public:
 
     // count the counts to create local histogram
     std::vector<int> local_count_hist(all_max_count+1, 0);
-    for (auto iter=this->local_map.begin(); iter!=this->local_map.end();
-         iter=this->local_map.equal_range(iter->first)->second)
-    {
-      std::size_t count = getLocalCount(local_map, *iter);
-      local_count_hist[count]++;
+    for (int i = 0; i < nThreads; ++i) {
+      for (auto iter=this->local_map[i].begin(); iter!=this->local_map[i].end();
+           iter=this->local_map[i].equal_range(iter->first)->second)
+      {
+        std::size_t count = getLocalCount(local_map[i], *iter);
+        local_count_hist[count]++;
+      }
     }
 
     // then accumulate across all processors
@@ -299,8 +393,9 @@ protected:
    * @param hashFunction    The hash function to use for distributing elements
    *                        accross processors. Defaults to std::hash<K>().
    */
-  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, int num_threads = 1, RemoteHasher hashFunction = RemoteHasher())
-      : commLayer(mpi_comm, comm_size, num_threads), comm(mpi_comm), hashFunct(hashFunction),
+  _distributed_map_base(MPI_Comm mpi_comm, int comm_size, int num_threads = 1, ThreadHasher thread_hash_func = ThreadHasher(), MPIHasher mpi_hash_func = MPIHasher())
+      : commLayer(mpi_comm, comm_size, num_threads), comm(mpi_comm), nThreads(num_threads), threadHashFunc(thread_hash_func), mpiHashFunc(mpi_hash_func),
+        local_map(num_threads), threadKeys(num_threads),
         has_pending_inserts(false), has_pending_lookups(false)
   {
 	  MPI_Comm_rank(comm, &commRank);
@@ -379,11 +474,19 @@ protected:
   {
     // get the target rank for the processor
     int size = commLayer.getCommSize();
-    return hashFunct(key) % size;
+    return mpiHashFunc(key) % size;
   }
+
+  int getTargetThread(const K& key)
+  {
+    // get the target rank for the processor
+    return threadHashFunc(key) % nThreads;
+  }
+
 
   /**
    * @brief Returns the local count of a given key.
+   *
    *
    * @param localMap    The local map data structure.
    * @param item        The item to lookup the count for.
@@ -397,7 +500,7 @@ protected:
   }
 
   /**
-   * @brief Returns the local count of a given key.
+   * @brief Returns the local count of a given key.  this one is for count map.
    *
    * @param localMap    The local map data structure.
    * @param item        The item to lookup the count for.
@@ -428,11 +531,14 @@ protected:
     K* keys = reinterpret_cast<K*>(msg);
     int key_count = count / sizeof(K);
 
+    int nt = this->nThreads;
+
     // for all received requests, send the value from the lookup
+#pragma omp parallel for default(none) num_threads(nt) shared(key_count, keys, fromRank)
     for (int i = 0; i < key_count; ++i)
     {
       // check if exists and then send
-      auto range = this->local_map.equal_range(keys[i]);
+      auto range = this->local_map[this->getTargetThread(keys[i])].equal_range(keys[i]);
       for (auto it = range.first; it != range.second; ++it)
       {
         // send the results to the requesting processor
@@ -440,6 +546,36 @@ protected:
       }
     }
   }
+  /**
+   * @brief Callback function for received lookup messages.
+   *
+   * Performs the actual lookup in the local data structure and sends a message
+   * as reply.
+   *
+   * @param msg         The message data received.
+   * @param count       The number of bytes received.
+   * @param fromRank    The source rank of the message.
+   */
+  void sequentialReceivedLookupCallback(uint8_t* msg, std::size_t count, int fromRank)
+  {
+    // deserialize
+    K* keys = reinterpret_cast<K*>(msg);
+    int key_count = count / sizeof(K);
+
+    // for all received requests, send the value from the lookup
+    for (int i = 0; i < key_count; ++i)
+    {
+      // check if exists and then send
+      auto range = this->local_map[this->getTargetThread(keys[i])].equal_range(keys[i]);
+      for (auto it = range.first; it != range.second; ++it)
+      {
+        // send the results to the requesting processor
+        this->sendPair(*it, fromRank, LOOKUP_ANSWER_MPI_TAG);
+      }
+    }
+  }
+
+  //TODO: let user define these.
 
   /**
    * @brief Callback function for received lookup answers.
@@ -453,15 +589,17 @@ protected:
    */
   void receivedLookupAnswerCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
-    // deserialize
+//    // deserialize
     std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
     int element_count = count / sizeof(std::pair<K, T>);
+//
+//    // insert all elements into the hash table
+//    for (int i = 0; i < element_count; ++i)
+//    {
+//      lookupAnswerCallbackFunc(elements[i]);
+//    }
 
-    // insert all elements into the hash table
-    for (int i = 0; i < element_count; ++i)
-    {
-      lookupAnswerCallbackFunc(elements[i]);
-    }
+    lookupAnswerCallbackFunc(elements, element_count);
   }
 
 protected:
@@ -476,12 +614,19 @@ protected:
   /// The MPI communicator used for distributing the input
   MPI_Comm comm;
 
-  /// The hash function used for distributing input accross processors
-  RemoteHasher hashFunct;
+  int nThreads;
+
+  /// The hash functijon used for distributing elements across threads
+  ThreadHasher threadHashFunc;
+
+  /// The hash function used for distributing input across processors
+  MPIHasher mpiHashFunc;
+
 
   /// The local container data-structure. For most cases this is either
   /// a std::unordered_map or std::unordered_multimap
-  LocalContainer local_map;
+  std::vector<LocalContainer> local_map;
+  std::vector<int> threadKeys;
 
   /// Whether there are pending insert operations
   std::atomic<bool> has_pending_inserts;
@@ -490,7 +635,7 @@ protected:
 
   /// The async callback function, which is called when an answer to a
   /// lookup query is received
-  std::function<void(std::pair<K, T>&)> lookupAnswerCallbackFunc;
+  std::function<void(std::pair<K, T>*, std::size_t)> lookupAnswerCallbackFunc;
 
   std::mutex mutex;
 
@@ -508,15 +653,15 @@ protected:
  * @tparam T                    The value type.
  * @tparam CommunicationLayer   The CommunicationLayer class type.
  */
-template<typename K, typename T, typename CommunicationLayer, typename LocalHasher = std::hash<K>, typename RemoteHasher = std::hash<K> >
+template<typename K, typename T, typename CommunicationLayer, typename LocalHasher = std::hash<K>, typename ThreadHasher = std::hash<K>, typename MPIHasher = std::hash<K> >
 class distributed_multimap
   : public _distributed_map_base<K, T,
-              CommunicationLayer, std::unordered_multimap<K, T, LocalHasher>, RemoteHasher >
+              CommunicationLayer, std::unordered_multimap<K, T, LocalHasher>, ThreadHasher, MPIHasher >
 {
 public:
   /// The baseclass type
   typedef _distributed_map_base<K, T, CommunicationLayer,
-                                std::unordered_multimap<K, T, LocalHasher>, RemoteHasher > _base_class;
+                                std::unordered_multimap<K, T, LocalHasher>, ThreadHasher, MPIHasher > _base_class;
   /// The iterator type of the local container type
   typedef typename _base_class::local_iterator local_iterator;
   /// The constant iterator type of the local container type
@@ -536,8 +681,9 @@ public:
    *                        accross processors. Defaults to std::hash<K>().
    */
   distributed_multimap (MPI_Comm mpi_comm, int comm_size, int num_threads = 1,
-        RemoteHasher hashFunction = RemoteHasher())
-      : _base_class(mpi_comm, comm_size, num_threads, hashFunction)
+        ThreadHasher thread_hash_func = ThreadHasher(),
+        MPIHasher mpi_hash_func = MPIHasher())
+      : _base_class(mpi_comm, comm_size, num_threads, thread_hash_func, mpi_hash_func)
   {
     // add comm layer receive callbacks
     using namespace std::placeholders;
@@ -639,6 +785,7 @@ public:
 protected:
   /**
    * @brief Callback function for received inserts.
+   * @note internally, the function is parallel.
    *
    * Deserializes the message data and performs the local insertions.
    *
@@ -652,14 +799,54 @@ protected:
     std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
     int element_count = count / sizeof(std::pair<K, T>);
 
-    // insert all elements into the hash table
-//    for (int i = 0; i < element_count; ++i)
-//    {
-//      this->local_map.insert(elements[i]);
-//    }
-    this->local_map.insert(elements, elements + element_count);
-  }
+    //====  now use parallel for to compute the hash,
+    int nt = this->nThreads;
+    // clear and make room.  callbacks are invoked in series so only 1 thread uses threadKeys.
+    this->threadKeys.clear();
+    if (this->threadKeys.capacity() < element_count) this->threadKeys.reserve(element_count);
 
+    // compute threadhash and store in vector in parallel, (perfectly parallelizable, compute heavy)
+#pragma omp parallel for num_threads(nt) shared(element_count, elements) default(none)
+    for (int i = 0; i < element_count; ++i) {
+      this->threadKeys[i] = this->getTargetThread(elements[i].first);  // insert hash value
+    }
+
+    // in parallel, each thread walks through entire vector (read only) and if hash matches insert into per thread map  (read vec is not compute heavy.)
+#pragma omp parallel num_threads(nt) shared(element_count, elements) default(none)
+    {
+      int tid = omp_get_thread_num();
+      for (int i = 0; i < element_count; ++i) {
+        // insert value if hash matches thread id
+        if (this->threadKeys[i] == tid) this->local_map[tid].insert(elements[i]);
+      }
+    }
+
+    // also alternatively
+    // T^2 vectors of pointers.
+    // first parallel generate hash, each thread insert vector into vector[hash][tid]
+    // then parallel insert  each thread process all vectors in vector[tid]
+    // potentially more cost.
+      // performance is kind of similar for small number of thread.  there is more variability here.
+
+
+    // alternatively.
+    // store entry in per thread concurrentqueues
+    // use omp parallel to pop from queue and insert into the per thread map.
+    // this approach is likely more costly, as contended insertion into concurrent queue (up to nThreads conflicts) is serialized.
+    //    and popping may be more costly because of internal state tracking.
+
+  }
+  void sequentialReceivedInsertCallback(uint8_t* msg, std::size_t count, int fromRank)
+  {
+    // deserialize
+    std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
+    int element_count = count / sizeof(std::pair<K, T>);
+
+    for (int i = 0; i < element_count; ++i) {
+
+      this->local_map[this->getTargetThread(elements[i].first)].insert(elements[i]);
+    }
+  }
 };
 
 
@@ -673,15 +860,15 @@ protected:
  * @tparam K                    The key type.
  * @tparam CommunicationLayer   The CommunicationLayer class type.
  */
-template<typename K, typename CommunicationLayer, typename LocalHasher = std::hash<K>, typename RemoteHasher = std::hash<K>>
+template<typename K, typename CommunicationLayer, typename LocalHasher = std::hash<K>, typename ThreadHasher = std::hash<K>, typename MPIHasher = std::hash<K>>
 class distributed_counting_map
  : public _distributed_map_base<K, count_t, CommunicationLayer,
-                                std::unordered_map<K, count_t, LocalHasher>, RemoteHasher >
+                                std::unordered_map<K, count_t, LocalHasher>, ThreadHasher, MPIHasher >
 {
 public:
   /// The baseclass type
   typedef _distributed_map_base<K, count_t, CommunicationLayer,
-                                std::unordered_map<K,count_t, LocalHasher>, RemoteHasher > _base_class;
+                                std::unordered_map<K,count_t, LocalHasher>, ThreadHasher, MPIHasher > _base_class;
   /// The iterator type of the local container type
   typedef typename _base_class::local_iterator local_iterator;
   /// The constant iterator type of the local container type
@@ -703,8 +890,9 @@ public:
    *                        accross processors. Defaults to std::hash<K>().
    */
   distributed_counting_map (MPI_Comm mpi_comm, int comm_size, int num_threads = 1,
-          RemoteHasher hashFunction = RemoteHasher())
-      : _base_class(mpi_comm, comm_size, num_threads, hashFunction)
+          ThreadHasher thread_hash_func = ThreadHasher(),
+          MPIHasher mpi_hash_func = MPIHasher())
+      : _base_class(mpi_comm, comm_size, num_threads, thread_hash_func, mpi_hash_func)
   {
     // add comm layer receive callbacks
     using namespace std::placeholders;
@@ -726,10 +914,6 @@ public:
    */
   virtual ~distributed_counting_map()
   {
-//    this->commLayer.finish(_base_class::INSERT_MPI_TAG);
-//    this->commLayer.finish(_base_class::LOOKUP_MPI_TAG);
-//    this->commLayer.finish(_base_class::LOOKUP_ANSWER_MPI_TAG);
-//	  this->commLayer.finishCommunication();
   }
 
   /**
@@ -745,7 +929,6 @@ public:
     int targetRank = this->getTargetRank(key);
     this->sendKey(key, targetRank, _base_class::INSERT_MPI_TAG);
     this->has_pending_inserts.store(true, std::memory_order_release);
-    //DEBUG("inserted key " << key);
   }
 
   /**
@@ -796,6 +979,7 @@ protected:
   /**
    * @brief Callback function for received inserts.
    *
+   * @note parallel internally vis OMP.
    * Deserializes the message data and sets or increases the local count of the
    * received keys.
    *
@@ -809,12 +993,56 @@ protected:
     K* keys = reinterpret_cast<K*>(msg);
     int key_count = count / sizeof(K);
 
+    //====  now use parallel for to compute the hash,
+    int nt = this->nThreads;
+    // clear and make room.  callbacks are invoked in series so only 1 thread uses threadKeys.
+    this->threadKeys.clear();
+    if (this->threadKeys.capacity() < key_count) this->threadKeys.reserve(key_count);
+
+    // compute threadhash and store in vector in parallel, (perfectly parallelizable, compute heavy)
+#pragma omp parallel for num_threads(nt) shared(key_count, keys) default(none)
+    for (int i = 0; i < key_count; ++i) {
+      this->threadKeys[i] = this->getTargetThread(keys[i]);  // insert hash value
+    }
+
+    // in parallel, each thread walks through entire vector (read only) and if hash matches insert into per thread map  (read vec is not compute heavy.)
+#pragma omp parallel num_threads(nt) shared(key_count, keys) default(none)
+    {
+      int tid = omp_get_thread_num();
+      for (int i = 0; i < key_count; ++i) {
+        // insert value if hash matches thread id
+        if (this->threadKeys[i] == tid) this->local_map[tid][keys[i]]++;
+      }
+    }
+
+    // also alternatively
+    // T^2 vectors of pointers.
+    // first parallel generate hash, each thread insert vector into vector[hash][tid]
+    // then parallel insert  each thread process all vectors in vector[tid]
+    // potentially more cost.
+      // performance is kind of similar for small number of thread.  there is more variability here.
+
+
+    // alternatively.
+    // store entry in per thread concurrentqueues
+    // use omp parallel to pop from queue and insert into the per thread map.
+    // this approach is likely more costly, as contended insertion into concurrent queue (up to nThreads conflicts) is serialized.
+    //    and popping may be more costly because of internal state tracking.
+
+  }
+  void sequentialReceivedCountCallback(uint8_t* msg, std::size_t count, int fromRank)
+  {
+    // deserialize
+    K* keys = reinterpret_cast<K*>(msg);
+    int key_count = count / sizeof(K);
+
     // insert all elements into the hash table
     for (int i = 0; i < key_count; ++i)
     {
-      this->local_map[keys[i]]++;
+      this->local_map[this->getTargetThread(keys[i])][keys[i]]++;
     }
   }
+
 };
 
 } // namespace bliss

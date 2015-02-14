@@ -11,7 +11,7 @@
  */
 #include "config.hpp"
 
-
+#include <functional>
 #include "utils/logging.h"
 
 #include "common/alphabets.hpp"
@@ -26,6 +26,8 @@
 /*
  * TYPE DEFINITIONS
  */
+
+using namespace std::placeholders;   // for _1, _2, _3
 
 template<typename KmerIndexType>
 void testQueryOld(MPI_Comm comm, const std::string & filename, const int nthreads, const int chunkSize, KmerIndexType& kmer_index) {
@@ -168,6 +170,12 @@ void testQuery(MPI_Comm comm, const std::string & filename, const int nthreads, 
 
 }
 
+
+
+
+
+
+
 /**
  *
  * @param argc
@@ -245,12 +253,22 @@ int main(int argc, char** argv) {
 
   std::chrono::high_resolution_clock::time_point t1, t2;
   std::chrono::duration<double> time_span;
+
+  size_t result = 0;
+  size_t entries = 0;
+  double score = 0;
+
 #if defined(KMOLECULEINDEX)
   {
     t1 = std::chrono::high_resolution_clock::now();
     // initialize index
     INFOF("***** initializing index.");
-    bliss::index::retired::KmerPositionIndexOld<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
+
+    using IndexType = bliss::index::retired::KmerPositionIndexOld<21, DNA, bliss::io::FASTQ, true>;
+    IndexType kmer_index(comm, nprocs,
+                                       std::bind(IndexType::defaultReceivePositionAnswer,
+                                                 _1, _2, nthreads, std::ref(result), std::ref(entries)),
+                                       nthreads);
 
     // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
     INFOF("***** building index first pass.");
@@ -287,9 +305,15 @@ int main(int argc, char** argv) {
 #elif defined(KMERINDEX)
   {
     t1 = std::chrono::high_resolution_clock::now();
+
+
   // initialize index
   INFOF("***** initializing index.");
-  bliss::index::KmerPositionIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
+  using IndexType = bliss::index::KmerPositionIndex<21, DNA, bliss::io::FASTQ, true>;
+  IndexType kmer_index(comm, nprocs,
+                                    std::bind(IndexType::defaultReceivePositionAnswer, // <bliss::Kmer<21, DNA>, bliss::io::FASTQSequenceId >
+                                              _1, _2, nthreads, std::ref(result), std::ref(entries)),
+                                              nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   INFOF("***** building index first pass.");
@@ -327,13 +351,21 @@ int main(int argc, char** argv) {
 #endif
   MPI_Barrier(comm);
 
+
+  result = 0;
+  entries = 0;
+  score = 0;
+
 #if defined(KMOLECULEINDEX)
   {
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
   INFOF("***** initializing index.");
-  using KmerIndexType = bliss::index::retired::KmerCountIndexOld<21, DNA, bliss::io::FASTQ, true>;
-  KmerIndexType kmer_index(comm, nprocs, nthreads);
+  using IndexType = bliss::index::retired::KmerCountIndexOld<21, DNA, bliss::io::FASTQ, true>;
+  IndexType kmer_index(comm, nprocs,
+                           std::bind(&IndexType::defaultReceiveCountAnswer,
+                                     _1, _2, nthreads, std::ref(result), std::ref(entries)),
+                                     nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   INFOF("***** building index first pass.");
@@ -378,8 +410,11 @@ int main(int argc, char** argv) {
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
   INFOF("***** initializing index.");
-  using KmerIndexType = bliss::index::KmerCountIndex<21, DNA, bliss::io::FASTQ, true>;
-    KmerIndexType  kmer_index(comm, nprocs, nthreads);
+  using IndexType = bliss::index::KmerCountIndex<21, DNA, bliss::io::FASTQ, true>;
+  IndexType  kmer_index(comm, nprocs,
+                              std::bind(&IndexType::defaultReceiveCountAnswer,
+                                        _1, _2, nthreads, std::ref(result), std::ref(entries)),
+                                        nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   INFOF("***** building index first pass.");
@@ -422,7 +457,9 @@ int main(int argc, char** argv) {
   MPI_Barrier(comm);
 
 
-
+entries = 0;
+result = 0;
+score = 0;
 
 #if defined(KMOLECULEINDEX)
 
@@ -431,7 +468,11 @@ int main(int argc, char** argv) {
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
   INFOF("***** initializing index.");
-  bliss::index::retired::KmerPositionAndQualityIndexOld<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
+  using IndexType = bliss::index::retired::KmerPositionAndQualityIndexOld<21, DNA, bliss::io::FASTQ, true>;
+  IndexType kmer_index(comm, nprocs,
+                                     std::bind(&IndexType::defaultReceivePositionAndQualityAnswer,
+                                               _1, _2, nthreads, std::ref(result), std::ref(score), std::ref(entries)),
+                                              nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   INFOF("***** building index first pass.");
@@ -472,7 +513,11 @@ int main(int argc, char** argv) {
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
   INFOF("***** initializing index.");
-  bliss::index::KmerPositionAndQualityIndex<21, DNA, bliss::io::FASTQ, true> kmer_index(comm, nprocs, nthreads);
+  using IndexType = bliss::index::KmerPositionAndQualityIndex<21, DNA, bliss::io::FASTQ, true>;
+  IndexType kmer_index(comm, nprocs,
+                                    std::bind(&IndexType::defaultReceivePositionAndQualityAnswer,
+                                               _1, _2, nthreads, std::ref(result), std::ref(score), std::ref(entries)),
+                                               nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   INFOF("***** building index first pass.");
