@@ -1,6 +1,6 @@
 /**
  * @file    filter_iterator.hpp
- * @ingroup bliss::iterators
+ * @ingroup iterators
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   an iterator that returns only elements that match a predicate
  * @details

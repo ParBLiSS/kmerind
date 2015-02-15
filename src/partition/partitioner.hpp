@@ -1,6 +1,6 @@
 /**
- * @file		Partitioner.hpp
- * @ingroup bliss::partition
+ * @file		partitioner.hpp
+ * @ingroup partition
  * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   contains several class that provide different logic for partitioning a range
  * @details contains block, cyclic, and demand driven (THREAD SAFE) partitioners

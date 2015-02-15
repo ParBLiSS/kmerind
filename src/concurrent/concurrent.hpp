@@ -1,6 +1,6 @@
 /**
  * @file		concurrent.hpp
- * @ingroup bliss::concurrent
+ * @ingroup concurrent
  * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   this file contains predefined constants for concurrency and thread safety
  * @details

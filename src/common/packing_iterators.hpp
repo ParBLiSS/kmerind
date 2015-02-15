@@ -1,5 +1,5 @@
 /**
- * @file    PackingIterator.hpp
+ * @file    packing_iterators.hpp
  * @ingroup common
  * @author  Patrick Flick
  * @brief

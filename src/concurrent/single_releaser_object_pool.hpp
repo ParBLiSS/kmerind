@@ -1,6 +1,6 @@
 /**
- * @file		object_pool.hpp
- * @ingroup bliss::io
+ * @file		single_releaser_object_pool.hpp
+ * @ingroup concurrent
  * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   this file defines an in-memory Object Pool for the scenario where there is only 1 thread performing the obj release.
  * @details this is essentially a higher level allocator for large objects.

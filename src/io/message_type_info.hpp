@@ -1,6 +1,6 @@
 /**
  * @file    message_type_info.hpp
- * @ingroup
+ * @ingroup io
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details

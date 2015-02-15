@@ -1,6 +1,6 @@
 /**
  * @file    function_tratis.hpp
- * @ingroup interators
+ * @ingroup utils
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Implements helper functions for fucntors.
  *

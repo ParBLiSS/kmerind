@@ -1,6 +1,6 @@
 /**
  * @file		iterator_functor.hpp
- * @ingroup
+ * @ingroup wip
  * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details

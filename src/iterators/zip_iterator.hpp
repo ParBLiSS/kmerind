@@ -1,6 +1,6 @@
 /**
  * @file    zip_iterator.hpp
- * @ingroup bliss::iterators
+ * @ingroup iterators
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains a zip iterator that allows co-iteration of 2 base iterators.
  * @details

@@ -1,6 +1,6 @@
 /**
  * @file    kmer_index_generator.hpp
- * @ingroup
+ * @ingroup retired
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details

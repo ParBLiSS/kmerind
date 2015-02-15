@@ -1,6 +1,6 @@
 /**
  * @file		spinlock_queue.hpp
- * @ingroup bliss::concurrent
+ * @ingroup concurrent
  * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   Thread Safe Queue Implementation
  * @details this header file contains the templated implementation of a thread safe queue.  this class is used for MPI buffer management.

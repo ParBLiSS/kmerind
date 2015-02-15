@@ -1,6 +1,6 @@
 /**
  * @file    sequence_id_iterator.hpp
- * @ingroup bliss::iterators
+ * @ingroup io
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains a sequence_id iterator
  * @details

@@ -1,6 +1,6 @@
 /**
  * @file    iterator_utils.hpp
- * @ingroup interators
+ * @ingroup iterators
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements helper functions for implementation of iterators.
  *

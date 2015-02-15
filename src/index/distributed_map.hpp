@@ -44,20 +44,20 @@ typedef uint32_t count_t;
  *        distributed_counting_map implementations.
  * @detail  distributed map supports Insert and Query functions, but not delete.
  * 		each of these is supported in an asynchronous, distributed fashion.
- * 		insert and query functions essentiall initiates communication with remote
+ * 		insert and query functions essentially initiates communication with remote
  * 		processes.
  *
  * 		remote processes perform actual insert and query via callback
  *		functions.  internally, we use thread-local unordered_map
  *		to store the actual key-value pairs.
  *
- *		3 levels of hashing exists:  MPI process, thread, and local container internal
+ *		3 levels of hashing exists:  MPI process, thread, and local container.
  *		The user can specify 3 separate hash functions, e.g. use prefix, infix, and suffix
  *		of a kmer.  MPI processes therefore have disjoint subspace of the keys.  Threads
  *		also have disjoint subspace of the keys.  Using different hash functions
  *		avoid overloading particular hashtable buckets.
  *
- * @note: supplied insert and lookup callbacks should be sufficient, and hidden from user
+ * @note  supplied insert and lookup callbacks should be sufficient, and hidden from user
  * 		lookup result callback should be supplied by user, and should be able to operator
  * 		on bulk data.
  *
@@ -110,7 +110,7 @@ public:
    * @brief Returns an iterator to the element following the last element of
    * the local container(s).
    *
-   * @return Iterator the the element following the last local element.
+   * @return Iterator to the element following the last local element.
    */
   local_iterator end()
   {
@@ -118,7 +118,7 @@ public:
   }
 
   /**
-   * @brief Returns an iterator to the first element of the local container(s).
+   * @brief Returns a const iterator to the first element of the local container(s).
    *
    * @return Iterator to the first local element.
    */
@@ -131,10 +131,10 @@ public:
   }
 
   /**
-   * @brief Returns an iterator to the element following the last element of
+   * @brief Returns a const iterator to the element following the last element of
    * the local container(s).
    *
-   * @return Iterator the the element following the last local element.
+   * @return Iterator to the element following the last local element.
    */
   local_const_iterator cend() const
   {
@@ -428,8 +428,6 @@ protected:
    *                        layer.
    * @param comm_size       The size of the MPI communicator, needed for
    *                        initialization.
-   * @param hashFunction    The hash function to use for distributing elements
-   *                        accross processors. Defaults to std::hash<K>().
    */
   _distributed_map_base(MPI_Comm mpi_comm, int comm_size, int num_threads = 1, ThreadHasher thread_hash_func = ThreadHasher(), MPIHasher mpi_hash_func = MPIHasher())
       : commLayer(mpi_comm, comm_size, num_threads), comm(mpi_comm), nThreads(num_threads), threadHashFunc(thread_hash_func), mpiHashFunc(mpi_hash_func),
@@ -594,7 +592,7 @@ protected:
     }
   }
 
-//  /**
+//  /*
 //   * @brief Callback function for received lookup messages.
 //   *
 //   * Performs the actual lookup in the local data structure and sends a message

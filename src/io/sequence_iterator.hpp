@@ -1,6 +1,6 @@
 /**
- * @file    SequencesIterator.hpp
- * @ingroup bliss::io
+ * @file    sequence_iterator.hpp
+ * @ingroup io
  * @author  Tony Pan <tpan7@gatech.edu>
  * @date    Feb 5, 2014
  * @brief   Contains an iterator for traversing a sequence data, record by record, a FASTQ format specific parser for use by the iterator,

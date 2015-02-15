@@ -1,5 +1,5 @@
 /**
- * @file    logging.h
+ * @file    logging.cpp
  * @ingroup utils
  * @brief   Defines macros for logging.
  * @author  Patrick Flick

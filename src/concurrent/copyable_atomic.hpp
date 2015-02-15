@@ -1,6 +1,6 @@
 /**
  * @file    copyable_atomic.hpp
- * @ingroup
+ * @ingroup concurrent
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   atomic type that supports copy consturctor, suitable for map container.
  * @details std::atomic types are compatible with vector, but not map container.

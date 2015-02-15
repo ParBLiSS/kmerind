@@ -1,6 +1,6 @@
 /**
  * @file    range.hpp
- * @ingroup bliss::partition
+ * @ingroup partition
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Generic representation of an interval on a 1D data structure
  * @details Represents an interval with start, end, and overlap length.

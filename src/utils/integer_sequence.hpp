@@ -1,6 +1,6 @@
 /**
  * @file    integer_sequence.hpp
- * @ingroup bliss::utils
+ * @ingroup utils
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   templates to support generating a integer/index sequence
  * @details adapted from http://coliru.stacked-crooked.com/a/663dee82db2aef0a

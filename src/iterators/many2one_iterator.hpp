@@ -1,6 +1,6 @@
 /**
  * @file    many2one_iterator.hpp
- * @ingroup interators
+ * @ingroup iterators
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the many2one iterator.
  *

@@ -1,6 +1,6 @@
 /**
  * @file    message_types.hpp
- * @ingroup
+ * @ingroup io
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   various types of mpi messages:  sent data, received data, control messages, base class
  * @details
