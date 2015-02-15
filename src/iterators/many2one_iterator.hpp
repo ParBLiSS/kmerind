@@ -653,14 +653,17 @@ public:
   {
   }
 
+  /// default constructor
   many2one_iterator()
     : base_class_type(Iterator(), Iterator(), Compressor(), 0) {}
 
+  /// copy constructor
   many2one_iterator(const many2one_iterator& other)
     : base_class_type(other._base, other._end, other._f, other._m)
   {
   }
 
+  /// copy assign operator
   many2one_iterator& operator=(const many2one_iterator& other)
   {
     // check for self assignment

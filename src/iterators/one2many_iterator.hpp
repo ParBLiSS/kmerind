@@ -719,14 +719,17 @@ public:
   {
   }
 
+  /// default constructor
   one2many_iterator()
     : base_class_type(Iterator(), Functor(), 0, 0) {}
 
+  /// copy constructor
   one2many_iterator(const one2many_iterator& other)
     : base_class_type(other._base, other._f, other._m, other._offset)
   {
   }
 
+  /// copy assignment iterator
   one2many_iterator& operator=(const one2many_iterator& other)
   {
     // check for self assignment

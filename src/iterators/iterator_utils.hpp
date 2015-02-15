@@ -35,6 +35,7 @@ struct _iter_tools_ra
   /// The difference type of this iterator
   typedef typename traits::difference_type difference_type;
 
+  /// random access iterator jump ahead by m position, or to end iterator
   static void _advance_at_most(Iterator& it, const Iterator& end,
                               const difference_type m)
   {
@@ -52,6 +53,7 @@ struct _iter_tools_dir
   /// The difference type of this iterator
   typedef typename std::iterator_traits<Iterator>::difference_type difference_type;
 
+  /// non-random access iterator jump ahead by m position, or to end iterator
   static void _advance_at_most(Iterator& it, const Iterator& end,
                               const difference_type m)
   {
