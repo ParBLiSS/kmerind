@@ -238,20 +238,17 @@ public:
 				ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", prev_size);
 			}
 		} else {
+		  // try pop one.
+		  auto reuse = available.tryPop();
 
-			// now get or create
-			if (available.isEmpty()) {
-
-				// none available for reuse
-				// but has room to allocate, so do it.
-				sptr = new T();
-
-			} else {
-				// has available for reuse.
-				sptr = available.tryPop().second;
-				// available may return null because it's concurrent queue.
-				// cannot waitAndPop, because available could be empty at this point.
-			}
+		  // if successful pop
+		  if (reuse.first) {
+		    // use it
+		    sptr = reuse.second;
+		  } else {
+		    // available is likely empty. allocate a new one.
+		    sptr = new T();
+		  }
 
 			if (sptr) {
 
@@ -293,20 +290,17 @@ public:
 			// leave ptr as nullptr.
 		} else {
 
-			// now get or create
-			if (available.isEmpty()) {
+      // try pop one.
+      auto reuse = available.tryPop();
 
-				// none available for reuse
-				// but has room to allocate, so do it.
-				sptr = new T();
-
-			} else {
-				// has available for reuse.
-				sptr = available.tryPop().second;
-
-				// available may return null because it's concurrent queue.
-				// cannot wait for available to return non-null, because available could be empty at this point.
-			}
+      // if successful pop
+      if (reuse.first) {
+        // use it
+        sptr = reuse.second;
+      } else {
+        // available is likely empty. allocate a new one.
+        sptr = new T();
+      }
 
 			if (sptr) {
 				while (spinlock.test_and_set());
@@ -611,20 +605,17 @@ public:
 				ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", prev_size);
 			}
 		} else {
+      // try pop one.
+      auto reuse = available.tryPop();
 
-			// now get or create
-			if (available.isEmpty()) {
-
-				// none available for reuse
-				// but has room to allocate, so do it.
-				sptr = new T();
-
-			} else {
-				// has available for reuse.
-				sptr = available.tryPop().second;
-				// available may return null because it's concurrent queue.
-				// cannot waitAndPop, because available could be empty at this point.
-			}
+      // if successful pop
+      if (reuse.first) {
+        // use it
+        sptr = reuse.second;
+      } else {
+        // available is likely empty. allocate a new one.
+        sptr = new T();
+      }
 
 			if (sptr) {
 				// save in in_use set.

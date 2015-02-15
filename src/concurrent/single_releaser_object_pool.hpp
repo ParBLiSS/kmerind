@@ -209,17 +209,19 @@ namespace bliss
 			}
           } else {
 
-            // now get or create
-            if (available.isEmpty()) {
 
-                // none available for reuse
-                // but has room to allocate, so do it.
-                sptr = new T();
+            // try pop one.
+            auto reuse = available.tryPop();
 
+            // if successful pop
+            if (reuse.first) {
+              // use it
+              sptr = reuse.second;
             } else {
-              // has available for reuse.
-              sptr = available.tryPop().second;
+              // available is likely empty. allocate a new one.
+              sptr = new T();
             }
+
           }
 
           return sptr;
