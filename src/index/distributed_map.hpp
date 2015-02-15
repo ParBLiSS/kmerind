@@ -2,10 +2,11 @@
  * @file    distributed_map.hpp
  * @ingroup index
  * @author  Patrick Flick <patrick.flick@gmail.com>
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Implements the distributed_multimap and distributed_counting_map
  *          data structures.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology. All Rights Reserved.
  *
  * TODO add Licence
  */
@@ -13,13 +14,13 @@
 #ifndef BLISS_DISTRIBUTED_MAP_HPP
 #define BLISS_DISTRIBUTED_MAP_HPP
 
-#include <utility> // for std::pair
-#include <unordered_map> // local storage hash table
+#include <utility> 			// for std::pair
+#include <unordered_map> 	// local storage hash table
 #include <vector>
-#include <functional> // for std::function and std::hash
+#include <functional> 		// for std::function and std::hash
 #include <limits>
 #include <stdexcept>
-#include <algorithm> // for std::max
+#include <algorithm> 		// for std::max
 #include <atomic>
 #include <tuple>
 
@@ -41,24 +42,47 @@ typedef uint32_t count_t;
 /**
  * @brief A shared base class for the distributed_multimap and
  *        distributed_counting_map implementations.
+ * @detail  distributed map supports Insert and Query functions, but not delete.
+ * 		each of these is supported in an asynchronous, distributed fashion.
+ * 		insert and query functions essentiall initiates communication with remote
+ * 		processes.
+ *
+ * 		remote processes perform actual insert and query via callback
+ *		functions.  internally, we use thread-local unordered_map
+ *		to store the actual key-value pairs.
+ *
+ *		3 levels of hashing exists:  MPI process, thread, and local container internal
+ *		The user can specify 3 separate hash functions, e.g. use prefix, infix, and suffix
+ *		of a kmer.  MPI processes therefore have disjoint subspace of the keys.  Threads
+ *		also have disjoint subspace of the keys.  Using different hash functions
+ *		avoid overloading particular hashtable buckets.
+ *
+ * @note: supplied insert and lookup callbacks should be sufficient, and hidden from user
+ * 		lookup result callback should be supplied by user, and should be able to operator
+ * 		on bulk data.
  *
  * @tparam K                    The key type.
  * @tparam T                    The value type.
  * @tparam CommunicationLayer   The CommunicationLayer class type.
  * @tparam LocalContainer       The local container type (unordered_map or
  *                              unodered_multimap)
+ * @tparam ThreadHasher		    Hash function for hashing to key to thread id
+ * @tparam MPIHasher		    Hash function for hashing to key to MPI rank.
  */
 template<typename K, typename T, typename CommunicationLayer,
          typename LocalContainer, typename ThreadHasher, typename MPIHasher>
 class _distributed_map_base
 {
-public:
-  /// The iterator type of the local container type
+protected:
+	// iterator for a the local container.
   typedef typename LocalContainer::iterator local_thread_iterator;
-  /// The constant iterator type of the local container type
+    // const iterator for a local container.
   typedef typename LocalContainer::const_iterator local_thread_const_iterator;
 
+public:
+  /// The iterator type of the entire set of thread-local containers on an MPI process
   typedef typename bliss::iterator::ConcatenatingIterator<local_thread_iterator>  local_iterator;
+  /// The constant iterator type of the entire set of thread-local containers on an MPI process
   typedef typename bliss::iterator::ConcatenatingIterator<local_thread_const_iterator>  local_const_iterator;
 
 
@@ -70,7 +94,7 @@ public:
   static constexpr int LOOKUP_ANSWER_MPI_TAG = 15;
 
   /**
-   * @brief Returns an iterator to the first element of the local container.
+   * @brief Returns an iterator to the first element of the local container(s).
    *
    * @return Iterator to the first local element.
    */
@@ -84,7 +108,7 @@ public:
 
   /**
    * @brief Returns an iterator to the element following the last element of
-   * the local container.
+   * the local container(s).
    *
    * @return Iterator the the element following the last local element.
    */
@@ -94,7 +118,7 @@ public:
   }
 
   /**
-   * @brief Returns an iterator to the first element of the local container.
+   * @brief Returns an iterator to the first element of the local container(s).
    *
    * @return Iterator to the first local element.
    */
@@ -108,7 +132,7 @@ public:
 
   /**
    * @brief Returns an iterator to the element following the last element of
-   * the local container.
+   * the local container(s).
    *
    * @return Iterator the the element following the last local element.
    */
@@ -136,19 +160,27 @@ public:
     return result;
   }
 
+  /**
+   * @brief flush all the insertion messages (across all MPI processes)
+   * @details  exits this call when all incoming messages from other MPI processes
+   * 	have arrived.
+   */
   void flushInsert()
   {
     DEBUGF("FLUSH DISTR MAP Insert");
-    //std::lock_guard<std::mutex> lock(mutex);
     if (has_pending_inserts.exchange(false, std::memory_order_acquire))
     {
       this->commLayer.flush(INSERT_MPI_TAG);
      }
   }
+  /**
+   * @brief flush all the lookup messages (across all MPI processes)
+   * @details  exits this call when all incoming messages from other MPI processes
+   * 	have arrived.
+   */
   void flushLookup()
   {
-    DEBUGF("FLUSH DISTR MAP Lookup");
-    //std::lock_guard<std::mutex> lock(mutex);
+   DEBUGF("FLUSH DISTR MAP Lookup");
    if (has_pending_lookups.exchange(false, std::memory_order_acquire))
    {
     this->commLayer.flush(LOOKUP_MPI_TAG);
@@ -213,6 +245,8 @@ public:
    * value. This function only operates locally, there is no communication
    * involved.
    *
+   * performed using openmp.
+   *
    * @param count   The key count threshold. Everything lower than this will be
    *                removed.
    */
@@ -242,26 +276,26 @@ public:
       }
     }
   }
-  void sequentialFilter(const std::size_t lower_threshold)
-  {
-    for (int tid = 0; tid < nThreads; ++tid) {
-      // iterate through all keys
-      for (auto iter = this->local_map[tid].begin(); iter!=this->local_map[tid].end();)
-      {
-        // get end of the range of identical key
-        auto cur_end_iter = this->local_map[tid].equal_range(iter->first)->second;
-        std::size_t cur_count = getLocalCount(local_map[tid], iter);  // note we're only operation on 1 map at a time.
-        if (cur_count < lower_threshold)
-        {
-          // remove all entries with this key, this will invalidate the `iter`
-          // iterator
-          this->local_map[tid].erase(iter, cur_end_iter);
-        }
-        // advance loop iterator
-        iter = cur_end_iter;
-      }
-    }
-  }
+//  void sequentialFilter(const std::size_t lower_threshold)
+//  {
+//    for (int tid = 0; tid < nThreads; ++tid) {
+//      // iterate through all keys
+//      for (auto iter = this->local_map[tid].begin(); iter!=this->local_map[tid].end();)
+//      {
+//        // get end of the range of identical key
+//        auto cur_end_iter = this->local_map[tid].equal_range(iter->first)->second;
+//        std::size_t cur_count = getLocalCount(local_map[tid], iter);  // note we're only operation on 1 map at a time.
+//        if (cur_count < lower_threshold)
+//        {
+//          // remove all entries with this key, this will invalidate the `iter`
+//          // iterator
+//          this->local_map[tid].erase(iter, cur_end_iter);
+//        }
+//        // advance loop iterator
+//        iter = cur_end_iter;
+//      }
+//    }
+//  }
 
   /**
    * @brief Returns a histrogram of counts for all elements in the distributed
@@ -269,6 +303,8 @@ public:
    *
    * The valid histrogram is returned on ALL MPI processes. This function has
    * to be called by ALL MPI processes of the given MPI communicator.
+   *
+   * performed using openmp
    *
    * TODO: [ ] granularity/resolution of histogram (i.e., bin sizes as param)
    *       [ ] sampling rather than full histogram (estimation)
@@ -320,59 +356,61 @@ public:
 
     return count_hist;
   }
-  std::vector<int> sequentialCountHistrogram()
-  {
-    // first determine the maximum count
-    uint64_t local_max_count = 0; // use uint64_t for all systems!
-    for (int i = 0; i < nThreads; ++i) {
-      for (auto iter=this->local_map[i].begin(); iter!=this->local_map[i].end();
-           iter=this->local_map[i].equal_range(iter->first)->second)
-      {
-        std::size_t count = getLocalCount(local_map[i], *iter);
-        local_max_count = std::max<uint64_t>(local_max_count, count);
-      }
-    }
+//  std::vector<int> sequentialCountHistrogram()
+//  {
+//    // first determine the maximum count
+//    uint64_t local_max_count = 0; // use uint64_t for all systems!
+//    for (int i = 0; i < nThreads; ++i) {
+//      for (auto iter=this->local_map[i].begin(); iter!=this->local_map[i].end();
+//           iter=this->local_map[i].equal_range(iter->first)->second)
+//      {
+//        std::size_t count = getLocalCount(local_map[i], *iter);
+//        local_max_count = std::max<uint64_t>(local_max_count, count);
+//      }
+//    }
+//
+//    // cast max count to int and check that it doesn't overflow
+//    if (local_max_count >= std::numeric_limits<int>::max())
+//    {
+//      throw std::range_error("Histrogram of counts: maximum count exceeds integer range");
+//    }
+//    int max_count = static_cast<int>(local_max_count);
+//
+//    // get max accross all processors
+//    int all_max_count;
+//    MPI_Allreduce(&max_count, &all_max_count, 1, MPI_INT, MPI_MAX, this->comm);
+//
+//    // count the counts to create local histogram
+//    std::vector<int> local_count_hist(all_max_count+1, 0);
+//    for (int i = 0; i < nThreads; ++i) {
+//      for (auto iter=this->local_map[i].begin(); iter!=this->local_map[i].end();
+//           iter=this->local_map[i].equal_range(iter->first)->second)
+//      {
+//        std::size_t count = getLocalCount(local_map[i], *iter);
+//        local_count_hist[count]++;
+//      }
+//    }
+//
+//    // then accumulate across all processors
+//    std::vector<int> count_hist(all_max_count+1, 0);
+//    MPI_Allreduce(&local_count_hist[0], &count_hist[0], all_max_count+1,
+//                  MPI_INT, MPI_SUM, this->comm);
+//
+//    return count_hist;
+//  }
 
-    // cast max count to int and check that it doesn't overflow
-    if (local_max_count >= std::numeric_limits<int>::max())
-    {
-      throw std::range_error("Histrogram of counts: maximum count exceeds integer range");
-    }
-    int max_count = static_cast<int>(local_max_count);
-
-    // get max accross all processors
-    int all_max_count;
-    MPI_Allreduce(&max_count, &all_max_count, 1, MPI_INT, MPI_MAX, this->comm);
-
-    // count the counts to create local histogram
-    std::vector<int> local_count_hist(all_max_count+1, 0);
-    for (int i = 0; i < nThreads; ++i) {
-      for (auto iter=this->local_map[i].begin(); iter!=this->local_map[i].end();
-           iter=this->local_map[i].equal_range(iter->first)->second)
-      {
-        std::size_t count = getLocalCount(local_map[i], *iter);
-        local_count_hist[count]++;
-      }
-    }
-
-    // then accumulate across all processors
-    std::vector<int> count_hist(all_max_count+1, 0);
-    MPI_Allreduce(&local_count_hist[0], &count_hist[0], all_max_count+1,
-                  MPI_INT, MPI_SUM, this->comm);
-
-    return count_hist;
-  }
-
-
+  /**
+   * initializes the communication for a distributed map.
+   */
   void init() {
-    DEBUG("initialize distributed multimap's communication");
+    DEBUGF("Initialize distributed multimap's communication");
     // start the threads in the comm layer (if not already running)
     this->commLayer.initCommunication();
   }
 
 
   /**
-   * finalize waits for commLayer to finish, which guarantees that all communications are done (to avoid timing issue with MPI_FINALIZE and distributed map object clean up.
+   * waits for commLayer to finish, which guarantees that all communications are done (to avoid timing issue with MPI_FINALIZE and distributed map object clean up.
    */
   void finish() {
     this->commLayer.finish(INSERT_MPI_TAG);
@@ -384,7 +422,7 @@ public:
 
 protected:
   /**
-   * @brief Constructs the shared base class.
+   * @brief Constructs the shared base class.  protected:  use derived class
    *
    * @param mpi_comm        The MPI communicator to pass onto the communication
    *                        layer.
@@ -402,7 +440,7 @@ protected:
   }
 
   /**
-   * @brief
+   * @brief  virtual destructor.  waits for underlying commLayer to finish
    */
   virtual ~_distributed_map_base() {
     this->finish();
@@ -437,7 +475,6 @@ protected:
   void sendPair(const K& key, const T& value, const int dstRank, const int tag)
   {
     // create the pair and call the overloaded function
-    //std::pair<K, T> keyElement(key, value);
     this->sendPair(std::make_pair(key, value), dstRank, tag);
   }
 
@@ -458,7 +495,6 @@ protected:
     commLayer.sendMessage(msg, count, dstRank, tag);
   }
 
-  // returns the target rank for a given key (uses the distribution function)
   /**
    * @brief Returns the target rank for a given key.
    *
@@ -477,6 +513,18 @@ protected:
     return mpiHashFunc(key) % size;
   }
 
+  /**
+   * @brief Returns the target thread id for a given key.
+   *
+   * Uses the given hash function to determine the thread responsible for storing
+   * the key and its metadata.
+   *
+   * @param key     The key for which to determine the target thread.
+   *
+   * @return        The target thread to which the given key
+   *                belongs.
+   *
+   */
   int getTargetThread(const K& key)
   {
     // get the target rank for the processor
@@ -485,8 +533,7 @@ protected:
 
 
   /**
-   * @brief Returns the local count of a given key.
-   *
+   * @brief Returns the local count of a given key in one unordered multimap
    *
    * @param localMap    The local map data structure.
    * @param item        The item to lookup the count for.
@@ -500,7 +547,7 @@ protected:
   }
 
   /**
-   * @brief Returns the local count of a given key.  this one is for count map.
+   * @brief Returns the local count of a given key in one unordered multimap.  this one is for count map.
    *
    * @param localMap    The local map data structure.
    * @param item        The item to lookup the count for.
@@ -519,7 +566,7 @@ protected:
    * @brief Callback function for received lookup messages.
    *
    * Performs the actual lookup in the local data structure and sends a message
-   * as reply.
+   * as reply.  OMP parallelized
    *
    * @param msg         The message data received.
    * @param count       The number of bytes received.
@@ -546,36 +593,36 @@ protected:
       }
     }
   }
-  /**
-   * @brief Callback function for received lookup messages.
-   *
-   * Performs the actual lookup in the local data structure and sends a message
-   * as reply.
-   *
-   * @param msg         The message data received.
-   * @param count       The number of bytes received.
-   * @param fromRank    The source rank of the message.
-   */
-  void sequentialReceivedLookupCallback(uint8_t* msg, std::size_t count, int fromRank)
-  {
-    // deserialize
-    K* keys = reinterpret_cast<K*>(msg);
-    int key_count = count / sizeof(K);
 
-    // for all received requests, send the value from the lookup
-    for (int i = 0; i < key_count; ++i)
-    {
-      // check if exists and then send
-      auto range = this->local_map[this->getTargetThread(keys[i])].equal_range(keys[i]);
-      for (auto it = range.first; it != range.second; ++it)
-      {
-        // send the results to the requesting processor
-        this->sendPair(*it, fromRank, LOOKUP_ANSWER_MPI_TAG);
-      }
-    }
-  }
+//  /**
+//   * @brief Callback function for received lookup messages.
+//   *
+//   * Performs the actual lookup in the local data structure and sends a message
+//   * as reply.
+//   *
+//   * @param msg         The message data received.
+//   * @param count       The number of bytes received.
+//   * @param fromRank    The source rank of the message.
+//   */
+//  void sequentialReceivedLookupCallback(uint8_t* msg, std::size_t count, int fromRank)
+//  {
+//    // deserialize
+//    K* keys = reinterpret_cast<K*>(msg);
+//    int key_count = count / sizeof(K);
+//
+//    // for all received requests, send the value from the lookup
+//    for (int i = 0; i < key_count; ++i)
+//    {
+//      // check if exists and then send
+//      auto range = this->local_map[this->getTargetThread(keys[i])].equal_range(keys[i]);
+//      for (auto it = range.first; it != range.second; ++it)
+//      {
+//        // send the results to the requesting processor
+//        this->sendPair(*it, fromRank, LOOKUP_ANSWER_MPI_TAG);
+//      }
+//    }
+//  }
 
-  //TODO: let user define these.
 
   /**
    * @brief Callback function for received lookup answers.
@@ -583,21 +630,18 @@ protected:
    * Deserializes the answer to lookup queries and calls the
    * given callback function.
    *
+   * @note	user supplied callback function should operate on these in bulk
+   * 	so that they can better express parallelism.
+   *
    * @param msg         The message data received.
    * @param count       The number of bytes received.
    * @param fromRank    The source rank of the message.
    */
   void receivedLookupAnswerCallback(uint8_t* msg, std::size_t count, int fromRank)
   {
-//    // deserialize
+    // deserialize
     std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
     int element_count = count / sizeof(std::pair<K, T>);
-//
-//    // insert all elements into the hash table
-//    for (int i = 0; i < element_count; ++i)
-//    {
-//      lookupAnswerCallbackFunc(elements[i]);
-//    }
 
     lookupAnswerCallbackFunc(elements, element_count);
   }
@@ -607,13 +651,13 @@ protected:
    *  Data members  *
    ******************/
 
-  /// The async communication layer abstraction, used for sending and receiving
-  /// messages
+  /// The async communication layer abstraction, used for sending and receiving messages
   CommunicationLayer commLayer;
 
   /// The MPI communicator used for distributing the input
   MPI_Comm comm;
 
+  /// number of threads participating in callback functions.
   int nThreads;
 
   /// The hash functijon used for distributing elements across threads
@@ -622,10 +666,11 @@ protected:
   /// The hash function used for distributing input across processors
   MPIHasher mpiHashFunc;
 
-
   /// The local container data-structure. For most cases this is either
   /// a std::unordered_map or std::unordered_multimap
   std::vector<LocalContainer> local_map;
+
+  /// storage for temporarily generated key to thread mapping.  reused for each received buffer to process.
   std::vector<int> threadKeys;
 
   /// Whether there are pending insert operations
@@ -648,10 +693,14 @@ protected:
  * @brief   A distributed, asynchronous multimap.
  *
  * This can hold multiple elements with identical key.
+ * @note	this is useful for position kmer index, and position+quality score kmer index.
  *
  * @tparam K                    The key type.
  * @tparam T                    The value type.
  * @tparam CommunicationLayer   The CommunicationLayer class type.
+ * @tparam LocalHasher		    Hash function used by local unordered_map backend store.
+ * @tparam ThreadHasher		    Hash function for hashing to key to thread id
+ * @tparam MPIHasher		    Hash function for hashing to key to MPI rank.
  */
 template<typename K, typename T, typename CommunicationLayer, typename LocalHasher = std::hash<K>, typename ThreadHasher = std::hash<K>, typename MPIHasher = std::hash<K> >
 class distributed_multimap
@@ -696,7 +745,6 @@ public:
     this->commLayer.addReceiveCallback(_base_class::LOOKUP_ANSWER_MPI_TAG,
         std::bind(&distributed_multimap::receivedLookupAnswerCallback,
                   this, _1, _2, _3));
-
   }
 
   /**
@@ -836,17 +884,17 @@ protected:
     //    and popping may be more costly because of internal state tracking.
 
   }
-  void sequentialReceivedInsertCallback(uint8_t* msg, std::size_t count, int fromRank)
-  {
-    // deserialize
-    std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
-    int element_count = count / sizeof(std::pair<K, T>);
-
-    for (int i = 0; i < element_count; ++i) {
-
-      this->local_map[this->getTargetThread(elements[i].first)].insert(elements[i]);
-    }
-  }
+//  void sequentialReceivedInsertCallback(uint8_t* msg, std::size_t count, int fromRank)
+//  {
+//    // deserialize
+//    std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
+//    int element_count = count / sizeof(std::pair<K, T>);
+//
+//    for (int i = 0; i < element_count; ++i) {
+//
+//      this->local_map[this->getTargetThread(elements[i].first)].insert(elements[i]);
+//    }
+//  }
 };
 
 
@@ -859,8 +907,12 @@ protected:
  *
  * @tparam K                    The key type.
  * @tparam CommunicationLayer   The CommunicationLayer class type.
+ * @tparam LocalHasher		    Hash function used by local unordered_map backend store.
+ * @tparam ThreadHasher		    Hash function for hashing to key to thread id
+ * @tparam MPIHasher		    Hash function for hashing to key to MPI rank.
  */
-template<typename K, typename CommunicationLayer, typename LocalHasher = std::hash<K>, typename ThreadHasher = std::hash<K>, typename MPIHasher = std::hash<K>>
+template<typename K, typename CommunicationLayer,
+	typename LocalHasher = std::hash<K>, typename ThreadHasher = std::hash<K>, typename MPIHasher = std::hash<K>>
 class distributed_counting_map
  : public _distributed_map_base<K, count_t, CommunicationLayer,
                                 std::unordered_map<K, count_t, LocalHasher>, ThreadHasher, MPIHasher >
@@ -1030,18 +1082,18 @@ protected:
     //    and popping may be more costly because of internal state tracking.
 
   }
-  void sequentialReceivedCountCallback(uint8_t* msg, std::size_t count, int fromRank)
-  {
-    // deserialize
-    K* keys = reinterpret_cast<K*>(msg);
-    int key_count = count / sizeof(K);
-
-    // insert all elements into the hash table
-    for (int i = 0; i < key_count; ++i)
-    {
-      this->local_map[this->getTargetThread(keys[i])][keys[i]]++;
-    }
-  }
+//  void sequentialReceivedCountCallback(uint8_t* msg, std::size_t count, int fromRank)
+//  {
+//    // deserialize
+//    K* keys = reinterpret_cast<K*>(msg);
+//    int key_count = count / sizeof(K);
+//
+//    // insert all elements into the hash table
+//    for (int i = 0; i < key_count; ++i)
+//    {
+//      this->local_map[this->getTargetThread(keys[i])][keys[i]]++;
+//    }
+//  }
 
 };
 
