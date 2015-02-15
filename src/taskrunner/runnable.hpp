@@ -1,9 +1,9 @@
 /**
  * @file    runnable.hpp
- * @ingroup
- * @author  tpan
- * @brief
- * @details
+ * @ingroup taskrunner
+ * @author  Tony Pan
+ * @brief	abstract base class for Runnable objects, including tasks and task engine
+ * @details	common base class allows task engine to be treated as tasks.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -27,6 +27,9 @@ namespace concurrent
  * @details subclasses include runner and is subclasses, and user defined
  *          tasks.
  *
+ *         	This interface allows Runners to be treated as tasks as well, so
+ *         	nesting Runners is possible.
+ *
  *          since we allow mix of different types of Runnables (tasks),
  *          we cannot use CRTP and static polymorphism, which requires
  *          all types to be known at compile time.
@@ -37,10 +40,13 @@ namespace concurrent
 class Runnable : public std::enable_shared_from_this<Runnable>
 {
   public:
+	/// constructor
     Runnable() {};
 
+    /// destructor
     virtual ~Runnable() {};
 
+    /// abstract "run" operator.
     virtual void operator()() = 0;
 };
 

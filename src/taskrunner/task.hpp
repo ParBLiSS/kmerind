@@ -1,8 +1,8 @@
 /**
  * @file    task.hpp
- * @ingroup
- * @author  tpan
- * @brief
+ * @ingroup taskrunner
+ * @author  Tony Pan
+ * @brief	API interface for a task.  essentially a functor
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -21,37 +21,23 @@ namespace concurrent
 
 /**
  * @class     bliss::concurrent::Task
- * @brief
- * @details   assumption is that the run method contains a loop, which
- *            calls src repeatedly to get data block, compute, then put
- *            data in Dest.  compute should take a datablock as input, and
- *            dest as output target (write directly into dest).  Src should
- *            know how to partition itself, and have a "getNextChunk"
- *            method Dest should know how to hash the values it receives,
- *            and have a "put" method.
+ * @brief	  a conceptual unit of work, or a task.
+ * @details   Defined in the form of a functor.
+ * 			  It is the user's responsibility to define the input and output
+ * 			  and the computation.
  *
-   *            because of the repeated runs, the three classes should avoid
-   *            dynamic polymorphism.  we use static polymorphism to ensure
-   *            that the types specified are correct.  we also use
-   *            static_assert to ensure that the input/output types are
-   *            matched up.
-   *
-   */
-//  template<typename Compute, typename Input, typename Output>
+ * 			  Derived from Runnable so that the task engine can provide a
+ * 			  standard task management interface (add, run, etc).
+ *
+ */
   class Task : public Runnable
   {
-//    protected:
-//      Compute& comp;
-//      Input& input;
-//      Output& output;
-
     public:
-//      Task(Compute &_comp, Input &_input, Output &_output)
-//        : comp(_comp), input(_input), output(_output) {};
-      Task() {};
-
+	  /// default construtor
+	  Task() {};
+	  /// default destructor
       virtual ~Task() {};
-
+      /// interface function for running a task.  essentially a functor.
       virtual void operator()() = 0;
   };
 

@@ -1,5 +1,5 @@
 /**
- * @file    PackedString.hpp
+ * @file    packed_string.hpp
  * @ingroup common
  * @author  Patrick Flick
  * @brief   Declares the PackedStringImpl and PackedString classes.

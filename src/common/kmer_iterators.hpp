@@ -27,7 +27,7 @@
 // own includes
 #include <common/base_types.hpp>
 #include <common/padding.hpp>
-#include <common/Kmer.hpp>
+#include <common/kmer.hpp>
 
 #include <iterators/sliding_window_iterator.hpp>
 

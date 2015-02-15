@@ -1,5 +1,5 @@
 /**
- * @file    KmerIndex.hpp
+ * @file    kmer_index.hpp
  * @ingroup index
  * @author  Tony Pan
  * @brief	High level kmer indexing API
@@ -38,9 +38,9 @@
 #include <unistd.h>     // sysconf
 #include <sys/stat.h>   // block size.
 
-#include "common/Kmer.hpp"
+#include "common/kmer.hpp"
 #include "common/base_types.hpp"
-#include "common/AlphabetTraits.hpp"
+#include "common/alphabet_traits.hpp"
 #include "io/fastq_loader.hpp"
 #include "io/CommunicationLayer.hpp"
 #include "index/distributed_map.hpp"
@@ -773,7 +773,7 @@ namespace bliss
           /// trasforms from ASCII to kmoleculess
           typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
           /// transform from kmolecule to kmer
-          typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
+          typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToCanonicalKmerFunctor<KmerType> >       KmerIterType;
 
         protected:
           /// kmer iterator is the index element iterator type here.
@@ -834,7 +834,7 @@ namespace bliss
 
             //== set up the kmer generating iterators.
             KmoleculeOpType kmer_op;
-            bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
+            bliss::utils::KmoleculeToCanonicalKmerFunctor<KmerType> transform;
             KmerIndexIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
             KmerIndexIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
 
@@ -905,7 +905,7 @@ namespace bliss
           /// trasforms from ASCII to kmoleculess
           typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
           /// transform from kmolecule to kmer
-          typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
+          typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToCanonicalKmerFunctor<KmerType> >       KmerIterType;
         protected:
 
           /// kmer position iterator type
@@ -972,7 +972,7 @@ namespace bliss
 
             //== set up the kmer generating iterators.
             KmoleculeOpType kmer_op;
-            bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
+            bliss::utils::KmoleculeToCanonicalKmerFunctor<KmerType> transform;
             KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
             KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
 
@@ -1057,7 +1057,7 @@ namespace bliss
           /// trasforms from ASCII to kmoleculess
           typedef bliss::iterator::buffered_transform_iterator<KmoleculeOpType, typename KmoleculeOpType::BaseIterType> KmoleculeIterType;
           /// transform from kmolecule to kmer
-          typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToKmerFunctor<KmerType> >       KmerIterType;
+          typedef bliss::iterator::transform_iterator<KmoleculeIterType, bliss::utils::KmoleculeToCanonicalKmerFunctor<KmerType> >       KmerIterType;
 
 
           /// kmer position iterator type
@@ -1137,7 +1137,7 @@ namespace bliss
 
             //== set up the kmer generating iterators.
             KmoleculeOpType kmer_op;
-            bliss::utils::KmoleculeToKmerFunctor<KmerType> transform;
+            bliss::utils::KmoleculeToCanonicalKmerFunctor<KmerType> transform;
             KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
             KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
 

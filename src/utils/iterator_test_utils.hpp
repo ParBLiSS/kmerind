@@ -1,8 +1,8 @@
 /**
- * @file    test_utils.hpp
- * @ingroup
- * @author  tpan
- * @brief
+ * @file    iterator_test_utils.hpp
+ * @ingroup utils
+ * @author  Tony Pan
+ * @brief   convenience functions to compare sequences of items
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -18,7 +18,7 @@
 #include <cstdio>
 #include <sstream>
 
-
+/// assign a sequence of numeric values to an iterator.
 template<typename Iterator>
 void assignSequence(Iterator data, size_t count,
                     typename std::iterator_traits<Iterator>::value_type offset = 0,
@@ -28,7 +28,9 @@ void assignSequence(Iterator data, size_t count,
   }
 }
 
-
+/**
+ * @brief  compare 2 iterators up to count number of entries, and print out the number of items that are different.
+ */
 template<typename Iterator1, typename Iterator2>
 bool compareSequences(Iterator1 data1, Iterator2 data2, size_t count) {
   static_assert(std::is_same<typename std::iterator_traits<Iterator1>::value_type,
@@ -61,12 +63,10 @@ bool compareSequences(Iterator1 data1, Iterator2 data2, size_t count) {
     }
   }
   return same;
-
-
 }
 
 
-
+/// compare a input iterator with a numeric sequence
 template<typename Iterator>
 bool checkSequence(Iterator data, size_t count,
                    typename std::iterator_traits<Iterator>::value_type offset = 0,
@@ -79,6 +79,7 @@ bool checkSequence(Iterator data, size_t count,
   return compareSequences(data, seq.begin(), count);
 }
 
+/// compare an iterator's content to a numeric sequence, first sorting the content.
 template<typename Iterator>
 bool checkUnorderedSequence(Iterator data, size_t count,
                             typename std::iterator_traits<Iterator>::value_type offset = 0,
@@ -91,6 +92,7 @@ bool checkUnorderedSequence(Iterator data, size_t count,
 }
 
 
+/// compare 2 iterators contents to each other, first sorting the content.
 template<typename Iterator1, typename Iterator2>
 bool compareUnorderedSequences(Iterator1 data, Iterator2 data2, size_t count) {
   static_assert(std::is_same<typename std::iterator_traits<Iterator1>::value_type,

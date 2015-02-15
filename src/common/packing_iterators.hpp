@@ -22,7 +22,7 @@
 #include <common/base_types.hpp>
 #include <common/bit_ops.hpp>
 #include <common/padding.hpp>
-#include <common/Kmer.hpp>
+#include <common/kmer.hpp>
 
 #include <iterators/many2one_iterator.hpp>
 #include <iterators/one2many_iterator.hpp>

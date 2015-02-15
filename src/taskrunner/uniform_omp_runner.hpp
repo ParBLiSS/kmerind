@@ -1,9 +1,9 @@
 /**
  * @file    uniform_omp_runner.hpp
- * @ingroup
- * @author  tpan
- * @brief
- * @details
+ * @ingroup taskrunner
+ * @author  Tony Pan
+ * @brief   an OMP task execution engine where all threads execute the same list of tasks
+ * @details allows adding tasks during execution
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -13,12 +13,12 @@
 #define UNIFORM_OMP_RUNNER_HPP_
 
 #include "omp.h"
+#include <vector>
 #include <cassert>
 
 #include "config.hpp"
 #include "taskrunner/runner.hpp"
 #include "concurrent/lockfree_queue.hpp"
-#include <vector>
 
 namespace bliss
 {
@@ -28,13 +28,14 @@ namespace concurrent
 /**
  * @class      bliss::concurrent::UniformOMPRunner
  * @brief       runner that performs the same task(s) for each thread.
- * @details     if the task is compound, a sequential runner can be used.
- *
+ * @details     for multiple tasks, either tasks can be added directly
+ * 				or a sequential runner can be used.
  */
 class UniformOMPRunner : public Runner
 {
   protected:
     // since each thread executes the same tasks we need an array of queues
+	// using threadsafe queue because task addition may be multithreaded.
     std::vector<bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> > > qs;
 
     const int nThreads;
@@ -67,7 +68,7 @@ class UniformOMPRunner : public Runner
     virtual ~UniformOMPRunner() {};
 
     /**
-     * @brief Runs all tasks.
+     * @brief Runs all tasks until queue is empty.  each thread performs the same tasks.
      */
     void operator()() {
       size_t proc = 0;
@@ -91,7 +92,7 @@ class UniformOMPRunner : public Runner
 
     /**
      * @brief Adds a task to this Runner.
-     *
+     * @details  each thread has its own queue.  adding a task adds to all queues.
      * @param t
      */
     virtual bool addTask(std::shared_ptr<Runnable> &&t) {
@@ -118,6 +119,7 @@ class UniformOMPRunner : public Runner
 
     }
 
+    /// count the number of pending tasks
     virtual size_t getTaskCount() {
       size_t max = 0;
       int id;
@@ -128,6 +130,7 @@ class UniformOMPRunner : public Runner
       return max;
     }
 
+    /// check to see if new tasks can be added to the queue
     virtual bool isAddDisabled() {
       bool canPush = true;
       int id;
@@ -138,6 +141,7 @@ class UniformOMPRunner : public Runner
       return !canPush;
     }
 
+    /// flush currently queued tasks and disallow further new tasks
     virtual void disableAdd() {
       int id;
       for (int i = 0; i < nThreads; ++i) {

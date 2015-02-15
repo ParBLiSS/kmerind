@@ -1,8 +1,8 @@
 /**
- * @file    KmerUtils.hpp
- * @ingroup
- * @author  tpan
- * @brief
+ * @file    kmer_utils.hpp
+ * @ingroup bliss::utils
+ * @author  Tony Pan
+ * @brief   Utility functions and functors for kmers
  * @details
  *
  * Copyright (c) 2015 Georgia Institute of Technology.  All Rights Reserved.
@@ -12,27 +12,32 @@
 #ifndef KMERUTILS_HPP_
 #define KMERUTILS_HPP_
 
-#include "common/Kmer.hpp"
+#include "common/kmer.hpp"
 #include "common/bit_ops.hpp"
 
 namespace bliss
 {
   namespace utils
   {
-
+    /**
+     * @class  bliss::utils::KmoleculeToCanonicalKmerFunctor
+     * @brief  choose the smaller kmer from a Kmolecule (std::pair of Kmer and its reverse complement)
+     *
+     */
     template<typename KmerType>
-    struct KmoleculeToKmerFunctor {
+    struct KmoleculeToCanonicalKmerFunctor {
+    	/// DEFINE kmolecule type
         typedef std::pair<KmerType, KmerType> KmoleculeType;
 
+        /// operator for choosing the lexigraphically smaller kmer/reverse complement.
         KmerType operator()(const KmoleculeType& input) {
           return (input.first < input.second ? input.first : input.second);
-          //return input.first;
         }
     };
 
     /**
      * @class    bliss::io::KmerUtils
-     * @brief
+     * @brief	 collection of kmer related utility functions.
      * @details
      *
      */
@@ -40,6 +45,9 @@ namespace bliss
     {
 
       public:
+    	/**
+    	 * @brief convenience function to convert from kmer to ascii representation.  minimizes shifting.
+    	 */
         template<typename Kmer>
         static std::string toASCIIString(const Kmer &kmer)
         {
@@ -61,17 +69,12 @@ namespace bliss
             word_pos = bit_pos / (sizeof(WordType) * 8);
             bit_pos_in_word = bit_pos % (sizeof(WordType) * 8);
 
-      //      printf("word %d bit %d\n", word_pos, bit_pos_in_word);
             w = (kmer.data[word_pos] >> bit_pos_in_word);
 
             // now check if char crosses bit boundary.
-
             if (bit_pos_in_word + Kmer::bitsPerChar > (sizeof(WordType) * 8)) {  // == means that there were just enough bits in the previous word.
               offset = (sizeof(WordType) * 8) - bit_pos_in_word;
               ++word_pos;
-
-      //        printf("word %d bit %d\n", word_pos, bit_pos_in_word);
-      //        printf("offset = %d\n", offset);
 
               // now need to get the next part.
               if (word_pos < Kmer::nWords) w = w | (kmer.data[word_pos] << offset);

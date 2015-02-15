@@ -1,9 +1,9 @@
 /**
  * @file    runner.hpp
- * @ingroup
- * @author  tpan
- * @brief
- * @details
+ * @ingroup taskrunner
+ * @author  Tony Pan
+ * @brief	an abstract class to represent a task engine, "runner"
+ * @details derived from Runnable so that Runner can be treated as tasks as well.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -29,7 +29,8 @@ namespace concurrent
  *
  *            inherit from Runnable to allow nesting of Runners as tasks
  *
- *            task implementation allows the following flow of control patterns to be constructed:
+ *            specific task implementation allows the following flow of
+ *            control patterns to be constructed:
  *            1. execute once:  task perform computation and terminate
  *            2. looping:  task reinsert into the same task queue at end of computation
  *            3. dependent computation:  task instantiate additional task of different type
@@ -78,7 +79,7 @@ namespace concurrent
  *            for 3b and 3c, since we need for loop, we require a list/vector and
  *              cannot dynamically insert anyways.
  *
- *            if omp task queue is to be used directly without a middleware level
+ *            if omp task queue were to be used directly without a middleware level
  *            task queue, then we need a master task, and would still need an api
  *            like the one defined here to encapsulate the parallel blocks.
  *            at the same time, dynamically adding tasks becomes hard or impossible
@@ -88,27 +89,31 @@ namespace concurrent
  *            summary:  A middleware task queue simplifies logic and enable certain
  *              concurrency patterns, when compared to using omp task queue directly.
  *
- *
- *
- * TODO:           not subclassed yet: streaming runner.
  */
-
 class Runner : public Runnable
 {
   public:
+	/// default constructor
     Runner() {};
+    /// default destructor
     virtual ~Runner() {};
 
-    // function to run
+    /// interface function, for executes the tasks
     virtual void operator()() = 0;
 
+    /// interface for adding new tasks to queue
     virtual bool addTask(std::shared_ptr<Runnable> &&_t) = 0;
+
+    /// interface function for getting the number of pending tasks
     virtual size_t getTaskCount() = 0;
+
+    /// interface function for checking if queue is blocked from future task addition
     virtual bool isAddDisabled() = 0;
 
     /// flush currently queued tasks and disallow further new tasks
     virtual void disableAdd() = 0;
 
+    /// interface function for synchronizing between runners.
     virtual void synchronize() = 0;
 
 
