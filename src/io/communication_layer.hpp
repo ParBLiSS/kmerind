@@ -96,22 +96,19 @@ namespace io
  *          of sender and receiver communication threads avoids deadlock when the receiving process is blocked by a full
  *          recvQueue, thus blocking the sending function.
  *
- *
  *        6. Thread Safe processing of received messages
  *          Multiple callback threads can process the received messages in the receive queue, which is thread safe.
  *
- *        6. single threaded control of the Communication Layer (flush messages, finish, etc)
+ *        7. single threaded control of the Communication Layer (flush messages, finish, etc)
  *          flush and finish functions are collectively called by the control thread (owner of Communication Layer object)
- *
  *
  *        Basic Concepts and Design:
  *        A. Threading
  *          The following are the intended threading pattern:
  *          * single control thread (owner of Communication Layer instance.  can be one of the compute threads)
  *          * one or more compute threads (producer of messages to be sent)
- *          * single MPI communication thread for send (internal)
- *          * single MPI communication thread for recv (internal)
- *          * one or more receive threads (consumers of messages received, internal)
+ *          * single MPI communication thread for send and recv (internal)
+ *          * one or more receive callback threads (consumers of messages received, internal)
  *
  *        The choice of using a single MPI communication thread is based on
  *          1. Single threaded MPI libraries are more readily available on different platforms.
@@ -261,15 +258,13 @@ namespace io
  *
  *          Control thread call finish(tag)
  *
- *          control thread call finishCommunication()
+ *          control thread call finishCommunication() (TO MAKE SURE ALL THREADS ARE FINISHED)
  *
- *          Control thread call finalize (TO MAKE SURE ALL THREADS ARE FINISHED)
  *
- * TODO - replace uint8_t by typedef
+ * @note:  COMMLAYER USES THREADLOCAL BUFFERS.  Shared BUFFER requires coordinate buffer ptr swap, which is not really safe.
  *
  */
-/// DISABLED COMMLAYER THAT USES SHARED BUFFER - SWAPPING BUFFER PTR in MULTITHREADED CODE IS NOT SAFE.
-template<bool ThreadLocal>
+template<bool ThreadLocal = true>
 class CommunicationLayer
 {
 	 static_assert(ThreadLocal, "Communication Layer only supports ThreadLocal mode. (template param set to true)");
@@ -284,12 +279,9 @@ protected:
    /// alias BufferPtrType to MessageBuffersType's
    using BufferPtrType = typename MessageBuffersType::BufferType*;
 
-    //==== Message type aliases for convenience.
+   /// send MPI Message type aliases for convenience.
    using SendDataElementType = typename bliss::io::DataMessageToSend<BufferPtrType>;
 
-
-   // ==== send comm thread class.  for organization.
-   // TODO: group the code for comm thread
 
    /**
     * @brief    communication thread to handle all send the receive.
@@ -303,45 +295,39 @@ protected:
    class CommThread
    {
      protected:
-
-
-
-
+       /// disabled default constructor
        CommThread() = delete;
-
 
        /// The MPI Communicator object for this communication layer
        MPI_Comm comm;
 
+       /// the parent communication layer object
        CommunicationLayer& commLayer;
 
 
-       /// Atomic status variable: set to true if `finishing` and if all sends are
-       /// completed.
+       /// set to true after all sends are completed
        bool sendDone;
 
-       /// Atomic status variable: set to true if `finishing` and if all receives
-       /// are completed.
+       /// set to true if `finishing` and if all receives are completed.
        bool recvDone;
 
 
        /// Queue of pending MPI send operations
        std::deque<std::pair<MPI_Request, std::unique_ptr<MPIMessage> > > sendInProgress;
 
-       // pending mpi messages.  also holds local messages (send to self) between send thread and recv thread.
-       //   (2 producers, 1 consumer) thread.
        /// Queue of pending MPI receive operations
-       //bliss::concurrent::ThreadSafeQueue<std::pair<MPI_Request, std::unique_ptr<MPIMessage> > > recvInProgress;
        std::deque<std::pair<MPI_Request, std::unique_ptr<MPIMessage> > > recvInProgress;
 
+       /// actual thread
        std::thread td;
+       /// MPI comm rank
        int commRank;
+       /// MPI communicator size
        int commSize;
 
      public:
 
-
-
+       /// default constructor
        CommThread(const MPI_Comm& communicator, CommunicationLayer & comm_layer) :
          comm(communicator), commLayer(comm_layer),
          sendDone(false),
@@ -354,8 +340,10 @@ protected:
          MPI_Comm_rank(comm, &commRank);
        };
 
+       /// default destructor
        virtual ~CommThread() {}
 
+       /// start the comm thread and also allocate some buffer for sending control messages.
        void start() {
 
          if (!td.joinable()) {
@@ -372,6 +360,7 @@ protected:
          } // else already started the thread.
        }
 
+       /// finished the comm thread by waiting for the thread to join.
        void finish() {
          if (td.joinable()) {
            td.join();
@@ -402,8 +391,6 @@ protected:
        {
          DEBUGF("C THREAD STARTED:  send comm-thread on %d", commRank);
 
-         // TODO: use thread lock mutex and cond var to help reduce load.
-
          bool worked = false;
          // while there's still work to be done:
          while (!sendDone || !recvDone)
@@ -419,8 +406,7 @@ protected:
            // start pending recvs
            worked |= tryStartReceive();
 
-           //if (!worked) _mm_pause();
-
+           if (!worked) _mm_pause();
          }
          DEBUGF("C THREAD FINISHED:  send comm-thread on %d", commRank);
        }
@@ -437,9 +423,6 @@ protected:
        {
          // quit if no more sends are to be expected
          if (sendDone) return false;
-
-         //DEBUGF("rank %d sendDone? %s, finishing %s sendqueue %ld sendInProgress %ld", commRank, (sendDone ? "true":"false"), (finishing.load() ? "true": "false"), commLayer.sendQueue.getSize(), sendInProgress.size());
-
 
          if (commLayer.sendQueue.isEmpty()) {
            _mm_pause();
@@ -460,7 +443,7 @@ protected:
 
          // second is a pointer to ControlMessage
          if (ptr->tag == CONTROL_TAG) {
-           // if control message,
+           // ===== if control message,
 
            // ControlMessage ownership is maintained by el.
            ControlMessage* se = dynamic_cast<ControlMessage*>(ptr.get());  // MPIMessage*
@@ -468,39 +451,27 @@ protected:
 
            DEBUGF("C SEND %d -> %d, termination signal for tag %d epoch %u", commRank, se->rank, getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
 
-           // termination message for this tag and destination
+           // send termination message for this tag and destination
            if (se->rank == commRank) {
+             // =========== send locally
+
              // local, directly handle by creating an byte array and directly
              // insert into the recvInProgress (needed by the receiver decrement
-             // logic in "finishReceive", so can't put into receive queue)
+             // logic in "finishReceive", so can't put into receive queue.  also to maintain message orders)
              MPI_Request req = MPI_REQUEST_NULL;
-//              uint8_t *array = new uint8_t[sizeof(TaggedEpoch)];
-//              memcpy(array, &(te), sizeof(TaggedEpoch));
-
-
 
              // now move ControlMessage ownership to recvInProgress
              auto pair = std::make_pair(std::move(req),
-                                        std::move(ptr));
-             assert(ptr == nullptr);
-             assert(pair.second != nullptr);
-
+                                        std::move(ptr));  // message from send queue is a ControlMessage, which is compatible with recvInProgress queue.
              recvInProgress.push_back(std::move(pair));
-             assert(pair.second.get() == nullptr);
-             assert(recvInProgress.back().second.get() != nullptr);
 
-
-             //DEBUGF("C rank %d tag %d epoch %ld local send control message to rank %d", commRank, getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te), commRank);
            } else {
 
 
-//               remote control message.  send a terminating message with tag CONTROL_TAG
-//               payload is the message type and epoch.  Message Ordering is guaranteed by MPI.
-//               Bsend to allow use of preallocated buffer, so don't have to clean up allocated messages.
+            // remote control message.  send a terminating message with tag CONTROL_TAG
+            // payload is the message type and epoch.  Message Ordering is guaranteed by MPI.
+            // Bsend to allow use of preallocated buffer, so don't have to clean up allocated messages.
              MPI_Bsend(&(te), 1, MPI_LONG, se->rank, CONTROL_TAG, comm);
-
-
-             //DEBUGF("C rank %d tag %d epoch %ld remote send control message to rank %d", commRank, getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te), se->rank);
            }
 
            worked = true;
@@ -531,20 +502,12 @@ protected:
                MPI_Request req = MPI_REQUEST_NULL;
 
                auto pair = std::make_pair(std::move(req), std::move(dmr));
-               assert(dmr == nullptr);
-               assert(pair.second != nullptr);
 
                recvInProgress.push_back(std::move(pair));
-               assert(pair.second.get() == nullptr);
 
-               assert(recvInProgress.back().second.get() != nullptr);
-
-               // finished inserting directly to local RecvInProgress.  release the buffer
-
-               // TODO:  don't release the buffer for local transmit.  do it after callback thread is done with it.
+               // finished inserting directly to local RecvInProgress.  release the buffer (since we have a copy)
                commLayer.getTagInfo(se->tag).getBuffer()->releaseBuffer(std::move(se->ptr));
              } else {
-
 
                // remote: initiate async MPI message
                MPI_Request req;
@@ -561,8 +524,6 @@ protected:
                assert(sendInProgress.back().second.get() != nullptr);
 
              }
-//            } else {
-//              WARNINGF("C WARNING: NOT SEND %d -> %d: 0 byte message for tag %d, ptr = %d.", commRank, se->rank, se->tag, se->bufferId);
              worked = true;
            }
 
@@ -584,7 +545,6 @@ protected:
          // probe for messages
          int hasMessage = 0;
          MPI_Status status;
-
          if (commSize > 1)
            MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
 
@@ -605,11 +565,8 @@ protected:
              std::unique_ptr<ControlMessage> msg(new ControlMessage(CONTROL_TAGGED_EPOCH, src));
 
              // receive data or FOC messages.  use finishReceive to handle the
-             // FOC messages and count decrement
-
+             // FOC messages and count decrement.
              MPI_Irecv(&(msg->tagged_epoch), received_count, MPI_LONG, src, tag, comm, &req);
-
-             //DEBUGF("R RECV %d -> %d, termination signal", src, commRank);
 
              // insert into the received InProgress queue.
              auto pair = std::make_pair(std::move(req), std::move(msg));
@@ -619,7 +576,6 @@ protected:
              recvInProgress.push_back(std::move(pair));
              assert(pair.second.get() == nullptr);
              assert(recvInProgress.back().second.get() != nullptr);
-
 
            } else {  // data messages
              MPI_Get_count(&status, MPI_UNSIGNED_CHAR, &received_count);
@@ -629,19 +585,11 @@ protected:
              std::unique_ptr<DataMessageReceived> msg(new DataMessageReceived(msg_data, received_count, tag, src));
              // owner of msg-data is now msg.
 
-
              MPI_Irecv(msg_data, received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
 
-
              auto pair = std::make_pair(std::move(req), std::move(msg));
-             assert(msg.get() == nullptr);
-             assert(pair.second.get() != nullptr);
-
              // insert into the received InProgress queue.
              recvInProgress.push_back(std::move(pair));
-
-             assert(pair.second.get() == nullptr);
-             assert(recvInProgress.back().second.get() != nullptr);
 
            }
            return true;
@@ -651,7 +599,8 @@ protected:
 
 
        /**
-        * @brief Finishes pending MPI_Send requests.  stops at first unfinished request, left unfinished requests finish in next iteration's call.
+        * @brief Finishes pending MPI_Send requests.  stops at first unfinished request,
+        *        leave unfinished requests to finish in next iteration's call.
         */
        bool finishSends()
        {
@@ -666,7 +615,6 @@ protected:
          {
            // get the first request to check - ONLY 1 THREAD CHECKING sendInProgress.
            assert(sendInProgress.front().second != nullptr);
-
 
            // check if MPI request has completed.
            if (sendInProgress.front().first == MPI_REQUEST_NULL) {
@@ -689,7 +637,6 @@ protected:
                }
              }  // control tag, and mpi send finished, so nothing to clean up.
 
-
              // remove the entry from the in-progress queue.  object destruction will clean up data associated with tthe pointer.
              sendInProgress.pop_front();
 
@@ -698,24 +645,14 @@ protected:
            else
            {
              // the head of the queue is not finished, so break and get it later.
-             //DEBUGF("not done sending!");
              worked = false;
-             // break;
            }
          }
 
          // all sending is done when "finishing" is set, and no more messages are pending send,
          // and no messages are being sent.
-         //if (finishing.load() && sendQueue.isEmpty() && sendInProgress.empty()) {
          if (!commLayer.sendQueue.canPop() && sendInProgress.empty()) {
-           // not using sendAccept as check - sendAccept is cleared BEFORE the last
-           // tag end messages starts to be sent, and definitely before the app end
-           // message starts to be sent so sendDone may be set to true too early,
-           // and elements for the last tag, or tag 0 (termination) may be added to
-           // the sendQueue or sendInProfess queue after the empty check here.
            sendDone = true;
-           //
-           //commLayer.sendQueue.disablePush();
          }
          return worked;
        }
@@ -742,7 +679,7 @@ protected:
          // if there are pending receive requests
          if(!recvInProgress.empty())
          {
-           // get the next request.
+           //== get the next request.
            assert(recvInProgress.front().second.get() != nullptr);
 
            //== check if MPI request has completed.
@@ -756,15 +693,14 @@ protected:
 
            if (mpi_finished)
            {
-             // finished request, so enqueue the message for processing.
+             //== finished request, so enqueue the message for processing.
 
-             // get the request from the
+             // get the request from the queue
              auto front = std::move(recvInProgress.front());
-             // remove pending receive element
              recvInProgress.pop_front();
 
 
-             // if it's a control message, then need to count down
+             // if it's a control message, then count down
              if (front.second.get()->tag == CONTROL_TAG)  {
 
                // get the control message
@@ -773,57 +709,27 @@ protected:
 
                MessageInfo& taginfo = commLayer.getTagInfo(getTagFromTaggedEpoch(te));
 
+               // counts down.  note that if this is a new epoch, a new entry will be created and activeEpochCount will be incremented.
+               TaggedEpoch v = taginfo.countdownEpoch(te, std::ref(commLayer.activeEpochCount));
+               //   doing it this way means we can process the received request right away (in message recv order)
 
-//                DEBUGF("C rank %d received control message for tag %d epoch %ld.  recvRemaining has %ld tags", commRank, tag, epoch, recvRemaining.size());
+               //== if after countdown the count is 0 for the epoch, then the TaggedEpoch is done. enqueue a message for Callback Thread.
+               if (v == 0) {
 
-               //==== handle case where local process is not yet listening for tagged epoch.
-               // if this process is not yet waiting for this epoch, that means it has not flushed or finished that tag,
-               // then we need to push this message back into recvInProgress.
-               // need to construct a new message with a NULL request.
-               // then skip over the remaining of this branch and leave the message in recvInProgress.
-               // note that if we were to just create a new epoch capacity entry for previously unseen epoch from remote source, we need to
-               //     increment the active epoch count, and make sure any existing entry is not reset to max (comm size).  The second part is handled
-               //     in messageTypeInfo class, while the first need to be done in coordination with the entry creation.
-               //     MessageTypeInfo therefore need to be passed a reference to the shared ActiveEpochCount entry.
-               // The benefit is that otherwise, we'd need to save the message back into RecvInProgress, thus changing message receive order.
-//               if (!taginfo.isEpochPresent(te)) {
-//                 front.first = MPI_REQUEST_NULL;
-//                 recvInProgress.push_back(std::move(front));
-//                 worked = false;
-
-                 // this delays the processing, which hopefully does not create deadlock.
-               //} else {  // for use when we push back onto recvInProgress queue, since we can't count down in that situation.
-//               }
-
-                 //== now decrement the count of control messages for a epoch
-  //                DEBUGF("C RECV PRE rank %d receiving END signal tag %d epoch %ld from %d, recvRemaining size: %ld",
-  //                     commRank, te.tag, te.epoch, front.second->rank, commLayer.ctrlMsgRemainingForEpoch.size());
-                 TaggedEpoch v = taginfo.countdownEpoch(te, std::ref(commLayer.activeEpochCount));
-  //                DEBUGF("C RECV rank %d receiving END signal tag %d epoch %ld from %d, num senders remaining is %d",
-  //                     commRank, te.tag, te.epoch, front.second->rank, commLayer.ctrlMsgRemainingForEpoch.at(te));
-
-
-                 //== if after decrement the count is 0 for the ep,
-                 if (v == 0) {
-
-                   //DEBUGF("ALL END received for tag %d, pushing to recv queue", front.second.tag);
-
-
-                   // and enqueue ONE FOC message for this tag to be handled by callback.  (reduction from commSize to 1)
-                   if (!commLayer.recvQueue.waitAndPush(std::move(front.second)).first) {
-                     throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
-                   }
-
-                 } else if (v < 0) {
-                   // count decremented to negative.  should not happen.  throw exception.
-
-                   std::stringstream ss;
-                   ss << "R ERROR: number of remaining receivers for tag " << getTagFromTaggedEpoch(te) << " epoch " << (getEpochFromTaggedEpoch(te)) << " is now NEGATIVE";
-                   throw bliss::io::IOException(ss.str());
+                 // and enqueue ONE FOC message for this tag to be handled by callback.  (reduction from commSize to 1)
+                 if (!commLayer.recvQueue.waitAndPush(std::move(front.second)).first) {
+                   throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
                  }
 
-                 worked = true;
-               //}  // for use when we push back onto recvInProgress queue, since we can't count down in that situation.
+               } else if (v < 0) {
+                 // count decremented to negative.  should not happen.  throw exception.
+
+                 std::stringstream ss;
+                 ss << "R ERROR: number of remaining receivers for tag " << getTagFromTaggedEpoch(te) << " epoch " << (getEpochFromTaggedEpoch(te)) << " is now NEGATIVE";
+                 throw bliss::io::IOException(ss.str());
+               }
+
+               worked = true;
 
              } else {  // data message
 
@@ -834,17 +740,16 @@ protected:
              }
            }
            else
-           {  // mpi message is not finished yet.
+           {  //== mpi message is not finished yet.
 
              // the recv request is not done, so stop and wait for the next cycle.
-             //break;
              worked = false;
            }
          } // end while loop for processing recvInProgress.
 
          //== see if we are done with all pending receives and all Application Termination FOC messages are received.
-         if (commLayer.activeEpochCount.load(std::memory_order_acquire) == 0) { //&& !recvInProgress.canPop()) {
-           // if completely done, epoch=CONTROL_TAGGED_EPOCH would have been erased from recvRemaining.
+         if (commLayer.activeEpochCount.load(std::memory_order_acquire) == 0) {
+           // if completely done, epoch=CONTROL_TAGGED_EPOCH would have been erased from recvRemaining, after recvInProgress is empty.
            recvDone = true;
            commLayer.recvQueue.disablePush();
          }
@@ -993,7 +898,7 @@ protected:
               DEBUGF("B rank %d tag %d epoch %u notified all.", commLayer.commRank, getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
 
             } else {
-              // data message.  process it.
+              // data message.  process it.  msg owns data now.
 
               DataMessageReceived* msg = dynamic_cast<DataMessageReceived*>(ptr.get());
 
@@ -1050,8 +955,6 @@ public:
       ctrlMsgProperties.clear();
     }
   }
-
-
 
 
   /**
