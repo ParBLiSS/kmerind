@@ -95,7 +95,6 @@ struct Tester
         {
           msgs[j] = generate_message(my_rank, j);
           commLayer.sendMessage(&(msgs[j]), sizeof(int), j, FIRST_TAG);
-          commLayer.sendMessage(&(msgs[j]), sizeof(int), j, FIRST_TAG);
           if (i == 0 || i == els - 1)
             DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, FIRST_TAG, i, els, msgs[j]);
 
