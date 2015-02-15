@@ -692,11 +692,12 @@ namespace bliss
           void* output = nullptr;
           unsigned int result = append(_data, count, output);
 
+          // DEBUG ONLY.
           if (result & 0x1) {
             if (output == nullptr) {
               ERRORF("ERROR: successful insert but result pointer is null.");
             } else if (std::memcmp(_data, output, count) != 0) {
-              ERRORF("ERROR: successful insert but input not same as what was memcpy'd.");
+              ERRORF("ERROR: A successful insert but input not same as what was memcpy'd.");
             }
           }
 
@@ -1128,11 +1129,12 @@ namespace bliss
           void* output = nullptr;
           unsigned int result = append(_data, count, output);
 
+          // DEBUG ONLY
           if (result & 0x1) {
             if (output == nullptr) {
               ERRORF("ERROR: successful insert but result pointer is null.");
             } else if (std::memcmp(_data, output, count) != 0) {
-              ERRORF("ERROR: successful insert but input not same as what was memcpy'd.");
+              ERRORF("ERROR: B successful insert but input not same as what was memcpy'd.");
             }
           }
 
@@ -1634,15 +1636,17 @@ namespace bliss
         unsigned int append(const void* _data, const uint32_t count)  // _inserted is for DEBUGGING only.
         {
           void* output = nullptr;
+          //uint8_t* ptr = start_ptr;
           unsigned int result = append(_data, count, output);
 
-          if (result & 0x1) {
-            if (output == nullptr) {
-              ERRORF("ERROR: successful insert but result pointer is null.");
-            } else if (std::memcmp(_data, output, count) != 0) {
-              ERRORF("ERROR: successful insert but input not same as what was memcpy'd.");
-            }
-          }
+          // DEBUG ONLY
+//          if (result & 0x1) {
+//            if (output == nullptr) {
+//              ERRORF("ERROR: successful insert but result pointer is null.");
+//            } else if (std::memcmp(_data, output, count) != 0) {
+//              ERRORF("ERROR: C successful insert but input not same as what was memcpy'd.");
+//            }
+//          }
 
           return result;
         }
