@@ -2,7 +2,7 @@
  * function_tratis.hpp
  *
  *  Created on: Feb 18, 2014
- *      Author: tpan
+ *      Author: Tony Pan <tpan7@gatech.edu>
  */
 
 #ifndef FUNCTION_TRAITS_HPP_

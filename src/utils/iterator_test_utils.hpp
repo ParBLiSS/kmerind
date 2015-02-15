@@ -1,7 +1,7 @@
 /**
  * @file    iterator_test_utils.hpp
  * @ingroup utils
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   convenience functions to compare sequences of items
  * @details
  *

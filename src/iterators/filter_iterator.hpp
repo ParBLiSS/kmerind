@@ -2,7 +2,7 @@
  * filter_iterator.hpp
  *
  *  Created on: Feb 5, 2014
- *      Author: tpan
+ *      Author: Tony Pan <tpan7@gatech.edu>
  *
  *  patterned after boost's filter iterator.  uses functor class.  allows variadic parameters
  *  support functor (possibly overloaded operator() ), function pointer.

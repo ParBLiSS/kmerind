@@ -1,7 +1,7 @@
 /**
  * @file    kmer_index.hpp
  * @ingroup index
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief	High level kmer indexing API
  * @details	3 primary Kmer Index classes are currently provided:
  * 			Kmer Count Index,

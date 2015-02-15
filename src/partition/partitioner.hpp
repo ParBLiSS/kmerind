@@ -1,7 +1,7 @@
 /**
  * @file		Partitioner.hpp
  * @ingroup bliss::partition
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   contains several class that provide different logic for partitioning a range
  * @details contains block, cyclic, and demand driven (THREAD SAFE) partitioners
 						logic implementation uses comparison to avoid overflows and implicit casting where needed.
@@ -46,9 +46,9 @@ namespace bliss
      *            independent of other threads.  For DemandDriven partitioner, the chunks are computed using atomc operation to provide
      *            memory fence/synchronization.
      *
-     * @note      The purpose of partitioning is to divide the data for computation.  Partitioner will therefore divide the source range,
-     *            including the overlap region (see range class documentation), into equal parts.
-     *            A new overlap region length can be specified during partitioning.  When overlap region length is specified, all subranges
+     * @note      The purpose of partitioning is to divide the range of data for computation.  Partitioner will therefore divide the source range,
+     *            including the overlap region (see range class documentation), into parts.
+     *            An overlap region length can be specified during partitioning.  When overlap region length is specified, all subranges
      *            from the partitioner, except the last subrange, will have its "overlap" variable set to the overlap region size.  The last
      *            subrange has overlap region of size 0.
      *
@@ -283,6 +283,7 @@ namespace bliss
 
       public:
 
+        /// default constructor
         BlockPartitioner() : BaseClassType(), curr(), done(false), rem(0) {};
 
 
@@ -568,7 +569,6 @@ namespace bliss
           for (size_t i = 0; i < s; ++i) {
             state[i] = BEFORE;
             BaseClassType::computeRangeForChunkId(curr[i], this->src, 0, i, this->chunkSize, this->overlapSize);
-//            printf ("values start-end: %lu %lu\n", curr[i].start, curr[i].end);
           }
         }
 
@@ -660,6 +660,7 @@ namespace bliss
         }
 
       public:
+        /// default constructor
         DemandDrivenPartitioner() : BaseClassType(), chunkOffset(0), chunkId(0), nChunks(0), curr(nullptr), done(false) {};
 
         /**
@@ -690,8 +691,6 @@ namespace bliss
 
           resetImpl();
         };
-
-
 
 
         /**

@@ -1,7 +1,7 @@
 /**
  * @file		test_threadsafe_queue.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *

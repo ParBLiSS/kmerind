@@ -4,7 +4,7 @@
  * @file:  threadpool.h
  *
  * @date:  Mar 20, 2014
- * @author: tpan
+ * @author: Tony Pan <tpan7@gatech.edu>
  * @description
  *
  * inspired by https://github.com/greyfade/workqueue/blob/master/threadpool.hpp

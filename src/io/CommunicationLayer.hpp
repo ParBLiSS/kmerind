@@ -2,7 +2,7 @@
  * @file    CommunicationLayer.hpp
  * @ingroup bliss::io
  * @author  Patrick Flick <patrick.flick@gmail.com>
- * @author  Tony Pan <tpan@gatech.edu>
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains a class that abstracts MPI point-to-point, non-blocking messaging.
  *
  * Copyright (c) TODO

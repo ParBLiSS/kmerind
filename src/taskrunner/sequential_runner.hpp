@@ -1,7 +1,7 @@
 /**
  * @file    sequential_runner.hpp
  * @ingroup taskrunner
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief	a sequential task engine that executes all tasks in a queue.
  * @details
  *

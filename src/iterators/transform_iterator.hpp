@@ -1,6 +1,6 @@
 /**
  * @file    transform_iterator.hpp
- * @ingroup interators
+ * @ingroup iterators
  * @author  Tony Pan <tpan7@gatech.edu>
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the transforming iterator.
@@ -153,7 +153,7 @@ protected:
       : _base(base_iter), _f(f)
   {
   }
-
+  /// destructor
   virtual ~_shared_transforming_iterator() {}
 };
 
@@ -602,8 +602,10 @@ public:
   {
   }
 
+  /// default destructor
   virtual ~transform_iterator() {}
 
+  /// copy assignment operator
   transform_iterator& operator=(const transform_iterator& other)
   {
     if (this != &other)

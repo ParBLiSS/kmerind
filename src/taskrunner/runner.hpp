@@ -1,7 +1,7 @@
 /**
  * @file    runner.hpp
  * @ingroup taskrunner
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief	an abstract class to represent a task engine, "runner"
  * @details derived from Runnable so that Runner can be treated as tasks as well.
  *

@@ -1,7 +1,7 @@
 /**
  * @file    task.hpp
  * @ingroup taskrunner
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief	API interface for a task.  essentially a functor
  * @details
  *

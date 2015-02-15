@@ -1,7 +1,7 @@
 /**
  * @file    runnable.hpp
  * @ingroup taskrunner
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief	abstract base class for Runnable objects, including tasks and task engine
  * @details	common base class allows task engine to be treated as tasks.
  *

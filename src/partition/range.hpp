@@ -1,7 +1,7 @@
 /**
  * @file    range.hpp
  * @ingroup bliss::partition
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Generic representation of an interval on a 1D data structure
  * @details Represents an interval with start, end, and overlap length.
  *   Convenience functions are provided to compute an page aligned starting position that is
@@ -40,11 +40,19 @@ namespace bliss
      * @note    All calculations include the overlap regions, as data in overlap region should undergo the same computation as the non-overlap regions.
      *          overlap region length is included as metadata for the application.
      *
+     *            vs std::partition:
+     *            	std::partition is defined as std::pair<iterator, iterator>.
+     *            	std::partition is heavier weight than Range's start and end values.
+     *            	Also, range can support overlap explicitly while std::partition does not.
+     *				Finally, std::partition cannot support floating point ranges.
+     *
+     *
      * @tparam T  data type used for the start and end offsets and overlap.
      */
     template<typename T>
     struct range
     {
+    	/// DEFINE value type of the range.
         typedef T ValueType;
 
         /**
@@ -96,7 +104,6 @@ namespace bliss
 
         //============= move constructor and move assignment operator
         //  NOTE: these are NOT defined because they would take more ops than the copy constructor/assignment operator.
-
 
         /**
          * @brief   default constructor.  construct an empty range, with start and end initialized to 0.
@@ -450,6 +457,9 @@ namespace bliss
          * @brief   Static function.  align the range to underlying block boundaries, e.g. disk page size.  only for integral types
          * @details range is aligned to underlying block boundaries by moving the block_start variable back towards minimum
          *    if range start is too close to the data type's minimum, then assertion is thrown.
+         *
+         *   static so Range does not need to be modified during alignment.
+         *
          * @tparam TT             type of values for start/end.  used to check if type is integral.
          * @param[in] r           the range to be aligned.
          * @param[in] page_size   the size of the underlying block.
@@ -460,20 +470,6 @@ namespace bliss
         {
           return range<T>::align_to_page(r.start, page_size);
         }
-
-//        /**
-//         * @brief   Member function.  align the range to underlying block boundaries, e.g. disk page size.  only for integral types
-//         * @details range is aligned to underlying block boundaries by moving the block_start variable back towards minimum
-//         *    if range start is too close to the data type's minimum, then assertion is thrown.
-//         * @tparam TT             type of values for start/end.  used to check if type is integral.
-//         * @param[in] page_size   the size of the underlying block.
-//         * @return                the page aligned start position of the range.
-//         */
-//        template<typename TT = T>
-//        typename std::enable_if<std::is_integral<TT>::value, TT >::type align_to_page(const size_t &page_size) const
-//        {
-//          return range<T>::align_to_page(this->start, page_size);
-//        }
 
         /**
          * @brief     Static function. check to see if the start position has been aligned to underlying block boundary.   only for integral types
@@ -502,21 +498,6 @@ namespace bliss
         {
           return range<T>::is_page_aligned(r.start, page_size);
         }
-
-//        /**
-//         * @brief     Member function. check to see if the start position has been aligned to underlying block boundary.   only for integral types
-//         *
-//         * @tparam    TT          type of start/end.  used to check if type is integral
-//         * @param[in] r           the range to be checked for alignment.
-//         * @param[in] page_size   the size of the underlying block.
-//         * @return                true if range is block aligned, false otherwise.
-//         */
-//        template<typename TT = T>
-//        typename std::enable_if<std::is_integral<TT>::value, bool >::type is_page_aligned(const size_t &page_size)
-//        {
-//          return range<T>::is_page_aligned(this->start, page_size);
-//        }
-
 
         /**
          * @brief   get the integral size of the range between [start, end), including the overlap region

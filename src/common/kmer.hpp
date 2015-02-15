@@ -1,7 +1,8 @@
 /**
  * @file    kmer.hpp
  * @ingroup common
- * @author  Patrick Flick, Tony Pan
+ * @author  Patrick Flick
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Implements the Kmer data type.
  *
  * Copyright (c) TODO

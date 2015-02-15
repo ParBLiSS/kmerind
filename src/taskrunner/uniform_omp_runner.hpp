@@ -1,7 +1,7 @@
 /**
  * @file    uniform_omp_runner.hpp
  * @ingroup taskrunner
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   an OMP task execution engine where all threads execute the same list of tasks
  * @details allows adding tasks during execution
  *

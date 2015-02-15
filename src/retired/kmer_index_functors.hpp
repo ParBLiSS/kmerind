@@ -1,7 +1,7 @@
 /**
  * @file    kmer_index_functors.hpp
  * @ingroup
- * @author  tpan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains functors for generating kmers and its quality scores.
  * @details uses a containment strategy for generating kmers w/ or w/o id and quality score.
  *

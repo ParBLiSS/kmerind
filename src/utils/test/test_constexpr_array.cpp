@@ -1,7 +1,7 @@
 /**
  * @file		test_constexpr_array.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   tests const expre array using google test
  * @details
  *

@@ -3,7 +3,7 @@
  * @ingroup bliss::utils
  * @brief   Defines macros for logging.
  * @author  Patrick Flick
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  *
  * This file defines internal macros for logging of events of different `severity`.
  * This is meant to be use for code organization.

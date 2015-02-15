@@ -1,7 +1,7 @@
 /**
  * @file		test_threads.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *
@@ -585,7 +585,7 @@ int main(int argc, char** argv) {
   LOG_INIT();
 
   //////////////// parse parameters
-  std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
+  std::string filename("/home/Tony Pan <tpan7@gatech.edu>/src/bliss/test/data/test.fastq");
 
   int WithMaster = 1;
   if (argc > 1)

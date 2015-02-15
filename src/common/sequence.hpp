@@ -1,7 +1,7 @@
 /**
  * @file    sequence.hpp
  * @ingroup
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   represents a sequence of characters in computer memory.
  * @details Internally, contains a start and end iterator for traversing the characters.
  *

@@ -1,7 +1,7 @@
 /**
  * @file    dynamic_omp_runner.hpp
  * @ingroup taskrunner
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief	an OMP task execution engine for a queue of tasks.
  * @details
  *

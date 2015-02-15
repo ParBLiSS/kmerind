@@ -2,7 +2,7 @@
  * buffered_transform_iterator.hpp
  *
  *  Created on: Feb 5, 2014
- *      Author: tpan
+ *      Author: Tony Pan <tpan7@gatech.edu>
  *
  *  COMPATIBLE WITH A BUFFERING FUNCTOR with
  *    operator()(Iterator curr) and

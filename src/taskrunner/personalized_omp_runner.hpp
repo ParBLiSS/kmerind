@@ -1,7 +1,7 @@
 /**
  * @file    personalized_omp_runner.hpp
  * @ingroup task runner
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief	an OMP task execution engine for a fixed list of tasks
  * @details	the threads block decompose or round robin the task execution
  *

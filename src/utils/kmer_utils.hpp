@@ -1,7 +1,7 @@
 /**
  * @file    kmer_utils.hpp
  * @ingroup bliss::utils
- * @author  Tony Pan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Utility functions and functors for kmers
  * @details
  *

@@ -1,7 +1,7 @@
 /**
  * @file		check_bufferpool.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *

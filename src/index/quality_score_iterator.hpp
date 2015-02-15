@@ -2,7 +2,7 @@
  * @file    quality_score_iterator.hpp
  * @ingroup index
  * @author  Patrick Flick <patrick.flick@gmail.com>
- * @author  Tony Pan <tcp1975@gmail.com>
+ * @author  Tony Pan <tpan7@gatech.edu> <tcp1975@gmail.com>
  *
  * @brief   Implements the sliding window quality score generating iterator.
  *
