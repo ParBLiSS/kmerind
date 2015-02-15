@@ -1,5 +1,5 @@
 /**
- * @file    CommunicationLayer.hpp
+ * @file    communication_layer.hpp
  * @ingroup bliss::io
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @author  Tony Pan <tpan7@gatech.edu>
@@ -35,8 +35,8 @@
 #include "concurrent/lockfree_queue.hpp"
 #include "concurrent/copyable_atomic.hpp"
 #include "concurrent/concurrent.hpp"
-#include "io/message_buffers.hpp"
 #include "io/io_exception.hpp"
+#include "io/message_buffers.hpp"
 #include "io/message_type_info.hpp"
 #include "io/message_types.hpp"
 

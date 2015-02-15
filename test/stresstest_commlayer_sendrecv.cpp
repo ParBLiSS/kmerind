@@ -6,7 +6,7 @@
 #include <iostream>
 #include <functional>
 
-#include <io/CommunicationLayer.hpp>
+#include <io/communication_layer.hpp>
 
 //#define DEBUG(msg) std::cerr << msg << std::endl;
 

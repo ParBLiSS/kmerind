@@ -3,15 +3,15 @@
  * @ingroup bliss::io
  * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   MessageBuffers base class and SendMessageBuffers subclass for buffering data for MPI send/receive
- * @details SendMessageBuffers is a collection of in-memory Buffers that containing data that
+ * @details MessageBuffers is a collection of in-memory Buffers that containing data that
  *            1. will be sent to remote destinations, such as a MPI process
- *            2. was received from remote destinations, such as a MPI process
+ *            2. was received from remote destinations, such as a MPI process  (not implemented)
  *
- *          In contrast to BufferPool, whose purpose is to prevent local process from blocking waiting for a buffer to clear,
- *          MessageBuffer's purpose is to batch the data to be transmitted, using BufferPool to prevent local process from blocking.
+ *          MessageBuffer's purpose is to batch the data to be transmitted, using BufferPool to prevent local process from blocking waiting
+ *          for a writable buffer.
  *
  *          As there may be several different patterns of interactions between MessageBuffers and other MessageBuffers, MessageBuffers and
- *          local thread/process, there is a base class MessageBuffers that acts as proxy to the underlying BufferPool (memory management).
+ *          local thread/process, there is a base class MessageBuffers that acts as proxy to the underlying ObjectPool (memory management).
  *          Two subclasses are planned:  SendMessageBuffers and RecvMessageBuffers, but only SendMessageBuffers has been implemented.
  *
  *          Envisioned patterns of interaction:
@@ -20,11 +20,11 @@
  *            Forward:  mpi recv -> mpi send
  *            Local:    MessageBuffers -> MessageBuffers
  *
- *          The SendMessageBuffers accumulates data in its internal buffer, and notifies the caller when a buffer is full.
+ *          The SendMessageBuffers accumulates data in its internal buffer, and notifies the caller when a buffer is full.  The caller then
+ *          can send the buffer.  SendMessageBuffers swaps in an empty buffer meanwhile.
  *
  *          The (unimplemented) RecvMessageBuffers requires an event notification mechanism that works with callbacks to handle the received messages.
  *          This is currently implemented in CommunicationLayer.
- *
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -63,30 +63,27 @@ namespace bliss
      * @brief     a data structure to buffering/batching messages for communication
      * @details   Templated base class for a collection of buffers that are used for communication.
      *
-     *
-     *            The class contains a BufferPool, which contains an array of reusable Buffer objects for in-memory storage.
-     *
-     * @tparam LockType   Indicates whether the class should be thread safe or not.
+     * @tparam PoolLT          Object Pool's thread safety model
+     * @tparam BufferLT        Buffer's thread safety model
+     * @tparam BufferCapacity  capacity of Buffers to create
      */
     template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT = PoolLT, int64_t BufferCapacity = 8192>
     class MessageBuffers
     {
-        // TODO: move consturctor and assignment operator to copy between thread safety levels.
       public:
-
+        /// DEFINE  type of the buffer.
         typedef Buffer<BufferLT, BufferCapacity> BufferType;
 
       protected:
-
         /// Internal BufferPool Type.  typedefed only to shorten the usage.
         typedef typename bliss::io::ObjectPool<PoolLT, BufferType>  BufferPoolType;
 
       public:
-        /// IdType of a Buffer, aliased from BufferPool
+        /// Pointer type of a Buffer, aliased from BufferPool
         typedef typename BufferPoolType::ObjectPtrType            BufferPtrType;
 
       protected:
-        /// a pool of in-memory Buffers for storage.
+        /// ObjectPool for memory management.
         BufferPoolType pool;
 
         /**
@@ -103,7 +100,6 @@ namespace bliss
          *
          *        limit BufferPool to have unlimited capacity, so as to ensure that we don't get nullptrs and thus don't need to
          *        check in code.
-         *
          *
          * @param buffer_capacity   the Buffer's maximum capacity.  default to 8192.
          * @param pool_capacity     the BufferPool's capacity.  default to unlimited.
@@ -157,8 +153,9 @@ namespace bliss
         virtual ~MessageBuffers() {};
 
         /**
-         * @brief Releases a Buffer by it's BufferPool id, after the buffer is no longer needed.
-         * @note  this should be called on a buffer that is not being used by MessageBuffers, i.e. flush does not satisfy this.
+         * @brief Releases a Buffer by pointer, after the buffer is no longer needed.
+         * @note  this should be called on a buffer that is not being used.  e,g, after the buffer has been transmitted
+         *        this also includes potential multithreaded use of the same buffer.
          *
          * @note  This to be called after the communication logic is done with the Send or Recv buffer.
          *
@@ -182,6 +179,8 @@ namespace bliss
      * @brief SendMessageBuffers is a subclass of MessageBuffers designed to manage the actual buffering of data for a set of messaging targets.
      * @details
      *
+     *  DISABLED BECAUSE SWAPPING BUFFER PTR IS NOT SAFE in multiple threaded code.
+     *
      *  The class is designed with the following requirements in mind:
      *  1. data is destined for some remote process identifiable by a process id (e.g. rank)
      *  2. data is appended to buffer incrementally and with minimal blocking
@@ -191,28 +190,28 @@ namespace bliss
      *  The class is implemented to support the requirement:
      *  1. SendMessageBuffers is not aware of its data's type or metadata specifying its type.
      *  2. SendMessageBuffers uses the base MessageBuffers class' internal BufferPool to reuse memory
-     *  3. SendMessageBuffers stores a vector of Buffer Ids (as assigned from BufferPool), thus mapping from process Rank to BufferId.
+     *  3. SendMessageBuffers maps from target process Ranks to Buffers.
      *  4. SendMessageBuffers provides an Append function to incrementally add data to the Buffer object for the targt process rank.
      *  5. When a particular buffer is full, return the Buffer Id to the calling thread for it to process (send), and swap in an empty
      *      Buffer from BufferPool.
      *
      *  An internal vector is used to map from target process rank to Buffer pointer.  For multithreading flavors of message buffers,
-     *    atomic<BufferType*> is used.
+     *    atomic<BufferType*> instead of BufferType* is used.
      *
-     *  @note
+     * @note
      *  pool size is unlimited so we would not get nullptr, and therefore do not need to check it.
      *
      * @note
-     *  For Buffers that are full, the calling thread will need to track the full buffers' Ids as this class evicts a full Buffer's id from it's
-     *    vector of Buffer Ids.  The Calling Thread can do t his via a queue, as in the case of CommunicationLayer.
+     *  For Buffers that are full, the calling thread will need to track the full buffer as this class evicts a full Buffer from it's
+     *    vector of Buffer Ptrs.  The Calling Thread can do this via a queue, as in the case of CommunicationLayer.
      *  Note that a Buffer is "in use" from the first call to the Buffer's append function to the completion of the send (e.g. via MPI Isend)
      *
      *  @tparam LockType    determines if this class should be thread safe
+     *
+     *
      */
     template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity = 8192>
     class SendMessageBuffers;
-
-    /// DISABLED BECAUSE SWAPPING BUFFER PTR IS NOT SAFE in multiple threaded code.
 //    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity = 8192>
 //    class SendMessageBuffers : public MessageBuffers<PoolLT, BufferLT, BufferCapacity>
 //    {
@@ -327,10 +326,10 @@ namespace bliss
 //         * @param targetRank   the target id for the messages.
 //         * @return      reference to the unique_ptr.  when swapping, the content of the unique ptrs are swapped.
 //         */
-////        template<bliss::concurrent::LockType LT = PoolLT>
-////        const typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type at(const int targetRank) const {
-////          return buffers.at(targetRank).load();   // can use reference since we made pool unlimited, so never get nullptr
-////        }
+// //        template<bliss::concurrent::LockType LT = PoolLT>
+// //        const typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type at(const int targetRank) const {
+// //          return buffers.at(targetRank).load();   // can use reference since we made pool unlimited, so never get nullptr
+// //        }
 //        BufferType* at(const int targetRank) {
 //          return (BufferType*)(buffers.at(targetRank));   // if atomic pointer, then will do load()
 //        }
@@ -358,8 +357,8 @@ namespace bliss
 //          }
 //          // reset the pool. local vector should contain a bunch of nullptrs.
 //          this->pool.reset();
-////          buffers.clear();
-////          buffers.resize(count);
+// //          buffers.clear();
+// //          buffers.resize(count);
 //
 //          // populate the buffers from the pool
 //          for (int i = 0; i < count; ++i) {
@@ -449,32 +448,32 @@ namespace bliss
 //          auto ptr = this->at(targetProc);
 //
 //          if (ptr) {
-////            // DEBUGGING ONLY - for testCommLayer only.  test if call from CommLayer appended the wrong message to MessageBuffers.  Buffer has test for before and after as well.
-////            int m = *((int*)data);
-////            if ((m / 1000) % 10 == 1) {
-////              if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
-////            }
-////            else {
-////              if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
-////            }
+// //            // DEBUGGING ONLY - for testCommLayer only.  test if call from CommLayer appended the wrong message to MessageBuffers.  Buffer has test for before and after as well.
+// //            int m = *((int*)data);
+// //            if ((m / 1000) % 10 == 1) {
+// //              if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
+// //            }
+// //            else {
+// //              if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
+// //            }
 //            void * result = nullptr;
 //
 //            appendResult = ptr->append(data, count, result);  //DEBUGGING FORM
 //
-////            // DEBUGGING ONLY - for testCommLayer only.  test if call from CommLayer appended the wrong message to MessageBuffers.  Buffer has test for before and after as well.
-////            if (result != nullptr) {
-////              m = *((int*)result);
-////              if ((m / 1000) % 10 == 1) {
-////                if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong outputmessage: %d to proc %d", m, targetProc);
-////              }
-////              else {
-////                if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
-////              }
-////            } else {
-////              if (appendResult & 0x1) {
-////                ERRORF("ERROR: successful append but result ptr is null!");
-////              }
-////            }
+// //            // DEBUGGING ONLY - for testCommLayer only.  test if call from CommLayer appended the wrong message to MessageBuffers.  Buffer has test for before and after as well.
+// //            if (result != nullptr) {
+// //              m = *((int*)result);
+// //              if ((m / 1000) % 10 == 1) {
+// //                if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong outputmessage: %d to proc %d", m, targetProc);
+// //              }
+// //              else {
+// //                if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
+// //              }
+// //            } else {
+// //              if (appendResult & 0x1) {
+// //                ERRORF("ERROR: successful append but result ptr is null!");
+// //              }
+// //            }
 //          }
 //          else {
 //            ERRORF("ERROR: Append: shared Buffer ptr is null and no way to swap in a different one.");
@@ -482,9 +481,9 @@ namespace bliss
 //          }
 //
 //
-////          unsigned int appendResult = this->at(targetProc)->append(data, count);
+// //          unsigned int appendResult = this->at(targetProc)->append(data, count);
 //
-////          printf("buffer blocked? %s, empty? %s\n", this->at(targetProc)->is_read_only()? "y" : "n", this->at(targetProc)->isEmpty() ? "y" : "n");
+// //          printf("buffer blocked? %s, empty? %s\n", this->at(targetProc)->is_read_only()? "y" : "n", this->at(targetProc)->isEmpty() ? "y" : "n");
 //
 //          // now if appendResult is false, then we return false, but also swap in a new buffer.
 //          // conditions are either full buffer, or blocked buffer.
@@ -517,9 +516,9 @@ namespace bliss
 //          }
 //
 //          std::vector<BufferType*> result;
-////          // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-////          this->at(targetProc)->block_and_flush();  // this part can be concurrent.
-////
+// //          // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
+// //          this->at(targetProc)->block_and_flush();  // this part can be concurrent.
+// //
 //          // passing in getBufferIdForRank result to ensure atomicity.
 //          // may return ABSENT if there is no available buffer to use.
 //          auto old = swapInEmptyBuffer<PoolLT>(targetProc);
@@ -545,9 +544,9 @@ namespace bliss
 //            throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
 //          }
 //
-////          // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
-////          this->at(targetProc)->block_and_flush();  // this part can be concurrent.
-////
+// //          // block the old buffer (when append full, will block as well).  each proc has a unique buffer.
+// //          this->at(targetProc)->block_and_flush();  // this part can be concurrent.
+// //
 //          // passing in getBufferIdForRank result to ensure atomicity.
 //          // may return ABSENT if there is no available buffer to use.
 //          auto old = swapInEmptyBuffer<PoolLT>(targetProc);
@@ -608,7 +607,7 @@ namespace bliss
 //
 //          auto oldbuf = buffers.at(dest).exchange(ptr);
 //          if (oldbuf && oldbuf->isEmpty()) {
-////            printf("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
+// //            printf("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
 //            releaseBuffer(oldbuf);
 //            return nullptr;
 //          }
@@ -663,7 +662,7 @@ namespace bliss
 //
 //          buffers.at(dest) = ptr;
 //          if (oldbuf && oldbuf->isEmpty()) {
-////            printf("oldbuf %p, empty? %s\n", oldbuf, oldbuf->isEmpty() ? "y" : "n");
+// //            printf("oldbuf %p, empty? %s\n", oldbuf, oldbuf->isEmpty() ? "y" : "n");
 //
 //            releaseBuffer(oldbuf);
 //            return nullptr;
@@ -681,6 +680,9 @@ namespace bliss
      * @brief SendMessageBuffers is a subclass of MessageBuffers designed to manage the actual buffering of data for a set of messaging targets.
      * @details
      *
+     *  This version uses a single ObjectPool for memory management, and thread local message buffer vectors
+     *    each thread has its own set of buffers, one per target MPI Process.
+     *
      *  The class is designed with the following requirements in mind:
      *  1. data is destined for some remote process identifiable by a process id (e.g. rank)
      *  2. data is appended to buffer incrementally and with minimal blocking
@@ -690,23 +692,25 @@ namespace bliss
      *  The class is implemented to support the requirement:
      *  1. SendMessageBuffers is not aware of its data's type or metadata specifying its type.
      *  2. SendMessageBuffers uses the base MessageBuffers class' internal BufferPool to reuse memory
-     *  3. SendMessageBuffers stores a vector of Buffer Ids (as assigned from BufferPool), thus mapping from process Rank to BufferId.
+     *  3. SendMessageBuffers maps from target process Ranks to Buffers.
      *  4. SendMessageBuffers provides an Append function to incrementally add data to the Buffer object for the targt process rank.
      *  5. When a particular buffer is full, return the Buffer Id to the calling thread for it to process (send), and swap in an empty
      *      Buffer from BufferPool.
      *
      *  An internal vector is used to map from target process rank to Buffer pointer.  For multithreading flavors of message buffers,
-     *    atomic<BufferType*> is used.
+     *    atomic<BufferType*> instead of BufferType* is used.
      *
-     *  @note
+     * @note
      *  pool size is unlimited so we would not get nullptr, and therefore do not need to check it.
      *
      * @note
-     *  For Buffers that are full, the calling thread will need to track the full buffers' Ids as this class evicts a full Buffer's id from it's
-     *    vector of Buffer Ids.  The Calling Thread can do t his via a queue, as in the case of CommunicationLayer.
+     *  For Buffers that are full, the calling thread will need to track the full buffer as this class evicts a full Buffer from it's
+     *    vector of Buffer Ptrs.  The Calling Thread can do this via a queue, as in the case of CommunicationLayer.
      *  Note that a Buffer is "in use" from the first call to the Buffer's append function to the completion of the send (e.g. via MPI Isend)
      *
      *  @tparam LockType    determines if this class should be thread safe
+     *
+     *
      */
     template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity>
     class SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, PoolLT, BufferLT, BufferCapacity> :
@@ -717,27 +721,31 @@ namespace bliss
         using MyType = SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, PoolLT, BufferLT, BufferCapacity>;
 
       public:
-        /// Id type of the Buffers
+        /// type of the Buffers
         using BufferType = typename BaseType::BufferType;
+        /// pointer type of the Buffers
         using BufferPtrType = typename BaseType::BufferPtrType;
-
         /// the BufferPoolType from parent class
         using BufferPoolType = typename BaseType::BufferPoolType;
 
       protected:
-
-        /// Vector of pointers (atomic).  Provides a mapping from process id (0 to vector size), to bufferPtr (from BufferPool)
-        /// using vector of atomic pointers allows atomic swap of each pointer, without array of mutex or atomic_flags.
         typedef BufferType* BufferPtrTypeInternal;
 
-        /// buffers, one set per target, and in each set, as many as there are local threads.
+        /**
+         * @brief  Vector of vector of buffer pointers that avoids sharing buffers between threads.
+         * @details  primiarily, this speeds up access to buffers, and avoid thread data race when
+         *          buffers are swapped out.
+         *          top level vector denotes target MPI Rank to local buffers mapping.
+         *          bottom level vector maps thread to buffers.
+         *          since each thread has its own buffer, no synchronization is required.
+         */
         std::vector< std::vector< BufferPtrTypeInternal > > buffers;
 
-        /// for synchronizing access to buffers (and pool).
+        /// for synchronizing access to buffers (and pool) during construction.
         mutable std::mutex mutex;
       private:
 
-        // private copy contructor
+        /// move constructor with mutex lock
         SendMessageBuffers(MyType&& other, const std::lock_guard<std::mutex>&) :
           BaseType(std::move(other)), buffers(std::move(other.buffers))
           {};
@@ -773,6 +781,7 @@ namespace bliss
         {
           int nThreads = (numThreads == 0 ? omp_get_max_threads() : numThreads);
 
+          // top level vector maps buffers to MPI rank.
           for (int i = 0; i < numDests; ++i) {
             buffers.push_back(std::vector<BufferPtrTypeInternal>(nThreads));
           }
@@ -824,22 +833,17 @@ namespace bliss
         }
 
         /**
-         * @brief get a raw pointer to the the BufferId that a messaging target maps to (FOR THE CALLING THREAD)
-         * @details for simplicity, not distinguishing between thread safe and unsafe versions
+         * @brief get a raw pointer to the buffer that a messaging target maps to (FOR THE CALLING THREAD)
+         * @details thread local version.
          *
          * @param targetRank   the target id for the messages.
-         * @return      reference to the unique_ptr.  when swapping, the content of the unique ptrs are swapped.
+         * @return      reference to the buffer.
          */
-//        template<bliss::concurrent::LockType LT = PoolLT>
-//        const typename std::enable_if<LT != bliss::concurrent::LockType::NONE, BufferType*>::type at(const int targetRank) const {
-//          return buffers.at(targetRank).load();   // can use reference since we made pool unlimited, so never get nullptr
-//        }
         BufferType* at(const int targetRank, int srcThread = -1) {
           // openmp - thread ids are sequential from 0 to nThreads - 1, so can use directly as vector index.
           int tid = (srcThread == -1 ? omp_get_thread_num() : srcThread);
-          // insert a new one if none there.   note that the entry is initialize to nullptr
 
-          return (BufferType*)(buffers.at(targetRank).at(tid));   // if atomic pointer, then will do load()
+          return (BufferType*)(buffers.at(targetRank).at(tid));
         }
 
 
@@ -852,7 +856,7 @@ namespace bliss
 
 
         /**
-         * @brief Reset the current MessageBuffers instance by first clearing its list of Buffer Ids, then repopulate it from the pool.
+         * @brief Reset the current MessageBuffers instance by first clearing its list of Buffers, then repopulate it from the pool.
          * @note  One thread only should call this.
          */
         virtual void reset() {
@@ -889,9 +893,10 @@ namespace bliss
           }
         }
 
-        /** thread safety:
-         * called by commlayer's send/recv thread, so single threaded there
-         * called by sendMessageBuffer's swapInEmptyBuffer
+        /**
+         * @brief release a buffer, by pointer, back to the ObjectPool associated with this MessageBuffers class.
+         * @details:  called by commlayer's send/recv thread, so single threaded there
+         *            called by sendMessageBuffer's swapInEmptyBuffer
          *    if threadsafe version of sendMessageBuffer, then the pointer to buffer to be released will be unique.
          *    if not threadsafe version, then the sendMessageBuffer should be used by a single threaded program, so buffer to release should be unique.
          *
@@ -912,31 +917,12 @@ namespace bliss
          *  1. success/failure of current insert
          *  2. indicator that there is a full buffer (the full buffer's id).
          *
-         * Notes:
-         *  on left side -
-         *    targetBufferId is obtained outside of CAS, so when CAS is called to update bufferIdForProcId[dest], it may be different already  (on left side)
-         *  on right side -
-         *  fullBufferId and bufferId[dest] are set atomically, but newTargetBufferId is obtained outside of CAS, so the id of the TargetBufferId
-         *  may be more up to date than the CAS function results, which is okay.  Note that a fullBuffer will be marked as blocked to prevent further append.
-         *
-         * Table of values and compare exchange behavior (called when a buffer if full and an empty buffer is swapped in.)
-         *  targetBufferId,     bufferIdForProcId[dest],    newBufferId (from pool) ->  fullBufferId,     bufferId[dest],   newTargetBufferId
-         *  x                   x                   y                           x                 y                 y
-         *  x                   x                   -1                          x                 -1                -1
-         *  x                   z                   y                           -1                z                 z
-         *  x                   z                   -1                          -1                z                 z
-         *  x                   -1                  y                           -1                -1                -1
-         *  x                   -1                  -1                          -1                -1                -1
-         *  -1                  -1                  y                           -1                y                 y
-         *  -1                  -1                  -1                          -1                -1                -1
-         *  -1                  z                   y                           -1                -1                -1
-         *  -1                  z                   -1                          -1                -1                -1
-         *
-         * @note              if failure, data to be inserted would need to be handled by the caller.
+         * @note              if failure, data to be inserted would need to be reinserted by the caller.
          *
          * @param[in] data    data to be inserted, as byteArray
          * @param[in] count   number of bytes to be inserted in the the Buffer
-         * @param[in] dest    messaging target for the data, decides which buffer to append into.
+         * @param[in] targetProc    messaging target for the data, decides which buffer to append into.
+         * @param[in] thread_id id of thread performing the append.
          * @return            std::pair containing the status of the append (boolean success/fail), and the id of a full buffer if there is one.
          */
         std::pair<bool, BufferType*> append(const void* data, const size_t count, const int targetProc, int thread_id = -1) {
@@ -958,51 +944,22 @@ namespace bliss
 
           int tid = (thread_id < 0 ? omp_get_thread_num() : thread_id);
 
-
-          // NOTE: BufferPool is unlimited in size, so don't need to check for nullptr, can just append directly.   is append really atomic?
-          // question is what happens in unique_ptr when dereferencing the internal pointer - if the dereference happens before a unique_ptr swap
-          // from swapInEmptyBuffer, then append would use the old object.  however, it was probably swapped because it's full,
-          // or flushing, so lock_read() would have been set for the full case.  now it depends on what happens in append.
-          // if flush, then block is set just before swap, so it's more likely this thread enters append without a block.
+          // NOTE: BufferPool is unlimited in size, so don't need to check for nullptr, can just append directly.
+          // since there is 1 buffer per threadid-processid pair, there is no data race.  swap, if any, when append,
+          //  is then sequential.
+          // in contrast, multithreaded version would require careful orchestration during buffer swap.
 
           unsigned int appendResult = 0x0;
           BufferType* ptr = this->at(targetProc, thread_id);
 
           if (ptr) {
-//            // DEBUGGING ONLY - for testCommLayer only.  test if call from CommLayer appended the wrong message to MessageBuffers.  Buffer has test for before and after as well.
-//            int m = *((int*)data);
-//            if ((m / 1000) % 10 == 1) {
-//              if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
-//            }
-//            else {
-//              if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong input message: %d to proc %d", m, targetProc);
-//            }
-            void * result = nullptr;
-
-            appendResult = ptr->append(data, count, result);  //DEBUGGING FORM
-
-//            // DEBUGGING ONLY - for testCommLayer only.  test if call from CommLayer appended the wrong message to MessageBuffers.  Buffer has test for before and after as well.
-//            if (result != nullptr) {
-//              m = *((int*)result);
-//              if ((m / 1000) % 10 == 1) {
-//                if (m / 100000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
-//              }
-//              else {
-//                if (m % 1000 != targetProc + 1) ERRORF("ERROR: DEBUG: MessageBuffers Append wrong output message: %d to proc %d", m, targetProc);
-//              }
-//            } else {
-//              if (appendResult & 0x1) {
-//                ERRORF("ERROR: successful append but result ptr is null!");
-//              }
-//            }
+            void * result = nullptr;    //DEBUGGING FORM
+            appendResult = ptr->append(data, count, result);
           }
           else {
-            // do NOT swap in one here, since access here is concurrent, multiple threads may try to swap.
             ERRORF("ERROR: Append: threadlocal Buffer ptr is null and no way to swap in a different one.");
             throw std::logic_error("ERROR: Append: threadlocal Buffer ptr is null and no way to swap in a different one.");
           }
-
-//          printf("buffer blocked? %s, empty? %s\n", this->at(targetProc)->is_read_only()? "y" : "n", this->at(targetProc)->isEmpty() ? "y" : "n");
 
           // now if appendResult is false, then we return false, but also swap in a new buffer.
           // conditions are either full buffer, or blocked buffer.
@@ -1010,18 +967,15 @@ namespace bliss
           // ideally, we want it to be a reference that gets updated for all threads.
 
           if (appendResult & 0x2) { // only 1 thread gets 0x2 result for a buffer.  all other threads either writes successfully or fails.
-
             return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer(targetProc, tid) ) );
-
           } else {
-            //if (preswap != postswap) printf("ERROR: NOSWAP: preswap %p and postswap %p are not the same.\n", preswap, postswap);
             return std::move(std::make_pair(appendResult & 0x1, nullptr));
           }
 
         }
 
         /**
-         * flushes the buffer at rank targetProc.
+         * @brief flushes the buffer at rank targetProc.  all buffers for that rank will be sent.
          *
          * @note  only 1 thread should call this per proc.
          *        multiple calls to this may be needed to get all data that are written to the new empty buffer.
@@ -1050,6 +1004,12 @@ namespace bliss
           return result;
         }
 
+        /**
+         * @brief flushes the buffer at rank targetProc for a local thread.
+         *
+         * @param targetProc
+         * @return
+         */
         BufferType* threadFlushBufferForRank(const int targetProc, int thread_id = -1) {
           //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
@@ -1067,32 +1027,10 @@ namespace bliss
 
       protected:
 
-
-
         /**
          * @brief Swap in an empty Buffer from BufferPool at the dest location in MessageBuffers.  The old buffer is returned.
-         * @details The new buffer may be BufferPoolType::ABSENT (invalid buffer, when there is no available Buffer from pool)
+         * @details The new buffer may be nullptr (invalid buffer, when there is no available Buffer from pool)
          *
-         * effect:  bufferIdForProcId[dest] gets a new Buffer Id, full Buffer is set to "blocked" to prevent further append.
-         *
-         * this is the THREAD UNSAFE version
-
-         * @note we make the caller get the new bufferIdForProcId[dest] directly instead of returning by reference in the method parameter variable
-         *  because this way there is less of a chance of race condition if a shared "old" variable was accidentally used.
-         *    and the caller will likely prefer the most up to date bufferIdForProcId[dest] anyway.
-         *
-         * @note
-         *    ABSENT      available     not a valid case
-         *    ABSENT      at dest       swap, return ABS
-         *    ABSENT      not at dest   dest is already swapped.  no op, return ABS
-         *    not ABS     available     not used.  block old, no swap. return ABS
-         *    not ABS     at dest       swap, block old.  return old
-         *    not ABS     not at dest   being used.  no op. return ABS
-         *
-         * @note:  requires that the queue at dest to be blocked.
-         *
-         *
-         * @tparam LT     used to choose thread safe vs not verfsion of the method.
          * @param dest    position in bufferIdForProcId array to swap out
          * @return        the BufferId that was swapped out.
          */
@@ -1110,10 +1048,8 @@ namespace bliss
           }
           if (i > 200) WARNINGF("NOTICE: non-Concurrent Pool threadlocal Buffer ptr took %d iterations to acquire, %d threads.", i, omp_get_num_threads());
 
-
           if (ptr) {
             ptr->clear_and_unblock_writes();
-            //memset(ptr->operator int*(), 0, ptr->getCapacity());
           }
 
           buffers.at(dest).at(tid) = ptr;

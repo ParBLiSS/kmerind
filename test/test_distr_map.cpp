@@ -5,7 +5,7 @@
 #include <unistd.h> // for sleep!
 
 
-#include <io/CommunicationLayer.hpp>
+#include <io/communication_layer.hpp>
 #include <index/distributed_map.hpp>
 
 //#define DEBUG(msg) std::cerr << msg << std::endl;

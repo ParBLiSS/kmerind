@@ -42,7 +42,7 @@
 #include "common/base_types.hpp"
 #include "common/alphabet_traits.hpp"
 #include "io/fastq_loader.hpp"
-#include "io/CommunicationLayer.hpp"
+#include "io/communication_layer.hpp"
 #include "index/distributed_map.hpp"
 #include "iterators/zip_iterator.hpp"
 #include "iterators/transform_iterator.hpp"

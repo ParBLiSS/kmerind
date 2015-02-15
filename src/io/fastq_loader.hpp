@@ -19,8 +19,8 @@
 #include "config.hpp"
 
 #include "common/base_types.hpp"
-#include "io/file_loader.hpp"
 #include "common/sequence.hpp"
+#include "io/file_loader.hpp"
 
 namespace bliss
 {
@@ -62,44 +62,6 @@ namespace bliss
         };
     };
 
-//    /**
-//     * @class     bliss::io::FASTASequenceId
-//     * @brief     represents a fasta sequence's id, also used for id of the FASTA file, and for position inside a FASTA sequence..
-//     * @details   for FASTA sequences, a processor/thread may be reading a portion of a sequence.
-//     *            In order to assign an id to a sequence, communication between processes is necessary.
-//     *            therefore, there is no need to use the file position offset as sequence id.
-//     *
-//     *            however, for consistency of the logic, it may be best to keep it the same way as the FASTQ version.
-//     *
-//     *            8 bits for file id
-//     *            40 bits for sequence id
-//     *            40 bits for position within the sequence.
-//     *
-//     *            this is set up as a union of to allow easy serialization
-//     *            and parsing of the content.
-//     *
-//     *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
-//     */
-//    struct FASTASequenceId
-//    {
-//        /// the concatenation of the id components as a single unsigned 64 bit field for sequence position inside file.
-//        union {
-//            uint64_t file_pos;
-//
-//            /// the id field components.  anonymous struct
-//            struct
-//            {
-//                /// sequence's id, lower 32 of 40 bits (potentially as offset in the containing file)
-//                uint32_t seq_id;
-//                /// sequence's id, upper 8 of 40 bits (potentially as offset in the containing file)
-//                uint8_t seq_id_msb;
-//                /// id of fastq file
-//                uint8_t file_id;
-//            };
-//        };
-//        /// offset within the read.  Default 0 refers to the whole sequence
-//        uint64_t pos;
-//    };
 
     /**
      * @class bliss::io::FASTQParser
@@ -356,12 +318,9 @@ namespace bliss
     const typename std::iterator_traits<Iterator>::value_type bliss::io::FASTQParser<Iterator, Quality>::eol;
 
 
-    //==== subclass of FileLoader.  using static polymorphism via CRTP.
-
-
     /**
      * @class FASTQLoader
-     * @brief FileLoader subclass specialized for the FASTQ file format
+     * @brief FileLoader subclass specialized for the FASTQ file format, uses CRTP to enforce interface consistency.
      * @details   FASTQLoader understands the FASTQ file format, and enforces that the
      *            L1 and L2 partition boundaries occur at FASTQ sequence record boundaries.
      *
@@ -532,10 +491,6 @@ namespace bliss
           if (i == t.end)  // this part only contained \n
             return t.end;
 
-
-
-
-
           //== now read 4 lines
           ValueType first[4] =
           { 0, 0, 0, 0 };
@@ -571,8 +526,6 @@ namespace bliss
             ++data;
             ++i;
           }
-
-//        DEBUGF("chars: %c %c %c %c, %lu - %lu, lines: %d\n", first[0], first[1], first[2], first[3], target.start, target.end, currLineId);
 
           //=== determine the position of a read by looking for @...+ or +...@
           // at this point, first[0] is pointing to first char after first newline, or in the case of first block, the first char.
@@ -721,8 +674,6 @@ namespace bliss
 
           }
 
-          // DEBUG("range " << range << " chunk " << cs << " chunkPos " << chunkPos);
-
           return output;
         }
 
@@ -766,7 +717,6 @@ namespace bliss
             s = e;
           }
 
-          // DEBUG("Sequence size is " << ss);
           return ss;
         }
 
