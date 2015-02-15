@@ -11,7 +11,7 @@
  */
 #include <common/alphabets.hpp>
 
-// TODO properly initialize the translation tables in the .cpp file for correct linkage
+// initialize the translation tables in the .cpp file for correct linkage
 constexpr uint8_t DNA::FROM_ASCII[256];
 constexpr char DNA::TO_ASCII[DNA::SIZE];
 constexpr uint8_t DNA::TO_COMPLEMENT[DNA::SIZE];

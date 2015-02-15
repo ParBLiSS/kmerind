@@ -1,7 +1,7 @@
 /**
  * @file    Kmer.hpp
  * @ingroup common
- * @author  Patrick Flick
+ * @author  Patrick Flick, Tony Pan
  * @brief   Implements the Kmer data type.
  *
  * Copyright (c) TODO
@@ -30,8 +30,6 @@
 #include <common/padding.hpp>
 #include <utils/KmerUtils.hpp>
 
-// TODO: need convenience class that can transcode on the fly?
-// TODO: make KMER depend on bitsPerChar and K, but not Alphabet?
 
 namespace bliss
 {
@@ -43,6 +41,8 @@ namespace bliss
  * the k-mer size for this k-mer needs to be fixed at compile time. The given
  * k-mer size and the `BITS_PER_CHAR` determine the size of the underlying
  * data array at compile time.
+ *
+ * A kmer's Most Significant Bit (MSB) corresponds to the prefix of the input string.
  *
  * @details  In memory organization of the kmer is described below.
  *      Kmer is packed bitwise based on the alphabet.  i.e. alphabet defines required

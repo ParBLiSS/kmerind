@@ -1,8 +1,14 @@
 /**
  * @file    kmer_iterators.hpp
  * @ingroup common
- * @author  Patrick Flick
- * @brief
+ * @author  Patrick Flick, Tony Pan
+ * @brief   iterator to generate kmers from a sequence of characters in alphabet (DNA, etc)
+ * @details include support for Kmer and reverse Kmer (for reverse complement)
+ *
+ *          These classes DO NOT perform translation from ASCII to selected alphabet.
+ *          To handle that, use "bliss::utils::ASCII2<ALPHABET>" functor with a transform iterator
+ *            e.g. bliss::iterator::transform_iterator, or boost's transform iterator
+ *          then set the transform iterator as base iterator type for kmerGenerationIterators below.
  *
  * Copyright (c) TODO
  *
@@ -25,7 +31,7 @@
 
 #include <iterators/sliding_window_iterator.hpp>
 
-// TODO: Need convenience functions to make start and end iterators (the true/false flags are not good.  else enforce that flag has no default value.)
+// TODO: Need convenience functions to make start and end iterators (the true/false flags are not easy to remember.)
 // TODO: Need convenience typedef to allow for reverse complement generation.
 
 namespace bliss
@@ -248,9 +254,11 @@ protected:
     : base_class_t(baseBegin, window, initialize_window)  {}
 };
 
+/// normal KmerGenerationIterator for generating kmers from a sequence of alphabet characters
 template <class BaseIterator, class Kmer>
 using KmerGenerationIterator = KmerGenerationIteratorBase<KmerSlidingWindow<BaseIterator, Kmer > >;
 
+/// reverse KmerGenerationIterator for generating kmers from a sequence of alphabet characters.  can be used for reverse complements.
 template <class BaseIterator, class Kmer>
 using ReverseKmerGenerationIterator = KmerGenerationIteratorBase<ReverseKmerSlidingWindow<BaseIterator, Kmer > >;
 

@@ -581,9 +581,11 @@ RELEASE TASKS
 		
 	8. documentation
 		a. code comments
-		b. install documentation
-		c. usage documentation
-		d. example code
+		b. install documentation - update
+		c. design document.
+		d. license
+		e. usage documentation
+		f. example code
 		
 	9. Testing.
 		a. verify correctness - 

@@ -1,9 +1,9 @@
 /**
  * @file    copyable_atomic.hpp
  * @ingroup
- * @author  tpan
- * @brief
- * @details
+ * @author  Tony Pan
+ * @brief   atomic type that supports copy consturctor, suitable for map container.
+ * @details std::atomic types are compatible with vector, but not map container.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -34,42 +34,48 @@ namespace bliss
       public:
         copyable_atomic() noexcept : base() {}
 
-        // initialization is not atomic
+        /// constructor. initialization is not atomic
         constexpr copyable_atomic(T desired) noexcept : base(desired) {}
 
-        // initialization is not atomic
+        /// copy constructor (from std::atomic).  initialization is not atomic
         copyable_atomic(const base& other) noexcept : base(other.load(std::memory_order_relaxed)) {}
 
-        // initialization is not atomic.  required copy constructor
+        /// copy constructor.  initialization is not atomic.  required copy constructor
         copyable_atomic(const copyable_atomic<T>& other) noexcept : base(other.load(std::memory_order_relaxed)) {}
 
-        // nonvirtual destructor, since atomic does not have a virtual destructor.
+        /// nonvirtual destructor, since atomic does not have a virtual destructor.
         ~copyable_atomic() noexcept {
           base::~atomic();
         }
 
+        /// assignemnt operator
         T operator=(T desired) noexcept {
           base::store(desired, std::memory_order_relaxed);
           return desired;
         }
+        /// assignment operator
         T operator=(T desired) volatile noexcept {
           base::store(desired, std::memory_order_relaxed);
           return desired;
         }
 
+        /// copy assign from std::atomic
         copyable_atomic& operator=(const base& other) noexcept {
           base::store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;
         }
+        /// copy assign from std::atomic
         copyable_atomic& operator=(const base& other) volatile noexcept {
           base::store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;
         }
 
+        /// copy assign
         copyable_atomic& operator=(const copyable_atomic<T>& other) noexcept {
           base::store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;
         }
+        /// copy assign
         copyable_atomic& operator=(const copyable_atomic<T>& other) volatile noexcept {
           base::store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;

@@ -1,12 +1,12 @@
 /**
  * @file		lockfree_queue.hpp
  * @ingroup bliss::concurrent
- * @author	tpan
+ * @author	Tony Pan
  * @brief   Thread Safe Queue Implementation
- * @details this header file contains the templated implementation of a thread safe queue.  this class is used for MPI buffer management.
+ * @details this header file contains the templated implementation of a thread-safe queue.  this class is used for MPI buffer management.
  *
- *    // can't use boost's lockfree queue:  expect T to have copy constuctor, tribial assignment operator, and trivial destuctor.
- *    // using moodycamel's concurrent queue
+ *    This class uses moodycamel's concurrent queue.
+ *      can't use boost's lockfree queue:  boost expect T to have copy constuctor, tribial assignment operator, and trivial destuctor.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -15,15 +15,16 @@
 #ifndef THREADSAFE_QUEUE_HPP_
 #define THREADSAFE_QUEUE_HPP_
 
+#include <cassert>
 #include <thread>
 #include <mutex>
 #include <limits>
 #include <atomic>
 #include <stdexcept>
 #include <xmmintrin.h>
-#include <concurrentqueue/concurrentqueue.h>
-#include <cassert>
 #include <tuple>
+
+#include "concurrentqueue/concurrentqueue.h"
 
 
 namespace bliss
@@ -33,15 +34,19 @@ namespace bliss
     /**
      * @class     bliss::concurrent::ThreadSafeQueue
      * @brief     a multi-producer, multi-consumer thread safe queue with an optional capacity
-     * @details   adapted from http://www.justsoftwaresolutions.co.uk/threading/implementing-a-thread-safe-queue-using-condition-variables.html
-     *            with SIGNIFICANT modifications
-     *            1. use c++11 std::thread and atomic constructs
-     *            2. incorporating move semantics.
-     *            3. support a capacity limit.
-     *            4. supports multiple producer, multiple consumer.
-     *            5. allows blocking of the enqueue function, (useful when draining queue or when finishing the use of the queue).
+     * @details   This class is a wrapper for the moodycamel::concurrentqueue::ConcurrentQueue class.
+     *            https://github.com/cameron314/concurrentqueue
      *
-     *          note that this is NOT truly concurrent.  the class serializes parallel access.  move semantic minimizes the copy operations needed.
+     *          This class inherits the following properties:
+     *            growable
+     *            supports move semantics
+     *            c++11 compatible
+     *            lockfree
+     *            multiple producer, multiple consumer
+     *
+     *          The wrapper provides additional capabilities including:
+     *            capacity limit
+     *            disabling and enabling push operation (to "pause" the queue)
      *
      *          DUE TO LOCKS, this is NOT fast.  but may be fast enough for MPI buffer management.
      */
@@ -50,10 +55,10 @@ namespace bliss
     {
       protected:
 
-        /// mutex for locking access to the queue
+        /// mutex for locking access to the queue during construction/assignment
         mutable std::mutex mutex;
 
-        /// underlying queue that is not thread safe.
+        /// underlying lockfree queue
         moodycamel::ConcurrentQueue<T> q;
 
         /// capacity of the queue.  if set to std::numeric_limits<size_t>::max() indicates unlimited size queue
@@ -74,7 +79,6 @@ namespace bliss
           size.exchange(other.size.exchange(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed), std::memory_order_relaxed);
         };
 
-
         /**
          * copy constructor, DISABLED
          * @param other   the source ThreadSafeQueue from which to copy.
@@ -82,13 +86,14 @@ namespace bliss
         explicit ThreadSafeQueue(const ThreadSafeQueue<T>& other) = delete;
 
         /**
-         * copy assignment operator
+         * copy assignment operator.  disabled.
          * @param other   the source ThreadSafeQueue from which to copy.
          * @return
          */
         ThreadSafeQueue<T>& operator=(const ThreadSafeQueue<T>& other) = delete;
 
       public:
+
         /// maximum possible size of a thread safe queue.  initialized to maximum size_t value.
         static constexpr int64_t MAX_SIZE  = std::numeric_limits<int64_t>::max();
 
@@ -135,6 +140,7 @@ namespace bliss
           return capacity;
         }
 
+        /// check if queue is fixed size or growable.
         inline bool isFixedSize() const {
         	return getCapacity() < MAX_SIZE;
         }
@@ -162,7 +168,7 @@ namespace bliss
          */
         inline size_t getSize() const
         {
-          return static_cast<size_t>(size.load(std::memory_order_relaxed) & MAX_SIZE);   // size is atomic, so don't need strong memory ordering.
+          return static_cast<size_t>(size.load(std::memory_order_relaxed) & MAX_SIZE);   // size is atomic, so don't need strong memory ordering itself.
         }
 
         /**
@@ -170,18 +176,15 @@ namespace bliss
          */
         void clear()
         {
-//          std::lock_guard<std::mutex> lock(mutex);
-          // clear is done by 1, so don't need strong mem ordering.
-
           // first clear the size, so threads' don't try to dequeue
           size.fetch_and(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed);  // keep the push bit, and set size to 0
 
+          // dequeue
           T val;
           while (q.try_dequeue(val)) ;
 
-          // clear it again to catch all that have been enqueued.
+          // clear size again to catch all that have been enqueued.
           size.fetch_and(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed);  // keep the push bit, and set size to 0
-
         }
 
         /**
@@ -198,7 +201,6 @@ namespace bliss
          * set the queue to disallow insertion of new elements.
          */
         inline void disablePush() {
-
           // before disable push, should make sure that all writes are visible to all other threads, so release here.
           size.fetch_or(std::numeric_limits<int64_t>::lowest(), std::memory_order_acq_rel);   // set the push bit, and leave size as is.
         }
@@ -208,43 +210,39 @@ namespace bliss
          * @return    boolean - queue insertion allowed or not.
          */
         inline bool canPush() {
-          // pushing thread does not immediately are what other threads did before this
+          // pushing thread does not immediately care what other threads did before this
           // size is >= 0 (not disabled), and less than capacity.
           // note that if we reinterpret_cast size to size_t, then disabled (< 0) will have MSB set to 1, so > max(int64_t).
-
           return size.load(std::memory_order_relaxed) >= 0;   // int highest bit set means negative, and means cannot push
         }
 
         /**
-         * check if the thread safe queue can produce an element now or in near future.  ThreadSafeQueue can pop only if it has elements in the base queue. or
-         * if additional items can be pushed in.
+         * @brief    check if the thread safe queue can produce an element now or in near future.
+         * @details  ThreadSafeQueue can pop only if it has elements in the base queue. or
+         *            if additional items can be pushed in.
          * @return    boolean - queue pop is allowed or not.
          */
         inline bool canPop() {
           // canPop == first bit is 0, OR has some elements (not 0 for remaining bits).  so basically, not 1000000000...
-
           // popping thread should have visibility of all changes to the queue
           return size.load(std::memory_order_acquire) != std::numeric_limits<int64_t>::lowest();
-          //return canPush() || !isEmpty();
         }
 
-//      protected:
-//        inline bool canPushAndHasRoom() {
-//          // canPush() && !full() :  positive number less than capacity.
-//          //return size.load(std::memory_order_seq_cst) >= 0 &&
-//          //    ((capacity >= MAX_SIZE) || ((size.load() & std::numeric_limits<int64_t>::max()) < capacity));
-//
-//          // if we reinterpret this number as a uint64_t, then we only need to check less than capacity, since now highest bits are all way higher.
-//          int64_t v = size.load();
-//          return reinterpret_cast<uint64_t&>(v) < capacity;
-//        }
-//
-//      public:
+      protected:
+        /**
+         * check if the thread safe queue can accept new elements. (full or not)
+         * @return    boolean - queue insertion allowed or not.
+         */
+        inline bool canPushAndHasRoom() {
+          // if we reinterpret this number as a uint64_t, then we only need to check less than capacity, since now highest bits are all way higher.
+          int64_t v = size.load(std::memory_order_relaxed);
+          return reinterpret_cast<uint64_t&>(v) < capacity;
+        }
 
-        // push increments size first, then add to queue.
+      public:
 
         /**
-         * Non-blocking - pushes an element by constant reference (copy).
+         * @brief     Non-blocking - pushes an element by constant reference (copy).
          * Returns true only if push was successful.
          * If queue is full, or if queue is not accepting new element inserts, return false.
          *    Does not modify the element if cannot push onto queue.
@@ -254,7 +252,7 @@ namespace bliss
          */
         bool tryPush (T const& data) {
 
-//          // race condition causes extra items to be pushed.
+//          // code below produces race condition causes extra items to be pushed.
 //          int64_t v = size.load(std::memory_order_relaxed);
 //          if ( reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity) ) {
 //            if (q.enqueue(data)) {
@@ -272,7 +270,7 @@ namespace bliss
         }
 
         /**
-         * Non-blocking - pushes an element by constant reference (move).
+         * @brief Non-blocking - pushes an element by constant reference (move).
          * Returns true only if push was successful.
          * If queue is full, or if queue is not accepting new element inserts, return false.
          *    Does not modify the element if cannot push onto queue.
@@ -286,7 +284,7 @@ namespace bliss
          * @return        whether push was successful.
          */
         std::pair<bool,T> tryPush (T && data) {
-//          // race condition causes extra items to be pushed.
+//          // code below race condition causes extra items to be pushed.
 //          int64_t v = size.load(std::memory_order_relaxed);
 //          if ( reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity) ) {
 //            if (q.enqueue(std::forward<T>(data))) {   // depend on q not messing up data if enqueue fails
@@ -308,10 +306,10 @@ namespace bliss
         }
 
         /**
-         * Semi-blocking - pushes an element by constant reference (copy).
+         * @brief Semi-blocking - pushes an element by constant reference (copy).
          * Returns true only if push was successful.
          * If queue is full, wait until space becomes available.
-         * If queue is not accepting new element inserts, return false.
+         * If queue is not accepting new element inserts, return false immediately.
          *    Does not modify the element if cannot push onto queue.
          *
          * this function signature is useful where the application would like to have guaranteed insertion without busy-waiting,
@@ -344,28 +342,10 @@ namespace bliss
 
           return false;
 
-//          // wait while size is greater than capacity.
-//        	volatile int64_t v;
-//        	while ((v = size.fetch_add(1, std::memory_order_relaxed)) >= capacity) {
-//        		size.fetch_sub(1, std::memory_order_relaxed);
-//        		_mm_pause();               // full q.  wait for someone to signal (not full && canPush, or !canPush).
-//        	}
-//            // to get here, have to have one of these conditions changed:  pushEnabled, !full
-//
-//
-//        	if ( v >= 0 )
-//        		if (q.enqueue(data))
-//        			return true;  //  0 <= v < capacity
-//
-//
-//        	// else v < 0. push disabled., or enqueue failed for other reasons
-//          size.fetch_sub(1, std::memory_order_relaxed);
-//          return false;
-//        	// no v >= capacity case.  would still be in loop.
         }
 
         /**
-         * Semi-blocking - pushes an element by constant reference (move).
+         * @brief Semi-blocking - pushes an element by constant reference (move).
          * Returns true only if push was successful.
          * If queue is full, wait until space becomes available.
          * If queue is not accepting new element inserts, return false.
@@ -400,33 +380,13 @@ namespace bliss
           } while (true);
 
           return std::move(std::make_pair(false, std::forward<T>(data)));
-
-//            // wait while size is greater than capacity.
-//          	volatile int64_t v;;
-//          	while ((v = size.fetch_add(1, std::memory_order_relaxed)) >= capacity) {
-//          	  size.fetch_sub(1, std::memory_order_relaxed);
-//          		_mm_pause();               // full q.  wait for someone to signal (not full && canPush, or !canPush).
-//          	}
-//              // to get here, have to have one of these conditions changed:  pushEnabled, !full
-//
-//
-//          	if (v >= 0 )
-//          		if (q.enqueue(std::forward<T>(data)))
-//          			return std::move(std::make_pair(true, std::forward<T>(data)));;  //  0 <= v < capacity
-//
-//          	// else v < 0. push disabled.  or enqueue failed for other reasons
-//          	size.fetch_sub(1, std::memory_order_relaxed);
-//          	// no v >= capacity case.  would still be in loop.
-//            // at this point, if success, data should be empty.  else data should be untouched.
-//          	return std::move(std::make_pair(false, std::forward<T>(data)));
         }
 
 
 
-        // pop dequeues first, then decrement count
 
         /**
-         * Non-blocking - remove the first element in the queue and return it to the calling thread.
+         * @brief Non-blocking - remove the first element in the queue and return it to the calling thread.
          * returns a std::pair with first element indicating the success/failure of the Pop operation,
          * and second is the popped queue element, if pop were successful.
          *
@@ -438,6 +398,7 @@ namespace bliss
          * @return    std::pair with boolean (successful pop?) and an element from the queue (if successful)
          */
         std::pair<bool, T> tryPop() {
+          // pop dequeues first, then decrement count
           std::pair<bool, T> output;
 
           if ((output.first = q.try_dequeue(output.second)) == true)
@@ -447,7 +408,7 @@ namespace bliss
         }
 
         /**
-         * Semi-blocking - remove the first element in the queue and return it to the calling thread.
+         * @brief Semi-blocking - remove the first element in the queue and return it to the calling thread.
          * Returns a std::pair with first element indicating the success/failure of the Pop operation,
          *  and second is the popped queue element, if pop were successful.
          *
