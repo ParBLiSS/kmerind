@@ -1,6 +1,6 @@
 /**
- * @file    Buffer.hpp
- * @ingroup bliss::io
+ * @file    buffer.hpp
+ * @ingroup concurrent
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   fixed sized memory buffer declaration and implementations.
  * @details templated memory buffer classes with fixed sized byte array for storage, including thread safe and thread unsafe versions.

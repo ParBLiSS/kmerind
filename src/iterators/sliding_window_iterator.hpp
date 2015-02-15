@@ -1,6 +1,6 @@
 /**
- * @file    many2one_iterator.hpp
- * @ingroup interators
+ * @file    single_releaser_object_pool.hpp
+ * @ingroup iterators
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the sliding window iterators.
  *

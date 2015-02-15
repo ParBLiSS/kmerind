@@ -1,6 +1,6 @@
 /**
  * @file    concatenating_iterator.hpp
- * @ingroup bliss::iterators
+ * @ingroup iterators
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains an iterator that concatenates multiple ranges represented as iterators.
  * @details

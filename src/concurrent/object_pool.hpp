@@ -1,6 +1,6 @@
 /**
  * @file		object_pool.hpp
- * @ingroup bliss::io
+ * @ingroup concurrent
  * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   this file defines in-memory Object Pool.
  * @details

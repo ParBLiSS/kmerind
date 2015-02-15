@@ -1,6 +1,6 @@
 /**
  * @file    fastq_loader.hpp
- * @ingroup bliss::io
+ * @ingroup io
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains a FileLoader subclass to perform distributed and concurrent FASTQ file access.
  *

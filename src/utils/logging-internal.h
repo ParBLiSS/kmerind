@@ -1,6 +1,6 @@
 /**
  * @file    logging-internal.h
- * @ingroup bliss::utils
+ * @ingroup utils
  * @brief   Defines macros for logging.
  * @author  Patrick Flick
  * @author  Tony Pan <tpan7@gatech.edu>

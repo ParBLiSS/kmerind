@@ -1,6 +1,6 @@
 /**
  * @file		constexpr_array.hpp
- * @ingroup bliss::utils
+ * @ingroup utils
  * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   utility functions to create an index array and transform it into a const value array, at compile time
  *

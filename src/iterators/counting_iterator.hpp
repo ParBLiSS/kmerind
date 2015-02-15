@@ -1,6 +1,6 @@
 /**
  * @file    counting_iterator.hpp
- * @ingroup bliss::iterators
+ * @ingroup iterators
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains a counting iterator
  * @details

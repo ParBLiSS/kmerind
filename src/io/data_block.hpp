@@ -1,6 +1,6 @@
 /**
  * @file		data_block.hpp
- * @ingroup bliss::io
+ * @ingroup io
  * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   contains classes for managing an in-memory 1D address range, along with iterators pointing to the actual data.  with or without buffering
  * @details Presents a standardized interface for buffered and unbuffered data blocks.

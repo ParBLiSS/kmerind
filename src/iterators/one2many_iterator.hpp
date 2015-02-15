@@ -1,6 +1,6 @@
 /**
  * @file    one2many_iterator.hpp
- * @ingroup interators
+ * @ingroup iterators
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the one2many iterator.
  *

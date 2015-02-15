@@ -1,5 +1,6 @@
 /**
- * buffered_transform_iterator.hpp
+ * @file buffered_transform_iterator.hpp
+ * @ingroup retired
  *
  *  Created on: Feb 5, 2014
  *      Author: Tony Pan <tpan7@gatech.edu>
