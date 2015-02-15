@@ -8,6 +8,6 @@ target_link_libraries(sys_probe ${EXTRA_LIBS})
 #target_link_libraries(test testlib)
 
 
-add_executable(TextInspector TextInspector.cpp)
+add_executable(TextInspector text_inspector.cpp)
 target_link_libraries(TextInspector ${EXTRA_LIBS})
 

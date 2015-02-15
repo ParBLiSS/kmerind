@@ -86,40 +86,40 @@ namespace io
      *          Performance of mmap is good generally compared to traditional open-read-close-process
      *
      *  Simple Usage:
-     *    instantiate file_loader - // default partitioning is based on MPI communicator
-     *                                // but user can also specify the number of partitions and partition id directly
-     *    getNextL1Block()            // get the next L1 DataBlock for the current partition id (e.g. rank)
+     *    1. instantiate file_loader - // default partitioning is based on MPI communicator
+     *                                 // but user can also specify the number of partitions and partition id directly
+     *    2. getNextL1Block()          // get the next L1 DataBlock for the current partition id (e.g. rank)
      *
-     *    [get the iterators (begin(),end()) and do some work.  (L1 Block traversal)]
-     *    or
-     *    loop
+     *    3. [get the iterators (begin(),end()) and do some work.  (L1 Block traversal)]
+     *      or
+     *      loop
      *        getNextL2Block(),
      *        [then get the iterators (begin(),end()) and do some work.  (L2 Block traversal)]
      *
-     *    destroy file_loader          // close the file.
+     *    4. destroy file_loader          // close the file.
      *
      *
      *  Any modification to the L1 and L2 partitioning, specifically modifying the associated Range object, or additional partitioning,
      *          such as partitioning by record, should be done by subclasses of FileLoader.  This falls under the Advanced Usage show below.
      *
      *  Advanced Usage:  This should be relevant to subclasses only, as most of these methods are protected.
-     *    instantiate file_loader - // default partitioning is based on number of MPI processes.
+     *    1. instantiate file_loader - // default partitioning is based on number of MPI processes.
      *                                // but user can also specify the number of partitions.
-     *    getNextL1BlockRange()       // allows iteration over partition ids, mapping of process to partition other than 1 to 1.
+     *    2. getNextL1BlockRange()       // allows iteration over partition ids, mapping of process to partition other than 1 to 1.
      *    ...                         // modify range
-     *    getL1DataForRange(range)    // actually open the file and memmap
+     *    3. getL1DataForRange(range)    // actually open the file and memmap
      *
      *
-     *    [get the iterators (begin(),end()) and do some work.  (L1 Block traversal)]
-     *    or
-     *    loop
+     *    4. [get the iterators (begin(),end()) and do some work.  (L1 Block traversal)]
+     *      or
+     *      loop
      *        getNextL2BlockRange(),
      *        ...                      // modify range
      *        getL2DataForRange(range) // get the data. and optionally buffering
      *        [then get the iterators (begin(),end()) and do some work.  (L2 Block traversal)]
      *
-     *    unload                       // mem unmap
-     *    destroy file_loader          // close the file.
+     *    5. unload                       // mem unmap
+     *    6. destroy file_loader          // close the file.
      *
      *
      * @note:   For real data,  No Buffering is better for large files and limited memory, while
@@ -334,17 +334,7 @@ namespace io
           MPI_Comm_rank(comm, &loaderId);
           MPI_Comm_size(comm, &nConcurrentLoaders);
 
-//          // get the file size.
-//          size_t file_size = 0;
-//          if (loaderId == 0)
-//          {
-//            size_t file_size = getFileSize(fileHandle);
-//          }
-//          // TODO: check if we can avoid the broadcast.
-//          if (nConcurrentLoaders > 1) {
-//            // broadcast file_size to all
-//            MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG_LONG, 0, comm);
-//          }
+          //====  every node can get the file size directly, so no need for MPI_Bcast.
 
           // get the file size.  all processes do this, since all have to open the file and read from it anyways.
           // compute the full range of the file

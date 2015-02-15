@@ -177,7 +177,7 @@ function(update_logging_engine varname cacheaccess varval)
     # set the log engine in the logger_config.hpp file.
     set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
 #    configure_file(
-#        "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+#        "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
 #        "${PROJECT_BINARY_DIR}/logger_config.hpp"
 #        @ONLY
 #        )
@@ -230,7 +230,7 @@ if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
         
         set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
 #        configure_file(
-#            "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+#            "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
 #            "${PROJECT_BINARY_DIR}/logger_config.hpp"
 #            @ONLY
 #            )
@@ -335,7 +335,7 @@ CMAKE_DEPENDENT_OPTION(ENABLE_COVERAGE "Enable Code Coverage Reporting" OFF
 CMAKE_DEPENDENT_OPTION(ENABLE_SANITIZER "Enable Sanitizer.  Choose via SANITIZER_STYLE" OFF
                         "ENABLE_TESTING;SUPPORTS_SANITIZER" OFF)
                         
-include("${CMAKE_SOURCE_DIR}/GCCFilter.cmake")
+include("${CMAKE_SOURCE_DIR}/cmake/GCCFilter.cmake")
 
 ## LOGGING ENGINE configuration
 #function(update_test_options varname cacheaccess varval) 
@@ -565,12 +565,12 @@ OPTION(BUILD_EXAMPLE_APPLICATIONS "Inform whether sample applications should be 
 
 # configure a header file to pass some of the CMake settings to the source code
 configure_file(
-    "${PROJECT_SOURCE_DIR}/config.hpp.in"
+    "${PROJECT_SOURCE_DIR}/src/config/config.hpp.in"
     "${PROJECT_BINARY_DIR}/config.hpp"
     @ONLY
     )
 configure_file(
-    "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+    "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
     "${PROJECT_BINARY_DIR}/logger_config.hpp"
     @ONLY
     )

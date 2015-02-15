@@ -1,5 +1,5 @@
 project(bliss-index)
-include("${CMAKE_SOURCE_DIR}/Sanitizer.cmake")
+include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
 
 if (ENABLE_TESTING)
 #add_subdirectory(testlib)
