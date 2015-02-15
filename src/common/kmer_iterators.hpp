@@ -11,7 +11,7 @@
  *            e.g. bliss::iterator::transform_iterator, or boost's transform iterator
  *          then set the transform iterator as base iterator type for kmerGenerationIterators below.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */

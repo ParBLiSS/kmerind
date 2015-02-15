@@ -4,7 +4,7 @@
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements helper functions for implementation of iterators.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */

@@ -25,10 +25,16 @@ namespace bliss
 
     /**
      * @class    bliss::iterator::CountingIterator
-     * @brief    iterator that iterates from start to end in specified steps size
-     * @details  counting iterator counts from the start to the end in regular steps.
+     * @brief    iterator that iterates from start value to end value in specified steps size
+     * @details  counting iterator returns a list of numeric values from start to finish in regular steps.
+     *           example:  2, 4, 6, 8, 10...
      *           this is useful to establish index values for some other array.
-     * @tparam T the type of data to over.
+     *
+     *           the value type is typically numeric.
+     *           alternatively, if operator+() and operator-() are defined, and T()
+     *              is interpretable as an interval, then non-numeric types can be used as well.
+     *
+     * @tparam T the type of data to over.  typically this is numeric.
      */
     template<typename T>
     class CountingIterator :  public std::iterator<std::random_access_iterator_tag, T>

@@ -5,7 +5,7 @@
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains a class that abstracts MPI point-to-point, non-blocking messaging.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2015 Georgia Institute of Technology
  *
  * TODO add Licence
  */

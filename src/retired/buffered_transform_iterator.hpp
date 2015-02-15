@@ -27,7 +27,7 @@
 #define BUFFERED_TRANSFORM_ITERATOR_HPP_
 
 #include <iterator>
-#include "iterators/function_traits.hpp"
+#include "utils/function_traits.hpp"
 
 namespace bliss
 {

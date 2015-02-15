@@ -4,7 +4,7 @@
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the sliding window iterators.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */
@@ -15,7 +15,6 @@
 
 #include <iterator>
 
-#include <iterators/iterator_tools.hpp>
 #include <iterators/iterator_utils.hpp>
 
 namespace bliss

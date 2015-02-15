@@ -5,7 +5,7 @@
  * @brief   Declares and defines constexpr functions for common bit operations
  *          like shifting and masking.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */

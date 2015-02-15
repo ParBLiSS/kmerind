@@ -5,7 +5,7 @@
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Implements the Kmer data type.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */

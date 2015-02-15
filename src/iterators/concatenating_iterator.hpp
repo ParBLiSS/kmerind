@@ -1,8 +1,8 @@
 /**
  * @file    concatenating_iterator.hpp
- * @ingroup
+ * @ingroup bliss::iterators
  * @author  Tony Pan <tpan7@gatech.edu>
- * @brief
+ * @brief   contains an iterator that concatenates multiple ranges represented as iterators.
  * @details
  *
  * Copyright (c) 2015 Georgia Institute of Technology.  All Rights Reserved.
@@ -25,8 +25,8 @@ namespace bliss
 
     /**
      * @class    bliss::iterator::ConcatenatingIterator
-     * @brief    this class presents a single/sequential view of a series of underlying iterators.
-     * @details  random access iterator is not supported. other types are okay.
+     * @brief    this class presents a single/sequential view of a series of underlying iterator ranges
+     * @details  random access iterator is not supported. other iterator categories are okay.
      *
      */
     template<typename Iterator>
@@ -40,25 +40,29 @@ namespace bliss
         typename std::iterator_traits<Iterator>::value_type
         >
     {
-        // 	not a requirement when using pairs.
-        //	static_assert<!std::is_const<Iterator>::value, "ConcatenatingIterator cannot contain const Iterator - disallowed by std containers");
       protected:
-        // define first, to avoid -Wreorder error (where the variables are initialized before filter_iterator::Filter, etc are defined.
+        /// Define iterator trait of the base iterator
         typedef std::iterator_traits<Iterator> base_traits;
 
+        /// Define pair of iterators as start and end of a range
         typedef std::pair<Iterator, Iterator> RangeType;
 
-        std::vector<RangeType > ranges;  // all the starting iterators
+        /// list of iterator ranges to be concatenated, in order
+        std::vector<RangeType > ranges;
 
-        int64_t curr_iter_pos;         // the current set of start/end iterators
-        Iterator curr;                 // current position inside the current start-end range.
+        /// the current position in the ranges list
+        int64_t curr_iter_pos;
 
-      public:
+        /// the current iterator position in the range of interest.
+        Iterator curr;
+
         typedef ConcatenatingIterator<Iterator> type;
+      public:
 
+        /// DEFINE iterator element's value type
         typedef typename base_traits::value_type value_type;
 
-        // constructor for start iterator
+        /// constructor for start concatenating iterator using copy semantic
         ConcatenatingIterator(const std::vector<RangeType>& _ranges)
         : ranges(_ranges), curr_iter_pos(0)
         {
@@ -70,7 +74,7 @@ namespace bliss
           curr = ranges.begin()->first;
         };
 
-        /// constructor for start iterator, using move semantics.
+        /// constructor for start iterator, using move semantic.
         ConcatenatingIterator(std::vector<RangeType>&& _ranges)
         : ranges(std::forward<std::vector<RangeType> >(_ranges)),
           curr_iter_pos(0)
@@ -85,15 +89,17 @@ namespace bliss
         };
 
 
-        /// constructor for end iterator (supports forward iterator's default construction.
+        /// constructor for end iterator, copy semantic
         ConcatenatingIterator(const Iterator& end) : curr_iter_pos(-1), curr(end)
         {
         };
 
+        /// copnstructor for end iterator, move semantic
         ConcatenatingIterator(Iterator&& end) : curr_iter_pos(-1), curr(std::move(end))
         {
         };
 
+        /// default constructor if the base iterator is forward, bidirection, or random access.  useful for incremental concatenation.
         template<typename C = typename base_traits::iterator_category,
             typename std::enable_if<
             std::is_same<C, std::forward_iterator_tag>::value ||
@@ -105,10 +111,9 @@ namespace bliss
         {
         };
 
-        /// note that explicit keyword cannot be on copy and move constructors else the constructors are not defined/found.
+        // note that explicit keyword cannot be on copy and move constructors else the constructors are not defined/found.
 
-        /// copy constructor.  note that curr start and end need to reflect the moved one.
-        // respects multi-pass.
+        /// copy constructor.  respects multi-pass requirement of forward iterator.
         ConcatenatingIterator(const type& other)
         : ranges(other.ranges), curr_iter_pos(other.curr_iter_pos)
         {
@@ -119,7 +124,7 @@ namespace bliss
               ++it, ++curr);
         };
 
-        // copy assignment operator
+        /// copy constructor.  respects multi-pass requirement of forward iterator.
         type& operator=(const type& other)
         {
           ranges = other.ranges;
@@ -133,7 +138,7 @@ namespace bliss
           return *this;
         }
 
-        // move constructor
+        /// move constructor.
         ConcatenatingIterator(type&& other)
         {
           curr_iter_pos = other.curr_iter_pos;
@@ -150,7 +155,7 @@ namespace bliss
 
         };
 
-        // move assignment operator
+        /// move assignment operator
         type& operator=(type&& other)
         {
           curr_iter_pos = other.curr_iter_pos;
@@ -170,14 +175,14 @@ namespace bliss
 
 
         /**
-         * @brief add additional iterators to the list
+         * @brief add additional iterator range to the list, via copy semantic
          */
         bool addRange(const Iterator& start, const Iterator& end) {
           return this->addRange(std::move(std::make_pair(start, end)));
         }
 
         /**
-         * @brief add additional iterators to the list
+         * @brief add additional iterator range to the list via move semantic
          */
         bool addRange(Iterator&& start, Iterator&& end) {
           return this->addRange(std::move(std::make_pair(std::forward<Iterator>(start), std::forward<Iterator>(end))));
@@ -186,19 +191,22 @@ namespace bliss
 
 
         /**
-         * @brief add additional iterators to the list
+         * @brief add additional iterator range to the list via copy semantic
          */
         bool addRange(const std::pair<Iterator, Iterator>& range) {
-          if (range.first == range.second) return false;  // not useful to add.
+          if (range.first == range.second) return false;  // nothing useful to add.
+
+          // error when final position is greater than the size of range vector
           if (curr_iter_pos >= static_cast<int64_t>(ranges.size())) {
             ERRORF("position pointing to beyond available ranges: pos %ld, size %lu", curr_iter_pos, ranges.size());
             return false;
           }
 
+          // check if at end
           bool atEnd = this->at_end();  // eval at_end before changing size of vector.
-          ranges.push_back(range);
+          ranges.push_back(range);      // but first add the range
 
-
+          // if iterator was at the end of the concatenation, then move curr to the start of the new range.
           if (atEnd) { 
             ++curr_iter_pos;
 
@@ -211,19 +219,23 @@ namespace bliss
         }
 
         /**
-         * @brief add additional iterators to the list
+         * @brief add additional iterator range to the list via move semantic
          */
         bool addRange(std::pair<Iterator, Iterator>&& range) {
           if (range.first == range.second) return false;  // not useful to add.
+
+          // error when final position is greater than the size of range vector
           if (curr_iter_pos >= static_cast<int64_t>(ranges.size())) {
             ERRORF("position pointing to beyond available ranges: pos %ld, size %lu", curr_iter_pos, ranges.size());
             return false;
           }
 
+          // check if at end
           bool atEnd = this->at_end();  // eval at_end before changing size of vector.
-          ranges.push_back(std::move(std::forward<std::pair<Iterator,Iterator> >(range)));
+          ranges.push_back(std::move(std::forward<std::pair<Iterator,Iterator> >(range)));  // first add the range
 
 
+          // if iterator was at the end of the concatenation, then move curr to the start of the new range.
           if (atEnd) { 
             ++curr_iter_pos;
 
@@ -237,7 +249,7 @@ namespace bliss
 
 
         /**
-         * increment:  finds the next valid position.
+         * @brief increment:  move to the next position in the concatenating iterator, which may cross range boundaries.
          * @return
          */
         type& operator++()
@@ -260,6 +272,7 @@ namespace bliss
 
           // second case
           ++curr;
+
           // and third case.
           if (curr == ranges[curr_iter_pos].second) {
             if (this->at_end()) return *this;  // could be moved into last entry
@@ -269,7 +282,7 @@ namespace bliss
             curr = ranges[curr_iter_pos].first;
           }
           return *this;
-            }
+        }
 
         /**
          * post increment.  make a copy then increment that.
@@ -280,7 +293,9 @@ namespace bliss
           return ++output;
             }
 
-        // input iterator specific
+        //=== input iterator specific
+
+        /// comparison operator
         inline bool operator==(const type& rhs) const
             {
           if (this->at_end() && rhs.at_end()) return true;
@@ -288,23 +303,25 @@ namespace bliss
           return curr == rhs.curr;
             }
 
+        /// comparison operator
         inline bool operator!=(const type& rhs) const
             {
           return !(this->operator==(rhs));
             }
 
+        /// get pointer
         inline typename base_traits::pointer operator->() const
         {
           return &(*curr);
         }
 
-        // output iterator returns a reference.  input iterator returns a value.
-
+        /// dereference operator.  normal (not an output iterator) - returns a rvalue
         inline value_type operator*() const
         {
           return *curr;
         }
 
+        /// dereference operator.  output, forward, bidirectional, and random access iterators supported.  return lvalue
         template<typename P = typename base_traits::pointer>
         inline typename std::enable_if<
           !std::is_const<typename std::remove_pointer<P>::type>::value,
@@ -315,11 +332,10 @@ namespace bliss
         }
 
 
+        //=== bidirectional iterator
 
-
-        // bidirectional iterator
         /**
-         * semantics of -- does not have a bound on the start side.
+         * @brief pre decrement operator:  semantics of -- does not have a bound on the start side.
          */
         template<typename C = typename base_traits::iterator_category>
         typename std::enable_if<
@@ -345,7 +361,7 @@ namespace bliss
         }
 
         /**
-         * make a copy, then move it back 1.
+         * @brief post decrement operator:  semantics of -- does not have a bound on the start side.
          */
         template<typename C = typename base_traits::iterator_category>
         typename std::enable_if<
@@ -361,7 +377,7 @@ namespace bliss
       protected:
 
         /**
-         * @brief   check if current iterator is at the end (if an end iterator, or end of start iterator, etc.)
+         * @brief   check if current iterator is at the end of all ranges (if an end iterator, or end of start iterator, etc.)
          * @return
          */
         bool at_end() const
@@ -378,6 +394,11 @@ namespace bliss
 
           return false;
         }
+
+        /**
+         * @brief   check if current iterator is at the beginning of all ranges (if an end iterator, or end of start iterator, etc.)
+         * @return
+         */
         bool at_beginning() const
         {
           // end iterator

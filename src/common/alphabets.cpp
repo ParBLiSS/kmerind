@@ -5,7 +5,7 @@
  * @brief   Defines all common alphabets, including DNA, DNA5, RNA, RNA5
  *          AA (IUPAC), DNA_IUPAC, and CUSTOM
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */

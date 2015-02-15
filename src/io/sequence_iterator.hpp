@@ -30,7 +30,7 @@
 #include "common/sequence.hpp"
 #include "io/io_exception.hpp"
 #include "utils/logging.h"
-#include "iterators/function_traits.hpp"
+#include "utils/function_traits.hpp"
 #include "partition/range.hpp"
 
 namespace bliss

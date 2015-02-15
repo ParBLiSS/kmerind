@@ -5,7 +5,7 @@
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the transforming iterator.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */
@@ -14,7 +14,7 @@
 #define BLISS_ITERATORS_TRANSFORM_ITERATOR_HPP
 
 #include <iterator>
-#include <iterators/function_traits.hpp>
+#include <utils/function_traits.hpp>
 
 namespace bliss
 {

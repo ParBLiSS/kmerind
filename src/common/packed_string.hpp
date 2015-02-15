@@ -4,7 +4,7 @@
  * @author  Patrick Flick
  * @brief   Declares the PackedStringImpl and PackedString classes.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */

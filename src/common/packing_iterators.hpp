@@ -4,7 +4,7 @@
  * @author  Patrick Flick
  * @brief
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */

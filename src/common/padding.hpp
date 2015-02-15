@@ -4,7 +4,7 @@
  * @author  Patrick Flick
  * @brief   Implements common functions for managing padding.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */

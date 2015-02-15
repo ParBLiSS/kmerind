@@ -9,7 +9,7 @@
  *          alphabet, and translation functions for the alphabet (translating
  *          between ASCII and internal representation).
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */
