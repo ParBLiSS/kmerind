@@ -1,7 +1,7 @@
 /**
- * @file		container_traits.hpp
+ * @file	container_traits.hpp
  * @ingroup bliss::utils
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   helper functions to check if a container has the required methods.
  * @details
  *

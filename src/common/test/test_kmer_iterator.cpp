@@ -3,11 +3,11 @@
 //#include <boost/concept_check.hpp>
 
 // include classes to test
-#include <common/Kmer.hpp>
+#include <common/kmer.hpp>
 #include <common/alphabets.hpp>
 #include <iterators/transform_iterator.hpp>
 #include <common/kmer_iterators.hpp>
-#include <utils/KmerUtils.hpp>
+#include <utils/kmer_utils.hpp>
 
 
 template<typename Alphabet, int K>

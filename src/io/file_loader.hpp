@@ -1,7 +1,7 @@
 /**
  * @file    file_loader.hpp
  * @ingroup bliss::io
- * @author  tpan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains a generic FileLoader class to perform distributed and concurrent file access.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.

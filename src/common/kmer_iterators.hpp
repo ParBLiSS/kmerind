@@ -1,7 +1,8 @@
 /**
  * @file    kmer_iterators.hpp
  * @ingroup common
- * @author  Patrick Flick, Tony Pan
+ * @author  Patrick Flick
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   iterator to generate kmers from a sequence of characters in alphabet (DNA, etc)
  * @details include support for Kmer and reverse Kmer (for reverse complement)
  *
@@ -27,7 +28,7 @@
 // own includes
 #include <common/base_types.hpp>
 #include <common/padding.hpp>
-#include <common/Kmer.hpp>
+#include <common/kmer.hpp>
 
 #include <iterators/sliding_window_iterator.hpp>
 

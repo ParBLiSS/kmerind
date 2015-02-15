@@ -2,7 +2,7 @@
  * test_counting_iterator.cpp
  * Test CountingIterator class
  *  Created on: Aug 27, 2014
- *      Author: tpan
+ *      Author: Tony Pan <tpan7@gatech.edu>
  */
 
 #include "iterators/counting_iterator.hpp"

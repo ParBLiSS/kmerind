@@ -1,8 +1,8 @@
 /**
  * @file		object_pool.hpp
  * @ingroup bliss::io
- * @author	Tony Pan
- * @brief   this file defines an in-memory Object Pool.
+ * @author	Tony Pan <tpan7@gatech.edu>
+ * @brief   this file defines an in-memory Object Pool for the scenario where there is only 1 thread performing the obj release.
  * @details this is essentially a higher level allocator for large objects.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -38,7 +38,7 @@ namespace bliss
      *            When the pool is exhausted, Acquire function returns false.
      *
      *     this class assumes that while there may be multiple threads acquiring objects,
-     *     there is a single thread to release the object back.
+     *     but there is a SINGLE thread to release the object back.
      *        with this assumption, the pool can be lockfree, since the "in-use" set is unnecessary,
      *        and the available queue is already lockfree.
      *
@@ -62,7 +62,7 @@ namespace bliss
      *            MessageBuffers class internally ensures that this does not happen.
      *
      *
-     *  @tparam LockType    The thread safety property for the pool
+     *  @tparam LockType    The thread safety property for the pool. Default to mutex.
      *  @tparam T           The object instance type.  object pool stores pointers to T instances.
      */
     template<bliss::concurrent::LockType LockType, class T >
@@ -97,7 +97,7 @@ namespace bliss
         /// mutex for thread safety
         mutable std::mutex mutex;
 
-        /// clear all allocated objects.
+        /// clear all allocated objects.  NOT Thread Safe
         void clear_storage() {
           ObjectPtrType ptr;
           auto entry = available.tryPop();
@@ -109,6 +109,8 @@ namespace bliss
           }
 
           // note that in-use information is held by releaser thread.
+          size_in_use.store(0, std::memory_order_relaxed);
+
         }
 
 
@@ -151,8 +153,6 @@ namespace bliss
         virtual ~ObjectPool() {
           // delete all the objects
           capacity = 0;
-          size_in_use.store(0, std::memory_order_relaxed);
-
           clear_storage();
         };
 
@@ -189,7 +189,7 @@ namespace bliss
 
 
         /**
-         * @brief     Get the next available Object.
+         * @brief     Get the next available Object.  thread safe
          * @details   if none available, and size is below capacity or pool is unlimited,
          *            a new object is created.
          * @return    pointer to acquired object, nullptr if failed.
@@ -199,10 +199,14 @@ namespace bliss
 
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
+          // okay to add before compare, since object pool is long lasting.
           int64_t prev_size = size_in_use.fetch_add(1, std::memory_order_relaxed);
           if (prev_size >= capacity) {
             size_in_use.fetch_sub(1, std::memory_order_relaxed);
             // leave ptr as nullptr.
+			if (this->isUnlimited()) {
+				ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", prev_size);
+			}
           } else {
 
             // now get or create
@@ -225,18 +229,26 @@ namespace bliss
 
 
 
-        /**
-         * @brief     Release a object back to pool, by id.  if id is incorrect, throw std exception.  clears object before release back into available.
-         * @note      THREAD SAFE
-         * @param objectId    The id of the Object to be released.
-         */
+    	/**
+    	 * @brief     Release a buffer back to pool.  Single Thread Only..
+    	 * @details   clears object before release back into available.
+    	 * 				the ptr is NOT checked against any in-use set only.
+    	 * 				if the ptr was not created by this pool, it may encounter
+    	 * 				double free issues.
+    	 * @param ptr  ptr to object.
+    	 * @return		true if sucessful release. note if wrong thread releases then false is returned.
+    	 */
         bool releaseObject(ObjectPtrType ptr) {
-          if (!ptr) return false;
 
+    		if (!ptr)
+    		{
+    			WARNINGF("WARNING: pool releasing a nullptr.");
+    			return true;
+    		}
           // now make object available.  make sure push_back is done one thread at a time.
           int64_t prev = size_in_use.fetch_sub(1, std::memory_order_relaxed);
           if (prev <= 0) {
-            //delete ptr;  // this is a ptr that is beyond capacity of the internal queue, delete it and don't decrement.
+        	  // failed release, but do not delete.
             size_in_use.fetch_add(1, std::memory_order_release);
             return false;
           } else {
@@ -247,24 +259,46 @@ namespace bliss
     };
 
 
-
+    /**
+     * @class     ObjectPool
+     * @brief     ObjectPool manages a set of reusable, in-memory buffers.  In particular, it can limit the amount of memory usage.
+     * @details   The class is templated to provide thread-safe or unsafe ObjectPools, managing thread-safe or unsafe Objects
+     *
+     *            When the pool is exhausted, Acquire function returns false.
+     *
+     *     this class assumes single acquiring thread and single releasing thread.
+     *        It is NOT thread safe.
+     *
+     *        The releasing thread essentially acts as an "in-use" set.
+     *
+     *      object life cycle:
+     *              a thread calls pool's acquire() to get pointer to an allocated object
+     *              application:  uses object, potentially by multiple threads
+     *              when done, 1 thread releases the object to the pool.  repeated release of the same object pointer does nothing.
+     *
+     *
+     * @note      Each object should be acquired by a single thread.
+     *            object may be used by multiple threads
+     *            multiple threads can concurrently acquire
+     *            the object MAY be released a single thread only.
+     *
+     *  @tparam LockType    The thread safety property for the pool, default to NONE
+     *  @tparam T           The object instance type.  object pool stores pointers to T instances.
+     */
     template<class T >
     class ObjectPool<bliss::concurrent::LockType::NONE, T>
     {
       public:
-        /**
-         * @brief     Index Type used to reference the Objects in the ObjectPool.
-         */
+        /// object type
         using ObjectType = T;
-        using ObjectPtrType = T*;   // shared pointer allows atomic operations as well as check for expired pointers
-                                    // however, GCC does not support it.
+        /// object pointer type  (prefer shared pointer as c++11 allows atomic operations, but gcc does not support it.
+        using ObjectPtrType = T*;
 
+        /// type of lock for the pool. set to None
         static const bliss::concurrent::LockType poolLT = bliss::concurrent::LockType::NONE;
 
 
       protected:
-
-
         /**
          * @brief     capacity of the ObjectPool (in number of Objects)
          */
@@ -272,17 +306,18 @@ namespace bliss
 
         /**
          * @brief     Internal Set of available Objects for immediate use.
-         * @details   Using set instead of ThreadSafeQueue to ensure uniqueness of Object Ids.
+         * @details   Using std deque
+         * 				uniqueness is responsibility of releasing thread.
          */
         std::deque<ObjectPtrType>                          available;
 
+        /// num objects in active use.
         int64_t size_in_use;
 
+        /// mutex for thread safety
         mutable std::mutex mutex;
 
-        /**
-         * NOT thread safe, so need to be wrapped in synchronized calls.
-         */
+        /// clear all allocated objects.  NOT Thread Safe
         void clear_storage() {
           ObjectPtrType ptr;
           while (!available.empty()) {
@@ -293,23 +328,6 @@ namespace bliss
           available.clear();
 
         }
-
-
-
-        /**
-         * @brief     Private move constructor with mutex lock.
-         * @param other   Source ObjectPool object to move
-         * @param l       Mutex lock on the Source ObjectPool object
-         */
-        ObjectPool(ObjectPool<poolLT, T>&& other, const std::lock_guard<std::mutex>&) :
-          capacity(other.capacity), size_in_use(other.size_in_use)
-
-        {
-          other.capacity = 0;
-          other.size_in_use = 0;
-
-          available.swap(other.available);
-        };
 
 
         /**
@@ -328,7 +346,8 @@ namespace bliss
 
       public:
         /**
-         * @brief     construct a Object Pool with buffers of capacity _buffer_capacity.  the number of buffers in the pool is set to _pool_capacity.
+         * @brief     construct a Object Pool with buffers of capacity _buffer_capacity.
+         *   the number of buffers in the pool is set to _pool_capacity.
          *
          * @param _pool_capacity       number of buffers in the pool
          * @param _buffer_capacity     size of the individual buffers
@@ -339,33 +358,10 @@ namespace bliss
           {};
 
 
-        /**
-         * @brief      Move constructor.  Delegates to the Move constructor that locks access on the source.
-         * @param other    source ObjectPool object to move.
-         */
-        explicit ObjectPool(ObjectPool<poolLT, T>&& other) :
-          ObjectPool<poolLT, T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
-
-        /**
-         * @brief     move assignment operator.
-         * @param other   source ObjectPool object to move from.
-         * @return        self, with member variables moved from other.
-         */
-        ObjectPool<poolLT, T>& operator=(ObjectPool<poolLT, T>&& other) {
-          std::unique_lock<std::mutex> mylock(mutex, std::defer_lock),
-                                        otherlock(other.mutex, std::defer_lock);
-          std::lock(mylock, otherlock);
-
-          capacity = other.capacity; other.capacity = 0;
-          size_in_use = other.size_in_use; other.size_in_use = 0;
-          clear_storage();
-
-          available.swap(other.available);
-
-          return *this;
-        };
-//        explicit ObjectPool(ObjectPool<poolLT, T>&& other) = delete;
-//        ObjectPool<poolLT, T>& operator=(ObjectPool<poolLT, T>&& other) = delete;
+        /// move constructor is deleted.
+        explicit ObjectPool(ObjectPool<poolLT, T>&& other) = delete;
+        /// move assignment operator is deleted.
+        ObjectPool<poolLT, T>& operator=(ObjectPool<poolLT, T>&& other) = delete;
 
         /**
          * @brief     default destructor
@@ -374,14 +370,13 @@ namespace bliss
           // delete all the objects
           capacity = 0;
           size_in_use = 0;
-
           clear_storage();
         };
 
 
         /**
          * @brief     Current size of the ObjectPool
-         * @return  size, type IdType (aka int).
+         * @return  size
          */
         int64_t getAvailableCount() const  {
           return (isUnlimited() ? capacity : (capacity - size_in_use));
@@ -389,45 +384,43 @@ namespace bliss
 
         /**
          * @brief     Current capacity of the ObjectPool
-         * @return    capacity, type IdTyype (aka int)
+         * @return    capacity
          */
         const int64_t getCapacity() const {
           return capacity;
         }
 
+        /// check if the pool has unlimited capacity
         inline const bool isUnlimited() const {
           return capacity == std::numeric_limits<int64_t>::max();
         }
 
 
         /**
-         * @brief     Resets the entire ObjectPool: all Objects in pool are  marked as released and available.
+         * @brief     Resets the entire ObjectPool: all Objects in pool are marked as released and available.
          *
-         * @note      This is not entirely thread safe.  the available set is cleared by a single thread, but other
-         *            threads may be acquiring objects while they are being released.
-         *
-         *            It is envisioned that this function should be called from a single thread.
-         *            however, care must be taken to ensure that all other threads have completed their work, else data loss is likely.
+         * @note      this method just sets in-use to 0.  the releasing thread may have objects to release.
          */
         void reset() {
-
           size_in_use = 0;
-
-
         }
 
 
         /**
-         * @brief     Get the next available Object by id.  if none available, return false in the first argument of the pair.
-         * @return    std::pair with bool and Id,  first indicate whether acquire was successful, second indicate the ObjectId if successful.
+         * @brief     Get the next available Object.  single thread
+         * @details   if none available, and size is below capacity or pool is unlimited,
+         *            a new object is created.
+         * @return    pointer to acquired object, nullptr if failed.
          */
         ObjectPtrType tryAcquireObject() {
-
 
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
           if (size_in_use >= capacity) {
             // leave ptr as nullptr.
+  			if (this->isUnlimited()) {
+  				ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", size_in_use);
+  			}
           } else {
             ++size_in_use;
             // now get or create
@@ -451,13 +444,21 @@ namespace bliss
 
 
 
-        /**
-         * @brief     Release a object back to pool, by id.  if id is incorrect, throw std exception.  clears object before release back into available.
-         * @note      THREAD SAFE
-         * @param objectId    The id of the Object to be released.
-         */
+    	/**
+    	 * @brief     Release a buffer back to pool.  Single Thread Only..
+    	 * @details   clears object before release back into available.
+    	 * 				the ptr is NOT checked against any in-use set only.
+    	 * 				if the ptr was not created by this pool, it may encounter
+    	 * 				double free issues.
+    	 * @param ptr  ptr to object.
+    	 * @return		true if sucessful release. note if wrong thread releases then false is returned.
+    	 */
         bool releaseObject(ObjectPtrType ptr) {
-          if (!ptr) return false;
+    		if (!ptr)
+    		{
+    			WARNINGF("WARNING: pool releasing a nullptr.");
+    			return true;
+    		}
 
           // now make object available.  make sure push_back is done one thread at a time.
           if (size_in_use <= 0) {
@@ -473,6 +474,7 @@ namespace bliss
 
     };
 
+    /// static variable for Pool LockType.
     template<bliss::concurrent::LockType LockType, class T>
     const bliss::concurrent::LockType ObjectPool<LockType, T>::poolLT;
 

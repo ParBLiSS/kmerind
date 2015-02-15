@@ -1,7 +1,7 @@
 /**
  * @file		test_threads.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *
@@ -31,7 +31,7 @@
 #include "utils/constexpr_array.hpp"
 #include "common/base_types.hpp"
 #include "common/alphabets.hpp"
-#include "common/AlphabetTraits.hpp"
+#include "common/alphabet_traits.hpp"
 #include "iterators/range.hpp"
 #include "iterators/buffered_transform_iterator.hpp"
 #include "io/fastq_partition_helper.hpp"

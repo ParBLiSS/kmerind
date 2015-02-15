@@ -1,7 +1,8 @@
 /**
- * @file    Kmer.hpp
+ * @file    kmer.hpp
  * @ingroup common
- * @author  Patrick Flick, Tony Pan
+ * @author  Patrick Flick
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Implements the Kmer data type.
  *
  * Copyright (c) TODO
@@ -25,10 +26,10 @@
 // own includes
 #include <common/base_types.hpp>
 #include <common/alphabets.hpp>
-#include <common/AlphabetTraits.hpp>
+#include <common/alphabet_traits.hpp>
 #include <common/bit_ops.hpp>
 #include <common/padding.hpp>
-#include <utils/KmerUtils.hpp>
+#include <utils/kmer_utils.hpp>
 
 
 namespace bliss

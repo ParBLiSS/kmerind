@@ -1,7 +1,7 @@
 /**
  * @file		lockfree_queue.hpp
  * @ingroup bliss::concurrent
- * @author	Tony Pan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   Thread Safe Queue Implementation
  * @details this header file contains the templated implementation of a thread-safe queue.  this class is used for MPI buffer management.
  *
@@ -61,7 +61,7 @@ namespace bliss
         /// underlying lockfree queue
         moodycamel::ConcurrentQueue<T> q;
 
-        /// capacity of the queue.  if set to std::numeric_limits<size_t>::max() indicates unlimited size queue
+        /// capacity of the queue.  if set to std::numeric_limits<int64_t>::max() indicates unlimited size queue
         mutable int64_t capacity;
 
         /// size encodes 2 things:  sign bit encodes whether a calling thread can push into this queue.  use when suspending or terminating a queue.  rest is size of current queue.
@@ -194,7 +194,6 @@ namespace bliss
           // before enablePush, queue is probably empty or no one is writing to it.  so prior side effects don't need to be visible right away.
           // size itself is atomic
           size.fetch_and(MAX_SIZE, std::memory_order_relaxed);  // clear the push bit, and leave size as is
-
         }
 
         /**
@@ -386,7 +385,7 @@ namespace bliss
 
 
         /**
-         * @brief Non-blocking - remove the first element in the queue and return it to the calling thread.
+         * @brief	 Non-blocking - remove the first element in the queue and return it to the calling thread.
          * returns a std::pair with first element indicating the success/failure of the Pop operation,
          * and second is the popped queue element, if pop were successful.
          *

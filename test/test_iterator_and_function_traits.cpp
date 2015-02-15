@@ -2,7 +2,7 @@
  * test_types.cpp
  *
  *  Created on: Feb 5, 2014
- *      Author: tpan
+ *      Author: Tony Pan <tpan7@gatech.edu>
  */
 
 #include <cstdio>

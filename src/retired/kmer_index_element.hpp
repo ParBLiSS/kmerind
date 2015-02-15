@@ -1,7 +1,7 @@
 /**
  * @file    kmer_index_element.hpp
  * @ingroup
- * @author  tpan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *

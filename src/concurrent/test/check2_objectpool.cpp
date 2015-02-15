@@ -1,7 +1,7 @@
 /**
  * @file		check_bufferpool.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *
@@ -20,7 +20,7 @@
 #include <atomic>
 #include <memory>
 
-#include "utils/test_utils.hpp"
+#include "utils/iterator_test_utils.hpp"
 
 #include "concurrent/buffer.hpp"
 

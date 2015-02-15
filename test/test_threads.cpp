@@ -1,7 +1,7 @@
 /**
  * @file		test_threads.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *
@@ -35,7 +35,7 @@
 #include "utils/constexpr_array.hpp"
 #include "common/base_types.hpp"
 #include "common/alphabets.hpp"
-#include "common/AlphabetTraits.hpp"
+#include "common/alphabet_traits.hpp"
 #include "partition/range.hpp"
 #include "iterators/buffered_transform_iterator.hpp"
 #include "io/fastq_loader.hpp"
@@ -1039,7 +1039,7 @@ int main(int argc, char** argv) {
     chunkSize = atoi(argv[2]);
   }
 
-  std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
+  std::string filename("/home/Tony Pan <tpan7@gatech.edu>/src/bliss/test/data/test.fastq");
 //  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.fastq");
   if (argc > 3)
   {

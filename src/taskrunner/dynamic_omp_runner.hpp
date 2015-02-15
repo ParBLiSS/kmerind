@@ -1,8 +1,8 @@
 /**
  * @file    dynamic_omp_runner.hpp
- * @ingroup
- * @author  tpan
- * @brief
+ * @ingroup taskrunner
+ * @author  Tony Pan <tpan7@gatech.edu>
+ * @brief	an OMP task execution engine for a queue of tasks.
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -17,7 +17,6 @@
 
 #include "config.hpp"
 #include "concurrent/lockfree_queue.hpp"
-
 #include "taskrunner/runner.hpp"
 
 
@@ -31,6 +30,7 @@ namespace concurrent
  * @brief       OpenMP task runner, processing a queue of tasks until queue is done (blocked)
  * @details     used for continuously changing queue, threads process tasks in demand driven way.
  *              also use for one thread per task
+ *              allows addition of tasks during execution.
  *
  */
 class DynamicOMPRunner : public Runner
@@ -41,6 +41,9 @@ class DynamicOMPRunner : public Runner
     const int nThreads;
 
   public:
+    /**
+     * cnstructor.
+     */
     DynamicOMPRunner(const int num_threads) : Runner(), nThreads(num_threads)
     {
 #ifdef USE_OPENMP
@@ -51,9 +54,10 @@ class DynamicOMPRunner : public Runner
 #endif
     }
 
-
+    /// default destructor
     virtual ~DynamicOMPRunner() {};
 
+    /// runs in a loop until the task queue is empty and marked as complete.
     void operator()()
     {
       size_t *proc = new size_t[nThreads];
@@ -71,6 +75,7 @@ class DynamicOMPRunner : public Runner
               {
                 auto v = std::move(q.waitAndPop());
                 if (v.first) {
+                	// run the actual task.
                   (v.second)->operator()();
                   ++(proc[omp_get_thread_num()]);
                 }
@@ -93,17 +98,19 @@ class DynamicOMPRunner : public Runner
     }  // operator()
 
 
-
+    /// add a new task to queue
     virtual bool addTask(std::shared_ptr<Runnable> &&t)
     {
       DEBUGF("add to Dynamic runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
       return q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t)).first;
     }
 
+    /// count the number of pending tasks
     virtual size_t getTaskCount() {
       return q.getSize();
     }
 
+    /// check to see if new tasks can be added to the queue
     virtual bool isAddDisabled() {
       return !(q.canPush());
     }
@@ -113,6 +120,7 @@ class DynamicOMPRunner : public Runner
       q.disablePush();
     };
 
+    /// allows synchronization (not used right now)
     virtual void synchronize()
     {
 #pragma omp barrier

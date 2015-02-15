@@ -1,7 +1,7 @@
 /**
  * @file    SequencesIterator.hpp
  * @ingroup bliss::io
- * @author  Tony Pan <tpan@gatech.edu>
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @date    Feb 5, 2014
  * @brief   Contains an iterator for traversing a sequence data, record by record, a FASTQ format specific parser for use by the iterator,
  *          Sequence Id datatype definition, and 2 sequence types (with and without quality score iterators)

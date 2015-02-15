@@ -2,10 +2,10 @@
 #include <gtest/gtest.h>
 
 // include files to test
-#include <common/PackedString.hpp>
+#include <common/packed_string.hpp>
 #include <common/alphabets.hpp>
-#include <common/AlphabetTraits.hpp>
-#include <common/Kmer.hpp>
+#include <common/alphabet_traits.hpp>
+#include <common/kmer.hpp>
 #include <common/packing_iterators.hpp>
 #include <common/kmer_iterators.hpp>
 

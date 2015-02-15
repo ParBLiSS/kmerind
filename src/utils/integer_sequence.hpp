@@ -1,7 +1,7 @@
 /**
  * @file    integer_sequence.hpp
  * @ingroup bliss::utils
- * @author  tpan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   templates to support generating a integer/index sequence
  * @details adapted from http://coliru.stacked-crooked.com/a/663dee82db2aef0a
  *
@@ -130,7 +130,7 @@ namespace bliss
 
     /**
      * @typedef make_index_sequence
-     * @brief   specialization for index sequence. type is set to size_t
+     * @brief   specialization of integer sequence for index. type is set to size_t
      * @tparam N  number of entries
      */
     template<size_t N>

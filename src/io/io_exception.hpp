@@ -1,7 +1,7 @@
 /**
  * @file		io_exception.hpp
  * @ingroup bliss::io
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   derived from std exception to represent an IO exception
  * @details
  *

@@ -3,9 +3,9 @@
 //#include <boost/concept_check.hpp>
 
 // include classes to test
-#include <common/Kmer.hpp>
+#include <common/kmer.hpp>
 #include <common/alphabets.hpp>
-#include <utils/KmerUtils.hpp>
+#include <utils/kmer_utils.hpp>
 #include <iterators/transform_iterator.hpp>
 
 

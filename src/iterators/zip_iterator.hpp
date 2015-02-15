@@ -1,8 +1,8 @@
 /**
  * @file    zip_iterator.hpp
  * @ingroup bliss::iterators
- * @author  tpan
- * @brief   contains a zip iterator
+ * @author  Tony Pan <tpan7@gatech.edu>
+ * @brief   contains a zip iterator that allows co-iteration of 2 base iterators.
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -16,6 +16,8 @@
 #include <type_traits>
 #include <iterator>
 
+
+// TODO: tuple version that supports arbitrary number of base iterators,  via variadic templating.
 
 namespace bliss
 {

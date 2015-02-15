@@ -1,7 +1,7 @@
 /**
  * @file    test_threads.cpp
  * @ingroup
- * @author  tpan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *
@@ -17,12 +17,12 @@
 #include "common/alphabets.hpp"
 
 
-#include "index/KmerIndex.hpp"
-#include "common/Kmer.hpp"
+#include "index/kmer_index.hpp"
+#include "common/kmer.hpp"
 #include "common/base_types.hpp"
 #include <string>
 #include <sstream>
-#include "utils/KmerUtils.hpp"
+#include "utils/kmer_utils.hpp"
 /*
  * TYPE DEFINITIONS
  */
@@ -70,7 +70,7 @@ void testQueryOld(MPI_Comm comm, const std::string & filename, const int nthread
           if (read.seqBegin != read.seqEnd) {
 
             typename KmerIndexType::KmoleculeOpType kmer_op;
-            bliss::utils::KmoleculeToKmerFunctor<typename KmerIndexType::KmerType> transform;
+            bliss::utils::KmoleculeToCanonicalKmerFunctor<typename KmerIndexType::KmerType> transform;
             typename KmerIndexType::KmerIterType start(typename KmerIndexType::KmoleculeIterType(read.seqBegin, kmer_op), transform);
             typename KmerIndexType::KmerIterType end(typename KmerIndexType::KmoleculeIterType(read.seqEnd, kmer_op), transform);
 

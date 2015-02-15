@@ -1,5 +1,5 @@
 /**
- * @file    AlphabetTraits.hpp
+ * @file    alphabet_traits.hpp
  * @ingroup common
  * @author  Patrick Flick
  * @brief   Declares the class `AlphabetTraits<T>`, which implements static
@@ -22,7 +22,7 @@
 // own includes:
 #include <common/bit_ops.hpp>
 #include <common/alphabets.hpp>
-#include <common/PackedString.hpp>
+#include <common/packed_string.hpp>
 
 
 namespace bliss

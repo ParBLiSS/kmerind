@@ -1,7 +1,7 @@
 /**
  * @file		MessageBuffers.hpp
  * @ingroup bliss::io
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   MessageBuffers base class and SendMessageBuffers subclass for buffering data for MPI send/receive
  * @details SendMessageBuffers is a collection of in-memory Buffers that containing data that
  *            1. will be sent to remote destinations, such as a MPI process
