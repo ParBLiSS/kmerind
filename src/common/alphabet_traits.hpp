@@ -29,7 +29,7 @@ namespace bliss
 {
   namespace common
   {
-
+    /// Functor to convert from ascii to values in the alphabet
     template<typename Alphabet, typename I = unsigned char>
     struct ASCII2 {
         const uint8_t operator()(I ascii) {
@@ -37,6 +37,13 @@ namespace bliss
         }
     };
   
+    /// Functor to convert from values in the alphabet to is complement.
+    template<typename Alphabet>
+    struct ToComplement {
+        const uint8_t operator()(uint8_t in) {
+          return Alphabet::TO_COMPlEMENT[static_cast<size_t>(in)];
+        }
+    };
   
   /**
    * @brief Templated class of static functions returning properties of the
@@ -220,7 +227,7 @@ namespace bliss
       return result;
     }
   };
-  
+
   } // namespace common
 } // namespace bliss
 
