@@ -79,12 +79,14 @@ protected:
     // const iterator for a local container.
   typedef typename LocalContainer::const_iterator local_thread_const_iterator;
 
+  /// MPI message tag for reserve size.  this is meant to be sent only to self.
+  static constexpr int RESERVE_TAG = 12;
+
 public:
   /// The iterator type of the entire set of thread-local containers on an MPI process
   typedef typename bliss::iterator::ConcatenatingIterator<local_thread_iterator>  local_iterator;
   /// The constant iterator type of the entire set of thread-local containers on an MPI process
   typedef typename bliss::iterator::ConcatenatingIterator<local_thread_const_iterator>  local_const_iterator;
-
 
   /// MPI message tag for inserts
   static constexpr int INSERT_MPI_TAG = 13;
@@ -141,9 +143,33 @@ public:
     return local_const_iterator();
   }
 
-  void reserve(size_t size_hint) {
-    for (int i = 0; i < nThreads; ++i) {
-      local_map[i].reserve(size_hint);
+  /**
+   * @brief initiates a local map size increment request
+   * @details  this generates a local message that INCREASES the size of the local_map by size.
+   *        this is sent as a message to self because only Callback Thread can access the local_map
+   *
+   * @param size
+   */
+  void reserve(const size_t& size) {
+    this->commLayer.sendMessage(&size, sizeof(size), commRank, RESERVE_TAG);
+  }
+
+  /**
+   * @brief Reserves size
+   * @param size_hint
+   */
+  void mapReserveCallback(uint8_t* msg, std::size_t count, int fromRank) {
+    assert(count == sizeof(size_t));
+    assert(fromRank == commRank);
+
+    size_t addl = *(reinterpret_cast<size_t*>(msg));
+
+    // resize the hashtables.
+#pragma omp parallel num_threads(nThreads) shared(addl)
+    {
+      int tid = omp_get_thread_num();
+      size_t size = this->local_map[tid].size();
+      this->local_map[tid].reserve(size+addl);   // causes a rehash
     }
   }
 
@@ -200,6 +226,7 @@ public:
     flushInsert();
     flushLookup();
   }
+
 
   /**
    * @brief Posts an asynchronous lookup for the given key.
@@ -416,6 +443,8 @@ public:
     this->commLayer.finish(INSERT_MPI_TAG);
     this->commLayer.finish(LOOKUP_MPI_TAG);
     this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
+    this->commLayer.finish(RESERVE_TAG);
+
 
     this->commLayer.finishCommunication();
   }
@@ -435,6 +464,13 @@ protected:
         has_pending_inserts(false), has_pending_lookups(false)
   {
 	  MPI_Comm_rank(comm, &commRank);
+
+    using namespace std::placeholders;
+    this->commLayer.addReceiveCallback(RESERVE_TAG,
+        std::bind(&_distributed_map_base::mapReserveCallback,
+                  this, _1, _2, _3));
+
+
   }
 
   /**

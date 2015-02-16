@@ -171,8 +171,9 @@ namespace bliss
             //==== create file Loader
             FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire building process.
 
-            // modifying the index here causes a thread safety issue, since callback thread is already running.
-            //  index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
+            // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
+            // index reserve internally sends a message to itself.
+            index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
 
             //====  now process the file, one L1 block (block partition by MPI Rank) at a time
             typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
