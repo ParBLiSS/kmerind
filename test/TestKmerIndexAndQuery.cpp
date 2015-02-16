@@ -389,9 +389,9 @@ int main(int argc, char** argv) {
   INFO("RANK " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
 
 
-  for (auto it = kmer_index.getLocalIndex().cbegin(); it != kmer_index.getLocalIndex().cend(); ++it) {
-    INFOF("Entry: Key=%s (%s), val = %d", it->first.toString().c_str(), bliss::utils::KmerUtils::toASCIIString(it->first).c_str(), it->second);
-  }
+//  for (auto it = kmer_index.getLocalIndex().cbegin(); it != kmer_index.getLocalIndex().cend(); ++it) {
+//    INFOF("Entry: Key=%s (%s), val = %d", it->first.toString().c_str(), bliss::utils::KmerUtils::toASCIIString(it->first).c_str(), it->second);
+//  }
   t2 = std::chrono::high_resolution_clock::now();
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
@@ -437,9 +437,9 @@ int main(int argc, char** argv) {
   //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
   INFO("RANK " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
 
-  for (auto it = kmer_index.getLocalIndex().cbegin(); it != kmer_index.getLocalIndex().cend(); ++it) {
-    INFOF("Entry: Key=%s (%s), val = %d", it->first.toString().c_str(), bliss::utils::KmerUtils::toASCIIString(it->first).c_str(), it->second);
-  }
+//  for (auto it = kmer_index.getLocalIndex().cbegin(); it != kmer_index.getLocalIndex().cend(); ++it) {
+//    INFOF("Entry: Key=%s (%s), val = %d", it->first.toString().c_str(), bliss::utils::KmerUtils::toASCIIString(it->first).c_str(), it->second);
+//  }
 
   t2 = std::chrono::high_resolution_clock::now();
   time_span =
