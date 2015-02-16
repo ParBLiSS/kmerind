@@ -53,7 +53,7 @@ namespace bliss
         {
           using Alphabet = typename Kmer::KmerAlphabet;
 
-          static_assert(Kmer::bitsPerChar == bliss::AlphabetTraits<Alphabet>::getBitsPerChar(), "Kmer's bits Per Char is different than Alphabet's bits per char.");
+          static_assert(Kmer::bitsPerChar == bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar(), "Kmer's bits Per Char is different than Alphabet's bits per char.");
           std::stringstream ss;
 
           using word_type = typename Kmer::KmerWordType;

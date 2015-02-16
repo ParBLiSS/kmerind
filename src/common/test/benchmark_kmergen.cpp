@@ -19,12 +19,12 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
   auto start = std::chrono::high_resolution_clock::now();
   // first step: translate (in place)
   // TODO: do this as transformation iterator
-  bliss::AlphabetTraits<DNA>::translateFromAscii(dna.begin(), dna.end(), dna.begin());
+  bliss::common::AlphabetTraits<bliss::common::DNA>::translateFromAscii(dna.begin(), dna.end(), dna.begin());
   auto stop = std::chrono::high_resolution_clock::now();
   std::cerr << "Duration of translation: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" << std::endl;
 
   // define a packing iterator to wrap around the string's iterators
-  typedef bliss::PackingIterator<std::string::iterator, bliss::AlphabetTraits<DNA>::getBitsPerChar()> packit_t;
+  typedef bliss::common::PackingIterator<std::string::iterator, bliss::common::AlphabetTraits<bliss::common::DNA>::getBitsPerChar()> packit_t;
   packit_t packIt(dna.begin(), dna.end());
   packit_t packItEnd(dna.end());
 
@@ -49,9 +49,9 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
    *****************************/
 
   // generate Kmers
-  typedef bliss::Kmer<35, DNA, uint32_t> Kmer;
+  typedef bliss::common::Kmer<35, bliss::common::DNA, uint32_t> Kmer;
   std::cout << "size of kmer: " << sizeof(Kmer) << std::endl;
-  typedef bliss::PackedKmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
+  typedef bliss::common::PackedKmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
 
   kmer_gen_it_t kmerGenIt(packIt);
   kmer_gen_it_t kmerGenEnd(packIt, dna.length());
@@ -79,7 +79,7 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
    *  Direct k-mer construction (no prior packing)  *
    **************************************************/
 
-  typedef bliss::KmerGenerationIterator<std::string::iterator, Kmer> kmer_char_gen_it_t;
+  typedef bliss::common::KmerGenerationIterator<std::string::iterator, Kmer> kmer_char_gen_it_t;
 
   kmer_char_gen_it_t kmerGenIt2(dna.begin(), true);
   kmer_char_gen_it_t kmerGenEnd2(dna.end(), false);

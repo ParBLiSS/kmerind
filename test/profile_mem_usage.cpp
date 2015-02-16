@@ -34,7 +34,7 @@ using namespace bliss::index;
 using namespace bliss::io;
 
 
-typedef bliss::Kmer<21, DNA, uint64_t> KmerType;
+typedef bliss::common::Kmer<21, bliss::common::DNA, uint64_t> KmerType;
 
 
 typedef KmerIndexElement<KmerType > KmerIndexType1;

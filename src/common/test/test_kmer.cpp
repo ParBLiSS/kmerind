@@ -10,10 +10,10 @@
 
 
 template<unsigned int KMER_SIZE, typename ALPHABET, typename word_type=WordType>
-class MyKmer : bliss::Kmer<KMER_SIZE, ALPHABET, word_type>
+class MyKmer : bliss::common::Kmer<KMER_SIZE, ALPHABET, word_type>
 {
   public:
-    using SuperType = typename bliss::Kmer<KMER_SIZE, ALPHABET, word_type>;
+    using SuperType = typename bliss::common::Kmer<KMER_SIZE, ALPHABET, word_type>;
 
     explicit MyKmer(const SuperType& other) : SuperType(other) {};
 
@@ -351,7 +351,7 @@ struct Bits8
 
 
 // templated test function
-template<typename kmer_word_type, typename input_word_type, unsigned int kmer_size=31, class Alphabet=DNA>
+template<typename kmer_word_type, typename input_word_type, unsigned int kmer_size=31, class Alphabet=bliss::common::DNA>
 void test_kmer_with_word_type_packed(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned step=1) {
 
   typedef MyKmer<kmer_size, Alphabet, kmer_word_type> kmer_type;
@@ -360,7 +360,7 @@ void test_kmer_with_word_type_packed(input_word_type* kmer_data, uint64_t* kmer_
   kmer_type kmer;
 
   // the expected value is a 64bit kmer.  we only need the prefix corresponding to the kmer_size.
-  constexpr size_t expected_shift = ((64 / bliss::AlphabetTraits<Alphabet>::getBitsPerChar() - kmer_size) * bliss::AlphabetTraits<Alphabet>::getBitsPerChar());
+  constexpr size_t expected_shift = ((64 / bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar() - kmer_size) * bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar());
   //printf("expected_shift: %lu\n", expected_shift);
 
   input_word_type* kmer_pointer = kmer_data;
@@ -386,13 +386,13 @@ void test_kmer_with_word_type_packed(input_word_type* kmer_data, uint64_t* kmer_
 
     //printf("iter i = %d, expected: %016lX, actual %016lX\n", i, kmer_ex_i.getPrefix64(), kmer.getPrefix64());
 
-    EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(input_word_type) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bliss::AlphabetTraits<Alphabet>::getBitsPerChar() << " i = " << i;
+    EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(input_word_type) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar() << " i = " << i;
   }
 }
 
 
 
-template<typename input_word_type, unsigned int kmer_size=31, class Alphabet=DNA>
+template<typename input_word_type, unsigned int kmer_size=31, class Alphabet=bliss::common::DNA>
 void test_kmers_with_packed_input(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned int step=1)
 {
   // test with various kmer base types
@@ -406,11 +406,11 @@ template<typename input_word_type>
 void test_kmers_packed(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // test for bits per character: 2, 4, and 8 (no padding only!)
-  test_kmers_with_packed_input<input_word_type, 31, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 28, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 13, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 4,  DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 1,  DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 31, bliss::common::DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 28, bliss::common::DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 13, bliss::common::DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 4,  bliss::common::DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 1,  bliss::common::DNA>(kmer_data, kmer_ex, nkmers);
 
 //  test_kmers_with_packed_input<input_word_type, 10, Bits4>(kmer_data, kmer_ex, nkmers, 2);
 //  test_kmers_with_packed_input<input_word_type, 13, Bits4>(kmer_data, kmer_ex, nkmers, 2);
@@ -424,11 +424,11 @@ template<typename input_word_type>
 void test_kmers_3_packed(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // maximum in 64 bits is 21
-  test_kmers_with_packed_input<input_word_type, 21, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 20, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 13, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 9,  DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 1,  DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 21, bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 20, bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 13, bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 9,  bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_packed_input<input_word_type, 1,  bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
 }
 
 template<typename input_word_type>
@@ -793,7 +793,7 @@ TEST(KmerGeneration, TestKmerGenerationPacked5)
 
 
 // templated test function
-template<typename kmer_word_type, unsigned int kmer_size=31, class Alphabet=DNA>
+template<typename kmer_word_type, unsigned int kmer_size=31, class Alphabet=bliss::common::DNA>
 void test_kmer_with_word_type_unpacked(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned step=1) {
 
   typedef MyKmer<kmer_size, Alphabet, kmer_word_type> kmer_type;
@@ -802,7 +802,7 @@ void test_kmer_with_word_type_unpacked(unsigned char* kmer_data, uint64_t* kmer_
   kmer_type kmer;
 
   // the expected value is a 64bit kmer.  we only need the prefix corresponding to the kmer_size.
-  constexpr size_t expected_shift = ((64 / bliss::AlphabetTraits<Alphabet>::getBitsPerChar() - kmer_size) * bliss::AlphabetTraits<Alphabet>::getBitsPerChar());
+  constexpr size_t expected_shift = ((64 / bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar() - kmer_size) * bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar());
   //printf("expected_shift: %lu\n", expected_shift);
 
   unsigned char* kmer_pointer = kmer_data;
@@ -826,14 +826,14 @@ void test_kmer_with_word_type_unpacked(unsigned char* kmer_data, uint64_t* kmer_
 
     //printf("iter i = %d, expected: %016lX, actual %016lX\n", i, kmer_ex_i.getPrefix64(), kmer.getPrefix64());
 
-    EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(unsigned char) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bliss::AlphabetTraits<Alphabet>::getBitsPerChar() << " i = " << i;
+    EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(unsigned char) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar() << " i = " << i;
   }
 }
 
 
 
 
-template<unsigned int kmer_size=31, class Alphabet=DNA>
+template<unsigned int kmer_size=31, class Alphabet=bliss::common::DNA>
 void test_kmers_with_unpacked_input(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers, unsigned int step=1)
 {
   // test with various kmer base types
@@ -846,21 +846,21 @@ void test_kmers_with_unpacked_input(unsigned char* kmer_data, uint64_t* kmer_ex,
 void test_kmers_unpacked(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // test for bits per character: 2, 4, and 8 (no padding only!)
-  test_kmers_with_unpacked_input<31, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<28, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<13, DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<4,  DNA>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<1,  DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<31, bliss::common::DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<28, bliss::common::DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<13, bliss::common::DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<4,  bliss::common::DNA>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<1,  bliss::common::DNA>(kmer_data, kmer_ex, nkmers);
 }
 
 void test_kmers_3_unpacked(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
 {
   // maximum in 64 bits is 21
-  test_kmers_with_unpacked_input<21, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<20, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<13, DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<9,  DNA5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<1,  DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<21, bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<20, bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<13, bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<9,  bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
+  test_kmers_with_unpacked_input<1,  bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
 }
 
 void test_kmers_5_unpacked(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
@@ -930,9 +930,9 @@ TEST(KmerGeneration, TestKmerGenerationChar2)
 template<typename Alphabet, int K>
 void compute_kmer(std::string input) {
 
-  using KmerType = bliss::Kmer<K, Alphabet>;
+  using KmerType = bliss::common::Kmer<K, Alphabet>;
 
-  using Decoder = bliss::ASCII2<Alphabet, std::string::value_type>;
+  using Decoder = bliss::common::ASCII2<Alphabet, std::string::value_type>;
   using BaseCharIterator = bliss::iterator::transform_iterator<std::string::const_iterator, Decoder>;
   auto temp = BaseCharIterator(input.cbegin(), Decoder());
 
@@ -978,7 +978,7 @@ TEST(KmerGeneration, TestKmerGenerationRoundTrip)
                          "ATCGATCAAATAGTAAATCC"
                          "ATTTGTTCAACTCACAGTTT";
 
-  compute_kmer<DNA, 21>(input);
+  compute_kmer<bliss::common::DNA, 21>(input);
 }
 
 /**
@@ -991,7 +991,7 @@ TEST(KmerGeneration, TestKmerGenerationRoundTripDNA5)
                          "ATCGATCAAATAGTAAATCC"
                          "ATTTGTTCAACTCACAGTTT";
 
-  compute_kmer<DNA5, 21>(input);
+  compute_kmer<bliss::common::DNA5, 21>(input);
 
 }
 
@@ -1004,7 +1004,7 @@ TEST(KmerGeneration, TestKmerGenerationRoundTripMultiWord)
                          "ATCGATCAAATAGTAAATCC"
                          "ATTTGTTCAACTCACAGTTT";
 
-  compute_kmer<DNA, 33>(input);
+  compute_kmer<bliss::common::DNA, 33>(input);
 
 }
 
@@ -1017,7 +1017,7 @@ TEST(KmerGeneration, TestKmerGenerationRoundTripDNA5MultiWord)
                          "ATCGATCAAATAGTAAATCC"
                          "ATTTGTTCAACTCACAGTTT";
 
-  compute_kmer<DNA5, 33>(input);
+  compute_kmer<bliss::common::DNA5, 33>(input);
 }
 
 
@@ -1193,9 +1193,9 @@ TEST(KmerComparison, TestKmerComparison1)
   // greater value in 3rd block:
   uint16_t kmer_val_g3[] = {0xffee, 0x1c0, 0xfeef, 0xdead, 0x1234, 0x5678, 0xabba};
 
-  MyKmer<41, DNA, uint16_t> kmer(kmer_val);
-  MyKmer<41, DNA, uint16_t> kmer_s(kmer_val_s4);
-  MyKmer<41, DNA, uint16_t> kmer_g(kmer_val_g3);
+  MyKmer<41, bliss::common::DNA, uint16_t> kmer(kmer_val);
+  MyKmer<41, bliss::common::DNA, uint16_t> kmer_s(kmer_val_s4);
+  MyKmer<41, bliss::common::DNA, uint16_t> kmer_g(kmer_val_g3);
 
   EXPECT_TRUE(kmer > kmer_s);
   EXPECT_TRUE(kmer == kmer);
@@ -1250,17 +1250,17 @@ TEST(KmerReverse, TestKmerReverse112)
 
 
   /* test for bits_per_char = 2 */
-  MyKmer<7*8, DNA, uint16_t> kmer_in(kmer_val);
-  MyKmer<7*8, DNA, uint16_t> kmer_ex_rev(kmer_ex);
+  MyKmer<7*8, bliss::common::DNA, uint16_t> kmer_in(kmer_val);
+  MyKmer<7*8, bliss::common::DNA, uint16_t> kmer_ex_rev(kmer_ex);
   // get the reverse
-  MyKmer<7*8, DNA, uint16_t> kmer_rev = kmer_in.reversed_kmer();
+  MyKmer<7*8, bliss::common::DNA, uint16_t> kmer_rev = kmer_in.reversed_kmer();
   EXPECT_EQ(kmer_ex_rev, kmer_rev);
 
   /* test for bits_per_char = 3 */
-  MyKmer<37, DNA5, uint16_t> kmer3_in(kmer_val);
-  MyKmer<37, DNA5, uint16_t> kmer3_ex_rev(kmer_ex_3);
+  MyKmer<37, bliss::common::DNA5, uint16_t> kmer3_in(kmer_val);
+  MyKmer<37, bliss::common::DNA5, uint16_t> kmer3_ex_rev(kmer_ex_3);
   // get the reverse
-  MyKmer<37, DNA5, uint16_t> kmer3_rev = kmer3_in.reversed_kmer();
+  MyKmer<37, bliss::common::DNA5, uint16_t> kmer3_rev = kmer3_in.reversed_kmer();
   EXPECT_EQ(kmer3_ex_rev, kmer3_rev);
 
   /* test for bits_per_char = 4 */

@@ -120,8 +120,8 @@ namespace bliss
                   const std::function<void(std::pair<KmerType, ValueType>*, std::size_t)> &callbackFunction,
                   int num_threads = 1) :
           index(_comm, _comm_size, num_threads, 
-                bliss::KmerInfixHasher<KmerType>(ceilLog2(num_threads), ceilLog2(_comm_size)),
-                bliss::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))
+                bliss::common::KmerInfixHasher<KmerType>(ceilLog2(num_threads), ceilLog2(_comm_size)),
+                bliss::common::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))
           ),
           comm(_comm), commSize(_comm_size) {
           MPI_Comm_rank(comm, &rank);
@@ -314,24 +314,24 @@ namespace bliss
      *			for counting kmers.
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
-    class KmerCountIndex : public KmerIndex<bliss::index::distributed_counting_map<bliss::Kmer<Kmer_Size, Alphabet>,
+    class KmerCountIndex : public KmerIndex<bliss::index::distributed_counting_map<bliss::common::Kmer<Kmer_Size, Alphabet>,
     bliss::io::CommunicationLayer<ThreadLocal>,
-    bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-    bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-    bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+    bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
     FileFormat, void, ThreadLocal>
     {
       public:
         /// DEFINE kmer index key type, also used for reverse complement
-        using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
+        using KmerType = bliss::common::Kmer<Kmer_Size, Alphabet>;
 
         /// DEFINE the index storage type.  using an infix of kmer to map to threads,
         /// since prefix is used for distributing to processors.
         using MapType = bliss::index::distributed_counting_map<KmerType,
             bliss::io::CommunicationLayer<ThreadLocal>,
-            bliss::KmerSuffixHasher<KmerType>,
-            bliss::KmerInfixHasher<KmerType>,
-            bliss::KmerPrefixHasher<KmerType> >;
+            bliss::common::KmerSuffixHasher<KmerType>,
+            bliss::common::KmerInfixHasher<KmerType>,
+            bliss::common::KmerPrefixHasher<KmerType> >;
 
         /// DEFINE kmer index value type (std::pair)
         using ValueType = typename MapType::value_type;
@@ -348,10 +348,10 @@ namespace bliss
         //==========below are to be redefined for each index type
         ///////////// INDEX TYPES
         /// converter from ascii to alphabet values
-        using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::ASCII2<Alphabet> >;
+        using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
 
         /// kmer generation iterator
-        typedef bliss::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
+        typedef bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
       protected:
 
         /// kmer iterator is the index element iterator type here.
@@ -414,8 +414,8 @@ namespace bliss
           if (read.seqBegin == read.seqEnd) return;
 
           //== transform ascii to coded value
-          BaseCharIterator charStart(read.seqBegin, bliss::ASCII2<Alphabet>());
-          BaseCharIterator charEnd(read.seqEnd, bliss::ASCII2<Alphabet>());
+          BaseCharIterator charStart(read.seqBegin, bliss::common::ASCII2<Alphabet>());
+          BaseCharIterator charEnd(read.seqEnd, bliss::common::ASCII2<Alphabet>());
 
           //== set up the kmer generating iterators.
           KmerIterType start(charStart, true);
@@ -439,26 +439,26 @@ namespace bliss
      *			 positions are in file offsets to the beginning of sequence, then offset within the read.
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
-    class KmerPositionIndex : public KmerIndex<bliss::index::distributed_multimap<bliss::Kmer<Kmer_Size, Alphabet>,
+    class KmerPositionIndex : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
     bliss::io::FASTQSequenceId,
     bliss::io::CommunicationLayer<ThreadLocal>,
-    bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-    bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-    bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+    bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
     FileFormat, void, ThreadLocal>
     {
       public:
         /// DEFINE kmer index type, also used for reverse complement
-        using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
+        using KmerType = bliss::common::Kmer<Kmer_Size, Alphabet>;
 
         /// DEFINE the index storage type.  using an infix of kmer to map to threads,
         /// since prefix is used for distributing to processors.
         using MapType = bliss::index::distributed_multimap<KmerType,
             bliss::io::FASTQSequenceId,
             bliss::io::CommunicationLayer<ThreadLocal>,
-            bliss::KmerSuffixHasher<KmerType>,
-            bliss::KmerInfixHasher<KmerType>,
-            bliss::KmerPrefixHasher<KmerType> >;
+            bliss::common::KmerSuffixHasher<KmerType>,
+            bliss::common::KmerInfixHasher<KmerType>,
+            bliss::common::KmerPrefixHasher<KmerType> >;
 
         /// DEFINE kmer index value type (std::pair)
         using ValueType = typename MapType::value_type;
@@ -475,10 +475,10 @@ namespace bliss
         //==========below are to be redefined for each index type
         ///////////// INDEX TYPES
         /// converter from ascii to alphabet values
-        using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::ASCII2<Alphabet> >;
+        using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
 
         /// kmer generation iterator
-        typedef bliss::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
+        typedef bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
       protected:
 
         /// kmer position iterator type
@@ -544,8 +544,8 @@ namespace bliss
           if (read.seqBegin == read.seqEnd) return;
 
           //== set up the kmer generating iterators.
-          KmerIterType start(BaseCharIterator(read.seqBegin, bliss::ASCII2<Alphabet>()), true);
-          KmerIterType end(BaseCharIterator(read.seqEnd, bliss::ASCII2<Alphabet>()), false);
+          KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
+          KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
 
           //== set up the position iterators
           IdIterType id_start(read.id);
@@ -574,26 +574,26 @@ namespace bliss
      *			 quality score is concatenation of base quality scores.
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
-    class KmerPositionAndQualityIndex : public KmerIndex<bliss::index::distributed_multimap<bliss::Kmer<Kmer_Size, Alphabet>,
+    class KmerPositionAndQualityIndex : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
     std::pair<bliss::io::FASTQSequenceId, float>,
     bliss::io::CommunicationLayer<ThreadLocal>,
-    bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-    bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-    bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+    bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
     FileFormat, float, ThreadLocal>
     {
       public:
         /// DEFINE kmer index type, also used for reverse complement
-        using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
+        using KmerType = bliss::common::Kmer<Kmer_Size, Alphabet>;
 
         /// define the index storage type.  using an infix of kmer to map to threads
         /// since prefix is used for distributing to processors.
         using MapType = bliss::index::distributed_multimap<KmerType,
             std::pair<bliss::io::FASTQSequenceId, float>,
             bliss::io::CommunicationLayer<ThreadLocal>,
-            bliss::KmerSuffixHasher<KmerType>,
-            bliss::KmerInfixHasher<KmerType>,
-            bliss::KmerPrefixHasher<KmerType> >;
+            bliss::common::KmerSuffixHasher<KmerType>,
+            bliss::common::KmerInfixHasher<KmerType>,
+            bliss::common::KmerPrefixHasher<KmerType> >;
 
         /// DEFINE kmer index value type (std::pair)
         using ValueType = typename MapType::value_type;
@@ -612,10 +612,10 @@ namespace bliss
         //==========below are to be redefined for each index type
         ///////////// INDEX TYPES
         /// converter from ascii to alphabet values
-        using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::ASCII2<Alphabet> >;
+        using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
 
         /// kmer generation iterator
-        typedef bliss::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
+        typedef bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>             KmerIterType;
 
       protected:
         /// kmer position iterator type
@@ -695,8 +695,8 @@ namespace bliss
           if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) return;
 
           //== set up the kmer generating iterators.
-          KmerIterType start(BaseCharIterator(read.seqBegin, bliss::ASCII2<Alphabet>()), true);
-          KmerIterType end(BaseCharIterator(read.seqEnd, bliss::ASCII2<Alphabet>()), false);
+          KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
+          KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
 
           //== set up the position iterators
           IdIterType id_start(read.id);
@@ -734,25 +734,25 @@ namespace bliss
      * @note	   build kmolecule first with custom kmer iterator.  will be replaced.
      */
       template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
-      class KmerCountIndexOld : public KmerIndex<bliss::index::distributed_counting_map<bliss::Kmer<Kmer_Size, Alphabet>,
+      class KmerCountIndexOld : public KmerIndex<bliss::index::distributed_counting_map<bliss::common::Kmer<Kmer_Size, Alphabet>,
       bliss::io::CommunicationLayer<ThreadLocal>,
-      bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-      bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-      bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+      bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
       FileFormat, void, ThreadLocal>
       {
 
         public:
     	  /// DEFINE kmer index key type, also used for reverse complement
-          using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
+          using KmerType = bliss::common::Kmer<Kmer_Size, Alphabet>;
 
           /// DEFINE the index storage type.  using an infix of kmer to map to threads,
 		  /// since prefix is used for distributing to processors.
           using MapType = bliss::index::distributed_counting_map<KmerType,
               bliss::io::CommunicationLayer<ThreadLocal>,
-              bliss::KmerSuffixHasher<KmerType>,
-              bliss::KmerInfixHasher<KmerType>,
-              bliss::KmerPrefixHasher<KmerType> >;
+              bliss::common::KmerSuffixHasher<KmerType>,
+              bliss::common::KmerInfixHasher<KmerType>,
+              bliss::common::KmerPrefixHasher<KmerType> >;
 
           /// DEFINE kmer index value type (std::pair)
           using ValueType = typename MapType::value_type;
@@ -864,27 +864,27 @@ namespace bliss
        * @note	   build kmolecule first with custom kmer iterator.  will be replaced.
        */
       template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
-      class KmerPositionIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::Kmer<Kmer_Size, Alphabet>,
+      class KmerPositionIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
       bliss::io::FASTQSequenceId,
       bliss::io::CommunicationLayer<ThreadLocal>,
-      bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-      bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-      bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+      bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
       FileFormat, void, ThreadLocal>
       {
 
         public:
     	  /// DEFINE kmer index type, also used for reverse complement
-          using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
+          using KmerType = bliss::common::Kmer<Kmer_Size, Alphabet>;
 
           /// DEFINE the index storage type.  using an infix of kmer to map to threads,
                  /// since prefix is used for distributing to processors.
           using MapType = bliss::index::distributed_multimap<KmerType,
               bliss::io::FASTQSequenceId,
               bliss::io::CommunicationLayer<ThreadLocal>,
-              bliss::KmerSuffixHasher<KmerType>,
-              bliss::KmerInfixHasher<KmerType>,
-              bliss::KmerPrefixHasher<KmerType> >;
+              bliss::common::KmerSuffixHasher<KmerType>,
+              bliss::common::KmerInfixHasher<KmerType>,
+              bliss::common::KmerPrefixHasher<KmerType> >;
 
           /// DEFINE kmer index value type (std::pair)
           using ValueType = typename MapType::value_type;
@@ -1013,27 +1013,27 @@ namespace bliss
        * @note	   build kmolecule first with custom kmer iterator.  will be replaced.
        */
       template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
-      class KmerPositionAndQualityIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::Kmer<Kmer_Size, Alphabet>,
+      class KmerPositionAndQualityIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
       std::pair<bliss::io::FASTQSequenceId, float>,
       bliss::io::CommunicationLayer<ThreadLocal>,
-      bliss::KmerSuffixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-      bliss::KmerInfixHasher<bliss::Kmer<Kmer_Size, Alphabet> >,
-      bliss::KmerPrefixHasher<bliss::Kmer<Kmer_Size, Alphabet> > >,
+      bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
       FileFormat, float, ThreadLocal>
       {
 
         public:
     	  /// DEFINE kmer index type, also used for reverse complement
-          using KmerType = bliss::Kmer<Kmer_Size, Alphabet>;
+          using KmerType = bliss::common::Kmer<Kmer_Size, Alphabet>;
 
           /// define the index storage type.  using an infix of kmer to map to threads
           /// since prefix is used for distributing to processors.
           using MapType = bliss::index::distributed_multimap<KmerType,
               std::pair<bliss::io::FASTQSequenceId, float>,
               bliss::io::CommunicationLayer<ThreadLocal>,
-              bliss::KmerSuffixHasher<KmerType>,
-              bliss::KmerInfixHasher<KmerType>,
-              bliss::KmerPrefixHasher<KmerType> >;
+              bliss::common::KmerSuffixHasher<KmerType>,
+              bliss::common::KmerInfixHasher<KmerType>,
+              bliss::common::KmerPrefixHasher<KmerType> >;
 
           /// DEFINE kmer index value type (std::pair)
           using ValueType = typename MapType::value_type;

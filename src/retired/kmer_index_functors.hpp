@@ -51,11 +51,11 @@ namespace bliss
 
 
         static constexpr BitSizeType nBits =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
+            bliss::common::AlphabetTraits<AlphabetType>::getBitsPerChar();
         static constexpr BitSizeType shift =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerValueType::size - 1);
+            bliss::common::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerValueType::size - 1);
         static constexpr AlphabetSizeType max =
-            bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
+            bliss::common::AlphabetTraits<AlphabetType>::getSize() - 1;
 
         static constexpr int word_size = sizeof(KmerValueType) * 8;
 //        static constexpr KmerValueType mask_reverse = ~(KmerValueType());
@@ -120,11 +120,11 @@ namespace bliss
 
 
         static constexpr BitSizeType nBits =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
+            bliss::common::AlphabetTraits<AlphabetType>::getBitsPerChar();
         static constexpr BitSizeType shift =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerIndexType::SizeType::size - 1);
+            bliss::common::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerIndexType::SizeType::size - 1);
         static constexpr AlphabetSizeType max =
-            bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
+            bliss::common::AlphabetTraits<AlphabetType>::getSize() - 1;
 
         static constexpr int word_size = sizeof(KmerValueType) * 8;
         static constexpr KmerValueType mask_reverse = ~(static_cast<KmerValueType>(0))

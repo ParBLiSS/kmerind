@@ -144,8 +144,8 @@ void testQuery(MPI_Comm comm, const std::string & filename, const int nthreads, 
           if (read.seqBegin != read.seqEnd) {
 
           //== set up the kmer generating iterators.
-          typename KmerIndexType::KmerIterType start(typename KmerIndexType::BaseCharIterator(read.seqBegin, bliss::ASCII2<DNA>()), true);
-          typename KmerIndexType::KmerIterType end(typename KmerIndexType::BaseCharIterator(read.seqEnd, bliss::ASCII2<DNA>()), false);
+          typename KmerIndexType::KmerIterType start(typename KmerIndexType::BaseCharIterator(read.seqBegin, bliss::common::ASCII2<bliss::common::DNA>()), true);
+          typename KmerIndexType::KmerIterType end(typename KmerIndexType::BaseCharIterator(read.seqEnd, bliss::common::ASCII2<bliss::common::DNA>()), false);
 
   //          int kmerCount = 0;
 
@@ -264,7 +264,7 @@ int main(int argc, char** argv) {
     // initialize index
     INFOF("***** initializing index.");
 
-    using IndexType = bliss::index::retired::KmerPositionIndexOld<21, DNA, bliss::io::FASTQ, true>;
+    using IndexType = bliss::index::retired::KmerPositionIndexOld<21, bliss::common::DNA, bliss::io::FASTQ, true>;
     IndexType kmer_index(comm, nprocs,
                                        std::bind(IndexType::defaultReceivePositionAnswer,
                                                  _1, _2, nthreads, std::ref(result), std::ref(entries)),
@@ -309,9 +309,9 @@ int main(int argc, char** argv) {
 
   // initialize index
   INFOF("***** initializing index.");
-  using IndexType = bliss::index::KmerPositionIndex<21, DNA, bliss::io::FASTQ, true>;
+  using IndexType = bliss::index::KmerPositionIndex<21, bliss::common::DNA, bliss::io::FASTQ, true>;
   IndexType kmer_index(comm, nprocs,
-                                    std::bind(IndexType::defaultReceivePositionAnswer, // <bliss::Kmer<21, DNA>, bliss::io::FASTQSequenceId >
+                                    std::bind(IndexType::defaultReceivePositionAnswer, // <bliss::Kmer<21, bliss::common::DNA>, bliss::io::FASTQSequenceId >
                                               _1, _2, nthreads, std::ref(result), std::ref(entries)),
                                               nthreads);
 
@@ -361,7 +361,7 @@ int main(int argc, char** argv) {
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
   INFOF("***** initializing index.");
-  using IndexType = bliss::index::retired::KmerCountIndexOld<21, DNA, bliss::io::FASTQ, true>;
+  using IndexType = bliss::index::retired::KmerCountIndexOld<21, bliss::common::DNA, bliss::io::FASTQ, true>;
   IndexType kmer_index(comm, nprocs,
                            std::bind(&IndexType::defaultReceiveCountAnswer,
                                      _1, _2, nthreads, std::ref(result), std::ref(entries)),
@@ -410,7 +410,7 @@ int main(int argc, char** argv) {
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
   INFOF("***** initializing index.");
-  using IndexType = bliss::index::KmerCountIndex<21, DNA, bliss::io::FASTQ, true>;
+  using IndexType = bliss::index::KmerCountIndex<21, bliss::common::DNA, bliss::io::FASTQ, true>;
   IndexType  kmer_index(comm, nprocs,
                               std::bind(&IndexType::defaultReceiveCountAnswer,
                                         _1, _2, nthreads, std::ref(result), std::ref(entries)),
@@ -468,7 +468,7 @@ score = 0;
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
   INFOF("***** initializing index.");
-  using IndexType = bliss::index::retired::KmerPositionAndQualityIndexOld<21, DNA, bliss::io::FASTQ, true>;
+  using IndexType = bliss::index::retired::KmerPositionAndQualityIndexOld<21, bliss::common::DNA, bliss::io::FASTQ, true>;
   IndexType kmer_index(comm, nprocs,
                                      std::bind(&IndexType::defaultReceivePositionAndQualityAnswer,
                                                _1, _2, nthreads, std::ref(result), std::ref(score), std::ref(entries)),
@@ -513,7 +513,7 @@ score = 0;
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
   INFOF("***** initializing index.");
-  using IndexType = bliss::index::KmerPositionAndQualityIndex<21, DNA, bliss::io::FASTQ, true>;
+  using IndexType = bliss::index::KmerPositionAndQualityIndex<21, bliss::common::DNA, bliss::io::FASTQ, true>;
   IndexType kmer_index(comm, nprocs,
                                     std::bind(&IndexType::defaultReceivePositionAndQualityAnswer,
                                                _1, _2, nthreads, std::ref(result), std::ref(score), std::ref(entries)),

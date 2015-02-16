@@ -40,20 +40,20 @@ TEST_F(PackingTest, TestPackedString1) {
   for (std::string dna : dna_seqs)
   {
     // first step: translate (in place)
-    bliss::AlphabetTraits<DNA>::translateFromAscii(dna.begin(), dna.end(), dna.begin());
+    bliss::common::AlphabetTraits<bliss::common::DNA>::translateFromAscii(dna.begin(), dna.end(), dna.begin());
     // check that every letter's value is smaller than the total alphabet size
     for (char c : dna)
     {
-      EXPECT_LT(static_cast<unsigned int>(c), bliss::AlphabetTraits<DNA>::getSize()) << "The value of the translated chars must be smaller than the size of the alphabet";
+      EXPECT_LT(static_cast<unsigned int>(c), bliss::common::AlphabetTraits<bliss::common::DNA>::getSize()) << "The value of the translated chars must be smaller than the size of the alphabet";
     }
 
     // then pack it
-    bliss::PackedString<DNA> packedStr(dna);
+    bliss::common::PackedString<bliss::common::DNA> packedStr(dna);
 
     ASSERT_EQ(packedStr.size(), dna.size()) << "The packed sequence should be of same length as the original string.";
 
     // unpack it
-    std::vector<DNA> unpacked_dna(packedStr.size());
+    std::vector<bliss::common::DNA> unpacked_dna(packedStr.size());
     packedStr.unpackSequence(unpacked_dna.begin());
 
     // compare the vector and the given string
@@ -69,21 +69,21 @@ TEST_F(PackingTest, TestPackedString2) {
   {
     // translate into different container
     std::vector<char> dna_vec(dna.size());
-    bliss::AlphabetTraits<DNA>::translateFromAscii(dna.begin(), dna.end(), dna_vec.begin());
+    bliss::common::AlphabetTraits<bliss::common::DNA>::translateFromAscii(dna.begin(), dna.end(), dna_vec.begin());
     // check that every letter's value is smaller than the total alphabet size
     for (char c : dna_vec)
     {
-      EXPECT_LT(static_cast<unsigned int>(c), bliss::AlphabetTraits<DNA>::getSize()) << "The value of the translated chars must be smaller than the size of the alphabet";
+      EXPECT_LT(static_cast<unsigned int>(c), bliss::common::AlphabetTraits<bliss::common::DNA>::getSize()) << "The value of the translated chars must be smaller than the size of the alphabet";
     }
 
     // then pack it
-    bliss::PackedString<DNA> packedStr(dna_vec.begin(), dna_vec.end());
+    bliss::common::PackedString<bliss::common::DNA> packedStr(dna_vec.begin(), dna_vec.end());
 
     ASSERT_EQ(packedStr.size(), dna.size()) << "The packed sequence should be of same length as the original string.";
     ASSERT_EQ(packedStr.size(), dna_vec.size()) << "The packed sequence should be of same length as the original string.";
 
     // unpack it into a basic_string<DNA> container
-    std::basic_string<DNA> unpacked_dna(packedStr.size(),'X');
+    std::basic_string<bliss::common::DNA> unpacked_dna(packedStr.size(),'X');
     packedStr.unpackSequence(unpacked_dna.begin());
 
     // compare the values using the [] operator
@@ -93,7 +93,7 @@ TEST_F(PackingTest, TestPackedString2) {
     }
 
     // translate back to ASCII (in place)
-    bliss::AlphabetTraits<DNA>::translateToAscii(unpacked_dna.begin(), unpacked_dna.end(), unpacked_dna.begin());
+    bliss::common::AlphabetTraits<bliss::common::DNA>::translateToAscii(unpacked_dna.begin(), unpacked_dna.end(), unpacked_dna.begin());
 
     // compare the vector and the given string
     for (unsigned int i = 0; i < dna.size(); ++i)
@@ -108,19 +108,19 @@ TEST_F(PackingTest, TestPackingIterator) {
   for (std::string dna : dna_seqs)
   {
     // first step: translate (in place)
-    bliss::AlphabetTraits<DNA>::translateFromAscii(dna.begin(), dna.end(), dna.begin());
+    bliss::common::AlphabetTraits<bliss::common::DNA>::translateFromAscii(dna.begin(), dna.end(), dna.begin());
     // check that every letter's value is smaller than the total alphabet size
     for (char c : dna)
     {
-      EXPECT_LT(static_cast<unsigned int>(c), bliss::AlphabetTraits<DNA>::getSize()) << "The value of the translated chars must be smaller than the size of the alphabet";
+      EXPECT_LT(static_cast<unsigned int>(c), bliss::common::AlphabetTraits<bliss::common::DNA>::getSize()) << "The value of the translated chars must be smaller than the size of the alphabet";
     }
 
     // define a packing iterator to wrap around the string's iterators
-    typedef bliss::PackingIterator<std::string::iterator, bliss::AlphabetTraits<DNA>::getBitsPerChar()> packit_t;
+    typedef bliss::common::PackingIterator<std::string::iterator, bliss::common::AlphabetTraits<bliss::common::DNA>::getBitsPerChar()> packit_t;
     packit_t packIt(dna.begin(), dna.end());
     packit_t packItEnd(dna.end());
     // define an unpacking iterator to wrap around the packing iterator
-    typedef bliss::UnpackingIterator<packit_t, bliss::AlphabetTraits<DNA>::getBitsPerChar()> unpackit_t;
+    typedef bliss::common::UnpackingIterator<packit_t, bliss::common::AlphabetTraits<bliss::common::DNA>::getBitsPerChar()> unpackit_t;
     unpackit_t unpackIt(packIt);
     // pass the total unpacked size, so that the end is properly defined
     unpackit_t unpackEnd(packIt, dna.size());
@@ -160,21 +160,21 @@ TEST_F(PackingTest, TestKmerGeneration1) {
   for (std::string dna : dna_seqs)
   {
     // first step: translate (in place)
-    bliss::AlphabetTraits<DNA>::translateFromAscii(dna.begin(), dna.end(), dna.begin());
+    bliss::common::AlphabetTraits<bliss::common::DNA>::translateFromAscii(dna.begin(), dna.end(), dna.begin());
     // check that every letter's value is smaller than the total alphabet size
     for (char c : dna)
     {
-      EXPECT_LT(static_cast<unsigned int>(c), bliss::AlphabetTraits<DNA>::getSize()) << "The value of the translated chars must be smaller than the size of the alphabet";
+      EXPECT_LT(static_cast<unsigned int>(c), bliss::common::AlphabetTraits<bliss::common::DNA>::getSize()) << "The value of the translated chars must be smaller than the size of the alphabet";
     }
 
     // define a packing iterator to wrap around the string's iterators
-    typedef bliss::PackingIterator<std::string::iterator, bliss::AlphabetTraits<DNA>::getBitsPerChar()> packit_t;
+    typedef bliss::common::PackingIterator<std::string::iterator, bliss::common::AlphabetTraits<bliss::common::DNA>::getBitsPerChar()> packit_t;
     packit_t packIt(dna.begin(), dna.end());
     packit_t packItEnd(dna.end());
 
     // TODO generate Kmers
-    typedef bliss::Kmer<21, DNA, uint8_t> Kmer;
-    typedef bliss::PackedKmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
+    typedef bliss::common::Kmer<21, bliss::common::DNA, uint8_t> Kmer;
+    typedef bliss::common::PackedKmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
     if (dna.size() >= 21)
     {
       kmer_gen_it_t kmerGenIt(packIt);
