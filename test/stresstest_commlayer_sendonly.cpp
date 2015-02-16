@@ -1,7 +1,7 @@
 
 #include <mpi.h>
 #include <omp.h>
-#include <unistd.h> // for sleep!
+#include <unistd.h> // for sleep!, for gethosthanme
 
 #include <iostream>
 #include <functional>
@@ -192,6 +192,16 @@ int main(int argc, char *argv[])
   int p, rank;
   MPI_Comm_size(comm, &p);
   MPI_Comm_rank(comm, &rank);
+
+
+  // get host hame and print out
+  {
+    char hostname[256];
+    memset(hostname, 0, 256);
+    gethostname(hostname, 256);
+    INFOF("Rank %d hostname [%s]\n", rank, hostname);
+  }
+  MPI_Barrier(comm);
 
   /* code */
   {

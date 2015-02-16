@@ -19,6 +19,7 @@
 #include <string.h>
 #include <cstdio>
 #include <cmath>
+#include <unistd.h>  // get hostname
 
 #include <iostream>
 //#include <thread>
@@ -1070,6 +1071,13 @@ int main(int argc, char** argv) {
           MPI_Comm_size(comm, &groupSize);
           MPI_Comm_rank(comm, &id);
 
+          {
+            char hostname[256];
+            memset(hostname, 0, 256);
+            gethostname(hostname, 256);
+            INFOF("Rank %d hostname [%s]\n", rank, hostname);
+          }
+          MPI_Barrier(comm);
 
           if (id == 0)
             std::cout << "USE_MPI is set" << std::endl;

@@ -87,6 +87,15 @@ int main(int argc, char *argv[])
   MPI_Comm_size(comm, &p);
   MPI_Comm_rank(comm, &rank);
 
+  {
+    char hostname[256];
+    memset(hostname, 0, 256);
+    gethostname(hostname, 256);
+    INFOF("Rank %d hostname [%s]\n", rank, hostname);
+  }
+  MPI_Barrier(comm);
+
+
   /* code */
 //  {
 //  test_map<false>(comm, nthreads);
