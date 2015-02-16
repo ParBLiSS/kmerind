@@ -295,7 +295,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    INFO("new position index: time " << time_span.count());
+    INFO("old position index: time " << time_span.count());
 
     // === test query.  make each node read 1.
     // get the file ready for read
@@ -308,7 +308,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    INFO("new position index query: time " << time_span.count());
+    INFO("old position index query: time " << time_span.count());
 
     kmer_index.finalize();
 
@@ -402,7 +402,7 @@ int main(int argc, char** argv) {
   // get the file ready for read
 
   INFOF("***** query index.");
-  t2 = std::chrono::high_resolution_clock::now();
+  t1 = std::chrono::high_resolution_clock::now();
 
   testQueryOld(comm, filename, nthreads, chunkSize, kmer_index);
 
