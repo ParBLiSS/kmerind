@@ -120,8 +120,8 @@ namespace bliss
                   const std::function<void(std::pair<KmerType, ValueType>*, std::size_t)> &callbackFunction,
                   int num_threads = 1) :
           index(_comm, _comm_size, num_threads, 
-                bliss::common::KmerInfixHasher<KmerType>(ceilLog2(num_threads), ceilLog2(_comm_size)),
-                bliss::common::KmerPrefixHasher<KmerType>(ceilLog2(_comm_size))
+                bliss::common::KmerInfixStdHash<KmerType>(ceilLog2(num_threads), ceilLog2(_comm_size)),
+                bliss::common::KmerPrefixStdHash<KmerType>(ceilLog2(_comm_size))
           ),
           comm(_comm), commSize(_comm_size) {
           MPI_Comm_rank(comm, &rank);
@@ -317,9 +317,9 @@ namespace bliss
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
     class KmerCountIndex : public KmerIndex<bliss::index::distributed_counting_map<bliss::common::Kmer<Kmer_Size, Alphabet>,
     bliss::io::CommunicationLayer<ThreadLocal>,
-    bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-    bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-    bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
+    bliss::common::KmerSuffixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerInfixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerPrefixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
     FileFormat, void, ThreadLocal>
     {
       public:
@@ -330,9 +330,9 @@ namespace bliss
         /// since prefix is used for distributing to processors.
         using MapType = bliss::index::distributed_counting_map<KmerType,
             bliss::io::CommunicationLayer<ThreadLocal>,
-            bliss::common::KmerSuffixHasher<KmerType>,
-            bliss::common::KmerInfixHasher<KmerType>,
-            bliss::common::KmerPrefixHasher<KmerType> >;
+            bliss::common::KmerSuffixStdHash<KmerType>,
+            bliss::common::KmerInfixStdHash<KmerType>,
+            bliss::common::KmerPrefixStdHash<KmerType> >;
 
         /// DEFINE kmer index value type (std::pair)
         using ValueType = typename MapType::value_type;
@@ -443,9 +443,9 @@ namespace bliss
     class KmerPositionIndex : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
     bliss::io::FASTQSequenceId,
     bliss::io::CommunicationLayer<ThreadLocal>,
-    bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-    bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-    bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
+    bliss::common::KmerSuffixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerInfixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerPrefixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
     FileFormat, void, ThreadLocal>
     {
       public:
@@ -457,9 +457,9 @@ namespace bliss
         using MapType = bliss::index::distributed_multimap<KmerType,
             bliss::io::FASTQSequenceId,
             bliss::io::CommunicationLayer<ThreadLocal>,
-            bliss::common::KmerSuffixHasher<KmerType>,
-            bliss::common::KmerInfixHasher<KmerType>,
-            bliss::common::KmerPrefixHasher<KmerType> >;
+            bliss::common::KmerSuffixStdHash<KmerType>,
+            bliss::common::KmerInfixStdHash<KmerType>,
+            bliss::common::KmerPrefixStdHash<KmerType> >;
 
         /// DEFINE kmer index value type (std::pair)
         using ValueType = typename MapType::value_type;
@@ -578,9 +578,9 @@ namespace bliss
     class KmerPositionAndQualityIndex : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
     std::pair<bliss::io::FASTQSequenceId, float>,
     bliss::io::CommunicationLayer<ThreadLocal>,
-    bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-    bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-    bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
+    bliss::common::KmerSuffixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerInfixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+    bliss::common::KmerPrefixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
     FileFormat, float, ThreadLocal>
     {
       public:
@@ -592,9 +592,9 @@ namespace bliss
         using MapType = bliss::index::distributed_multimap<KmerType,
             std::pair<bliss::io::FASTQSequenceId, float>,
             bliss::io::CommunicationLayer<ThreadLocal>,
-            bliss::common::KmerSuffixHasher<KmerType>,
-            bliss::common::KmerInfixHasher<KmerType>,
-            bliss::common::KmerPrefixHasher<KmerType> >;
+            bliss::common::KmerSuffixStdHash<KmerType>,
+            bliss::common::KmerInfixStdHash<KmerType>,
+            bliss::common::KmerPrefixStdHash<KmerType> >;
 
         /// DEFINE kmer index value type (std::pair)
         using ValueType = typename MapType::value_type;
@@ -737,9 +737,9 @@ namespace bliss
       template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, bool ThreadLocal = true>
       class KmerCountIndexOld : public KmerIndex<bliss::index::distributed_counting_map<bliss::common::Kmer<Kmer_Size, Alphabet>,
       bliss::io::CommunicationLayer<ThreadLocal>,
-      bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-      bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-      bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
+      bliss::common::KmerSuffixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerInfixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerPrefixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
       FileFormat, void, ThreadLocal>
       {
 
@@ -751,9 +751,9 @@ namespace bliss
 		  /// since prefix is used for distributing to processors.
           using MapType = bliss::index::distributed_counting_map<KmerType,
               bliss::io::CommunicationLayer<ThreadLocal>,
-              bliss::common::KmerSuffixHasher<KmerType>,
-              bliss::common::KmerInfixHasher<KmerType>,
-              bliss::common::KmerPrefixHasher<KmerType> >;
+              bliss::common::KmerSuffixStdHash<KmerType>,
+              bliss::common::KmerInfixStdHash<KmerType>,
+              bliss::common::KmerPrefixStdHash<KmerType> >;
 
           /// DEFINE kmer index value type (std::pair)
           using ValueType = typename MapType::value_type;
@@ -868,9 +868,9 @@ namespace bliss
       class KmerPositionIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
       bliss::io::FASTQSequenceId,
       bliss::io::CommunicationLayer<ThreadLocal>,
-      bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-      bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-      bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
+      bliss::common::KmerSuffixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerInfixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerPrefixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
       FileFormat, void, ThreadLocal>
       {
 
@@ -883,9 +883,9 @@ namespace bliss
           using MapType = bliss::index::distributed_multimap<KmerType,
               bliss::io::FASTQSequenceId,
               bliss::io::CommunicationLayer<ThreadLocal>,
-              bliss::common::KmerSuffixHasher<KmerType>,
-              bliss::common::KmerInfixHasher<KmerType>,
-              bliss::common::KmerPrefixHasher<KmerType> >;
+              bliss::common::KmerSuffixStdHash<KmerType>,
+              bliss::common::KmerInfixStdHash<KmerType>,
+              bliss::common::KmerPrefixStdHash<KmerType> >;
 
           /// DEFINE kmer index value type (std::pair)
           using ValueType = typename MapType::value_type;
@@ -1017,9 +1017,9 @@ namespace bliss
       class KmerPositionAndQualityIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
       std::pair<bliss::io::FASTQSequenceId, float>,
       bliss::io::CommunicationLayer<ThreadLocal>,
-      bliss::common::KmerSuffixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-      bliss::common::KmerInfixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> >,
-      bliss::common::KmerPrefixHasher<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
+      bliss::common::KmerSuffixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerInfixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
+      bliss::common::KmerPrefixStdHash<bliss::common::Kmer<Kmer_Size, Alphabet> > >,
       FileFormat, float, ThreadLocal>
       {
 
@@ -1032,9 +1032,9 @@ namespace bliss
           using MapType = bliss::index::distributed_multimap<KmerType,
               std::pair<bliss::io::FASTQSequenceId, float>,
               bliss::io::CommunicationLayer<ThreadLocal>,
-              bliss::common::KmerSuffixHasher<KmerType>,
-              bliss::common::KmerInfixHasher<KmerType>,
-              bliss::common::KmerPrefixHasher<KmerType> >;
+              bliss::common::KmerSuffixStdHash<KmerType>,
+              bliss::common::KmerInfixStdHash<KmerType>,
+              bliss::common::KmerPrefixStdHash<KmerType> >;
 
           /// DEFINE kmer index value type (std::pair)
           using ValueType = typename MapType::value_type;

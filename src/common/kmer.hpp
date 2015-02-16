@@ -88,11 +88,13 @@ namespace bliss
   template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE=WordType>
   class Kmer
   {
-      friend std::string bliss::utils::KmerUtils::toASCIIString<Kmer>(const Kmer & kmer);
+      friend std::string bliss::utils::KmerUtils::toASCIIString< Kmer >(const Kmer & kmer);
   
       template<unsigned int K, typename ALPHA, typename WT>
       friend std::ostream& operator<<(std::ostream& ost, const Kmer<K, ALPHA, WT> & kmer);
-  
+
+      friend class std::hash< Kmer >;
+
    public:
       /// The size of the Kmer, i.e. the number of characters
     static constexpr unsigned int size = KMER_SIZE;
@@ -1167,39 +1169,89 @@ namespace bliss
       // set unused bits to zero to make this a valid kmer
       do_sanitize();
     }
-  
-  
+
   };
-  
+
+  /**
+   * @brief  Kmer hash, returns the most significant NumBits directly as identity hash.
+   * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+   */
   template <typename KMER>
-  struct KmerPrefixHasher {
+  struct KmerPrefixIdentityHash {
       const unsigned int NumBits;
-      KmerPrefixHasher(const unsigned int nBits = 64) : NumBits(nBits) {};
+      KmerPrefixIdentityHash(const unsigned int nBits = 64) : NumBits(nBits) {};
       uint64_t operator()(const KMER & kmer) const {
         return kmer.getPrefix(NumBits);
       };
   };
   
+  /**
+   * @brief  Kmer hash, returns the middle NumBits, offset from MSB, directly as identity hash.
+   * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+   */
   template<typename KMER>
-  struct KmerInfixHasher {
+  struct KmerInfixIdentityHash {
       const unsigned int NumBits;
       const unsigned int offset;
-      KmerInfixHasher(const unsigned int nBits = 64, const unsigned int _offset = 0) : NumBits(nBits), offset(_offset) {};
+      KmerInfixIdentityHash(const unsigned int nBits = 64, const unsigned int _offset = 0) : NumBits(nBits), offset(_offset) {};
       uint64_t operator()(const KMER & kmer) const {
         return kmer.getInfix(NumBits, offset);
       }
   };
   
+  /**
+   * @brief  Kmer hash, returns the least significant NumBits directly as identity hash.
+   * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+   */
   template <typename KMER>
-  struct KmerSuffixHasher {
+  struct KmerSuffixIdentityHash {
     const unsigned int NumBits;
-    KmerSuffixHasher(const unsigned int nBits = 64) : NumBits(nBits) {};
+    KmerSuffixIdentityHash(const unsigned int nBits = 64) : NumBits(nBits) {};
     uint64_t operator()(const KMER & kmer) const {
       return kmer.getSuffix(NumBits);
     }
   };
   
+  /**
+   * @brief  Kmer hash, returns the most significant NumBits directly as identity hash.
+   * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+   */
+  template <typename KMER>
+  struct KmerPrefixStdHash {
+      const unsigned int NumBits;
+      KmerPrefixStdHash(const unsigned int nBits = 64) : NumBits(nBits) {};
+      uint64_t operator()(const KMER & kmer) const {
+        return std::hash<KMER>()(kmer) >> (sizeof(size_t) - NumBits);
+      };
+  };
   
+  /**
+   * @brief  Kmer hash, returns the middle NumBits, offset from MSB, directly as identity hash.
+   * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+   */
+  template<typename KMER>
+  struct KmerInfixStdHash {
+      const unsigned int NumBits;
+      const unsigned int offset;
+      KmerInfixStdHash(const unsigned int nBits = 64, const unsigned int _offset = 0) : NumBits(nBits), offset(_offset) {};
+      uint64_t operator()(const KMER & kmer) const {
+        return std::hash<KMER>()(kmer) >> (sizeof(size_t) - NumBits - offset) &
+            (std::numeric_limits<size_t>::max() >> (sizeof(size_t) - NumBits));
+      }
+  };
+  
+  /**
+   * @brief  Kmer hash, returns the least significant NumBits directly as identity hash.
+   * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+   */
+  template <typename KMER>
+  struct KmerSuffixStdHash {
+    const unsigned int NumBits;
+    KmerSuffixStdHash(const unsigned int nBits = 64) : NumBits(nBits) {};
+    uint64_t operator()(const KMER & kmer) const {
+      return std::hash<KMER>()(kmer) & (std::numeric_limits<size_t>::max() >> (sizeof(size_t) - NumBits));
+    }
+  };
   
   /**
    * @brief << operator to write out DataBlock object's actual data.
@@ -1219,8 +1271,35 @@ namespace bliss
   }
   
   
-  
   } // namespace common
 } // namespace bliss
+
+namespace std {
+
+  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
+  class hash<bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
+    protected:
+      using KmerType = bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
+
+    public:
+      std::size_t operator()(KmerType const& kmer) const
+      {
+        std::size_t h = std::hash<WORD_TYPE>()(kmer.data[0]);
+        std::size_t hp;
+        for (int i = 1; i < KmerType::nWords; ++i) {
+          hp = std::hash<WORD_TYPE>()(kmer.data[i]);
+          h ^= (hp << 1);
+        }
+
+        return h;
+      }
+  };
+
+
+
+}  // namespace std
+
+
+
 
 #endif // BLISS_COMMON_KMER_H
