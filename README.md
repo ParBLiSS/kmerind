@@ -7,6 +7,10 @@ Name can stand for:
 
 Please take a look at our [Wiki](https://bitbucket.org/AluruLab/bliss/wiki/Home).
 
+## Overview
+BLISS is a C++ library for distributed and multi-core bioinformatics algorithms.  It requires C++ 11 features, as well as OpenMP, and MPI.  The library is implemented as a set of templated classes.  As such, most of the code is in header form, and are incorporated into the user code via `#include`.  
+
+
 ## Build
 
 ### Dependencies
@@ -15,7 +19,7 @@ Required:
 
 - `g++` (version 4.7+)
 - `cmake` (version 2.6+)
-
+- `openmpi` or `mpich2` or `intel mpi library`
 
 Optional libraries are:
 
