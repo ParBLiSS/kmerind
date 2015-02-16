@@ -25,6 +25,7 @@ These are only needed if you intend to turn on boost log engine.
 
 
 Optional tools include:
+
 - `ccmake` (for graphical cmake configuration)
 - `perl`, and perl packages `Term::ANSIColor`, `Getopt::ArgvFile`, `Getopt::Long`, `Regexp::Common` (for g++ error message formatting)
 
@@ -108,5 +109,3 @@ Cmake typically uses a out-of-source build.  to generate eclipse compatible `.pr
 to cmake.
 
 Recommend that `ptp`, `egit`, and `cmake ed` also be installed.
-
-
