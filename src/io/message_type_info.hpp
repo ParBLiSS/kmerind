@@ -175,7 +175,7 @@ namespace bliss
           if (epoch_capacities.count(te) == 0) {
             epoch_capacities[te] = commSize;
             totalCount.fetch_add(1, std::memory_order_release);
-            WARNINGF("epoch does not exist to count down. created: %d %d", getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
+            DEBUGF("epoch does not exist to count down. created: %d %d", getTagFromTaggedEpoch(te), getEpochFromTaggedEpoch(te));
           }
           return --epoch_capacities.at(te);
         }

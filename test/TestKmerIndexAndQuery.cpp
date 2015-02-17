@@ -273,7 +273,7 @@ int main(int argc, char** argv) {
   {
     t1 = std::chrono::high_resolution_clock::now();
     // initialize index
-    INFOF("***** initializing index.");
+    INFOF("RANK %d: ***** initializing index.", rank);
 
     using IndexType = bliss::index::retired::KmerPositionIndexOld<21, bliss::common::DNA, bliss::io::FASTQ, true>;
     IndexType kmer_index(comm, nprocs,
@@ -282,7 +282,7 @@ int main(int argc, char** argv) {
                                        nthreads);
 
     // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-    INFOF("***** building index first pass.");
+    INFOF("RANK %d: ***** building index first pass.", rank);
 
     kmer_index.build(filename, nthreads, chunkSize);
     //kmer_index.flush();
@@ -295,11 +295,11 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    INFO("old position index: time " << time_span.count());
+    INFO("RANK " << rank << "RANK %d: old position index: time " << time_span.count());
 
     // === test query.  make each node read 1.
     // get the file ready for read
-    INFOF("******* query index");
+    INFOF("RANK %d: ******* query index", rank);
     t1 = std::chrono::high_resolution_clock::now();
 
     testQueryOld(comm, filename, nthreads, chunkSize, kmer_index);
@@ -308,7 +308,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    INFO("old position index query: time " << time_span.count());
+    INFO("RANK " << rank << " old position index query: time " << time_span.count());
 
     kmer_index.finalize();
 
@@ -319,7 +319,7 @@ int main(int argc, char** argv) {
 
 
   // initialize index
-  INFOF("***** initializing index.");
+  INFOF("RANK %d: ***** initializing index.", rank);
   using IndexType = bliss::index::KmerPositionIndex<21, bliss::common::DNA, bliss::io::FASTQ, true>;
   IndexType kmer_index(comm, nprocs,
                                     std::bind(IndexType::defaultReceivePositionAnswer, // <bliss::Kmer<21, bliss::common::DNA>, bliss::io::FASTQSequenceId >
@@ -327,7 +327,7 @@ int main(int argc, char** argv) {
                                               nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  INFOF("***** building index first pass.");
+  INFOF("RANK %d: ***** building index first pass.", rank);
 
   kmer_index.build(filename, nthreads, chunkSize);
   //kmer_index.flush();
@@ -340,11 +340,11 @@ int main(int argc, char** argv) {
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("new position index: time " << time_span.count());
+  INFO("RANK " << rank << " new position index: time " << time_span.count());
 
   // === test query.  make each node read 1.
   // get the file ready for read
-  INFOF("******* query index");
+  INFOF("RANK %d: ******* query index", rank);
   t1 = std::chrono::high_resolution_clock::now();
 
   testQuery(comm, filename, nthreads, chunkSize, kmer_index);
@@ -353,7 +353,7 @@ int main(int argc, char** argv) {
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("new position index query: time " << time_span.count());
+  INFO("RANK " << rank << " new position index query: time " << time_span.count());
   kmer_index.finalize();
 
   }
@@ -371,7 +371,7 @@ int main(int argc, char** argv) {
   {
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
-  INFOF("***** initializing index.");
+  INFOF("RANK %d: ***** initializing index.", rank);
   using IndexType = bliss::index::retired::KmerCountIndexOld<21, bliss::common::DNA, bliss::io::FASTQ, true>;
   IndexType kmer_index(comm, nprocs,
                            std::bind(&IndexType::defaultReceiveCountAnswer,
@@ -379,14 +379,14 @@ int main(int argc, char** argv) {
                                      nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  INFOF("***** building index first pass.");
+  INFOF("RANK %d: ***** building index first pass.", rank);
 
   kmer_index.build(filename, nthreads, chunkSize);
   //kmer_index.flush();
 
 //  MPI_Barrier(comm);
   //INFO("COUNT " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
-  INFO("RANK " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
+  INFO("RANK " << rank << " RANK " << rank << " Index Building 1 for " << filename << " using " << nthreads << " threads, index size " << kmer_index.local_size());
 
 
 //  for (auto it = kmer_index.getLocalIndex().cbegin(); it != kmer_index.getLocalIndex().cend(); ++it) {
@@ -396,12 +396,12 @@ int main(int argc, char** argv) {
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("old count index: time " << time_span.count());
+  INFO("RANK " << rank << " old count index: time " << time_span.count());
 
   //=== query
   // get the file ready for read
 
-  INFOF("***** query index.");
+  INFOF("RANK %d: ***** query index.", rank);
   t1 = std::chrono::high_resolution_clock::now();
 
   testQueryOld(comm, filename, nthreads, chunkSize, kmer_index);
@@ -410,7 +410,7 @@ int main(int argc, char** argv) {
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("old count index query: time " << time_span.count());
+  INFO("RANK " << rank << " old count index query: time " << time_span.count());
   kmer_index.finalize();
 
   }
@@ -420,7 +420,7 @@ int main(int argc, char** argv) {
   {
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
-  INFOF("***** initializing index.");
+  INFOF("RANK %d: ***** initializing index.", rank);
   using IndexType = bliss::index::KmerCountIndex<21, bliss::common::DNA, bliss::io::FASTQ, true>;
   IndexType  kmer_index(comm, nprocs,
                               std::bind(&IndexType::defaultReceiveCountAnswer,
@@ -428,7 +428,7 @@ int main(int argc, char** argv) {
                                         nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  INFOF("***** building index first pass.");
+  INFOF("RANK %d: ***** building index first pass.", rank);
 
   kmer_index.build(filename, nthreads, chunkSize);
   //kmer_index.flush();
@@ -445,11 +445,11 @@ int main(int argc, char** argv) {
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("new count index: time " << time_span.count());
+  INFO("RANK " << rank << " new count index: time " << time_span.count());
 
   // === test query.  make each node read 1.
   // get the file ready for read
-  INFOF("******* query index");
+  INFOF("RANK %d: ******* query index", rank);
   t1 = std::chrono::high_resolution_clock::now();
 
   testQuery(comm, filename, nthreads, chunkSize, kmer_index);
@@ -458,7 +458,7 @@ int main(int argc, char** argv) {
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("new count index query: time " << time_span.count());
+  INFO("RANK " << rank << " new count index query: time " << time_span.count());
   kmer_index.finalize();
 
 
@@ -478,7 +478,7 @@ score = 0;
   {
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
-  INFOF("***** initializing index.");
+  INFOF("RANK %d: ***** initializing index.", rank);
   using IndexType = bliss::index::retired::KmerPositionAndQualityIndexOld<21, bliss::common::DNA, bliss::io::FASTQ, true>;
   IndexType kmer_index(comm, nprocs,
                                      std::bind(&IndexType::defaultReceivePositionAndQualityAnswer,
@@ -486,7 +486,7 @@ score = 0;
                                               nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  INFOF("***** building index first pass.");
+  INFOF("RANK %d: ***** building index first pass.", rank);
 
   kmer_index.build(filename, nthreads, chunkSize);
   //kmer_index.flush();
@@ -499,11 +499,11 @@ score = 0;
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("old pos + quality index: time " << time_span.count());
+  INFO("RANK " << rank << " old pos + quality index: time " << time_span.count());
 
   // === test query.  make each node read 1.
   // get the file ready for read
-  INFOF("******* query index");
+  INFOF("RANK %d: ******* query index", rank);
   t1 = std::chrono::high_resolution_clock::now();
 
   testQueryOld(comm, filename, nthreads, chunkSize, kmer_index);
@@ -512,7 +512,7 @@ score = 0;
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("old pos + quality index query: time " << time_span.count());
+  INFO("RANK " << rank << " old pos + quality index query: time " << time_span.count());
 
   kmer_index.finalize();
 
@@ -523,7 +523,7 @@ score = 0;
   {
     t1 = std::chrono::high_resolution_clock::now();
   // initialize index
-  INFOF("***** initializing index.");
+  INFOF("RANK %d: ***** initializing index.", rank);
   using IndexType = bliss::index::KmerPositionAndQualityIndex<21, bliss::common::DNA, bliss::io::FASTQ, true>;
   IndexType kmer_index(comm, nprocs,
                                     std::bind(&IndexType::defaultReceivePositionAndQualityAnswer,
@@ -531,7 +531,7 @@ score = 0;
                                                nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  INFOF("***** building index first pass.");
+  INFOF("RANK %d: ***** building index first pass.", rank);
 
   kmer_index.build(filename, nthreads, chunkSize);
   //kmer_index.flush();
@@ -544,11 +544,11 @@ score = 0;
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("new pos + quality index: time " << time_span.count());
+  INFO("RANK " << rank << ": new pos + quality index: time " << time_span.count());
 
   // === test query.  make each node read 1.
   // get the file ready for read
-  INFOF("******* query index");
+  INFOF("RANK %d: ******* query index", rank);
   t1 = std::chrono::high_resolution_clock::now();
 
   testQuery(comm, filename, nthreads, chunkSize, kmer_index);
@@ -557,7 +557,7 @@ score = 0;
   time_span =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           t2 - t1);
-  INFO("new pos + quality index query: time " << time_span.count());
+  INFO("RANK " << rank << " new pos + quality index query: time " << time_span.count());
 
   kmer_index.finalize();
 
@@ -570,7 +570,7 @@ score = 0;
   //////////////  clean up MPI.
   MPI_Finalize();
 
-  DEBUGF("M Rank %d called MPI_Finalize", rank);
+  INFOF("M Rank %d called MPI_Finalize", rank);
 
 
 

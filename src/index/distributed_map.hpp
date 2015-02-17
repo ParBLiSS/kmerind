@@ -152,6 +152,7 @@ public:
    */
   void reserve(const size_t& size) {
     this->commLayer.sendMessage(&size, sizeof(size), commRank, RESERVE_TAG);
+    this->commLayer.flush(RESERVE_TAG);
   }
 
   /**
