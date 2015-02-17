@@ -380,7 +380,7 @@ namespace bliss
         /**
          *  @brief 	default Count Index Lookup Result callback function
          */
-        static void defaultReceiveCountAnswer(std::pair<KmerType, CountType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+        static void defaultReceiveAnswerCallback(std::pair<KmerType, CountType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
         {
           size_t count = 0;
           size_t entries = 0;
@@ -511,7 +511,7 @@ namespace bliss
         /**
 		 *  @brief 	default Position Index Lookup Result callback function
 		 */
-        static void defaultReceivePositionAnswer(std::pair<KmerType, IdType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+        static void defaultReceiveAnswerCallback(std::pair<KmerType, IdType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
         {
           size_t res = 0;
           size_t entries = 0;
@@ -658,7 +658,7 @@ namespace bliss
         /**
 		 *  @brief 	default Position and quality score Index Lookup Result callback function
 		 */
-        static void defaultReceivePositionAndQualityAnswer(std::pair<KmerType, KmerInfoType>* answers, std::size_t answer_count, int nthreads, size_t& result, double& total_score, size_t& total_entries)
+        static void defaultReceiveAnswerCallback(std::pair<KmerType, KmerInfoType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
         {
           double score = 0;
           size_t res = 0;
@@ -678,7 +678,7 @@ namespace bliss
             if ((entries % 1000000) == 0) INFOF("position + quality result: %s <=> [%d %d %d %d] %f", key.toString().c_str(), val.first.file_id, val.first.seq_id_msb, val.first.seq_id, val.first.pos, val.second);
           }
 
-          total_score += score;
+          //total_score += score;
           result += res;
           total_entries += entries;
         }
@@ -802,7 +802,7 @@ namespace bliss
           /**
 		   *  @brief 	default Count Index Lookup Result callback function
 		   */
-          static void defaultReceiveCountAnswer(std::pair<KmerType, CountType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+          static void defaultReceiveAnswerCallback(std::pair<KmerType, CountType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
           {
             size_t count = 0;
             size_t entries = 0;
@@ -938,7 +938,7 @@ namespace bliss
           /**
   		 *  @brief 	default Position Index Lookup Result callback function
   		 */
-          static void defaultReceivePositionAnswer(std::pair<KmerType, IdType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+          static void defaultReceiveAnswerCallback(std::pair<KmerType, IdType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
           {
             size_t res = 0;
             size_t entries = 0;
@@ -1099,7 +1099,7 @@ namespace bliss
           /**
   		 *  @brief 	default Position and quality score Index Lookup Result callback function
   		 */
-          static void defaultReceivePositionAndQualityAnswer(std::pair<KmerType, KmerInfoType>* answers, std::size_t answer_count, int nthreads, size_t& result, double& total_score, size_t& total_entries)
+          static void defaultReceiveAnswerCallback(std::pair<KmerType, KmerInfoType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
           {
             double score = 0;
             size_t res = 0;
@@ -1119,7 +1119,7 @@ namespace bliss
               if ((entries % 1000000) == 0) INFOF("position + quality result: %s <=> [%d %d %d %d] %f", key.toString().c_str(), val.first.file_id, val.first.seq_id_msb, val.first.seq_id, val.first.pos, val.second);
             }
 
-            total_score += score;
+            //total_score += score;
             result += res;
             total_entries += entries;
           }
