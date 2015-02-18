@@ -1,5 +1,5 @@
 /**
- * @file    single_releaser_object_pool.hpp
+ * @file    sliding_window_iterator.hpp
  * @ingroup iterators
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the sliding window iterators.
