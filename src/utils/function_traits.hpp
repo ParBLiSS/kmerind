@@ -1,5 +1,5 @@
 /**
- * @file    function_tratis.hpp
+ * @file    function_traits.hpp
  * @ingroup utils
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Implements helper functions for fucntors.
