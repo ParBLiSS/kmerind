@@ -163,7 +163,7 @@ public:
     assert(count == sizeof(size_t));
     assert(fromRank == commRank);
 
-    size_t addl = *(reinterpret_cast<size_t*>(msg));
+    size_t addl = *(reinterpret_cast<size_t*>(msg)) / nThreads;
 
     // resize the hashtables.
 #pragma omp parallel num_threads(nThreads) shared(addl)
