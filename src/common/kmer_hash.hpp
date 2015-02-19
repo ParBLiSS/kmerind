@@ -389,8 +389,8 @@ namespace bliss {
           const int nBytes;
         public:
           /// constructor
-          KmerPrefixHash(const unsigned int nBits = sizeof(size_t)) : shift(sizeof(size_t) - nBits), nBytes((KMER::nBits + 7)/ 8) {
-            if ((nBits == 0) || (nBits > sizeof(size_t))) throw ::std::invalid_argument("ERROR: does not support more than machine word size bits for hash");
+          KmerPrefixHash(const unsigned int nBits = sizeof(size_t) * 8) : shift(sizeof(size_t) * 8 - nBits), nBytes((KMER::nBits + 7)/ 8) {
+            if ((nBits == 0) || (nBits > sizeof(size_t) * 8)) throw ::std::invalid_argument("ERROR: does not support more than machine word size bits for hash");
           };
           /// operator to compute actual hash
           size_t operator()(const KMER & kmer) const {
@@ -412,8 +412,8 @@ namespace bliss {
           ::std::hash<KMER> hashf;
         public:
           /// constructor
-          KmerInfixHash(const unsigned int nBits = ::std::min(static_cast<size_t>(KMER::nBits), sizeof(size_t)), const unsigned int _offset = 0) :
-              hashMaxBits(::std::min(static_cast<size_t>(KMER::nBits), sizeof(size_t))),
+          KmerInfixHash(const unsigned int nBits = ::std::min(static_cast<size_t>(KMER::nBits), sizeof(size_t) * 8), const unsigned int _offset = 0) :
+              hashMaxBits(::std::min(static_cast<size_t>(KMER::nBits), sizeof(size_t) * 8)),
               shift(hashMaxBits - nBits - _offset), nBytes((KMER::nBits + 7)/ 8),
               mask(::std::numeric_limits<size_t>::max() >> (hashMaxBits - nBits)) {
             if ((nBits == 0) || (nBits > hashMaxBits)) throw ::std::invalid_argument("ERROR: does not support more than size_t bits for hash");
@@ -439,10 +439,10 @@ namespace bliss {
           ::bliss::hash::murmur::hash<KMER> hashf;
         public:
           /// constructor
-          KmerSuffixHash(const unsigned int nBits = sizeof(size_t)) :
+          KmerSuffixHash(const unsigned int nBits = sizeof(size_t) * 8) :
             nBytes((KMER::nBits + 7)/ 8),
-            mask(::std::numeric_limits<size_t>::max() >> (sizeof(size_t) - nBits)){
-            if ((nBits == 0) || (nBits > sizeof(size_t))) throw ::std::invalid_argument("ERROR: does not support more than size_t  bits for hash");
+            mask(::std::numeric_limits<size_t>::max() >> (sizeof(size_t) * 8 - nBits)){
+            if ((nBits == 0) || (nBits > sizeof(size_t) * 8)) throw ::std::invalid_argument("ERROR: does not support more than size_t  bits for hash");
           };
 
           /// operator to compute hash
