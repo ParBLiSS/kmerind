@@ -400,6 +400,7 @@ namespace bliss
           // pop dequeues first, then decrement count
           std::pair<bool, T> output;
 
+          // don't check if canPop here - this call should return asap.
           if ((output.first = q.try_dequeue(output.second)) == true)
             size.fetch_sub(1, std::memory_order_acq_rel);
 
@@ -424,15 +425,18 @@ namespace bliss
         std::pair<bool, T> waitAndPop() {
           std::pair<bool, T> output;
 
-          // loop while pop fails and canPop()
-          output.first = q.try_dequeue(output.second);
-          while (!output.first && canPop()) {
+          output.first = false;
+          int64_t s;
+          // while the queue is not disabled nor empty
+          while ( (s = size.load(std::memory_order_acquire)) != std::numeric_limits<int64_t>::lowest() ) {
+            // check size to see if there are entries to dequeue
+            if ((s & MAX_SIZE) > 0)
+              if ((output.first = q.try_dequeue(output.second)) == true) {
+                size.fetch_sub(1, std::memory_order_acq_rel);
+                break;
+              }
             _mm_pause();
-            output.first = q.try_dequeue(output.second);
           }
-
-          // get here if !canPop, OR dequeue succeeds
-          if (output.first) size.fetch_sub(1, std::memory_order_acq_rel);   // successful dequeue, so decrement size.
 
           return output;
         }

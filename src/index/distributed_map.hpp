@@ -15,7 +15,8 @@
 #define BLISS_DISTRIBUTED_MAP_HPP
 
 #include <utility> 			// for std::pair
-#include <unordered_map> 	// local storage hash table
+#include <unordered_map> 	// local storage hash table  // for multimap
+//#include <sparsehash/dense_hash_map>  // local storage hash table, google dense hash map.
 #include <vector>
 #include <functional> 		// for std::function and std::hash
 #include <limits>
@@ -69,7 +70,7 @@ typedef uint32_t count_t;
  * @tparam ThreadHasher		    Hash function for hashing to key to thread id
  * @tparam MPIHasher		    Hash function for hashing to key to MPI rank.
  */
-template<typename K, typename T, typename CommunicationLayer,
+template<typename CommunicationLayer,
          typename LocalContainer, typename ThreadHasher, typename MPIHasher>
 class _distributed_map_base
 {
@@ -79,8 +80,24 @@ protected:
     // const iterator for a local container.
   typedef typename LocalContainer::const_iterator local_thread_const_iterator;
 
+  typedef typename LocalContainer::key_type K;
+  typedef typename LocalContainer::mapped_type T;
+
+
   /// MPI message tag for reserve size.  this is meant to be sent only to self.
   static constexpr int RESERVE_TAG = 12;
+
+  typedef std::unordered_map<K,
+//  typedef dense_hash_map<K,
+                             T,
+                             typename LocalContainer::hasher,
+                             typename LocalContainer::key_equal,
+                             typename LocalContainer::allocator_type> MapType;
+  typedef std::unordered_multimap<K,
+                             T,
+                             typename LocalContainer::hasher,
+                             typename LocalContainer::key_equal,
+                             typename LocalContainer::allocator_type> MultimapType;
 
 public:
   /// The iterator type of the entire set of thread-local containers on an MPI process
@@ -183,6 +200,19 @@ public:
     size_t result = 0;
     for (int i = 0; i < nThreads; ++i) {
       result += local_map[i].size();
+    }
+    return result;
+  }
+
+  /**
+   * @brief   Returns the local map's size.  primarily for debugging.
+   * @return  size of the local map.
+   */
+  std::vector<size_t> local_sizes() const
+  {
+    std::vector<size_t> result;
+    for (int i = 0; i < nThreads; ++i) {
+      result.push_back(local_map[i].size());
     }
     return result;
   }
@@ -575,7 +605,9 @@ protected:
    *
    * @return    The count of elements with the given item's key.
    */
-  inline std::size_t getLocalCount(const std::unordered_multimap<K, T>& localMap, const std::pair<K, T>& item)
+  template <typename Container = LocalContainer>
+  inline typename std::enable_if<std::is_same<Container, MultimapType>::value, std::size_t>::type
+  getLocalCount(const Container& localMap, const std::pair<K, T>& item)
   {
     // use the maps count() function
     return localMap.count(item.first);
@@ -589,7 +621,9 @@ protected:
    *
    * @return    The count of elements with the given item's key.
    */
-  inline std::size_t getLocalCount(const std::unordered_map<K, T>& localMap, const std::pair<K, T>& item)
+  template <typename Container = LocalContainer>
+  inline typename std::enable_if<std::is_same<Container, MapType>::value, std::size_t>::type
+  getLocalCount(const Container& localMap, const std::pair<K, T>& item)
   {
     // this is a counting map: i.e. the value of (key,value) is the count
     assert(localMap.find(item.first) != localMap.end());
@@ -739,12 +773,12 @@ protected:
  */
 template<typename K, typename T, typename CommunicationLayer, typename LocalHasher = std::hash<K>, typename ThreadHasher = std::hash<K>, typename MPIHasher = std::hash<K> >
 class distributed_multimap
-  : public _distributed_map_base<K, T,
+  : public _distributed_map_base<
               CommunicationLayer, std::unordered_multimap<K, T, LocalHasher>, ThreadHasher, MPIHasher >
 {
 public:
   /// The baseclass type
-  typedef _distributed_map_base<K, T, CommunicationLayer,
+  typedef _distributed_map_base<CommunicationLayer,
                                 std::unordered_multimap<K, T, LocalHasher>, ThreadHasher, MPIHasher > _base_class;
   /// The iterator type of the local container type
   typedef typename _base_class::local_iterator local_iterator;
@@ -949,13 +983,15 @@ protected:
 template<typename K, typename CommunicationLayer,
 	typename LocalHasher = std::hash<K>, typename ThreadHasher = std::hash<K>, typename MPIHasher = std::hash<K>>
 class distributed_counting_map
- : public _distributed_map_base<K, count_t, CommunicationLayer,
-                                std::unordered_map<K, count_t, LocalHasher>, ThreadHasher, MPIHasher >
+ : public _distributed_map_base<CommunicationLayer,
+                               std::unordered_map<K, count_t, LocalHasher>, ThreadHasher, MPIHasher >
+//                               google::dense_hash_map<K, count_t, LocalHasher>, ThreadHasher, MPIHasher >
 {
 public:
   /// The baseclass type
-  typedef _distributed_map_base<K, count_t, CommunicationLayer,
+  typedef _distributed_map_base<CommunicationLayer,
                                 std::unordered_map<K,count_t, LocalHasher>, ThreadHasher, MPIHasher > _base_class;
+                                //google::dense_hash_map<K,count_t, LocalHasher>, ThreadHasher, MPIHasher > _base_class;
   /// The iterator type of the local container type
   typedef typename _base_class::local_iterator local_iterator;
   /// The constant iterator type of the local container type

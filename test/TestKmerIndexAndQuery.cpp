@@ -255,7 +255,12 @@ void test(MPI_Comm comm, const std::string & filename, const int nthreads, const
   std::stringstream ss2;
   std::copy(timespans.begin(), timespans.end(), std::ostream_iterator<double>(ss2, ","));
 
-  INFOF("Rank %d Test %s phases [%s] times [%s]", rank, testname.c_str(), ss.str().c_str(), ss2.str().c_str() );
+  std::stringstream ss3;
+  std::vector<size_t> sizes = kmer_index.local_sizes();
+  std::copy(sizes.begin(), sizes.end(), std::ostream_iterator<size_t>(ss3, ","));
+
+
+  INFOF("Rank %d Test %s phases [%s] times [%s] size %lu (by thread [%s])", rank, testname.c_str(), ss.str().c_str(), ss2.str().c_str(), kmer_index.local_size(), ss3.str().c_str() );
 
   kmer_index.finalize();
 

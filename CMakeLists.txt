@@ -581,6 +581,8 @@ configure_file(
 include_directories("${PROJECT_BINARY_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/src")
 include_directories("${PROJECT_SOURCE_DIR}/ext")
+include_directories("${PROJECT_SOURCE_DIR}/ext/farmhash/src")
+#include_directories("${PROJECT_SOURCE_DIR}/ext/sparsehash/src")
 
 
 
