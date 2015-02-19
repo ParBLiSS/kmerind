@@ -15,7 +15,6 @@
 #include <cstdlib>
 
 // C++ STL includes:
-#include <iostream>
 #include <iterator>
 #include <type_traits>
 #include <string>
@@ -828,34 +827,38 @@ public:
     return ss.str();
   }
 
+  // for debug purposes
+  /**
+   * @brief Returns a string representation of this k-mer.
+   *
+   * Usage: for debugging and testing.
+   *
+   * @returns   A std::string representing this k-mer.
+   */
   std::string toAlphabetString() const
   {
+    /* return the char representation of the data array values */
     std::stringstream result;
-    std::stack<WordType> reverseResult;
     Kmer cpy(*this);
 
+    std::stack<size_t> elementsInReverse;
     size_t forBitMask = (1 << bitsPerChar) - 1;
+
     for (unsigned int i = 0; i < size; ++i)
     {
-      reverseResult.push(static_cast<WordType>(forBitMask & cpy.data[0]));
+      elementsInReverse.push(static_cast<size_t>(forBitMask & cpy.data[0]));
       cpy.do_right_shift(bitsPerChar);
     }
 
-    while(!reverseResult.empty())
+    //Pop stack elements to string stream
+    while(!elementsInReverse.empty())
     {
-      result << reverseResult.top() << " ";
-      reverseResult.pop();
+      result << elementsInReverse.top() << " ";
+      elementsInReverse.pop();
     }
-
-    //std::cout << "<< " << result.str() << " >>" << std::endl;
-
 
     return result.str();
   }
-
-
-
-
 
   /// get 64 bit prefix.  for hashing.
   uint64_t getPrefix(const unsigned int NumBits = 64) const {
