@@ -1,11 +1,11 @@
 /**
  * @file    transform_iterator.hpp
- * @ingroup interators
+ * @ingroup iterators
  * @author  Tony Pan <tpan7@gatech.edu>
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the transforming iterator.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */
@@ -14,7 +14,7 @@
 #define BLISS_ITERATORS_TRANSFORM_ITERATOR_HPP
 
 #include <iterator>
-#include <iterators/function_traits.hpp>
+#include <utils/function_traits.hpp>
 
 namespace bliss
 {
@@ -153,7 +153,7 @@ protected:
       : _base(base_iter), _f(f)
   {
   }
-
+  /// destructor
   virtual ~_shared_transforming_iterator() {}
 };
 
@@ -602,8 +602,10 @@ public:
   {
   }
 
+  /// default destructor
   virtual ~transform_iterator() {}
 
+  /// copy assignment operator
   transform_iterator& operator=(const transform_iterator& other)
   {
     if (this != &other)

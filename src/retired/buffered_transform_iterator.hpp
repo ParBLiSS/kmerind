@@ -1,8 +1,9 @@
 /**
- * buffered_transform_iterator.hpp
+ * @file buffered_transform_iterator.hpp
+ * @ingroup retired
  *
  *  Created on: Feb 5, 2014
- *      Author: tpan
+ *      Author: Tony Pan <tpan7@gatech.edu>
  *
  *  COMPATIBLE WITH A BUFFERING FUNCTOR with
  *    operator()(Iterator curr) and
@@ -27,7 +28,7 @@
 #define BUFFERED_TRANSFORM_ITERATOR_HPP_
 
 #include <iterator>
-#include "iterators/function_traits.hpp"
+#include "utils/function_traits.hpp"
 
 namespace bliss
 {

@@ -29,7 +29,6 @@
 // own includes
 #include <io/io_exception.hpp>
 #include <utils/logging.h>
-#include <iterators/function_traits.hpp>
 #include <partition/range.hpp>
 #include <common/kmer_iterators.hpp>
 #include <common/alphabets.cpp>
@@ -85,7 +84,7 @@ namespace bliss
           transformed_seq_iterator;
 
         //Converting raw character Iterator to Kmer Iterator (filtering later)
-        typedef bliss::KmerGenerationIterator<transformed_seq_iterator, KmerType> KmerIncompleteIterator;
+        typedef bliss::common::KmerGenerationIterator<transformed_seq_iterator, KmerType> KmerIncompleteIterator;
 
         //Tuple of two iterators id and Kmer iterator over raw data
         typedef boost::tuple<offset_transform_iterator, KmerIncompleteIterator> 
@@ -314,8 +313,8 @@ namespace bliss
               localStartLocStoreIter ++;
 
               //A sanity check (important in multithreaded version because here we might have headers ahead that we should ignore)
-              leftIndex = std::min(offsetRange.end + KmerType::getKmerSize(), leftIndex);
-              rightIndex = std::min(offsetRange.end + KmerType::getKmerSize(), rightIndex);
+              leftIndex = std::min(offsetRange.end + KmerType::size, leftIndex);
+              rightIndex = std::min(offsetRange.end + KmerType::size, rightIndex);
             }
 
             //If there is no FASTA sequence header ahead, we assume left and right indices at the end.
@@ -325,13 +324,13 @@ namespace bliss
               //Assume a dummy header (This takes care of the extra characters we might need from next partition)
               //leftIndex should point to two extra offsets from the last alphabet we are interested in
               //TODO: What if we encounter a header in the overlap?
-              leftIndex = std::min(offsetRange.end + KmerType::getKmerSize(), parentRange.end);
+              leftIndex = std::min(offsetRange.end + KmerType::size, parentRange.end);
               rightIndex = leftIndex + 1;
             }
 
             //Current offset should not overlap with the header
             //Also make sure we have atleast KMER_SIZE characters ahead (also consider eol after them)
-            if(rawOffset < leftIndex && leftIndex - rawOffset > KmerType::getKmerSize())
+            if(rawOffset < leftIndex && leftIndex - rawOffset > KmerType::size)
             {
               return rawOffset;
             }
@@ -355,7 +354,7 @@ namespace bliss
         {
           Iterator_valueType operator()(const Iterator_valueType& inValue)
           {
-            return KmerType::AlphabetType::FROM_ASCII[static_cast<size_t>(inValue)];
+            return KmerType::KmerAlphabet::FROM_ASCII[static_cast<size_t>(inValue)];
           }
         };
     };

@@ -1,7 +1,7 @@
 /**
  * @file		test_copyable_atomics.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *

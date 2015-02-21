@@ -177,7 +177,7 @@ function(update_logging_engine varname cacheaccess varval)
     # set the log engine in the logger_config.hpp file.
     set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
 #    configure_file(
-#        "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+#        "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
 #        "${PROJECT_BINARY_DIR}/logger_config.hpp"
 #        @ONLY
 #        )
@@ -203,8 +203,8 @@ endif(OPENMP_STRICT_SCOPING)
 ###### External Library Settings
 #### Boost Library
 #set(EXTRA_LIBS pthread)
-#if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
-#                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
     set(Boost_USE_MULTITHREADED ON)
     set(Boost_ADDITIONAL_VERSIONS "1.54" "1.54.0")
     set(Boost_DETAILED_FAILURE_MSG ON)
@@ -229,36 +229,33 @@ endif(OPENMP_STRICT_SCOPING)
         message(WARNING "Did not find boost.  Default Log Engine set to NO_LOG")
         
         set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
-        configure_file(
-            "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
-            "${PROJECT_BINARY_DIR}/logger_config.hpp"
-            @ONLY
-            )
-        endif(Boost_FOUND)
+#        configure_file(
+#            "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
+#            "${PROJECT_BINARY_DIR}/logger_config.hpp"
+#            @ONLY
+#            )
+    endif(Boost_FOUND)
     
     # need this flag for boost log
-#else(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
-    
-    # need this flag for boost log
-#else(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
-#                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
-#    unset(Boost_USE_MULTITHREADED)
-#    unset(Boost_ADDITIONAL_VERSIONS)
-#    unset(Boost_DETAILED_FAILURE_MSG)
-#    unset(Boost_FOUND)
-#    unset(BOOST_ROOT CACHE)
-#    unset(Boost_DIR CACHE)
-#    unset(Boost_INCLUDE_DIR CACHE)
-#    unset(Boost_LIBRARY_DIR CACHE)
-#    unset(Boost_LOG_LIBRARY_DEBUG CACHE)
-#    unset(Boost_LOG_LIBRARY_RELEASE CACHE)
-#    unset(Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG CACHE)
-#    unset(Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE CACHE)
-#    unset(Boost_SYSTEM_LIBRARY_DEBUG CACHE)
-#    unset(Boost_SYSTEM_LIBRARY_RELEASE CACHE)
+else(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+    unset(Boost_USE_MULTITHREADED)
+    unset(Boost_ADDITIONAL_VERSIONS)
+    unset(Boost_DETAILED_FAILURE_MSG)
+    unset(Boost_FOUND)
+    unset(BOOST_ROOT CACHE)
+    unset(Boost_DIR CACHE)
+    unset(Boost_INCLUDE_DIR CACHE)
+    unset(Boost_LIBRARY_DIR CACHE)
+    unset(Boost_LOG_LIBRARY_DEBUG CACHE)
+    unset(Boost_LOG_LIBRARY_RELEASE CACHE)
+    unset(Boost_PROGRAM_OPTIONS_LIBRARY_DEBUG CACHE)
+    unset(Boost_PROGRAM_OPTIONS_LIBRARY_RELEASE CACHE)
+    unset(Boost_SYSTEM_LIBRARY_DEBUG CACHE)
+    unset(Boost_SYSTEM_LIBRARY_RELEASE CACHE)
 
-#endif(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
-#                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+endif(LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
 
 
 #### MPI
@@ -338,7 +335,7 @@ CMAKE_DEPENDENT_OPTION(ENABLE_COVERAGE "Enable Code Coverage Reporting" OFF
 CMAKE_DEPENDENT_OPTION(ENABLE_SANITIZER "Enable Sanitizer.  Choose via SANITIZER_STYLE" OFF
                         "ENABLE_TESTING;SUPPORTS_SANITIZER" OFF)
                         
-include("${CMAKE_SOURCE_DIR}/GCCFilter.cmake")
+include("${CMAKE_SOURCE_DIR}/cmake/GCCFilter.cmake")
 
 ## LOGGING ENGINE configuration
 #function(update_test_options varname cacheaccess varval) 
@@ -456,7 +453,7 @@ if (ENABLE_TESTING)
     # set the name for the test target and executable
     set(test_target_name test-${module_name})
     # add all give files
-    # message(STATUS ${ARGN})
+    message(STATUS ${ARGN})
     add_executable(${test_target_name} ${ARGN})
     # add the googletest dependency
     add_dependencies(${test_target_name} googletest)
@@ -606,12 +603,12 @@ OPTION(BUILD_EXAMPLE_APPLICATIONS "Inform whether sample applications should be 
 
 # configure a header file to pass some of the CMake settings to the source code
 configure_file(
-    "${PROJECT_SOURCE_DIR}/config.hpp.in"
+    "${PROJECT_SOURCE_DIR}/src/config/config.hpp.in"
     "${PROJECT_BINARY_DIR}/config.hpp"
     @ONLY
     )
 configure_file(
-    "${PROJECT_SOURCE_DIR}/logger_config.hpp.in"
+    "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
     "${PROJECT_BINARY_DIR}/logger_config.hpp"
     @ONLY
     )
@@ -622,6 +619,11 @@ configure_file(
 include_directories("${PROJECT_BINARY_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/src")
 include_directories("${PROJECT_SOURCE_DIR}/ext")
+include_directories("${PROJECT_SOURCE_DIR}/ext/farmhash/src")
+#include_directories("${PROJECT_SOURCE_DIR}/ext/sparsehash/src")
+
+
+
 
 ###### LIBRARY
 #set(libsrcs CmdlineParser.cpp Communicator_I.cpp CommHandler_I.cpp Process.cpp PullCommHandler.cpp PushCommHandler.cpp RandomScheduler.cpp RoundRobinScheduler.cpp NullSinkAction.cpp DataBuffer.cpp MPIDataBuffer.cpp MPISendDataBuffer.cpp MPIRecvDataBuffer.cpp)

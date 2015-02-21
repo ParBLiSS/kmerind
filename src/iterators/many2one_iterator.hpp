@@ -1,10 +1,10 @@
 /**
  * @file    many2one_iterator.hpp
- * @ingroup interators
+ * @ingroup iterators
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the many2one iterator.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */
@@ -17,7 +17,7 @@
 
 #include <common/bit_ops.hpp>
 #include <iterators/iterator_utils.hpp>
-#include <iterators/function_traits.hpp>
+#include <utils/function_traits.hpp>
 #include <iterators/transform_iterator.hpp>
 
 namespace bliss
@@ -653,14 +653,17 @@ public:
   {
   }
 
+  /// default constructor
   many2one_iterator()
     : base_class_type(Iterator(), Iterator(), Compressor(), 0) {}
 
+  /// copy constructor
   many2one_iterator(const many2one_iterator& other)
     : base_class_type(other._base, other._end, other._f, other._m)
   {
   }
 
+  /// copy assign operator
   many2one_iterator& operator=(const many2one_iterator& other)
   {
     // check for self assignment

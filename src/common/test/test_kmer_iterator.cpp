@@ -3,27 +3,27 @@
 //#include <boost/concept_check.hpp>
 
 // include classes to test
-#include <common/Kmer.hpp>
+#include <common/kmer.hpp>
 #include <common/alphabets.hpp>
 #include <iterators/transform_iterator.hpp>
 #include <common/kmer_iterators.hpp>
-#include <utils/KmerUtils.hpp>
+#include <utils/kmer_utils.hpp>
 
 
 template<typename Alphabet, int K>
 void compute_kmer_iter(std::string input) {
 
-  using KmerType = bliss::Kmer<K, Alphabet>;
+  using KmerType = bliss::common::Kmer<K, Alphabet>;
 
   using BaseIterator = std::string::const_iterator;
 
-  using Decoder = bliss::ASCII2<Alphabet, typename BaseIterator::value_type>;
+  using Decoder = bliss::common::ASCII2<Alphabet, typename BaseIterator::value_type>;
   using BaseCharIterator = bliss::iterator::transform_iterator<BaseIterator, Decoder>;
 
   BaseCharIterator charStart(input.cbegin(), Decoder());
   BaseCharIterator charEnd  (input.cend(),   Decoder());
 
-  using KmerIterator = bliss::KmerGenerationIterator<BaseCharIterator, KmerType>;
+  using KmerIterator = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
 
   KmerIterator start(charStart, true);
   KmerIterator end(charEnd, false);
@@ -57,7 +57,7 @@ TEST(KmerIterator, TestKmerIterator)
                          "ATCGATCAAATAGTAAATCC"
                          "ATTTGTTCAACTCACAGTTT";
 
-  compute_kmer_iter<DNA, 21>(input);
+  compute_kmer_iter<bliss::common::DNA, 21>(input);
 }
 
 /**
@@ -71,7 +71,7 @@ TEST(KmerIterator, TestKmerIteratorDNA5)
                          "ATTTGTTCAACTCACAGTTT";
 
 
-  compute_kmer_iter<DNA5, 21>(input);
+  compute_kmer_iter<bliss::common::DNA5, 21>(input);
 
 }
 
@@ -85,7 +85,7 @@ TEST(KmerIterator, TestKmerIteratorMultiWord)
                          "ATCGATCAAATAGTAAATCC"
                          "ATTTGTTCAACTCACAGTTT";
 
-  compute_kmer_iter<DNA, 33>(input);
+  compute_kmer_iter<bliss::common::DNA, 33>(input);
 
 }
 
@@ -98,7 +98,7 @@ TEST(KmerIterator, TestKmerIteratorDNA5MultiWord)
   std::string input = "GATTTGGGGTTCAAAGCAGT"
                          "ATCGATCAAATAGTAAATCC"
                          "ATTTGTTCAACTCACAGTTT";
-  compute_kmer_iter<DNA5, 33>(input);
+  compute_kmer_iter<bliss::common::DNA5, 33>(input);
 
 
 }

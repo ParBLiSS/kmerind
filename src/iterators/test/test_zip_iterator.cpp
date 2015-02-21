@@ -2,7 +2,7 @@
  * test_zip_iterator.cpp
  * Test ZipIterator class
  *  Created on: Aug 27, 2014
- *      Author: tpan
+ *      Author: Tony Pan <tpan7@gatech.edu>
  */
 
 #include "iterators/zip_iterator.hpp"

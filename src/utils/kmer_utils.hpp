@@ -1,6 +1,6 @@
 /**
  * @file    kmer_utils.hpp
- * @ingroup bliss::utils
+ * @ingroup utils
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Utility functions and functors for kmers
  * @details
@@ -53,7 +53,7 @@ namespace bliss
         {
           using Alphabet = typename Kmer::KmerAlphabet;
 
-          static_assert(Kmer::bitsPerChar == bliss::AlphabetTraits<Alphabet>::getBitsPerChar(), "Kmer's bits Per Char is different than Alphabet's bits per char.");
+          static_assert(Kmer::bitsPerChar == bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar(), "Kmer's bits Per Char is different than Alphabet's bits per char.");
 
           /* return the char representation of the data array values */
           std::string result;
@@ -69,6 +69,7 @@ namespace bliss
           return result;
 
         }
+
     };
 
   } /* namespace io */

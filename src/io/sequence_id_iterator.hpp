@@ -1,7 +1,7 @@
 /**
  * @file    sequence_id_iterator.hpp
- * @ingroup bliss::iterators
- * @author  tpan
+ * @ingroup bliss::iterator
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains a sequence_id iterator
  * @details
  *
@@ -25,9 +25,14 @@ namespace bliss
 
     /**
      * @class    bliss::iterator::SequenceIdIterator
-     * @brief    iterator that iterates from start to end in specified steps size
+     * @brief    iterator that returns a set of ids, matching to a char sequence such as DNA
      * @details  sequence_id iterator counts from the start to the end in regular steps.
      *           this is useful to establish index values for some other array.
+     *
+     * @note     this is similar to a counting iterator, except that the data type is more complex.
+     *            a sequence Id may have multiple parts to represent file/read/position inside read, etc.
+     *
+     *
      * @tparam SequenceIdType the type of data to over.
      */
     template<typename SequenceIdType>
@@ -199,7 +204,7 @@ namespace bliss
         }
 
         /**
-         * @brief difference between 2 iterators;
+         * @brief difference between 2 iterators;  relies on regularity of the strides
          * @param other         the iterator to subtract by
          * @return              distance between the iterators
          */
@@ -209,7 +214,7 @@ namespace bliss
 
 
         /**
-         * @brief compare to other iterator: >
+         * @brief compare to other iterator: >.  relies on ordering of the sequence Ids correspond to ordering of iterators.
          * @param other   iterator to compare to.
          * @return  bool, true if greater than, false otherwise.
          */
@@ -218,7 +223,7 @@ namespace bliss
         }
 
         /**
-         * @brief compare to other iterator: <
+         * @brief compare to other iterator: <. relies on ordering of the sequence Ids correspond to ordering of iterators.
          * @param other   iterator to compare to.
          * @return  bool, true if less than, false otherwise.
          */
@@ -227,7 +232,7 @@ namespace bliss
         }
 
         /**
-         * @brief compare to other iterator: >=
+         * @brief compare to other iterator: >=. relies on ordering of the sequence Ids correspond to ordering of iterators.
          * @param other   iterator to compare to.
          * @return  bool, true if greater than or equal to, false otherwise.
          */
@@ -236,7 +241,7 @@ namespace bliss
         }
 
         /**
-         * @brief compare to other iterator: <=
+         * @brief compare to other iterator: <=. relies on ordering of the sequence Ids correspond to ordering of iterators.
          * @param other   iterator to compare to.
          * @return  bool, true if less than or equal to, false otherwise.
          */

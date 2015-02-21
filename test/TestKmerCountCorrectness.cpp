@@ -1,8 +1,8 @@
 /**
- * @file    test_threads.cpp
+ * @file    TestKmerCountCorrectness.cpp
  * @ingroup
- * @author  tpan
- * @brief
+ * @author  cjain7
+ * @brief   Tests the kmer frequency count output of the library against the jellyFish's histogram
  * @details
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
@@ -11,31 +11,53 @@
  */
 #include "config.hpp"
 
+#include <functional>
+#include <fstream>
 
 #include "utils/logging.h"
 
 #include "common/alphabets.hpp"
 
 
-#include "index/KmerIndex.hpp"
+#include "index/kmer_index.hpp"
 #include "index/distributed_map.hpp"
-#include "io/CommunicationLayer.hpp"
+#include "io/communication_layer.hpp"
 /*
  * TYPE DEFINITIONS
  */
 
+using namespace std::placeholders;   // for _1, _2, _3
+
 //Code snippet to execute bash command and return the result
-std::string exec(char* cmd) {
-  FILE* pipe = popen(cmd, "r");
-  if (!pipe) return "ERROR";
-  char buffer[8];
-  std::string result = "";
-  while(!feof(pipe)) {
-    if(fgets(buffer, 8, pipe) != NULL)
-      result += buffer;
+/*std::string exec(char* cmd) {*/
+  //FILE* pipe = popen(cmd, "r");
+  //if (!pipe) return "ERROR";
+  //char buffer[8];
+  //std::string result = "";
+  //while(!feof(pipe)) {
+    //if(fgets(buffer, 8, pipe) != NULL)
+      //result += buffer;
+  //}
+  //pclose(pipe);
+  //return result;
+/*}*/
+
+/**
+ * @param filename  File with space seperated frequency and counts
+ */
+std::map<int, int> buildHistogramfromFile(std::string filename)
+{
+  std::map<int, int> histoMap;
+
+  std::ifstream infile(filename);
+  int freq, count;
+
+  while (infile >> freq >> count)
+  {
+    histoMap.insert(std::make_pair(freq, count));
   }
-  pclose(pipe);
-  return result;
+
+  return histoMap;
 }
 
 /**
@@ -72,7 +94,16 @@ int main(int argc, char** argv) {
     chunkSize = atoi(argv[2]);
   }
 
-  std::string filename("/home/chirag/Documents/GRA/BigData/Code/bliss/test/data/natural.fastq");
+  std::string filename;
+  filename.assign(PROJ_SRC_DIR);
+  filename.append("/test/data/natural.fastq");
+
+  std::string solutionFileName;
+  solutionFileName.assign(PROJ_SRC_DIR);
+  solutionFileName.append("/test/data/natural.fastq.jellyFish.histo");
+
+  std::cout << "DEBUGGING : " << filename << "\n";
+
   if (argc > 3)
   {
     filename.assign(argv[3]);
@@ -114,9 +145,13 @@ int main(int argc, char** argv) {
   {
   // initialize index
   printf("***** initializing index.\n");
-  typedef typename bliss::index::KmerCountIndex<21, DNA, bliss::io::FASTQ, true> KmerIndexType;
+  typedef bliss::index::KmerCountIndex<21, bliss::common::DNA, bliss::io::FASTQ, true> KmerIndexType;
 
-  KmerIndexType kmer_index(comm, nprocs, nthreads);
+  size_t result = 0, entries = 0;
+  KmerIndexType kmer_index(comm, nprocs,
+                                     std::bind(KmerIndexType::defaultReceiveAnswerCallback,
+                                               _1, _2, nthreads, std::ref(result), std::ref(entries)), 
+                                     nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
   printf("***** building index first pass.\n");
@@ -128,27 +163,25 @@ int main(int argc, char** argv) {
 
   fprintf(stderr, "COUNT %d index built pass 1 with index size: %ld\n", rank, kmer_index.local_size());
 
+  //Make sure every proc/ thread is done 
+  kmer_index.finalize();
+
   auto& localIndex = kmer_index.getLocalIndex();
 
-  //Run Jellyfish to build its index
-  std::string jellyFishExec = "/home/chirag/Documents/GRA/BigData/Code/JelleyFish/jellyfish-2.2.0/bin/jellyfish";
+  //If n is the highest frequency, vector should contain n entries
+  //ith element denotes the count of kmers with (i+1) frequency
+  auto overallHistogram = localIndex.countHistogram();
 
-  std::string jellyFishRunCommand = jellyFishExec + " count -m 21 -s 100000 -o jellyFishoutput -C /home/chirag/Documents/GRA/BigData/Code/bliss/test/data/natural.fastq"; 
-  exec(&jellyFishRunCommand[0]); 
+  //Get a map with frequency as key
+  auto solutionHistogram = buildHistogramfromFile(solutionFileName);
 
-  //Iterate over all the kmers
-  //Get and compare the frequency with Jellyfish's output
-  for (auto iter=localIndex.cbegin(); iter!=localIndex.cend(); iter++)
+  //Start checking
+  for(auto& item: solutionHistogram)
   {
-    //std::cout << (iter->first).toAlphabets() << " ";
-    std::string jellyFishQueryCommand = jellyFishExec + " query jellyFishoutput " + bliss::utils::KmerUtils::toASCIIString(iter->first) + " |  sed 's/[^0-9]*//g'";
-    std::string jellyFishResult = exec(&jellyFishQueryCommand[0]);
-    //std::cout << iter->second << ", " << std::stoi(jellyFishResult) << "\n";
-    assert(iter->second == (unsigned)std::stoi(jellyFishResult));
-
+    cout << item.first << ":" << item.second << "\n";
+    assert(overallHistogram[item.first -1]  == item.second);
   }
-
-  kmer_index.finalize();
+  
   MPI_Barrier(comm);
 
   }

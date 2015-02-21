@@ -15,7 +15,7 @@ TEST(PaddingTest, RemovePaddingSameType)
   uint32_t unpadded[2];
 
   uint32_t* begin = paddedseq;
-  bliss::removePadding(begin, unpadded, 4*16, 16);
+  bliss::common::removePadding(begin, unpadded, 4*16, 16);
 
   EXPECT_EQ(unpadded[0], 0xbeefdead) << std::hex << "wrong result is: 0x"  << unpadded[0];
   EXPECT_EQ(unpadded[1], 0xabba1234) << std::hex << "wrong result is: 0x"  << unpadded[1];
@@ -27,7 +27,7 @@ TEST(PaddingTest, RemovePaddingSameType2)
   uint32_t unpadded[(6*6)/8 + 1];
 
   uint32_t* begin = paddedseq;
-  bliss::removePadding(begin, unpadded, 6*6*4, 8);
+  bliss::common::removePadding(begin, unpadded, 6*6*4, 8);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xef12dead) << std::hex << "wrong result is: 0x"  << unpadded[0];
@@ -45,7 +45,7 @@ TEST(PaddingTest, RemovePaddingSameType3)
   uint32_t unpadded[(13*4)/32 + 1];
 
   uint32_t* begin = paddedseq;
-  bliss::removePadding(begin, unpadded, 4*13, 32-13);
+  bliss::common::removePadding(begin, unpadded, 4*13, 32-13);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xd3ddfead) << std::hex << "wrong result is: 0x"  << unpadded[0];
@@ -58,7 +58,7 @@ TEST(PaddingTest, RemovePadding32to16by8)
   uint16_t unpadded[(6*6*4)/16 + 1];
 
   uint32_t* begin = paddedseq;
-  bliss::removePadding(begin, unpadded, 6*6*4, 8);
+  bliss::common::removePadding(begin, unpadded, 6*6*4, 8);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xdead) << std::hex << "wrong result is: 0x"  << unpadded[0];
@@ -78,7 +78,7 @@ TEST(PaddingTest, RemovePadding32to8by28)
   uint8_t unpadded[(4*6)/8 + 1];
 
   uint32_t* begin = paddedseq;
-  bliss::removePadding(begin, unpadded, 4*6, 28);
+  bliss::common::removePadding(begin, unpadded, 4*6, 28);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xfd) << std::hex << "wrong result is: 0x"  << unpadded[0];
@@ -92,7 +92,7 @@ TEST(PaddingTest, RemovePadding32to16by13)
   uint16_t unpadded[(13*4)/16 + 1];
 
   uint32_t* begin = paddedseq;
-  bliss::removePadding(begin, unpadded, 4*13, 32-13);
+  bliss::common::removePadding(begin, unpadded, 4*13, 32-13);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xfead) << std::hex << "wrong result is: 0x"  << unpadded[0];
@@ -107,7 +107,7 @@ TEST(PaddingTest, RemovePadding32to8by13)
   uint8_t unpadded[(13*4)/8 + 1];
 
   uint32_t* begin = paddedseq;
-  bliss::removePadding(begin, unpadded, 4*13, 32-13);
+  bliss::common::removePadding(begin, unpadded, 4*13, 32-13);
 
   // check for correct depadding (entered manually)
   EXPECT_EQ(unpadded[0], 0xad) << std::hex << "wrong result is: 0x"  << unpadded[0];

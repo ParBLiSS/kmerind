@@ -1,7 +1,7 @@
 /**
  * @file		check_buffer.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *
@@ -24,7 +24,7 @@
 #include <sstream>
 #include <xmmintrin.h>
 
-#include <utils/test_utils.hpp>
+#include <utils/iterator_test_utils.hpp>
 
 
 

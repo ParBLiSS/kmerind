@@ -1,6 +1,6 @@
 project(bliss_test_apps)
 
-include("${CMAKE_SOURCE_DIR}/Sanitizer.cmake")
+include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
 
 if(ENABLE_TESTING)
 
@@ -8,10 +8,6 @@ if(ENABLE_TESTING)
 ## EXECUTABLES
 add_executable(test_omp_patterns test_omp_patterns.cpp)
 target_link_libraries(test_omp_patterns ${EXTRA_LIBS})
-
-## EXECUTABLES
-add_executable(test_iterator_and_function_traits test_iterator_and_function_traits.cpp)
-target_link_libraries(test_iterator_and_function_traits ${EXTRA_LIBS})
 
 ## EXECUTABLES
 add_executable(testCommLayer test_commlayer.cpp)

@@ -1,7 +1,7 @@
 /**
- * @file		Partitioner.hpp
- * @ingroup bliss::partition
- * @author	tpan
+ * @file		partitioner.hpp
+ * @ingroup partition
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   contains several class that provide different logic for partitioning a range
  * @details contains block, cyclic, and demand driven (THREAD SAFE) partitioners
 						logic implementation uses comparison to avoid overflows and implicit casting where needed.
@@ -26,7 +26,7 @@ namespace bliss
   namespace partition
   {
 
-    /** 
+    /**
      * @class			Partitioner
      * @brief     base class to partition a range.
      * @details   operates without knowledge of the data that the range refers to,  so no "search" type of partitioning
@@ -46,9 +46,9 @@ namespace bliss
      *            independent of other threads.  For DemandDriven partitioner, the chunks are computed using atomc operation to provide
      *            memory fence/synchronization.
      *
-     * @note      The purpose of partitioning is to divide the data for computation.  Partitioner will therefore divide the source range,
-     *            including the overlap region (see range class documentation), into equal parts.
-     *            A new overlap region length can be specified during partitioning.  When overlap region length is specified, all subranges
+     * @note      The purpose of partitioning is to divide the range of data for computation.  Partitioner will therefore divide the source range,
+     *            including the overlap region (see range class documentation), into parts.
+     *            An overlap region length can be specified during partitioning.  When overlap region length is specified, all subranges
      *            from the partitioner, except the last subrange, will have its "overlap" variable set to the overlap region size.  The last
      *            subrange has overlap region of size 0.
      *
@@ -194,9 +194,6 @@ namespace bliss
         void configure(const Range &_src, const size_t &_nPartitions, const ChunkSizeType &_chunkSize, const RangeValueType &_overlapSize) {
 
           if (_nPartitions == 0)
-            throw std::invalid_argument("ERROR: partitioner c'tor: nPartitions is 0");
-
-          if (_nPartitions == std::numeric_limits<size_t>::max()) 
             throw std::invalid_argument("ERROR: partitioner c'tor: nPartitions is 0");
           nPartitions = _nPartitions;
 
@@ -585,7 +582,7 @@ namespace bliss
     };
 
 
-    /** 
+    /**
      * @class DemandDrivenPartitioner
      * @brief a partitioner that assigns chunks to partition in the order that the getNext function is called.
      * @tparam Range  type of the range object to be partitioned.

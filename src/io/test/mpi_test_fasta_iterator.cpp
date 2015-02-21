@@ -20,7 +20,7 @@
 
 #include "io/fasta_loader.hpp"
 #include "io/file_loader.hpp"
-#include "common/Kmer.hpp"
+#include "common/kmer.hpp"
 #include "common/alphabets.hpp"
 #include "io/fasta_iterator.hpp"
 #include "partition/partitioner.hpp"
@@ -88,7 +88,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks)
 
   //Define Kmer type
   const int len = 35;
-  typedef bliss::Kmer<len, DNA5, uint32_t> KmerType;
+  typedef bliss::common::Kmer<len, bliss::common::DNA5, uint32_t> KmerType;
 
   //Define type for FASTALoader 
   typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
@@ -161,7 +161,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiProc)
 
   //Define Kmer type
   const int len = 35;
-  typedef bliss::Kmer<len, DNA5, uint32_t> KmerType;
+  typedef bliss::common::Kmer<len, bliss::common::DNA5, uint32_t> KmerType;
 
   typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
   typename FASTALoaderType::vectorType vectorReturned;
@@ -233,7 +233,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiThreaded_L2DemandPartition)
 
   //Define Kmer type
   const int len = 35;
-  typedef bliss::Kmer<len, DNA5, uint32_t> KmerType;
+  typedef bliss::common::Kmer<len, bliss::common::DNA5, uint32_t> KmerType;
 
   typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
   typename FASTALoaderType::vectorType vectorReturned;
@@ -340,7 +340,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiThreaded_L2BlockPartition)
 
   //Define Kmer type
   const int len = 35;
-  typedef bliss::Kmer<len, DNA5, uint32_t> KmerType;
+  typedef typename bliss::common::Kmer<len, bliss::common::DNA5, uint32_t> KmerType;
 
   typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
   typename FASTALoaderType::vectorType vectorReturned;

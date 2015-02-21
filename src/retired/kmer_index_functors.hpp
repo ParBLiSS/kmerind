@@ -1,7 +1,7 @@
 /**
  * @file    kmer_index_functors.hpp
- * @ingroup
- * @author  tpan
+ * @ingroup retired
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   contains functors for generating kmers and its quality scores.
  * @details uses a containment strategy for generating kmers w/ or w/o id and quality score.
  *
@@ -20,7 +20,7 @@
 
 #include <utils/constexpr_array.hpp>      // for precomputing the quality scores
 #include <common/alphabets.hpp>
-#include <common/AlphabetTraits.hpp>      // for mapping char to alphabet value
+#include <common/alphabet_traits.hpp>      // for mapping char to alphabet value
 #include <io/sequence_iterator.hpp>          // for Id.
 #include <retired/kmer_index_element.hpp>   // for the basic kmer index element structures.
 #include <common/sequence.hpp>
@@ -51,11 +51,11 @@ namespace bliss
 
 
         static constexpr BitSizeType nBits =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
+            bliss::common::AlphabetTraits<AlphabetType>::getBitsPerChar();
         static constexpr BitSizeType shift =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerValueType::size - 1);
+            bliss::common::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerValueType::size - 1);
         static constexpr AlphabetSizeType max =
-            bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
+            bliss::common::AlphabetTraits<AlphabetType>::getSize() - 1;
 
         static constexpr int word_size = sizeof(KmerValueType) * 8;
 //        static constexpr KmerValueType mask_reverse = ~(KmerValueType());
@@ -120,11 +120,11 @@ namespace bliss
 
 
         static constexpr BitSizeType nBits =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar();
+            bliss::common::AlphabetTraits<AlphabetType>::getBitsPerChar();
         static constexpr BitSizeType shift =
-            bliss::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerIndexType::SizeType::size - 1);
+            bliss::common::AlphabetTraits<AlphabetType>::getBitsPerChar() * (KmerIndexType::SizeType::size - 1);
         static constexpr AlphabetSizeType max =
-            bliss::AlphabetTraits<AlphabetType>::getSize() - 1;
+            bliss::common::AlphabetTraits<AlphabetType>::getSize() - 1;
 
         static constexpr int word_size = sizeof(KmerValueType) * 8;
         static constexpr KmerValueType mask_reverse = ~(static_cast<KmerValueType>(0))

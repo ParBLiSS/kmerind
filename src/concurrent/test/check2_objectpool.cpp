@@ -1,7 +1,7 @@
 /**
  * @file		check_bufferpool.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *
@@ -20,7 +20,7 @@
 #include <atomic>
 #include <memory>
 
-#include "utils/test_utils.hpp"
+#include "utils/iterator_test_utils.hpp"
 
 #include "concurrent/buffer.hpp"
 
@@ -292,7 +292,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 	    }
   }
   expected = pool.isUnlimited() ? 0 : 1;
-  if (count != expected) printf("FAIL: number of failed attempt to acquire buffer should be %d, actual %d.  pool remaining: %lu \n", expected, count, pool.getAvailableCount());
+  if (count != expected) printf("FAIL: attempts %d number of failed attempt to acquire buffer should be %d, actual %d.  pool remaining: %lu \n", mx, expected, count, pool.getAvailableCount());
   else printf("PASSED.\n");
 
 

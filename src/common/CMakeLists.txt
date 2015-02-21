@@ -1,5 +1,5 @@
 project(bliss-common)
-include("${CMAKE_SOURCE_DIR}/Sanitizer.cmake")
+include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
 
 # TODO: add .cpp files (if we have some)
 add_library(${PROJECT_NAME}

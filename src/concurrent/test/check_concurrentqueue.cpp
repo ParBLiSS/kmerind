@@ -1,7 +1,7 @@
 /**
  * @file    testconcurrentqueue.cpp
  * @ingroup
- * @author  tpan
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *
@@ -134,11 +134,15 @@ void test3() {
 
     int item = -1;
     int i = 0;
+    std::vector<int> vals;
     while (q.try_dequeue(item)) {
-      assert(item == i);
-      ++i;
+      vals.push_back(item);
     }
-    assert(i == 4);
+    assert(vals.size() == 4);
+    std::sort(vals.begin(), vals.end());
+    for (; i < vals.size(); ++i) {
+      assert(vals[i] == i);
+    }
 
     std::vector<std::thread> threads(MAX_THREADS);
     for (int rep = 0; rep != 2; ++rep) {

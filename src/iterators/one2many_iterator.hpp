@@ -1,10 +1,10 @@
 /**
  * @file    one2many_iterator.hpp
- * @ingroup interators
+ * @ingroup iterators
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the one2many iterator.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */
@@ -16,8 +16,7 @@
 #include <iterator>
 
 #include <common/bit_ops.hpp>
-#include <iterators/iterator_tools.hpp>
-#include <iterators/function_traits.hpp>
+#include <utils/function_traits.hpp>
 #include <iterators/transform_iterator.hpp>
 
 namespace bliss
@@ -719,14 +718,17 @@ public:
   {
   }
 
+  /// default constructor
   one2many_iterator()
     : base_class_type(Iterator(), Functor(), 0, 0) {}
 
+  /// copy constructor
   one2many_iterator(const one2many_iterator& other)
     : base_class_type(other._base, other._f, other._m, other._offset)
   {
   }
 
+  /// copy assignment iterator
   one2many_iterator& operator=(const one2many_iterator& other)
   {
     // check for self assignment

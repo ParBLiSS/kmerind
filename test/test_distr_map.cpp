@@ -5,7 +5,7 @@
 #include <unistd.h> // for sleep!
 
 
-#include <io/CommunicationLayer.hpp>
+#include <io/communication_layer.hpp>
 #include <index/distributed_map.hpp>
 
 //#define DEBUG(msg) std::cerr << msg << std::endl;
@@ -14,20 +14,22 @@ int glCommSize;
 int repeats;
 
 
-void receiveAnswer(std::pair<int, bliss::index::count_t>& answer)
+void receiveAnswer(std::pair<int, bliss::index::count_t>* answers, std::size_t count)
 {
-  int key = answer.first;
-  int count = answer.second;
-  if (count != repeats * (key+1) * glCommSize)
-  {
-    std::cerr << "ERROR: distributed count is wrong: received=" << count << ", expected=" << ((key+1) * repeats * glCommSize) << std::endl;
-  }
-  else
-  {
-    std::cerr << "SUCCESS!" << std::endl;
-  }
+  for (size_t i = 0; i < count; ++i) {
+    int key = answers[i].first;
+    int count = answers[i].second;
+    if (count != repeats * (key+1) * glCommSize)
+    {
+      std::cerr << "ERROR: distributed count is wrong: received=" << count << ", expected=" << ((key+1) * repeats * glCommSize) << std::endl;
+    }
+    else
+    {
+      std::cerr << "SUCCESS!" << std::endl;
+    }
 
-  std::cerr << std::flush;
+    std::cerr << std::flush;
+  }
 }
 
 template<bool ThreadLocal = true>
@@ -41,7 +43,7 @@ void test_map(MPI_Comm& comm, int nthreads)
   //printf("INIT COUNTING MAP\n");
   bliss::index::distributed_counting_map<int, bliss::io::CommunicationLayer<ThreadLocal> > counting_map(comm, p, nthreads);
   //printf("REGISTER COUNTING MAP CALLBACK\n");
-  counting_map.setLookupAnswerCallback(std::function<void(std::pair<int, bliss::index::count_t>&)>(&receiveAnswer));
+  counting_map.setLookupAnswerCallback(std::function<void(std::pair<int, bliss::index::count_t>*, std::size_t)>(&receiveAnswer));
 
   counting_map.init();
 
@@ -84,6 +86,15 @@ int main(int argc, char *argv[])
   int p, rank;
   MPI_Comm_size(comm, &p);
   MPI_Comm_rank(comm, &rank);
+
+  {
+    char hostname[256];
+    memset(hostname, 0, 256);
+    gethostname(hostname, 256);
+    INFOF("Rank %d hostname [%s]\n", rank, hostname);
+  }
+  MPI_Barrier(comm);
+
 
   /* code */
 //  {

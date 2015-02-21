@@ -1,7 +1,7 @@
 /**
  * @file		concurrent.hpp
- * @ingroup bliss::concurrent
- * @author	tpan
+ * @ingroup concurrent
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   this file contains predefined constants for concurrency and thread safety
  * @details
  *
@@ -25,7 +25,7 @@ namespace bliss {
     constexpr bool THREAD_UNSAFE = false;
 
 
-    // types of threading locks.
+    /// types of thread safety mechanisms
     enum class LockType { NONE = 0, MUTEX = 1, SPINLOCK = 2, LOCKFREE = 4, THREADLOCAL = 8 };
 
   }

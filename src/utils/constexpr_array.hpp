@@ -1,11 +1,14 @@
 /**
  * @file		constexpr_array.hpp
- * @ingroup bliss::utils
- * @author	tpan
+ * @ingroup utils
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   utility functions to create an index array and transform it into a const value array, at compile time
  *
  * @details create std array of size N and transform the values via a constexpr function to create a const value array at compile time.
  *          adapted from http://stackoverflow.com/questions/19019252/c11-create-0-to-n-constexpr-array-in-c
+ *
+ *          essentially, recursive template parameter deduction and substitution via variadic templates
+ *          to progressively build the final template.
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *

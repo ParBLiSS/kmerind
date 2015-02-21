@@ -35,7 +35,7 @@
 #include "io/fastq_loader.hpp"
 
 #include "common/alphabets.hpp"
-#include "common/AlphabetTraits.hpp"
+#include "common/alphabet_traits.hpp"
 #include "iterators/buffered_transform_iterator.hpp"
 
 template<typename ALPHABET, typename Iterator, typename TO, int K>

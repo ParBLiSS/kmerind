@@ -1,9 +1,20 @@
 /**
  * @file    message_types.hpp
- * @ingroup
- * @author  tpan
+ * @ingroup bliss::io
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   various types of mpi messages:  sent data, received data, control messages, base class
- * @details
+ * @details  background:
+ *          For control message, the tag sent/received under is the control tag.
+ *            its payload has 2 parts:  tag to control, and the epoch of the communication.
+ *              tag to control is associated to a type of data message.
+ *              epoch is a unique number for that tag to indicate the particular communication episode for that message type
+ *
+ *          For Send data message, the tag is the message type.  a pointer is stored, but space not managed.
+ *          For Recv data message, the tag is the message type.  a pointer is stored, and space is managed.
+ *
+ *        Here we need to rely on non-overtaking behavior of MPI to preserve order between data messages (tag > 0) and control messages (tag == 0).
+ *
+ *
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
@@ -22,7 +33,7 @@ namespace bliss
     //========= internal message queue data types.
 
     /**
-     * base class for storing mpi tag and sr for a received message.
+     * base class for storing mpi tag and src for a received message.
      */
     struct MPIMessage
     {
@@ -50,24 +61,22 @@ namespace bliss
 
 
     /**
-     * @brief Structure to hold all associated information of a received MPI message.
-     * @details tag is used to annotate the message type/format.  The message is processed according to this tag.
-     *
-     *        tag == CONTROL_TAG:  control message indicating the last of a type of data messages for a synchronization epoch (period between synchronizations)
-     *                    data contains the tag for the data message type that is ending, as well as an identifier for a synchronization epoch.
-     *                    if data contains a tag of 0, then the application is ending.
-     *        otherwise:  data messages, with data containing payload.
-     *
-     *        Here we need to rely on non-overtaking behavior of MPI to preserve order between data messages (tag > 0) and control messages (tag == 0).
+     * @brief a MPI message representing a control message associated with a data message type.
+     * @details tag is used to annotate the message type/format, here it would be CONTROL_TAG.
+     *        The payload has a tag component, interpreted as the data message type being controlled.
+     *        The epoch component indicates the communication episode this control message is associated with
      *
      *        The control messages are used to flush the receiver's queue of a particular message type.  "flush" is considered
      *        a collective operation, with synchronization barrier satisfied when control messages for the same message type are received from all sources.
      *
+     *        if the payload's tag inforation is CONTROL_TAG, then it indicates that the calling application is
+     *          completely finished with communication.
+     *
      */
     struct ControlMessage : public MPIMessage
     {
-      /// The received data
-       TaggedEpoch tagged_epoch;
+      /// The received data.  for control message, this is a tag + an epoch number
+      TaggedEpoch tagged_epoch;
 
       /**
        * @brief constructor using a pre-existing memory block
@@ -95,6 +104,7 @@ namespace bliss
       /// default constructor
       ControlMessage() = default;
 
+      /// default destructor
       virtual ~ControlMessage() {};
 
     };
@@ -104,17 +114,10 @@ namespace bliss
      * @brief Structure to hold all associated information of a received MPI message.
      * @details tag is used to annotate the message type/format.  The message is processed according to this tag.
      *
-     *        tag == CONTROL_TAG:  control message indicating the last of a type of data messages for a synchronization epoch (period between synchronizations)
-     *                    data contains the tag for the data message type that is ending, as well as an identifier for a synchronization epoch.
-     *                    if data contains a tag of 0, then the application is ending.
-     *        otherwise:  data messages, with data containing payload.
+     *        This class only handles received DATA MESSAGES.
      *
-     *        Here we need to rely on non-overtaking behavior of MPI to preserve order between data messages (tag > 0) and control messages (tag == 0).
-     *
-     *        The control messages are used to flush the receiver's queue of a particular message type.  "flush" is considered
-     *        a collective operation, with synchronization barrier satisfied when control messages for the same message type are received from all sources.
-     *
-     *        data is a unique pointer to a byte array.  received data buffer is managed by DataMessageRecevied.
+     *        On construction, this class is assigned a pointer to a byte array.  From this point on, this class
+     *        manages that byte array.
      */
     struct DataMessageReceived  : public MPIMessage
     {
@@ -150,6 +153,7 @@ namespace bliss
       /// default constructor
       DataMessageReceived() = default;
 
+      /// default destructor
       virtual ~DataMessageReceived() {};
 
     };
@@ -159,8 +163,7 @@ namespace bliss
      * @brief Structure to hold all associated information of a message to be sent via MPI.
      * @details MessageToSend is a small metadata stucture to be used for message queuing (to be sent)
      *          MessageToSend does not actually hold any data.  it points to a in-memory Buffer by pointer.
-     *
-     *          Does NOT manage data.
+     *          It does NOT manage data.
      *
      *          control message is NOT sent this way, since there is no Buffer associated with a control message.
      *
@@ -186,6 +189,7 @@ namespace bliss
       /// default constructor
       DataMessageToSend() = default;
 
+      /// default destructor
       virtual ~DataMessageToSend() {};
     };
 

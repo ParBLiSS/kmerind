@@ -455,7 +455,7 @@ struct SequencesIterator {
     LoaderType loader;
 
     typedef float QualityType;
-    typedef DNA Alphabet;
+    typedef bliss::common::DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
 
     typedef bliss::io::FASTQParser<BaseIterType, QualityType>  ParserType;
@@ -577,7 +577,7 @@ struct SequencesIterator2 {
     LoaderType loader;
 
     typedef float QualityType;
-    typedef DNA Alphabet;
+    typedef bliss::common::DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
 
     typedef bliss::io::FASTQParser<BaseIterType, QualityType>  ParserType;
@@ -688,7 +688,7 @@ struct SequencesIteratorNoQual {
     LoaderType loader;
 
     typedef float QualityType;
-    typedef DNA Alphabet;
+    typedef bliss::common::DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
 
     typedef bliss::io::FASTQParser<BaseIterType, QualityType>  ParserType;

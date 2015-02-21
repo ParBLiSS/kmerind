@@ -1,7 +1,7 @@
 /**
  * @file    mpi_runner.hpp
- * @ingroup
- * @author  tpan
+ * @ingroup wip
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   runs some MPI work.  has a source, a compute algo, and a sink.
  * @details can either initialize directly, or use an existing MPI communicator.
  *

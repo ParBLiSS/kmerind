@@ -1,10 +1,11 @@
 /**
  * bliss-Release@bliss copyright 2014 Georgia Institute of Technology
  *
- * @file:  threadpool.h
+ * @file    thread_pool.hpp
+ * @ingroup wip
  *
  * @date:  Mar 20, 2014
- * @author: tpan
+ * @author: Tony Pan <tpan7@gatech.edu>
  * @description
  *
  * inspired by https://github.com/greyfade/workqueue/blob/master/threadpool.hpp

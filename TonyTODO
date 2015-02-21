@@ -510,7 +510,7 @@ TODO:
 			changing CommunicationLayer to minimize use of unordered map, and when do, use lock.
 				also lock access to unordered map.
 				
-		4. multithread callback functions.
+		4. **** multithread callback functions - very important.  - requires functors for query result handler callback.  openmp inside callback - done.
 			task runner is working.
 			integration will involve a lot of code restructuring
 			most significantly, need **[ threadsafe hashtable ]**.
@@ -518,7 +518,7 @@ TODO:
 			API is sequential, implementation is parallel/distributed/overlapped.
 				ie. use message handlers to allow overlapped communication and io, but functions return when all's complete.
 		
-		6. **need KMolecule instead of kmer.  - separate keys for rank and for local hash.
+		6. *** need KMolecule instead of kmer.  - separate keys for rank and for local hash.  - delay
 			so that we don't have duplicates on different processors.
 		
 		6. verify correctness - 
@@ -532,10 +532,11 @@ TODO:
 			query
 				appears working.
 				
-			****functors for callback handler.
+			****functors for callback handler.  - NO.  std::bind is more flexible.
 			
 		7. optimization: specialized kmer for sizes that does not require arrays
-		   optimization: allow reserve size to be set in a thread safe way.
+		   ** optimization: allow reserve size to be set in a thread safe way.   
+		  	
 			
 		9. MPI deadlocks and thread safety
 			reserve map size from index thread is problematic:  callback thread can be receiving before local worker finishes resizing the map.  since unorderedmap is not threadsafe, this causes problems
@@ -580,9 +581,11 @@ RELEASE TASKS
 		
 	8. documentation
 		a. code comments
-		b. install documentation
-		c. usage documentation
-		d. example code
+		b. install documentation - update
+		c. design document.
+		d. license
+		e. usage documentation
+		f. example code
 		
 	9. Testing.
 		a. verify correctness - 

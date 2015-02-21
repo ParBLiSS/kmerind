@@ -2,7 +2,7 @@
  * sys_probe.cpp
  *
  *  Created on: Jan 22, 2014
- *      Author: tpan
+ *      Author: Tony Pan <tpan7@gatech.edu>
  */
 
 #include <unistd.h>

@@ -1,7 +1,7 @@
 /**
  * @file		io_exception.hpp
- * @ingroup bliss::io
- * @author	tpan
+ * @ingroup io
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief   derived from std exception to represent an IO exception
  * @details
  *
@@ -20,7 +20,7 @@ namespace bliss
     /**
      * @class			IOException
      * @brief     derived from std exception to represent an IO exception
-     * @details
+     * @details   this will be retired in the near future.
      */
     class IOException : public std::exception
     {

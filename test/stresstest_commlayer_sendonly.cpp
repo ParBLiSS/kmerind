@@ -1,12 +1,12 @@
 
 #include <mpi.h>
 #include <omp.h>
-#include <unistd.h> // for sleep!
+#include <unistd.h> // for sleep!, for gethosthanme
 
 #include <iostream>
 #include <functional>
 
-#include <io/CommunicationLayer.hpp>
+#include <io/communication_layer.hpp>
 
 //#define DEBUG(msg) std::cerr << msg << std::endl;
 
@@ -94,7 +94,6 @@ struct Tester
         for (int j = 0; j < commSize; ++j)
         {
           msgs[j] = generate_message(my_rank, j);
-          commLayer.sendMessage(&(msgs[j]), sizeof(int), j, FIRST_TAG);
           commLayer.sendMessage(&(msgs[j]), sizeof(int), j, FIRST_TAG);
           if (i == 0 || i == els - 1)
             DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, FIRST_TAG, i, els, msgs[j]);
@@ -193,6 +192,16 @@ int main(int argc, char *argv[])
   int p, rank;
   MPI_Comm_size(comm, &p);
   MPI_Comm_rank(comm, &rank);
+
+
+  // get host hame and print out
+  {
+    char hostname[256];
+    memset(hostname, 0, 256);
+    gethostname(hostname, 256);
+    INFOF("Rank %d hostname [%s]\n", rank, hostname);
+  }
+  MPI_Barrier(comm);
 
   /* code */
   {

@@ -2,7 +2,7 @@
  * range_test.cpp
  * Test range class
  *  Created on: Feb 18, 2014
- *      Author: tpan
+ *      Author: Tony Pan <tpan7@gatech.edu>
  */
 
 #include <config.hpp>

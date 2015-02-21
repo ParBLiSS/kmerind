@@ -6,7 +6,7 @@
 #include <iostream>
 #include <functional>
 
-#include <io/CommunicationLayer.hpp>
+#include <io/communication_layer.hpp>
 
 //#define DEBUG(msg) std::cerr << msg << std::endl;
 
@@ -313,6 +313,15 @@ int main(int argc, char *argv[])
   int p, rank;
   MPI_Comm_size(comm, &p);
   MPI_Comm_rank(comm, &rank);
+
+  {
+    char hostname[256];
+    memset(hostname, 0, 256);
+    gethostname(hostname, 256);
+    INFOF("Rank %d hostname [%s]\n", rank, hostname);
+  }
+  MPI_Barrier(comm);
+
 
   /* code */
   {

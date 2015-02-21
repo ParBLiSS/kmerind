@@ -1,11 +1,10 @@
-
 /**
  * @file    generator.hpp
  * @ingroup utils
  * @author  Patrick Flick
- * @brief   Implements input generators used for benchmarking and testing.
+ * @brief   Implements input string generators used for benchmarking and testing.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
  * TODO add Licence
  */
@@ -71,74 +70,6 @@ std::string random_dna(const std::size_t length)
   std::vector<char> dna_chars = {'A','C','G','T'};
   return random_string(length, dna_chars);
 }
-
-
-
-//
-///**
-// * generate the lengths
-// */
-//template<int K>
-//void generateLengths(std::vector<ReadLengthType>& lengths)
-//{
-//
-//  std::default_random_engine generator;
-//  std::normal_distribution<double> distribution(L_MEAN, L_STDEV);
-//
-//  ReadLengthType l;
-//
-//  for (ReadCountType i = 0; i < N_R; ++i)
-//  {
-//    // generate the random lengths of the reads
-//    l = static_cast<ReadLengthType>(round(distribution(generator)));
-//
-//    if (l < 80 || l > 120)
-//    {
-//      --i;
-//      continue;
-//    }
-//
-//    lengths[i] = l;
-//  }
-//
-//}
-//
-///**
-// * allocate input vector.
-// * supports packed string with padding bits.
-// */
-//void generateStrings(std::vector<ReadLengthType> const & lengths,
-//                     std::vector<SequenceT>& reads)
-//{
-//  std::default_random_engine generator;
-//  std::uniform_int_distribution<WordType> distribution;
-//
-//  // use a random number generator to generate the "packed string"
-//  for (ReadCountType i = 0; i < N_R; ++i)
-//  {
-//    // allocate a sequence of packed string blocks.
-//    SequenceT read((lengths[i] + N_PACKED_CHARS - 1) / N_PACKED_CHARS, 0);
-//
-//    int idx = 0;
-//    for (ReadLengthType j = 0; j < lengths[i]; j += N_PACKED_CHARS)
-//    {
-//      // packed bits, with padding.  low order bits only.
-//      read[idx] = distribution(generator) & PADDING_MASK;
-//      ++idx;
-//    }
-//    // the last one may not be completely filled.
-//    if (lengths[i] % N_PACKED_CHARS > 0)
-//    {
-//      WordType keep_mask = std::numeric_limits<WordType>::max()
-//          >> (WORD_BITS - (lengths[i] % N_PACKED_CHARS) * N_BITS);
-//      read[idx - 1] = read[idx - 1] & keep_mask;
-//    }
-//    read.shrink_to_fit();
-//    reads[i] = read;
-//  }
-//
-//}
-//
 
 
 }

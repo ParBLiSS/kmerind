@@ -1,14 +1,14 @@
 /**
- * @file    SequencesIterator.hpp
- * @ingroup bliss::io
- * @author  Tony Pan <tpan@gatech.edu>
+ * @file    sequence_iterator.hpp
+ * @ingroup io
+ * @author  Tony Pan <tpan7@gatech.edu>
  * @date    Feb 5, 2014
  * @brief   Contains an iterator for traversing a sequence data, record by record, a FASTQ format specific parser for use by the iterator,
  *          Sequence Id datatype definition, and 2 sequence types (with and without quality score iterators)
  *
  * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
  *
- * TODO add Licence
+ * TODO add License
  *
  */
 
@@ -30,7 +30,7 @@
 #include "common/sequence.hpp"
 #include "io/io_exception.hpp"
 #include "utils/logging.h"
-#include "iterators/function_traits.hpp"
+#include "utils/function_traits.hpp"
 #include "partition/range.hpp"
 
 namespace bliss
@@ -43,36 +43,37 @@ namespace bliss
     /**
      * @class bliss::io::SequencesIterator
      * @brief Iterator for parsing and traversing a block of data to access individual sequence records (of some file format)
-     * @details The iterator is initialized with start and end iterators pointing to the source data.
+     * @details The iterator is initialized with start and end iterators pointing to a block of character data.
+     *
      *    The source data should be of primitive type such as unsigned char.  The input iterators should be aligned
      *    to record boundaries.
      *
-     *    The iterator uses a Parser Functoid to walk through the data one sequence record at a time.  Different Parser
+     *    The iterator uses a Parser Functoid to walk through the data one sequence record (e.g. read) at a time.  Different Parser
      *    types may be used, e.g. FASTA, FASTQ, to parse different file formats.
      *
      *    The iterator has the following characteristics.
-     *      transform  (changes data type)
-     *      delimiter  (trivial search for the end of the "record" / beginning of next record.)
-     *      finite  (needs to know base iterator's end.)
+     *      transforming  (changes data type)
+     *      delimiting    (trivial search for the end of the "record" / beginning of next record.)
+     *      finite        (needs to know base iterator's end.)
      *
      *    Design considerations:
-     *      1. repeated calls to operator*() returns the same output, WITHOUT reparsing the underlying data
-     *      2. repeated calls to operator++() moves the current pointer forward each time
-     *      3. comparison of 2 SequencesIterators compares the underlying input iterators at the start positions of the current record
-     *      4. iterator states:  before first use, during use, after reaching the end.
+     *      1. Repeated calls to operator*() returns the same output, WITHOUT reparsing the underlying data
+     *      2. Repeated calls to operator++() moves the current pointer forward each time
+     *      3. Comparison of 2 SequencesIterators compares the underlying input iterators at the start positions of the current record
+     *      4. Iterator states:  before first use, during use, after reaching the end.
      *          before:  operator* points to the first output, no need to call ++ first.  so this is same case as "during".
      *          during:  operator* gets the most current output that's a result of calling ++, ++ moves pointer forward
      *          after:   operator* returns empty result, ++ is same as no-op.
      *     Based on these, we need to
      *      1. cache the output
-     *      2. keep a current iterator (for comparison between SequencesIterators)
-     *      3. keep a next iterator (for parsing)
+     *      2. keep a current iterator  (for comparison between SequencesIterators)
+     *      3. keep a next iterator     (for parsing)
      *      4. have constructor parse the first entry, so that dereference functions properly
-     *      5. check for end condition (next == end) and return if at end.
+     *      5. check for end condition  (next == end) and return if at end.
      *
      *      The Parser functoid then only has 1 simple task:  to increment, as it does not need to store locally.
      *
-     * @note this iterator is not a forward or bidirectional iterator, as traversing in reverse is not implemented.
+     * @note this iterator is not a random access or bidirectional iterator, as traversing in reverse is not implemented.
      *
      * @tparam Parser     Functoid type to supply specific logic for increment and dereference functionalities.
      */
@@ -206,8 +207,6 @@ namespace bliss
           //== at end of the data block, can't parse any further, no movement.  (also true for end iterator)
           if (_next == _end)
           {
-            //DEBUG("no more.  seq should be empty: " << (seq.seqBegin == seq.seqEnd));
-
             //== check if reaching _end for the first time
             if (_curr != _end) {
               // advance to end
@@ -223,7 +222,6 @@ namespace bliss
 
             //== then try parsing.  this advances _next and offset, ready for next ++ call, and updates output cache.
             parser.increment(_next, _end, offset, seq);
-            //if (_next == _end) DEBUG("did not find one.  at end of block.  sequence should be empty: " << (seq.seqBegin == seq.seqEnd));
           }
 
           //== states updated.  return self.

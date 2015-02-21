@@ -262,7 +262,7 @@ namespace bliss
               localStartLocStore.front().second = newFirstHeaderEndLocation;
 
             //Due to overlap in the search range, its crucial to know if there is nearby header in the next block
-            offSetType extendedEnd = std::min(parentRange.end, t.end + KmerType::getKmerSize() -1);
+            offSetType extendedEnd = std::min(parentRange.end, t.end + KmerType::size -1);
             while (i < extendedEnd) {
               if(*data == '>') 
               {

@@ -1,0 +1,9 @@
+/**
+
+\page tutorial Tutorials and Examples
+
+# Available Examples
+
+\ref examples/KmerIndexAndQuery.cpp "KmerIndexAndQuery.cpp".
+\example examples/KmerIndexAndQuery.cpp
+*/

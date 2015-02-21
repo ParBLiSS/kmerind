@@ -1,7 +1,7 @@
 /**
  * @file		quicktest.cpp
  * @ingroup
- * @author	tpan
+ * @author	Tony Pan <tpan7@gatech.edu>
  * @brief
  * @details
  *
@@ -19,9 +19,9 @@
 #include "sys/types.h"
 #include "sys/sysinfo.h"
 
-#include "common/Kmer.hpp"
+#include "common/kmer.hpp"
 #include "common/alphabets.hpp"
-#include "common/AlphabetTraits.hpp"
+#include "common/alphabet_traits.hpp"
 
 #include "retired/kmer_index_element.hpp"
 #include "io/sequence_iterator.hpp"
@@ -34,7 +34,7 @@ using namespace bliss::index;
 using namespace bliss::io;
 
 
-typedef bliss::Kmer<21, DNA, uint64_t> KmerType;
+typedef bliss::common::Kmer<21, bliss::common::DNA, uint64_t> KmerType;
 
 
 typedef KmerIndexElement<KmerType > KmerIndexType1;

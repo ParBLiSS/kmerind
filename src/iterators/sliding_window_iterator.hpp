@@ -1,10 +1,10 @@
 /**
- * @file    many2one_iterator.hpp
- * @ingroup interators
+ * @file    sliding_window_iterator.hpp
+ * @ingroup iterators
  * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the sliding window iterators.
  *
- * Copyright (c) TODO
+ * Copyright (c) 2014 Georgia Institute of Technology
  *
  * TODO add Licence
  */
@@ -15,7 +15,6 @@
 
 #include <iterator>
 
-#include <iterators/iterator_tools.hpp>
 #include <iterators/iterator_utils.hpp>
 
 namespace bliss
@@ -399,11 +398,13 @@ public:
    *  Constructors  *
    ******************/
 
+  /// default constructor
   one2many_sliding_window_iterator()
     :_base(), _next(), _base_offset(0), _next_offset(0), _window()
   {
   }
 
+  /// constructor, initialize with a base iterator.  optionally initialize the first sliding window result
   one2many_sliding_window_iterator(const BaseIterator& base_iter, bool init_first = true)
     :_base(base_iter), _next(base_iter), _base_offset(0), _next_offset(0), _window()
   {
@@ -413,6 +414,7 @@ public:
     }
   }
 
+  /// constructor, initialize the sliding window to offset.
   one2many_sliding_window_iterator(const BaseIterator& base_iter, difference_type offset)
     :_base(base_iter), _next(base_iter), _base_offset(0), _next_offset(0), _window()
   {
