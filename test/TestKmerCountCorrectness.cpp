@@ -178,8 +178,8 @@ int main(int argc, char** argv) {
   //Start checking
   for(auto& item: solutionHistogram)
   {
-    cout << item.first << ":" << item.second << "\n";
     assert(overallHistogram[item.first -1]  == item.second);
+    cout << item.first << ":" << item.second << " matches \n";
   }
   
   MPI_Barrier(comm);

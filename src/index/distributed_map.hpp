@@ -378,7 +378,7 @@ public:
     {
       int tid = omp_get_thread_num();
       for (auto iter=this->local_map[tid].begin(); iter!=this->local_map[tid].end();
-           iter=this->local_map[tid].equal_range(iter->first)->second)
+           iter=this->local_map[tid].equal_range(iter->first).second)
       {
         std::size_t count = getLocalCount(local_map[tid], *iter);
         local_max_count = std::max<uint64_t>(local_max_count, count);
@@ -397,11 +397,11 @@ public:
 
     // count the counts to create local histogram
     std::vector<int> local_count_hist(all_max_count+1, 0);
-#pragma omp parallel default(none) num_threads(nt)
+#pragma omp parallel num_threads(nt)
     {
       int tid = omp_get_thread_num();
       for (auto iter=this->local_map[tid].begin(); iter!=this->local_map[tid].end();
-           iter=this->local_map[tid].equal_range(iter->first)->second)
+           iter=this->local_map[tid].equal_range(iter->first).second)
       {
         std::size_t count = getLocalCount(local_map[tid], *iter);
         local_count_hist[count]++;
