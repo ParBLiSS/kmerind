@@ -17,6 +17,8 @@
 
 #include "io/message_buffers.hpp"
 #include "concurrent/lockfree_queue.hpp"
+#include "io/message_types.hpp"
+
 #include "omp.h"
 #include <cassert>
 #include <chrono>
@@ -129,7 +131,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   printf("\n");
 
 
-  buffers.reset();
+  buffers.reset(bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed));
 
   printf("TEST all operations together: ");
   int success3 = 0, failure3 = 0, sswap3 = 0, fswap3 = 0, bytes3 = 0, chars3 = 0;
@@ -174,7 +176,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   bool updating = buffers.at(id)->is_writing();
   if (updating) printf("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
 
-  std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id);
+  std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id, bliss::io::makeTaggedEpoch(0, bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed)));
   if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) printf("\nFAIL: expected %d threads have %lu actual.\n", nthreads, finals.size());
   for (auto final : finals) {
     gbytes += (final == nullptr) ? 0 : final->getSize();
@@ -187,7 +189,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   }
 
   //if (count7 != count/data.length()) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
-  finals = buffers.flushBufferForRank(id);
+  finals = buffers.flushBufferForRank(id, bliss::io::makeTaggedEpoch(0, bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed)));
   int gbytes2 = 0;
   for (auto final : finals) {
     gbytes2 += (final == nullptr) ? 0 : final->getSize();
@@ -238,7 +240,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   int i;
   int swap = 0;
 
-  buffers.reset();
+  buffers.reset(bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed));
 
   printf("TEST all operations together: ");
   int bytes= 0;
@@ -273,7 +275,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   bool updating = ptr->is_writing();
   if (updating) printf("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
 
-  std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id);
+  std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id, bliss::io::makeTaggedEpoch(0, bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed)));
   if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) printf("\nFAIL: expected %d threads have %lu actual.\n", nthreads, finals.size());
   for (auto final : finals) {
     gbytes += (final == nullptr) ? 0 : final->getSize();
@@ -286,7 +288,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   }
 
   //if (count7 != count/data.length()) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
-  finals = buffers.flushBufferForRank(id);
+  finals = buffers.flushBufferForRank(id, bliss::io::makeTaggedEpoch(0, bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed)));
   for (auto final : finals) {
     gbytes2 += (final == nullptr) ? 0 : final->getSize();
     buffers.releaseBuffer(std::move(final));

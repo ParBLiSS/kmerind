@@ -23,7 +23,8 @@
 #ifndef MESSAGE_TYPES_HPP_
 #define MESSAGE_TYPES_HPP_
 
-#include <io/message_type_info.hpp>
+#include <io/mpi_utils.hpp>
+
 
 namespace bliss
 {
@@ -32,16 +33,28 @@ namespace bliss
 
     //========= internal message queue data types.
 
+
     /**
      * base class for storing mpi tag and src for a received message.
      */
-    struct MPIMessage
+    class MPIMessage
     {
-        /// The message tag, indicates the type of message (how to interpret the message)
+      public:
+        /// constant indicating that all MPI ranks are involved.
+        static const int ALL_RANKS = -1;
+        static const int ALL_TAGS = -1;
+        /// static atomic for tracking the current/next epoch in a process.
+        static std::atomic<uint64_t> nextEpoch;
+
+      protected:
+        /// The message tag and epoch. tag indicates the type of message (how to interpret the message, control vs data)
+        /// epoch indicates the phase, which is global.
         int tag;
 
         /// The message source id
         int rank;
+
+      public:
 
         /**
          * @brief constructor using a pre-existing memory block
@@ -51,17 +64,38 @@ namespace bliss
          */
         MPIMessage(int _tag, int _rank)
           : tag(_tag), rank(_rank) {}
-
+ 
         /// default constructor
         MPIMessage() = default;
 
         /// needed to create a virtual function table, only then is polymorphism allowed.  (inheritance not sufficient)
         virtual ~MPIMessage() {};
-    };
 
+        /// get the message's tag
+        inline int getTag() { return tag; };
+
+        /// get the messages's target process rank
+        inline int getRank() { return rank; };
+
+        /// get the message's epoch
+        virtual uint64_t getEpoch() = 0;
+
+        /// get the payload (Data + metadata)
+        virtual uint8_t* getPayload() = 0;
+
+        /// get the payload (data + metadata) size in bytes
+        virtual size_t getPayloadSize() = 0;
+
+        /// get the payload
+        virtual uint8_t* getData() = 0;
+
+        /// get the payload size in bytes
+        virtual size_t getDataSize() = 0;
+    };
+    std::atomic<uint64_t> MPIMessage::nextEpoch(0);
 
     /**
-     * @brief a MPI message representing a control message associated with a data message type.
+     * @brief a MPI message representing a control message.  control messages are NOT associated with a message type.   It is used to mark the start and end of communication.
      * @details tag is used to annotate the message type/format, here it would be CONTROL_TAG.
      *        The payload has a tag component, interpreted as the data message type being controlled.
      *        The epoch component indicates the communication episode this control message is associated with
@@ -73,32 +107,26 @@ namespace bliss
      *          completely finished with communication.
      *
      */
-    struct ControlMessage : public MPIMessage
+    class ControlMessage : public MPIMessage
     {
-      /// The received data.  for control message, this is a tag + an epoch number
-      TaggedEpoch tagged_epoch;
-
-      /**
-       * @brief constructor using a pre-existing memory block
-       *
-       * @param data      in memory block of data (received from remote proc, to be processed here)
-       * @param count     number of bytes in the data block
-       * @param tag       the MPI message tag, indicating the type of message
-       * @param src       the MPI source process rank
-       */
-      ControlMessage(TaggedEpoch _control, int rank)
-        : MPIMessage(CONTROL_TAG, rank), tagged_epoch(_control) {}
+      protected:
+        /// current epoch [0] and next epoch [1].  these are set externally instead of using the atomic MPIMessage::nextEpoch so we can use ControlMessage
+        /// to flush multiple tags.
+        uint64_t epochs[2];
+      public:
 
       /**
        * @brief Constructs a new instance of this struct and sets all members as given.
        *
-       * @param _id   Id of MessageBuffer that will be sent
-       * @param _tag  type of the message being sent
-       * @param _epoch  epoch in which to send the message (epoch of the tag)
+       * @param curr_epoch  epoch in which to send the message
+       * @param next_epoch  the next epoch.
        * @param _dst  destination of the message
        */
-      ControlMessage(int _tag, int _epoch, int rank)
-        : MPIMessage(CONTROL_TAG, rank), tagged_epoch(static_cast<TaggedEpoch>(_tag) << 32 | static_cast<TaggedEpoch>(_epoch)) {}
+      ControlMessage(uint64_t curr_epoch, uint64_t next_epoch, int _dst)
+        : MPIMessage(bliss::io::CONTROL_TAG, _dst) {
+        epochs[0] = curr_epoch;
+        epochs[1] = next_epoch;
+      }
 
 
       /// default constructor
@@ -106,6 +134,33 @@ namespace bliss
 
       /// default destructor
       virtual ~ControlMessage() {};
+
+      /// get the current epoch
+      virtual uint64_t getEpoch() { return epochs[0]; };
+
+      /// get the next epoch
+      uint64_t getNextEpoch() { return epochs[1]; };
+
+      /// get pointer to the payload (data + metadata)
+      virtual uint8_t* getPayload() {
+        return reinterpret_cast<uint8_t*>(epochs);
+      }
+
+      /// get size in bytes of the payload (data + metadata)
+      virtual size_t getPayloadSize() {
+        return sizeof(uint64_t) * 2;
+      }
+
+
+      /// get pointer to the data
+      virtual uint8_t* getData() {
+        return reinterpret_cast<uint8_t*>(epochs);
+      }
+
+      /// get size in bytes of the data.
+      virtual size_t getDataSize() {
+        return sizeof(uint64_t) * 2;
+      }
 
     };
 
@@ -119,14 +174,16 @@ namespace bliss
      *        On construction, this class is assigned a pointer to a byte array.  From this point on, this class
      *        manages that byte array.
      */
-    struct DataMessageReceived  : public MPIMessage
+    class DataMessageReceived  : public MPIMessage
     {
-      /// The received data
-      std::unique_ptr<uint8_t[]> data;
+      protected:
+        /// The received data
+        std::unique_ptr<uint8_t[]> data;
 
-      /// The number of bytes received
-      std::size_t count;
-
+        /// The number of bytes received
+        std::size_t count;
+      
+      public:
       /**
        * @brief constructor using a pre-existing memory block
        *
@@ -156,6 +213,27 @@ namespace bliss
       /// default destructor
       virtual ~DataMessageReceived() {};
 
+      /// get the message's epoch embedded as the first sizeof(uint64_t) bytes.
+      virtual uint64_t getEpoch() {
+        return (reinterpret_cast<uint64_t*>(data.get()))[0];
+      }
+
+      /// get pointer to the payload (data + metadata)
+      virtual uint8_t* getPayload() {
+        return data.get();
+      }
+
+      /// get size in bytes of the payload (data + metadata)
+      virtual size_t getPayloadSize() {
+        return count;
+      }
+
+
+      /// get pointer to data, exclude the metadata portion  (for whole data, access member directly
+      virtual uint8_t* getData() { return (data == nullptr) ? nullptr : (data.get() + sizeof(uint64_t)); }
+
+      /// get size of data, exclude the metadata portion
+      virtual size_t getDataSize() { return (count == 0) ? 0 : (count - sizeof(uint64_t)); }
     };
 
 
@@ -172,9 +250,11 @@ namespace bliss
     template<typename BufferPtrType>
     struct DataMessageToSend : public MPIMessage
     {
-      /// pointer to the message buffer
-      BufferPtrType ptr;
+      protected:
+        /// pointer to the message buffer
+        BufferPtrType data;
 
+      public:
       /**
        * @brief Constructs a new instance of this struct and sets all members as given.
        *
@@ -183,7 +263,7 @@ namespace bliss
        * @param _dst  destination of the message
        */
       DataMessageToSend(BufferPtrType _ptr, int _tag, int _dst)
-        : MPIMessage(_tag, _dst), ptr(_ptr) {}
+        : MPIMessage(_tag, _dst), data(_ptr) {}
 
 
       /// default constructor
@@ -191,6 +271,33 @@ namespace bliss
 
       /// default destructor
       virtual ~DataMessageToSend() {};
+
+      /// get the message's epoch embedded as the first sizeof(uint64_t) bytes.
+      virtual uint64_t getEpoch() {
+        return ((uint64_t*)data)[0];
+      }
+
+
+      /// get pointer to the payload (data + metadata)
+      virtual uint8_t* getPayload() {
+        return (data == nullptr) ? nullptr : data->operator uint8_t*();
+      }
+
+      /// get size in bytes of the payload (data + metadata)
+      virtual size_t getPayloadSize() {
+        return (data == nullptr) ? 0 : data->getSize();
+      }
+
+
+      /// get pointer to data, exclude the metadata portion  (for whole data, access member directly
+      virtual uint8_t* getData() { return (getPayload() == nullptr) ? nullptr : (getPayload() + sizeof(uint64_t)); }
+
+      /// get size of data, exclude the metadata portion
+      virtual size_t getDataSize() { return (data == nullptr) ? 0 : (data->getSize() - sizeof(uint64_t)); }
+
+
+      BufferPtrType& getBuffer() { return data; }
+
     };
 
 

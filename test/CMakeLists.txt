@@ -19,6 +19,11 @@ target_link_libraries(testCommLayer bliss-common)
 #target_link_libraries(testCommLayer_THREADSHARED ${EXTRA_LIBS})
 #target_link_libraries(testCommLayer_THREADSHARED bliss-common)
 
+## EXECUTABLES
+add_executable(testCommLayer_leaky test_commlayer_leakybarrier.cpp)
+target_link_libraries(testCommLayer_leaky ${EXTRA_LIBS})
+target_link_libraries(testCommLayer_leaky bliss-common)
+
 
 ## EXECUTABLES
 add_executable(stressTestCommLayer_sendonly stresstest_commlayer_sendonly.cpp)
