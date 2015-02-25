@@ -140,7 +140,8 @@ void test3() {
     }
     assert(vals.size() == 4);
     std::sort(vals.begin(), vals.end());
-    for (; i < vals.size(); ++i) {
+    int s = vals.size();
+    for (; i < s; ++i) {
       assert(vals[i] == i);
     }
 

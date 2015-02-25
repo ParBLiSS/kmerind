@@ -99,6 +99,7 @@ namespace bliss
 
         /// mutex for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
         mutable std::mutex mutex;
+
         /// spinlock for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
         mutable std::atomic_flag spinlock = ATOMIC_FLAG_INIT;
 
@@ -692,14 +693,14 @@ namespace bliss
           void* output = nullptr;
           unsigned int result = append(_data, count, output);
 
-          // DEBUG ONLY.
-          if (result & 0x1) {
-            if (output == nullptr) {
-              ERRORF("ERROR: successful insert but result pointer is null.");
-            } else if (std::memcmp(_data, output, count) != 0) {
-              ERRORF("ERROR: A successful insert but input not same as what was memcpy'd.");
-            }
-          }
+//          // DEBUG ONLY.
+//          if (result & 0x1) {
+//            if (output == nullptr) {
+//              ERRORF("ERROR: successful insert but result pointer is null.");
+//            } else if (std::memcmp(_data, output, count) != 0) {
+//              ERRORF("ERROR: A successful insert but input not same as what was memcpy'd.");
+//            }
+//          }
 
           return result;
         }
@@ -1129,14 +1130,14 @@ namespace bliss
           void* output = nullptr;
           unsigned int result = append(_data, count, output);
 
-          // DEBUG ONLY
-          if (result & 0x1) {
-            if (output == nullptr) {
-              ERRORF("ERROR: successful insert but result pointer is null.");
-            } else if (std::memcmp(_data, output, count) != 0) {
-              ERRORF("ERROR: B successful insert but input not same as what was memcpy'd.");
-            }
-          }
+//          // DEBUG ONLY
+//          if (result & 0x1) {
+//            if (output == nullptr) {
+//              ERRORF("ERROR: successful insert but result pointer is null.");
+//            } else if (std::memcmp(_data, output, count) != 0) {
+//              ERRORF("ERROR: B successful insert but input not same as what was memcpy'd.");
+//            }
+//          }
 
           return result;
         }

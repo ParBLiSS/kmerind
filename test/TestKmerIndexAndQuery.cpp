@@ -199,7 +199,7 @@ void test(MPI_Comm comm, const std::string & filename, const int nthreads, const
 
   t1 = std::chrono::high_resolution_clock::now();
   // initialize index
-  DEBUGF("RANK %d: ***** initializing %s.", rank, testname);
+  DEBUGF("RANK %d: ***** initializing %s.", rank, testname.c_str());
 
   IndexType kmer_index(comm, nprocs,
                                      std::bind(IndexType::defaultReceiveAnswerCallback,

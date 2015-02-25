@@ -8,8 +8,6 @@
 
 #include <io/communication_layer.hpp>
 
-//#define DEBUG(msg) std::cerr << msg << std::endl;
-
 int my_rank;
 std::atomic<int> msgs_received(0);
 std::atomic<int> lookup_received(0);
