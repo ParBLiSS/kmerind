@@ -73,7 +73,6 @@ struct Tester
 
     int nthreads = numThreads;
     int it = 0;
-    int i = 0;
     for (; it < iters; ++it) {
 
       // R: src rank
@@ -87,7 +86,7 @@ struct Tester
 
       // start sending one message to each:
 #pragma omp parallel for default(none) num_threads(nthreads) shared(els, my_rank, it, stdout)
-      for (i = 0; i < els; ++i)
+      for (int i = 0; i < els; ++i)
       {
         std::vector<int> msgs(commSize);
         for (int j = 0; j < commSize; ++j)
