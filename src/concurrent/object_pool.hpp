@@ -74,7 +74,7 @@ public:
 	/// object type
 	using ObjectType = T;
 
-	/// object pointer type  (prefer shared pointer as c++11 allows atomic operations, but gcc does not support it.
+	/// object pointer type  (prefer shared pointer as c++11 allows atomic operations, however gcc does not support it.)
 	using ObjectPtrType = T*;
 
 	/// type of lock for the pool. (mutex, spinlock,  or none).
@@ -109,20 +109,30 @@ protected:
 
 
 	/// clear all allocated objects.
+	template<bliss::concurrent::LockType LT = LockType,
+		typename std::enable_if<(LT == bliss::concurrent::LockType::MUTEX) ||
+								(LT == bliss::concurrent::LockType::SPINLOCK), int>::type = 0>
 	void clear_storage() {
-		ObjectPtrType ptr;
 		auto entry = available.tryPop();
 		while (entry.first) {
-			delete entry.second;
+			delete entry.second;  // not checking if pointer is null, because what's in available should all be valid.
 			entry = available.tryPop();
 		}
 
-		std::unique_lock<std::mutex> lock(mutex);
-		for (auto ptr : in_use) {
-			delete ptr;
+		if (LT == bliss::concurrent::LockType::MUTEX) {
+			std::lock_guard<std::mutex> lock(mutex);
+			for (auto ptr : in_use) {
+				delete ptr;  // not checking if pointer is null, because what's in available should all be valid.
+			}
+			in_use.clear();
+		} else {
+			while (spinlock.test_and_set());
+			for (auto ptr : in_use) {
+				delete ptr;  // not checking if pointer is null, because what's in available should all be valid.
+			}
+			in_use.clear();
+			spinlock.clear();
 		}
-		in_use.clear();
-		lock.unlock();
 
 		size_in_use.store(0, std::memory_order_release);
 	}
@@ -202,6 +212,8 @@ public:
 	 *            It is envisioned that this function should be called from a single thread.
 	 *            however, care must be taken to ensure that all other threads have completed their work, else data loss is likely.
 	 */
+	template<bliss::concurrent::LockType LT = LockType,
+		typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, int>::type = 0>
 	void reset() {
 		std::lock_guard<std::mutex> lock(mutex);
 
@@ -216,14 +228,31 @@ public:
 	}
 
 
+	template<bliss::concurrent::LockType LT = LockType,
+		typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, int>::type = 0>
+	void reset() {
+		while (spinlock.test_and_set());
+
+		// move all from in_use to available
+		for (auto iter = in_use.begin(); iter != in_use.end(); ++iter) {
+			available.tryPush(*iter);
+		}
+
+		// TODO: clear the objects somehow?
+		in_use.clear();
+		spinlock.clear();
+		size_in_use.store(0, std::memory_order_release);
+	}
+
 	/**
-	 * @brief     Get the next available Object.  Mutex Locked.
+	 * @brief     Get the next available Object.  Mutex or Spin Locked.
 	 * @details   if none available, and size is below capacity or pool is unlimited,
 	 *            a new object is created.
 	 * @return    pointer to acquired object, nullptr if failed.
 	 */
 	template<bliss::concurrent::LockType LT = LockType>
-	typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, ObjectPtrType>::type
+	typename std::enable_if<(LT == bliss::concurrent::LockType::MUTEX) ||
+							(LT == bliss::concurrent::LockType::SPINLOCK), ObjectPtrType>::type
 	tryAcquireObject() {
 
 
@@ -238,6 +267,8 @@ public:
 				ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", prev_size);
 			}
 		} else {
+			// code below uses copy semantics instead of move.  reason is else we could have entries that are null?
+
 		  // try pop one.
 		  auto reuse = available.tryPop();
 
@@ -247,72 +278,29 @@ public:
 		    sptr = reuse.second;
 		  } else {
 		    // available is likely empty. allocate a new one.
-		    sptr = new T();
+		    sptr = new ObjectType();
 		  }
 
 			if (sptr) {
 
-				std::unique_lock<std::mutex> lock(mutex);
-				// save in in_use set.
-				in_use.insert(sptr);  // store the shared pointer.
+				if (LT == bliss::concurrent::LockType::MUTEX) {
+					std::lock_guard<std::mutex> lock(mutex);
+					// save in in_use set.
+					in_use.insert(sptr);  // store copy of shared pointer.
 
-				lock.unlock();
+				} else {
+					while (spinlock.test_and_set());
 
+					// save in in-use set.
+					in_use.insert(sptr);  // store the shared pointer.
+
+					spinlock.clear();
+				}
 			}
 		}
 
-		return sptr;
+		return sptr;  // return a copy of shared pointer.
 
-	}
-
-	/**
-	 * @brief     Get the next available Object.  spinlocked.
-	 * @details   if none available, and size is below capacity or pool is unlimited,
-	 *            a new object is created.
-	 * @return    pointer to acquired object, nullptr if failed.
-	 */
-	template<bliss::concurrent::LockType LT = LockType>
-	typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, ObjectPtrType>::type
-	tryAcquireObject() {
-
-		ObjectPtrType sptr = nullptr;  // default is a null ptr.
-
-		// okay to add before compare, since object pool is long lasting.
-		int64_t prev_size = size_in_use.fetch_add(1, std::memory_order_relaxed);
-		if (prev_size >= capacity) {
-
-			size_in_use.fetch_sub(1, std::memory_order_relaxed);
-
-			if (this->isUnlimited()) {
-				ERRORF("ERROR: pool is full but should be unlimited. prev size %lu.", prev_size);
-			}
-
-			// leave ptr as nullptr.
-		} else {
-
-      // try pop one.
-      auto reuse = available.tryPop();
-
-      // if successful pop
-      if (reuse.first) {
-        // use it
-        sptr = reuse.second;
-      } else {
-        // available is likely empty. allocate a new one.
-        sptr = new T();
-      }
-
-			if (sptr) {
-				while (spinlock.test_and_set());
-
-				// save in in-use set.
-				in_use.insert(sptr);  // store the shared pointer.
-
-				spinlock.clear();
-			}
-		}
-
-		return sptr;
 	}
 
 
@@ -322,7 +310,8 @@ public:
 	 * @param ptr weak_ptr to object.
 	 */
 	template<bliss::concurrent::LockType LT = LockType>
-	typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type
+	typename std::enable_if<(LT == bliss::concurrent::LockType::MUTEX) ||
+							(LT == bliss::concurrent::LockType::SPINLOCK), bool>::type
 	releaseObject(ObjectPtrType ptr) {
 
 		if (!ptr)
@@ -331,9 +320,16 @@ public:
 			return true;
 		}
 
-		std::unique_lock<std::mutex> lock(mutex);
-		int count = in_use.erase(ptr);
-		lock.unlock();
+		int count = 0;
+		if (LT == bliss::concurrent::LockType::MUTEX) {
+			std::lock_guard<std::mutex> lock(mutex);
+			count = in_use.erase(ptr);
+		} else {
+			while (spinlock.test_and_set());
+			count = in_use.erase(ptr);
+			spinlock.clear();
+
+		}
 
 		bool res = false;
 
@@ -346,38 +342,6 @@ public:
 		return res;
 	}
 
-
-	/**
-	 * @brief     Release a buffer back to pool.  Threadsafe via spinlock
-	 * @details   clears object before release back into available.
-	 * @param ptr weak_ptr to object.
-	 */
-	template<bliss::concurrent::LockType LT = LockType>
-	typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, bool>::type
-	releaseObject(ObjectPtrType ptr) {
-
-		if (!ptr)
-		{
-			WARNINGF("WARNING: pool releasing a nullptr.");
-			return true;
-		}
-
-		while (spinlock.test_and_set());
-		int count = in_use.erase(ptr);
-		spinlock.clear();
-
-		bool res = false;
-
-		if (count > 0) { // only put object back in available queue if it was in use.
-			// now make object available.  make sure push_back is done one thread at a time.
-			res = available.tryPush(ptr);
-			size_in_use.fetch_sub(count, std::memory_order_release);
-
-		} // else return false.
-
-		return res;
-
-	}
 };
 
 /**
@@ -456,7 +420,7 @@ protected:
 
 	/// clear all allocated objects.
 	void clear_storage() {
-		ObjectPtrType ptr;
+
 		auto entry = available.tryPop();
 		while (entry.first) {
 			delete entry.second;
@@ -614,7 +578,7 @@ public:
         sptr = reuse.second;
       } else {
         // available is likely empty. allocate a new one.
-        sptr = new T();
+        sptr = new ObjectType();
       }
 
 			if (sptr) {
@@ -633,6 +597,8 @@ public:
 	 * @details   clears object before release back into available.
 	 * 				the ptr is checked against the thread's in-use set only.
 	 * 				if the wrong thread releases the ptr, it will fail with false.
+	 *
+	 * 				a buffer may be returned by a different thread.
 	 * @param ptr  ptr to object.
 	 * @param thread_id  id of thread to release object into.  -1 implies current omp thread.
 	 * @return		true if sucessful release. note if wrong thread releases then false is returned.
@@ -836,7 +802,7 @@ public:
 
 				// none available for reuse
 				// but has room to allocate, so do it.
-				sptr = new T();
+				sptr = new ObjectType();
 			}  else {
 				// else already nullptr.
 				if (this->isUnlimited()) {
