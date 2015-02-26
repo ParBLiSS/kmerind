@@ -146,6 +146,7 @@ namespace bliss
         virtual ~Buffer()
         {
           block_and_flush();
+          delete [] start_ptr;
         }
 
         /**
@@ -305,7 +306,7 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_writing() const
         {
           std::lock_guard<std::mutex> lock(mutex);
-          return written < size;
+          return written < size;  // reserved > written if is writing. but reserve can increase while buffer is unblocked.
         }
 
         /// check if the buffer is blocked from further writes and no threads need to write to it.  uses mutex
@@ -803,6 +804,7 @@ namespace bliss
         virtual ~Buffer()
         {
           block_and_flush();
+          delete [] start_ptr;
         }
 
         /**
@@ -1257,6 +1259,7 @@ namespace bliss
         virtual ~Buffer()
         {
           block_and_flush();
+          delete [] start_ptr;
         }
 
         /**
