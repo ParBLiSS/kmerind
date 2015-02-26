@@ -147,7 +147,6 @@ struct Tester
 
     int nthreads = numThreads;
     int it = 0;
-    int i = 0;
     for (; it < iters; ++it) {
 
         // R: src rank
@@ -162,7 +161,7 @@ struct Tester
 
         // start sending one message to each:
   #pragma omp parallel for default(none) num_threads(nthreads) shared(els, my_rank, it, stdout)
-        for (i = 0; i < els; ++i)
+        for (int i = 0; i < els; ++i)
         {
           int msg;
           for (int j = 0; j < commSize; ++j)
@@ -193,7 +192,8 @@ struct Tester
   //      msgs_received.store(0);
       }
 
-      assert(buildphase.exchange(false, std::memory_order_relaxed));
+      bool r = buildphase.exchange(false, std::memory_order_relaxed);
+      assert(r);
       INFOF("M R %d, SEND DONE. ", commRank);
 //      commLayer.finishCommunication2();
 
@@ -202,11 +202,10 @@ struct Tester
 //      commLayer.initCommunication2();
 
       it = 0;
-      i = 0;
       for (; it < iters; ++it) {
         // sending one message to each:
     #pragma omp parallel for default(none) num_threads(nthreads) shared(els, my_rank, it, after, stdout)
-        for (i = 0; i < els; ++i)
+        for (int i = 0; i < els; ++i)
         {
           int msg;
           for (int j = 0; j < commSize; ++j)
