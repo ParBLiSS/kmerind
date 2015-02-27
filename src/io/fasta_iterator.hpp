@@ -45,6 +45,9 @@ namespace bliss
 {
   namespace io
   {
+    //dummy struct to indicate FASTA format
+    struct FASTA {};
+
      /**
      * @class     bliss::io::FASTAParser
      * @brief     The purpose of this class is to expose an iterator to parse 
@@ -96,8 +99,13 @@ namespace bliss
 
         //Filter iterator over the zip iterator 
         typedef typename std::iterator_traits<the_offset_rawkmer_zip>::value_type the_offset_rawkmer_zip_valueType;
+
+      public:
+        //Corrected final zip iterator of Kmer and Offset value
         typedef boost::filter_iterator <std::function <bool(the_offset_rawkmer_zip_valueType) >, the_offset_rawkmer_zip>
           corrected_offset_Kmer_zip;
+
+      protected:
 
         //Vector containing positions of fasta record start
         typedef typename FASTALoader<Iterator,KmerType>::vectorType vectorType;
@@ -260,12 +268,12 @@ namespace bliss
           return idSeqZipEndCorrect;
         }
 
-        offSetType getOffset(corrected_offset_Kmer_zip &e)
+        offSetType getOffset(const corrected_offset_Kmer_zip &e)
         {
           return boost::get<0>(*e);
         }
 
-        KmerType getKmer(corrected_offset_Kmer_zip &e)
+        KmerType getKmer(const corrected_offset_Kmer_zip &e)
         {
           return boost::get<1>(*e);
         }

@@ -108,7 +108,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks)
   RangeType r = d.getRange();
 
   //Get the vector of fasta headers from FASTA Loader
-  FASTALoaderType obj;
+  FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
   ASSERT_LT(0 , vectorReturned.size());
 
@@ -180,7 +180,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiProc)
   RangeType r = d.getRange();
 
   //Get the vector of fasta headers from FASTA Loader
-  FASTALoaderType obj;
+  FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
   ASSERT_LT(0 , vectorReturned.size());
 
@@ -252,7 +252,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiThreaded_L2DemandPartition)
   RangeType r = d.getRange();
 
   //Get the vector of fasta headers from FASTA Loader
-  FASTALoaderType obj;
+  FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
 
 #ifdef USE_MPI
@@ -359,7 +359,7 @@ TYPED_TEST_P(FASTAIteratorTest, BufferingChunks_MultiThreaded_L2BlockPartition)
   RangeType r = d.getRange();
 
   //Get the vector of fasta headers from FASTA Loader
-  FASTALoaderType obj;
+  FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
 
 #ifdef USE_MPI

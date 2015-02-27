@@ -56,6 +56,16 @@ namespace bliss
         typedef std::size_t  offSetType;
         typedef std::vector <std::pair<offSetType, offSetType>>   vectorType;
 
+        /// MPI communicator used by fasta loader.
+        MPI_Comm comm;
+
+        /**
+         * @brief   Constructor of this class
+         */
+        FASTALoader(const MPI_Comm& _comm)
+          : comm(_comm)
+        {}
+
       protected:
         /**
          * @brief  search for first EOL character in a iterator.
@@ -87,8 +97,8 @@ namespace bliss
         void MPICommForward(type *sendInfo, type *recvInfo, MPI_Datatype datatype) const
         {
             int noProcs, myRank;
-            MPI_Comm_size(MPI_COMM_WORLD, &noProcs); 
-            MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
+            MPI_Comm_size(comm, &noProcs); 
+            MPI_Comm_rank(comm, &myRank);
             MPI_Request request_send, request_recv; 
 
             //2.1 To fetch and store the information if we have to resolve previous block's broken header problem
@@ -96,13 +106,13 @@ namespace bliss
             {
               const int rank_dest = myRank + 1;
               const int msg_tag_send = 1000 + rank_dest;
-              MPI_Isend(const_cast<type *>(sendInfo), 1, datatype, rank_dest, msg_tag_send, MPI_COMM_WORLD, &request_send);
+              MPI_Isend(const_cast<type *>(sendInfo), 1, datatype, rank_dest, msg_tag_send, comm, &request_send);
             }
             if (myRank > 0)
             {
               const int rank_src = myRank - 1;
               const int msg_tag_recv = 1000 + myRank;
-              MPI_Irecv(recvInfo, 1, datatype, rank_src, msg_tag_recv, MPI_COMM_WORLD, &request_recv);
+              MPI_Irecv(recvInfo, 1, datatype, rank_src, msg_tag_recv, comm, &request_recv);
             }
             MPI_Status stat;   
             if (myRank < noProcs - 1) MPI_Wait(&request_send, &stat);
@@ -124,8 +134,8 @@ namespace bliss
         void MPICommBackward(const type *sendInfo, type *recvInfo, MPI_Datatype datatype) const
         {
             int noProcs, myRank;
-            MPI_Comm_size(MPI_COMM_WORLD, &noProcs); 
-            MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
+            MPI_Comm_size(comm, &noProcs); 
+            MPI_Comm_rank(comm, &myRank);
             MPI_Request request_send, request_recv; 
 
             //2.1 To fetch and store the information if we have to resolve previous block's broken header problem
@@ -133,13 +143,13 @@ namespace bliss
             {
               const int rank_dest = myRank - 1;
               const int msg_tag_send = 1000 + rank_dest;
-              MPI_Isend(const_cast<type *>(sendInfo), 1, datatype, rank_dest, msg_tag_send, MPI_COMM_WORLD, &request_send);
+              MPI_Isend(const_cast<type *>(sendInfo), 1, datatype, rank_dest, msg_tag_send, comm, &request_send);
             }
             if (myRank < noProcs - 1)
             {
               const int rank_src = myRank + 1;
               const int msg_tag_recv = 1000 + myRank;
-              MPI_Irecv(recvInfo, 1, datatype, rank_src, msg_tag_recv, MPI_COMM_WORLD, &request_recv);
+              MPI_Irecv(recvInfo, 1, datatype, rank_src, msg_tag_recv, comm, &request_recv);
             }
             MPI_Status stat;   
             if (myRank > 0) MPI_Wait(&request_send, &stat);
@@ -150,6 +160,7 @@ namespace bliss
       public:
         /**
          * @brief   Keep track of all '>' and the following EOL character to save the positions of the fasta record headers for each fasta record in the local block
+         * @attention   This function should be called by all the MPI ranks in MPI communicator
          * @tparam      Iterator      type of iterator for data to traverse.  raw pointer if no L2Buffering, or vector's iterator if buffering.
          * @param[in]   _data         start of iterator.
          * @param[in]   parentRange   the "full" range to which the inMemRange belongs.  used to determine if the target is a "first" block and last block.  has to start and end with valid delimiters (@)
@@ -158,7 +169,6 @@ namespace bliss
          * @param[out]  localStartLocStore  vector of positions of the fasta sequence headers.
          *              Each pair in the vector represents the position of '>' and '\n' in the fasta record header
          */
-
         void countSequenceStarts(const Iterator _data, const RangeType &parentRange, const RangeType &searchRange, vectorType &localStartLocStore) const
           throw (bliss::io::IOException) {
 
@@ -221,7 +231,7 @@ namespace bliss
             offSetType localMaximum = localStartLocStore.back().first;
             offSetType newFirstStartLocation;
 
-            MPI_Exscan(&localMaximum, &newFirstStartLocation, 1, boost::mpi::get_mpi_datatype(newFirstStartLocation), MPI_MAX, MPI_COMM_WORLD);
+            MPI_Exscan(&localMaximum, &newFirstStartLocation, 1, boost::mpi::get_mpi_datatype(newFirstStartLocation), MPI_MAX, comm);
 
             //Update the first starting location (first element in the pair)
             if (changeFirstStartLocation == true)
@@ -255,7 +265,7 @@ namespace bliss
 
             offSetType newFirstHeaderEndLocation;
 
-            MPI_Exscan(&localMaximum, &newFirstHeaderEndLocation, 1, boost::mpi::get_mpi_datatype(newFirstHeaderEndLocation), MPI_MAX, MPI_COMM_WORLD);
+            MPI_Exscan(&localMaximum, &newFirstHeaderEndLocation, 1, boost::mpi::get_mpi_datatype(newFirstHeaderEndLocation), MPI_MAX, comm);
 
             //Update the first starting location (first element in the pair)
             if (changeFirstStartLocation == true)

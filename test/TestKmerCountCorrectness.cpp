@@ -28,36 +28,49 @@
 
 using namespace std::placeholders;   // for _1, _2, _3
 
-//Code snippet to execute bash command and return the result
-/*std::string exec(char* cmd) {*/
-  //FILE* pipe = popen(cmd, "r");
-  //if (!pipe) return "ERROR";
-  //char buffer[8];
-  //std::string result = "";
-  //while(!feof(pipe)) {
-    //if(fgets(buffer, 8, pipe) != NULL)
-      //result += buffer;
-  //}
-  //pclose(pipe);
-  //return result;
-/*}*/
-
 /**
- * @param filename  File with space seperated frequency and counts
+ * @brief returns the histogram of kmer frequencies without using Bliss
+ * @details If v is the vector returned, v[i] denotes the count of unique
+ *          kmers which have frequence i. v[0] = 0
  */
-std::map<int, int> buildHistogramfromFile(std::string filename)
+std::vector<int> sequentialbuildHistogram(std::string filename, int kmerLength)
 {
-  std::map<int, int> histoMap;
-
+  //Assuming the given fastq file is well-structured
   std::ifstream infile(filename);
-  int freq, count;
+  std::string ignore, read;
+  std::vector<std::string> kmerVectorWithDuplicates;
 
-  while (infile >> freq >> count)
+  //Process the file
+  while (infile >> ignore >> read >> ignore >> ignore)
   {
-    histoMap.insert(std::make_pair(freq, count));
+    //Process this read
+    for(unsigned int i= 0; i < read.size() - (unsigned)kmerLength + 1; i++)
+      kmerVectorWithDuplicates.push_back(read.substr(i, kmerLength));
   }
 
-  return histoMap;
+  std::sort(begin(kmerVectorWithDuplicates), end(kmerVectorWithDuplicates));
+  std::vector<int> allFrequenciesUniqueKmers;
+
+  for(auto i= begin(kmerVectorWithDuplicates) ; i != end(kmerVectorWithDuplicates);)
+  {
+    auto r = std::equal_range(i, end(kmerVectorWithDuplicates), *i);
+    allFrequenciesUniqueKmers.emplace_back( std::distance(r.first, r.second) );
+    i = r.second;
+  }
+
+  //Build histogram
+  std::sort(begin(allFrequenciesUniqueKmers), end(allFrequenciesUniqueKmers));
+  std::vector<int> histogram;
+
+  histogram.emplace_back(0);
+  for(auto i= begin(allFrequenciesUniqueKmers) ; i != end(allFrequenciesUniqueKmers);)
+  {
+    auto r = std::equal_range(i, end(allFrequenciesUniqueKmers), *i);
+    histogram.emplace_back( std::distance(r.first, r.second) );
+    i = r.second;
+  }
+
+  return histogram;
 }
 
 /**
@@ -97,10 +110,6 @@ int main(int argc, char** argv) {
   std::string filename;
   filename.assign(PROJ_SRC_DIR);
   filename.append("/test/data/natural.fastq");
-
-  std::string solutionFileName;
-  solutionFileName.assign(PROJ_SRC_DIR);
-  solutionFileName.append("/test/data/natural.fastq.jellyFish.histo");
 
   std::cout << "DEBUGGING : " << filename << "\n";
 
@@ -145,7 +154,9 @@ int main(int argc, char** argv) {
   {
   // initialize index
   printf("***** initializing index.\n");
-  typedef bliss::index::KmerCountIndex<21, bliss::common::DNA, bliss::io::FASTQ, true> KmerIndexType;
+
+  const int kmerLength = 21;
+  typedef bliss::index::KmerCountIndex<kmerLength, bliss::common::DNA, bliss::io::FASTQ, true> KmerIndexType;
 
   size_t result = 0, entries = 0;
   KmerIndexType kmer_index(comm, nprocs,
@@ -173,15 +184,17 @@ int main(int argc, char** argv) {
   auto overallHistogram = localIndex.countHistogram();
 
   //Get a map with frequency as key
-  auto solutionHistogram = buildHistogramfromFile(solutionFileName);
+  //auto solutionHistogram = buildHistogramfromFile(solutionFileName);
+  auto ourOwnHistogram = sequentialbuildHistogram(filename, kmerLength);
 
-  //Start checking
-  for(auto& item: solutionHistogram)
-  {
-    assert(overallHistogram[item.first -1]  == item.second);
-    cout << item.first << ":" << item.second << " matches \n";
-  }
+  //for(auto const& e : ourOwnHistogram) std::cout << e << "; "; std::cout << "\n";
+  //for(auto const& e : overallHistogram) std::cout << e << "; "; std::cout << "\n";
+
+  assert(ourOwnHistogram.size() == overallHistogram.size());
+  bool is_equal = std::equal(overallHistogram.begin(), overallHistogram.end(), ourOwnHistogram.begin());
   
+  assert(is_equal == true);
+
   MPI_Barrier(comm);
 
   }

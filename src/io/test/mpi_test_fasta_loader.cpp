@@ -96,7 +96,7 @@ TYPED_TEST_P(FASTALoaderTest, OpenWithRange)
 
   typename FASTALoaderType::vectorType vectorReturned;
 
-  FASTALoaderType obj;
+  FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
   ASSERT_LT(0 , vectorReturned.size());
 }
