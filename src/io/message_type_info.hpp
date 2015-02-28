@@ -50,7 +50,7 @@ namespace bliss
         /// indicates that a Tag (message type) is finished and no future messages will be of this type
         std::atomic<bool>         finished;  // do we need this?
 
-        /// id of the next Epoch
+        /// tag == message type
         int tag;
 
         /// deleted copy constructor
@@ -100,7 +100,7 @@ namespace bliss
         }
 
         /// get the Message Buffers class associated with this message type.
-        std::shared_ptr<MessageBuffersType> getBuffer() {
+        std::shared_ptr<MessageBuffersType> getBuffers() {
           return std::shared_ptr<MessageBuffersType>(bufferPtr);
         }
 

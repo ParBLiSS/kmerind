@@ -270,8 +270,10 @@ class CommunicationLayer
 	 static_assert(ThreadLocal, "Communication Layer only supports ThreadLocal mode. (template param set to true)");
 
 protected:
+	 // set pool locktype to mutex - for testing with thread sanitizer (suspect spinlock does not work with threadsanitizer well.)
    /// alias MessageBuffersType to Use the thread safe version of the SendMessageBuffers
    using MessageBuffersType = SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, bliss::concurrent::LockType::SPINLOCK, bliss::concurrent::LockType::NONE, 8192>;
+
 
    /// alias BufferPoolType to MessageBuffersType's
    using BufferPoolType = typename MessageBuffersType::BufferPoolType;
@@ -452,7 +454,8 @@ protected:
            // ControlMessage ownership is maintained by el.
            ControlMessage* se = dynamic_cast<ControlMessage*>(ptr.get());  // MPIMessage*
 
-           DEBUGF("C SEND %d -> %d, termination signal for tag %d epoch %lu, next epoch %lu, sendInProgress size %lu", commRank, se->getRank(), se->getTag(), se->getEpoch(), se->getNextEpoch(), sendInProgress.size());
+           DEBUGF("C R %d -> %d SEND CONTROL for tag %d epoch %lu, next epoch %lu, sendInProgress size %lu",
+                 commRank, se->getRank(), se->getTag(), se->getEpoch(), se->getNextEpoch(), sendInProgress.size());
 
            // send termination message for this tag and destination
 //           if (se->rank == commRank) {
@@ -477,11 +480,14 @@ protected:
            if (se->getRank() == MPIMessage::ALL_RANKS) {
              int r = commRank;
              for (int i = 0; i < commSize; ++i) {
-               r = (r+ i) % commSize;
+               r = (r + 1) % commSize;
                MPI_Bsend(se->getData(), se->getDataSize(), MPI_UNSIGNED_CHAR, r, CONTROL_TAG, comm);
+
+               DEBUGF("C R %d -> %d Send Control for epoch %lu, nextEpoch %lu", commRank, r, se->getEpoch(), se->getNextEpoch());
              }
            } else {
              MPI_Bsend(se->getData(), se->getDataSize(), MPI_UNSIGNED_CHAR, se->getRank(), CONTROL_TAG, comm);
+             DEBUGF("C R %d -> %d Send single Control for epoch %lu, nextEpoch %lu", commRank, se->getRank(), se->getEpoch(), se->getNextEpoch());
            }
 
 //             // instead of Bsend, push into sendInProgress, and then there, do barrier.
@@ -496,7 +502,7 @@ protected:
            SendDataElementType* se = dynamic_cast<SendDataElementType*>(ptr.get());  // MPIMessage*
 
            // get message data and it's size
-           size_t count = se->getPayloadSize();
+           size_t count = se->getDataSize();
 
            if (count > 0) {
 
@@ -520,12 +526,12 @@ protected:
 //               recvInProgress.push_back(std::move(pair));
 //
 //               // finished inserting directly to local RecvInProgress.  release the buffer (since we have a copy)
-//               commLayer.getTagInfo(se->tag).getBuffer()->releaseBuffer(std::move(se->ptr));
+//               commLayer.getTagInfo(se->tag).getBuffers()->releaseBuffer(std::move(se->ptr));
 //             } else {
 
                // remote: initiate async MPI message
                MPI_Request req;
-               MPI_Isend(se->getPayload(), count, MPI_UNSIGNED_CHAR, se->getRank(), se->getTag(), comm, &req);
+               MPI_Isend(se->getPayload(), se->getPayloadSize(), MPI_UNSIGNED_CHAR, se->getRank(), se->getTag(), comm, &req);
 
                auto pair = std::make_pair(std::move(req), std::move(ptr));
                assert(ptr.get() == nullptr);
@@ -562,11 +568,10 @@ protected:
          //if (commSize > 1)  // iprobe checks low rank first.
          // MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
          int srcRank = lastSrcRank;
-         while (hasMessage == 0) {
+         do {
            MPI_Iprobe(srcRank, MPI_ANY_TAG, comm, &hasMessage, &status);  // fair probe.
            srcRank = (srcRank + 1) % commSize;
-           if (srcRank == lastSrcRank) break;
-         }
+         } while ((hasMessage == 0) && (srcRank != lastSrcRank));
          lastSrcRank = srcRank;
 
          // if have message to receive,
@@ -589,7 +594,9 @@ protected:
              // FOC messages and count decrement.
              MPI_Irecv(msg->getData(), received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
 
-             DEBUGF("C R %d RECEIVED CONTROL\ttag %d, epoch %lu, next epoch %lu. recvInProgress size %lu", commRank, msg->getTag(), msg->getEpoch(),msg->getNextEpoch(), recvInProgress.size());
+             DEBUGF("C R %d <- %d RECEIVING CONTROL\ttag %d, epoch %lu, next epoch %lu. recvInProgress size %lu", 
+                      commRank, src, msg->getTag(), msg->getEpoch(),msg->getNextEpoch(), recvInProgress.size());
+             fflush(stdout);
 
              // insert into the received InProgress queue.
              recvInProgress.push_back(std::move(std::make_pair(std::move(req), std::move(msg))));
@@ -605,7 +612,7 @@ protected:
 
              MPI_Irecv(msg_data, received_count, MPI_UNSIGNED_CHAR, src, tag, comm, &req);
 
-             DEBUGF("C R %d RECEIVED DATA\ttag %d from src rank %d", commRank, tag, src);
+             DEBUGF("C R %d <- %d RECEIVING DATA\ttag %d", commRank, src, tag);
 
              // insert into the received InProgress queue.
              recvInProgress.push_back(std::move(std::make_pair(std::move(req), std::move(msg))));
@@ -652,12 +659,12 @@ protected:
            {
              // if there is a buffer, then release it.
              if (sendInProgress.front().second->getTag() != CONTROL_TAG) {
-               DEBUGF("R %d FINISHED SEND for tag %d, sendInProgress size %lu", commRank, sendInProgress.front().second->getTag(), sendInProgress.size());
+               DEBUGF("R %d FINISHED SEND DATA for tag %d, sendInProgress size %lu", commRank, sendInProgress.front().second->getTag(), sendInProgress.size() - 1);
 
                SendDataElementType* msg = dynamic_cast<SendDataElementType*>(sendInProgress.front().second.get());
                if (msg->getBuffer()) {
                  // cleanup, i.e., release the buffer back into the pool
-                 commLayer.getTagInfo(msg->getTag()).getBuffer()->releaseBuffer(std::move(msg->getBuffer()));
+                 commLayer.getTagInfo(msg->getTag()).getBuffers()->releaseBuffer(std::move(msg->getBuffer()));
                }
 //             }  else {
 //               ControlMessage* msg = dynamic_cast<ControlMessage*>(sendInProgress.front().second.get());
@@ -666,7 +673,12 @@ protected:
 //               MPI_Barrier(comm);
 //               recvInProgress.push_back(std::move(sendInProgress.front()));
 
-             } // control tag, and mpi send finished, so nothing to clean up.
+             } else { // control tag, and mpi send finished, so nothing to clean up.
+               DEBUGF("R %d FINISHED SEND CONTROL for tag %d epoch %lu, sendInProgress size %lu", commRank,
+            		   sendInProgress.front().second->getTag(),
+            		   sendInProgress.front().second->getEpoch(),
+            		   sendInProgress.size() - 1);
+             }
 
              // remove the entry from the in-progress queue.  object destruction will clean up data associated with tthe pointer.
              sendInProgress.pop_front();
@@ -734,21 +746,34 @@ protected:
              // if it's a control message, then count down
              if (front.second.get()->getTag() == CONTROL_TAG)  {
 
+            	 DEBUGF("B R %d <- %d CONTROL %d epoch %lu",
+            			 commLayer.commRank, front.second.get()->getRank(), front.second.get()->getTag(),
+            			 front.second.get()->getEpoch());
+
                // get the control message
                ControlMessage* msg = dynamic_cast<ControlMessage*>(front.second.get());
+          	 DEBUGF("B R %d <- %d CONTROL cast %d epoch %lu, nextEpoch %lu",
+          			 commLayer.commRank, msg->getRank(), msg->getTag(),
+          			 msg->getEpoch(), msg->getNextEpoch());
 
                // counts down.  note that if this is a new epoch, a new entry will be created and activeEpochCount will be incremented.
                int v = commLayer.epochProperties.countdownEpoch(msg->getEpoch(), std::ref(commLayer.activeEpochCount));
                //   doing it this way means we can process the received request right away (in message recv order)
 
+            	 DEBUGF("B R %d <- %d CONTROL countdown %d epoch %lu, nextEpoch %lu, count %d",
+            			 commLayer.commRank, msg->getRank(), msg->getTag(),
+            			 msg->getEpoch(), msg->getNextEpoch(), v);
+
                //== if after countdown the count is 0 for the epoch, then the TaggedEpoch is done. enqueue a message for Callback Thread.
                if (v == 0) {
+
+                   DEBUGF("FINISHING RECV CONTROL for tag %d, epoch %lu, next epoch %lu, recvInProgress size %lu", msg->getTag(), msg->getEpoch(), msg->getNextEpoch(), recvInProgress.size());
 
                  // and enqueue ONE FOC message for this tag to be handled by callback.  (reduction from commSize to 1)
                  if (!commLayer.recvQueue.waitAndPush(std::move(front.second)).first) {
                    throw bliss::io::IOException("C ERROR: recvQueue is not accepting new receivedMessage due to disablePush");
                  }
-                   DEBUGF("FINISH RECV FOR FLUSH for tag %d, epoch %lu, next epoch %lu, recvInProgress size %lu", msg->getTag(), msg->getEpoch(), msg->getNextEpoch(), recvInProgress.size());
+                 DEBUGF("FINISHED RECV CONTROL for tag %d, epoch %lu, next epoch %lu, recvInProgress size %lu", msg->getTag(), msg->getEpoch(), msg->getNextEpoch(), recvInProgress.size());
 
                } else if (v < 0) {
                  // count decremented to negative.  should not happen.  throw exception.
@@ -761,7 +786,7 @@ protected:
                worked = true;
 
              } else {  // data message
-               DEBUGF("R %d FINISHED RECV for tag %d, recvInProgress size %lu", commRank, front.second->getTag(), recvInProgress.size());
+               DEBUGF("R %d FINISHED RECV DATA for tag %d epoch %lu, recvInProgress size %lu", commRank, front.second->getTag(), front.second->getEpoch(), recvInProgress.size());
 
                //==== Data message.  add the received messages into the recvQueue
                if (!commLayer.recvQueue.waitAndPush(std::move(front.second)).first) {
@@ -806,7 +831,7 @@ protected:
        /// constructor
         CallbackThread(CommunicationLayer& _comm_layer) :
           commLayer(_comm_layer), callbackFunctions(),
-          td(), currEpoch(0) {
+          td(), currRecvEpoch(0) {
 
         };
         /// disabled default constructor
@@ -819,7 +844,7 @@ protected:
 
         /// starts running th thread.
         void start(uint64_t epoch) {
-          currEpoch = epoch;
+          currRecvEpoch = epoch;
           if (!td.joinable()) td = std::move(std::thread(&bliss::io::CommunicationLayer<ThreadLocal>::CallbackThread::run, this));
         }
 
@@ -882,7 +907,7 @@ protected:
         std::thread td;
 
         /// current epoch of the callback thread - updated on control message receipt.
-        uint64_t currEpoch;
+        uint64_t currRecvEpoch;
 
         /**
          * @brief The function for the dedicated callback-handler thread.
@@ -912,38 +937,46 @@ protected:
               break;
             }
 
-            if (!entry.second) continue;
+            if (!entry.second) {
+            	ERRORF("B R %d received a message with no payload.", commLayer.commRank);
+
+            	continue;
+            }
 
             // if the message is a control message (enqueued ONE into RecvQueue only after all control messages
             //  for a tag have been received.)
             if (entry.second->getTag() == CONTROL_TAG) {   // Control message
 
               ControlMessage* msg = dynamic_cast<ControlMessage*>(entry.second.get());
-              DEBUGF("B rank %d tag %d epoch %lu control message, nextEpoch %lu", commLayer.commRank, msg->getTag(), msg->getEpoch(), msg->getNextEpoch());
+              DEBUGF("B R %d tag %d epoch %lu control message, nextEpoch %lu",
+                       commLayer.commRank, msg->getTag(), msg->getEpoch(), msg->getNextEpoch());
 
               if (!msg) continue;
 
               // here only when all ctrlMsg for the tagged_epoch are received and the flush/finish is complete.
 
               // move to the next epoch.
-              currEpoch = msg->getNextEpoch();
+              currRecvEpoch = msg->getNextEpoch();
 
               // now release the epoch to unblock the corresponding waitForControlMessage.
               commLayer.epochProperties.releaseEpoch(msg->getEpoch(), std::ref(commLayer.activeEpochCount));
 
-              DEBUGF("B rank %d tag %d epoch %lu next epoch %lu notified all.", commLayer.commRank, msg->getTag(), msg->getEpoch(), msg->getNextEpoch());
+              DEBUGF("B R %d tag %d epoch %lu next epoch %lu notified all.", commLayer.commRank, msg->getTag(), msg->getEpoch(), msg->getNextEpoch());
 
             } else {
               // data message.  process it.  msg owns data now.
               DataMessageReceived* msg = dynamic_cast<DataMessageReceived*>(entry.second.get());
-              //DEBUGF("B rank %d tag %d epoch %lu data message", commLayer.commRank, msg->getTag(), msg->getEpoch());
+              //DEBUGF("B R %d tag %d epoch %lu data message", commLayer.commRank, msg->getTag(), msg->getEpoch());
 
               if (msg) {
-                if (msg->getEpoch() <= currEpoch) {  // current epoch message, so process it.
+                if (msg->getEpoch() <= currRecvEpoch) {  // current epoch message, so process it.
 
                   (callbackFunctions.at(msg->getTag()))(msg->getData(), msg->getDataSize(), msg->getRank());
                 } else {  // else a future epoch message.  put it back.
-                  commLayer.recvQueue.waitAndPush(std::move(entry.second));
+                    commLayer.recvQueue.waitAndPush(std::move(entry.second));
+                  DEBUGF("B R %d <- %d, tag %d epoch %lu data message pushed back to queue.  currRecvEpoch = %lu",
+                         commLayer.commRank, msg->getRank(), msg->getTag(), msg->getEpoch(), currRecvEpoch);
+
                 }
               }
               // using unique_ptr in control message, don't need to delete msg data.
@@ -1035,28 +1068,40 @@ public:
 
     //== try to append the new data - repeat until successful.
     // along the way, if a full buffer's id is returned, queue it for sendQueue.
-    bool suc;
-    BufferPtrType ptr;
+    bool suc = false;
+    BufferPtrType ptr = nullptr;
     std::shared_ptr<MessageBuffersType> tptr;
 
     int i = 0;
     do {
       // try gappend.  append fails if there is no buffer or no room
-      tptr = taginfo.getBuffer();
-      std::tie(suc, ptr) = tptr->append(data, nbytes, dst_rank);
+      tptr = taginfo.getBuffers();
+      auto res = std::move(tptr->append(data, nbytes, dst_rank));
+      suc = res.first;
+
       ++i;
 
-      if (ptr) {        // have a full buffer.  implies !result.first
+      if (res.second) {        // have a full buffer.  implies !result.first
         // verify that the buffer is not empty (may change because of threading)
-        if (!(ptr->isEmpty())) {
+    	size_t bufSize = res.second->getSize();
+    	size_t cap = res.second->getCapacity();
+
+        if (bufSize <= cap) {
           // have a non-empty buffer - put in send queue.
-          std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(ptr), tag, dst_rank));
+          std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(res.second), tag, dst_rank));
+
+          msg->setEpoch(currEpoch.load(std::memory_order_relaxed));
+          INFOF("W set msg epoch to %lu, curr %lu", msg->getEpoch(), currEpoch.load(std::memory_order_relaxed));
 
           if (!sendQueue.waitAndPush(std::move(msg)).first) {
-            ERROR("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
+            ERRORF("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
             throw bliss::io::IOException("W ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
           } // else successfully pushed into sendQueue.
-        }  // else empty buffer
+        } else if (bufSize > cap) {
+        	ERRORF("R %d T %d buffer not finished writing.  should not get here.  Buffer should not have returned from append", commRank, omp_get_thread_num());
+        } else {// else empty buffer. shared_ptr handles clean up.
+        	ERRORF("R %d T %d empty buffer.  should not get here.  Buffer should have returned a nullptr and commlayer checked earlier.", commRank, omp_get_thread_num());
+        }
 
       } // else don't have a full buffer.
 
@@ -1107,7 +1152,7 @@ public:
       ctrlMsgProperties.resize(2 * tag);
     }
     ctrlMsgProperties[tag] = new MessageInfo(tag,
-                                             std::shared_ptr<MessageBuffersType>(new MessageBuffersType(commSize, currEpoch, numSrcThreads)));
+                                             std::shared_ptr<MessageBuffersType>(new MessageBuffersType(commSize, numSrcThreads)));
 
     // now add the callback to callback thread.
     callbackThread.addReceiveCallback(tag, callbackFunction);
@@ -1142,19 +1187,19 @@ public:
       throw std::logic_error("M ERROR flush called after finishCommunication");
     }
 
-    MessageInfo& taginfo = getTagInfo(tag);
+//    MessageInfo& taginfo = getTagInfo(tag);
+//
+//    //== check to see if the target tag is still accepting
+//    if (taginfo.isFinished()) {
+//      throw std::invalid_argument("M ERROR tag not registered, or already finished. cannot FLUSH");
+//    }
 
-    //== check to see if the target tag is still accepting
-    if (taginfo.isFinished()) {
-      throw std::invalid_argument("M ERROR tag not registered, or already finished. cannot FLUSH");
-    }
-
-    DEBUGF("M R %d,\t,\t,\t,\tt %d\tFLUSH BUFFERS", commRank, tag);
+    DEBUGF("M R %d,\t,\t,\t,\tt %d,\tFLUSH BUFFERS", commRank, tag);
 
     uint64_t ce = MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed);
 
     // flush all data buffers (put them into send queue)
-    flushBuffers(tag, ce);
+    flushBuffers(tag);
 
     // send the control message - generates an unique epoch for the tag as well.  (also into the send queue, to maintain ordering)
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
@@ -1187,21 +1232,21 @@ public:
       return;
     }
 
-    // Mark tag as finished in the metadata.
-    MessageInfo& taginfo = getTagInfo(tag);
+//    // Mark tag as finished in the metadata.
+//    MessageInfo& taginfo = getTagInfo(tag);
+//
+//    //== check to see if the target tag is still accepting
+//    if (taginfo.finish()) {
+//      // already finished.  return.
+//      return;
+//    }
 
-    //== check to see if the target tag is still accepting
-    if (taginfo.finish()) {
-      // already finished.  return.
-      return;
-    }
-
-    DEBUGF("M FINISH Rank %d tag %d", commRank, tag);
+    DEBUGF("M R %d tag %d FINISH", commRank, tag);
 
     uint64_t ce = MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed);
 
     // flush all data buffers (put them into send queue)
-    flushBuffers(tag, ce);
+    flushBuffers(tag);
 
     // send the control message - generates an unique epoch for the tag as well.  (also into the send queue, to maintain ordering)
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
@@ -1235,7 +1280,7 @@ public:
     // reserve space
     if (ctrlMsgProperties.size() <= CONTROL_TAG) {
       std::unique_lock<std::recursive_mutex> lock(mutex);
-      ctrlMsgProperties.reserve(CONTROL_TAG * 2);
+      ctrlMsgProperties.reserve(CONTROL_TAG * 2 + 1);
     }
 
 
@@ -1246,7 +1291,7 @@ public:
       std::unique_lock<std::recursive_mutex> lock(mutex);
       //== init with control_tag only.  only 1 thread uses this.
       ctrlMsgProperties[CONTROL_TAG] = new MessageInfo(CONTROL_TAG,
-                                                       std::shared_ptr<MessageBuffersType>(new MessageBuffersType(commSize, CONTROL_TAG_EPOCH, 1)));
+                                                       std::shared_ptr<MessageBuffersType>(new MessageBuffersType(commSize, 1)));
     }
 
     // initialize the epochs
@@ -1254,10 +1299,6 @@ public:
     uint64_t oe = startFirstEpoch(ce);
 
     DEBUGF("R %d initCommunication old epoch %lu, curr epoch %lu", commRank, oe, ce);
- 
-    for (auto el : ctrlMsgProperties) {
-      if (el) el->getBuffer()->reset(ce);
-    }
 
     callbackThread.start(ce);  // uses constructor to pass in the current epoch.
     commThread.start();
@@ -1282,7 +1323,7 @@ public:
 
     if (!initialized.load(std::memory_order_relaxed)) return;
 
-    DEBUGF("M FINISH COMM rank %d", commRank);
+    DEBUGF("M R %d FINISH COMM ", commRank);
 
     std::unique_lock<std::recursive_mutex> lock(mutex);    // ensure a single thread doing this.
 
@@ -1294,10 +1335,10 @@ public:
 
     // send the control message for the final control tag.
     // wait till all control messages have been received (not using MPI_Barrier.  see Rationale.)
-    DEBUGF("M FINISH COMM Rank %d next epoch %lu, waiting for CONTROL messages to complete", commRank, CONTROL_TAG_EPOCH);
+    DEBUGF("M R %d FINISH COMM.  next epoch %lu, waiting for CONTROL messages to complete", commRank, CONTROL_TAG_EPOCH);
     //sendControlMessagesAndWait(CONTROL_TAG, CONTROL_TAG_EPOCH);  // only 1 control message needs to be sent.
     uint64_t oe = finishLastEpoch();
-    DEBUGF("M FINISH COMM Rank %d epoch %lu, finished wait for CONTROL messages", commRank, oe);
+    DEBUGF("M R %d FINISH COMM epoch %lu, finished wait for CONTROL messages", commRank, oe);
 
     deleteTagInfo(CONTROL_TAG);  // delete and set to null
 
@@ -1352,7 +1393,7 @@ protected:
     // and sendControlMessageAndWait.  these should be single threaded, so we don't need a lock here.
 
     if (ctrlMsgProperties[tag] == nullptr) {
-      ERRORF("W ERROR: invalid tag: tag has not been registered %d", tag);
+      ERRORF("W R %d ERROR: invalid tag: tag has not been registered %d", commRank, tag);
       throw std::out_of_range("W invalid tag: tag has not been registered");
     }
     return *(ctrlMsgProperties.at(tag));
@@ -1396,34 +1437,41 @@ protected:
     // queue must be active
     if (!sendQueue.canPush())  throw std::logic_error("M ERROR: sendControlMessagesAndWait already called");
 
+    DEBUGF("M R %d obtain next epoch %lu, next %lu", commRank, currEpoch.load(), next_epoch);
+
     // get a new epoch and exchange it.
 //    uint64_t ce = bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed); // new
     uint64_t oe = currEpoch.exchange(next_epoch, std::memory_order_relaxed);  // old
     // must have previous epoch.
     assert(oe != CONTROL_TAG_EPOCH);
 
+    DEBUGF("M R %d obtained next epoch %lu, next %lu", commRank, currEpoch.load(), next_epoch);
+
     // register it.
     epochProperties.registerEpoch(next_epoch, std::ref(activeEpochCount));
 	  
+    DEBUGF("M R %d registered next epoch %lu, next %lu", commRank, currEpoch.load(), next_epoch);
+
     //=== THEN finish the last epoch
     // create a control message to send to all MPI processes, and queue it.  also notifies callback thread of epoch change.
     std::unique_ptr<ControlMessage> msg(new ControlMessage(oe, next_epoch, MPIMessage::ALL_RANKS));
     if (!sendQueue.waitAndPush(std::move(msg)).first) {
+    	DEBUGF("M R %d inserted new control message for epoch %lu, next epoch %lu", commRank, oe, next_epoch);
       throw std::logic_error("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
     }
 
     //============= now wait for the old epoch to finish.  the next has been set up.
-    DEBUGF("M WAIT Rank %d Waiting for epoch %lu, next %lu, currently flushing", commRank, oe, next_epoch);
-    epochProperties.waitForEpochRelease(oe);
-    DEBUGF("M END WAIT Rank %d Waiting for epoch %lu, next %lu, currently flushing", commRank, oe, next_epoch);
+    DEBUGF("M R %d WAIT for epoch %lu, next %lu, currently flushing", commRank, oe, next_epoch);
+    epochProperties.waitForEpochRelease(oe);  // TODO:  deadlock caused by this not returning/.
+    DEBUGF("M R %d WAITED for epoch %lu, next %lu, currently flushing", commRank, oe, next_epoch);
     // then clean up.
 
     //============= DEBUGGING
-    if (recvQueue.getSize() > 0) {
-      WARNINGF("finished waiting for epoch %lu but recvQueue is not empty - there may be additional messages to be processed. size of recv queue %lu, send queue %lu.\n", oe, recvQueue.getSize(), sendQueue.getSize());
-    }
+//    if (recvQueue.getSize() > 0) {
+//      WARNINGF("R %d finished waiting for epoch %lu.  recvQueue: %lu, sendQueue %lu.\n", commRank, oe, recvQueue.getSize(), sendQueue.getSize());
+//    }
 
-    DEBUGF("M Rank %d received all END message for epoch = %lu, next %lu", commRank, oe, next_epoch);
+    DEBUGF("M R %d <- -1 received all END message for epoch = %lu, next %lu", commRank, oe, next_epoch);
 
     return oe;
   }
@@ -1452,17 +1500,17 @@ protected:
     sendQueue.disablePush();
 
     //============= now wait for the current epoch to finish.  the next has been set up.
-    DEBUGF("M WAIT Rank %d Waiting for epoch %lu, currently flushing", commRank, oe);
+    DEBUGF("M R %d WAIT for epoch %lu, currently flushing", commRank, oe);
     epochProperties.waitForEpochRelease(oe);
-    DEBUGF("M END WAIT Rank %d Waiting for epoch %lu, currently flushing", commRank, oe);
+    DEBUGF("M R %d WAITED for epoch %lu, currently flushing", commRank, oe);
     // then clean up.
 
     //============= DEBUGGING
-    if (recvQueue.getSize() > 0) {
-      WARNINGF("finished waiting for epoch %lu but recvQueue is not empty - there may be additional messages to be processed. size of recv queue %lu, send queue %lu.\n", oe, recvQueue.getSize(), sendQueue.getSize());
-    }
+//    if (recvQueue.getSize() > 0) {
+//        WARNINGF("R %d finished waiting for epoch %lu.  recvQueue: %lu, sendQueue %lu.\n", commRank, oe, recvQueue.getSize(), sendQueue.getSize());
+//    }
 
-    DEBUGF("M Rank %d received all END message for epoch = %lu", commRank, oe);
+    DEBUGF("M R %d <- -1 received all END message for epoch = %lu", commRank, oe);
 
     return oe;
   }
@@ -1538,7 +1586,7 @@ protected:
    * @param next_epoch    The next epoch - new bufers that are swapped in will have this value.  to just flush, pass in the same value
    * @throw bliss::io::IOException
    */
-  void flushBuffers(int tag, uint64_t next_epoch) throw (bliss::io::IOException)
+  void flushBuffers(int tag) throw (bliss::io::IOException)
   {
     assert(initialized.load(std::memory_order_relaxed));
 
@@ -1548,17 +1596,21 @@ protected:
 
     MessageInfo& taginfo = getTagInfo(tag);
 
+    int target_rank = getCommRank();
     for (int i = 0; i < commSize; ++i) {
       // flush buffers in a circular fashion, starting with the next neighbor
-      int target_rank = (i + getCommRank() + 1) % getCommSize();
+      target_rank = (target_rank + 1) % getCommSize();
 
-      auto ptrs = taginfo.getBuffer()->flushBufferForRank(target_rank, next_epoch);  // returns vector of buffer pointers
+      auto ptrs = taginfo.getBuffers()->flushBufferForRank(target_rank);  // returns vector of buffer pointers
       // flush/send all remaining non-empty buffers
       for (auto bufPtr : ptrs) {
         if ((bufPtr) && !(bufPtr->isEmpty())) {
 
           // put all buffers onto sendQueue
           std::unique_ptr<SendDataElementType> msg(new SendDataElementType(std::move(bufPtr), tag, target_rank));
+
+          msg->setEpoch(currEpoch.load(std::memory_order_relaxed));
+          INFOF("W Flush.  epoch set to %lu actual %lu", currEpoch.load(std::memory_order_relaxed), msg->getEpoch());
 
           if (!sendQueue.waitAndPush(std::move(msg)).first) {
             throw bliss::io::IOException("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
@@ -1601,7 +1653,7 @@ protected:
    *  using vector because unordered map requires locking.
    *  vector is allocated so that the tag number directly map to vector index.
    */
-  std::vector< MessageInfo* > ctrlMsgProperties;
+  std::vector< MessageInfo* > ctrlMsgProperties;    // TODO:  replace with vector of MessageBuffers.
   bliss::io::EpochInfo epochProperties;
 
   /// total count of active epochs across all message types

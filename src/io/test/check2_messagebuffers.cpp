@@ -10,14 +10,11 @@
  * TODO add License
  */
 
-// TODO: replace content here to use messagebuffers.
-
 
 #include <unistd.h>  // for usleep
 
 #include "io/message_buffers.hpp"
 #include "concurrent/lockfree_queue.hpp"
-#include "io/message_types.hpp"
 
 #include "omp.h"
 #include <cassert>
@@ -131,7 +128,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   printf("\n");
 
 
-  buffers.reset(bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed));
+  buffers.reset();
 
   printf("TEST all operations together: ");
   int success3 = 0, failure3 = 0, sswap3 = 0, fswap3 = 0, bytes3 = 0, chars3 = 0;
@@ -176,7 +173,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   bool updating = buffers.at(id)->is_writing();
   if (updating) printf("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
 
-  std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id, bliss::io::makeTaggedEpoch(0, bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed)));
+  std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id);
   if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) printf("\nFAIL: expected %d threads have %lu actual.\n", nthreads, finals.size());
   for (auto final : finals) {
     gbytes += (final == nullptr) ? 0 : final->getSize();
@@ -185,11 +182,12 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   finals.clear();
 
   if ((bytes3 + gbytes) != success3 * data.length()) {
-    printf("\nFAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.\n", (bytes3 + gbytes), bytes3, gbytes, (bytes3 + gbytes)/data.length(), success3);
+    printf("\nFAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.\n",
+	 (bytes3 + gbytes), bytes3, gbytes, (bytes3 + gbytes)/data.length(), success3);
   }
 
   //if (count7 != count/data.length()) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
-  finals = buffers.flushBufferForRank(id, bliss::io::makeTaggedEpoch(0, bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed)));
+  finals = buffers.flushBufferForRank(id);
   int gbytes2 = 0;
   for (auto final : finals) {
     gbytes2 += (final == nullptr) ? 0 : final->getSize();
@@ -240,7 +238,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   int i;
   int swap = 0;
 
-  buffers.reset(bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed));
+  buffers.reset();
 
   printf("TEST all operations together: ");
   int bytes= 0;
@@ -275,7 +273,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   bool updating = ptr->is_writing();
   if (updating) printf("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
 
-  std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id, bliss::io::makeTaggedEpoch(0, bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed)));
+  std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id);
   if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) printf("\nFAIL: expected %d threads have %lu actual.\n", nthreads, finals.size());
   for (auto final : finals) {
     gbytes += (final == nullptr) ? 0 : final->getSize();
@@ -288,7 +286,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   }
 
   //if (count7 != count/data.length()) printf("\nFAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
-  finals = buffers.flushBufferForRank(id, bliss::io::makeTaggedEpoch(0, bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed)));
+  finals = buffers.flushBufferForRank(id);
   for (auto final : finals) {
     gbytes2 += (final == nullptr) ? 0 : final->getSize();
     buffers.releaseBuffer(std::move(final));

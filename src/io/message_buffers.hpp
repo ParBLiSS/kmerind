@@ -169,7 +169,7 @@ namespace bliss
         /**
          * @brief Convenience method to release and clear all current Buffers in the pool.
          */
-        virtual void reset(const uint64_t & epoch) = 0;
+        virtual void reset() = 0;
     };
 
 
@@ -741,8 +741,6 @@ namespace bliss
          */
         std::vector< std::vector< BufferPtrTypeInternal > > buffers;
 
-        uint64_t currEpoch;
-
         /// for synchronizing access to buffers (and pool) during construction.
         mutable std::mutex mutex;
       private:
@@ -778,8 +776,8 @@ namespace bliss
          * @param bufferCapacity   The capacity of the individual buffers.  default 8192.
          * @param poolCapacity     The capacity of the pool.  default unbounded.
          */
-        explicit SendMessageBuffers(const int & num_dests, uint64_t curr_epoch, int num_threads = 0) :
-          BaseType(), buffers(), currEpoch(curr_epoch)
+        explicit SendMessageBuffers(const int & num_dests, int num_threads = 0) :
+          BaseType(), buffers()
         {
           int nThreads = (num_threads == 0 ? omp_get_max_threads() : num_threads);
 
@@ -788,7 +786,7 @@ namespace bliss
             buffers.push_back(std::vector<BufferPtrTypeInternal>(nThreads));
           }
 
-          this->reset(currEpoch);
+          this->reset();
         };
 
 
@@ -861,7 +859,7 @@ namespace bliss
          * @brief Reset the current MessageBuffers instance by first clearing its list of Buffers, then repopulate it from the pool.
          * @note  One thread only should call this.
          */
-        virtual void reset(const uint64_t& nextEpoch) {
+        virtual void reset() {
 
           std::lock_guard<std::mutex> lock(mutex);
           int count = buffers.size();
@@ -885,17 +883,17 @@ namespace bliss
           // reset the pool. local vector should contain a bunch of nullptrs.
           this->pool.reset();
 
-          currEpoch = nextEpoch;
 
           // populate the buffers from the pool
           for (int i = 0; i < count; ++i) {
             nthreads = buffers.at(i).size();
 
             for (tid = 0; tid < nthreads; ++tid) {
-              swapInEmptyBuffer(i, currEpoch, tid);
+              swapInEmptyBuffer(i, tid);
             }
           }
         }
+
 
         /**
          * @brief release a buffer, by pointer, back to the ObjectPool associated with this MessageBuffers class.
@@ -971,7 +969,7 @@ namespace bliss
           // ideally, we want it to be a reference that gets updated for all threads.
 
           if (appendResult & 0x2) { // only 1 thread gets 0x2 result for a buffer.  all other threads either writes successfully or fails.
-            return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer(targetProc, currEpoch, tid) ) );
+            return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer(targetProc, tid) ) );
           } else {
             return std::move(std::make_pair(appendResult & 0x1, nullptr));
           }
@@ -987,19 +985,18 @@ namespace bliss
          * @param targetProc
          * @return
          */
-        std::vector<BufferType*> flushBufferForRank(const int targetProc, uint64_t nextEpoch) {
+        std::vector<BufferType*> flushBufferForRank(const int targetProc) {
           //== if targetProc is outside the valid range, throw an error
           if (targetProc < 0 || targetProc > getSize()) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
-          currEpoch = nextEpoch;
 
           BufferType* old;
           std::vector<BufferType*> result;
           int tid = omp_get_thread_num();
           int nthreads = buffers.at(targetProc).size();
           for (int t = 0; t < nthreads; ++t) {
-            old = swapInEmptyBuffer(targetProc, currEpoch, (t + tid) % nthreads);
+            old = swapInEmptyBuffer(targetProc, (t + tid) % nthreads);
             if (old) {
               old->block_and_flush();
               result.push_back(old);
@@ -1008,27 +1005,6 @@ namespace bliss
 
           return result;
         }
-
-//        /**
-//         * @brief flushes the buffer at rank targetProc for a local thread.
-//         *
-//         * @param targetProc
-//         * @return
-//         */
-//        BufferType* threadFlushBufferForRank(const int targetProc, uint64_t nextEpoch, int thread_id = -1) {
-//          //== if targetProc is outside the valid range, throw an error
-//          if (targetProc < 0 || targetProc > getSize()) {
-//            throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
-//          }
-//
-//          int tid = (thread_id < 0 ? omp_get_thread_num() : thread_id);
-//
-//          BufferType* old = swapInEmptyBuffer(targetProc, nextEpoch, tid);
-//          if (old) {
-//            old->block_and_flush();
-//            return old;
-//          }
-//        }
 
       protected:
 
@@ -1039,7 +1015,7 @@ namespace bliss
          * @param dest    position in bufferIdForProcId array to swap out
          * @return        the BufferId that was swapped out.
          */
-        BufferType* swapInEmptyBuffer(const int dest, uint64_t nextEpoch, int thread_id = -1) {
+        BufferType* swapInEmptyBuffer(const int dest, int thread_id = -1) {
 
           int tid = thread_id < 0 ? omp_get_thread_num() : thread_id;
 
@@ -1055,10 +1031,9 @@ namespace bliss
 
           if (ptr) {
             ptr->clear_and_unblock_writes();
-            ptr->append(&nextEpoch, sizeof(uint64_t));
           }
 
-          buffers.at(dest).at(tid) = ptr;
+          buffers.at(dest).at(tid) = ptr;  // one thread accessing at a time.
           if (oldbuf && oldbuf->isEmpty()) {
             releaseBuffer(oldbuf);
             oldbuf = nullptr;

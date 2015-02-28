@@ -72,8 +72,7 @@ struct Tester
     commLayer.initCommunication();
 
     int nthreads = numThreads;
-    int it = 0;
-    for (; it < iters; ++it) {
+    for (int it = 0; it < iters; ++it) {
 
       // R: src rank
       // T: thread id
@@ -83,7 +82,7 @@ struct Tester
       // i: message counter
       // M: message
       // L: recv message cont
-
+    	DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PRESEND", my_rank, it, FIRST_TAG, els, msgs_received.load());
       // start sending one message to each:
 #pragma omp parallel for default(none) num_threads(nthreads) shared(els, my_rank, it, stdout)
       for (int i = 0; i < els; ++i)
@@ -119,9 +118,9 @@ struct Tester
 //      msgs_received.store(0);
     }
     // call the finish function for this tag  //
-    DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PREFINISH", my_rank, it, FIRST_TAG, els, msgs_received.load());
+    DEBUGF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PREFINISH", my_rank, FIRST_TAG, els, msgs_received.load());
     commLayer.finish(FIRST_TAG);
-    DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d POSTFINISH", my_rank, it, FIRST_TAG, els, msgs_received.load());
+    DEBUGF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti %d,\tM ,\tL%d POSTFINISH", my_rank, FIRST_TAG, els, msgs_received.load());
 
     // check that all messages have been received
     if (msgs_received.load() != els * commSize * iters)

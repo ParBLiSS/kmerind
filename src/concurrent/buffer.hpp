@@ -34,6 +34,214 @@ namespace bliss
   namespace io
   {
 
+
+    /**
+     * @brief Base Memory Buffer.  provides base storage and some common functionalities. All thread safety related implementations
+     *        are handled in subclasses.
+     * @note  does NOT use virtual functions for append, for performance reason.
+     */
+    template<int64_t Capacity, size_t MetadataSize>
+    class BufferBase
+    {
+        static_assert(Capacity > 0, "Buffer Capacity is given as 0");
+
+      protected:
+        /// internal data storage.  includes metadata
+        mutable uint8_t* start_ptr; // const, does not change
+        
+        /// pointer to where the actual data starts
+        mutable uint8_t* data_ptr;  
+
+        /// mutex for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
+        mutable std::mutex mutex;
+
+        /// pointer to FINAL  end of data.   only updated when buffer is blocked or when full (from reserved)
+        /// capacity + 1 indicates buffer is unblocked.  other values indicate that buffer is blocked or full.
+        ///  exchanges with reserved
+        mutable int64_t size;
+
+
+        /**
+         * @brief Move constructor with a mutex lock on the source object.
+         * @details This constructor is private and only use as constructor delegation target.
+         *  the source object is locked before this function is called and data moved to the newly constructed object.
+         *
+         * @param other   the source Buffer
+         * @param l       the mutex lock on the source Buffer.
+         */
+        BufferBase(BufferBase<Capacity, MetadataSize> && other, const std::lock_guard<std::mutex> &l)
+            : start_ptr(other.start_ptr), data_ptr(other.data_ptr), size(other.size)
+        {
+          other.start_ptr = nullptr;
+          other.data_ptr = nullptr;
+          other.size = 0;
+        };
+
+
+        /**
+         * @brief Move assignment operator, requiring mutex lock. For between Buffers of the SAME LockType property.
+         * @details  Internal data memory moved.
+         * The move is done in a thread safe way always.
+         *
+         * @param other     Source Buffer to move
+         */
+        void move_assigner(BufferBase<Capacity, MetadataSize> && other,
+            const std::unique_lock<std::mutex> &l1, const std::unique_lock<std::mutex> &l2)
+        {
+
+          if (this->start_ptr != other.start_ptr)
+          {
+            // move the internal memory.
+            start_ptr = other.start_ptr;
+            data_ptr = other.data_ptr;
+            size = other.size;
+
+            other.start_ptr = nullptr;
+            other.data_ptr = nullptr;
+            other.size = 0;
+          }
+        }
+
+
+        /// remove copy constructor and copy assignement operators.
+        explicit BufferBase(const BufferBase<Capacity, MetadataSize>& other) = delete;
+        /// remove copy constructor and copy assignement operators.
+        BufferBase<Capacity, MetadataSize>& operator=(const BufferBase<Capacity, MetadataSize>& other) = delete;
+
+
+        /**
+         * @brief Constructor.  Allocate and initialize memory with size specified as parameter.
+         */
+        BufferBase() : start_ptr(new uint8_t[Capacity + MetadataSize]()), data_ptr(start_ptr + MetadataSize), size(0)
+        {}
+        //start_ptr(new uint8_t[Capacity](), []( uint8_t *p ) { delete [] p; })  if using shared ptr
+
+        /**
+         * @brief Destructor.  waits for all writes and then deallocate memory manually.
+         */
+        virtual ~BufferBase()
+        {
+          delete [] start_ptr;
+        }
+
+        /**
+         * @brief Move constructs from a Buffer with the SAME LockType property
+         * @details
+         * Thread Safe always, using approach from http://www.justsoftwaresolutions.co.uk/threading/thread-safe-copy-constructors.html
+         *
+         * Constructs a mutex lock and then delegates to another constructor.
+         *
+         * @param other   Source object to move
+         */
+        explicit BufferBase(BufferBase<Capacity, MetadataSize> && other)
+            : BufferBase<Capacity, MetadataSize>(std::move(other),
+                               std::lock_guard<std::mutex>(other.mutex))
+        {}
+
+
+
+
+
+        /**
+         * @brief Move assignment operator, between Buffers of the SAME LockType property.
+         * @details  Internal data memory moved.
+         * The move is done in a thread safe way always.
+         *
+         * @param other     Source Buffer to move
+         * @return          target Buffer reference
+         */
+        BufferBase<Capacity, MetadataSize>& operator=(BufferBase<Capacity, MetadataSize> && other)
+        {
+
+          if (this->start_ptr != other.start_ptr)
+          {
+
+            std::unique_lock<std::mutex> myLock(mutex, std::defer_lock),
+                otherLock(other.mutex, std::defer_lock);
+            std::lock(myLock, otherLock);
+
+            // delegate the assignment operator.
+            this->move_assigner(std::forward<BufferBase<Capacity, MetadataSize> >(other), myLock, otherLock);
+            
+          }
+          return *this;
+        }
+
+      public:
+
+        /// Get size of buffer.  only meaningful after buffer has been "blocked"
+        int64_t getSize() const
+        {
+          return size;
+        }
+
+        /**
+         * @brief pointer to the start of the metadata block in buffer
+         * @note  DO NOT DEALLOCATE THE MEMORY SPACE RETURNED.
+         *
+         * const because the caller will have a const reference to the buffer
+         */
+        uint8_t* metadata_begin() const 
+        {
+          return start_ptr;
+        }
+  
+        /// pointer to the end of the metadata block in buffer
+        uint8_t* metadata_end() const
+        {
+          return begin();
+        }
+
+
+        /**
+         * @brief Get a pointer to the buffer data memory block.
+         *
+         * @note  DO NOT DEALLOCATE THE MEMORY SPACE RETURNED.
+         *
+         * const because the caller will have a const reference to the buffer
+         *
+         */
+        uint8_t* begin() const
+        {
+          return data_ptr;
+        }
+        
+        /// pointer to the end of the data block in buffer.
+        uint8_t* end() const
+        {
+          return data_ptr + size;
+        }
+
+        /**
+         * @brief cast the internal data buffer to type T and return pointer to user.
+         * @note  this breaks the encapsulation a little.
+         * @tparam  T   desired data type.
+         */
+        template<typename T>
+        operator T*() const {
+          return reinterpret_cast<T*>(data_ptr);
+        }
+
+        /**
+         * @brief   get the capacity of the buffer.
+         * @return  maximum capacity of buffer.
+         */
+        const int64_t getCapacity() const
+        {
+          return Capacity;
+        }
+
+
+      	/// get the metadata size
+      	const size_t getMetadataSize() const
+       	{
+      	  return MetadataSize;
+       	}
+
+
+    };
+
+
     /**
      * @brief   Mutex or Spinlocked Memory Buffer, which is a fixed size allocated block of memory where data can be appended to, and read from via pointer.
      * @details this class supports only MOVE semantics.
@@ -65,40 +273,31 @@ namespace bliss
      * @tparam  LockType  controls the type of thread safely.  See concurrent/concurrent.h for allowed values.
      * @tparam  Capacity  size of the allocated byte array
      */
-    template<bliss::concurrent::LockType LockType, int64_t Capacity = 8192>
-    class Buffer
+    template<bliss::concurrent::LockType LockType, int64_t Capacity = 8192, size_t MetadataSize = 0>
+    class Buffer : public BufferBase<Capacity, MetadataSize>
     {
-        static_assert(Capacity > 0, "Buffer Capacity is given as 0");
-
-        template<bliss::concurrent::LockType LT, int64_t C>
-        friend std::ostream & operator<<(std::ostream &os, const Buffer<LT, C>& p);
+        template<bliss::concurrent::LockType LT, int64_t C, size_t MDS>
+        friend std::ostream & operator<<(std::ostream &os, const Buffer<LT, C, MDS>& p);
 
       protected:
+        using BaseType = BufferBase<Capacity, MetadataSize>;
+
         // instead of a single "size" variable and a "blocked" variable (to prevent further writes to the buffer)
         //   (which require concurrent updates to both)
-        // we use the sign bit to indicate "blocked".
+        // we use Capacity+1 to indicate a blocked state: if reserved is set to Capacity+1, it is blocked..
         // also, because reservation and actual write may occur separately, we need a "reserved" and a "written"
         //   for separate incrementing.
         // having the "written" variable allows us to wait for all writes to complete.
 
-        /// internal data storage
-        mutable uint8_t* start_ptr; // const, does not change
 
         /// position of current start of free space.  for reservation.
         /// capacity + 1 indicates buffer is blocked/full.  other values indicate that buffer is unblocked.
         /// exchanges with size.
         volatile int64_t reserved;
 
-        /// final size of the data in the buffer.   only updated when buffer is blocked or when full (from reserved)
-        /// capacity + 1 indicates buffer is unblocked.  other values indicate that buffer is blocked or full.
-        ///  exchanges with reserved
-        mutable int64_t size;
-
         /// amount of data written so far.  will not update beyond the FINAL size
         volatile int64_t written;
 
-        /// mutex for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
-        mutable std::mutex mutex;
 
         /// spinlock for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
         mutable std::atomic_flag spinlock = ATOMIC_FLAG_INIT;
@@ -112,31 +311,25 @@ namespace bliss
          * @param other   the source Buffer
          * @param l       the mutex lock on the source Buffer.
          */
-        Buffer(Buffer<LockType, Capacity> && other, const std::lock_guard<std::mutex> &l)
-            : start_ptr(other.start_ptr),
-              reserved(other.reserved), size(other.size),
-              written(other.written)
+        Buffer(Buffer<LockType, Capacity, MetadataSize> && other, const std::lock_guard<std::mutex> &l)
+            : BaseType(other, l), reserved(other.reserved), written(other.written)
         {
-
-          other.start_ptr = nullptr;
-          other.size = 0;
           other.written = 0;
           other.reserved = Capacity + 1;
-
         };
 
         /// remove copy constructor and copy assignement operators.
-        explicit Buffer(const Buffer<LockType, Capacity>& other) = delete;
+        explicit Buffer(const Buffer<LockType, Capacity, MetadataSize>& other) = delete;
         /// remove copy constructor and copy assignement operators.
-        Buffer<LockType, Capacity>& operator=(const Buffer<LockType, Capacity>& other) = delete;
+        Buffer<LockType, Capacity, MetadataSize>& operator=(const Buffer<LockType, Capacity, MetadataSize>& other) = delete;
 
 
       public:
         /**
          * @brief Constructor.  Allocate and initialize memory with size specified as parameter.
          */
-        Buffer() : start_ptr(new uint8_t[Capacity]()),
-         reserved(Capacity + 1), size(0L), written(0L)
+        Buffer() : BaseType(),
+         reserved(Capacity + 1), written(0L)
         {}
         //start_ptr(new uint8_t[Capacity](), []( uint8_t *p ) { delete [] p; })  if using shared ptr
 
@@ -146,7 +339,6 @@ namespace bliss
         virtual ~Buffer()
         {
           block_and_flush();
-          delete [] start_ptr;
         }
 
         /**
@@ -158,8 +350,8 @@ namespace bliss
          *
          * @param other   Source object to move
          */
-        explicit Buffer(Buffer<LockType, Capacity> && other)
-            : Buffer<LockType, Capacity>(std::move(other),
+        explicit Buffer(Buffer<LockType, Capacity, MetadataSize> && other)
+            : Buffer<LockType, Capacity, MetadataSize>(std::move(other),
                                std::lock_guard<std::mutex>(other.mutex))
         {}
 
@@ -171,35 +363,29 @@ namespace bliss
          * @param other     Source Buffer to move
          * @return          target Buffer reference
          */
-        Buffer<LockType, Capacity>& operator=(Buffer<LockType, Capacity> && other)
+        Buffer<LockType, Capacity, MetadataSize>& operator=(Buffer<LockType, Capacity, MetadataSize> && other)
         {
 
           if (this->start_ptr != other.start_ptr)
           {
 
-            std::unique_lock<std::mutex> myLock(mutex, std::defer_lock),
+            std::unique_lock<std::mutex> myLock(this->mutex, std::defer_lock),
                 otherLock(other.mutex, std::defer_lock);
             std::lock(myLock, otherLock);
 
             // move the internal memory.
-            start_ptr = other.start_ptr;
             written = (int64_t)(other.written);
-            size = (int64_t)(other.size);
             reserved = (int64_t)(other.reserved);
 
-            other.size = 0;
-            other.start_ptr = nullptr;
+            this->move_assigner(std::move(other), myLock, otherLock);
+
+
             other.written = 0;
             other.reserved = Capacity + 1;
           }
           return *this;
         }
 
-        /// Get size of buffer.  only meaningful after buffer has been "blocked"
-        int64_t getSize() const
-        {
-          return size;
-        }
 
       protected:
 
@@ -226,8 +412,8 @@ namespace bliss
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_flushing() const
         {
-          std::lock_guard<std::mutex> lock(mutex);
-          return (reserved > Capacity) && (written < size);
+          std::lock_guard<std::mutex> lock(this->mutex);
+          return (reserved > Capacity) && (written < this->size);
         }
 
         /// Check if buffer has been blocked from further reservation but still waiting for all writes to finish. via spin lock
@@ -237,7 +423,7 @@ namespace bliss
         {
           while (spinlock.test_and_set())
             ;
-          bool res = (reserved > Capacity) && (written < size);
+          bool res = (reserved > Capacity) && (written < this->size);
           spinlock.clear();
           return res;
         }
@@ -245,37 +431,6 @@ namespace bliss
 
       public:
 
-        /**
-         * @brief Get a pointer to the buffer data memory block.
-         *
-         * @note  DO NOT DEALLOCATE THE MEMORY SPACE RETURNED.
-         *
-         * const because the caller will have a const reference to the buffer
-         *
-         */
-        uint8_t* getData() const
-        {
-          return start_ptr;
-        }
-
-        /**
-         * @brief cast the internal data buffer to type T and return pointer to user.
-         * @note  this breaks the encapsulation a little.
-         * @tparam  T   desired data type.
-         */
-        template<typename T>
-        operator T*() const {
-          return reinterpret_cast<T*>(start_ptr);
-        }
-
-        /**
-         * @brief   get the capacity of the buffer.
-         * @return  maximum capacity of buffer.
-         */
-        const int64_t getCapacity() const
-        {
-          return Capacity;
-        }
 
         /**
          * @brief   Checks if a buffer is empty.
@@ -305,16 +460,16 @@ namespace bliss
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_writing() const
         {
-          std::lock_guard<std::mutex> lock(mutex);
-          return written < size;  // reserved > written if is writing. but reserve can increase while buffer is unblocked.
+          std::lock_guard<std::mutex> lock(this->mutex);
+          return written < this->size;  // reserved > written if is writing. but reserve can increase while buffer is unblocked.
         }
 
         /// check if the buffer is blocked from further writes and no threads need to write to it.  uses mutex
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_read_only() const
         {
-          std::lock_guard<std::mutex> lock(mutex);
-          return (reserved > Capacity) && (written >= size);
+          std::lock_guard<std::mutex> lock(this->mutex);
+          return (reserved > Capacity) && (written >= this->size);
         }
 
         /// check if there are threads writing to the buffer.  uses mutex lock
@@ -324,7 +479,7 @@ namespace bliss
         {
           while (spinlock.test_and_set())
             ;
-          bool res = written < size;
+          bool res = written < this->size;
           spinlock.clear();
           return res;
         }
@@ -336,7 +491,7 @@ namespace bliss
         {
           while (spinlock.test_and_set())
             ;
-          bool res = (reserved > Capacity) && (written >= size);
+          bool res = (reserved > Capacity) && (written >= this->size);
           spinlock.clear();
           return res;
         }
@@ -369,13 +524,13 @@ namespace bliss
             if (curr + count > Capacity)  // filled to past capacity, so no valid position is returned.
             {
               reserved = Capacity + 1 ;
-              size = curr;
+              this->size = curr;
               curr = -2;
 
             } else if (curr + count == Capacity)  // filled to capacity, so valid position is returned.
             {
               reserved = Capacity + 1 ;
-              size = Capacity;
+              this->size = Capacity;
             }  // else normal append
             else
               reserved += count;
@@ -396,7 +551,7 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX,
             int64_t>::type reserve(const uint32_t count)
         {
-          std::lock_guard<std::mutex> lock(mutex);
+          std::lock_guard<std::mutex> lock(this->mutex);
 
           return internal_reserve(count);
         }
@@ -427,7 +582,7 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, void>::type complete_write(
             const int count)
         {
-          std::lock_guard<std::mutex> lock(mutex);
+          std::lock_guard<std::mutex> lock(this->mutex);
 
           written += count;
         }
@@ -457,7 +612,7 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, void>::type block_writes(
             int64_t _curr = -1)
         {
-          std::lock_guard<std::mutex> lock(mutex);
+          std::lock_guard<std::mutex> lock(this->mutex);
 
           // if supplied a desired size at which to lock, use it.
           int64_t curr = (_curr >= 0 ? _curr : reserved);
@@ -466,9 +621,9 @@ namespace bliss
           reserved = Capacity + 1;
 
           // choose smallest curr value amount all threads.
-          if (size > curr)
+          if (this->size > curr)
           {
-            size = curr;
+        	  this->size = curr;
           }
         }
         /**
@@ -490,9 +645,9 @@ namespace bliss
           reserved = Capacity + 1;
 
           // choose smallest curr value amount all threads.
-          if (size > curr)
+          if (this->size > curr)
           {
-            size = curr;
+        	  this->size = curr;
           }
           spinlock.clear();
         }
@@ -506,13 +661,13 @@ namespace bliss
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, void>::type unblock_writes()
         {
-          std::lock_guard<std::mutex> lock(mutex);
+          std::lock_guard<std::mutex> lock(this->mutex);
 
           if (reserved > Capacity)
-            reserved = size;
+            reserved = this->size;
 
           // then reset size to max
-          size = Capacity + 1;
+          this->size = Capacity + 1;
         }
 
         /**
@@ -526,10 +681,10 @@ namespace bliss
           while (spinlock.test_and_set());
 
           if (reserved > Capacity)
-            reserved = size;
+            reserved = this->size;
 
           // then reset size to max
-          size = Capacity + 1;
+          this->size = Capacity + 1;
           spinlock.clear();
 
         }
@@ -557,7 +712,7 @@ namespace bliss
         {
           while (spinlock.test_and_set()) ;
           reserved = Capacity + 1;
-          size = 0;
+          this->size = 0;
           written = 0;
           spinlock.clear();
         }
@@ -570,9 +725,9 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX,
             void>::type clear_and_block_writes()
         {
-          std::lock_guard<std::mutex> lock(mutex);
+          std::lock_guard<std::mutex> lock(this->mutex);
           reserved = Capacity + 1;
-          size = 0;
+          this->size = 0;
           written = 0;
         }
 
@@ -586,7 +741,7 @@ namespace bliss
         {
           while (spinlock.test_and_set());
           reserved = 0;
-          size = Capacity + 1;
+          this->size = Capacity + 1;
           written = 0;
           spinlock.clear();
         }
@@ -600,9 +755,9 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX,
             void>::type clear_and_unblock_writes()
         {
-          std::lock_guard<std::mutex> lock(mutex);
+          std::lock_guard<std::mutex> lock(this->mutex);
           reserved = 0;
-          size = Capacity + 1;
+          this->size = Capacity + 1;
           written = 0;
         }
 
@@ -658,11 +813,11 @@ namespace bliss
           { // valid position returned, so can write.
 
             // write
-            std::memcpy(start_ptr + pos, _data, count);
+            std::memcpy(this->data_ptr + pos, _data, count);
             complete_write<LockType>(count); // all full buffers lock the read and unlock the writer
 
             // for DEBUGGING.
-            _inserted = start_ptr + pos;
+            _inserted = this->data_ptr + pos;
 
             if ((pos + count) == Capacity)
             { // thread that JUST filled the buffer
@@ -740,30 +895,23 @@ namespace bliss
      * @tparam  LockType  controls the type of thread safely.  See concurrent/concurrent.h for allowed values.
      * @tparam  Capacity  size of the allocated byte array
      */
-    template<int64_t Capacity>
-    class Buffer<bliss::concurrent::LockType::NONE, Capacity>
+    template<int64_t Capacity, size_t MetadataSize>
+    class Buffer<bliss::concurrent::LockType::NONE, Capacity, MetadataSize> : public BufferBase<Capacity, MetadataSize>
     {
-        static_assert(Capacity > 0, "Buffer Capacity is given as 0");
 
-        template<bliss::concurrent::LockType LT, int64_t C>
-        friend std::ostream & operator<<(std::ostream &os, const Buffer<LT, C>& p);
+        template<bliss::concurrent::LockType LT, int64_t C, size_t MDS>
+        friend std::ostream & operator<<(std::ostream &os, const Buffer<LT, C, MDS>& p);
 
-        using BufferType = Buffer<bliss::concurrent::LockType::NONE, Capacity>;
 
       protected:
+        using BaseType = BufferBase<Capacity, MetadataSize>;
+      
+        using BufferType = Buffer<bliss::concurrent::LockType::NONE, Capacity, MetadataSize>;
         // since not threaded, uses a single size member variable  and blocked flag.
-
-        /// internal data storage
-        mutable uint8_t* start_ptr; // const, does not change
 
         /// inidicate if the buffer is accepting further append
         mutable bool blocked;
 
-        /// size of the data in the buffer.
-        mutable int64_t size;
-
-        /// mutex for locking access to the buffer.  for move constructor and assignments only.
-        mutable std::mutex mutex;
 
       private:
         /**
@@ -775,11 +923,9 @@ namespace bliss
          * @param l       the mutex lock on the source Buffer.
          */
         Buffer(BufferType && other, const std::lock_guard<std::mutex> &l)
-            : start_ptr(other.start_ptr),
-              blocked(other.blocked), size(other.size)
+            : BaseType(other, l),
+              blocked(other.blocked)
         {
-          other.start_ptr = nullptr;
-          other.size = 0;
           other.blocked = Capacity + 1;
         };
 
@@ -793,8 +939,7 @@ namespace bliss
         /**
          * @brief Normal constructor.  Allocate and initialize memory with size specified as parameter.
          */
-        Buffer() : start_ptr(new uint8_t[Capacity]()),
-         blocked(true), size(0L)
+        Buffer() : BaseType(), blocked(true)
         {}
         //start_ptr(new uint8_t[Capacity](), []( uint8_t *p ) { delete [] p; })  for shared ptr
 
@@ -804,7 +949,6 @@ namespace bliss
         virtual ~Buffer()
         {
           block_and_flush();
-          delete [] start_ptr;
         }
 
         /**
@@ -835,26 +979,18 @@ namespace bliss
           if (this->start_ptr != other.start_ptr)
           {
 
-            std::unique_lock<std::mutex> myLock(mutex, std::defer_lock),
+            std::unique_lock<std::mutex> myLock(this->mutex, std::defer_lock),
                 otherLock(other.mutex, std::defer_lock);
             std::lock(myLock, otherLock);
 
             /// move the internal memory.
-            start_ptr = other.start_ptr;
-            size = other.size;
             blocked = other.blocked;
 
-            other.size = 0;
-            other.start_ptr = nullptr;
+            this->move_assigner(std::move(other), myLock, otherLock);
+
             other.blocked = true;
           }
           return *this;
-        }
-
-        /// Get size of buffer.  only meaningful after buffer has been "blocked"
-        int64_t getSize() const
-        {
-          return size;
         }
 
       protected:
@@ -865,7 +1001,7 @@ namespace bliss
          */
         int64_t getApproximateSize() const
         {
-          return size;
+          return this->size;
         }
         /**
          * @brief get the current written data size of the Buffer.
@@ -874,7 +1010,7 @@ namespace bliss
          */
         int64_t getWrittenSize() const
         {
-          return size;
+          return this->size;
         }
 
         /// Check if buffer has been blocked from further reservation but still waiting for all writes to finish.
@@ -888,45 +1024,13 @@ namespace bliss
       public:
 
         /**
-         * @brief Get a pointer to the buffer data memory block.
-         *
-         * @note  DO NOT DEALLOCATE THE MEMORY SPACE RETURNED.
-         *
-         * const because the caller will have a const reference to the buffer
-         *
-         */
-        uint8_t* getData() const
-        {
-          return start_ptr;
-        }
-
-        /**
-         * @brief cast the internal data buffer to type T and return pointer to user.
-         * @note  this breaks the encapsulation a little.
-         * @tparam  T   desired data type.
-         */
-        template<typename T>
-        operator T*() const {
-          return reinterpret_cast<T*>(start_ptr);
-        }
-
-        /**
-         * @brief get the capacity of the buffer.
-         * @return    maximum capacity of buffer.
-         */
-        const int64_t getCapacity() const
-        {
-          return Capacity;
-        }
-
-        /**
          * @brief Checks if a buffer is empty.
          *
          * @return    true if the buffer is empty, false otherwise.
          */
         bool isEmpty() const
         {
-          return size == 0;
+          return this->size == 0;
         }
 
         // TODO:  make this more clear.
@@ -969,7 +1073,7 @@ namespace bliss
           */
         int64_t reserve(const uint32_t count)
         {
-          int64_t curr = size;
+          int64_t curr = this->size;
 
           if (blocked)
           {
@@ -985,10 +1089,10 @@ namespace bliss
             } else if (curr + count == Capacity)  // filled to capacity, so valid position is returned.
             {
               blocked = true ;
-              size = Capacity;
+              this->size = Capacity;
             }  // else normal append
             else
-              size += count;
+              this->size += count;
 
           }
           return curr;
@@ -1005,7 +1109,7 @@ namespace bliss
          */
         void block_writes(int64_t _curr = -1)
         {
-          size = (_curr >= 0 ? _curr : size);
+          this->size = (_curr >= 0 ? _curr : this->size);
           blocked = true;
         }
 
@@ -1037,7 +1141,7 @@ namespace bliss
         {
           // blocked
           blocked = true;
-          size = 0;
+          this->size = 0;
         }
 
         /**
@@ -1048,7 +1152,7 @@ namespace bliss
         {
           // blocked
           blocked = false;
-          size = 0;
+          this->size = 0;
         }
 
         /**
@@ -1100,10 +1204,10 @@ namespace bliss
           { // valid position returned, so can write.
 
             // write
-            std::memcpy(start_ptr + pos, _data, count);
+            std::memcpy(this->data_ptr + pos, _data, count);
 
             // for DEBUGGING.
-            _inserted = start_ptr + pos;
+            _inserted = this->data_ptr + pos;
 
             if ((pos + count) == Capacity)
             { // thread that JUST filled the buffer
@@ -1179,17 +1283,20 @@ namespace bliss
      * @tparam  LockType  controls the type of thread safely.  See concurrent/concurrent.h for allowed values.
      * @tparam  Capacity  size of the allocated byte array
      */
-    template<int64_t Capacity>
-    class Buffer<bliss::concurrent::LockType::LOCKFREE, Capacity>
+    template<int64_t Capacity, size_t MetadataSize>
+    class Buffer<bliss::concurrent::LockType::LOCKFREE, Capacity, MetadataSize> : public BufferBase<Capacity, MetadataSize>
     {
         static_assert(Capacity > 0, "Buffer Capacity is given as 0");
 
-        template<bliss::concurrent::LockType LT, int64_t C>
-        friend std::ostream & operator<<(std::ostream &os, const Buffer<LT, C>& p);
+        template<bliss::concurrent::LockType LT, int64_t C, size_t MDS>
+        friend std::ostream & operator<<(std::ostream &os, const Buffer<LT, C, MDS>& p);
 
-        using BufferType = Buffer<bliss::concurrent::LockType::LOCKFREE, Capacity>;
 
       protected:
+        using BufferType = Buffer<bliss::concurrent::LockType::LOCKFREE, Capacity, MetadataSize>;
+        
+        using BaseType = BufferBase<Capacity, MetadataSize>;
+
         // instead of a single "size" variable and a "blocked" variable (to prevent further writes to the buffer)
         //   (which require concurrent updates to both)
         // we use the sign bit to indicate "blocked".
@@ -1197,24 +1304,14 @@ namespace bliss
         //   for separate incrementing.
         // having the "written" variable allows us to wait for all writes to complete.
 
-        /// internal data storage
-        mutable uint8_t* start_ptr; // const, does not change
-
         /// pointer to current head of reservation.
         /// capacity + 1 indicates buffer is blocked/full.  other values indicate that buffer is unblocked.
         /// exchanges with size.
         volatile std::atomic<int64_t> reserved;
 
-        /// pointer to FINAL  end of data.   only updated when buffer is blocked or when full (from reserved)
-        /// capacity + 1 indicates buffer is unblocked.  other values indicate that buffer is blocked or full.
-        ///  exchanges with reserved
-        mutable std::atomic<int64_t> size;
 
         /// represent amount of data written.  will not update beyond the FINAL size
         volatile std::atomic<int64_t> written;
-
-        /// mutex for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
-        mutable std::mutex mutex;
 
       private:
         /**
@@ -1225,14 +1322,11 @@ namespace bliss
          * @param other   the source Buffer
          * @param l       the mutex lock on the source Buffer.
          */
-        Buffer(BufferType && other, const std::lock_guard<std::mutex> &l)
-            : start_ptr(std::move(other.start_ptr)),
-              reserved(other.reserved.load()), size(other.size.load()),
+        Buffer(BufferType && other, const std::lock_guard<std::mutex> &l) :
+              BaseType(other, l),
+              reserved(other.reserved.load()),
               written(other.written.load())
         {
-
-          other.start_ptr = nullptr;
-          other.size = 0;
           other.written = 0;
           other.reserved = Capacity + 1;
 
@@ -1248,8 +1342,8 @@ namespace bliss
         /**
          * @brief Normal constructor.  Allocate and initialize memory with size specified as parameter.
          */
-        Buffer() : start_ptr(new uint8_t[Capacity]()),
-         reserved(Capacity + 1), size(0L), written(0L)
+        Buffer() : BaseType(),
+         reserved(Capacity + 1), written(0L)
         {}
         //start_ptr(new uint8_t[Capacity](), []( uint8_t *p ) { delete [] p; })  for shared ptr
 
@@ -1259,7 +1353,6 @@ namespace bliss
         virtual ~Buffer()
         {
           block_and_flush();
-          delete [] start_ptr;
         }
 
         /**
@@ -1290,28 +1383,20 @@ namespace bliss
           if (this->start_ptr != other.start_ptr)
           {
 
-            std::unique_lock<std::mutex> myLock(mutex, std::defer_lock),
+            std::unique_lock<std::mutex> myLock(this->mutex, std::defer_lock),
                 otherLock(other.mutex, std::defer_lock);
             std::lock(myLock, otherLock);
 
             /// move the internal memory.
-            start_ptr = other.start_ptr;
             written = (int64_t)(other.written);
-            size = (int64_t)(other.size);
             reserved = (int64_t)(other.reserved);
 
-            other.size = 0;
-            other.start_ptr = nullptr;
+            this->move_assigner(std::move(other), myLock, otherLock);
+
             other.written = 0;
             other.reserved = Capacity + 1;
           }
           return *this;
-        }
-
-        /// Get size of buffer.  only meaningful after buffer has been "blocked"
-        int64_t getSize() const
-        {
-          return size.load(std::memory_order_relaxed);
         }
 
       protected:
@@ -1338,46 +1423,14 @@ namespace bliss
         /// Check if buffer has been blocked from further reservation but still waiting for all writes to finish.
         bool is_flushing() const
         {
-          int64_t s = size.load(std::memory_order_relaxed);
-          return (reserved.load(std::memory_order_relaxed) > Capacity) && (written.load(std::memory_order_relaxed) < s);
+          //int64_t s = size.load(std::memory_order_relaxed);
+
+          return (reserved.load(std::memory_order_relaxed) > Capacity) && (written.load(std::memory_order_acquire) < this->size);
         }
 
 
 
       public:
-
-        /**
-         * @brief Get a pointer to the buffer data memory block.
-         *
-         * @note  DO NOT DEALLOCATE THE MEMORY SPACE RETURNED.
-         *
-         * const because the caller will have a const reference to the buffer
-         *
-         */
-        uint8_t* getData() const
-        {
-          return start_ptr;
-        }
-
-        /**
-         * @brief cast the internal data buffer to type T and return pointer to user.
-         * @note  this breaks the encapsulation a little.
-         * @tparam  T   desired data type.
-         */
-        template<typename T>
-        operator T*() const {
-          std::atomic_thread_fence(std::memory_order_release);
-          return reinterpret_cast<T*>(start_ptr);
-        }
-
-        /**
-         * @brief get the capacity of the buffer.
-         * @return    maximum capacity of buffer.
-         */
-        const int64_t getCapacity() const
-        {
-          return Capacity;
-        }
 
         /**
          * @brief Checks if a buffer is empty.
@@ -1407,16 +1460,16 @@ namespace bliss
         bool is_writing() const
         {
           // is writing - really only for debugging external to this class
-          int64_t s = size.load(std::memory_order_relaxed);
-          return written.load(std::memory_order_acquire) < s;
+          //int64_t s = size.load(std::memory_order_relaxed);
+          return written.load(std::memory_order_acquire) < this->size;
         }
 
         /// check if the buffer is blocked from further writes and no threads need to write to it.
         bool is_read_only() const
         {
           // is read only - really only for debugging external to this class
-          int64_t s = size.load(std::memory_order_relaxed);
-          return (reserved.load(std::memory_order_relaxed) > Capacity) && (written.load(std::memory_order_acquire) >= s);
+          //int64_t s = size.load(std::memory_order_relaxed);
+          return (reserved.load(std::memory_order_relaxed) > Capacity) && (written.load(std::memory_order_acquire) >= this->size);
         }
 
 
@@ -1452,14 +1505,18 @@ namespace bliss
               // just filled. curr position not a valid insertion point.
 
               // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
-              size.store(curr, std::memory_order_release);
+              //size.store(curr, std::memory_order_release);
+              this->size = curr;
+              std::atomic_thread_fence(std::memory_order_release);
               return -2;
             } else if (curr + count == Capacity) {
               reserved.store(Capacity + 1, std::memory_order_relaxed);
               // just filled.  curr position is a valid insertion point.
 
               // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
-              size.store(Capacity, std::memory_order_release);
+              //size.store(Capacity, std::memory_order_release);
+              this->size = Capacity;
+              std::atomic_thread_fence(std::memory_order_release);
               return curr;
             } else return curr;
           }
@@ -1479,22 +1536,34 @@ namespace bliss
          *
          * @details purpose of this method is to swap the size and reserved, so that reserved is at max+1, and size is the smallest of all locking thread's pointers
          *         user can specify a size at which which the block occurs.
+         *
+         *         threading cases:  reserve <= capacity;  reserve = capacity+1;  reserver > capacity
+         *         					size = capacity + 1; size <= capacity.
+         *
+         *         					size > reserve:  reserve <= cap, size = cap + 1:  size = reserve
+         *         									 reserve < size <= cap:	  		  size = reserve.
+         *         					size <= reserve: size < reserve <= cap:			  size = size
+         *         		reserve.exchange guarantees that only 1 thread will be able to match condition above.
+         *         		want minimum of reserve and size to set as new size.
          */
         void block_writes(int64_t _curr = -1)
         {
           int64_t curr = reserved.exchange(Capacity + 1, std::memory_order_relaxed);
           // curr could be greater than capacity, or not.
 
-          int64_t end = size.load(std::memory_order_relaxed);  // size initially at Capacity + 1
+          //int64_t end = size.load(std::memory_order_relaxed);  // size initially at Capacity + 1
 
           curr = (_curr >= 0 ? _curr : curr);
-          bool stop = false;
+          //bool stop = false;
 
           // multiple threads:  smallest wins.
-          while (end > curr && !stop)
-          {
-            stop = size.compare_exchange_weak(end, curr, std::memory_order_relaxed);
-          }
+//          while (end > curr && !stop)
+//          {
+//            stop = size.compare_exchange_weak(end, curr, std::memory_order_relaxed);
+//          }
+          std::atomic_thread_fence(std::memory_order_acquire);
+          this->size = std::min(curr, this->size);
+          std::atomic_thread_fence(std::memory_order_release);
 
         }
 
@@ -1503,19 +1572,29 @@ namespace bliss
          * @brief  allow future writes.  block can be turned off while there are writes in progress.  once block is off, reserve may proceed
          *
          * @details purpose of this method is to swap the size and reserved, so that reserved is again below max, and size is the at max+1
+         * 			compare_exchange_strong ensures only 1 thread succeeds with this function.
+         *
+         * 			thread safety is not guaranteed if unblock_writes and block_writes are called concurrently.
          */
         void unblock_writes()
         {
-          // put the size into curr if it hasn't been done.
-          int64_t curr = reserved.load(std::memory_order_relaxed);
-          int64_t end = size.exchange(Capacity + 1, std::memory_order_relaxed);
+//          // put the size into curr if it hasn't been done.
+//          int64_t curr = reserved.load(std::memory_order_relaxed);
+//          int64_t end = size.exchange(Capacity + 1, std::memory_order_relaxed);
+//
+//          bool stop = false;
+//          while (curr > Capacity && !stop)
+//          {
+//            stop = reserved.compare_exchange_weak(curr, end, std::memory_order_relaxed);
+//          }
 
-          bool stop = false;
-          while (curr > Capacity && !stop)
-          {
-            stop = reserved.compare_exchange_weak(curr, end, std::memory_order_relaxed);
-          }
-
+        	int64_t curr = Capacity + 1;
+        	if (reserved.compare_exchange_strong(curr, this->size, std::memory_order_acquire)) {
+        		this->size = Capacity + 1;
+                std::atomic_thread_fence(std::memory_order_release);
+        	} else {
+        		ERRORF("unblock_writes called, but reserved is not at Capacity+1. reserved: %ld, size: %ld", curr, this->size);
+        	}
         }
 
 
@@ -1539,7 +1618,10 @@ namespace bliss
           // blocked
           reserved.store(Capacity + 1, std::memory_order_relaxed);
           written.store(0, std::memory_order_relaxed);
-          size.store(0, std::memory_order_relaxed);
+          //size.store(0, std::memory_order_relaxed);
+          this->size = 0;
+          std::atomic_thread_fence(std::memory_order_release);
+
         }
 
 
@@ -1551,7 +1633,9 @@ namespace bliss
         {
           written.store(0, std::memory_order_relaxed);
           reserved.store(0, std::memory_order_relaxed);
-          size.store(Capacity + 1, std::memory_order_relaxed);
+          //size.store(Capacity + 1, std::memory_order_relaxed);
+          this->size = Capacity + 1;
+          std::atomic_thread_fence(std::memory_order_release);
         }
 
         /**
@@ -1605,11 +1689,11 @@ namespace bliss
           { // valid position returned, so can write.
 
             // write
-            std::memcpy(start_ptr + pos, _data, count);
+            std::memcpy(this->data_ptr + pos, _data, count);
             complete_write(count); // all full buffers lock the read and unlock the writer
 
             // for DEBUGGING.
-            _inserted = start_ptr + pos;
+            _inserted = this->data_ptr + pos;
 
             if ((pos + count) == Capacity)
             { // thread that JUST filled the buffer
@@ -1640,7 +1724,7 @@ namespace bliss
         unsigned int append(const void* _data, const uint32_t count)  // _inserted is for DEBUGGING only.
         {
           void* output = nullptr;
-          //uint8_t* ptr = start_ptr;
+          //uint8_t* ptr = this->data_ptr;
           unsigned int result = append(_data, count, output);
 
           // DEBUG ONLY
@@ -1669,15 +1753,15 @@ namespace bliss
      * @param[in]     db    BufferedDataBlock object to write out
      * @return              output stream object
      */
-    template<bliss::concurrent::LockType LT, int64_t C = 8192>
-    std::ostream& operator<<(std::ostream& ost, const Buffer<LT, C> & buffer)
+    template<bliss::concurrent::LockType LT, int64_t C = 8192, size_t MDS = 0>
+    std::ostream& operator<<(std::ostream& ost, const Buffer<LT, C, MDS> & buffer)
     {
       ost << "LockType=" << static_cast<int>(LT)
-      << " BUFFER: data_ptr/size="
+      << " BUFFER: this->data_ptr/size="
       << static_cast<const void *>(buffer.start_ptr) << "/"
       << buffer.getSize() << " written="
       << buffer.getWrittenSize() << " approx,size/cap="
-      << buffer.getApproximateSize() << "," << buffer.getSize() << "/"
+      << buffer.getApproximateSize() << "," << buffer.getSize() << "/" << buffer.getMetadataSize() << "+"
       << buffer.getCapacity() << " R? " << (buffer.is_read_only() ? "y" : "n")
       << " F? " << (buffer.is_flushing() ? "y" : "n") << " W? "
       << (buffer.is_writing() ? "y" : "n") << std::flush;

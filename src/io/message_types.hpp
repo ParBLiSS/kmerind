@@ -154,12 +154,12 @@ namespace bliss
 
       /// get pointer to the data
       virtual uint8_t* getData() {
-        return reinterpret_cast<uint8_t*>(epochs);
+        return getPayload();
       }
 
       /// get size in bytes of the data.
       virtual size_t getDataSize() {
-        return sizeof(uint64_t) * 2;
+        return getPayloadSize();
       }
 
     };
@@ -272,28 +272,32 @@ namespace bliss
       /// default destructor
       virtual ~DataMessageToSend() {};
 
+      void setEpoch(const uint64_t epoch) {
+    	  *(reinterpret_cast<uint64_t*>(data->metadata_begin())) = epoch;
+      }
+
       /// get the message's epoch embedded as the first sizeof(uint64_t) bytes.
       virtual uint64_t getEpoch() {
-        return ((uint64_t*)data)[0];
+        return *(reinterpret_cast<uint64_t*>(data->metadata_begin()));
       }
 
 
       /// get pointer to the payload (data + metadata)
       virtual uint8_t* getPayload() {
-        return (data == nullptr) ? nullptr : data->operator uint8_t*();
+        return (data == nullptr) ? nullptr : data->metadata_begin();
       }
 
       /// get size in bytes of the payload (data + metadata)
       virtual size_t getPayloadSize() {
-        return (data == nullptr) ? 0 : data->getSize();
+        return (data == nullptr) ? 0 : data->getSize() + data->getMetadataSize();
       }
 
 
       /// get pointer to data, exclude the metadata portion  (for whole data, access member directly
-      virtual uint8_t* getData() { return (getPayload() == nullptr) ? nullptr : (getPayload() + sizeof(uint64_t)); }
+      virtual uint8_t* getData() { return data->begin(); }
 
       /// get size of data, exclude the metadata portion
-      virtual size_t getDataSize() { return (data == nullptr) ? 0 : (data->getSize() - sizeof(uint64_t)); }
+      virtual size_t getDataSize() { return data->getSize(); }
 
 
       BufferPtrType& getBuffer() { return data; }
