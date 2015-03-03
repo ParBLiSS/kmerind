@@ -19,6 +19,7 @@
 #include <limits>
 #include <atomic>
 #include <stdexcept>
+#include <cassert>
 
 // TODO: every operation that's modifying the queue is using unique lock. can this be made better with just careful atomic operations
 // 		 e.g. with memory fence?
@@ -48,7 +49,7 @@ namespace bliss
     template <typename T>
     class ThreadSafeQueue
     {
-    	static_assert(false, "Mutex Locking Thread Safe Queue encounters deadlock from time to time.  also slow.  Please do not use.");
+    	//static_assert(false, "Mutex Locking Thread Safe Queue encounters deadlock from time to time.  also slow.  Please do not use.");
 
       protected:
 
@@ -65,47 +66,13 @@ namespace bliss
         /// underlying queue that is not thread safe.
         std::deque<T> q;
 
-
         /// capacity of the queue.  if set to std::numeric_limits<size_t>::max() indicates unlimited size queue
-        size_t capacity;
-
+        mutable int64_t capacity;
 
         /// the current size of the underlying queue.  using atomic data type avoids having to lock the queue prior to checking its size.
-        std::atomic<size_t> qsize;
-
-
-        /// atomic boolean variable to indicate whether a calling thread can push into this queue.  use when suspending or terminating a queue.
-        std::atomic<bool> pushEnabled;
+        std::atomic<int64_t> size;
 
       private:
-        /**
-         * private move constructor that requires a lock during the call, so that the source of the move is locked.   content of other is moved back.
-         * @param other   the soruce ThreadSafeQueue object from which data will be moved.
-         * @param l       a lock that uses the mutex of the source ThreadSafeQueue.
-         */
-        ThreadSafeQueue(ThreadSafeQueue<T>&& other, const std::lock_guard<std::mutex>& l) : q(std::move(other.q)),
-            capacity(other.capacity), qsize(0), pushEnabled(false) {
-          other.capacity = 0;
-          qsize.exchange(other.qsize.load(std::memory_order_seq_cst), std::memory_order_seq_cst);              // relaxed, since we have a lock.
-          pushEnabled.exchange(other.pushEnabled.load(std::memory_order_seq_cst), std::memory_order_seq_cst);
-        };
-
-
-      public:
-        /// maximum possible size of a thread safe queue.  initialized to maximum size_t value.
-        static constexpr size_t MAX_SIZE  = std::numeric_limits<size_t>::max();
-
-        /**
-         * normal constructor allowing the caller to specify an optional capacity parameter.
-         * @param _capacity   The maximum capacity for the thread safe queue.
-         */
-        explicit ThreadSafeQueue(const size_t &_capacity = MAX_SIZE) :
-            capacity(_capacity), qsize(0), pushEnabled(true)
-        {
-          if (capacity == 0)
-            throw std::invalid_argument("ThreadSafeQueue constructor parameter capacity is given as 0");
-        };
-
         /**
          * copy constructor, DISABLED
          * @param other   the source ThreadSafeQueue from which to copy.
@@ -118,6 +85,43 @@ namespace bliss
          * @return
          */
         ThreadSafeQueue<T>& operator=(const ThreadSafeQueue<T>& other) = delete;
+
+
+        /**
+         * private move constructor that requires a lock during the call, so that the source of the move is locked.   content of other is moved back.
+         * @param other   the soruce ThreadSafeQueue object from which data will be moved.
+         * @param l       a lock that uses the mutex of the source ThreadSafeQueue.
+         */
+        ThreadSafeQueue(ThreadSafeQueue<T>&& other, const std::lock_guard<std::mutex>& l) {
+
+        	std::atomic_thread_fence(std::memory_order_acquire);
+
+			std::swap(q, other.q);
+			capacity = other.capacity;  other.capacity = 0;
+			size.exchange(other.size.exchange(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed), std::memory_order_relaxed);
+			// relaxed, since we have a lock.
+        	std::atomic_thread_fence(std::memory_order_release);
+
+        };
+
+
+      public:
+        /// maximum possible size of a thread safe queue.  initialized to maximum size_t value.
+        static constexpr size_t MAX_SIZE  = std::numeric_limits<int64_t>::max();
+
+        /**
+         * normal constructor allowing the caller to specify an optional capacity parameter.
+         * @param _capacity   The maximum capacity for the thread safe queue.
+         */
+        explicit ThreadSafeQueue(const size_t &_capacity = static_cast<size_t>(MAX_SIZE)) :
+			   capacity(static_cast<int64_t>(_capacity)), size(0)
+		{
+		   assert(_capacity <= static_cast<size_t>(MAX_SIZE));
+
+		   if (capacity == 0)
+			throw std::invalid_argument("ThreadSafeQueue constructor parameter capacity is given as 0");
+		};
+
 
         /**
          * move constructor.  mutex locks the src ThreadSafeQueue first before delegating to the private constructor.
@@ -133,10 +137,14 @@ namespace bliss
         ThreadSafeQueue<T>& operator=(ThreadSafeQueue<T>&& other) {
           std::unique_lock<std::mutex> mylock(mutex, std::defer_lock), otherlock(other.mutex, std::defer_lock);
           std::lock(mylock, otherlock);
-          q = std::move(other.q);
-          capacity = other.capacity; other.capacity = 0;
-          qsize.exchange(other.qsize.load(std::memory_order_seq_cst), std::memory_order_seq_cst);             // relaxed, since we have a lock.
-          pushEnabled.exchange(other.pushEnabled.load(std::memory_order_seq_cst), std::memory_order_seq_cst);
+
+      	std::atomic_thread_fence(std::memory_order_acquire);
+
+      	std::swap(q, other.q);
+      	capacity = other.capacity; other.capacity = 0;
+      	size.exchange(other.size.exchange(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed), std::memory_order_relaxed);
+
+      	std::atomic_thread_fence(std::memory_order_release);
 
           return *this;
         }
@@ -145,9 +153,11 @@ namespace bliss
          * get the capacity of the thread safe queue
          * @return    capacity of the queue
          */
-        const size_t& getCapacity() const {
+        inline size_t getCapacity() const {
           return capacity;
         }
+
+        /// check if queue is fixed size or growable.
         inline bool isFixedSize() const {
         	return getCapacity() < MAX_SIZE;
         }
@@ -156,29 +166,28 @@ namespace bliss
          * check if the thread safe queue is full.
          * @return    boolean - whether the queue is full.
          */
-        bool isFull() const {
-        	if (capacity >= MAX_SIZE) return false;
-        
-          return qsize.load(std::memory_order_seq_cst) >= capacity;
+        inline bool isFull() const {
+          return (isFixedSize()) && (getSize() >= getCapacity());
         }
 
         /**
          * check if the thread safe queue is empty
          * @return    boolean - whether the queue is empty.
          */
-        bool isEmpty() const
+        inline bool isEmpty() const
         {
-          return qsize.load(std::memory_order_seq_cst) == 0;
+          return getSize() == 0;
         }
 
         /**
          * get the current size of the queue
          * @return    the current size of the queue
          */
-        size_t getSize() const
+        inline size_t getSize() const
         {
-          return qsize.load(std::memory_order_seq_cst);
+          return static_cast<size_t>(size.load(std::memory_order_relaxed) & MAX_SIZE);   // size is atomic, so don't need strong memory ordering itself.
         }
+
 
         /**
          * clears the queue of all contents (discarding).
@@ -187,7 +196,8 @@ namespace bliss
         {
           std::unique_lock<std::mutex> lock(mutex);
           q.clear();
-          qsize.store(0, std::memory_order_seq_cst);        // have lock.  relaxed.
+          // clear size
+          size.fetch_and(std::numeric_limits<int64_t>::lowest(), std::memory_order_release);  // keep the push bit, and set size to 0
           lock.unlock();
 
           canPushCV.notify_all();
@@ -196,9 +206,10 @@ namespace bliss
         /**
          * set the queue to accept new elements
          */
-        void enablePush() {
-//          std::unique_lock<std::mutex> lock(mutex);  simple atomic upate to pushEnabled.  no need for lock
-          pushEnabled.store(true, std::memory_order_seq_cst);
+        inline void enablePush() {
+			// before enablePush, queue is probably empty or no one is writing to it.  so prior side effects don't need to be visible right away.
+			// size itself is atomic
+			size.fetch_and(MAX_SIZE, std::memory_order_relaxed);  // clear the push bit, and leave size as is
           canPushCV.notify_all();   // notify, so waitAndPush can check if it can push now.
           // not notifying canPopCV, used in waitAndPop, as that function exits the loop ONLY when queue is not empty.
         }
@@ -206,32 +217,49 @@ namespace bliss
         /**
          * set the queue to disallow insertion of new elements.
          */
-        void disablePush() {
-//          std::unique_lock<std::mutex> lock(mutex);   simple atomic update to pushEnabled.  no need for lock
-          pushEnabled.store(false, std::memory_order_seq_cst);
+        inline void disablePush() {
+            // before disable push, should make sure that all writes are visible to all other threads, so release here.
+            size.fetch_or(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed);   // set the push bit, and leave size as is.
           canPushCV.notify_all();   // notify, so waitAndPush can check if it can push now.  (only happens with a full buffer, allows waitToPush to return)
                                     // this allows waitAndPush to fail if push is disabled before the queue becomes not full.
           canPopCV.notify_all();   // notify, so waitAndPop can exit because there is no more data coming in. (only happens with an empty buffer, allows waitToPop to return)
         }
 
         /**
-         * check if the thread safe queue is accepting new elements. (full or not)
+         * check if the thread safe queue can accept new elements. (full or not)
          * @return    boolean - queue insertion allowed or not.
          */
-        bool canPush() {
-          return pushEnabled.load(std::memory_order_seq_cst);
+        inline bool canPush() {
+          // pushing thread does not immediately care what other threads did before this
+          // size is >= 0 (not disabled), and less than capacity.
+          // note that if we reinterpret_cast size to size_t, then disabled (< 0) will have MSB set to 1, so > max(int64_t).
+          return size.load(std::memory_order_relaxed) >= 0;   // int highest bit set means negative, and means cannot push
         }
 
         /**
-         * check if the thread safe queue can produce an element now or in near future.  ThreadSafeQueue can pop only if it has elements in the base queue. or
-         * if additional items can be pushed in.
+         * @brief    check if the thread safe queue can produce an element now or in near future.
+         * @details  ThreadSafeQueue can pop only if it has elements in the base queue. or
+         *            if additional items can be pushed in.
          * @return    boolean - queue pop is allowed or not.
          */
-        bool canPop() {
-          return canPush() || !isEmpty();
+        inline bool canPop() {
+          // canPop == first bit is 0, OR has some elements (not 0 for remaining bits).  so basically, not 1000000000...
+          // popping thread should have visibility of all changes to the queue
+          return size.load(std::memory_order_relaxed) != std::numeric_limits<int64_t>::lowest();
         }
 
+      protected:
+        /**
+         * check if the thread safe queue can accept new elements. (full or not)
+         * @return    boolean - queue insertion allowed or not.
+         */
+        inline bool canPushAndHasRoom() {
+          // if we reinterpret this number as a uint64_t, then we only need to check less than capacity, since now highest bits are all way higher.
+          int64_t v = size.load(std::memory_order_relaxed);
+          return reinterpret_cast<uint64_t&>(v) < capacity;
+        }
 
+      public:
 
         /**
          * Non-blocking - pushes an element by constant reference (copy).
@@ -245,18 +273,19 @@ namespace bliss
         bool tryPush (T const& data) {
           std::unique_lock<std::mutex> lock(mutex);
 
-          if (!canPush() || isFull()) {
-            lock.unlock();
-            return false;
-          }
+          int64_t v = size.fetch_add(1, std::memory_order_acquire);
+          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
+        	  q.push_back(data);  // insert using predefined copy version of dequeue's push function
+        	  std::atomic_thread_fence(std::memory_order_release);
+        	  lock.unlock();
+              canPopCV.notify_one();
+              return true;
+          }  // else at capacity.
+          size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
 
-          //std::unique_lock<std::mutex> lock(mutex);
-          qsize.fetch_add(1, std::memory_order_seq_cst);
-          q.push_back(data);   // insert using predefined copy version of dequeue's push function
           lock.unlock();
 
-          canPopCV.notify_one();
-          return true;
+          return false;
         }
 
         /**
@@ -271,18 +300,20 @@ namespace bliss
         std::pair<bool,T> tryPush (T && data) {
           std::unique_lock<std::mutex> lock(mutex);
 
-          if (!canPush() || isFull()) {
-            lock.unlock();
-            return std::move(std::make_pair(false, std::move(data)));;
-          }
 
-//          std::unique_lock<std::mutex> lock(mutex);
-          qsize.fetch_add(1, std::memory_order_seq_cst);
-          q.push_back(std::move(data));    // insert using predefined move version of deque's push function
+          int64_t v = size.fetch_add(1, std::memory_order_acquire);
+          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
+        	  q.push_back(std::forward<T>(data));  // insert using predefined copy version of dequeue's push function
+        	  std::atomic_thread_fence(std::memory_order_release);
+        	  lock.unlock();
+              canPopCV.notify_one();
+            return std::move(std::make_pair(true, std::forward<T>(data)));
+          }  // else at capacity.
+          size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
+
           lock.unlock();
+          return std::move(std::make_pair(false, std::forward<T>(data)));;
 
-          canPopCV.notify_one();
-          return std::move(std::make_pair(true, std::move(T())));
         }
 
         /**
@@ -300,25 +331,28 @@ namespace bliss
          */
         bool waitAndPush (T const& data) {
 
-          if (!canPush()) return false;   // if finished, then no more insertion.  return.
 
+          if (!canPush()) return false;   // if finished, then no more insertion.  return.
           std::unique_lock<std::mutex> lock(mutex);
-          while (!canPush() || isFull()) {
+          int64_t v = size.load(std::memory_order_relaxed);
+          while (reinterpret_cast<uint64_t&>(v) >= reinterpret_cast<uint64_t&>(capacity)) {
             // full q.  wait for someone to signal (not full && canPush, or !canPush).
             canPushCV.wait(lock);
-
+            v = size.load(std::memory_order_relaxed);
             // to get here, have to have one of these conditions changed:  pushEnabled, !full
-            if (!canPush()) {
+            if (v < 0) {  // blocked.
               lock.unlock();
               return false;  // if finished, then no more insertion.  return.
             }
           }
-          qsize.fetch_add(1, std::memory_order_seq_cst);
+          size.fetch_add(1, std::memory_order_acquire);
           q.push_back(data);   // insert using predefined copy version of deque's push function
+          std::atomic_thread_fence(std::memory_order_release);
 
           lock.unlock();
           canPopCV.notify_one();
           return true;
+
         }
 
         /**
@@ -335,154 +369,34 @@ namespace bliss
          * @return        whether push was successful.
          */
         std::pair<bool,T> waitAndPush (T && data) {
-          if (!canPush())
-        	  return std::move(std::make_pair(false, std::move(data)));  // if finished, then no more insertion.  return.
 
-          std::unique_lock<std::mutex> lock(mutex);
-          while (!canPush() || isFull()) {
-            // full q.  wait for someone to signal  (not full && canPush, or !canPush).
-            canPushCV.wait(lock);
+            if (!canPush())
+          	  return std::move(std::make_pair(false, std::forward<T>(data)));  // if finished, then no more insertion.  return.
 
-            // to get here, have to have one of these conditions changed:  pushEnabled, !full
-            if (!canPush()) {
-              lock.unlock();
-              return std::move(std::make_pair(false, std::move(data)));  // if finished, then no more insertion.  return.
+            std::unique_lock<std::mutex> lock(mutex);
+            int64_t v = size.load(std::memory_order_relaxed);
+            while (reinterpret_cast<uint64_t&>(v) >= reinterpret_cast<uint64_t&>(capacity)) {
+              // full q.  wait for someone to signal (not full && canPush, or !canPush).
+              canPushCV.wait(lock);
+              v = size.load(std::memory_order_relaxed);
+              // to get here, have to have one of these conditions changed:  pushEnabled, !full
+              if (v < 0) {
+                lock.unlock();
+                return std::move(std::make_pair(false, std::forward<T>(data)));  // if finished, then no more insertion.  return.
+              }
             }
-          }
+            size.fetch_add(1, std::memory_order_acquire);
+            q.push_back(std::forward<T>(data));   // insert using predefined copy version of deque's push function
+            std::atomic_thread_fence(std::memory_order_release);
 
-          qsize.fetch_add(1, std::memory_order_seq_cst);
-          q.push_back(std::move(data));    // insert using predefined move version of deque's push function
-
-          lock.unlock();
-          canPopCV.notify_one();
-          return std::move(std::make_pair(true, std::move(T())));
-        }
-
-
-        /**
-         * Non-blocking - pushes an element by constant reference (copy).
-         * Returns true only if push was successful.
-         * If queue is full, or if queue is not accepting new element inserts, return false.
-         *    Does not modify the element if cannot push onto queue.
-         *
-         * @param data    data element to be pushed onto the thread safe queue
-         * @return        whether push was successful.
-         */
-        bool tryPushFront (T const& data) {
-          std::unique_lock<std::mutex> lock(mutex);
-
-          if (!canPush() || isFull()) {
             lock.unlock();
-            return false;
-          }
+            canPopCV.notify_one();
+            return std::move(std::make_pair(true, std::forward<T>(data)));
 
-          //std::unique_lock<std::mutex> lock(mutex);
-          qsize.fetch_add(1, std::memory_order_seq_cst);
-          q.push_front(data);   // insert using predefined copy version of dequeue's push function
-          lock.unlock();
-
-          canPopCV.notify_one();
-          return true;
-        }
-
-        /**
-         * Non-blocking - pushes an element by constant reference (move).
-         * Returns true only if push was successful.
-         * If queue is full, or if queue is not accepting new element inserts, return false.
-         *    Does not modify the element if cannot push onto queue.
-         *
-         * @param data    data element to be pushed onto the thread safe queue
-         * @return        whether push was successful.
-         */
-        std::pair<bool, T> tryPushFront (T && data) {
-          std::unique_lock<std::mutex> lock(mutex);
-
-          if (!canPush() || isFull()) {
-            lock.unlock();
-            return std::move(std::make_pair(false, std::move(data)));
-          }
-
-//          std::unique_lock<std::mutex> lock(mutex);
-          qsize.fetch_add(1, std::memory_order_seq_cst);
-          q.push_front(std::move(data));    // insert using predefined move version of deque's push function
-          lock.unlock();
-
-          canPopCV.notify_one();
-          return std::move(std::make_pair(true, std::move(T())));
         }
 
 
-        /**
-         * Semi-blocking - pushes an element by constant reference (copy).
-         * Returns true only if push was successful.
-         * If queue is full, wait until space becomes available.
-         * If queue is not accepting new element inserts, return false.
-         *    Does not modify the element if cannot push onto queue.
-         *
-         * this function signature is useful where the application would like to have guaranteed insertion without busy-waiting,
-         * yet needs a way to lift the block when the queue has been marked by another thread as terminating (not accepting new elements)
-         *
-         * @param data    data element to be pushed onto the thread safe queue
-         * @return        whether push was successful.
-         */
-        bool waitAndPushFront (T const& data) {
 
-          if (!canPush()) return false;   // if finished, then no more insertion.  return.
-
-          std::unique_lock<std::mutex> lock(mutex);
-          while (!canPush() || isFull()) {
-            // full q.  wait for someone to signal (not full && canPush, or !canPush).
-            canPushCV.wait(lock);
-
-            // to get here, have to have one of these conditions changed:  pushEnabled, !full
-            if (!canPush()) {
-              lock.unlock();
-              return false;  // if finished, then no more insertion.  return.
-            }
-          }
-          qsize.fetch_add(1, std::memory_order_seq_cst);
-          q.push_front(data);   // insert using predefined copy version of deque's push function
-
-          lock.unlock();
-          canPopCV.notify_one();
-          return true;
-        }
-
-        /**
-         * Semi-blocking - pushes an element by constant reference (move).
-         * Returns true only if push was successful.
-         * If queue is full, wait until space becomes available.
-         * If queue is not accepting new element inserts, return false.
-         *    Does not modify the element if cannot push onto queue.
-         *
-         * this function signature is useful where the application would like to have guaranteed insertion without busy-waiting,
-         * yet needs a way to lift the block when the queue has been marked by another thread as terminating (not accepting new elements)
-         *
-         * @param data    data element to be pushed onto the thread safe queue
-         * @return        whether push was successful.
-         */
-        std::pair<bool, T> waitAndPushFront (T && data) {
-          if (!canPush()) return std::move(std::make_pair(false, std::move(data)));  // if finished, then no more insertion.  return.
-
-          std::unique_lock<std::mutex> lock(mutex);
-          while (!canPush() || isFull()) {
-            // full q.  wait for someone to signal  (not full && canPush, or !canPush).
-            canPushCV.wait(lock);
-
-            // to get here, have to have one of these conditions changed:  pushEnabled, !full
-            if (!canPush()) {
-              lock.unlock();
-              return std::move(std::make_pair(false, std::move(data)));  // if finished, then no more insertion.  return.
-            }
-          }
-
-          qsize.fetch_add(1, std::memory_order_seq_cst);
-          q.push_front(std::move(data));    // insert using predefined move version of deque's push function
-
-          lock.unlock();
-          canPopCV.notify_one();
-          return std::move(std::make_pair(true, std::move(T())));
-        }
 
 
         /**
@@ -499,21 +413,19 @@ namespace bliss
           std::pair<bool, T> output;
           output.first = false;
 
+          if (isEmpty()) return output;
+
           std::unique_lock<std::mutex> lock(mutex);
-          if (isEmpty()) {
-            lock.unlock();
-            return output;
+          if (!isEmpty()) {
+        	  std::atomic_thread_fence(std::memory_order_acquire);
+        	  output.second = std::move(q.front());  // convert to movable reference and move-assign.
+        	  q.pop_front();
+              size.fetch_sub(1, std::memory_order_release);
+              output.first = true;
+              canPushCV.notify_one();
           }
 
-          //std::unique_lock<std::mutex> lock(mutex);
-          output.second = std::move(q.front());  // convert to movable reference and move-assign.
-          q.pop_front();
-          qsize.fetch_sub(1, std::memory_order_seq_cst);
           lock.unlock();
-
-          output.first = true;
-          canPushCV.notify_one();
-
           return output;
 
         }
@@ -537,12 +449,14 @@ namespace bliss
           std::pair<bool, T> output;
           output.first = false;
 
+
           // if !canPush and queue is empty, then return false.
           if (!canPop()) return output;
-
           // else either canPush (queue empty or not), or !canPush and queue is not empty.
 
+          // while the queue is not disabled nor empty
           std::unique_lock<std::mutex> lock(mutex);
+
           while (isEmpty()) {
             // empty q.  wait for someone to signal (when !isEmpty, or !canPop)
             canPopCV.wait(lock);
@@ -554,99 +468,20 @@ namespace bliss
             }
           }
 
-          qsize.fetch_sub(1, std::memory_order_seq_cst);
+          size.fetch_sub(1, std::memory_order_acquire);
+
           output.second = std::move(q.front());  // convert to movable reference and move-assign.
           q.pop_front();
+          std::atomic_thread_fence(std::memory_order_release);
+          output.first = true;
 
           lock.unlock();
-          output.first = true;
 
           canPushCV.notify_one();
 
           return output;
         }
 
-
-        /**
-         * Non-blocking - remove the first element in the queue and return it to the calling thread.
-         * returns a std::pair with first element indicating the success/failure of the Pop operation,
-         * and second is the popped queue element, if pop were successful.
-         *
-         * Function fails when the queue is empty, returning false.
-         * Function returns success and retrieved element, regardless of whether the thread safe queue is accepting new inserts.
-         *
-         * @return    std::pair with boolean (successful pop?) and an element from the queue (if successful)
-         */
-        std::pair<bool, T> tryPopBack() {
-          std::pair<bool, T> output;
-          output.first = false;
-
-          std::unique_lock<std::mutex> lock(mutex);
-          if (isEmpty()) {
-            lock.unlock();
-            return output;
-          }
-
-          //std::unique_lock<std::mutex> lock(mutex);
-          output.second = std::move(q.back());  // convert to movable reference and move-assign.
-          q.pop_back();
-          qsize.fetch_sub(1, std::memory_order_seq_cst);
-          lock.unlock();
-
-          output.first = true;
-          canPushCV.notify_one();
-
-          return output;
-
-        }
-
-        /**
-         * Semi-blocking - remove the first element in the queue and return it to the calling thread.
-         * Returns a std::pair with first element indicating the success/failure of the Pop operation,
-         *  and second is the popped queue element, if pop were successful.
-         *
-         * Function will wait for some element to be available for pop from the queue.
-         * Function will return when it has retrieved some data from queue, or when if it is notified that the thread safe queue has terminated.
-         * Returns false if queue is terminated (no new elements) and flushed.
-         *
-         * This function signature is useful where the application would like to have guaranteed data retrieval from the queue without busy-waiting,
-         * yet needs a way to lift the block when the queue has been marked by another thread as terminated and flushed
-         *   (no more new elements to be inserted and queue is empty.)
-         *
-         * @return    std::pair with boolean (successful pop?) and an element from the queue (if successful)
-         */
-        std::pair<bool, T> waitAndPopBack() {
-          std::pair<bool, T> output;
-          output.first = false;
-
-          // if !canPush and queue is empty, then return false.
-          if (!canPop()) return output;
-
-          // else either canPush (queue empty or not), or !canPush and queue is not empty.
-
-          std::unique_lock<std::mutex> lock(mutex);
-          while (isEmpty()) {
-            // empty q.  wait for someone to signal (when !isEmpty, or !canPop)
-            canPopCV.wait(lock);
-
-            // if !canPush and queue is empty, then return false.
-            if (!canPop()) {
-              lock.unlock();
-              return output;
-            }
-          }
-
-          qsize.fetch_sub(1, std::memory_order_seq_cst);
-          output.second = std::move(q.back());  // convert to movable reference and move-assign.
-          q.pop_back();
-
-          lock.unlock();
-          output.first = true;
-
-          canPushCV.notify_one();
-
-          return output;
-        }
 
 
     };

@@ -8,21 +8,26 @@
  *	this class is adapted from  http://www.justsoftwaresolutions.co.uk/threading/implementing-a-thread-safe-queue-using-condition-variables.html
  *            with SIGNIFICANT modifications
  *
- * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
+ * Copyright (c) 2014 Georgia InOAstitute of Technology.  All Rights Reserved.
  *
  * TODO add License
  */
 #ifndef THREADSAFE_QUEUE_HPP_
 #define THREADSAFE_QUEUE_HPP_
 
+#include <cassert>
 #include <thread>
 #include <mutex>
-#include <deque>
+//#include <deque>
+#include <list>
 #include <limits>
 #include <atomic>
 #include <stdexcept>
 #include <xmmintrin.h>
-#include <cassert>
+
+#include "concurrent/concurrent.hpp"
+#include "utils/logging.h"
+
 
 namespace bliss
 {
@@ -49,39 +54,20 @@ namespace bliss
     {
       protected:
 
-    	/// mutex for locking access to the queue during construction/assignment
-    	mutable std::mutex mutex;
-
     	/// spinlock for locking during enqueue, dequeue.
         std::atomic_flag spinlock = ATOMIC_FLAG_INIT;
 
         /// internal queue, protected by spinlock.
-        std::deque<T> q;
-
+        //std::deque<T> q;
+        std::list<T> q;
 
         /// capacity of the queue.  if set to std::numeric_limits<size_t>::max() indicates unlimited size queue
-        size_t capacity;
+        mutable int64_t capacity;
 
         /// the current size of the underlying queue.  using atomic data type avoids having to lock the queue prior to checking its size.
-        std::atomic<size_t> qsize;
-
-        /// atomic boolean variable to indicate whether a calling thread can push into this queue.  use when suspending or terminating a queue.
-        std::atomic<bool> pushEnabled;
+        volatile std::atomic<int64_t> size;
 
       private:
-        /**
-         * private move constructor that requires a lock during the call, so that the source of the move is locked.   content of other is moved back.
-         * @param other   the soruce ThreadSafeQueue object from which data will be moved.
-         * @param l       a lock that uses the mutex of the source ThreadSafeQueue.
-         */
-        ThreadSafeQueue(ThreadSafeQueue<T>&& other, const std::lock_guard<std::mutex>& l) :
-              q(std::move(other.q)),
-            capacity(other.capacity) {
-          other.capacity = 0;
-          qsize.exchange(other.qsize.exchange(0));              // relaxed, since we have a lock.
-          pushEnabled.exchange(other.pushEnabled.exchange(false));
-        };
-
 
         /**
          * copy constructor, DISABLED
@@ -98,16 +84,19 @@ namespace bliss
 
       public:
         /// maximum possible size of a thread safe queue.  initialized to maximum size_t value.
-        static constexpr size_t MAX_SIZE  = std::numeric_limits<size_t>::max();
+        static constexpr int64_t MAX_SIZE  = std::numeric_limits<int64_t>::max();
+        static constexpr int64_t DISABLE_FLAG = std::numeric_limits<int64_t>::lowest();
 
         /**
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueue(const size_t &_capacity = MAX_SIZE) :
-               capacity(_capacity), qsize(0), pushEnabled(true)
+        explicit ThreadSafeQueue(const size_t &_capacity = static_cast<size_t>(MAX_SIZE)) :
+               capacity(static_cast<int64_t>(_capacity)), size(0)
         {
-          if (capacity == 0)
+           assert(_capacity <= static_cast<size_t>(MAX_SIZE));
+
+           if (capacity == 0)
             throw std::invalid_argument("ThreadSafeQueue constructor parameter capacity is given as 0");
         };
 
@@ -115,8 +104,15 @@ namespace bliss
          * move constructor.  mutex locks the src ThreadSafeQueue first before delegating to the private constructor.
          * @param other   the source ThreadSafeQueue from which to move.
          */
-        explicit ThreadSafeQueue(ThreadSafeQueue<T>&& other) :
-            ThreadSafeQueue<T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
+        explicit ThreadSafeQueue(ThreadSafeQueue<T>&& other) {
+        	while (other.spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));
+
+    			std::swap(q, other.q);
+		    	capacity = other.capacity; other.capacity = 0;
+			    // ordering may seem strange, but see http://en.cppreference.com/w/cpp/atomic/memory_order re. operator ordering within same thread.
+			    size.exchange(other.size.exchange(DISABLE_FLAG, bliss::concurrent::MO_ACQUIRE), bliss::concurrent::MO_RELEASE);
+    			other.spinlock.clear(bliss::concurrent::MO_RELEASE);
+        };
 
         /**
          * move assignment operator.  locks both the src and destination ThreadSafeQueue before performing the move.
@@ -124,12 +120,17 @@ namespace bliss
          * @return
          */
         ThreadSafeQueue<T>& operator=(ThreadSafeQueue<T>&& other) {
-          std::unique_lock<std::mutex> mylock(mutex, std::defer_lock), otherlock(other.mutex, std::defer_lock);
-          std::lock(mylock, otherlock);
-          q = std::move(other.q);
-          capacity = other.capacity; other.capacity = 0;
-          qsize.exchange(other.qsize.exchange(0));             // relaxed, since we have a lock.
-          pushEnabled.exchange(other.pushEnabled.exchange(false));
+
+        	while (spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));
+        	while (other.spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));
+
+        	std::swap(q, other.q);
+        	capacity = other.capacity; other.capacity = 0;
+        	size.exchange(other.size.exchange(DISABLE_FLAG, bliss::concurrent::MO_ACQUIRE), bliss::concurrent::MO_RELEASE);
+
+        	other.spinlock.clear(bliss::concurrent::MO_RELEASE);
+        	spinlock.clear(bliss::concurrent::MO_RELEASE);
+
            return *this;
         }
 
@@ -137,7 +138,7 @@ namespace bliss
          * get the capacity of the thread safe queue
          * @return    capacity of the queue
          */
-        const size_t& getCapacity() const {
+        inline size_t getCapacity() const {
           return capacity;
         }
 
@@ -150,28 +151,26 @@ namespace bliss
          * check if the thread safe queue is full.
          * @return    boolean - whether the queue is full.
          */
-        bool isFull() const {
-        	if (capacity >= MAX_SIZE) return false;
-        
-          return qsize.load(std::memory_order_relaxed) >= capacity;
+        inline bool isFull() const {
+          return (isFixedSize()) && (getSize() >= getCapacity());
         }
 
         /**
          * check if the thread safe queue is empty
          * @return    boolean - whether the queue is empty.
          */
-        bool isEmpty() const
+        inline bool isEmpty() const
         {
-          return qsize.load(std::memory_order_relaxed) == 0;
+          return getSize() == 0;
         }
 
         /**
          * get the current size of the queue
          * @return    the current size of the queue
          */
-        size_t getSize() const
+        inline size_t getSize() const
         {
-          return qsize.load(std::memory_order_relaxed);
+          return static_cast<size_t>(size.load(bliss::concurrent::MO_RELAXED) & MAX_SIZE);   // size is atomic, so don't need strong memory ordering itself.
         }
 
         /**
@@ -179,47 +178,70 @@ namespace bliss
          */
         void clear()
         {
-          while(spinlock.test_and_set());
+          while(spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));
           q.clear();
-          spinlock.clear();
+          // clear size
+          size.fetch_and(DISABLE_FLAG, bliss::concurrent::MO_ACQ_REL);  // keep the push bit, and set size to 0
 
-          qsize.store(0, std::memory_order_release);        // have lock.  relaxed.
+          spinlock.clear(bliss::concurrent::MO_RELEASE);
         }
 
         /**
          * set the queue to accept new elements
          */
-        void enablePush() {
-          pushEnabled.store(true, std::memory_order_relaxed);
-          // not notifying canPopCV, used in waitAndPop, as that function exits the loop ONLY when queue is not empty.
+        inline void enablePush() {
+          // before enablePush, queue is probably empty or no one is writing to it.  so prior side effects don't need to be visible right away.
+          // size itself is atomic
+          while(spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));
+          size.fetch_and(MAX_SIZE, bliss::concurrent::MO_ACQ_REL);  // clear the push bit, and leave size as is
+          spinlock.clear(bliss::concurrent::MO_RELEASE);
         }
 
         /**
          * set the queue to disallow insertion of new elements.
          */
-        void disablePush() {
-            // before disable push, should make sure that all writes are visible to all other threads, so release here.
-          pushEnabled.store(false, std::memory_order_release);
+        inline void disablePush() {
+          // before disable push, should make sure that all writes are visible to all other threads, so release here.
+          while(spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));
+          size.fetch_or(DISABLE_FLAG, bliss::concurrent::MO_ACQ_REL);   // set the push bit, and leave size as is.
+          spinlock.clear(bliss::concurrent::MO_RELEASE);
         }
 
         /**
-         * check if the thread safe queue is accepting new elements. (full or not)
+         * check if the thread safe queue can accept new elements. (full or not)
          * @return    boolean - queue insertion allowed or not.
          */
-        bool canPush() {
-          return pushEnabled.load(std::memory_order_relaxed);
+        inline bool canPush() {
+          // pushing thread does not immediately care what other threads did before this
+          // size is >= 0 (not disabled), and less than capacity.
+          // note that if we reinterpret_cast size to size_t, then disabled (< 0) will have MSB set to 1, so > max(int64_t).
+          return size.load(bliss::concurrent::MO_RELAXED) >= 0;   // int highest bit set means negative, and means cannot push
         }
 
         /**
-         * check if the thread safe queue can produce an element now or in near future.  ThreadSafeQueue can pop only if it has elements in the base queue. or
-         * if additional items can be pushed in.
+         * @brief    check if the thread safe queue can produce an element now or in near future.
+         * @details  ThreadSafeQueue can pop only if it has elements in the base queue. or
+         *            if additional items can be pushed in.
          * @return    boolean - queue pop is allowed or not.
          */
-        bool canPop() {
-          return canPush() || !isEmpty();
+        inline bool canPop() {
+          // canPop == first bit is 0, OR has some elements (not 0 for remaining bits).  so basically, not 1000000000...
+          // popping thread should have visibility of all changes to the queue
+          return size.load(bliss::concurrent::MO_RELAXED) != DISABLE_FLAG;
         }
 
+      protected:
+        /**
+         * check if the thread safe queue can accept new elements. (full or not)
+         * @return    boolean - queue insertion allowed or not.
+         */
+        inline bool canPushAndHasRoom() {
+          // if we reinterpret this number as a uint64_t, then we only need to check less than capacity, since now highest bits are all way higher.
+          int64_t v = size.load(bliss::concurrent::MO_RELAXED);  // since uint64_t&, need a variable
+          return reinterpret_cast<uint64_t&>(v) < capacity;
+        }
 
+      public:
 
         /**
          * @brief Non-blocking - pushes an element by constant reference (copy).
@@ -231,18 +253,21 @@ namespace bliss
          * @return        whether push was successful.
          */
         bool tryPush (T const& data) {
-          while(spinlock.test_and_set());
+          bool res = false;
+          while(spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));    // critical block instructions confined here via acquire/release
 
-          if (!canPush() || isFull()) {
-            spinlock.clear();
-            return false;
-          }
+          int64_t v = size.load(bliss::concurrent::MO_ACQUIRE);        // load and RMW are ordered via acq/release at the fence.
+          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
+            // following 2 instructions cannot be reordered to above this line,
+            // and the if check cannot be reordered to below this line
+            std::atomic_thread_fence(bliss::concurrent::MO_ACQ_REL);            
 
-          qsize.fetch_add(1, std::memory_order_relaxed);
-          q.push_back(data);   // insert using predefined copy version of dequeue's push function
-
-          spinlock.clear();
-          return true;
+      			q.push_back(data);  // insert using predefined copy version of dequeue's push function
+            res = true;
+            size.fetch_add(1, bliss::concurrent::MO_ACQ_REL);
+          } // else at capacity.
+          spinlock.clear(bliss::concurrent::MO_RELEASE);
+          return res;
         }
 
         /**
@@ -255,18 +280,24 @@ namespace bliss
          * @return        whether push was successful.
          */
         std::pair<bool,T> tryPush (T && data) {
-          while(spinlock.test_and_set());
+            std::pair<bool, T> res;
+            res.first = false;
 
-          if (!canPush() || isFull()) {
-            spinlock.clear();
-            return std::move(std::make_pair(false, std::move(data)));;
-          }
+            while(spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));   // see const ref version for memory order info.
 
-          qsize.fetch_add(1, std::memory_order_relaxed);
-          q.push_back(std::move(data));    // insert using predefined move version of deque's push function
-          spinlock.clear();
+            int64_t v = size.load(bliss::concurrent::MO_ACQUIRE);
+            if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
+              std::atomic_thread_fence(bliss::concurrent::MO_ACQ_REL);
 
-          return std::move(std::make_pair(true, std::move(T())));
+          	  q.emplace_back(std::forward<T>(data));  // insert using predefined copy version of dequeue's push function
+              res.first = true;
+              size.fetch_add(1, bliss::concurrent::MO_ACQ_REL);
+            } else { // else at capacity.
+              res.second = std::move(data);
+            }
+
+            spinlock.clear(bliss::concurrent::MO_RELEASE);
+            return std::move(res);
         }
 
         /**
@@ -284,27 +315,39 @@ namespace bliss
          */
         bool waitAndPush (T const& data) {
 
-          if (!canPush()) return false;   // if finished, then no more insertion.  return.
+          volatile int64_t v = 0L;
+          bool res = false;
 
-          while(spinlock.test_and_set());
-          while (!canPush() || isFull()) {
-            spinlock.clear();
-            _mm_pause();
-            // full q.  wait for someone to signal (not full && canPush, or !canPush).
+          do {  // loop forever, unless queue is disabled, or insert succeeded.
+        	  while(spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));
 
-            // to get here, have to have one of these conditions changed:  pushEnabled, !full
-            if (!canPush()) {
-              return false;  // if finished, then no more insertion.  return.
+            v = size.load(bliss::concurrent::MO_ACQUIRE);
+
+            if (v < 0L) { // disabled so return false
+             	spinlock.clear(bliss::concurrent::MO_RELEASE);
+              break;
             }
 
-            while(spinlock.test_and_set());
-          }
-          qsize.fetch_add(1, std::memory_order_relaxed);
-          q.push_back(data);   // insert using predefined copy version of deque's push function
+            if (v >= capacity) {   // over capacity.  wait.
+             	spinlock.clear(bliss::concurrent::MO_RELEASE);
+            	_mm_pause();
+              continue;
+            }
 
-          spinlock.clear();
+            // else between 0 and capacity - 1.  enqueue.
 
-          return true;
+          	std::atomic_thread_fence(bliss::concurrent::MO_ACQ_REL);    // separate the conditional from the actual enqueue
+
+           	q.push_back(data);  // successfully enqueued.
+            res = true;
+            size.fetch_add(1, bliss::concurrent::MO_ACQ_REL);
+  
+          	spinlock.clear(bliss::concurrent::MO_RELEASE);
+            break;                        
+            
+          } while (!res);
+
+          return res;
         }
 
         /**
@@ -321,27 +364,43 @@ namespace bliss
          * @return        whether push was successful.
          */
         std::pair<bool,T> waitAndPush (T && data) {
-          if (!canPush())
-        	  return std::move(std::make_pair(false, std::move(data)));  // if finished, then no more insertion.  return.
 
-          while(spinlock.test_and_set());
-          while (!canPush() || isFull()) {
-            // full q.  wait for someone to signal  (not full && canPush, or !canPush).
-            spinlock.clear();
-            _mm_pause();
+          std::pair<bool, T> res;
+          res.first = false;
 
-            // to get here, have to have one of these conditions changed:  pushEnabled, !full
-            if (!canPush()) {
-              return std::move(std::make_pair(false, std::move(data)));  // if finished, then no more insertion.  return.
+          volatile int64_t v = 0L;
+
+          do {  // loop forever, unless queue is disabled, or insert succeeded.
+          	while(spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));
+
+            v = size.load(bliss::concurrent::MO_ACQUIRE);
+
+            if (v < 0L) { // disabled so return false
+              res.second = std::move(data);
+            	spinlock.clear(bliss::concurrent::MO_RELEASE);
+              break;
             }
-            while(spinlock.test_and_set());
-          }
 
-          qsize.fetch_add(1, std::memory_order_relaxed);
-          q.push_back(std::move(data));    // insert using predefined move version of deque's push function
+            if (v >= capacity) {   // over capacity.  wait.
+             	spinlock.clear(bliss::concurrent::MO_RELEASE);
+            	_mm_pause();
+              continue;
+            }
 
-          spinlock.clear();
-          return std::move(std::make_pair(true, std::move(T())));
+            // else between 0 and capacity - 1.  enqueue.
+
+          	std::atomic_thread_fence(bliss::concurrent::MO_ACQ_REL);
+
+           	q.emplace_back(std::forward<T>(data));  // successfully enqueued.
+            res.first = true;
+            size.fetch_add(1, bliss::concurrent::MO_ACQ_REL);
+            	
+          	spinlock.clear(bliss::concurrent::MO_RELEASE);
+            break;
+
+          } while (!res.first);
+
+          return std::move(res);  // disabled so return false
         }
 
 
@@ -359,18 +418,20 @@ namespace bliss
           std::pair<bool, T> output;
           output.first = false;
 
-          while(spinlock.test_and_set());
-          if (isEmpty()) {
-            spinlock.clear();
-            return output;
+          if (isEmpty()) return output;
+
+          while (spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));   // establish critical section
+
+          if (!isEmpty()) {
+        	  std::atomic_thread_fence(bliss::concurrent::MO_ACQ_REL);    // fence separate conditional from dequeue.
+        	  output.second = std::move(q.front());  // convert to movable reference and move-assign.
+            std::atomic_thread_fence(bliss::concurrent::MO_ACQ_REL);    // fence enforce q.front and q.pop_front
+        	  q.pop_front();
+            output.first = true;
+            size.fetch_sub(1, bliss::concurrent::MO_ACQ_REL);
           }
 
-          output.second = std::move(q.front());  // convert to movable reference and move-assign.
-          q.pop_front();
-          qsize.fetch_sub(1, std::memory_order_relaxed);
-          spinlock.clear();
-
-          output.first = true;
+          spinlock.clear(bliss::concurrent::MO_RELEASE);
 
           return output;
 
@@ -395,31 +456,47 @@ namespace bliss
           std::pair<bool, T> output;
           output.first = false;
 
-          // if !canPush and queue is empty, then return false.
-          if (!canPop()) return output;
 
-          // else either canPush (queue empty or not), or !canPush and queue is not empty.
+          volatile int64_t v = 0L;
+          bool breaking = false;
 
-          while(spinlock.test_and_set());
-          while (isEmpty()) {
-            // empty q.  wait for someone to signal (when !isEmpty, or !canPop)
-            spinlock.clear();
-            _mm_pause();
+          do {
 
-            // if !canPush and queue is empty, then return false.
-            if (!canPop()) {
-              return output;
+            while (spinlock.test_and_set(bliss::concurrent::MO_ACQ_REL));
+
+//            printf("checking..."); fflush(stdout);
+            v = size.load(bliss::concurrent::MO_ACQUIRE);
+
+
+//            if (v < 0) printf("-"); fflush(stdout);
+            if (v == DISABLE_FLAG) {  // disabled and empty. return.
+//              printf("-"); fflush(stdout);
+              breaking = true;
+            } else if (v == 0L) {  // empty but not disabled. so wait
+//              printf("%ld", v); fflush(stdout);
+            } else {
+
+//            printf("popping..."); fflush(stdout);
+
+              //  else has some entries
+            
+              std::atomic_thread_fence(bliss::concurrent::MO_ACQ_REL);   // fence to separate conditional and dequeue
+              output.second = std::move(q.front());  // convert to movable reference and move-assign.
+              std::atomic_thread_fence(bliss::concurrent::MO_ACQ_REL);
+              q.pop_front();
+              
+              output.first = true;
+              size.fetch_sub(1, bliss::concurrent::MO_ACQ_REL);
+              breaking = true;
             }
-            while(spinlock.test_and_set());
-          }
+            spinlock.clear(bliss::concurrent::MO_RELEASE);
 
-          qsize.fetch_sub(1, std::memory_order_relaxed);
-          output.second = std::move(q.front());  // convert to movable reference and move-assign.
-          q.pop_front();
+            if (breaking) break;
+          
+            _mm_pause();
+          } while (!output.first);
 
-          spinlock.clear();
-          output.first = true;
-
+//          printf("done..."); fflush(stdout);
 
           return output;
         }
@@ -431,7 +508,7 @@ namespace bliss
     /**
      * static templated MAX_SIZE definition.
      */
-    template<typename T> constexpr size_t ThreadSafeQueue<T>::MAX_SIZE;
+    template<typename T> constexpr int64_t ThreadSafeQueue<T>::MAX_SIZE;
 
 
 
