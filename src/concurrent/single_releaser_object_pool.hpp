@@ -28,7 +28,7 @@
 
 namespace bliss
 {
-  namespace io
+  namespace concurrent
   {
     /**
      * @class     ObjectPool
@@ -481,7 +481,7 @@ namespace bliss
     const bliss::concurrent::LockType ObjectPool<LockType, T>::poolLT;
 
 
-  } /* namespace io */
+  } /* namespace concurrent */
 } /* namespace bliss */
 
 #endif /* OBJECTPOOL_HPP_ */

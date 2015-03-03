@@ -22,7 +22,8 @@
 
 #include "utils/logging.h"
 #include "concurrent/concurrent.hpp"
-#include "concurrent/lockfree_queue.hpp"
+//#include "concurrent/lockfree_queue.hpp"
+#include "concurrent/spinlock_queue.hpp"
 
 #include <omp.h>
 
@@ -30,7 +31,7 @@
 
 namespace bliss
 {
-namespace io
+namespace concurrent
 {
 
 /**
@@ -115,23 +116,28 @@ protected:
 	void clear_storage() {
 		auto entry = available.tryPop();
 		while (entry.first) {
-			delete entry.second;  // not checking if pointer is null, because what's in available should all be valid.
+			if (entry.second) delete entry.second;
+			else ERRORF("object pool contains nullptr in available queue!");
 			entry = available.tryPop();
 		}
 
 		if (LT == bliss::concurrent::LockType::MUTEX) {
 			std::lock_guard<std::mutex> lock(mutex);
+			std::atomic_thread_fence(std::memory_order_acquire);
 			for (auto ptr : in_use) {
-				delete ptr;  // not checking if pointer is null, because what's in available should all be valid.
+				if (ptr) delete ptr;
+				else ERRORF("object pool contains nullptr in available queue!");
 			}
 			in_use.clear();
 		} else {
-			while (spinlock.test_and_set());
+			while (spinlock.test_and_set(std::memory_order_relaxed));
+			std::atomic_thread_fence(std::memory_order_acquire);
 			for (auto ptr : in_use) {
-				delete ptr;  // not checking if pointer is null, because what's in available should all be valid.
+				if (ptr) delete ptr;
+				else ERRORF("object pool contains nullptr in available queue!");
 			}
 			in_use.clear();
-			spinlock.clear();
+			spinlock.clear(std::memory_order_relaxed);
 		}
 
 		size_in_use.store(0, std::memory_order_release);
@@ -217,9 +223,12 @@ public:
 	void reset() {
 		std::lock_guard<std::mutex> lock(mutex);
 
+		std::atomic_thread_fence(std::memory_order_acquire);
+
 		// move all from in_use to available
 		for (auto iter = in_use.begin(); iter != in_use.end(); ++iter) {
-			available.tryPush(*iter);
+			if (*iter != nullptr &&   // if nullptr, won't push and won't delete.
+					!available.tryPush(*iter)) delete (*iter);
 		}
 
 		// TODO: clear the objects somehow?
@@ -231,16 +240,19 @@ public:
 	template<bliss::concurrent::LockType LT = LockType,
 		typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, int>::type = 0>
 	void reset() {
-		while (spinlock.test_and_set());
+		while (spinlock.test_and_set(std::memory_order_relaxed));
+
+		std::atomic_thread_fence(std::memory_order_acquire);
 
 		// move all from in_use to available
 		for (auto iter = in_use.begin(); iter != in_use.end(); ++iter) {
-			available.tryPush(*iter);
+			if (*iter != nullptr &&   // if nullptr, won't push and won't delete.
+								!available.tryPush(*iter)) delete (*iter);
 		}
 
-		// TODO: clear the objects somehow?
+		// clear the objects
 		in_use.clear();
-		spinlock.clear();
+		spinlock.clear(std::memory_order_relaxed);
 		size_in_use.store(0, std::memory_order_release);
 	}
 
@@ -254,11 +266,13 @@ public:
 	typename std::enable_if<(LT == bliss::concurrent::LockType::MUTEX) ||
 							(LT == bliss::concurrent::LockType::SPINLOCK), ObjectPtrType>::type
 	tryAcquireObject() {
-
+		// pattern below is okay since no threads will get the object until returned.
 
 		ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
 		// okay to add before compare, since object pool is long lasting.
+
+		// first reserve an available one.
 		int64_t prev_size = size_in_use.fetch_add(1, std::memory_order_relaxed);
 		if (prev_size >= capacity) {
 			size_in_use.fetch_sub(1, std::memory_order_relaxed);
@@ -269,7 +283,7 @@ public:
 		} else {
 			// code below uses copy semantics instead of move.  reason is else we could have entries that are null?
 
-		  // try pop one.
+		  // try pop one. - reserved.
 		  auto reuse = available.tryPop();
 
 		  // if successful pop
@@ -278,23 +292,30 @@ public:
 		    sptr = reuse.second;
 		  } else {
 		    // available is likely empty. allocate a new one.
+			  assert(reuse.second = nullptr);
+
 		    sptr = new ObjectType();
 		  }
+
+		  // reserved.  now add to in_use, then return.
 
 			if (sptr) {
 
 				if (LT == bliss::concurrent::LockType::MUTEX) {
-					std::lock_guard<std::mutex> lock(mutex);
+					std::unique_lock<std::mutex> lock(mutex);
 					// save in in_use set.
+					std::atomic_thread_fence(std::memory_order_acquire);
 					in_use.insert(sptr);  // store copy of shared pointer.
-
+					std::atomic_thread_fence(std::memory_order_release);
+					lock.unlock();
 				} else {
-					while (spinlock.test_and_set());
+					while (spinlock.test_and_set(std::memory_order_relaxed));
 
 					// save in in-use set.
+					std::atomic_thread_fence(std::memory_order_acquire);
 					in_use.insert(sptr);  // store the shared pointer.
 
-					spinlock.clear();
+					spinlock.clear(std::memory_order_release);
 				}
 			}
 		}
@@ -322,14 +343,20 @@ public:
 
 		int count = 0;
 		if (LT == bliss::concurrent::LockType::MUTEX) {
-			std::lock_guard<std::mutex> lock(mutex);
+			std::unique_lock<std::mutex> lock(mutex);
+			std::atomic_thread_fence(std::memory_order_acquire);
 			count = in_use.erase(ptr);
+			std::atomic_thread_fence(std::memory_order_release);
+			lock.unlock();
 		} else {
-			while (spinlock.test_and_set());
+			while (spinlock.test_and_set(std::memory_order_relaxed));
+			std::atomic_thread_fence(std::memory_order_acquire);
 			count = in_use.erase(ptr);
-			spinlock.clear();
+			spinlock.clear(std::memory_order_release);
 
 		}
+
+		// object no longer in in_use, but not yet available - lock pattern okay.
 
 		bool res = false;
 
@@ -423,14 +450,17 @@ protected:
 
 		auto entry = available.tryPop();
 		while (entry.first) {
-			delete entry.second;
+			if (entry.second) delete entry.second;
+			else ERRORF("object pool contains nullptr in available queue!");
 			entry = available.tryPop();
 		}
 
 		std::unique_lock<std::mutex> lock(mutex);
 		for (size_t t = 0; t < in_use.size() ; ++t) {
 			for (auto ptr : in_use[t]) {
-				delete ptr;
+				if (ptr) delete ptr;
+				else ERRORF("object pool contains nullptr in in_use set!");
+
 			}
 			in_use[t].clear();
 		}
@@ -521,7 +551,8 @@ public:
 		// move all from in_use to available
 		for (int tid = in_use.size() - 1; tid >= 0; --tid) {
 			for (auto iter = in_use[tid].begin(); iter != in_use[tid].end(); ++iter) {
-				available.tryPush(*iter);
+				if (*iter != nullptr &&   // if nullptr, won't push and won't delete.
+									!available.tryPush(*iter)) delete (*iter);
 			}
 
 			// TODO: clear the objects somehow?
@@ -539,7 +570,8 @@ public:
 		// move all from in_use to available
 		int count = 0;
 		for (auto iter = in_use[tid].begin(); iter != in_use[tid].end(); ++iter, ++count) {
-			available.tryPush(*iter);
+			if (*iter != nullptr &&   // if nullptr, won't push and won't delete.
+								!available.tryPush(*iter)) delete (*iter);
 		}
 
 		// TODO: clear the objects somehow?
@@ -578,6 +610,8 @@ public:
         sptr = reuse.second;
       } else {
         // available is likely empty. allocate a new one.
+    	  assert(reuse.second = nullptr);
+
         sptr = new ObjectType();
       }
 
@@ -614,8 +648,9 @@ public:
 		int tid = thread_id < 0 ? omp_get_thread_num() : thread_id;
 
 		bool res = false;            // nullptr would not be in in_use.
-		int count = 0;
-		if ((count = in_use[tid].erase(ptr)) > 0) {
+		int count = in_use[tid].erase(ptr);
+
+		if (count > 0) {
 			// only put back in available queue if it was in use.
 			// now make object available.  make sure push_back is done one thread at a time.
 			res = available.tryPush(ptr);
@@ -695,12 +730,14 @@ protected:
 		while (!available.empty()) {
 			ptr = available.front();
 			available.pop_front();
-			delete ptr;
+			if (ptr) delete ptr;
+			else ERRORF("object pool contains nullptr in available queue!");
 		}
 		available.clear();
 
 		for (auto ptr : in_use) {
-			delete ptr;
+			if (ptr) delete ptr;
+			else ERRORF("object pool contains nullptr in in_use set!");
 		}
 		in_use.clear();
 	}
@@ -818,7 +855,10 @@ public:
 		}
 
 		// save in in_use set.
+		std::atomic_thread_fence(std::memory_order_acquire);
 		if (sptr) in_use.insert(sptr);  // store the shared pointer.
+		std::atomic_thread_fence(std::memory_order_release);
+
 		return sptr;
 	}
 
@@ -839,7 +879,11 @@ public:
 
 		bool res = false;            // nullptr would not be in in_use.
 
-		if (in_use.erase(ptr) > 0) {
+		std::atomic_thread_fence(std::memory_order_acquire);
+		int count = in_use.erase(ptr);
+		std::atomic_thread_fence(std::memory_order_release);
+
+		if ( count > 0) {
 			// only put back in available queue if it was in use.
 			// now make object available.  make sure push_back is done one thread at a time.
 			available.push_back(ptr);
@@ -855,7 +899,7 @@ template<bliss::concurrent::LockType LockType, class T>
 const bliss::concurrent::LockType ObjectPool<LockType, T>::poolLT;
 
 
-} /* namespace io */
+} /* namespace concurrent */
 } /* namespace bliss */
 
 #endif /* OBJECTPOOL_HPP_ */

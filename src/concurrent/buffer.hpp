@@ -69,12 +69,13 @@ namespace bliss
          * @param other   the source Buffer
          * @param l       the mutex lock on the source Buffer.
          */
-        BufferBase(BufferBase<Capacity, MetadataSize> && other, const std::lock_guard<std::mutex> &l)
+        BufferBase(BufferBase<Capacity, MetadataSize> && other, const std::lock_guard<std::mutex> &)
             : start_ptr(other.start_ptr), data_ptr(other.data_ptr), size(other.size)
         {
           other.start_ptr = nullptr;
           other.data_ptr = nullptr;
           other.size = 0;
+          std::atomic_thread_fence(std::memory_order_release);
         };
 
 
@@ -86,7 +87,7 @@ namespace bliss
          * @param other     Source Buffer to move
          */
         void move_assigner(BufferBase<Capacity, MetadataSize> && other,
-            const std::unique_lock<std::mutex> &l1, const std::unique_lock<std::mutex> &l2)
+            const std::unique_lock<std::mutex> &, const std::unique_lock<std::mutex> &)
         {
 
           if (this->start_ptr != other.start_ptr)
@@ -94,11 +95,14 @@ namespace bliss
             // move the internal memory.
             start_ptr = other.start_ptr;
             data_ptr = other.data_ptr;
+
+            std::atomic_thread_fence(std::memory_order_acquire);
             size = other.size;
 
             other.start_ptr = nullptr;
             other.data_ptr = nullptr;
             other.size = 0;
+            std::atomic_thread_fence(std::memory_order_release);
           }
         }
 
@@ -172,6 +176,7 @@ namespace bliss
         /// Get size of buffer.  only meaningful after buffer has been "blocked"
         int64_t getSize() const
         {
+          std::atomic_thread_fence(std::memory_order_acquire);
           return size;
         }
 
@@ -209,6 +214,7 @@ namespace bliss
         /// pointer to the end of the data block in buffer.
         uint8_t* end() const
         {
+          std::atomic_thread_fence(std::memory_order_acquire);
           return data_ptr + size;
         }
 
@@ -219,6 +225,7 @@ namespace bliss
          */
         template<typename T>
         operator T*() const {
+          std::atomic_thread_fence(std::memory_order_acquire);
           return reinterpret_cast<T*>(data_ptr);
         }
 
@@ -316,6 +323,8 @@ namespace bliss
         {
           other.written = 0;
           other.reserved = Capacity + 1;
+          std::atomic_thread_fence(std::memory_order_release);
+
         };
 
         /// remove copy constructor and copy assignement operators.
@@ -374,14 +383,16 @@ namespace bliss
             std::lock(myLock, otherLock);
 
             // move the internal memory.
+            std::atomic_thread_fence(std::memory_order_acquire);
+
             written = (int64_t)(other.written);
             reserved = (int64_t)(other.reserved);
 
             this->move_assigner(std::move(other), myLock, otherLock);
 
-
             other.written = 0;
             other.reserved = Capacity + 1;
+            std::atomic_thread_fence(std::memory_order_release);
           }
           return *this;
         }
@@ -395,6 +406,7 @@ namespace bliss
          */
         int64_t getApproximateSize() const
         {
+            std::atomic_thread_fence(std::memory_order_acquire);
           return reserved;
         }
 
@@ -405,6 +417,7 @@ namespace bliss
          */
         int64_t getWrittenSize() const
         {
+            std::atomic_thread_fence(std::memory_order_acquire);
           return written;
         }
 
@@ -413,6 +426,7 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_flushing() const
         {
           std::lock_guard<std::mutex> lock(this->mutex);
+          std::atomic_thread_fence(std::memory_order_acquire);
           return (reserved > Capacity) && (written < this->size);
         }
 
@@ -421,10 +435,9 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
             bool>::type is_flushing() const
         {
-          while (spinlock.test_and_set())
-            ;
+          while (spinlock.test_and_set(std::memory_order_acquire));
           bool res = (reserved > Capacity) && (written < this->size);
-          spinlock.clear();
+          spinlock.clear(std::memory_order_release);
           return res;
         }
 
@@ -461,6 +474,8 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_writing() const
         {
           std::lock_guard<std::mutex> lock(this->mutex);
+          std::atomic_thread_fence(std::memory_order_acquire);
+
           return written < this->size;  // reserved > written if is writing. but reserve can increase while buffer is unblocked.
         }
 
@@ -469,6 +484,8 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, bool>::type is_read_only() const
         {
           std::lock_guard<std::mutex> lock(this->mutex);
+          std::atomic_thread_fence(std::memory_order_acquire);
+
           return (reserved > Capacity) && (written >= this->size);
         }
 
@@ -477,10 +494,9 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
             bool>::type is_writing() const
         {
-          while (spinlock.test_and_set())
-            ;
+          while (spinlock.test_and_set(std::memory_order_acquire));
           bool res = written < this->size;
-          spinlock.clear();
+          spinlock.clear(std::memory_order_release);
           return res;
         }
 
@@ -489,10 +505,9 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
             bool>::type is_read_only() const
         {
-          while (spinlock.test_and_set())
-            ;
+          while (spinlock.test_and_set(std::memory_order_acquire));
           bool res = (reserved > Capacity) && (written >= this->size);
-          spinlock.clear();
+          spinlock.clear(std::memory_order_release);
           return res;
         }
 
@@ -511,6 +526,7 @@ namespace bliss
          */
         int64_t internal_reserve(const uint32_t count)
         {
+          std::atomic_thread_fence(std::memory_order_acquire);
           int64_t curr = reserved;
 
           // this part reduces likelihood of accessing freed memory (a different thread tries to reserve to a freed region, i.e. )
@@ -525,19 +541,55 @@ namespace bliss
             {
               reserved = Capacity + 1 ;
               this->size = curr;
+
               curr = -2;
 
-            } else if (curr + count == Capacity)  // filled to capacity, so valid position is returned.
+            }
+            else if (curr + count == Capacity)  // filled to capacity, so valid position is returned.
             {
               reserved = Capacity + 1 ;
               this->size = Capacity;
+
             }  // else normal append
-            else
+            else {
               reserved += count;
 
+            }
+            std::atomic_thread_fence(std::memory_order_release);
           }
           return curr;
         }
+
+
+
+
+        /// marked write as completed. mutex version
+        template<bliss::concurrent::LockType LT = LockType>
+        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, void>::type complete_write(
+            const int count)
+        {
+          std::lock_guard<std::mutex> lock(this->mutex);
+          std::atomic_thread_fence(std::memory_order_acquire);
+
+          written += count;
+          std::atomic_thread_fence(std::memory_order_release);
+
+        }
+
+        /// marked write as completed. spinlock version
+        template<bliss::concurrent::LockType LT = LockType>
+        typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
+            void>::type complete_write(const int count)
+        {
+          while (spinlock.test_and_set(std::memory_order_acquire));
+
+          written += count;
+
+          spinlock.clear(std::memory_order_release);
+        }
+
+
+      public:
 
 
         /**
@@ -567,40 +619,14 @@ namespace bliss
             int64_t>::type reserve(const uint32_t count)
         {
 
-          while (spinlock.test_and_set());
+          while (spinlock.test_and_set(std::memory_order_acquire));
 
           int64_t curr = internal_reserve(count);
 
-          spinlock.clear();
+          spinlock.clear(std::memory_order_release);
           return curr;
         }
 
-
-
-        /// marked write as completed. mutex version
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, void>::type complete_write(
-            const int count)
-        {
-          std::lock_guard<std::mutex> lock(this->mutex);
-
-          written += count;
-        }
-
-        /// marked write as completed. spinlock version
-        template<bliss::concurrent::LockType LT = LockType>
-        typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
-            void>::type complete_write(const int count)
-        {
-          while (spinlock.test_and_set())
-            ;
-
-          written += count;
-          spinlock.clear();
-        }
-
-
-      public:
 
         /**
          * @brief  prevents future writes.  block can be turned on while there are writes in progress.  once block is on, reserve will fail.
@@ -615,6 +641,7 @@ namespace bliss
           std::lock_guard<std::mutex> lock(this->mutex);
 
           // if supplied a desired size at which to lock, use it.
+          std::atomic_thread_fence(std::memory_order_acquire);
           int64_t curr = (_curr >= 0 ? _curr : reserved);
 
           // set reserve so no further reservations occur.
@@ -625,6 +652,8 @@ namespace bliss
           {
         	  this->size = curr;
           }
+          std::atomic_thread_fence(std::memory_order_release);
+
         }
         /**
          * @brief  prevents future writes.  block can be turned on while there are writes in progress.  once block is on, reserve will fail.
@@ -636,9 +665,10 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
             void>::type block_writes(int64_t _curr = -1)
         {
-          while (spinlock.test_and_set());
+          while (spinlock.test_and_set(std::memory_order_acquire));
 
           // if supplied a desired size at which to lock, use it.
+
           int64_t curr = (_curr >= 0 ? _curr : reserved);
 
           // set reserve so no further reservations occur.
@@ -649,7 +679,8 @@ namespace bliss
           {
         	  this->size = curr;
           }
-          spinlock.clear();
+
+          spinlock.clear(std::memory_order_release);
         }
 
 
@@ -662,12 +693,14 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::MUTEX, void>::type unblock_writes()
         {
           std::lock_guard<std::mutex> lock(this->mutex);
+          std::atomic_thread_fence(std::memory_order_acquire);
 
           if (reserved > Capacity)
             reserved = this->size;
 
           // then reset size to max
           this->size = Capacity + 1;
+          std::atomic_thread_fence(std::memory_order_release);
         }
 
         /**
@@ -678,14 +711,15 @@ namespace bliss
         template<bliss::concurrent::LockType LT = LockType>
         typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK, void>::type unblock_writes()
         {
-          while (spinlock.test_and_set());
+          while (spinlock.test_and_set(std::memory_order_acquire));
 
           if (reserved > Capacity)
             reserved = this->size;
 
           // then reset size to max
           this->size = Capacity + 1;
-          spinlock.clear();
+
+          spinlock.clear(std::memory_order_release);
 
         }
 
@@ -710,11 +744,11 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
             void>::type clear_and_block_writes()
         {
-          while (spinlock.test_and_set()) ;
+          while (spinlock.test_and_set(std::memory_order_acquire)) ;
           reserved = Capacity + 1;
           this->size = 0;
           written = 0;
-          spinlock.clear();
+          spinlock.clear(std::memory_order_release);
         }
 
         /**
@@ -729,6 +763,8 @@ namespace bliss
           reserved = Capacity + 1;
           this->size = 0;
           written = 0;
+          std::atomic_thread_fence(std::memory_order_release);
+
         }
 
         /**
@@ -739,11 +775,13 @@ namespace bliss
         typename std::enable_if<LT == bliss::concurrent::LockType::SPINLOCK,
             void>::type clear_and_unblock_writes()
         {
-          while (spinlock.test_and_set());
+          while (spinlock.test_and_set(std::memory_order_acquire));
           reserved = 0;
           this->size = Capacity + 1;
           written = 0;
-          spinlock.clear();
+
+          spinlock.clear(std::memory_order_release);
+
         }
 
 
@@ -759,6 +797,8 @@ namespace bliss
           reserved = 0;
           this->size = Capacity + 1;
           written = 0;
+          std::atomic_thread_fence(std::memory_order_release);
+
         }
 
 
@@ -1059,8 +1099,6 @@ namespace bliss
         }
 
 
-      protected:
-
         /**
           * @brief       reserves a position in the buffer at which to insert count number of bytes.
           * @details     increment only if we have room
@@ -1098,8 +1136,6 @@ namespace bliss
           return curr;
         }
 
-
-      public:
 
         /**
          * @brief  prevents future writes.  block can be turned on while there are writes in progress.  once block is on, reserve will fail.
@@ -1324,12 +1360,9 @@ namespace bliss
          */
         Buffer(BufferType && other, const std::lock_guard<std::mutex> &l) :
               BaseType(other, l),
-              reserved(other.reserved.load()),
-              written(other.written.load())
         {
-          other.written = 0;
-          other.reserved = Capacity + 1;
-
+			reserved.store(other.reserved.exchange(Capacity+1, std::memory_order_acquire), std::memory_order_release);
+			written.store(other.written.exchange(0, std::memory_order_acquire), std::memory_order_release);
         };
 
         /// remove copy constructor and copy assignement operators.
@@ -1387,14 +1420,10 @@ namespace bliss
                 otherLock(other.mutex, std::defer_lock);
             std::lock(myLock, otherLock);
 
-            /// move the internal memory.
-            written = (int64_t)(other.written);
-            reserved = (int64_t)(other.reserved);
-
             this->move_assigner(std::move(other), myLock, otherLock);
 
-            other.written = 0;
-            other.reserved = Capacity + 1;
+            reserved.store(other.reserved.exchange(Capacity+1, std::memory_order_acquire), std::memory_order_release);
+            written.store(other.written.exchange(0, std::memory_order_acquire), std::memory_order_release);
           }
           return *this;
         }
@@ -1423,9 +1452,10 @@ namespace bliss
         /// Check if buffer has been blocked from further reservation but still waiting for all writes to finish.
         bool is_flushing() const
         {
-          //int64_t s = size.load(std::memory_order_relaxed);
 
-          return (reserved.load(std::memory_order_relaxed) > Capacity) && (written.load(std::memory_order_acquire) < this->size);
+        	std::atomic_thread_fence(std::memory_order_acquire);
+        	auto s = this->size;
+          return (reserved.load(std::memory_order_acquire) > Capacity) && (s > written.load(std::memory_order_relaxed));
         }
 
 
@@ -1440,7 +1470,7 @@ namespace bliss
          */
         bool isEmpty() const
         {
-          return written.load(std::memory_order_acquire) == 0;
+          return written.load(std::memory_order_relaxed) == 0;
         }
 
         // TODO:  make this more clear.
@@ -1461,19 +1491,18 @@ namespace bliss
         {
           // is writing - really only for debugging external to this class
           //int64_t s = size.load(std::memory_order_relaxed);
-          return written.load(std::memory_order_acquire) < this->size;
+          return written.load(std::memory_order_relaxed) < this->size;
         }
 
         /// check if the buffer is blocked from further writes and no threads need to write to it.
         bool is_read_only() const
         {
           // is read only - really only for debugging external to this class
-          //int64_t s = size.load(std::memory_order_relaxed);
-          return (reserved.load(std::memory_order_relaxed) > Capacity) && (written.load(std::memory_order_acquire) >= this->size);
+        	std::atomic_thread_fence(std::memory_order_acquire);
+        	auto s = this->size;
+          return (reserved.load(std::memory_order_acquire) > Capacity) && (s <= written.load(std::memory_order_relaxed));
         }
 
-
-      protected:
 
         /**
          * @brief       reserves a position in the buffer at which to insert the count number of bytes.
@@ -1489,13 +1518,13 @@ namespace bliss
         {
 
           // blocked buffer, from full or explicit block call.
-          if (reserved.load(std::memory_order_relaxed) > Capacity) {
+          if (reserved.load(std::memory_order_acquire) > Capacity) {
             // have this here to minimize fetch_add calls.
 
             return -1;
           } else {
             // not yet full, so reserve
-            int64_t curr = reserved.fetch_add(count, std::memory_order_acquire);
+            int64_t curr = reserved.fetch_add(count, std::memory_order_acq_rel);
 
             if (curr >= Capacity) {
               return -1;
@@ -1522,11 +1551,12 @@ namespace bliss
           }
         }
 
+      protected:
 
         /// marked write as completed.
         void complete_write(const int count)
         {
-          written.fetch_add(count, std::memory_order_release);
+          written.fetch_add(count, std::memory_order_acq_rel);
         }
 
       public:
@@ -1548,7 +1578,7 @@ namespace bliss
          */
         void block_writes(int64_t _curr = -1)
         {
-          int64_t curr = reserved.exchange(Capacity + 1, std::memory_order_relaxed);
+          int64_t curr = reserved.exchange(Capacity + 1, std::memory_order_acq_rel);
           // curr could be greater than capacity, or not.
 
           //int64_t end = size.load(std::memory_order_relaxed);  // size initially at Capacity + 1
@@ -1561,7 +1591,6 @@ namespace bliss
 //          {
 //            stop = size.compare_exchange_weak(end, curr, std::memory_order_relaxed);
 //          }
-          std::atomic_thread_fence(std::memory_order_acquire);
           this->size = std::min(curr, this->size);
           std::atomic_thread_fence(std::memory_order_release);
 
@@ -1589,7 +1618,7 @@ namespace bliss
 //          }
 
         	int64_t curr = Capacity + 1;
-        	if (reserved.compare_exchange_strong(curr, this->size, std::memory_order_acquire)) {
+        	if (reserved.compare_exchange_strong(curr, this->size, std::memory_order_acq_rel)) {
         		this->size = Capacity + 1;
                 std::atomic_thread_fence(std::memory_order_release);
         	} else {
@@ -1615,10 +1644,10 @@ namespace bliss
          */
         void clear_and_block_writes()
         {
+          std::atomic_thread_fence(std::memory_order_acquire);
           // blocked
           reserved.store(Capacity + 1, std::memory_order_relaxed);
           written.store(0, std::memory_order_relaxed);
-          //size.store(0, std::memory_order_relaxed);
           this->size = 0;
           std::atomic_thread_fence(std::memory_order_release);
 
@@ -1631,9 +1660,9 @@ namespace bliss
          */
         void clear_and_unblock_writes()
         {
+          std::atomic_thread_fence(std::memory_order_acquire);
           written.store(0, std::memory_order_relaxed);
           reserved.store(0, std::memory_order_relaxed);
-          //size.store(Capacity + 1, std::memory_order_relaxed);
           this->size = Capacity + 1;
           std::atomic_thread_fence(std::memory_order_release);
         }
