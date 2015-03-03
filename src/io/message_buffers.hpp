@@ -58,6 +58,10 @@ namespace bliss
   namespace io
   {
 
+  	template<typename BufferPool>
+  	class MessageBuffers;
+
+
     /**
      * @class			MessageBuffers
      * @brief     a data structure to buffering/batching messages for communication
@@ -67,16 +71,16 @@ namespace bliss
      * @tparam BufferLT        Buffer's thread safety model
      * @tparam BufferCapacity  capacity of Buffers to create
      */
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT = PoolLT, int64_t BufferCapacity = 8192>
-    class MessageBuffers
+    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity, size_t MetadataSize>
+    class MessageBuffers<bliss::concurrent::ObjectPool<PoolLT, bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize> > >
     {
       public:
         /// DEFINE  type of the buffer.
-        typedef Buffer<BufferLT, BufferCapacity> BufferType;
+        typedef bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize> BufferType;
 
       protected:
         /// Internal BufferPool Type.  typedefed only to shorten the usage.
-        typedef typename bliss::io::ObjectPool<PoolLT, BufferType>  BufferPoolType;
+        typedef typename bliss::concurrent::ObjectPool<PoolLT, BufferType>  BufferPoolType;
 
       public:
         /// Pointer type of a Buffer, aliased from BufferPool
@@ -84,7 +88,7 @@ namespace bliss
 
       protected:
         /// ObjectPool for memory management.
-        BufferPoolType pool;
+        BufferPoolType& pool;
 
         /**
          * Gets the capacity of the Buffer instances.
@@ -104,7 +108,7 @@ namespace bliss
          * @param buffer_capacity   the Buffer's maximum capacity.  default to 8192.
          * @param pool_capacity     the BufferPool's capacity.  default to unlimited.
          */
-        explicit MessageBuffers() : pool() {};  // unlimited size pool
+        explicit MessageBuffers(BufferPoolType & _pool) : pool(_pool) {};  // unlimited size pool
 
         /**
          * @brief default copy constructor.  deleted.  since internal BufferPool does not allow copy construction/assignment.
@@ -112,7 +116,7 @@ namespace bliss
          *
          * @param other     source MessageBuffers to copy from
          */
-        explicit MessageBuffers(const MessageBuffers<PoolLT, BufferLT, BufferCapacity>& other) = delete;
+        explicit MessageBuffers(const MessageBuffers& other) = delete;
 
         /**
          * @brief default copy assignment operator.  deleted.   since internal BufferPool does not allow copy construction/assignment.
@@ -121,7 +125,7 @@ namespace bliss
          * @param other     source MessageBuffers to copy from
          * @return          self.
          */
-        MessageBuffers<PoolLT, BufferLT, BufferCapacity>& operator=(const MessageBuffers<PoolLT, BufferLT, BufferCapacity>& other) = delete;
+        MessageBuffers& operator=(const MessageBuffers& other) = delete;
 
 
         /**
@@ -130,7 +134,7 @@ namespace bliss
          *
          * @param other     source MessageBuffers to move from
          */
-        explicit MessageBuffers(MessageBuffers<PoolLT, BufferLT, BufferCapacity>&& other) : pool(std::move(other.pool)) {};
+        explicit MessageBuffers(MessageBuffers&& other) : pool(other.pool) {};
 
 
         /**
@@ -140,8 +144,8 @@ namespace bliss
          * @param other     source MessageBuffers to move from
          * @return          self.
          */
-        MessageBuffers<PoolLT, BufferLT, BufferCapacity>& operator=(MessageBuffers<PoolLT, BufferLT, BufferCapacity>&& other) {
-          pool = std::move(other.pool);
+        MessageBuffers& operator=(MessageBuffers&& other) {
+          pool = other.pool;
           return *this;
         }
 
@@ -210,7 +214,9 @@ namespace bliss
      *
      *
      */
-    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity = 8192>
+//    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT,
+//    			int64_t BufferCapacity = 8192, size_t MetadataSize>
+    template<bliss::concurrent::LockType ArrayLT, typename BufferPool>
     class SendMessageBuffers;
 //    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity = 8192>
 //    class SendMessageBuffers : public MessageBuffers<PoolLT, BufferLT, BufferCapacity>
@@ -712,13 +718,14 @@ namespace bliss
      *
      *
      */
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity>
-    class SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, PoolLT, BufferLT, BufferCapacity> :
-    public MessageBuffers<PoolLT, BufferLT, BufferCapacity>
+    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity, size_t MetadataSize>
+    class SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL,
+    		bliss::concurrent::ObjectPool<PoolLT, bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize> > > :
+    public MessageBuffers<bliss::concurrent::ObjectPool<PoolLT, bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize> > >
     {
       protected:
-        using BaseType = MessageBuffers<PoolLT, BufferLT, BufferCapacity>;
-        using MyType = SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, PoolLT, BufferLT, BufferCapacity>;
+        using BaseType = MessageBuffers<bliss::concurrent::ObjectPool<PoolLT, bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize> > >;
+        using MyType = SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, BaseType>;
 
       public:
         /// type of the Buffers
@@ -776,8 +783,8 @@ namespace bliss
          * @param bufferCapacity   The capacity of the individual buffers.  default 8192.
          * @param poolCapacity     The capacity of the pool.  default unbounded.
          */
-        explicit SendMessageBuffers(const int & num_dests, int num_threads = 0) :
-          BaseType(), buffers()
+        explicit SendMessageBuffers(BufferPoolType& _pool, const int & num_dests, int num_threads = 0) :
+          BaseType(_pool), buffers()
         {
           int nThreads = (num_threads == 0 ? omp_get_max_threads() : num_threads);
 
@@ -796,7 +803,7 @@ namespace bliss
          * @param other   source SendMessageBuffers to move from.
          */
         explicit SendMessageBuffers(MyType && other) :
-            SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, PoolLT, BufferLT, BufferCapacity>(std::forward<MyType >(other), std::lock_guard<std::mutex>(other.mutex)) {};
+            MyType(std::forward< MyType >(other), std::lock_guard<std::mutex>(other.mutex)) {};
 
 
         /**
@@ -809,7 +816,7 @@ namespace bliss
                                           hers(other.mutex, std::defer_lock);
           std::lock(mine, hers);
 
-          this->pool = std::move(other.pool);
+          this->pool = other.pool;
           buffers.clear(); buffers = std::move(other.buffers);
 
           return *this;
@@ -993,14 +1000,11 @@ namespace bliss
 
           BufferType* old;
           std::vector<BufferType*> result;
-          int tid = omp_get_thread_num();
           int nthreads = buffers.at(targetProc).size();
           for (int t = 0; t < nthreads; ++t) {
-            old = swapInEmptyBuffer(targetProc, (t + tid) % nthreads);
-            if (old) {
-              old->block_and_flush();
-              result.push_back(old);
-            }
+            old = swapInEmptyBuffer(targetProc, t);
+            if (old) result.push_back(old);
+
           }
 
           return result;
@@ -1020,6 +1024,8 @@ namespace bliss
           int tid = thread_id < 0 ? omp_get_thread_num() : thread_id;
 
           BufferType* oldbuf = buffers.at(dest).at(tid);
+          if (oldbuf) oldbuf->block_and_flush();
+
           BufferType* ptr = this->pool.tryAcquireObject();
           int i = 1;
           while (!ptr) {

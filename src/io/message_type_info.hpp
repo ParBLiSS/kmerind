@@ -28,84 +28,6 @@ namespace bliss
   namespace io
   {
 
-
-    /**
-     * @class MessageTypeInfo
-     * @brief Used to manage message buffers for a message type.
-     * @details
-     *          This class manages a pointer to the current MessageBuffers for a message type
-     *          via a shared pointer, which provides reference counting.
-     *            since MessageBuffers is long running, we don't expect it to change often,
-     *            and since MessageBuffers is thread safe, we don't lock MessageBuffer's access.
-     *
-     */
-    template<typename MessageBuffersType>
-    class MessageTypeInfo {
-      public:
-
-      protected:
-        /// shared pointer to MessageBuffers for storing pending communication.
-        std::shared_ptr<MessageBuffersType> bufferPtr;
-
-        /// indicates that a Tag (message type) is finished and no future messages will be of this type
-        std::atomic<bool>         finished;  // do we need this?
-
-        /// tag == message type
-        int tag;
-
-        /// deleted copy constructor
-        explicit MessageTypeInfo(const MessageTypeInfo& other) = delete;
-
-        /// deleted copy assignment operator
-        MessageTypeInfo& operator=(const MessageTypeInfo& other) = delete;
-
-      public:
-        /// default constructor.  needed by some containers.
-        MessageTypeInfo() : finished(false), tag(-1) {}
-
-        /// constructor
-        MessageTypeInfo(const int32_t _tag, const std::shared_ptr<MessageBuffersType>& ptr) :
-          bufferPtr(ptr), finished(false), tag(_tag) {}
-
-        /// move constructor
-        MessageTypeInfo(MessageTypeInfo&& other) :
-          bufferPtr(std::move(other.bufferPtr)), tag(other.tag)
-        {
-          finished.store(other.finished.exchange(true, std::memory_order_relaxed));
-          other.tag = -1;
-        }
-
-        /// move assignment operator
-        MessageTypeInfo& operator=(MessageTypeInfo&& other) {
-          bufferPtr = std::move(other.bufferPtr);
-          finished.store(other.finished.exchange(true, std::memory_order_relaxed));
-
-          return *this;
-        }
-
-
-        /// default constructor
-        virtual ~MessageTypeInfo() {}
-
-        //===== accessors
-
-        /// mark a message type as finished and return previous value
-        bool finish() {
-          return finished.exchange(true, std::memory_order_acq_rel);
-        }
-
-        /// check if a message type is finished
-        bool isFinished() {
-          return finished.load(std::memory_order_relaxed);
-        }
-
-        /// get the Message Buffers class associated with this message type.
-        std::shared_ptr<MessageBuffersType> getBuffers() {
-          return std::shared_ptr<MessageBuffersType>(bufferPtr);
-        }
-
-    };
-
     /**
      * @class EpochInfo
      * @brief Used to manage active communication episodes for all message types.
@@ -235,17 +157,22 @@ namespace bliss
 
         /// wait for the capacity associated with an epoch to go down to 0. (i.e. epoch's communication is done).  uses condition variable
         void waitForEpochRelease(const uint64_t & epoch) {
+      	  DEBUGF("WAIT FOR EPOCH RELEASE %lu", epoch);
           std::unique_lock<std::mutex> lock(mutex);
           while (epoch_capacities.count(epoch) > 0) {
             condVar.wait(lock);
+            DEBUGF("WAIT FOR EPOCH RELEASE.  epoch_capacities.size()= %lu, epoch_capacities.count(%lu) = %lu",
+               epoch_capacities.size(), epoch, epoch_capacities.count(epoch));
           }
           lock.unlock();
         }
 
         /// release an epoch.  notifies any waiting thread that epoch was released.
         void releaseEpoch(const uint64_t & epoch, std::atomic<int>& totalCount) {
+      	  DEBUGF("EPOCH RELEASE %lu", epoch);
           std::unique_lock<std::mutex> lock(mutex);
-          epoch_capacities.erase(epoch);
+
+    	  epoch_capacities.erase(epoch);
           totalCount.fetch_sub(1, std::memory_order_release);
           lock.unlock();
 

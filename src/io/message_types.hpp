@@ -163,78 +163,78 @@ namespace bliss
       }
 
     };
-
-
-    /**
-     * @brief Structure to hold all associated information of a received MPI message.
-     * @details tag is used to annotate the message type/format.  The message is processed according to this tag.
-     *
-     *        This class only handles received DATA MESSAGES.
-     *
-     *        On construction, this class is assigned a pointer to a byte array.  From this point on, this class
-     *        manages that byte array.
-     */
-    class DataMessageReceived  : public MPIMessage
-    {
-      protected:
-        /// The received data
-        std::unique_ptr<uint8_t[]> data;
-
-        /// The number of bytes received
-        std::size_t count;
-      
-      public:
-      /**
-       * @brief constructor using a pre-existing memory block
-       *
-       * @param data      in memory block of data (received from remote proc, to be processed here).  unique_ptr
-       * @param count     number of bytes in the data block
-       * @param tag       the MPI message tag, indicating the type of message
-       * @param src       the MPI source process rank
-       */
-      DataMessageReceived(std::unique_ptr<uint8_t[]>&& _data, std::size_t count, int tag, int src)
-        : MPIMessage(tag, src), data(std::move(_data)), count(count) {}
-
-      /**
-       * @brief constructor using a pre-existing memory block
-       *
-       * @param raw_data  in memory block of data (received from remote proc, to be processed here).  raw pointer
-       * @param count     number of bytes in the data block
-       * @param tag       the MPI message tag, indicating the type of message
-       * @param src       the MPI source process rank
-       */
-      DataMessageReceived(uint8_t* raw_data, std::size_t count, int tag, int src)
-        : MPIMessage(tag, src), data(raw_data), count(count) {}
-
-
-      /// default constructor
-      DataMessageReceived() = default;
-
-      /// default destructor
-      virtual ~DataMessageReceived() {};
-
-      /// get the message's epoch embedded as the first sizeof(uint64_t) bytes.
-      virtual uint64_t getEpoch() {
-        return (reinterpret_cast<uint64_t*>(data.get()))[0];
-      }
-
-      /// get pointer to the payload (data + metadata)
-      virtual uint8_t* getPayload() {
-        return data.get();
-      }
-
-      /// get size in bytes of the payload (data + metadata)
-      virtual size_t getPayloadSize() {
-        return count;
-      }
-
-
-      /// get pointer to data, exclude the metadata portion  (for whole data, access member directly
-      virtual uint8_t* getData() { return (data == nullptr) ? nullptr : (data.get() + sizeof(uint64_t)); }
-
-      /// get size of data, exclude the metadata portion
-      virtual size_t getDataSize() { return (count == 0) ? 0 : (count - sizeof(uint64_t)); }
-    };
+//
+//
+//    /**
+//     * @brief Structure to hold all associated information of a received MPI message.
+//     * @details tag is used to annotate the message type/format.  The message is processed according to this tag.
+//     *
+//     *        This class only handles received DATA MESSAGES.
+//     *
+//     *        On construction, this class is assigned a pointer to a byte array.  From this point on, this class
+//     *        manages that byte array.
+//     */
+//    class DataMessageReceived  : public MPIMessage
+//    {
+//      protected:
+//        /// The received data
+//        std::unique_ptr<uint8_t[]> data;
+//
+//        /// The number of bytes received
+//        std::size_t count;
+//
+//      public:
+//      /**
+//       * @brief constructor using a pre-existing memory block
+//       *
+//       * @param data      in memory block of data (received from remote proc, to be processed here).  unique_ptr
+//       * @param count     number of bytes in the data block
+//       * @param tag       the MPI message tag, indicating the type of message
+//       * @param src       the MPI source process rank
+//       */
+//      DataMessageReceived(std::unique_ptr<uint8_t[]>&& _data, std::size_t count, int tag, int src)
+//        : MPIMessage(tag, src), data(std::move(_data)), count(count) {}
+//
+//      /**
+//       * @brief constructor using a pre-existing memory block
+//       *
+//       * @param raw_data  in memory block of data (received from remote proc, to be processed here).  raw pointer
+//       * @param count     number of bytes in the data block
+//       * @param tag       the MPI message tag, indicating the type of message
+//       * @param src       the MPI source process rank
+//       */
+//      DataMessageReceived(uint8_t* raw_data, std::size_t count, int tag, int src)
+//        : MPIMessage(tag, src), data(raw_data), count(count) {}
+//
+//
+//      /// default constructor
+//      DataMessageReceived() = default;
+//
+//      /// default destructor
+//      virtual ~DataMessageReceived() {};
+//
+//      /// get the message's epoch embedded as the first sizeof(uint64_t) bytes.
+//      virtual uint64_t getEpoch() {
+//        return (reinterpret_cast<uint64_t*>(data.get()))[0];
+//      }
+//
+//      /// get pointer to the payload (data + metadata)
+//      virtual uint8_t* getPayload() {
+//        return data.get();
+//      }
+//
+//      /// get size in bytes of the payload (data + metadata)
+//      virtual size_t getPayloadSize() {
+//        return count;
+//      }
+//
+//
+//      /// get pointer to data, exclude the metadata portion  (for whole data, access member directly
+//      virtual uint8_t* getData() { return (data == nullptr) ? nullptr : (data.get() + sizeof(uint64_t)); }
+//
+//      /// get size of data, exclude the metadata portion
+//      virtual size_t getDataSize() { return (count < sizeof(uint64_t)) ? 0 : (count - sizeof(uint64_t)); }
+//    };
 
 
     /**
@@ -300,7 +300,7 @@ namespace bliss
       virtual size_t getDataSize() { return data->getSize(); }
 
 
-      BufferPtrType& getBuffer() { return data; }
+      BufferPtrType getBuffer() { return data; }
 
     };
 
