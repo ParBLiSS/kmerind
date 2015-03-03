@@ -1359,7 +1359,7 @@ namespace bliss
          * @param l       the mutex lock on the source Buffer.
          */
         Buffer(BufferType && other, const std::lock_guard<std::mutex> &l) :
-              BaseType(other, l),
+              BaseType(other, l)
         {
 			reserved.store(other.reserved.exchange(Capacity+1, std::memory_order_acquire), std::memory_order_release);
 			written.store(other.written.exchange(0, std::memory_order_acquire), std::memory_order_release);
