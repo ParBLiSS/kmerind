@@ -1,6 +1,7 @@
 
 #add_subdirectory(testlib)
-
+include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
+include("${CMAKE_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 ## EXECUTABLES
 add_executable(sys_probe sys_probe.cpp)

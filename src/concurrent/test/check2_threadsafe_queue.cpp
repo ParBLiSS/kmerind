@@ -16,7 +16,7 @@
 #include <unistd.h>
 
 #if defined( BLISS_MUTEX)
-#include "concurrent/mutexlock_queue.hpp"
+#include "wip/mutexlock_queue.hpp"
 #elif defined( BLISS_SPINLOCK )
 #include "concurrent/spinlock_queue.hpp"
 #else   //if defined( BLISS_LOCKFREE )
@@ -76,14 +76,22 @@ void testWaitAndPop1(bliss::concurrent::ThreadSafeQueue<T> &queue) {
   int count = 0, count3 = 0;
 
   while (queue.canPop()) {
+//    printf("queue waitAndPopping. "); fflush(stdout);
     if (queue.waitAndPop().first)
       ++count;
+//    printf("queue size = %lu\n", queue.getSize());  fflush(stdout);
 
     //if (count %1000) usleep(20);
   }
+      printf("done with waitAndPop()\n");  fflush(stdout);
+
+
   // now empty it
   while (queue.tryPop().first) {
     ++count3;
+
+    printf("emptying. queue size = %lu\n", queue.getSize());
+
   }
   if (!queue.isEmpty() || count3 != 0) printf("FAIL: TSQueue capacity %lu, finished waitAndPop 1 thread. %d successful, %d flushed.  empty? %s\n", queue.getCapacity(), count, count3, (queue.isEmpty() ? "yes" : "no"));
   else printf("PASS,");
@@ -191,7 +199,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   int count = 0, count2 = 0;
 
 
-  printf("  CHECK tryPop on empty: ");
+  printf("  CHECK tryPop on empty: ");  fflush(stdout);
   queue.clear();
 #pragma omp parallel for num_threads(nConsumer) private(i) shared(queue, entries) default(none) reduction(+: count, count2)
   for (i = 0; i < entries; ++i) {
@@ -203,7 +211,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   if (count2 != entries) printf("FAIL: TSQueue capacity %lu, finished tryPop on empty at iteration %d, success %d, fail %d\n", queue.getCapacity(), i, count, count2);
   else printf("PASS\n");
 
-  printf("  CHECK tryPush too much: ");
+  printf("  CHECK tryPush too much: ");  fflush(stdout);
   count = 0;
   count2 = 0;
   queue.clear();
@@ -218,7 +226,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2)))  printf("FAIL: TSQueue capacity %lu, finished tryPush until full, expected %d, success %d, fail %d. \n", queue.getCapacity(), expected, count, count2);
   else printf("PASS\n");
 
-  printf("  CHECK tryPop too much: ");
+  printf("  CHECK tryPop too much: ");  fflush(stdout);
   count = 0;
   count2 = 0;
 #pragma omp parallel for num_threads(nConsumer) private(i) shared(queue, entries) default(none) reduction(+: count, count2)
@@ -234,7 +242,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
 
 
-  printf("  CHECK waitAndPush then do waitAndPop in parallel: ");
+  printf("  CHECK waitAndPush then do waitAndPop in parallel: ");   fflush(stdout);
   queue.clear();
   queue.enablePush();
   count = 0;
@@ -256,7 +264,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
 
 
-  printf("  CHECK tryPush, and tryPop: ");
+  printf("  CHECK tryPush, and tryPop: ");  fflush(stdout);
   queue.clear();
   queue.enablePush();
 #pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
@@ -277,7 +285,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   }
   printf("\n");
 
-  printf("  CHECK waitAndPush, and tryPop: ");
+  printf("  CHECK waitAndPush, and tryPop: ");   fflush(stdout);
   queue.clear();
   queue.enablePush();
 #pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
@@ -297,7 +305,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   }
   printf("\n");
 
-  printf("  CHECK waitAndPush, and disablePush: ");
+  printf("  CHECK waitAndPush, and disablePush: ");   fflush(stdout);
   queue.clear();
   queue.enablePush();
 #pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
@@ -311,7 +319,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     {
 	sleep(1);
 	queue.disablePush();
-#pragma omp flush(queue)
+//#pragma omp flush(queue)
     }
   }
   printf("\n");
@@ -323,7 +331,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
 
 
-    printf("  CHECK tryPush, and waitAndPop: ");
+    printf("  CHECK tryPush, and waitAndPop: ");  fflush(stdout);
     queue.clear();
     queue.enablePush();
   #pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
@@ -342,7 +350,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
 
 
-    printf("  CHECK waitAndPush, and waitAndPop: ");
+    printf("  CHECK waitAndPush, and waitAndPop: ");  fflush(stdout);
     queue.clear();
     queue.enablePush();
   #pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)

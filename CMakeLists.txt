@@ -15,6 +15,8 @@ INCLUDE(CMakeDependentOption)
 # Initialize CXXFLAGS.
 add_definitions(-Wall -std=c++11 -fPIC)
 
+
+
 # Compiler-specific C++11 activation.
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
 #    message(FATAL_ERROR "${PROJECT_NAME} currently does not support Intel compiler due to constexpr not allowing math function calls")
@@ -23,8 +25,12 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
   if (NOT (ICPC_VERSION VERSION_GREATER 13.0 OR ICPC_VERSION VERSION_EQUAL 13.0))
     message(FATAL_ERROR "${PROJECT_NAME} requires icpc 13.0 or greater.")
   endif ()
-  SET(SUPPORTS_SANITIZER OFF CACHE INTERNAL "tracks compiler supported features")
-  SET(SUPPORTS_COVERAGE OFF CACHE INTERNAL "tracks compiler supported features")
+  SET(SUPPORTS_SANITIZER OFF CACHE INTERNAL "compiler supports sanitizer?")
+  SET(SUPPORTS_COVERAGE OFF CACHE INTERNAL "compiler supports coverage?")
+
+  SET(EXTRA_WARNING_FLAGS "" CACHE INTERNAL "extra compiler warning flags")
+  SET(TYPE_CONVERSION_WARNING_FLAGS "" CACHE INTERNAL "compiler flags to check type conversions")
+  SET(SUGGESTION_WARNING_FLAGS CACHE INTERNAL "compiler flags that suggest keywords for better type resolutions")
 
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   execute_process(
@@ -32,17 +38,27 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   if (NOT (GCC_VERSION VERSION_GREATER 4.7 OR GCC_VERSION VERSION_EQUAL 4.7))
     message(FATAL_ERROR "${PROJECT_NAME} requires g++ 4.7 or greater.")
   endif ()
-  SET(SUPPORTS_SANITIZER ON CACHE INTERNAL "tracks compiler supported features")
-  SET(SUPPORTS_COVERAGE ON CACHE INTERNAL "tracks compiler supported features")
+  SET(SUPPORTS_SANITIZER ON CACHE INTERNAL "compiler supports sanitizer?")
+  SET(SUPPORTS_COVERAGE ON CACHE INTERNAL "compiler supports coverage?")
+  
+# -Wzero-as-null-pointer-constant : causes a lot of errors in system headers.
+  SET(EXTRA_WARNING_FLAGS "-Wextra -Wuninitialized -Wswitch-default -Wundef")
+  SET(TYPE_CONVERSION_WARNING_FLAGS "-Wdouble-promotion -Wconversion -Wsign-conversion -Wcast-qual -Wuseless-cast -Wfloat-equal")
+  SET(SUGGESTION_WARNING_FLAGS "-Wsuggest-override -Wsuggest-final-types -Wsuggest-final-methods")
+  
   
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
     message(FATAL_ERROR "${PROJECT_NAME} currently does not support clang due to include path issues")
 #  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 #  set(_CMAKE_TOOLCHAIN_PREFIX "llvm-")
 #  include_directories("/usr/local/lib/clang/3.4/include")
-  SET(SUPPORTS_SANITIZER ON CACHE INTERNAL "tracks compiler supported features")
-  SET(SUPPORTS_COVERAGE ON CACHE INTERNAL "tracks compiler supported features")
+  SET(SUPPORTS_SANITIZER ON CACHE INTERNAL "compiler supports sanitizer?")
+  SET(SUPPORTS_COVERAGE ON CACHE INTERNAL "compiler supports coverage?")
 
+  SET(EXTRA_WARNING_FLAGS "" CACHE INTERNAL "extra compiler warning flags")
+  SET(TYPE_CONVERSION_WARNING_FLAGS "" CACHE INTERNAL "compiler flags to check type conversions")
+  SET(SUGGESTION_WARNING_FLAGS CACHE INTERNAL "compiler flags that suggest keywords for better type resolutions")
+  
 else ()
   message(FATAL_ERROR "Your C++ compiler does not support C++11.")
 endif ()
@@ -88,14 +104,17 @@ OPTION(ENABLE_PROFILING "Enable profiling in the GCC compiler (Add flags: -g -pg
 
 # Profiling?
 if(ENABLE_PROFILING)
-  set(EXTRA_C_FLAGS_RELEASE "${EXTRA_C_FLAGS_RELEASE} -pg -g")
+  add_definitions(-pg -g)
 else()
   # Remove unreferenced functions: function level linking
   if(NOT APPLE)
-    set(EXTRA_C_FLAGS "${EXTRA_C_FLAGS} -ffunction-sections")
+    add_definitions(-ffunction-sections)
   endif()
 endif()
 
+OPTION(ENABLE_EXTRA_COMPILER_WARNINGS "Enable compiler to generate extra warnings?" OFF)
+OPTION(ENABLE_TYPE_CONVERSION_WARNINGS "Enable compiler to generate extra warnings for type conversions?" OFF)
+OPTION(ENABLE_SUGGESTION_WARNINGS "Enable compiler to generate suggestions for polymorphic type analysis?" OFF)
 
 
 ###### LOGGING ENGINE configuration
@@ -425,10 +444,10 @@ if (ENABLE_TESTING)
       # set flags for coverage test
       message(STATUS "Code coverage reporting enabled")
       add_definitions(-fprofile-arcs -ftest-coverage -g)
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs")
-      set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fprofile-arcs")
-      set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-arcs")
-      set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fprofile-arcs")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
+      set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
+      set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
+      set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
     endif()
 
 

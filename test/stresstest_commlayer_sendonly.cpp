@@ -34,6 +34,7 @@ struct Tester
     int* msgs = reinterpret_cast<int*>(msg);
     size_t msg_count = count / sizeof(int);
 
+    DEBUGF("R %d <- %d, Callback with %lu elements", my_rank, fromRank, msg_count);
     int expected = generate_message(fromRank, my_rank);
     bool error = false;
     // for all received requests, send the value from the lookup
@@ -101,9 +102,9 @@ struct Tester
       }
 
 
-      DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PREFLUSH", my_rank, it, FIRST_TAG, els, msgs_received.load());
+      DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PREFLUSH.", my_rank, it, FIRST_TAG, els, msgs_received.load());
       commLayer.flush(FIRST_TAG);
-      DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d POSTFLUSH", my_rank, it, FIRST_TAG, els, msgs_received.load());
+      DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d POSTFLUSH. expected: %d", my_rank, it, FIRST_TAG, els, msgs_received.load(), els * commSize * (it+1));
 
 
 //      // check that all messages have been received
@@ -120,7 +121,7 @@ struct Tester
     // call the finish function for this tag  //
     DEBUGF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PREFINISH", my_rank, FIRST_TAG, els, msgs_received.load());
     commLayer.finish(FIRST_TAG);
-    DEBUGF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti %d,\tM ,\tL%d POSTFINISH", my_rank, FIRST_TAG, els, msgs_received.load());
+    DEBUGF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti %d,\tM ,\tL%d POSTFINISH. expected: %d", my_rank, FIRST_TAG, els, msgs_received.load(), els * commSize * iters);
 
     // check that all messages have been received
     if (msgs_received.load() != els * commSize * iters)
@@ -136,6 +137,15 @@ struct Tester
 
 
     commLayer.finishCommunication();
+
+    // check that all messages have been received
+    if (msgs_received.load() != els * commSize * iters)
+    {
+      ERRORF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti  ,\tM ,\tL%d, \tFINISHED.  FAIL: expected %d", my_rank, FIRST_TAG, msgs_received.load(), els * commSize * iters);
+//      exit(EXIT_FAILURE);
+    }
+    //std::cerr << "INDEX: " << msgs_received << std::endl;
+
 
     //std::cerr << "LOOKUP: " << lookup_received << " ANSWERS: " << answers_received << std::endl;
 

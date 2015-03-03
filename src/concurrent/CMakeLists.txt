@@ -1,5 +1,6 @@
 project(bliss-concurrent)
 include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
+include("${CMAKE_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 
 if (ENABLE_TESTING)
@@ -32,13 +33,13 @@ if (IS_DIRECTORY ./test)
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_LOCKFREE test/check2_objectpool_performance_lf.cpp )
 
 
-#    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_threadsafe_queue.cpp )
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_threadsafe_queue.cpp )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check2_threadsafe_queue.cpp )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_LOCKFREE test/check2_threadsafe_queue.cpp )
 
 
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_NONE test/check2_threadsafe_queue_performance.cpp )
-#    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_threadsafe_queue_performance.cpp )
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX test/check2_threadsafe_queue_performance.cpp )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK test/check2_threadsafe_queue_performance.cpp )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_LOCKFREE test/check2_threadsafe_queue_performance.cpp )
     

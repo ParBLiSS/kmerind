@@ -1,6 +1,6 @@
 project(bliss-utils)
 include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
-
+include("${CMAKE_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 ## EXECUTABLES
 add_library(${PROJECT_NAME} logging.cpp)

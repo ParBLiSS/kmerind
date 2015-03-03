@@ -37,7 +37,7 @@ void test1() {
     int v = -1;
     bool r = q.try_dequeue(v);
     assert(r);
-    printf("tid %d dequeued %d\n", omp_get_thread_num(), v);
+    printf("tid %d dequeued %d.  %s\n", omp_get_thread_num(), v, (r? "success" : "failure"));
   }
 
 #pragma omp parallel num_threads(4) shared (q)
@@ -48,7 +48,7 @@ void test1() {
     int v = -1;
     bool r = q.try_dequeue(v);
     assert(r);
-    printf("tid %d dequeued %d\n", omp_get_thread_num(), v);
+    printf("tid %d dequeued %d. %s\n", omp_get_thread_num(), v, (r? "success" : "failure"));
   }
 
 
@@ -72,14 +72,15 @@ void test1() {
 
   std::vector<bool> seenIds(MAX_THREADS, false);
   int v = -1;
-  bool r = false;
+  bool r = true;
   for (std::size_t i = 0; i != MAX_THREADS; ++i) {
-	  r = q.try_dequeue(v);
+	  r &= q.try_dequeue(v);
     assert(r);
     if (seenIds[v]) printf("already seen %d\n", v);
     else printf("haven't seen %d\n", v);
     seenIds[v] = true;
   }
+  if (!r) printf("there was a failed dequeue.\n");
   for (std::size_t i = 0; i != MAX_THREADS; ++i) {
     assert(seenIds[i]);
   }
@@ -166,13 +167,13 @@ void test3() {
         threads[tid].join();
       }
       std::vector<bool> seenIds(threads.size());
-      bool r = false;
+      bool r = true;
       for (std::size_t i = 0; i != threads.size(); ++i) {
-    	  r = q.try_dequeue(item);
-        assert(r);
+    	  r &= q.try_dequeue(item);
         assert(!seenIds[item]);
         seenIds[item] = true;
       }
+      if (!r) printf("there was a failed dequeue.\n");
       for (std::size_t i = 0; i != seenIds.size(); ++i) {
         assert(seenIds[i]);
       }

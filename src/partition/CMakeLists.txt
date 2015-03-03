@@ -1,5 +1,6 @@
 project(bliss-partition)
 include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
+include("${CMAKE_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 if (ENABLE_TESTING)
 # load the testing:

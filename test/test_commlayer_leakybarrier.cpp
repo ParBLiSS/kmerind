@@ -194,7 +194,7 @@ struct Tester
 
       bool r = buildphase.exchange(false, std::memory_order_relaxed);
       assert(r);
-      INFOF("M R %d, SEND DONE. ", commRank);
+      INFOF("M R %d, SEND DONE.  buildphase was %s ", commRank, (r? "on" : "off"));
 //      commLayer.finishCommunication2();
 
 

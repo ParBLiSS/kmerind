@@ -19,7 +19,7 @@
 #if defined(BLISS_NONE)
 #include <queue>
 #elif defined( BLISS_MUTEX)
-#include "concurrent/mutexlock_queue.hpp"
+#include "wip/mutexlock_queue.hpp"
 #elif defined( BLISS_SPINLOCK )
 #include "concurrent/spinlock_queue.hpp"
 #else   //if defined( BLISS_LOCKFREE )
