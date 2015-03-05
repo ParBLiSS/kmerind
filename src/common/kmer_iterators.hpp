@@ -26,11 +26,11 @@
 #include <type_traits>
 
 // own includes
-#include <common/base_types.hpp>
-#include <common/padding.hpp>
-#include <common/kmer.hpp>
+#include "common/base_types.hpp"
+#include "common/padding.hpp"
+#include "common/kmer.hpp"
 
-#include <iterators/sliding_window_iterator.hpp>
+#include "iterators/sliding_window_iterator.hpp"
 
 // TODO: Need convenience functions to make start and end iterators (the true/false flags are not easy to remember.)
 // TODO: Need convenience typedef to allow for reverse complement generation.

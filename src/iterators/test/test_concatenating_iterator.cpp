@@ -8,7 +8,7 @@
 #include <algorithm>
 
 // include files to test
-#include <iterators/concatenating_iterator.hpp>
+#include "iterators/concatenating_iterator.hpp"
 
 
 TEST(ConcatenatingIteratorTests, TestConcatenatingString)

@@ -20,9 +20,9 @@
 #include <cstdlib>
 
 // own includes:
-#include <common/bit_ops.hpp>
-#include <common/alphabets.hpp>
-#include <common/packed_string.hpp>
+#include "common/bit_ops.hpp"
+#include "common/alphabets.hpp"
+#include "common/packed_string.hpp"
 
 
 namespace bliss

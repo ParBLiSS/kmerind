@@ -211,7 +211,7 @@ namespace bliss
             ++curr_iter_pos;
 
             curr = ranges[curr_iter_pos].first;
-            WARNINGF("Converting empty or finished ConcatenatingIterator (end iterator) to non-empty (non-end).  pos %ld", curr_iter_pos);
+            //WARNINGF("Converting empty or finished ConcatenatingIterator (end iterator) to non-empty (non-end).  pos %ld", curr_iter_pos);
             // end iterator, now converted to non-end
           }
           return true;

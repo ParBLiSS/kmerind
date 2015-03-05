@@ -9,7 +9,7 @@
  *
  * TODO add Licence
  */
-#include <common/alphabets.hpp>
+#include "common/alphabets.hpp"
 
 namespace bliss
 {

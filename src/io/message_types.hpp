@@ -23,7 +23,7 @@
 #ifndef MESSAGE_TYPES_HPP_
 #define MESSAGE_TYPES_HPP_
 
-#include <io/mpi_utils.hpp>
+#include "io/mpi_utils.hpp"
 
 
 namespace bliss

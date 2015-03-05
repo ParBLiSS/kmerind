@@ -5,7 +5,8 @@
 #include <cstdint>
 
 // include files to test
-#include <common/padding.hpp>
+#include "common/padding.hpp"
+#include "utils/logging.h"
 
 
 

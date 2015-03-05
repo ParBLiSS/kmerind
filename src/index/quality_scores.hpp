@@ -20,7 +20,7 @@
 #include <array>
 #include <limits>
 
-#include <utils/constexpr_array.hpp>
+#include "utils/constexpr_array.hpp"
 
 
 namespace bliss

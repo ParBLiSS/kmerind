@@ -19,8 +19,8 @@
 #include <iterator> // for std::begin() and std::end()
 
 // own includes
-#include <common/base_types.hpp>
-#include <common/bit_ops.hpp>
+#include "common/base_types.hpp"
+#include "common/bit_ops.hpp"
 
 namespace bliss
 {

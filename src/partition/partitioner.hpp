@@ -16,7 +16,7 @@
 #include <stdexcept>
 #include <atomic>
 #include <config.hpp>
-#include <partition/range.hpp>
+#include "partition/range.hpp"
 
 namespace bliss
 {

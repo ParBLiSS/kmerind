@@ -18,12 +18,12 @@
 #include <type_traits>
 #include <utility>
 
-#include <utils/constexpr_array.hpp>      // for precomputing the quality scores
-#include <common/alphabets.hpp>
-#include <common/alphabet_traits.hpp>      // for mapping char to alphabet value
-#include <io/sequence_iterator.hpp>          // for Id.
-#include <retired/kmer_index_element.hpp>   // for the basic kmer index element structures.
-#include <common/sequence.hpp>
+#include "utils/constexpr_array.hpp"      // for precomputing the quality scores
+#include "common/alphabets.hpp"
+#include "common/alphabet_traits.hpp"      // for mapping char to alphabet value
+#include "io/sequence_iterator.hpp"          // for Id.
+#include "retired/kmer_index_element.hpp"   // for the basic kmer index element structures.
+#include "common/sequence.hpp"
 
 
 namespace bliss

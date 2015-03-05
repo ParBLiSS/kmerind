@@ -16,8 +16,8 @@
 
 #include <vector>
 
-#include <index/quality_scores.hpp>
-#include <iterators/sliding_window_iterator.hpp>
+#include "index/quality_scores.hpp"
+#include "iterators/sliding_window_iterator.hpp"
 
 namespace bliss
 {

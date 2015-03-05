@@ -21,7 +21,7 @@
 #include <type_traits>
 
 // own includes
-#include <common/bit_ops.hpp>
+#include "common/bit_ops.hpp"
 
 namespace bliss
 {

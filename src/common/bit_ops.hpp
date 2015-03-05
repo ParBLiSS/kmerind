@@ -15,7 +15,7 @@
 #include <limits>
 #include <type_traits>
 
-#include <common/base_types.hpp>
+#include "common/base_types.hpp"
 
 template <typename T>
 constexpr T getLeastSignificantBitsMask(const BitSizeType nBits)

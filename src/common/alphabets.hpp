@@ -13,7 +13,7 @@
 #define BLISS_COMMON_ALPHABETS_H
 
 // own includes:
-#include <common/base_types.hpp>
+#include "common/base_types.hpp"
 
 // TODO add the following alphabets:
 // D/RNA

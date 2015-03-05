@@ -14,7 +14,7 @@
 #define BLISS_ITERATORS_TRANSFORM_ITERATOR_HPP
 
 #include <iterator>
-#include <utils/function_traits.hpp>
+#include "utils/function_traits.hpp"
 
 namespace bliss
 {
