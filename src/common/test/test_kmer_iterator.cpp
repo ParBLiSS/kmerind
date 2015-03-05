@@ -3,12 +3,12 @@
 //#include <boost/concept_check.hpp>
 
 // include classes to test
-#include <common/kmer.hpp>
-#include <common/alphabets.hpp>
-#include <iterators/transform_iterator.hpp>
-#include <common/kmer_iterators.hpp>
-#include <utils/kmer_utils.hpp>
-
+#include "common/kmer.hpp"
+#include "common/alphabets.hpp"
+#include "iterators/transform_iterator.hpp"
+#include "common/kmer_iterators.hpp"
+#include "utils/kmer_utils.hpp"
+#include "utils/logging.h"
 
 template<typename Alphabet, int K>
 void compute_kmer_iter(std::string input) {
@@ -38,8 +38,8 @@ void compute_kmer_iter(std::string input) {
     int res = strncmp(gold.c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str(), K);
 
     if (res != 0) {
-      printf("%d iterator input %s\n", i, gold.c_str());
-      printf("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
+      INFOF("%d iterator input %s\n", i, gold.c_str());
+      INFOF("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
     }
 
     EXPECT_EQ(0, res);

@@ -12,32 +12,35 @@
 #include <string.h> // for strerror
 #include <stdint.h> // for uint32_t
 #include <sys/stat.h> // for stat
+
+#include "utils/logging.h"
+
 int checkNProcs()
 {
   long nprocs = -1;
   long nprocs_max = -1;
 
-  fprintf(stderr, "Does not yet compute the number of CPUs\n");
+  INFOF("Does not yet compute the number of CPUs\n");
 
 #ifdef _SC_NPROCESSORS_ONLN
   nprocs = sysconf(_SC_NPROCESSORS_ONLN);
   if (nprocs < 1)
   {
-    fprintf(stderr, "Could not determine number of Cores online:\n%s\n",
+    INFOF("Could not determine number of Cores online:\n%s\n",
             strerror(errno));
     return EXIT_FAILURE;
   }
   nprocs_max = sysconf(_SC_NPROCESSORS_CONF);
   if (nprocs_max < 1)
   {
-    fprintf(stderr, "Could not determine number of Cores configured:\n%s\n",
+    INFOF("Could not determine number of Cores configured:\n%s\n",
             strerror(errno));
     return EXIT_FAILURE;
   }
-  printf("%ld of %ld processors online\n", nprocs, nprocs_max);
+  INFOF("%ld of %ld processors online\n", nprocs, nprocs_max);
   return EXIT_SUCCESS;
 #else
-  fprintf(stderr, "Could not determine number of Cores\n");
+  INFOF("Could not determine number of Cores\n");
   return EXIT_FAILURE;
 #endif
   return 0;
@@ -48,26 +51,26 @@ int checkMainMem()
   long pages = sysconf(_SC_PHYS_PAGES);
   long page_size = sysconf(_SC_PAGE_SIZE);
 
-  fprintf(stderr, "%ld pages at %ld bytes per page, total %ld bytes\n", pages,
+  INFOF("%ld pages at %ld bytes per page, total %ld bytes\n", pages,
           page_size, pages * page_size);
   return 0;
 }
 
 int checkMPIBuffer()
 {
-  fprintf(stderr, "MPI tests not yet implemented\n");
+  INFOF("MPI tests not yet implemented\n");
   return 0;
 }
 
 int checkFileSystem()
 {
-  fprintf(stderr, "%d buffer size\n", BUFSIZ);
+  INFOF("%d buffer size\n", BUFSIZ);
 
   struct stat fileStat;
   if (stat(".", &fileStat) < 0)
     return EXIT_FAILURE;
 
-  fprintf(stderr, "on disk file block size: %ld\n", fileStat.st_size);
+  INFOF("on disk file block size: %ld\n", fileStat.st_size);
 
   return EXIT_SUCCESS;
 }
@@ -106,19 +109,19 @@ void cpu_features()
   bool cx16 = ecx && (1 << 13);
   bool popcnt = ecx && (1 << 23);
 
-  fprintf(stderr, "mmx: %s\n", (mmx ? "true" : "false"));
-  fprintf(stderr, "sse: %s\n", (sse ? "true" : "false"));
-  fprintf(stderr, "sse2: %s\n", (sse2 ? "true" : "false"));
-  fprintf(stderr, "sse3: %s\n", (sse3 ? "true" : "false"));
-  fprintf(stderr, "ssse3: %s\n", (ssse3 ? "true" : "false"));
-  fprintf(stderr, "sse41: %s\n", (sse41 ? "true" : "false"));
-  fprintf(stderr, "sse42: %s\n", (sse42 ? "true" : "false"));
-  fprintf(stderr, "avx: %s\n", (avx ? "true" : "false"));
-  fprintf(stderr, "ia64: %s\n", (ia64 ? "true" : "false"));
-  fprintf(stderr, "hyperthread: %s\n", (hyperthread ? "true" : "false"));
-  fprintf(stderr, "fma: %s\n", (fma ? "true" : "false"));
-  fprintf(stderr, "cx16: %s\n", (cx16 ? "true" : "false"));
-  fprintf(stderr, "popcnt: %s\n", (popcnt ? "true" : "false"));
+  INFOF("mmx: %s\n", (mmx ? "true" : "false"));
+  INFOF("sse: %s\n", (sse ? "true" : "false"));
+  INFOF("sse2: %s\n", (sse2 ? "true" : "false"));
+  INFOF("sse3: %s\n", (sse3 ? "true" : "false"));
+  INFOF("ssse3: %s\n", (ssse3 ? "true" : "false"));
+  INFOF("sse41: %s\n", (sse41 ? "true" : "false"));
+  INFOF("sse42: %s\n", (sse42 ? "true" : "false"));
+  INFOF("avx: %s\n", (avx ? "true" : "false"));
+  INFOF("ia64: %s\n", (ia64 ? "true" : "false"));
+  INFOF("hyperthread: %s\n", (hyperthread ? "true" : "false"));
+  INFOF("fma: %s\n", (fma ? "true" : "false"));
+  INFOF("cx16: %s\n", (cx16 ? "true" : "false"));
+  INFOF("popcnt: %s\n", (popcnt ? "true" : "false"));
 
 }
 
@@ -183,7 +186,7 @@ void i386_cpuid_caches()
         * cache_physical_line_partitions * cache_coherency_line_size
         * cache_sets;
 
-    printf("Cache ID %d:\n"
+    INFOF("Cache ID %d:\n"
            "- Level: %d\n"
            "- Type: %s\n"
            "- Sets: %d\n"

@@ -105,7 +105,7 @@ class FileLoaderTest : public ::testing::Test
       size_t read = fread_unlocked(result, sizeof(T), length, fp);
       fclose(fp);
 
-      //printf("filename %s, offset %lu, length %lu\n", fileName.c_str(), offset, length);
+      //INFOF("filename %s, offset %lu, length %lu\n", fileName.c_str(), offset, length);
 
       ASSERT_GT(read, 0);
     }
@@ -260,7 +260,7 @@ TYPED_TEST_P(FileLoaderTest, OpenConsecutiveRanges)
     loader.resetL1Partitioner();
 
     r = loader.getNextL1BlockRange(rank);
-    //std::cout << "partition for rank " << rank << ": " << r << std::endl;
+    //INFO( "partition for rank " << rank << ": " << r );
 
     size_t len = r.end - r.start;
     TypeParam* gold = new TypeParam[len + 1];

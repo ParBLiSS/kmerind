@@ -5,7 +5,8 @@
 #include <string>
 
 // include files to test
-#include <iterators/many2one_iterator.hpp>
+#include "iterators/many2one_iterator.hpp"
+#include "utils/logging.h"
 
 
 TEST(IteratorTests, TestCompressingIterator)
@@ -34,7 +35,7 @@ TEST(IteratorTests, TestCompressingIterator)
   while (comp_it != comp_it_end)
   {
     comp_it--;
-    std::cout << *(comp_it+2) << ", " << std::endl;
+    INFO( *(comp_it+2) << ", " );
     comp_it++;
     comp_it += 1;
 

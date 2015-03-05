@@ -17,6 +17,7 @@
 #include <omp.h>
 
 #include <thread>
+#include "utils/logging.h"
 
 
 using namespace moodycamel;
@@ -37,7 +38,7 @@ void test1() {
     int v = -1;
     bool r = q.try_dequeue(v);
     assert(r);
-    printf("tid %d dequeued %d.  %s\n", omp_get_thread_num(), v, (r? "success" : "failure"));
+    INFOF("tid %d dequeued %d.  %s\n", omp_get_thread_num(), v, (r? "success" : "failure"));
   }
 
 #pragma omp parallel num_threads(4) shared (q)
@@ -48,7 +49,7 @@ void test1() {
     int v = -1;
     bool r = q.try_dequeue(v);
     assert(r);
-    printf("tid %d dequeued %d. %s\n", omp_get_thread_num(), v, (r? "success" : "failure"));
+    INFOF("tid %d dequeued %d. %s\n", omp_get_thread_num(), v, (r? "success" : "failure"));
   }
 
 
@@ -61,7 +62,7 @@ void test1() {
       }
       q.enqueue(omp_get_thread_num());
 
-      printf("tid %d enqueue.\n", omp_get_thread_num());
+      INFOF("tid %d enqueue.\n", omp_get_thread_num());
       for (volatile int i = 0; i != 4096; ++i) {
         continue;
       }
@@ -76,11 +77,11 @@ void test1() {
   for (std::size_t i = 0; i != MAX_THREADS; ++i) {
 	  r &= q.try_dequeue(v);
     assert(r);
-    if (seenIds[v]) printf("already seen %d\n", v);
-    else printf("haven't seen %d\n", v);
+    if (seenIds[v]) INFOF("already seen %d\n", v);
+    else INFOF("haven't seen %d\n", v);
     seenIds[v] = true;
   }
-  if (!r) printf("there was a failed dequeue.\n");
+  if (!r) INFOF("there was a failed dequeue.\n");
   for (std::size_t i = 0; i != MAX_THREADS; ++i) {
     assert(seenIds[i]);
   }
@@ -173,7 +174,7 @@ void test3() {
         assert(!seenIds[item]);
         seenIds[item] = true;
       }
-      if (!r) printf("there was a failed dequeue.\n");
+      if (!r) INFOF("there was a failed dequeue.\n");
       for (std::size_t i = 0; i != seenIds.size(); ++i) {
         assert(seenIds[i]);
       }

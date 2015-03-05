@@ -368,9 +368,9 @@ namespace bliss
 //
 //          // populate the buffers from the pool
 //          for (int i = 0; i < count; ++i) {
-//            //printf("initializing buffer %p \n", this->at(i));
+//            //INFOF("initializing buffer %p \n", this->at(i));
 //            swapInEmptyBuffer<PoolLT>(i);
-//            //printf("initialized buffer %p blocked? %s, empty? %s\n", this->at(i), this->at(i)->is_read_only()? "y" : "n", this->at(i)->isEmpty() ? "y" : "n");
+//            //INFOF("initialized buffer %p blocked? %s, empty? %s\n", this->at(i), this->at(i)->is_read_only()? "y" : "n", this->at(i)->isEmpty() ? "y" : "n");
 //
 //          }
 //        }
@@ -489,7 +489,7 @@ namespace bliss
 //
 // //          unsigned int appendResult = this->at(targetProc)->append(data, count);
 //
-// //          printf("buffer blocked? %s, empty? %s\n", this->at(targetProc)->is_read_only()? "y" : "n", this->at(targetProc)->isEmpty() ? "y" : "n");
+// //          INFOF("buffer blocked? %s, empty? %s\n", this->at(targetProc)->is_read_only()? "y" : "n", this->at(targetProc)->isEmpty() ? "y" : "n");
 //
 //          // now if appendResult is false, then we return false, but also swap in a new buffer.
 //          // conditions are either full buffer, or blocked buffer.
@@ -500,7 +500,7 @@ namespace bliss
 //
 //            return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer<PoolLT>(targetProc) ) );
 //          } else {
-//            //if (preswap != postswap) printf("ERROR: NOSWAP: preswap %p and postswap %p are not the same.\n", preswap, postswap);
+//            //if (preswap != postswap) ERRORF("ERROR: NOSWAP: preswap %p and postswap %p are not the same.\n", preswap, postswap);
 //            return std::move(std::make_pair(appendResult & 0x1, nullptr));
 //          }
 //
@@ -613,7 +613,7 @@ namespace bliss
 //
 //          auto oldbuf = buffers.at(dest).exchange(ptr);
 //          if (oldbuf && oldbuf->isEmpty()) {
-// //            printf("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
+// //            INFOF("oldbuf %p, blocked? %s\n", oldbuf, oldbuf->is_read_only() ? "y" : "n");
 //            releaseBuffer(oldbuf);
 //            return nullptr;
 //          }
@@ -668,7 +668,7 @@ namespace bliss
 //
 //          buffers.at(dest) = ptr;
 //          if (oldbuf && oldbuf->isEmpty()) {
-// //            printf("oldbuf %p, empty? %s\n", oldbuf, oldbuf->isEmpty() ? "y" : "n");
+// //            INFOF("oldbuf %p, empty? %s\n", oldbuf, oldbuf->isEmpty() ? "y" : "n");
 //
 //            releaseBuffer(oldbuf);
 //            return nullptr;
@@ -779,14 +779,14 @@ namespace bliss
       public:
         /**
          * @brief Constructor.
+         * @param pool              ObjectPool for buffers
          * @param num_dests         The number of messaging targets/destinations
-         * @param bufferCapacity   The capacity of the individual buffers.  default 8192.
-         * @param poolCapacity     The capacity of the pool.  default unbounded.
+         * @param num_threads       The number of threads accessing this MessageBuffer
          */
-        explicit SendMessageBuffers(BufferPoolType& _pool, const int & num_dests, int num_threads = 0) :
+        explicit SendMessageBuffers(BufferPoolType& _pool, const int num_dests, const int num_threads = 0) :
           BaseType(_pool), buffers()
         {
-          int nThreads = (num_threads == 0 ? omp_get_max_threads() : num_threads);
+          int nThreads = (num_threads <= 0 ? omp_get_max_threads() : num_threads);
 
           // top level vector maps buffers to MPI rank.
           for (int i = 0; i < num_dests; ++i) {
@@ -1003,7 +1003,7 @@ namespace bliss
           int nthreads = buffers.at(targetProc).size();
           for (int t = 0; t < nthreads; ++t) {
             old = swapInEmptyBuffer(targetProc, t);
-            if (old) result.push_back(old);
+            if (old ) result.push_back(old);  // && !(old->isEmpty())
 
           }
 
@@ -1023,8 +1023,6 @@ namespace bliss
 
           int tid = thread_id < 0 ? omp_get_thread_num() : thread_id;
 
-          BufferType* oldbuf = buffers.at(dest).at(tid);
-          if (oldbuf) oldbuf->block_and_flush();
 
           BufferType* ptr = this->pool.tryAcquireObject();
           int i = 1;
@@ -1038,6 +1036,9 @@ namespace bliss
           if (ptr) {
             ptr->clear_and_unblock_writes();
           }
+
+          BufferType* oldbuf = buffers.at(dest).at(tid);
+          if (oldbuf) oldbuf->block_and_flush();
 
           buffers.at(dest).at(tid) = ptr;  // one thread accessing at a time.
           if (oldbuf && oldbuf->isEmpty()) {

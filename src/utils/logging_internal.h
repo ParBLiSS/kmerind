@@ -20,21 +20,32 @@
 #define BLISS_LOGGING_INTERNAL_H
 
 
+// MACRO DEFINITIONS  HERE REQUIRE THE "do {...} while (false)" construct for them to play nicely with if ... else ... statements.
+// see http://stackoverflow.com/questions/154136/do-while-and-if-else-statements-in-c-c-macros for explanation.
+// essentially, this avoids
+//  if X
+//     Z;    #define Z {a(); b()}
+//  else
+//     c();
+// the construct allows the macros to be used as if they are functions.
+// while (false) will be optimized away by compiler.
+// notice the macro definition DOES NOT HAVE A SEMICOLON AT END.
+
 
 /// non-printing version of functions
-#define NOPRINT_FATAL(msg) { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(-1); }
-#define NOPRINT_ERROR(msg)
-#define NOPRINT_WARNING(msg)
-#define NOPRINT_INFO(msg)
-#define NOPRINT_DEBUG(msg)
-#define NOPRINT_TRACE(msg)
+#define NOPRINT_FATAL(msg) do { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(-1); } while (false)
+#define NOPRINT_ERROR(msg) do {} while (false)
+#define NOPRINT_WARNING(msg) do {} while (false)
+#define NOPRINT_INFO(msg) do {} while (false)
+#define NOPRINT_DEBUG(msg) do {} while (false)
+#define NOPRINT_TRACE(msg) do {} while (false)
 
-#define NOPRINT_FATALF(msg, ...) { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(-1); }
-#define NOPRINT_ERRORF(msg, ...)
-#define NOPRINT_WARNINGF(msg, ...)
-#define NOPRINT_INFOF(msg, ...)
-#define NOPRINT_DEBUGF(msg, ...)
-#define NOPRINT_TRACEF(msg, ...)
+#define NOPRINT_FATALF(msg, ...) do { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(-1); } while (false)
+#define NOPRINT_ERRORF(msg, ...) do {} while (false)
+#define NOPRINT_WARNINGF(msg, ...) do {} while (false)
+#define NOPRINT_INFOF(msg, ...) do {} while (false)
+#define NOPRINT_DEBUGF(msg, ...) do {} while (false)
+#define NOPRINT_TRACEF(msg, ...) do {} while (false)
 
 
 
@@ -45,12 +56,12 @@
 #if USE_LOGGER == BLISS_LOGGING_NO_LOG
 
 // empty logging macros (no overhead)
-#define PRINT_FATAL(msg) { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(-1); }
-#define PRINT_ERROR(msg)
-#define PRINT_WARNING(msg)
-#define PRINT_INFO(msg)
-#define PRINT_DEBUG(msg)
-#define PRINT_TRACE(msg)
+#define PRINT_FATAL(msg) do { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(-1); } while (false)
+#define PRINT_ERROR(msg) do {} while (false)
+#define PRINT_WARNING(msg) do {} while (false)
+#define PRINT_INFO(msg) do {} while (false)
+#define PRINT_DEBUG(msg) do {} while (false)
+#define PRINT_TRACE(msg) do {} while (false)
 
 
 
@@ -65,12 +76,12 @@
 
 #include <iostream>
 
-#define PRINT_FATAL(msg)      { std::cerr << "[fatal] " << msg << std::endl << std::flush; exit(-1); }
-#define PRINT_ERROR(msg)      { std::cerr << "[error] " << msg << std::endl << std::flush; }
-#define PRINT_WARNING(msg)    { std::cerr << "[warn ] " << msg << std::endl << std::flush; }
-#define PRINT_INFO(msg)       { std::cerr << "[info ] " << msg << std::endl << std::flush; }
-#define PRINT_DEBUG(msg)      { std::cerr << "[debug] " << msg << std::endl << std::flush; }
-#define PRINT_TRACE(msg)      { std::cerr << "[trace] " << msg << std::endl << std::flush; }
+#define PRINT_FATAL(msg)      do { std::cerr << "[fatal] " << msg << std::endl << std::flush; exit(-1); } while (false)
+#define PRINT_ERROR(msg)      do { std::cerr << "[error] " << msg << std::endl << std::flush; } while (false)
+#define PRINT_WARNING(msg)    do { std::cerr << "[warn ] " << msg << std::endl << std::flush; } while (false)
+#define PRINT_INFO(msg)       do { std::cerr << "[info ] " << msg << std::endl << std::flush; } while (false)
+#define PRINT_DEBUG(msg)      do { std::cerr << "[debug] " << msg << std::endl << std::flush; } while (false)
+#define PRINT_TRACE(msg)      do { std::cerr << "[trace] " << msg << std::endl << std::flush; } while (false)
 
 
 /*********************************************************************
@@ -83,12 +94,12 @@
 // NOTE: this is not thread safe
 #include <sstream>
 
-#define PRINT_FATAL(msg)    { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(-1); }
-#define PRINT_ERROR(msg)    { std::stringstream ss; ss << msg; printf("[error] %s\n", ss.str().c_str());  }
-#define PRINT_WARNING(msg)  { std::stringstream ss; ss << msg; printf("[warn ] %s\n", ss.str().c_str());  }
-#define PRINT_INFO(msg)     { std::stringstream ss; ss << msg; printf("[info ] %s\n", ss.str().c_str());  }
-#define PRINT_DEBUG(msg)    { std::stringstream ss; ss << msg; printf("[debug] %s\n", ss.str().c_str());  }
-#define PRINT_TRACE(msg)    { std::stringstream ss; ss << msg; printf("[trace] %s\n", ss.str().c_str());  }
+#define PRINT_FATAL(msg)    do { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(-1); } while (false)
+#define PRINT_ERROR(msg)    do { std::stringstream ss; ss << msg; printf("[error] %s\n", ss.str().c_str());  } while (false)
+#define PRINT_WARNING(msg)  do { std::stringstream ss; ss << msg; printf("[warn ] %s\n", ss.str().c_str());  } while (false)
+#define PRINT_INFO(msg)     do { std::stringstream ss; ss << msg; printf("[info ] %s\n", ss.str().c_str());  } while (false)
+#define PRINT_DEBUG(msg)    do { std::stringstream ss; ss << msg; printf("[debug] %s\n", ss.str().c_str());  } while (false)
+#define PRINT_TRACE(msg)    do { std::stringstream ss; ss << msg; printf("[trace] %s\n", ss.str().c_str());  } while (false)
 
 
 
@@ -102,12 +113,12 @@
 // using boost trival logging
 #include <boost/log/trivial.hpp>
 
-#define PRINT_FATAL(msg)      { BOOST_LOG_TRIVIAL(fatal) << msg;  exit(-1);  }
-#define PRINT_ERROR(msg)      { BOOST_LOG_TRIVIAL(error) << msg;   }
-#define PRINT_WARNING(msg)    { BOOST_LOG_TRIVIAL(warning) << msg; }
-#define PRINT_INFO(msg)       { BOOST_LOG_TRIVIAL(info) << msg;    }
-#define PRINT_DEBUG(msg)      { BOOST_LOG_TRIVIAL(debug) << msg;   }
-#define PRINT_TRACE(msg)      { BOOST_LOG_TRIVIAL(trace) << msg;   }
+#define PRINT_FATAL(msg)      do { BOOST_LOG_TRIVIAL(fatal) << msg;  exit(-1);  } while (false)
+#define PRINT_ERROR(msg)      do { BOOST_LOG_TRIVIAL(error) << msg;   } while (false)
+#define PRINT_WARNING(msg)    do { BOOST_LOG_TRIVIAL(warning) << msg; } while (false)
+#define PRINT_INFO(msg)       do { BOOST_LOG_TRIVIAL(info) << msg;    } while (false)
+#define PRINT_DEBUG(msg)      do { BOOST_LOG_TRIVIAL(debug) << msg;   } while (false)
+#define PRINT_TRACE(msg)      do { BOOST_LOG_TRIVIAL(trace) << msg;   } while (false)
 
 
 /*********************************************************************
@@ -231,12 +242,12 @@ void init()
 #define _LOG_MSG(msg) __FILE__ << ":" << __LINE__ << ":\t" << msg ;
 
 
-#define PRINT_FATAL(msg)      { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::fatal) << _LOG_MSG(msg); exit(-1);   }
-#define PRINT_ERROR(msg)      { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::error) << _LOG_MSG(msg);   }
-#define PRINT_WARNING(msg)    { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::warning) << _LOG_MSG(msg); }
-#define PRINT_INFO(msg)       { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::info) << _LOG_MSG(msg);    }
-#define PRINT_DEBUG(msg)      { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::debug) << _LOG_MSG(msg);   }
-#define PRINT_TRACE(msg)      { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::trace) << _LOG_MSG(msg);   }
+#define PRINT_FATAL(msg)      do { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::fatal) << _LOG_MSG(msg); exit(-1);   } while (false)
+#define PRINT_ERROR(msg)      do { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::error) << _LOG_MSG(msg);   } while (false)
+#define PRINT_WARNING(msg)    do { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::warning) << _LOG_MSG(msg); } while (false)
+#define PRINT_INFO(msg)       do { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::info) << _LOG_MSG(msg);    } while (false)
+#define PRINT_DEBUG(msg)      do { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::debug) << _LOG_MSG(msg);   } while (false)
+#define PRINT_TRACE(msg)      do { BOOST_LOG_SEV(bliss::log::global_logger, bliss::log::trace) << _LOG_MSG(msg);   } while (false)
 
 #define LOG_INIT() bliss::log::init()
 
@@ -262,64 +273,64 @@ void init()
 #if USE_LOGGER == BLISS_LOGGING_NO_LOG
 
 // empty logging macros (no overhead)
-#define PRINT_FATALF(msg, ...) { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(-1); }
-#define PRINT_ERRORF(msg, ...)
-#define PRINT_WARNINGF(msg, ...)
-#define PRINT_INFOF(msg, ...)
-#define PRINT_DEBUGF(msg, ...)
-#define PRINT_TRACEF(msg, ...)
+#define PRINT_FATALF(msg, ...) do { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(-1); } while (false)
+#define PRINT_ERRORF(msg, ...) do {} while (false)
+#define PRINT_WARNINGF(msg, ...) do {} while (false)
+#define PRINT_INFOF(msg, ...) do {} while (false)
+#define PRINT_DEBUGF(msg, ...) do {} while (false)
+#define PRINT_TRACEF(msg, ...) do {} while (false)
 
 #elif USE_LOGGER == BLISS_LOGGING_PRINTF
 
 // C automatically concatenate c string literals, so "blah "msg"\n" where msg is "BLAH", becomes "blah BLAH\n"
 // C++11 requires space in between:  "blah " msg "\n".
-#define PRINT_FATALF(msg, ...)   { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(-1); }
-#define PRINT_ERRORF(msg, ...)   { printf("[error] " msg "\n", ##__VA_ARGS__); }
-#define PRINT_WARNINGF(msg, ...) { printf("[warn ] " msg "\n", ##__VA_ARGS__); }
-#define PRINT_INFOF(msg, ...)    { printf("[info ] " msg "\n", ##__VA_ARGS__); }
-#define PRINT_DEBUGF(msg, ...)   { printf("[debug] " msg "\n", ##__VA_ARGS__); }
-#define PRINT_TRACEF(msg, ...)   { printf("[trace] " msg "\n", ##__VA_ARGS__); }
+#define PRINT_FATALF(msg, ...)   do { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(-1); } while (false)
+#define PRINT_ERRORF(msg, ...)   do { printf("[error] " msg "\n", ##__VA_ARGS__); } while (false)
+#define PRINT_WARNINGF(msg, ...) do { printf("[warn ] " msg "\n", ##__VA_ARGS__); } while (false)
+#define PRINT_INFOF(msg, ...)    do { printf("[info ] " msg "\n", ##__VA_ARGS__); } while (false)
+#define PRINT_DEBUGF(msg, ...)   do { printf("[debug] " msg "\n", ##__VA_ARGS__); } while (false)
+#define PRINT_TRACEF(msg, ...)   do { printf("[trace] " msg "\n", ##__VA_ARGS__); } while (false)
 
 
 #else
 #define BLISS_SPRINTF_BUFFER_SIZE 256
 
-#define PRINT_FATALF(msg, ...) {\
+#define PRINT_FATALF(msg, ...) do {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
         PRINT_FATAL(buffer);\
         exit(-1); \
-        }
+        } while (false)
 
-#define PRINT_ERRORF(msg, ...) {\
+#define PRINT_ERRORF(msg, ...) do {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
         PRINT_ERROR(buffer);\
-        }
+        } while (false)
 
-#define PRINT_WARNINGF(msg, ...) {\
+#define PRINT_WARNINGF(msg, ...) do {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
         PRINT_WARNING(buffer);\
-        }
+        } while (false)
 
-#define PRINT_INFOF(msg, ...) {\
+#define PRINT_INFOF(msg, ...) do {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
         PRINT_INFO(buffer);\
-        }
+        } while (false)
 
-#define PRINT_DEBUGF(msg, ...) {\
+#define PRINT_DEBUGF(msg, ...) do {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
         PRINT_DEBUG(buffer);\
-        }
+        } while (false);
 
-#define PRINT_TRACEF(msg, ...) {\
+#define PRINT_TRACEF(msg, ...) do {\
         char buffer[BLISS_SPRINTF_BUFFER_SIZE]; \
         snprintf(buffer, BLISS_SPRINTF_BUFFER_SIZE, msg, ##__VA_ARGS__);\
         PRINT_TRACE(buffer);\
-        }
+        } while (false)
 #endif
 
 

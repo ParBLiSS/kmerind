@@ -6,7 +6,7 @@
 #include <iostream>
 #include <functional>
 
-#include <io/communication_layer.hpp>
+#include "io/communication_layer.hpp"
 
 int my_rank;
 std::atomic<int> msgs_received(0);
@@ -190,7 +190,7 @@ struct Tester
 
     commLayer.finishCommunication();
 
-    //std::cerr << "LOOKUP: " << lookup_received << " ANSWERS: " << answers_received << std::endl;
+    //INFO( "LOOKUP: " << lookup_received << " ANSWERS: " << answers_received );
 
     DEBUGF("This was a triumph.");
 //    sleep(1);

@@ -31,7 +31,7 @@ template<typename PoolType>
 void timeAppendMultipleBuffers(const int NumThreads, const int total_count, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, const int64_t buffer_cap) {
 
 
-//  printf("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %d total counts from unlimited pool\n",
+//  INFOF("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %d total counts from unlimited pool\n",
 //         NumThreads, poollt, bufferlt, buffer_cap, total_count);
 
 
@@ -118,7 +118,7 @@ int main(int argc, char** argv) {
     timeAppendMultipleBuffers<bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192> > >(1, count, lt, bliss::concurrent::LockType::LOCKFREE, 8192);
     t2 = std::chrono::high_resolution_clock::now();
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-//    printf("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
+//    INFOF("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
   }
 
 #else
@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
     timeAppendMultipleBuffers<bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192> > >(i, count, lt, bliss::concurrent::LockType::LOCKFREE, 8192);
     t2 = std::chrono::high_resolution_clock::now();
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-//    printf("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
+//    INFOF("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
   }
 #endif
 

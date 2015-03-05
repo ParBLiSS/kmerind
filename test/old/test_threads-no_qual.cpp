@@ -91,7 +91,7 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
 
   size_t capacity = buf_size / sizeof(KmerIndexType);
   KmerIndexType *array = new KmerIndexType[capacity];
-  //printf("created temp storage for read, capacity = %ld\n", capacity); fflush(stdout);
+  //INFOF("created temp storage for read, capacity = %ld\n", capacity); fflush(stdout);
   memset(array, 0, capacity * sizeof(KmerIndexType));
   int received = 0;
   int count = 0;
@@ -106,7 +106,7 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
 
 
     // probe for a message.  if empty message, then don't need to listen on that node anymore
-    //printf("probing...\n");
+    //INFOF("probing...\n");
     // NOTE: MPI_Probe does busy-wait (polling) - high CPU utilization.  reduce with --mca mpi_yield_when_idle 1
     // NOTE: that was still kind of slow.
     // NOTE: using Iprobe with usleep is even less CPU utilization.
@@ -123,13 +123,13 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
 
     if (tag ==  BufferType::END_TAG) {
       // end of messaging.
-      //printf("RECV %d receiving END signal %d from %d\n", rank, received, src); fflush(stdout);
+      //INFOF("RECV %d receiving END signal %d from %d\n", rank, received, src); fflush(stdout);
       MPI_Recv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
       --n_senders;
       continue;
     }
 
-    //printf("RECV %d receiving %d bytes from %d.%d\n", rank, received, src, tag - 1); fflush(stdout);
+    //INFOF("RECV %d receiving %d bytes from %d.%d\n", rank, received, src, tag - 1); fflush(stdout);
 
     MPI_Recv(reinterpret_cast<unsigned char*>(array), received, MPI_UNSIGNED_CHAR, src, tag, comm, MPI_STATUS_IGNORE);
 
@@ -142,7 +142,7 @@ void networkread(MPI_Comm comm, const int nprocs, const int rank, const size_t b
     assert(received % sizeof(KmerIndexType) == 0);  // no partial messages.
     count = received / sizeof(KmerIndexType);
     assert(count > 0);
-    //printf("RECV+ %d receiving %d bytes or %d records from %d.%d\n", rank, received, count, src, tag - 1); fflush(stdout);
+    //INFOF("RECV+ %d receiving %d bytes or %d records from %d.%d\n", rank, received, count, src, tag - 1); fflush(stdout);
 
     // TODO:  if we change to this one thread handles all MPI comm,
     //  then need to have another thread handle the insert.
@@ -184,7 +184,7 @@ void init(int &argc, char** &argv, MPI_Comm &comm, int &nprocs, int &rank) {
   MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
   if (provided < MPI_THREAD_MULTIPLE) {
-    printf("ERROR: The MPI Library Does not have full thread support.\n");
+    ERRORF("ERROR: The MPI Library Does not have full thread support.\n");
     MPI_Abort(MPI_COMM_WORLD, 1);
   }
 #else
@@ -197,11 +197,10 @@ void init(int &argc, char** &argv, MPI_Comm &comm, int &nprocs, int &rank) {
   MPI_Comm_rank(comm, &rank);
 
   if (rank == 0)
-    std::cout << "USE_MPI is set" << std::endl;
+    INFO( "USE_MPI is set" );
 #else
   //TODO:  need to support no MPI.
-  fprintf(stderr, "ERROR: need MPI support\n");
-  exit(1);
+  FATALF("ERROR: need MPI support\n");
 #endif
 
 }
@@ -249,7 +248,7 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader, PartitionHelperType &ph,
   senders = 0;
   MPI_Allreduce(&nt, &senders, 1, MPI_INT, MPI_SUM, comm);
 #endif
-//  printf("senders = %d\n", senders);
+//  INFOF("senders = %d\n", senders);
 
 
 int buffer_size = 8192*1024;
@@ -289,7 +288,7 @@ int buffer_size = 8192*1024;
       std::vector<BufferType> buffers;
       for (int j = 0; j < buf_size; ++j)
       {
-        //printf("insert buffer %d for thread %d to rank %d\n", j, j / nprocs, j % nprocs);
+        //INFOF("insert buffer %d for thread %d to rank %d\n", j, j / nprocs, j % nprocs);
         buffers.push_back(
             std::move(BufferType(comm, j % nprocs, buffer_size)));
       }
@@ -435,7 +434,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
     senders = 0;
     MPI_Allreduce(&nthreads, &senders, 1, MPI_INT, MPI_SUM, comm);
 #endif
-//    printf("senders = %d\n", senders);
+//    INFOF("senders = %d\n", senders);
 
 #pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, senders, index, nthreads, loader, parser, ph) default(none)
     {
@@ -645,7 +644,7 @@ void compute_MPI_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
     senders = 0;
     MPI_Allreduce(&nthreads, &senders, 1, MPI_INT, MPI_SUM, comm);
 #endif
-//    printf("senders = %d\n", senders);
+//    INFOF("senders = %d\n", senders);
 
 #pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, senders, index, nthreads, loader, parser, ph) default(none)
     {
@@ -929,7 +928,7 @@ int main(int argc, char** argv) {
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
     INFO("MMap rank " << rank << " elapsed time: " << time_span.count() << "s.");
 
-    std::cout << rank << " file partition: " << loader.getRange() << std::endl;
+    INFO( rank << " file partition: " << loader.getRange() );
 
 
 

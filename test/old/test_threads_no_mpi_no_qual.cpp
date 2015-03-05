@@ -243,7 +243,7 @@ void compute_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
 #endif
 
     int senders = nthreads;
-//    printf("senders = %d\n", senders);
+//    INFOF("senders = %d\n", senders);
 
       std::chrono::high_resolution_clock::time_point t1, t2;
       std::chrono::duration<double> time_span;
@@ -409,7 +409,7 @@ void compute_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
 
     int senders = nthreads;
 
-//    printf("senders = %d\n", senders);
+//    INFOF("senders = %d\n", senders);
 
       std::chrono::high_resolution_clock::time_point t1, t2;
       std::chrono::duration<double> time_span;
@@ -643,7 +643,7 @@ int main(int argc, char** argv) {
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
     INFO("MMap rank " << rank << " elapsed time: " << time_span.count() << "s.");
 
-    std::cout << rank << " file partition: " << loader.getRange() << std::endl;
+    INFO( rank << " file partition: " << loader.getRange() );
 
 
 

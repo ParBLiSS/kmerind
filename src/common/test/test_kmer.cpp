@@ -3,11 +3,11 @@
 //#include <boost/concept_check.hpp>
 
 // include classes to test
-#include <common/kmer.hpp>
-#include <common/alphabets.hpp>
-#include <utils/kmer_utils.hpp>
-#include <iterators/transform_iterator.hpp>
-
+#include "common/kmer.hpp"
+#include "common/alphabets.hpp"
+#include "utils/kmer_utils.hpp"
+#include "iterators/transform_iterator.hpp"
+#include "utils/logging.h"
 
 template<unsigned int KMER_SIZE, typename ALPHABET, typename word_type=WordType>
 class MyKmer : bliss::common::Kmer<KMER_SIZE, ALPHABET, word_type>
@@ -361,10 +361,10 @@ void test_kmer_with_word_type_packed(input_word_type* kmer_data, uint64_t* kmer_
 
   // the expected value is a 64bit kmer.  we only need the prefix corresponding to the kmer_size.
   constexpr size_t expected_shift = ((64 / bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar() - kmer_size) * bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar());
-  //printf("expected_shift: %lu\n", expected_shift);
+  //INFOF("expected_shift: %lu\n", expected_shift);
 
   input_word_type* kmer_pointer = kmer_data;
-  //printf("kmer pointer: %X\n", *kmer_pointer);
+  //INFOF("kmer pointer: %X\n", *kmer_pointer);
 
   // fill first kmer
   unsigned int offset = 0;
@@ -372,7 +372,7 @@ void test_kmer_with_word_type_packed(input_word_type* kmer_data, uint64_t* kmer_
 
   uint64_t expected = *kmer_ex >> expected_shift;
   kmer_type kmer_ex_0(reinterpret_cast<kmer_word_type*>(&expected));
-  //printf("iter i = %d, expected: %016lX, actual %016lX\n", 0, kmer_ex_0.getPrefix64(), kmer.getPrefix64());
+  //INFOF("iter i = %d, expected: %016lX, actual %016lX\n", 0, kmer_ex_0.getPrefix64(), kmer.getPrefix64());
 
   EXPECT_EQ(kmer_ex_0, kmer) << "Kmer from stream should be equal to kmer from non-stream";
 
@@ -384,7 +384,7 @@ void test_kmer_with_word_type_packed(input_word_type* kmer_data, uint64_t* kmer_
     expected = kmer_ex[i] >> expected_shift;
     kmer_type kmer_ex_i(reinterpret_cast<kmer_word_type*>(&expected));
 
-    //printf("iter i = %d, expected: %016lX, actual %016lX\n", i, kmer_ex_i.getPrefix64(), kmer.getPrefix64());
+    //INFOF("iter i = %d, expected: %016lX, actual %016lX\n", i, kmer_ex_i.getPrefix64(), kmer.getPrefix64());
 
     EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(input_word_type) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar() << " i = " << i;
   }
@@ -803,16 +803,16 @@ void test_kmer_with_word_type_unpacked(unsigned char* kmer_data, uint64_t* kmer_
 
   // the expected value is a 64bit kmer.  we only need the prefix corresponding to the kmer_size.
   constexpr size_t expected_shift = ((64 / bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar() - kmer_size) * bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar());
-  //printf("expected_shift: %lu\n", expected_shift);
+  //INFOF("expected_shift: %lu\n", expected_shift);
 
   unsigned char* kmer_pointer = kmer_data;
-  //printf("kmer pointer: %d\n", *kmer_pointer);
+  //INFOF("kmer pointer: %d\n", *kmer_pointer);
   // fill first kmer
   //unsigned int offset = 0;
   kmer.fillFromChars(kmer_pointer);
   uint64_t expected = *kmer_ex >> expected_shift;
   kmer_type kmer_ex_0(reinterpret_cast<kmer_word_type*>(&expected));
-  //printf("iter i = %d, expected: %016lX, actual %016lX\n", 0, kmer_ex_0.getPrefix64(), kmer.getPrefix64());
+  //INFOF("iter i = %d, expected: %016lX, actual %016lX\n", 0, kmer_ex_0.getPrefix64(), kmer.getPrefix64());
 
   EXPECT_EQ(kmer, kmer_ex_0) << "Kmer from stream should be equal to kmer from non-stream";
 
@@ -824,7 +824,7 @@ void test_kmer_with_word_type_unpacked(unsigned char* kmer_data, uint64_t* kmer_
     expected = kmer_ex[i] >> expected_shift;
     kmer_type kmer_ex_i(reinterpret_cast<kmer_word_type*>(&expected));
 
-    //printf("iter i = %d, expected: %016lX, actual %016lX\n", i, kmer_ex_i.getPrefix64(), kmer.getPrefix64());
+    //INFOF("iter i = %d, expected: %016lX, actual %016lX\n", i, kmer_ex_i.getPrefix64(), kmer.getPrefix64());
 
     EXPECT_EQ(kmer_ex_i, kmer) << "Kmer compare unequal for sizeof(input)="<< sizeof(unsigned char) << ", sizeof(kmer_word)=" << sizeof(kmer_word_type) << ", size=" << kmer_size << ", bits=" << bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar() << " i = " << i;
   }
@@ -945,8 +945,8 @@ void compute_kmer(std::string input) {
     int res = strncmp(gold.c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str(), K);
 
     if (res != 0) {
-      printf("%d iterator input %s\n", i, gold.c_str());
-      printf("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
+      INFOF("%d iterator input %s\n", i, gold.c_str());
+      INFOF("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
     }
 
     EXPECT_EQ(res, 0);
@@ -959,8 +959,8 @@ void compute_kmer(std::string input) {
   int res = strncmp(gold.c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str(), K);
 
   if (res != 0) {
-    printf("%d iterator input %s\n", i, gold.c_str());
-    printf("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
+    INFOF("%d iterator input %s\n", i, gold.c_str());
+    INFOF("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
   }
 
   EXPECT_EQ(res, 0);

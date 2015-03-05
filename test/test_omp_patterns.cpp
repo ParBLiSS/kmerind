@@ -13,6 +13,7 @@
 
 #include "omp_patterns.hpp"
 #include "partition/partitioner.hpp"
+#include "utils/logging.h"
 
 template <typename OT>
 struct compute {
@@ -39,10 +40,10 @@ void printTiming(std::string tag, int rank, int nprocs, int nthreads,
                  const std::chrono::duration<double>& time_span, int iter,
                  double v, size_t &count)
 {
-  std::cout << tag << "\tMPI rank: " << rank << "/" << nprocs << "\tOMP "
+  INFO( tag << "\tMPI rank: " << rank << "/" << nprocs << "\tOMP "
             << nthreads << " threads\ttook " << std::fixed
             << std::setprecision(6) << time_span.count() / iter
-            << "s,\tresult = " << v << ",\tcount" << count << std::endl;
+            << "s,\tresult = " << v << ",\tcount" << count );
 }
 
 int main(int argc, char* argv[])
@@ -58,13 +59,13 @@ int main(int argc, char* argv[])
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   if (rank == 0)
-  std::cout << "USE_MPI is set" << std::endl;
+  INFO( "USE_MPI is set" );
 
 #endif
 
 #ifdef USE_OPENMP
   if (rank == 0)
-  std::cout << "USE_OPENMP is set" << std::endl;
+  INFO( "USE_OPENMP is set" );
   omp_set_nested(1);
   omp_set_dynamic(0);
 #endif

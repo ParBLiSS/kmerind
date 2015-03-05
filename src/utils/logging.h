@@ -102,7 +102,7 @@
 #define LOGGER_VERBOSITY BLISS_LOGGER_VERBOSITY_WARNING
 #endif
 
-#include "utils/logging-internal.h"
+#include "utils/logging_internal.h"
 
 /********************************************
  *  actual macros, conditioned on verbosity *

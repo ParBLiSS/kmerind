@@ -67,18 +67,18 @@ namespace bliss
                                   // then copy assign
 
             // some debugging output
-            // printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
+            // INFOF("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
 
             // sending the kmer.
-            //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, kmer.first % nprocs + (nprocs * tid) );
+            //INFOF("rank %d thread %d, staging to buffer %d\n", rank, tid, kmer.first % nprocs + (nprocs * tid) );
 
             // TODO: abstract this to hide details.
 //            idx = this->_hash(kmer.first.kmer, kmer.second);
 //            if (counts[this->_tid] % 100000 == 0)
-//              printf("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, this->_tid, index, buffers.size()); fflush(stdout);
-            //printf("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, tid, index, buffers[index].size());
+//              INFOF("rank %d thread %d hashing to %lu of %lu buffers\n", this->_rank, this->_tid, index, buffers.size()); fflush(stdout);
+            //INFOF("rank %d thread %d hashing to %lu, fill = %lu\n", this->_rank, tid, index, buffers[index].size());
 //            index.insert(idx, kmer.first);
-            //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
+            //      INFOF("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
 //            ++kmerCount;
 
 
@@ -140,29 +140,29 @@ namespace bliss
             kmer.second.qual = *qstart;
 
             // some debugging output
-            // printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
+            // INFOF("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
 
             // sending the kmer.
-            //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, kmer.first % nprocs + (nprocs * tid) );
+            //INFOF("rank %d thread %d, staging to buffer %d\n", rank, tid, kmer.first % nprocs + (nprocs * tid) );
             if (fabs(kmer.second.qual) > std::numeric_limits<QualityType>::epsilon())
             {
               // sending the kmer.
-              //printf("rank %d thread %d, staging to buffer %d\n", rank, tid, kmer.first % nprocs + (nprocs * tid) );
+              //INFOF("rank %d thread %d, staging to buffer %d\n", rank, tid, kmer.first % nprocs + (nprocs * tid) );
 
               index.insert(kmer);
 
               // TODO: abstract this to hide details.
           // idx = this->_hash(kmer.first.kmer, kmer.second);
 //              if (counts[tid] % 100000 == 0)
-//                printf("rank %d thread %d hashing to %lu of %lu kmer\n", this->_rank, tid, index, buffers.size()); fflush(stdout);
-              //printf("rank %d thread %d hashing %lu to %lu, fill = %lu\n", this->_rank, tid, kmer.first.kmer, index, buffers[index].size());
+//                INFOF("rank %d thread %d hashing to %lu of %lu kmer\n", this->_rank, tid, index, buffers.size()); fflush(stdout);
+              //INFOF("rank %d thread %d hashing %lu to %lu, fill = %lu\n", this->_rank, tid, kmer.first.kmer, index, buffers[index].size());
           // index.insert(idx, kmer.first);
-              //      printf("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
+              //      INFOF("kmer send to %lx, key %lx, pos %d, qual %f\n", kmer.first, kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
 //              ++kmerCount;
             }
             else
             {
-              //      printf("BAD kmer quality.  key %lx, pos %d, qual %f\n", kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
+              //      INFOF("BAD kmer quality.  key %lx, pos %d, qual %f\n", kmer.second.kmer, kmer.second.id.pos, kmer.second.qual);
             }
 
           }

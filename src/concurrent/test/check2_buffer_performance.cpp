@@ -24,14 +24,14 @@
 #include <sstream>
 #include <xmmintrin.h>
 
-#include <utils/iterator_test_utils.hpp>
+#include "utils/iterator_test_utils.hpp"
 
 
 
 template<bliss::concurrent::LockType TS, int64_t CAP, int NumThreads = 1>
 void appendTimed(const int iterations) {
 
-  printf("PROFILING: %d threads, locktype %d buffer append with %ld elements and %d iterations\n", NumThreads, static_cast<int>(TS), CAP, iterations);
+  INFOF("PROFILING: %d threads, locktype %d buffer append with %ld elements and %d iterations\n", NumThreads, static_cast<int>(TS), CAP, iterations);
   bliss::io::Buffer<TS, CAP> buf;
 
   std::chrono::high_resolution_clock::time_point t1, t2;
@@ -68,7 +68,7 @@ void appendTimed(const int iterations) {
       t2 = std::chrono::high_resolution_clock::now();
 
       time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-      printf("Append %d (success) and %d (failure) elements duration = %f\n", success, failure, time_span.count());
+      INFOF("Append %d (success) and %d (failure) elements duration = %f\n", success, failure, time_span.count());
 
   }
 

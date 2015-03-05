@@ -86,11 +86,11 @@ TYPED_TEST_P(FASTQLoaderTest, OpenWithRange)
   loader.getNextL1Block();
 
 
-//  std::cout << "range: " << r2 << std::endl;
+//  INFO( "range: " << r2 );
   ASSERT_EQ('@', loader.getCurrentL1Block().begin()[0]);
   ASSERT_EQ('@', loader.getCurrentL1Block().end()[0]);
-//  std::cout << " characters = '" << loader.getData().begin()[0]  << "'" << std::endl;
-//  std::cout << " characters = '" << loader.getData().end()[0]  << "'" << std::endl;
+//  INFO( " characters = '" << loader.getData().begin()[0]  << "'" );
+//  INFO( " characters = '" << loader.getData().end()[0]  << "'" );
 }
 
 
@@ -116,14 +116,14 @@ TYPED_TEST_P(FASTQLoaderTest, OpenConsecutiveRanges)
       ASSERT_EQ(lastEnd, r.start);
       lastEnd = r.end;
 
-      //  std::cout << "range: " << r2 << std::endl;
+      //  INFO( "range: " << r2 );
         ASSERT_EQ('@', d.begin()[0]);
         if (r.end == loader.getFileRange().end)
           ASSERT_EQ(0, d.end()[0]);
         else
           ASSERT_EQ('@', d.end()[0]);
-      //  std::cout << " characters = '" << loader.getData().begin()[0]  << "'" << std::endl;
-      //  std::cout << " characters = '" << loader.getData().end()[0]  << "'" << std::endl;
+      //  INFO( " characters = '" << loader.getData().begin()[0]  << "'" );
+      //  INFO( " characters = '" << loader.getData().end()[0]  << "'" );
     }
   }
 }

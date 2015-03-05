@@ -6,7 +6,9 @@
 #include <iostream>
 #include <functional>
 
-#include <io/communication_layer.hpp>
+#include "utils/logging.h"
+
+#include "io/communication_layer.hpp"
 
 
 int my_rank;
@@ -258,7 +260,7 @@ struct Tester
         ERRORF("M R %d,\tT  ,\tI  ,\tD  ,\tt %d,\ti  ,\tM ,\tL%d, \tFAIL: expected %d", my_rank, FIRST_TAG, msgs_received.load(), els * commSize * iters);
   //      exit(EXIT_FAILURE);
       }
-      //std::cerr << "INDEX: " << msgs_received << std::endl;
+      //INFO( "INDEX: " << msgs_received );
 
       //======== call flush twice helps to avoid error below.  HACK
       // check that all messages have been received correctly
@@ -281,7 +283,7 @@ struct Tester
 
     commLayer.finishCommunication();
 
-    //std::cerr << "LOOKUP: " << lookup_received << " ANSWERS: " << answers_received << std::endl;
+    //INFO( "LOOKUP: " << lookup_received << " ANSWERS: " << answers_received );
 
     DEBUG("This was a triumph.");
 //    sleep(1);

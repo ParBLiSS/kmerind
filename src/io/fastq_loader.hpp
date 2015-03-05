@@ -664,9 +664,9 @@ namespace bliss
 
               WARNING(ex.what());
 
-              printf("curr range: chunk %lu, hint %lu-%lu, next %lu-%lu, srcData range %lu-%lu, mmap_range %lu-%lu\n",
+              ERRORF("curr range: chunk %lu, hint %lu-%lu, next %lu-%lu, srcData range %lu-%lu, mmap_range %lu-%lu\n",
                      this->L2BlockSize, hint.start, hint.end, next.start, next.end, parentRange.start, parentRange.end, this->L1Block.getRange().start, this->L1Block.getRange().end);
-              printf("got an exception search:  %s \n", ex.what());
+              ERRORF("got an exception search:  %s \n", ex.what());
 
               output.start = hint.end;
               output.end = hint.end;

@@ -39,7 +39,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 //  std::atomic_flag writelock3 = ATOMIC_FLAG_INIT;
 
 
-  printf("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %d total counts from unlimited pool\n",
+  INFOF("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %d total counts from unlimited pool\n",
          NumThreads, poollt, bufferlt, buffer_cap, total_count);
 
 
@@ -132,14 +132,14 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 
 
   if ( swap != success / (buffer_cap / sizeof(int)) || success != stored_count)
-      printf("FAIL: (actual/expected)  success (%d/%d), failure (%d/?), swap(%ld/%d).\n", success, stored_count, failure, success / (buffer_cap / sizeof(int)), swap);
+      FATALF("FAIL: (actual/expected)  success (%d/%d), failure (%d/?), swap(%ld/%d).\n", success, stored_count, failure, success / (buffer_cap / sizeof(int)), swap);
   else {
-    printf("INFO: success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
+    INFOF("INFO: success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
 
     if (compareUnorderedSequences(stored.begin(), gold.begin(), stored_count)) {
-      printf("PASS\n");
+      INFOF("PASS\n");
     } else {
-      printf("FAIL: content not matching\n");
+      FATALF("FAIL: content not matching\n");
     }
   }
   omp_destroy_lock(&writelock);
@@ -151,7 +151,7 @@ template<typename PoolType>
 void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_count, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, const int64_t buffer_cap) {
 
 
-  printf("TESTING: stress. %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %lu total counts from unlimited pool\n",
+  INFOF("TESTING: stress. %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %lu total counts from unlimited pool\n",
          NumThreads, poollt, bufferlt, buffer_cap, total_count);
 
 
@@ -189,13 +189,13 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
       ++success;
 
       if (out == nullptr) {
-        printf("ERROR: successful append but no pointer returned.\n");
+        FATALF("ERROR: successful append but no pointer returned.\n");
         fflush(stdout);
         ++failure2;
       } else {
         size_t od = *(reinterpret_cast<size_t*>(out));
         if (od != data) {
-          printf("ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. buffer %p data ptr %p, offset %ld\n",
+          FATALF("ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. buffer %p data ptr %p, offset %ld\n",
                  omp_get_thread_num(), data, od, sptr, sptr->operator char*(), (char*)out - sptr->operator char*());
           fflush(stdout);
           ++failure3;
@@ -216,12 +216,12 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
       sptr = buf_ptr;
       buf_ptr = new_buf_ptr;
 #pragma omp flush(buf_ptr)
-      //printf("SWAP: old buf %p, new buf %p\n", buf_ptr, sptr);
+      //INFOF("SWAP: old buf %p, new buf %p\n", buf_ptr, sptr);
 
       // this is showing a possible spurious wakeup...
       int oldsize = sptr ? sptr->getSize() / elSize : 0;
       if (oldsize != capInEl) {
-        fprintf(stdout, "FAIL atomic DID NOT GET 2047 elements 1. local swap = %d, i = %d. oldbuf %p, newbuf %p\n", swap, i, sptr, buf_ptr);
+        FATALF("FAIL atomic DID NOT GET 2047 elements 1. local swap = %d, i = %d. oldbuf %p, newbuf %p\n", swap, i, sptr, buf_ptr);
       }
 
       pool.releaseObject(sptr);
@@ -244,13 +244,13 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
   pool.releaseObject(buf_ptr);
 
   if (failure2 > 0 || failure3 > 0 ) {
-    printf("FAIL: bad inserts present: count of nullptr returned %d, count of bad value %d\n", failure2, failure3);
+    FATALF("FAIL: bad inserts present: count of nullptr returned %d, count of bad value %d\n", failure2, failure3);
   }
 
   if (success == 0 || swap != success / (capInEl))
-    printf("FAIL atomic: success (%d), failure (%d,%d,%d), swap(%d/%ld), last buf size %d.\n", success, failure, failure2, failure3, swap, success / (capInEl), last);
+    FATALF("FAIL atomic: success (%d), failure (%d,%d,%d), swap(%d/%ld), last buf size %d.\n", success, failure, failure2, failure3, swap, success / (capInEl), last);
   else {
-    printf("PASS: atomic success %d, failure %d/%d/%d, swap %d, total %lu\n", success, failure, failure2, failure3, swap, total_count);
+    INFOF("PASS: atomic success %d, failure %d/%d/%d, swap %d, total %lu\n", success, failure, failure2, failure3, swap, total_count);
 
   }
 }
@@ -261,9 +261,9 @@ template<typename PoolType>
 void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int pool_threads, int buffer_threads) {
 
 
-  printf("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d\n", poollt, bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
+  INFOF("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d\n", poollt, bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
 
-  printf("TEST acquire: ");
+  INFOF("TEST acquire: ");
   int expected;
   int i = 0;
   int count = 0;
@@ -276,11 +276,11 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     }
   }
   expected = 0;
-  if (count != expected) printf("FAIL: number of failed attempt to acquire buffer should be %d, actual %d.  pool capacity %lu, remaining: %lu \n", expected, count, pool.getCapacity(), pool.getAvailableCount());
-  else printf("PASSED.\n");
+  if (count != expected) FATALF("FAIL: number of failed attempt to acquire buffer should be %d, actual %d.  pool capacity %lu, remaining: %lu \n", expected, count, pool.getCapacity(), pool.getAvailableCount());
+  else INFOF("PASSED.\n");
   pool.reset();
 
-  printf("TEST acquire with growth: ");
+  INFOF("TEST acquire with growth: ");
   i = 0;
   count = 0;
   mx = pool.isUnlimited() ? 100 : pool.getCapacity();
@@ -292,13 +292,13 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 	    }
   }
   expected = pool.isUnlimited() ? 0 : 1;
-  if (count != expected) printf("FAIL: attempts %d number of failed attempt to acquire buffer should be %d, actual %d.  pool remaining: %lu \n", mx, expected, count, pool.getAvailableCount());
-  else printf("PASSED.\n");
+  if (count != expected) FATALF("FAIL: attempts %d number of failed attempt to acquire buffer should be %d, actual %d.  pool remaining: %lu \n", mx, expected, count, pool.getAvailableCount());
+  else INFOF("PASSED.\n");
 
 
   pool.reset();
 
-  printf("TEST release: ");
+  INFOF("TEST release: ");
   count = 0;
   mx = pool.isUnlimited() ? 100 : pool.getCapacity();
   // and create some dummy buffers to insert
@@ -321,12 +321,12 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     }
   }
   expected = mx;  // unlimited or not, can only push back in as much as taken out.
-  if (count != expected) printf("FAIL: number of failed attempt to release buffer should be %d, actual %d. pool remaining: %lu \n", expected, count, pool.getAvailableCount());
-  else printf("PASSED.\n");
+  if (count != expected) FATALF("FAIL: number of failed attempt to release buffer should be %d, actual %d. pool remaining: %lu \n", expected, count, pool.getAvailableCount());
+  else INFOF("PASSED.\n");
   pool.reset();
   temp.clear();
 
-  printf("TEST access by multiple threads, each a separate buffer: ");
+  INFOF("TEST access by multiple threads, each a separate buffer: ");
 
 
   count = 0;
@@ -357,13 +357,13 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
       pool.releaseObject(ptr);
     }
   }
-  if (count2 != 0) printf("FAIL: acquire failed\n");
-  else if (count != 0) printf("FAIL: append failed\n");
-  else if (count1 != 0) printf("FAIL: inserted and got back wrong values\n");
-  else printf("PASSED.\n");
+  if (count2 != 0) FATALF("FAIL: acquire failed\n");
+  else if (count != 0) FATALF("FAIL: append failed\n");
+  else if (count1 != 0) FATALF("FAIL: inserted and got back wrong values\n");
+  else INFOF("PASSED.\n");
   pool.reset();
 
-  printf("TEST access by multiple threads, all to same buffer: ");
+  INFOF("TEST access by multiple threads, all to same buffer: ");
 
 
   auto ptr = pool.tryAcquireObject();
@@ -379,15 +379,15 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   for (int i = 0; i < buffer_threads ; ++i) {
     same &= ptr->operator int*()[i] == 7;
   }
-  if (!same) printf("FAIL: inserted not same\n");
-  else printf("PASSED.\n");
+  if (!same) FATALF("FAIL: inserted not same\n");
+  else INFOF("PASSED.\n");
 
   pool.reset();
 
 
   omp_set_nested(1);
 
-  printf("TEST all operations together: ");
+  INFOF("TEST all operations together: ");
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool, pool_threads, buffer_threads, std::cout)
   {
     // Id range is 0 to 100
@@ -396,13 +396,13 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     for (int i = 0; i < 100; ++i) {
       // acquire
       auto buf = pool.tryAcquireObject();
-//      printf("acquiring ");
+//      INFOF("acquiring ");
       while (!buf) {
         _mm_pause();
-//        printf(".");
+//        INFOF(".");
         buf = pool.tryAcquireObject();
       }
-//      printf(" done.\n");
+//      INFOF(" done.\n");
       buf->clear_and_unblock_writes();
 
       // access
@@ -421,20 +421,20 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
         _mm_pause();
       }
       // clear buffer
-//      std::cout << "before block and flush: " << *buf << std::endl << std::flush;
+//      INFO( "before block and flush: " << *buf );
       buf->block_and_flush();
-//      std::cout << "after block and flush: " << *buf << std::endl << std::flush;
+//      INFO( "after block and flush: " << *buf );
 
-//      printf("count = %d\n", count);
+//      INFOF("count = %d\n", count);
 
       if (buf->getSize() != sizeof(int) * iter  || count != 0)
-        printf("FAIL: thread %d/%d buffer size is %ld, expected %lu\n", omp_get_thread_num() + 1, pool_threads, buf->getSize(), sizeof(int) * iter);
- // else printf("PASSED.\n");
+        FATALF("FAIL: thread %d/%d buffer size is %ld, expected %lu\n", omp_get_thread_num() + 1, pool_threads, buf->getSize(), sizeof(int) * iter);
+ // else INFOF("PASSED.\n");
 
       //release
       pool.releaseObject(buf);
       //if (i % 25 == 0)
-//      printf("thread %d released buffer %d\n", omp_get_thread_num(), id);
+//      INFOF("thread %d released buffer %d\n", omp_get_thread_num(), id);
 
     }
   }

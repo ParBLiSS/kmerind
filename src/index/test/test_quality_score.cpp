@@ -16,10 +16,11 @@
 //#include <boost/concept_check.hpp>
 
 // include classes to test
-#include <index/quality_scores.hpp>
+#include "index/quality_scores.hpp"
 #include <vector>
 #include <algorithm>
 #include <cassert>
+#include "utils/logging.h"
 
 //// Usable AlmostEqual function
 //// from http://www.cygnus-software.com/papers/comparingfloats/comparingfloats.htm
@@ -85,7 +86,7 @@ typename std::enable_if<std::is_floating_point<T>::value, bool>::type compare_ve
     return true;   // if same object
   }
   if (first.size() != second.size()) {
-    std::cout << "size not the same" << std::endl;
+    ERROR( "size not the same" );
     return false;  // if size differ
   }
 
@@ -93,11 +94,11 @@ typename std::enable_if<std::is_floating_point<T>::value, bool>::type compare_ve
     return fabs(x - y) < 1.0e-15; }
   )) return true;
   else {
-    std::cout << "Vectors not the same" << std::endl;
+    ERROR( "Vectors not the same" );
     for (int i = 0; i < first.size(); ++i) {
-      std::cout << (first[i] - second[i]) << std::endl;
+      std::cout << (first[i] - second[i])  << ",";
     }
-
+    std::cout << std::endl;
     return false;
   }
 }
@@ -110,10 +111,11 @@ typename std::enable_if<!std::is_floating_point<T>::value, bool>::type compare_v
   if (std::equal(first.cbegin(), first.cend(), second.cbegin())) return true;
   else {
 
-    std::cout << "Vectors not the same" << std::endl;
+    ERROR( "Vectors not the same" );
     for (int i = 0; i < first.size(); ++i) {
-      std::cout << first[i] - second[i] << std::endl;
+      std::cout<< first[i] - second[i] <<",";
     }
+    std::cout << std::endl;
 
     return false;
   }
@@ -126,7 +128,7 @@ void codec_decode(const std::vector<unsigned char> & data, // quality score valu
 
   CODEC decoder;
 
-//  std::cout << "decoder LUT SIZE: " << (int)CODEC::size << std::endl;
+//  INFO( "decoder LUT SIZE: " << (int)CODEC::size );
 //  for (int i = 0; i < CODEC::size; ++i) {
 //    std::cout << CODEC::lut[i] << ", ";
 //  }
@@ -148,7 +150,7 @@ void codec_encode(std::vector<typename CODEC::value_type> data, // quality score
   CODEC decoder;
 
 
-//  std::cout << "encoder LUT SIZE: " << (int)CODEC::size << std::endl;
+//  INFO( "encoder LUT SIZE: " << (int)CODEC::size );
 //  for (int i = 0; i < CODEC::size; ++i) {
 //    std::cout << CODEC::lut[i] << ", ";
 //  }
@@ -217,13 +219,13 @@ void testCodec(const std::string & strdata) {
   bool same = compare_vectors<unsigned char>(goldEncoded, gold);
 
   if (!same) {
-    std::cout << "direct encode/decode: result not same" << std::endl;
+    ERROR( "direct encode/decode: result not same" );
 
-    std::cout << std::endl<< "GOLD input: " << std::endl;
+    INFO( std::endl<< "GOLD input: " );
     std::copy(gold.begin() , gold.end(), std::ostream_iterator<unsigned char>(std::cout, " "));
-    std::cout << std::endl<< "GOLD re-encoded: " << std::endl;
+    INFO( std::endl<< "GOLD re-encoded: " );
     std::copy(goldDecoded.begin() , goldDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
-    std::cout << std::endl<< "GOLD re-encoded: " << std::endl;
+    INFO( std::endl<< "GOLD re-encoded: " );
     std::copy(goldEncoded.begin() , goldEncoded.end(), std::ostream_iterator<unsigned char>(std::cout, " "));
 
   }
@@ -236,11 +238,11 @@ void testCodec(const std::string & strdata) {
   same = compare_vectors<OT>(codecDecoded, goldDecoded);
 
   if (!same) {
-    std::cout << "codec decode: result not same" << std::endl;
+    ERROR( "codec decode: result not same" );
 
-    std::cout << std::endl<< "GOLD decoded: " << std::endl;
+    INFO( std::endl<< "GOLD decoded: " );
     std::copy(goldDecoded.begin() , goldDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
-    std::cout << std::endl<< "codec decoded: " << std::endl;
+    INFO( std::endl<< "codec decoded: " );
     std::copy(codecDecoded.begin() , codecDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
   }
 
@@ -251,11 +253,11 @@ void testCodec(const std::string & strdata) {
   same = compare_vectors<unsigned char>(codecEncodedFromGold, gold);
 
   if (!same) {
-    std::cout << "codec encode from goldDecoded : result not same" << std::endl;
+    ERROR( "codec encode from goldDecoded : result not same" );
 
-    std::cout << std::endl<< "GOLD input: " << std::endl;
+    INFO( std::endl<< "GOLD input: " );
     std::copy(gold.begin() , gold.end(), std::ostream_iterator<unsigned char>(std::cout, " "));
-    std::cout << std::endl<< "codec encode from goldDecoded: " << std::endl;
+    INFO( std::endl<< "codec encode from goldDecoded: " );
     std::copy(codecEncodedFromGold.begin() , codecEncodedFromGold.end(), std::ostream_iterator<unsigned char>(std::cout, " "));
 
   }
@@ -266,11 +268,11 @@ void testCodec(const std::string & strdata) {
   same = compare_vectors<unsigned char>(codecEncodedFromCodecDecoded, gold);
 
   if (!same) {
-    std::cout << "codec encode from codecDecoded : result not same" << std::endl;
+    ERROR( "codec encode from codecDecoded : result not same" );
 
-    std::cout << std::endl<< "GOLD input: " << std::endl;
+    INFO( std::endl<< "GOLD input: " );
     std::copy(gold.begin() , gold.end(), std::ostream_iterator<unsigned char>(std::cout, ""));
-    std::cout << std::endl<< "codec encode from goldDecoded: " << std::endl;
+    INFO( std::endl<< "codec encode from goldDecoded: " );
     std::copy(codecEncodedFromCodecDecoded.begin() , codecEncodedFromCodecDecoded.end(), std::ostream_iterator<unsigned char>(std::cout, " "));
 
   }
@@ -308,11 +310,11 @@ void testCodec(const std::string & strdata) {
   same = compare_vectors<unsigned char>(pathResults, goldPathResults);
 
   if (!same) {
-    std::cout << "encode with pathological inputs" << std::endl;
+    INFO( "encode with pathological inputs" );
 
-    std::cout << std::endl<< "pathological gold input: " << std::endl;
+    INFO( std::endl<< "pathological gold input: " );
     std::copy(goldPathResults.begin() , goldPathResults.end(), std::ostream_iterator<OT>(std::cout, ","));
-    std::cout << std::endl<< "codec encode pathological input: " << std::endl;
+    INFO( std::endl<< "codec encode pathological input: " );
     std::copy(pathResults.begin() , pathResults.end(), std::ostream_iterator<OT>(std::cout, ","));
 
   }

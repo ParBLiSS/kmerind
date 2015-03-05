@@ -76,8 +76,8 @@ struct generate_kmers
       reverse &= mask_reverse;
 
       xored = forward ^ reverse;
-//      std::cout << "kmer:\t" << std::bitset<word_size>(forward) << std::endl << "\t" << std::bitset<word_size>(reverse) << std::endl;
-//      std::cout << "\t" << std::bitset<word_size>(xored) << std::endl;
+//      INFO( "kmer:\t" << std::bitset<word_size>(forward) << std::endl << "\t" << std::bitset<word_size>(reverse) );
+//      INFO( "\t" << std::bitset<word_size>(xored) );
 
       xoredRecoverable = (xored & ~mask_lower_half)
           | (forward & mask_lower_half);
@@ -176,7 +176,7 @@ struct generate_qual
       // update the zero count
       if (newval == 0.0)
       {
-//        printf("ZERO!\n");
+//        INFOF("ZERO!\n");
         ++zeroCount;
       }
       if (oldval == 0.0)
@@ -196,7 +196,7 @@ struct generate_qual
 
         if (oldZeroCount == 1)
         {
-          //printf("HAD ZEROS!\n");
+          //INFOF("HAD ZEROS!\n");
           // removed a zero.  so recalculate.
           internal = 0.0;
           for (int i = 0; i < K; ++i)
@@ -214,7 +214,7 @@ struct generate_qual
         if (v == 1.0)
         {
           value = 1000;
-          printf("confident kmer!\n");
+          INFOF("confident kmer!\n");
         }
         else
         {
@@ -222,7 +222,7 @@ struct generate_qual
         }
       }
 
-//      printf("qual %d oldval = %f, newval = %f, internal = %f, output val = %f\n", *iter, oldval, newval, internal, value);
+//      INFOF("qual %d oldval = %f, newval = %f, internal = %f, output val = %f\n", *iter, oldval, newval, internal, value);
 
       // move the iterator.
       ++iter;
@@ -275,7 +275,7 @@ int main(int argc, char* argv[])
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   if (rank == 0)
-    std::cout << "USE_MPI is set" << std::endl;
+    INFO( "USE_MPI is set" );
 #endif
 
   // first thread gets the file size.
@@ -285,8 +285,8 @@ int main(int argc, char* argv[])
     struct stat filestat;
     stat(filename.c_str(), &filestat);
     file_size = static_cast<uint64_t>(filestat.st_size);
-    fprintf(stderr, "block size is %ld\n", filestat.st_blksize);
-    fprintf(stderr, "sysconf block size is %ld\n", sysconf(_SC_PAGE_SIZE));
+    INFOF("block size is %ld\n", filestat.st_blksize);
+    INFOF("sysconf block size is %ld\n", sysconf(_SC_PAGE_SIZE));
   }
 
 #ifdef USE_MPI
@@ -298,7 +298,7 @@ int main(int argc, char* argv[])
 
   if (rank == nprocs - 1)
   {
-    fprintf(stderr, "file size is %ld\n", file_size);
+    INFOF("file size is %ld\n", file_size);
   }
   /////////////// now try to open the file
 
@@ -312,9 +312,9 @@ int main(int argc, char* argv[])
   FileLoaderType::RangeType r =
       FileLoaderType::RangeType::block_partition(nprocs,
                                                           rank, 0, file_size);
-  std::cout << rank << " equipart: " << r << std::endl;
-  std::cout << rank << " test block aligned: "
-            << r.align_to_page(sysconf(_SC_PAGE_SIZE)) << std::endl;
+  INFO( rank << " equipart: " << r );
+  INFO( rank << " test block aligned: "
+            << r.align_to_page(sysconf(_SC_PAGE_SIZE)) );
 
   // now open the file and begin reading
   std::chrono::high_resolution_clock::time_point t1, t2;
@@ -333,7 +333,7 @@ int main(int argc, char* argv[])
         t2 - t1);
     INFO("MMap rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
-    std::cout << rank << " record adjusted " << loader.getRange() << std::endl;
+    INFO( rank << " record adjusted " << loader.getRange() );
 
     t1 = std::chrono::high_resolution_clock::now();
     typename FileLoaderType::IteratorType fastq_start = loader.begin();
@@ -353,7 +353,7 @@ int main(int argc, char* argv[])
         t2 - t1);
     INFO("reads " << readCount << " rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
-    printf("avoid compiler optimizing out the ops %ld\n", id);
+    INFOF("avoid compiler optimizing out the ops %ld\n", id);
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -389,7 +389,7 @@ int main(int argc, char* argv[])
         t2 - t1);
     INFO("bases " << baseCount << " kmer generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
-    printf("avoid compiler optimizing out the ops %ld\n", kmer);
+    INFOF("avoid compiler optimizing out the ops %ld\n", kmer);
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -436,7 +436,7 @@ int main(int argc, char* argv[])
         t2 - t1);
     INFO("kmer + qual " << kmerCount << " generation rank " << rank << " elapsed time: " << time_span3.count() << "s.");
 
-    printf("avoid compiler optimizing out the ops %lx %lf\n", kmer, qual);
+    INFOF("avoid compiler optimizing out the ops %lx %lf\n", kmer, qual);
 
   }
 
@@ -450,7 +450,7 @@ int main(int argc, char* argv[])
 //    time_span3 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //    INFO("MMap preload " << "elapsed time: " << time_span3.count() << "s.");
 //
-//    std::cout << rank << " record adjusted preload " << loader.getRange() << std::endl;
+//    INFO( rank << " record adjusted preload " << loader.getRange() );
 //
 //
 //    t1 = std::chrono::high_resolution_clock::now();

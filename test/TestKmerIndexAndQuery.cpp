@@ -195,7 +195,7 @@ void test(MPI_Comm comm, const std::string & filename, const int nthreads, const
   size_t result = 0;
   size_t entries = 0;
 
-  INFOF("RANK %d: Testing %s", rank, testname.c_str())
+  INFOF("RANK %d: Testing %s", rank, testname.c_str());
 
   t1 = std::chrono::high_resolution_clock::now();
   // initialize index

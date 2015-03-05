@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include "concurrent/copyable_atomic.hpp"
 
+#include "utils/logging.h"
 
 using namespace bliss::concurrent;
 
@@ -25,11 +26,11 @@ int main(int argc, char** argv) {
         for (int i = 0; i < 12; ++i) {
                 atoms[i].store(i);
         }
-        printf("Atomics preallocated in vector\n");
+        INFOF("Atomics preallocated in vector\n");
         for (int i = 0; i < 12; ++i) {
                 auto x = atoms[i].fetch_add(1);
                 auto y = atoms[i].load();
-                printf("%d: %d->%d\n", i, x, y);
+                INFOF("%d: %d->%d\n", i, x, y);
         }
 
 
@@ -41,13 +42,13 @@ int main(int argc, char** argv) {
                 atoms2[i+24] = i+24;
         }
 
-        printf("Copyable atomics in unordered_map\n");
+        INFOF("Copyable atomics in unordered_map\n");
         for (int i = 0; i < 12; ++i) {
                 auto x= atoms2.at(i*2).fetch_add(1);
                 auto y = atoms2.at(i*2).load();
-                printf("%d: %d->%d\n", i*2, x, y);
-                printf("%d: %d\n", i*2+1, atoms2.at(i*2+1).load());
-                printf("%d: %d\n", i+24, atoms2.at(i+24).load());
+                INFOF("%d: %d->%d\n", i*2, x, y);
+                INFOF("%d: %d\n", i*2+1, atoms2.at(i*2+1).load());
+                INFOF("%d: %d\n", i+24, atoms2.at(i+24).load());
         }
 
 

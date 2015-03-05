@@ -33,7 +33,7 @@ class Test : public bliss::concurrent::Task
     virtual ~Test() {};
 
     virtual void operator()() {
-      //printf("tid %d: %s\n", omp_get_thread_num(), content.c_str());
+      //INFOF("tid %d: %s\n", omp_get_thread_num(), content.c_str());
     }
 
   protected:
@@ -54,10 +54,10 @@ class Test2 : public bliss::concurrent::Task
     virtual ~Test2() {};
 
     virtual void operator()() {
-      //printf("tid %d: %s\n", omp_get_thread_num(), content.c_str());
+      //INFOF("tid %d: %s\n", omp_get_thread_num(), content.c_str());
       parent->addTask(this->shared_from_this());
 //      if (parent.addTask(this))
-//        printf("tid %d: %s reinserted\n", omp_get_thread_num(), content.c_str());
+//        INFOF("tid %d: %s reinserted\n", omp_get_thread_num(), content.c_str());
     }
 
 
@@ -73,13 +73,13 @@ class Test3 : public bliss::concurrent::Task
     virtual ~Test3() {};
 
     virtual void operator()() {
-      printf("tid %d: %s start\n", omp_get_thread_num(), content.c_str());
+      INFOF("tid %d: %s start\n", omp_get_thread_num(), content.c_str());
 
       usleep(1000);
 
-      printf("tid %d: %s stop\n", omp_get_thread_num(), content.c_str());
+      INFOF("tid %d: %s stop\n", omp_get_thread_num(), content.c_str());
       other->disableAdd();
-      printf("tid %d: %s stopped\n", omp_get_thread_num(), content.c_str());
+      INFOF("tid %d: %s stopped\n", omp_get_thread_num(), content.c_str());
     }
 
 };
@@ -103,8 +103,8 @@ class Test4 : public bliss::concurrent::Task
       auto id = cc.fetch_add(1, std::memory_order_relaxed);
 
       if (id < iter) {
-        //printf("tid %d: %s, count %d\n", omp_get_thread_num(), content.c_str(), i);
-        //printf("%dR%d ", omp_get_thread_num(), i);
+        //INFOF("tid %d: %s, count %d\n", omp_get_thread_num(), content.c_str(), i);
+        //INFOF("%dR%d ", omp_get_thread_num(), i);
 
         work_r->addTask(this->shared_from_this());
       } else {
@@ -133,10 +133,10 @@ class Sender : public bliss::concurrent::Task
     virtual ~Sender() {};
 
     virtual void operator()() {
-      //printf("tid %d: %s\n", omp_get_thread_num(), content.c_str());
-      //printf("%dS ", omp_get_thread_num());
+      //INFOF("tid %d: %s\n", omp_get_thread_num(), content.c_str());
+      //INFOF("%dS ", omp_get_thread_num());
       _mm_pause();
-//      printf("tid %d: %s add recv %d to comm runner size %lu, disabled %s \n", omp_get_thread_num(), content.c_str(), id, comm_r->getTaskCount(), (comm_r->isAddDisabled() ? "y" : "n"));
+//      INFOF("tid %d: %s add recv %d to comm runner size %lu, disabled %s \n", omp_get_thread_num(), content.c_str(), id, comm_r->getTaskCount(), (comm_r->isAddDisabled() ? "y" : "n"));
       comm_r->addTask(std::move(std::shared_ptr<Runnable>(new Receiver("recv", comm_r, work_r, id))));
 
     }
@@ -173,7 +173,7 @@ class Node : public bliss::concurrent::Task
       _mm_pause();
       _mm_pause();
 
-//      printf("tid %d: %s add send %d to comm runner size %lu, disabled %s \n", omp_get_thread_num(), content.c_str(), id, comm_r->getTaskCount(), (comm_r->isAddDisabled() ? "y" : "n"));
+//      INFOF("tid %d: %s add send %d to comm runner size %lu, disabled %s \n", omp_get_thread_num(), content.c_str(), id, comm_r->getTaskCount(), (comm_r->isAddDisabled() ? "y" : "n"));
       comm_r->addTask(std::move(std::shared_ptr<Runnable>(new SENDER("sender", comm_r, work_r, id))));
 
     }
@@ -198,21 +198,21 @@ class Source : public bliss::concurrent::Task
     virtual void operator()() {
       auto id = cc.fetch_add(1, std::memory_order_relaxed);
 
-        //printf("tid %d: %s, count %d\n", omp_get_thread_num(), content.c_str(), i);
-        //printf("%dR%d ", omp_get_thread_num(), i);
+        //INFOF("tid %d: %s, count %d\n", omp_get_thread_num(), content.c_str(), i);
+        //INFOF("%dR%d ", omp_get_thread_num(), i);
         _mm_pause();
         _mm_pause();
         _mm_pause();
 
-//        printf("tid %d: %s add send %d to comm runner size %lu, disabled %s \n", omp_get_thread_num(), content.c_str(), id, comm_r->getTaskCount(), (comm_r->isAddDisabled() ? "y" : "n"));
-//        printf("tid %d: %s add self %d to work runner size %lu, disabled %s \n", omp_get_thread_num(), content.c_str(), id, work_r->getTaskCount(), (work_r->isAddDisabled() ? "y" : "n"));
+//        INFOF("tid %d: %s add send %d to comm runner size %lu, disabled %s \n", omp_get_thread_num(), content.c_str(), id, comm_r->getTaskCount(), (comm_r->isAddDisabled() ? "y" : "n"));
+//        INFOF("tid %d: %s add self %d to work runner size %lu, disabled %s \n", omp_get_thread_num(), content.c_str(), id, work_r->getTaskCount(), (work_r->isAddDisabled() ? "y" : "n"));
         comm_r->addTask(std::move(std::shared_ptr<Runnable>(new SENDER("sender", comm_r, work_r, id))));
 
       if (id+1 < iter) {
         work_r->addTask(this->shared_from_this());
       } else {
 
-        if (id %1000 == 0) printf("tid %d: %s, count %d\n", omp_get_thread_num(), content.c_str(), id);
+        if (id %1000 == 0) INFOF("tid %d: %s, count %d\n", omp_get_thread_num(), content.c_str(), id);
       }
     }
 
@@ -239,11 +239,11 @@ class Sink : public bliss::concurrent::Task
       auto i = cc2.fetch_add(1, std::memory_order_relaxed);
 
       if (i+1 >= iter) {
-        printf("tid %d: disabled runners at %d, item %d, iter %d\n", omp_get_thread_num(), id, i, iter);
+        INFOF("tid %d: disabled runners at %d, item %d, iter %d\n", omp_get_thread_num(), id, i, iter);
         work_r->disableAdd();
         comm_r->disableAdd();
       } else {
-        //printf("%dW ", omp_get_thread_num());
+        //INFOF("%dW ", omp_get_thread_num());
         _mm_pause();
         _mm_pause();
         _mm_pause();
@@ -255,7 +255,7 @@ class Sink : public bliss::concurrent::Task
         _mm_pause();
         _mm_pause();
 
-//        printf("tid %d: sink id %d, item %d, iter %d, work runner size %lu, disabled %s\n", omp_get_thread_num(), id ,i, iter, work_r->getTaskCount(), (work_r->isAddDisabled() ? "y" : "n"));
+//        INFOF("tid %d: sink id %d, item %d, iter %d, work runner size %lu, disabled %s\n", omp_get_thread_num(), id ,i, iter, work_r->getTaskCount(), (work_r->isAddDisabled() ? "y" : "n"));
       }
 
     }
@@ -280,11 +280,11 @@ class Receiver : public bliss::concurrent::Task
     virtual ~Receiver() {};
 
     virtual void operator()() {
-        //printf("%dC%d ", omp_get_thread_num(), i);
+        //INFOF("%dC%d ", omp_get_thread_num(), i);
         _mm_pause();
         _mm_pause();
 
-//        printf("tid %d: %s add write %d to work runner size %lu, disabled %s \n", omp_get_thread_num(), content.c_str(), id, work_r->getTaskCount(), (work_r->isAddDisabled() ? "y" : "n"));
+//        INFOF("tid %d: %s add write %d to work runner size %lu, disabled %s \n", omp_get_thread_num(), content.c_str(), id, work_r->getTaskCount(), (work_r->isAddDisabled() ? "y" : "n"));
 
         work_r->addTask(std::move(std::shared_ptr<Runnable>(new WRITER("write", comm_r, work_r, id))));
 
@@ -305,7 +305,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::SequentialRunner());
     //// test sequential.
-    printf("serial runner\n");
+    INFOF("serial runner\n");
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 1"))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 2"))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 3"))));
@@ -316,7 +316,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "setup: time " << time_span.count() << std::endl;
+    INFO( "setup: time " << time_span.count() );
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -326,7 +326,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "run: time " << time_span.count() << std::endl;
+    INFO( "run: time " << time_span.count() );
 
 
   }
@@ -339,7 +339,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::SequentialRunner());
     //// test sequential.
-    printf("serial runner\n");
+    INFOF("serial runner\n");
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test4("task 1", sr))));
 
 
@@ -347,7 +347,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "setup: time " << time_span.count() << std::endl;
+    INFO( "setup: time " << time_span.count() );
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -357,7 +357,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "run: time " << time_span.count() << std::endl;
+    INFO( "run: time " << time_span.count() );
 
 
   }
@@ -369,7 +369,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::PersonalizedOMPRunner(3));
     //// test sequential.
-    printf("personalized OMP runner\n");
+    INFOF("personalized OMP runner\n");
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 1"))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 2"))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 3"))));
@@ -380,7 +380,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "setup: time " << time_span.count() << std::endl;
+    INFO( "setup: time " << time_span.count() );
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -390,7 +390,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "run: time " << time_span.count() << std::endl;
+    INFO( "run: time " << time_span.count() );
 
 
   }
@@ -403,7 +403,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::PersonalizedOMPRunner(4));
     //// test sequential.
-    printf("personalized OMP runner\n");
+    INFOF("personalized OMP runner\n");
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test4("task 1", sr))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test4("task 2", sr))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test4("task 3", sr))));
@@ -413,7 +413,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "setup: time " << time_span.count() << std::endl;
+    INFO( "setup: time " << time_span.count() );
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -423,7 +423,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "run: time " << time_span.count() << std::endl;
+    INFO( "run: time " << time_span.count() );
 
 
   }
@@ -435,7 +435,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::UniformOMPRunner(3));
     //// test sequential.
-    printf("uniform OMP runner\n");
+    INFOF("uniform OMP runner\n");
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 1"))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 2"))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 3"))));
@@ -446,7 +446,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "setup: time " << time_span.count() << std::endl;
+    INFO( "setup: time " << time_span.count() );
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -456,7 +456,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "run: time " << time_span.count() << std::endl;
+    INFO( "run: time " << time_span.count() );
 
 
   }
@@ -468,7 +468,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::UniformOMPRunner(4));
     //// test sequential.
-    printf("uniform OMP runner\n");
+    INFOF("uniform OMP runner\n");
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test4("task 1", sr))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test4("task 2", sr))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test4("task 3", sr))));
@@ -478,7 +478,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "setup: time " << time_span.count() << std::endl;
+    INFO( "setup: time " << time_span.count() );
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -488,7 +488,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "run: time " << time_span.count() << std::endl;
+    INFO( "run: time " << time_span.count() );
 
 
   }
@@ -498,7 +498,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::DynamicOMPRunner(3));
     //// test sequential.
-    printf("dynamic OMP runner\n");
+    INFOF("dynamic OMP runner\n");
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 1"))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 2"))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test("task 3"))));
@@ -509,7 +509,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "setup: time " << time_span.count() << std::endl;
+    INFO( "setup: time " << time_span.count() );
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -519,7 +519,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "run: time " << time_span.count() << std::endl;
+    INFO( "run: time " << time_span.count() );
 
   }
 
@@ -531,7 +531,7 @@ int main(int argc, char** argv) {
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::DynamicOMPRunner(4));
 
     //// test sequential.
-    printf("dynamic OMP runner \n");
+    INFOF("dynamic OMP runner \n");
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test4("task 1", sr))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test4("task 2", sr))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test4("task 3", sr))));
@@ -541,7 +541,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "setup: time " << time_span.count() << std::endl;
+    INFO( "setup: time " << time_span.count() );
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -551,7 +551,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "run: time " << time_span.count() << std::endl;
+    INFO( "run: time " << time_span.count() );
 
   }
 
@@ -561,7 +561,7 @@ int main(int argc, char** argv) {
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::DynamicOMPRunner(3));
 
     //// test sequential.
-    printf("dynamic OMP runner with self-adding tasks and blocked queue\n");
+    INFOF("dynamic OMP runner with self-adding tasks and blocked queue\n");
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test2("task 1", sr))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test2("task 2", sr))));
     sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new Test2("task 3", sr))));
@@ -572,7 +572,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "setup: time " << time_span.count() << std::endl;
+    INFO( "setup: time " << time_span.count() );
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -582,14 +582,14 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "run: time " << time_span.count() << std::endl;
+    INFO( "run: time " << time_span.count() );
 
   }
 
     {
       t1 = std::chrono::high_resolution_clock::now();
 
-      printf("sequential OMP with separate thread to stop\n");
+      INFOF("sequential OMP with separate thread to stop\n");
 
       std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::SequentialRunner());
 
@@ -609,7 +609,7 @@ int main(int argc, char** argv) {
       time_span =
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
-      std::cout << "setup: time " << time_span.count() << std::endl;
+      INFO( "setup: time " << time_span.count() );
 
       t1 = std::chrono::high_resolution_clock::now();
 
@@ -619,13 +619,13 @@ int main(int argc, char** argv) {
       time_span =
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
-      std::cout << "run: time " << time_span.count() << std::endl;
+      INFO( "run: time " << time_span.count() );
     }
 
   {
     t1 = std::chrono::high_resolution_clock::now();
 
-    printf("dynamic OMP with separate thread to stop, no reinsert\n");
+    INFOF("dynamic OMP with separate thread to stop, no reinsert\n");
 
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::DynamicOMPRunner(3));
 
@@ -645,7 +645,7 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "setup: time " << time_span.count() << std::endl;
+    INFO( "setup: time " << time_span.count() );
 
     t1 = std::chrono::high_resolution_clock::now();
 
@@ -655,14 +655,14 @@ int main(int argc, char** argv) {
     time_span =
         std::chrono::duration_cast<std::chrono::duration<double>>(
             t2 - t1);
-    std::cout << "run: time " << time_span.count() << std::endl;
+    INFO( "run: time " << time_span.count() );
   }
 
 
     {
       t1 = std::chrono::high_resolution_clock::now();
 
-      printf("dynamic OMP with separate thread to stop\n");
+      INFOF("dynamic OMP with separate thread to stop\n");
 
       std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::DynamicOMPRunner(3));
 
@@ -683,7 +683,7 @@ int main(int argc, char** argv) {
       time_span =
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
-      std::cout << "setup: time " << time_span.count() << std::endl;
+      INFO( "setup: time " << time_span.count() );
 
       t1 = std::chrono::high_resolution_clock::now();
 
@@ -693,7 +693,7 @@ int main(int argc, char** argv) {
       time_span =
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
-      std::cout << "run: time " << time_span.count() << std::endl;
+      INFO( "run: time " << time_span.count() );
     }
 
     {
@@ -702,7 +702,7 @@ int main(int argc, char** argv) {
       cc.store(0, std::memory_order_relaxed);
       cc2.store(0, std::memory_order_relaxed);
 
-      printf("index build pattern\n");
+      INFOF("index build pattern\n");
 
       std::shared_ptr<bliss::concurrent::Runner> commRunner(new bliss::concurrent::SequentialRunner());
       std::shared_ptr<bliss::concurrent::Runner> workRunner(new bliss::concurrent::DynamicOMPRunner(3));
@@ -724,7 +724,7 @@ int main(int argc, char** argv) {
       time_span =
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
-      std::cout << "setup: time " << time_span.count() << std::endl;
+      INFO( "setup: time " << time_span.count() );
 
       t1 = std::chrono::high_resolution_clock::now();
 
@@ -734,7 +734,7 @@ int main(int argc, char** argv) {
       time_span =
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
-      std::cout << "run: time " << time_span.count() << std::endl;
+      INFO( "run: time " << time_span.count() );
     }
 
     {
@@ -743,7 +743,7 @@ int main(int argc, char** argv) {
       cc.store(0, std::memory_order_relaxed);
       cc2.store(0, std::memory_order_relaxed);
 
-      printf("index query pattern\n");
+      INFOF("index query pattern\n");
 
       std::shared_ptr<bliss::concurrent::Runner> commRunner(new bliss::concurrent::SequentialRunner());
       std::shared_ptr<bliss::concurrent::Runner> workRunner(new bliss::concurrent::DynamicOMPRunner(3));
@@ -767,7 +767,7 @@ int main(int argc, char** argv) {
       time_span =
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
-      std::cout << "setup: time " << time_span.count() << std::endl;
+      INFO( "setup: time " << time_span.count() );
 
       t1 = std::chrono::high_resolution_clock::now();
 
@@ -777,7 +777,7 @@ int main(int argc, char** argv) {
       time_span =
           std::chrono::duration_cast<std::chrono::duration<double>>(
               t2 - t1);
-      std::cout << "run: time " << time_span.count() << std::endl;
+      INFO( "run: time " << time_span.count() );
     }
 
 

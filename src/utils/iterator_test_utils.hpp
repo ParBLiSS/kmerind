@@ -18,6 +18,8 @@
 #include <cstdio>
 #include <sstream>
 
+#include "utils/logging.h"
+
 /// assign a sequence of numeric values to an iterator.
 template<typename Iterator>
 void assignSequence(Iterator data, size_t count,
@@ -53,13 +55,13 @@ bool compareSequences(Iterator1 data1, Iterator2 data2, size_t count) {
       ss.str("");
       ss.clear();
       std::copy(t1only.begin(), t1only.end(), oit);
-      printf("\t first buffer exclusive: size=%lu, entries=[%s]\n", t1only.size(), ss.str().c_str());
+      INFOF("\t first buffer exclusive: size=%lu, entries=[%s]\n", t1only.size(), ss.str().c_str());
     }
     if (t2only.size() > 0) {
       ss.str("");
       ss.clear();
       std::copy(t2only.begin(), t2only.end(), oit);
-      printf("\t second buffer exclusive: size=%lu, entries=[%s]\n", t2only.size(), ss.str().c_str());
+      INFOF("\t second buffer exclusive: size=%lu, entries=[%s]\n", t2only.size(), ss.str().c_str());
     }
   }
   return same;

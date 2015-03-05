@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
   struct stat filestat;
   int ret = stat(filename.c_str(), &filestat);
   if (ret < 0 ) {
-    std::cerr << "ERROR in file open to get size." << std::endl;
+    ERROR( "ERROR in file open to get size." );
     exit(-1);
   }
   size_t file_size = static_cast<size_t>(filestat.st_size);
@@ -51,8 +51,7 @@ int main(int argc, char** argv) {
   if (file_handle == -1)
   {
     int myerr = errno;
-    std::cerr << "ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr);
-    exit(-1);
+    FATAL("ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr));
   }
 
 
@@ -64,7 +63,7 @@ int main(int argc, char** argv) {
 
 
 
-  std::cout << "please enter start and end positions.  enter a negative number to exit." << std::endl;
+  INFO( "please enter start and end positions.  enter a negative number to exit." );
   ///
   int pos = 0;
   int endpos = 0;
@@ -73,7 +72,7 @@ int main(int argc, char** argv) {
     endpos = 0;
     std::cin >> pos >> endpos;
     if (pos >= 0) {
-      std::cout << "char at pos " << pos << " - " << endpos << std::endl;
+      INFO( "char at pos " << pos << " - " << endpos );
       std::ostream_iterator<unsigned char> oit(std::cout);
       std::copy(data + pos, data + endpos, oit);
       std::cout << std::endl;

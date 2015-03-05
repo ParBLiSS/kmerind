@@ -55,7 +55,7 @@ class MPIRunner : public Runner
 
         // check if there is MPI thread support
         if (provided < MPI_THREAD_MULTIPLE) {
-          printf("ERROR: The MPI Library Does not have full thread support.\n");
+          ERRORF("ERROR: The MPI Library Does not have full thread support.\n");
           MPI_Abort(MPI_COMM_WORLD, 1);
         }
       } else {
@@ -71,7 +71,7 @@ class MPIRunner : public Runner
 
       if (id == 0)
         // TODO: replace with logging
-        std::cout << "USE_MPI is set" << std::endl;
+        INFO( "USE_MPI is set" );
 #else
       static_assert(false, "MPIRunner Used when compilation is not set to use MPI");
 #endif

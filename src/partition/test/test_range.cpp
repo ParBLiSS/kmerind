@@ -118,7 +118,7 @@ TYPED_TEST_P(RangeTest, align){
       if (s - std::numeric_limits<TypeParam>::lowest() < p)
         continue;
 
-      //printf("1 %ld %ld\n", static_cast<int64_t>(s), static_cast<int64_t>(p));
+      //INFOF("1 %ld %ld\n", static_cast<int64_t>(s), static_cast<int64_t>(p));
       r = range<TypeParam>(s, s+size);
       TypeParam val = range<TypeParam>::align_to_page(r, p);
       EXPECT_TRUE(range<TypeParam>::is_page_aligned(val, p));
@@ -175,7 +175,7 @@ TYPED_TEST_P(RangeTest, alignFails){
   {
     for (auto p : pageSizes)
     {
-      //printf("align fail processing start %ld page size %lud\n", static_cast<int64_t>(s), static_cast<uint64_t>(p));
+      //INFOF("align fail processing start %ld page size %lud\n", static_cast<int64_t>(s), static_cast<uint64_t>(p));
 
       // align fails because of bad page sizes (0 or negative
       r = range<TypeParam>(s, s+size);
