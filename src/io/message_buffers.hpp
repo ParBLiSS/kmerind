@@ -72,7 +72,7 @@ namespace bliss
      * @tparam BufferCapacity  capacity of Buffers to create
      */
     template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity, size_t MetadataSize>
-    class MessageBuffers<bliss::concurrent::ObjectPool<PoolLT, bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize> > >
+    class MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT> >
     {
       public:
         /// DEFINE  type of the buffer.
@@ -80,7 +80,7 @@ namespace bliss
 
       protected:
         /// Internal BufferPool Type.  typedefed only to shorten the usage.
-        typedef typename bliss::concurrent::ObjectPool<PoolLT, BufferType>  BufferPoolType;
+        typedef typename bliss::concurrent::ObjectPool<BufferType, PoolLT>  BufferPoolType;
 
       public:
         /// Pointer type of a Buffer, aliased from BufferPool
@@ -720,11 +720,11 @@ namespace bliss
      */
     template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity, size_t MetadataSize>
     class SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL,
-    		bliss::concurrent::ObjectPool<PoolLT, bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize> > > :
-    public MessageBuffers<bliss::concurrent::ObjectPool<PoolLT, bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize> > >
+    		bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT > > :
+    public MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT > >
     {
       protected:
-        using BaseType = MessageBuffers<bliss::concurrent::ObjectPool<PoolLT, bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize> > >;
+        using BaseType = MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT > >;
         using MyType = SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, BaseType>;
 
       public:

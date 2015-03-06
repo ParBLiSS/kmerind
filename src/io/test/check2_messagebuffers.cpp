@@ -16,7 +16,7 @@
 #include "utils/logging.h"
 
 #include "io/message_buffers.hpp"
-#include "concurrent/object_pool.hpp"
+#include "concurrent/referenced_object_pool.hpp"
 #include "concurrent/lockfree_queue.hpp"
 
 #include "omp.h"
@@ -343,15 +343,15 @@ int main(int argc, char** argv) {
   /// thread unsafe.  test in single thread way.
 //while(true) {
 
-  bliss::concurrent::ObjectPool<lt1, bliss::io::Buffer<lt2, 2047, 0> > pool;
+  bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 > pool;
 
   for (int i = 1; i <= 8; ++i) {  // num targets
     //testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i,1)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
 
     for (int j = 1; j <= 8; ++j) {  // num threads
-      testBuffers(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<lt1, bliss::io::Buffer<lt2, 2047, 0> > >(pool, i, j)), lt, lt2, j);
+      testBuffers(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1  > >(pool, i, j)), lt, lt2, j);
 
-      //testBuffersWaitForInsert(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<lt1, bliss::io::Buffer<lt2, 2047, 0> > >(pool, i, j)), lt, lt2, j);
+      //testBuffersWaitForInsert(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0> , lt1> >(pool, i, j)), lt, lt2, j);
 
     }
   }

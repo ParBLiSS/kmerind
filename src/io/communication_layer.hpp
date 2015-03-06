@@ -32,11 +32,10 @@
 
 // BLISS includes
 #include "utils/logging.h"
-#include "concurrent/spinlock_queue.hpp"
-//#include "concurrent/lockfree_queue.hpp"
-//#include "concurrent/mutexlock_queue.hpp"
+#include "concurrent/lockfree_queue.hpp"
 #include "concurrent/copyable_atomic.hpp"
 #include "concurrent/concurrent.hpp"
+#include "concurrent/referenced_object_pool.hpp"
 #include "io/io_exception.hpp"
 #include "io/message_buffers.hpp"
 #include "io/message_type_info.hpp"
@@ -276,7 +275,7 @@ protected:
 	 using BufferType = bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192, sizeof(uint64_t)>;
 
 	   /// alias BufferPoolType to MessageBuffersType's
-	   using BufferPoolType = bliss::concurrent::ObjectPool<bliss::concurrent::LockType::SPINLOCK, BufferType>;
+	   using BufferPoolType = bliss::concurrent::ObjectPool< BufferType, bliss::concurrent::LockType::SPINLOCK>;
 
 
 	 // set pool locktype to mutex - for testing with thread sanitizer (suspect spinlock does not work with threadsanitizer well.)
@@ -1637,11 +1636,11 @@ protected:
 
   /// message queue between sendMessage calling threads (src) and comm-thread
   /// (sink).  multiple producer, single consumer thread-safe queue.
-  bliss::concurrent::ThreadSafeQueue< MPIMessage* , bliss::concurrent::LockType::SPINLOCK> sendQueue;
+  bliss::concurrent::ThreadSafeQueue< MPIMessage* , bliss::concurrent::LockType::LOCKFREE> sendQueue;
 
   /// message queue between comm thread (src) and callback thread (sink)
   /// single producer potentially multiple consumer queue.
-  bliss::concurrent::ThreadSafeQueue< MPIMessage* , bliss::concurrent::LockType::SPINLOCK> recvQueue;
+  bliss::concurrent::ThreadSafeQueue< MPIMessage* , bliss::concurrent::LockType::LOCKFREE> recvQueue;
 
 
   // Message buffers per tag (message type) is stored in MessageTypeInfo.

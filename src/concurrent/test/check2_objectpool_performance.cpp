@@ -23,7 +23,7 @@
 #include "utils/iterator_test_utils.hpp"
 
 #include "concurrent/buffer.hpp"
-#include "concurrent/object_pool.hpp"
+#include "concurrent/referenced_object_pool.hpp"
 
 
 
@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
 
   for (int i = 1; i <= 8; ++i) {
     t1 = std::chrono::high_resolution_clock::now();
-    timeAppendMultipleBuffers<bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192> > >(1, count, lt, bliss::concurrent::LockType::LOCKFREE, 8192);
+    timeAppendMultipleBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt > >(1, count, lt, bliss::concurrent::LockType::LOCKFREE, 8192);
     t2 = std::chrono::high_resolution_clock::now();
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //    INFOF("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
 #else
   for (int i = 1; i <= 8; ++i) {
     t1 = std::chrono::high_resolution_clock::now();
-    timeAppendMultipleBuffers<bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192> > >(i, count, lt, bliss::concurrent::LockType::LOCKFREE, 8192);
+    timeAppendMultipleBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt > >(i, count, lt, bliss::concurrent::LockType::LOCKFREE, 8192);
     t2 = std::chrono::high_resolution_clock::now();
     time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 //    INFOF("  time: entries %d nthread %d time %f\n", count, 1, time_span.count());
