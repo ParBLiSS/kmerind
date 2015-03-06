@@ -16,9 +16,10 @@
 
 #include <vector>
 #include <functional>
+#include "utils/logging.h"
 
-#include <iterators/transform_iterator.hpp>
-#include <iterators/filter_iterator.hpp>
+#include "iterators/transform_iterator.hpp"
+#include "iterators/filter_iterator.hpp"
 
 template<typename INPUT, typename OUTPUT>
 struct testStruct
@@ -443,17 +444,17 @@ template<typename F, typename R, typename ... Args>
 void testFunctionTraits(std::string name)
 {
 
-  printf("NAME: %s\n", name.c_str());
-  printf("\ttypeid.name %s\n", typeid(F).name());
+  INFOF("NAME: %s\n", name.c_str());
+  INFOF("\ttypeid.name %s\n", typeid(F).name());
 
-  printf("\tis class: %s\n", std::is_class<F>::value ? "yes" : "no");
-  printf("\tis constructible: %s\n",
+  INFOF("\tis class: %s\n", std::is_class<F>::value ? "yes" : "no");
+  INFOF("\tis constructible: %s\n",
          std::is_constructible<F>::value ? "yes" : "no");
-  printf("\tis function: %s\n", std::is_function<F>::value ? "yes" : "no");
-  printf("\tis member function: %s\n",
+  INFOF("\tis function: %s\n", std::is_function<F>::value ? "yes" : "no");
+  INFOF("\tis member function: %s\n",
          std::is_member_function_pointer<F>::value ? "yes" : "no");
 
-  printf(
+  INFOF(
       "\tfunctor_trait result type is %s (== %s ? %s)\n",
       typeid(typename bliss::functional::function_traits<F, Args...>::return_type)
           .name(),
@@ -465,11 +466,11 @@ void testFunctionTraits(std::string name)
       == 0 ? "yes" : "no");
 
   // does not work for functor as this. type not defined.  don't know why. ....
-//  printf("\tresult_of result type is %s (== %s ?)\n",
+//  INFOF("\tresult_of result type is %s (== %s ?)\n",
 //         typeid(typename std::result_of<F(Args...)>::type).name(),
 //         typeid(R).name());
 
-  printf("\n");
+  INFOF("\n");
 
 }
 
@@ -477,17 +478,17 @@ template<typename F, typename R, typename ... Args>
 void testFunctionTraits2(std::string name)
 {
 
-  printf("NAME: %s\n", name.c_str());
-  printf("\ttypeid.name %s\n", typeid(F).name());
+  INFOF("NAME: %s\n", name.c_str());
+  INFOF("\ttypeid.name %s\n", typeid(F).name());
 
-  printf("\tis class: %s\n", std::is_class<F>::value ? "yes" : "no");
-  printf("\tis constructible: %s\n",
+  INFOF("\tis class: %s\n", std::is_class<F>::value ? "yes" : "no");
+  INFOF("\tis constructible: %s\n",
          std::is_constructible<F>::value ? "yes" : "no");
-  printf("\tis function: %s\n", std::is_function<F>::value ? "yes" : "no");
-  printf("\tis member function: %s\n",
+  INFOF("\tis function: %s\n", std::is_function<F>::value ? "yes" : "no");
+  INFOF("\tis member function: %s\n",
          std::is_member_function_pointer<F>::value ? "yes" : "no");
 
-  printf(
+  INFOF(
       "\tf_trait result type is %s (== %s ? %s)\n",
       typeid(typename bliss::functional::function_traits<F, Args...>::return_type)
           .name(),
@@ -498,7 +499,7 @@ void testFunctionTraits2(std::string name)
           typeid(R).name())
       == 0 ? "yes" : "no");
 
-  printf("\n");
+  INFOF("\n");
 
 }
 
@@ -524,9 +525,9 @@ void testTransformIterator(F f, V& data, std::string name,
   time2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       time2 - time1);
-  std::cout << name << " " << func_name << ":  sum " << sum
+  INFO( name << " " << func_name << ":  sum " << sum
             << " and [] elapsed time: " << time_span.count() << " s"
-            << std::endl;
+            );
 
   sum = 0;
   iter1 = t_iter_type(data.begin(), f);
@@ -538,8 +539,8 @@ void testTransformIterator(F f, V& data, std::string name,
   time2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       time2 - time1);
-  std::cout << name << " " << func_name << ":  sum " << sum
-            << "  elapsed time: " << time_span.count() << " s" << std::endl;
+  INFO( name << " " << func_name << ":  sum " << sum
+            << "  elapsed time: " << time_span.count() << " s" );
 
 }
 
@@ -565,8 +566,8 @@ void testFilterIterator(F f, V& data, std::string name, std::string func_name)
   time2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       time2 - time1);
-  std::cout << name << " filter with " << func_name << ":  sum " << sum
-            << "  elapsed time: " << time_span.count() << " s" << std::endl;
+  INFO( name << " filter with " << func_name << ":  sum " << sum
+            << "  elapsed time: " << time_span.count() << " s" );
 
 }
 
@@ -708,10 +709,10 @@ int main(int argc, char* argv[])
       "&testOverloadedFunc<int, double>(int, int)) - static cast");
 
   // does not work when using decltype( std::declval<testStruct<int, float> >().operator() )  because whats' in decltype is not a pointer.
-  //printf("decltype( std::declval<testStruct<int, float> >().operator() ) is class: %s\n", std::is_class< decltype( std::declval<testStruct<int, float> >().operator() ) >::value ? "yes" : "no");
+  //INFOF("decltype( std::declval<testStruct<int, float> >().operator() ) is class: %s\n", std::is_class< decltype( std::declval<testStruct<int, float> >().operator() ) >::value ? "yes" : "no");
 
   // can't use a bound member function address (i.e. an object's) to form a pointer to member function.
-  // printf("testFunc.u functor_trait result is %s\n", typeid(bliss::functional::function_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
+  // INFOF("testFunc.u functor_trait result is %s\n", typeid(bliss::functional::function_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
 
   // lambda functions.
   testFunctionTraits<decltype(lf0), double, double>("decltype(lf0)");
@@ -792,10 +793,10 @@ int main(int argc, char* argv[])
 //  testFunctionTraits2<decltype(static_cast<float (testClassMultiFuncs<int, float>::*)(int, int)>(&testClassMultiFuncs<int, float>::foo)), float, int, int>("2 &testClassMultiFuncs<int, float>::foo(int, int)) - static cast");
 
   // does not work when using decltype( std::declval<testStruct<int, float> >().operator() )  because whats' in decltype is not a pointer.
-  //printf("decltype( std::declval<testStruct<int, float> >().operator() ) is class: %s\n", std::is_class< decltype( std::declval<testStruct<int, float> >().operator() ) >::value ? "yes" : "no");
+  //INFOF("decltype( std::declval<testStruct<int, float> >().operator() ) is class: %s\n", std::is_class< decltype( std::declval<testStruct<int, float> >().operator() ) >::value ? "yes" : "no");
 
   // can't use a bound member function address (i.e. an object's) to form a pointer to member function.
-  // printf("testFunc.u functor_trait result is %s\n", typeid(bliss::functional::function_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
+  // INFOF("testFunc.u functor_trait result is %s\n", typeid(bliss::functional::function_traits<decltype(&testStruct<int, double>::u)>::return_type).name());
 
   // lambda functions.
   testFunctionTraits2<decltype(lf0), double, double>("2 decltype(lf0)");
@@ -853,8 +854,8 @@ int main(int argc, char* argv[])
     gold_sum += double(i + 1);
     gold_sum_squares += double(i) * double(i);
   }
-  printf("gold:  sum %f with add const\n", gold_sum);
-  printf("gold:  sum squares %f \n", gold_sum_squares);
+  INFOF("gold:  sum %f with add const\n", gold_sum);
+  INFOF("gold:  sum squares %f \n", gold_sum_squares);
 
   double sum = 0;
   double sum_squares = 0;
@@ -871,7 +872,7 @@ int main(int argc, char* argv[])
   time2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       time2 - time1);
-  printf("no functor:  sum %f with addConst elapsed time: %f s\n", sum,
+  INFOF("no functor:  sum %f with addConst elapsed time: %f s\n", sum,
          time_span.count());
 
   baseIter = data.begin();
@@ -886,7 +887,7 @@ int main(int argc, char* argv[])
   time2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       time2 - time1);
-  printf("no functor:  sum_squares %f with square elapsed time: %f s\n",
+  INFOF("no functor:  sum_squares %f with square elapsed time: %f s\n",
          sum_squares, time_span.count());
 
   // test with functor
@@ -931,7 +932,7 @@ int main(int argc, char* argv[])
   time2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       time2 - time1);
-  printf("no functor:  sum %f with struct elapsed time: %f s\n", sum,
+  INFOF("no functor:  sum %f with struct elapsed time: %f s\n", sum,
          time_span.count());
 
   baseIter2 = data2.begin();
@@ -945,7 +946,7 @@ int main(int argc, char* argv[])
   time2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       time2 - time1);
-  printf("no functor:  sum %f with struct elapsed time: %f s\n", sum,
+  INFOF("no functor:  sum %f with struct elapsed time: %f s\n", sum,
          time_span.count());
 
   swap<datatype<int>, int> sw;
@@ -962,9 +963,9 @@ int main(int argc, char* argv[])
   time2 = std::chrono::high_resolution_clock::now();
   time_span = std::chrono::duration_cast<std::chrono::duration<double>>(
       time2 - time1);
-  std::cout << "operator*" << " " << "swap" << ":  sum " << sum
+  INFO( "operator*" << " " << "swap" << ":  sum " << sum
             << " and [] elapsed time: " << time_span.count() << " s"
-            << std::endl;
+            );
 
   t_iter_type2 iter4(data2.begin(), sw);
   t_iter_type2 end4(data2.end(), sw);
@@ -976,7 +977,7 @@ int main(int argc, char* argv[])
 //  }
 //  time2 = std::chrono::high_resolution_clock::now();
 //  time_span = std::chrono::duration_cast<std::chrono::duration<double>>(time2 - time1);
-//  std::cout << "operator->" << " " << "swap" << ":  sum " << sum << " and [] elapsed time: " << time_span.count() << " s" << std::endl;
+//  INFO( "operator->" << " " << "swap" << ":  sum " << sum << " and [] elapsed time: " << time_span.count() << " s" );
 
   // member function pointer format.
 

@@ -40,7 +40,7 @@ class PersonalizedOMPRunner : public Runner
 {
   protected:
     // threadsafe queue because addTask may be called from a different thread.
-    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> > q;
+    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::LOCKFREE> q;
 
     const int nThreads;
 

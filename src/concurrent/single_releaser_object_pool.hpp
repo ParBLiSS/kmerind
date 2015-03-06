@@ -89,7 +89,7 @@ namespace bliss
          * @details   ThreadSafeQueue to ensure thread safety.
          *            uniqueness is responsibility of releasing thread.
          */
-        bliss::concurrent::ThreadSafeQueue<ObjectPtrType>  available;
+        bliss::concurrent::ThreadSafeQueue<ObjectPtrType, bliss::concurrent::LockType::LOCKFREE>  available;
 
         /// num objects in active use.
         std::atomic<int64_t>  size_in_use;

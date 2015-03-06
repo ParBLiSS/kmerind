@@ -36,7 +36,7 @@ class UniformOMPRunner : public Runner
   protected:
     // since each thread executes the same tasks we need an array of queues
 	// using threadsafe queue because task addition may be multithreaded.
-    std::vector<bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> > > qs;
+    std::vector<bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::LOCKFREE> > qs;
 
     const int nThreads;
 
@@ -58,7 +58,7 @@ class UniformOMPRunner : public Runner
 
       qs.clear();
       for (int i = 0; i < nThreads; ++i) {
-        qs.push_back(std::move(bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> >()));
+        qs.push_back(std::move(bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable>, bliss::concurrent::LockType::LOCKFREE >()));
       }
     }
 
@@ -76,7 +76,7 @@ class UniformOMPRunner : public Runner
       {
         // iterator for list is valid during append (no insertion in middle, no deletion).
         // no deletion since this is shared.
-        bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> >& q = qs[omp_get_thread_num()];
+        bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable>, bliss::concurrent::LockType::LOCKFREE >& q = qs[omp_get_thread_num()];
         while (q.canPop())
         {
           auto v = std::move(q.waitAndPop());
@@ -102,14 +102,14 @@ class UniformOMPRunner : public Runner
       // make copy and insert
       for (; i < nThreads-1; ++i) {
         id = (omp_get_thread_num() + i) % nThreads;
-        bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> >& q = qs[id];
+        bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable>, bliss::concurrent::LockType::LOCKFREE >& q = qs[id];
         auto result = q.waitAndPush(std::move(std::shared_ptr<Runnable>(t)));
 
         out &= result.first;
       }
       // insert the real thing.
       id = (omp_get_thread_num() + nThreads-1) % nThreads;
-      bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> >& q = qs[id];
+      bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable>, bliss::concurrent::LockType::LOCKFREE >& q = qs[id];
       auto result = q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t));
       out &= result.first;
 

@@ -22,8 +22,8 @@
 
 #include "utils/logging.h"
 #include "concurrent/concurrent.hpp"
-//#include "concurrent/lockfree_queue.hpp"
-#include "concurrent/spinlock_queue.hpp"
+#include "concurrent/lockfree_queue.hpp"
+//#include "concurrent/spinlock_queue.hpp"
 
 #include <omp.h>
 
@@ -91,7 +91,7 @@ protected:
 	 * @brief     Internal queue of available Objects for immediate use.
 	 * @details   ThreadSafeQueue to ensure thread safety.
 	 */
-	bliss::concurrent::ThreadSafeQueue<ObjectPtrType>  available;
+	bliss::concurrent::ThreadSafeQueue<ObjectPtrType, bliss::concurrent::LockType::LOCKFREE>  available;
 
 	/**
 	 * @brief     Internal Set of objects in use..
@@ -431,7 +431,7 @@ protected:
 	 * @brief     Internal queue of available Objects for immediate use.
 	 * @details   ThreadSafeQueue to ensure thread safety.
 	 */
-	bliss::concurrent::ThreadSafeQueue<ObjectPtrType>  available;
+	bliss::concurrent::ThreadSafeQueue<ObjectPtrType, bliss::concurrent::LockType::LOCKFREE>  available;
 
 	/**
 	 * @brief     Internal Set of objects in use..

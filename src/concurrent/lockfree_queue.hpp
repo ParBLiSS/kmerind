@@ -12,8 +12,8 @@
  *
  * TODO add License
  */
-#ifndef THREADSAFE_QUEUE_HPP_
-#define THREADSAFE_QUEUE_HPP_
+#ifndef LOCKFREE_QUEUE_HPP_
+#define LOCKFREE_QUEUE_HPP_
 
 #include <cassert>
 #include <thread>
@@ -26,6 +26,7 @@
 
 #include "concurrentqueue/concurrentqueue.h"
 
+#include "concurrent/threadsafe_queue.hpp"
 
 namespace bliss
 {
@@ -51,196 +52,101 @@ namespace bliss
      *          DUE TO LOCKS, this is NOT fast.  but may be fast enough for MPI buffer management.
      */
     template <typename T>
-    class ThreadSafeQueue
+    class ThreadSafeQueue<T, bliss::concurrent::LockType::LOCKFREE> :
+    public detail::ThreadSafeQueueBase<ThreadSafeQueue<T, bliss::concurrent::LockType::LOCKFREE> >
     {
     	//static_assert(false, "ConcurrentQueue is currently having data race problem resulting in missing entry sometimes, manifesting in deadlock when control message is missing.");
     
       protected:
 
-        /// mutex for locking access to the queue during construction/assignment
-        mutable std::mutex mutex;
+        using Derived = ThreadSafeQueue<T, bliss::concurrent::LockType::LOCKFREE>;
+        using Base = detail::ThreadSafeQueueBase<Derived>;
 
         /// underlying lockfree queue
         moodycamel::ConcurrentQueue<T> q;
-
-        /// capacity of the queue.  if set to std::numeric_limits<int64_t>::max() indicates unlimited size queue
-        mutable int64_t capacity;
-
-        /// size encodes 2 things:  sign bit encodes whether a calling thread can push into this queue.  use when suspending or terminating a queue.  rest is size of current queue.
-        std::atomic<int64_t> size;
-
-      private:
-        /**
-         * private move constructor that requires a lock during the call, so that the source of the move is locked.   content of other is moved back.
-         * @param other   the soruce ThreadSafeQueue object from which data will be moved.
-         * @param l       a lock that uses the mutex of the source ThreadSafeQueue.
-         */
-        ThreadSafeQueue(ThreadSafeQueue<T>&& other, const std::lock_guard<std::mutex>& l) :
-          q(std::move(other.q)), capacity(other.capacity) {
-          other.capacity = 0;
-          size.exchange(other.size.exchange(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed), std::memory_order_relaxed);
-        };
 
         /**
          * copy constructor, DISABLED
          * @param other   the source ThreadSafeQueue from which to copy.
          */
-        explicit ThreadSafeQueue(const ThreadSafeQueue<T>& other) = delete;
+        explicit ThreadSafeQueue(const Derived& other) = delete;
 
         /**
          * copy assignment operator.  disabled.
          * @param other   the source ThreadSafeQueue from which to copy.
          * @return
          */
-        ThreadSafeQueue<T>& operator=(const ThreadSafeQueue<T>& other) = delete;
+        Derived& operator=(const Derived& other) = delete;
 
       public:
-
-        /// maximum possible size of a thread safe queue.  initialized to maximum size_t value.
-        static constexpr int64_t MAX_SIZE  = std::numeric_limits<int64_t>::max();
 
         /**
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueue(const size_t &_capacity = static_cast<size_t>(MAX_SIZE)) :
-              q( _capacity == static_cast<size_t>(MAX_SIZE) ? 128 : _capacity),
-              capacity(static_cast<int64_t>(_capacity)), size(0)
-        {
-          assert(_capacity <= static_cast<size_t>(MAX_SIZE));
-
-          if (capacity == 0)
-            throw std::invalid_argument("ThreadSafeQueue constructor parameter capacity is given as 0");
-        };
+        explicit ThreadSafeQueue(const size_t &_capacity = static_cast<size_t>(Base::MAX_SIZE)) :
+          Base(_capacity), q( _capacity == static_cast<size_t>(Base::MAX_SIZE) ? 128 : _capacity)
+        {};
 
         /**
          * move constructor.  mutex locks the src ThreadSafeQueue first before delegating to the private constructor.
          * @param other   the source ThreadSafeQueue from which to move.
          */
-        explicit ThreadSafeQueue(ThreadSafeQueue<T>&& other) :
-            ThreadSafeQueue<T>(std::move(other), std::lock_guard<std::mutex>(other.mutex)) {};
+        explicit ThreadSafeQueue(Derived&& other) {
+          //std::atomic_thread_fence(std::memory_order_acquire);
+          this->size.exchange(other.size.exchange(Base::DISABLED, std::memory_order_acq_rel), std::memory_order_relaxed);
+          this->capacity = other.capacity;  other.capacity = 0;
+          q = std::move(other.q);
+          std::atomic_thread_fence(std::memory_order_release);
+        }
 
         /**
          * move assignment operator.  locks both the src and destination ThreadSafeQueue before performing the move.
          * @param other   the source ThreadSafeQueue from which to move.
          * @return
          */
-        ThreadSafeQueue<T>& operator=(ThreadSafeQueue<T>&& other) {
-          std::unique_lock<std::mutex> mylock(mutex, std::defer_lock), otherlock(other.mutex, std::defer_lock);
-          std::lock(mylock, otherlock);
+        Derived& operator=(Derived&& other) {
+
+          //std::atomic_thread_fence(std::memory_order_acquire);
+          this->size.exchange(other.size.exchange(Base::DISABLED, std::memory_order_acq_rel), std::memory_order_relaxed);
+          this->capacity = other.capacity; other.capacity = 0;
           q = std::move(other.q);
-          capacity = other.capacity; other.capacity = 0;
-          size.exchange(other.size.exchange(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed), std::memory_order_relaxed);
+          std::atomic_thread_fence(std::memory_order_release);
+
           return *this;
-        }
-
-        /**
-         * get the capacity of the thread safe queue
-         * @return    capacity of the queue
-         */
-        inline size_t getCapacity() const {
-          return capacity;
-        }
-
-        /// check if queue is fixed size or growable.
-        inline bool isFixedSize() const {
-        	return getCapacity() < MAX_SIZE;
-        }
-
-        /**
-         * check if the thread safe queue is full.
-         * @return    boolean - whether the queue is full.
-         */
-        inline bool isFull() const {
-          return (isFixedSize()) && (getSize() >= getCapacity());
-        }
-
-        /**
-         * check if the thread safe queue is empty
-         * @return    boolean - whether the queue is empty.
-         */
-        inline bool isEmpty() const
-        {
-          return getSize() == 0;
-        }
-
-        /**
-         * get the current size of the queue
-         * @return    the current size of the queue
-         */
-        inline size_t getSize() const
-        {
-          return static_cast<size_t>(size.load(std::memory_order_relaxed) & MAX_SIZE);   // size is atomic, so don't need strong memory ordering itself.
         }
 
         /**
          * clears the queue of all contents (discarding).
          */
-        void clear()
+        void clearImpl()
         {
           // first clear the size, so threads' don't try to dequeue
-          size.fetch_and(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed);  // keep the push bit, and set size to 0
+         this->size.fetch_and(Base::DISABLED, std::memory_order_acq_rel);  // keep the push bit, and set size to 0
 
           // dequeue
           T val;
           while (q.try_dequeue(val)) ;
-
-          // clear size again to catch all that have been enqueued.
-          size.fetch_and(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed);  // keep the push bit, and set size to 0
+          std::atomic_thread_fence(std::memory_order_release);
         }
 
         /**
          * set the queue to accept new elements
          */
-        inline void enablePush() {
+        inline void enablePushImpl() {
           // before enablePush, queue is probably empty or no one is writing to it.  so prior side effects don't need to be visible right away.
           // size itself is atomic
-          size.fetch_and(MAX_SIZE, std::memory_order_relaxed);  // clear the push bit, and leave size as is
+          this->size.fetch_and(Base::MAX_SIZE, std::memory_order_acq_rel);  // clear the push bit, and leave size as is
         }
 
         /**
          * set the queue to disallow insertion of new elements.
          */
-        inline void disablePush() {
+        inline void disablePushImpl() {
           // before disable push, should make sure that all writes are visible to all other threads, so release here.
-          size.fetch_or(std::numeric_limits<int64_t>::lowest(), std::memory_order_relaxed);   // set the push bit, and leave size as is.
+          this->size.fetch_or(Base::DISABLED, std::memory_order_acq_rel);   // set the push bit, and leave size as is.
         }
 
-        /**
-         * check if the thread safe queue can accept new elements. (full or not)
-         * @return    boolean - queue insertion allowed or not.
-         */
-        inline bool canPush() {
-          // pushing thread does not immediately care what other threads did before this
-          // size is >= 0 (not disabled), and less than capacity.
-          // note that if we reinterpret_cast size to size_t, then disabled (< 0) will have MSB set to 1, so > max(int64_t).
-          return size.load(std::memory_order_relaxed) >= 0;   // int highest bit set means negative, and means cannot push
-        }
-
-        /**
-         * @brief    check if the thread safe queue can produce an element now or in near future.
-         * @details  ThreadSafeQueue can pop only if it has elements in the base queue. or
-         *            if additional items can be pushed in.
-         * @return    boolean - queue pop is allowed or not.
-         */
-        inline bool canPop() {
-          // canPop == first bit is 0, OR has some elements (not 0 for remaining bits).  so basically, not 1000000000...
-          // popping thread should have visibility of all changes to the queue
-          return size.load(std::memory_order_relaxed) != std::numeric_limits<int64_t>::lowest();
-        }
-
-      protected:
-        /**
-         * check if the thread safe queue can accept new elements. (full or not)
-         * @return    boolean - queue insertion allowed or not.
-         */
-        inline bool canPushAndHasRoom() {
-          // if we reinterpret this number as a uint64_t, then we only need to check less than capacity, since now highest bits are all way higher.
-          int64_t v = size.load(std::memory_order_relaxed);
-          return reinterpret_cast<uint64_t&>(v) < capacity;
-        }
-
-      public:
 
         /**
          * @brief     Non-blocking - pushes an element by constant reference (copy).
@@ -251,26 +157,28 @@ namespace bliss
          * @param data    data element to be pushed onto the thread safe queue
          * @return        whether push was successful.
          */
-        bool tryPush (T const& data) {
+        bool tryPushImpl (T const& data) {
 
 //          // code below produces race condition causes extra items to be pushed.
 //          int64_t v = size.load(std::memory_order_relaxed);
-//          if ( reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity) ) {
+//          if ( reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity) ) {
 //            if (q.enqueue(data)) {
 //              size.fetch_add(1, std::memory_order_relaxed);
 //              return true;
 //            }
 //          }
 
-          int64_t v = size.fetch_add(1, std::memory_order_relaxed);
-          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
+          int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);
+          bool res = false;
+          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity)) {
           	std::atomic_thread_fence(std::memory_order_acquire);
-            if (q.enqueue(data)) {
-            	std::atomic_thread_fence(std::memory_order_release);
+          	res = q.enqueue(data);
+            std::atomic_thread_fence(std::memory_order_release);
+            if (res) {
             	return true;
             }
           }  // else at capacity.
-          size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
+          this->size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
           return false;
         }
 
@@ -288,29 +196,32 @@ namespace bliss
          * @param data    data element to be pushed onto the thread safe queue
          * @return        whether push was successful.
          */
-        std::pair<bool,T> tryPush (T && data) {
+        std::pair<bool, T> tryPushImpl (T && data) {
 //          // code below race condition causes extra items to be pushed.
-//          int64_t v = size.load(std::memory_order_relaxed);
-//          if ( reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity) ) {
+//          int64_t v = this->size.load(std::memory_order_relaxed);
+//          if ( reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity) ) {
 //            if (q.enqueue(std::forward<T>(data))) {   // depend on q not messing up data if enqueue fails
-//              size.fetch_add(1, std::memory_order_relaxed);
+//              this->size.fetch_add(1, std::memory_order_relaxed);
 //              return std::move(std::make_pair(true, std::forward<T>(data)));  // data already moved, so okay.
 //            }
 //          }
+          std::pair<bool, T> res(false, T());
 
-
-          int64_t v = size.fetch_add(1, std::memory_order_relaxed);
-          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(capacity)) {
+          int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);
+          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity)) {
           	std::atomic_thread_fence(std::memory_order_acquire);
-            if (q.enqueue(std::forward<T>(data))) {
-            	std::atomic_thread_fence(std::memory_order_release);
-            	return std::move(std::make_pair(true, std::forward<T>(T())));
+          	res.first = q.enqueue(std::forward<T>(data));
+            std::atomic_thread_fence(std::memory_order_release);
+            if (res.first) {
+            	res.first = true;
+            	return std::move(res);
             }
           }
 
-          size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
+          this->size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
           // at this point, if success, data should be empty.  else data should be untouched.
-          return std::move(std::make_pair(false, std::forward<T>(data)));
+          res.second = std::move(data);
+          return std::move(res);
         }
 
         /**
@@ -326,25 +237,29 @@ namespace bliss
          * @param data    data element to be pushed onto the thread safe queue
          * @return        whether push was successful.
          */
-        bool waitAndPush (T const& data) {
+        bool waitAndPushImpl (T const& data) {
 
           int64_t v;
+          bool res = false;
           bool first = true;
           do {  // loop forever, unless queue is disabled, or insert succeeded.
             if (first) {
-              v = size.fetch_add(1, std::memory_order_relaxed);
+              v = this->size.fetch_add(1, std::memory_order_relaxed);
               first = false;
             } else {
-              v = size.load(std::memory_order_relaxed);
+              v = this->size.load(std::memory_order_relaxed);
             }
+
             if (v < 0) {
-              size.fetch_sub(1, std::memory_order_relaxed);
+              this->size.fetch_sub(1, std::memory_order_relaxed);
               return false;  // disabled so return false
             }
-            else if (v < capacity) {  // else under capacity, enqueue
+            else if (v < this->capacity) {  // else under capacity, enqueue
             	std::atomic_thread_fence(std::memory_order_acquire);
-              if (q.enqueue(data)) {  // successfully enqueued.
-            	  std::atomic_thread_fence(std::memory_order_release);
+            	res = q.enqueue(data);
+            	std::atomic_thread_fence(std::memory_order_release);
+
+              if (res) {  // successfully enqueued.
                 return true;
               } // else failed enqueue, try again.
             } // else over capacity
@@ -367,33 +282,38 @@ namespace bliss
          * @param data    data element to be pushed onto the thread safe queue
          * @return        whether push was successful.
          */
-        std::pair<bool,T> waitAndPush (T && data) {
+        std::pair<bool, T> waitAndPushImpl (T && data) {
+          std::pair<bool, T> res(false, T());
 
           int64_t v;
           bool first = true;
+
           do {  // loop forever, unless queue is disabled, or insert succeeded.
             if (first) {
-              v = size.fetch_add(1, std::memory_order_relaxed);
+              v = this->size.fetch_add(1, std::memory_order_relaxed);
               first = false;
             } else {
-              v = size.load(std::memory_order_relaxed);
+              v = this->size.load(std::memory_order_relaxed);
             }
+
             if (v < 0) {
-              size.fetch_sub(1, std::memory_order_relaxed);
-              return std::move(std::make_pair(false, std::forward<T>(data)));  // disabled so return false
+              this->size.fetch_sub(1, std::memory_order_relaxed);
+              res.second = std::move(data);
+              return std::move(res);  // disabled so return false
             }
-            else if (v < capacity) {  // else under capacity, enqueue
+            else if (v < this->capacity) {  // else under capacity, enqueue
             	std::atomic_thread_fence(std::memory_order_acquire);
+            	res.first = q.enqueue(std::forward<T>(data));
+              std::atomic_thread_fence(std::memory_order_release);
 
-              if (q.enqueue(std::forward<T>(data))) {  // successfully enqueued.
-              	std::atomic_thread_fence(std::memory_order_release);
-
-                return std::move(std::make_pair(true, std::forward<T>(T())));
+              if (res.first) {  // successfully enqueued.
+                return std::move(res);
               }  // else failed enqueue, try again.
             } // else over capacity
           } while (true);
 
-          return std::move(std::make_pair(false, std::forward<T>(data)));
+          res.second = std::move(data);
+          return std::move(res);
         }
 
 
@@ -411,19 +331,20 @@ namespace bliss
          *
          * @return    std::pair with boolean (successful pop?) and an element from the queue (if successful)
          */
-        std::pair<bool, T> tryPop() {
+        std::pair<bool, T> tryPopImpl() {
           // pop dequeues first, then decrement count
-          std::pair<bool, T> output;
+          std::pair<bool, T> res(false, T());
 
           // don't check if canPop here - this call should return asap.
           std::atomic_thread_fence(std::memory_order_acquire);
+          res.first = q.try_dequeue(res.second);
+          std::atomic_thread_fence(std::memory_order_release);
 
-          if ((output.first = q.try_dequeue(output.second)) == true) {
-           	std::atomic_thread_fence(std::memory_order_release);
-          
-            size.fetch_sub(1, std::memory_order_relaxed);
-		  }
-          return output;
+          if (res.first == true) {
+            this->size.fetch_sub(1, std::memory_order_relaxed);
+          }
+
+          return res;
         }
 
         /**
@@ -441,42 +362,39 @@ namespace bliss
          *
          * @return    std::pair with boolean (successful pop?) and an element from the queue (if successful)
          */
-        std::pair<bool, T> waitAndPop() {
-          std::pair<bool, T> output;
+        std::pair<bool, T> waitAndPopImpl() {
+          std::pair<bool, T> res(false, T());
 
-          output.first = false;
-          int64_t s;
+          int64_t v;
           // while the queue is not disabled nor empty
-          while ( (s = size.load(std::memory_order_acquire)) != std::numeric_limits<int64_t>::lowest() ) {
+          while ( (v = this->size.load(std::memory_order_relaxed)) != Base::DISABLED ) {
             // check size to see if there are entries to dequeue
-            if ((s & MAX_SIZE) > 0)
+            if ((v & Base::MAX_SIZE) > 0) {
               std::atomic_thread_fence(std::memory_order_acquire);
-            
-              if ((output.first = q.try_dequeue(output.second)) == true) {
-                std::atomic_thread_fence(std::memory_order_release);
-              
-                size.fetch_sub(1, std::memory_order_relaxed);
+              res.first = q.try_dequeue(res.second);
+              std::atomic_thread_fence(std::memory_order_release);
+
+              if ((res.first) == true) {
+                this->size.fetch_sub(1, std::memory_order_relaxed);
                 break;
               }
+            }  // else no entry. so wait.
             _mm_pause();
           }
 
-          return output;
+          return res;
         }
-
-
 
 
     };
 
-    /**
-     * static templated MAX_SIZE definition.
-     */
-    template<typename T> constexpr int64_t ThreadSafeQueue<T>::MAX_SIZE;
+
+    template<typename T>
+    using MutexLockQueue = bliss::concurrent::ThreadSafeQueue<T, bliss::concurrent::LockType::MUTEX>;
 
 
 
   } /* namespace concurrent */
 } /* namespace bliss */
 
-#endif /* THREADSAFE_QUEUE_HPP_ */
+#endif /* LOCKFREE_QUEUE_HPP_ */

@@ -36,7 +36,7 @@ namespace concurrent
 class DynamicOMPRunner : public Runner
 {
   protected:
-    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> > q;
+    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::LOCKFREE> q;
 
     const int nThreads;
 

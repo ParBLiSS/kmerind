@@ -34,7 +34,7 @@
 #include "utils/logging.h"
 #include "concurrent/spinlock_queue.hpp"
 //#include "concurrent/lockfree_queue.hpp"
-//#include "wip/mutexlock_queue.hpp"
+//#include "concurrent/mutexlock_queue.hpp"
 #include "concurrent/copyable_atomic.hpp"
 #include "concurrent/concurrent.hpp"
 #include "io/io_exception.hpp"
@@ -1637,11 +1637,11 @@ protected:
 
   /// message queue between sendMessage calling threads (src) and comm-thread
   /// (sink).  multiple producer, single consumer thread-safe queue.
-  bliss::concurrent::ThreadSafeQueue< MPIMessage* > sendQueue;
+  bliss::concurrent::ThreadSafeQueue< MPIMessage* , bliss::concurrent::LockType::SPINLOCK> sendQueue;
 
   /// message queue between comm thread (src) and callback thread (sink)
   /// single producer potentially multiple consumer queue.
-  bliss::concurrent::ThreadSafeQueue< MPIMessage* > recvQueue;
+  bliss::concurrent::ThreadSafeQueue< MPIMessage* , bliss::concurrent::LockType::SPINLOCK> recvQueue;
 
 
   // Message buffers per tag (message type) is stored in MessageTypeInfo.

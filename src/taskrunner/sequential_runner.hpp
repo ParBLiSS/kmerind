@@ -35,7 +35,7 @@ class SequentialRunner : public Runner
 {
   protected:
     // using thread safe queue because other threads could be calling addTask.
-    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> > q;
+    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::LOCKFREE> q;
 
   public:
     /// constructor
