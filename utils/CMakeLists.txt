@@ -6,7 +6,6 @@ include("${CMAKE_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 ## EXECUTABLES
 add_executable(sys_probe sys_probe.cpp)
 target_link_libraries(sys_probe ${EXTRA_LIBS})
-#target_link_libraries(test testlib)
 
 
 add_executable(TextInspector text_inspector.cpp)

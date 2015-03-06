@@ -4,3 +4,6 @@
 [submodule "ext/concurrentqueue"]
 	path = ext/concurrentqueue
 	url = https://github.com/cameron314/concurrentqueue.git
+[submodule "ext/cotire"]
+	path = ext/cotire
+	url = https://github.com/sakra/cotire.git
