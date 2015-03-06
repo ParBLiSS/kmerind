@@ -218,7 +218,7 @@ namespace bliss
           int count = this->in_use.erase(ptr);
 
           if (count == 0) {
-            ERRORF("ERROR: attempting to release an object that is not managed by this object pool.");
+            //ERRORF("ERROR: attempting to release an object that is not managed by this object pool.");
             return false;
           }
           if (count > 1) {
@@ -444,7 +444,7 @@ namespace bliss
 
           if (count == 0) {
             spinlock.clear(std::memory_order_release);
-            ERRORF("ERROR: attempting to release an object that is not managed by this object pool.");
+            //ERRORF("ERROR: attempting to release an object that is not managed by this object pool.");
             return false;
           }
           if (count > 1) {
@@ -679,7 +679,11 @@ namespace bliss
 
               // save in in-use
               if (!res.second) {
+                // try put it back.  if can't delete it.
+                if (!this->available.tryPush(sptr)) delete sptr;
                 this->size_in_use.fetch_sub(1, std::memory_order_release);
+
+
                 throw std::logic_error("Inserting duplicates into in-use set");
               }
 
@@ -715,22 +719,31 @@ namespace bliss
           bool res = false;            // nullptr would not be in in_use.
 
           std::atomic_thread_fence(std::memory_order_acq_rel);
-          int count = this->in_use[tid].erase(ptr);
+
+
+          auto count = this->in_use[tid].erase(ptr);
 
           if (count == 0) {
-            this->size_in_use.fetch_sub(count, std::memory_order_release);
-            ERRORF("ERROR: attempting to release an object that is not managed by this object pool.");
+            std::atomic_thread_fence(std::memory_order_release);
+            //ERRORF("ERROR: attempting to release an object that is not managed by this object pool.");
             return false;
           }
+
+          this->size_in_use.fetch_sub(count, std::memory_order_release);
+
           if (count > 1) {
-            this->size_in_use.fetch_sub(count, std::memory_order_release);
+            delete ptr;
             throw std::logic_error("ERROR: attempting to release an object that has more than 1 entry in the in-use set.");
           }
 
           // only put back in available queue if it was in use.
           // now make object available.  make sure push_back is done one thread at a time.
           res = this->available.tryPush(ptr);
-          this->size_in_use.fetch_sub(count, std::memory_order_release);
+          if (!res) {
+            std::atomic_thread_fence(std::memory_order_acquire);
+            delete ptr;
+          }
+          std::atomic_thread_fence(std::memory_order_release);
 
           return res;
         }
@@ -935,7 +948,7 @@ namespace bliss
           int count = this->in_use.erase(ptr);
 
           if (count == 0) {
-            ERRORF("ERROR: attempting to release an object that is not managed by this object pool.");
+            //ERRORF("ERROR: attempting to release an object that is not managed by this object pool.");
             return false;
           }
           if (count > 1) {

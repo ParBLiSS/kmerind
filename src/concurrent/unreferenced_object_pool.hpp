@@ -201,7 +201,10 @@ namespace bliss
           }
 
           std::lock_guard<std::mutex> lock(mutex);
-
+          if (this->size_in_use == 0) {
+            // trying to release when we are maxed out.
+            return false;
+          }
 
           // only put back in available queue if it was in use.
           // now make object available.  make sure push_back is done one thread at a time.
@@ -404,6 +407,12 @@ namespace bliss
           }
 
           while (spinlock.test_and_set(std::memory_order_acq_rel));
+          if (this->size_in_use == 0) {
+            spinlock.clear(std::memory_order_release);
+
+            // trying to release when we are maxed out.
+            return false;
+          }
 
 
           // only put back in available queue if it was in use.
@@ -531,9 +540,8 @@ namespace bliss
 
           std::atomic_thread_fence(std::memory_order_acq_rel);
 
-          this->size_in_use.store(0, std::memory_order_release);
+          this->size_in_use.store(0, std::memory_order_relaxed);
 
-          std::atomic_thread_fence(std::memory_order_acquire);
           auto entry = this->available.tryPop();
           while (entry.first) {
             if (entry.second) delete entry.second;
@@ -559,21 +567,13 @@ namespace bliss
         }
 
         /**
-         * @brief     Resets the ObjectPool for a single thread: all Objects in use by that thread are marked as released and available.
-         * @param thread_id  id of thread being reset.  -1 means let openmp figure out the thread id.
-         */
-        void resetForThread(int thread_id = -1) {
-          this->size_in_use.fetch_sub(1, std::memory_order_acq_rel);
-        }
-
-        /**
          * @brief     Get the next available Object.  Thread Local
          * @details   if none available, and size is below capacity or pool is unlimited,
          *            a new object is created.
          * @param thread_id   id of thread acquiring.  -1 means the current omp thread.
          * @return    pointer to acquired object, nullptr if failed.
          */
-        ObjectPtrType tryAcquireObjectImpl(int thread_id = -1) {
+        ObjectPtrType tryAcquireObjectImpl() {
 
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
@@ -599,13 +599,6 @@ namespace bliss
               sptr = new ObjectType();
             }
 
-            std::atomic_thread_fence(std::memory_order_acquire);
-            if (sptr) {
-              this->size_in_use.fetch_sub(1, std::memory_order_release);
-              throw std::logic_error("Inserting duplicates into in-use set");
-
-            }
-            std::atomic_thread_fence(std::memory_order_release);
           }
 
           return sptr;
@@ -623,7 +616,7 @@ namespace bliss
          * @param thread_id  id of thread to release object into.  -1 implies current omp thread.
          * @return    true if sucessful release. note if wrong thread releases then false is returned.
          */
-        bool releaseObjectImpl(ObjectPtrType ptr, int thread_id = -1) {
+        bool releaseObjectImpl(ObjectPtrType ptr) {
 
           if (!ptr)
           {
@@ -633,13 +626,20 @@ namespace bliss
 
           bool res = false;            // nullptr would not be in in_use.
 
-          std::atomic_thread_fence(std::memory_order_acq_rel);
-
+          auto v = this->size_in_use.fetch_sub(1, std::memory_order_acq_rel);
+          if (v <= 0) {
+            this->size_in_use.fetch_add(1, std::memory_order_release);
+            return false;
+          }
 
           // only put back in available queue if it was in use.
           // now make object available.  make sure push_back is done one thread at a time.
           res = this->available.tryPush(ptr);
-          this->size_in_use.fetch_sub(1, std::memory_order_release);
+          if (!res) {
+            std::atomic_thread_fence(std::memory_order_acquire);
+            delete ptr;
+          }
+          std::atomic_thread_fence(std::memory_order_release);
 
           return res;
         }
@@ -654,7 +654,7 @@ namespace bliss
          * @param _pool_capacity       number of buffers in the pool
          * @param _buffer_capacity     size of the individual buffers
          */
-        explicit ObjectPool(int _num_threads = 0, const int64_t _pool_capacity = std::numeric_limits<int64_t>::max()) :
+        explicit ObjectPool(const int64_t _pool_capacity = std::numeric_limits<int64_t>::max()) :
         BaseType(_pool_capacity) {}
 
         /**
@@ -824,6 +824,9 @@ namespace bliss
             WARNINGF("WARNING: pool releasing a nullptr.");
             return true;
           }
+
+          if (this->size_in_use == 0)
+            return false;
 
           // only put back in available queue if it was in use.
           // now make object available.  make sure push_back is done one thread at a time.
