@@ -15,15 +15,6 @@
 #ifndef LOCKFREE_QUEUE_HPP_
 #define LOCKFREE_QUEUE_HPP_
 
-#include <cassert>
-#include <thread>
-#include <mutex>
-#include <limits>
-#include <atomic>
-#include <stdexcept>
-#include <xmmintrin.h>
-#include <tuple>
-
 #include "concurrentqueue/concurrentqueue.h"
 
 #include "concurrent/threadsafe_queue.hpp"
@@ -69,14 +60,14 @@ namespace bliss
          * copy constructor, DISABLED
          * @param other   the source ThreadSafeQueue from which to copy.
          */
-        explicit ThreadSafeQueue(const Derived& other) = delete;
+        DELETED_FUNC_DECL(explicit ThreadSafeQueue(const Derived& other));
 
         /**
          * copy assignment operator.  disabled.
          * @param other   the source ThreadSafeQueue from which to copy.
          * @return
          */
-        Derived& operator=(const Derived& other) = delete;
+        DELETED_FUNC_DECL(Derived& operator=(const Derived& other));
 
       public:
 
@@ -390,7 +381,7 @@ namespace bliss
 
 
     template<typename T>
-    using MutexLockQueue = bliss::concurrent::ThreadSafeQueue<T, bliss::concurrent::LockType::MUTEX>;
+    using LockfreeQueue = bliss::concurrent::ThreadSafeQueue<T, bliss::concurrent::LockType::LOCKFREE>;
 
 
 

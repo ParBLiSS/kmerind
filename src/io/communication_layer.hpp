@@ -18,7 +18,6 @@
 
 // C stdlib includes
 #include <assert.h>
-#include <cstdio>  // fflush
 
 // STL includes
 #include <queue>
@@ -610,7 +609,10 @@ protected:
              // get a buffer from pool
              BufferType* ptr = commLayer.acquireBuffer();
              // ensure capacity is okay
-             assert(received_count <= ptr->getCapacity());
+             if(received_count > (ptr->getCapacity() + ptr->getMetadataSize())) {
+               ERRORF("C R %d <- %d Recvd count = %d, capacity = %ld", commRank, src, received_count, ptr->getCapacity());
+               assert(received_count <= (ptr->getCapacity() + ptr->getMetadataSize()));
+             }
              ptr->reserve(received_count - ptr->getMetadataSize());  // reserve the data size as well.
              ptr->block_writes();  // and then block future writes (reservation)
 
@@ -961,7 +963,7 @@ protected:
             std::tie(suc, ptr) = commLayer.recvQueue.tryPop();
             if (!suc) {
               // no valid result, we must be done with receiving
-              DEBUGF("B R %d recvQueue has nothing. size = %lu", commLayer.commRank, commLayer.recvQueue.getSize());
+              //DEBUGF("B R %d recvQueue has nothing. size = %lu", commLayer.commRank, commLayer.recvQueue.getSize());
 
               //assert(!commLayer.recvQueue.canPush());
               assert(ptr == nullptr);

@@ -5,7 +5,6 @@
  *      Author: Tony Pan <tpan7@gatech.edu>
  */
 
-#include <cstdio>
 #include <iostream>
 #include <typeinfo>
 #include <type_traits>

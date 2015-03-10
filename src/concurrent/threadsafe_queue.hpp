@@ -15,16 +15,12 @@
 #ifndef THREADSAFE_QUEUE_HPP_
 #define THREADSAFE_QUEUE_HPP_
 
-#include <cassert>
-#include <thread>
-#include <mutex>
-#include <limits>
-#include <atomic>
-#include <stdexcept>
-#include <xmmintrin.h>
-#include <tuple>
+#include "config/relacy_config.hpp"
 
-#include "concurrentqueue/concurrentqueue.h"
+#include <limits>
+#include <stdexcept>
+#include <xmmintrin.h>   // for _mm_paush
+
 #include "concurrent/concurrent.hpp"
 
 namespace bliss
@@ -84,7 +80,9 @@ namespace bliss
         mutable int64_t capacity;
 
         /// size encodes 2 things:  sign bit encodes whether a calling thread can push into this queue.  use when suspending or terminating a queue.  rest is size of current queue.
-        typename std::conditional<LT == bliss::concurrent::LockType::LOCKFREE, std::atomic<int64_t>, int64_t>::type size;
+        typename std::conditional<LT == bliss::concurrent::LockType::LOCKFREE,
+            std::atomic<int64_t>,
+            VAR_T(int64_t) >::type size;
 
 
         /**
@@ -92,12 +90,13 @@ namespace bliss
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
         explicit ThreadSafeQueueBase(const size_t &_capacity = static_cast<size_t>(MAX_SIZE)) :
-              capacity(static_cast<int64_t>(_capacity)), size(0)
+              capacity(static_cast<int64_t>(_capacity))
         {
           assert(_capacity <= static_cast<size_t>(MAX_SIZE));
-
           if (capacity == 0)
             throw std::invalid_argument("ThreadSafeQueueBase constructor parameter capacity is given as 0");
+
+          VAR(size) = 0;
         };
 
 
@@ -105,27 +104,27 @@ namespace bliss
          * move constructor, DISABLED
          * @param other   the source ThreadSafeQueueBase from which to copy.
          */
-        explicit ThreadSafeQueueBase(Base&& other) = delete;
+        DELETED_FUNC_DECL(explicit ThreadSafeQueueBase(Base&& other));
 
         /**
          * move assignment operator.  disabled.
          * @param other   the source ThreadSafeQueueBase from which to copy.
          * @return
          */
-        Base& operator=(Base&& other) = delete;
+        DELETED_FUNC_DECL(Base& operator=(Base&& other));
 
         /**
          * copy constructor, DISABLED
          * @param other   the source ThreadSafeQueueBase from which to copy.
          */
-        explicit ThreadSafeQueueBase(const Base& other) = delete;
+        DELETED_FUNC_DECL(explicit ThreadSafeQueueBase(const Base& other));
 
         /**
          * copy assignment operator.  disabled.
          * @param other   the source ThreadSafeQueueBase from which to copy.
          * @return
          */
-        Base& operator=(const Base& other) = delete;
+        DELETED_FUNC_DECL(Base& operator=(const Base& other));
 
         /// internal, get value in size variable.  not thread safe
         template<bliss::concurrent::LockType L = LT>
@@ -139,7 +138,7 @@ namespace bliss
         inline const typename std::enable_if<L != bliss::concurrent::LockType::LOCKFREE, int64_t>::type
         getRawSize() const {
           std::atomic_thread_fence(std::memory_order_acquire);
-          return size;
+          return VAR(size);
         }
         
       public:
@@ -359,4 +358,4 @@ namespace bliss
   } /* namespace concurrent */
 } /* namespace bliss */
 
-#endif /* LOCKFREE_QUEUE_HPP_ */
+#endif /* THREADSAFE_QUEUE_HPP_ */

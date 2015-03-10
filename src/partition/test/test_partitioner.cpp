@@ -24,7 +24,7 @@ template<typename T>
 class PartitionTest : public ::testing::Test
 {
   protected:
-    size_t page_size;
+    long int page_size;
 
     virtual void SetUp()
     {
@@ -165,7 +165,7 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
         SizeType div = 1;
 
         //      INFOF("%ld, %d\n", static_cast<size_t>(len), i);
-        size_t nChunks = std::ceil(src.size() / div);
+        size_t nChunks = static_cast<size_t>(std::ceil(src.size() / div));
 
         // middle block
         size_t block = (p-1)/2;
@@ -226,7 +226,7 @@ TYPED_TEST_P(PartitionTest, demandPartition){
   {
     for (auto len : lens)
     {
-      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= len) ? start + len : std::numeric_limits<TypeParam>::max());
+      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= static_cast<TypeParam>(len)) ? start + static_cast<TypeParam>(len) : std::numeric_limits<TypeParam>::max());
 
       for (auto p : partitionCount)
       {

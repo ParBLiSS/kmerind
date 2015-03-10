@@ -17,7 +17,6 @@
 #include "omp.h"
 #include <atomic>
 #include <cassert>
-#include <cstdio>
 #include <chrono>
 #include <iterator>  // for ostream_iterator
 #include <iostream>   // for cout
@@ -26,6 +25,7 @@
 
 #include "utils/iterator_test_utils.hpp"
 
+#include "utils/logging.h"
 
 
 template<bliss::concurrent::LockType TS, int64_t CAP, int NumThreads = 1>

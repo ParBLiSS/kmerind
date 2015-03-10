@@ -19,6 +19,7 @@
 #ifndef BLISS_LOGGING_INTERNAL_H
 #define BLISS_LOGGING_INTERNAL_H
 
+#include <stdexcept>
 
 // MACRO DEFINITIONS  HERE REQUIRE THE "do {...} while (false)" construct for them to play nicely with if ... else ... statements.
 // see http://stackoverflow.com/questions/154136/do-while-and-if-else-statements-in-c-c-macros for explanation.
@@ -33,14 +34,14 @@
 
 
 /// non-printing version of functions
-#define NOPRINT_FATAL(msg) do { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(EXIT_FAILURE); } while (false)
+#define NOPRINT_FATAL(msg) do { throw std::logic_error("[fatal]  increase logging verbosity and rerun to get message.");  exit(EXIT_FAILURE); } while (false)
 #define NOPRINT_ERROR(msg) do {} while (false)
 #define NOPRINT_WARNING(msg) do {} while (false)
 #define NOPRINT_INFO(msg) do {} while (false)
 #define NOPRINT_DEBUG(msg) do {} while (false)
 #define NOPRINT_TRACE(msg) do {} while (false)
 
-#define NOPRINT_FATALF(msg, ...) do { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(EXIT_FAILURE); } while (false)
+#define NOPRINT_FATALF(msg, ...) do { throw std::logic_error("[fatal]  increase logging verbosity and rerun to get message.");  exit(EXIT_FAILURE); } while (false)
 #define NOPRINT_ERRORF(msg, ...) do {} while (false)
 #define NOPRINT_WARNINGF(msg, ...) do {} while (false)
 #define NOPRINT_INFOF(msg, ...) do {} while (false)
@@ -56,7 +57,7 @@
 #if USE_LOGGER == BLISS_LOGGING_NO_LOG
 
 // empty logging macros (no overhead)
-#define PRINT_FATAL(msg) do { std::stringstream ss; ss << msg; printf("[fatal] %s\n", ss.str().c_str());  exit(EXIT_FAILURE); } while (false)
+#define PRINT_FATAL(msg) do { throw std::logic_error("[fatal]  turn on logging and rerun to get message.");  exit(EXIT_FAILURE); } while (false)
 #define PRINT_ERROR(msg) do {} while (false)
 #define PRINT_WARNING(msg) do {} while (false)
 #define PRINT_INFO(msg) do {} while (false)
@@ -90,6 +91,7 @@
 
 #elif USE_LOGGER == BLISS_LOGGING_PRINTF
 
+#include <cstdio>
 // simple output via std::cerr
 // NOTE: this is not thread safe
 #include <sstream>
@@ -273,7 +275,7 @@ void init()
 #if USE_LOGGER == BLISS_LOGGING_NO_LOG
 
 // empty logging macros (no overhead)
-#define PRINT_FATALF(msg, ...) do { printf("[fatal] " msg "\n", ##__VA_ARGS__); exit(EXIT_FAILURE); } while (false)
+#define PRINT_FATALF(msg, ...) do { throw std::logic_error("[fatal]  turn on logging and rerun to get message."); exit(EXIT_FAILURE); } while (false)
 #define PRINT_ERRORF(msg, ...) do {} while (false)
 #define PRINT_WARNINGF(msg, ...) do {} while (false)
 #define PRINT_INFOF(msg, ...) do {} while (false)

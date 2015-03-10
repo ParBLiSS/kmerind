@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <atomic>
 #include <config.hpp>
+#include <type_traits>
 #include "partition/range.hpp"
 
 namespace bliss
@@ -82,10 +83,11 @@ namespace bliss
 
         /**
          * @typedef chunkSizeType
-         * @brief   value type used for chunkSize.  if integral ype for valueType, then size_t.  else (floating point) same as RangeValueType
+         * @brief   value type used for chunkSize.  if integral type for valueType, then size_t.  else (floating point) same as RangeValueType
          */
         using ChunkSizeType = typename std::conditional<std::is_integral<RangeValueType>::value,
-                                                        size_t, RangeValueType>::type;
+                                                        size_t,
+                                                        RangeValueType>::type;
 
         /**
          * @var src
@@ -125,8 +127,8 @@ namespace bliss
          * @return  number of chunks in a range.
          */
         template <typename R = Range>
-        typename std::enable_if<std::is_integral<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
-          return std::floor((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
+        inline typename std::enable_if<std::is_integral<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
+          return static_cast<std::size_t>((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
         }
         /**
          * @brief   computes the number of chunks in a src range, excluding the overlap region.  for floating type only.
@@ -134,8 +136,8 @@ namespace bliss
          * @return  number of chunks in a range, based on chunkSize.
          */
         template <typename R = Range>
-        typename std::enable_if<std::is_floating_point<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
-          return this->src.size() / this->chunkSize;
+        inline typename std::enable_if<std::is_floating_point<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
+          return static_cast<std::size_t>(std::ceil(this->src.size() / this->chunkSize));
         }
 
         /**

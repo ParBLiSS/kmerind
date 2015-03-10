@@ -21,15 +21,9 @@ endif()
 # load the testing:
 if (IS_DIRECTORY ./test)
     
-#    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX_LOCKFREE test/check2_messagebuffers.cpp )
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_THREADLOCAL_MUTEX_NONE     test/check2_messagebuffers.cpp )
-#    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK_LOCKFREE test/check2_messagebuffers.cpp )
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_THREADLOCAL_SPINLOCK_NONE     test/check2_messagebuffers.cpp )
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_messagebuffers.cpp )
 
-#    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_MUTEX_LOCKFREE test/check2_messagebuffers2.cpp )
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_THREADLOCAL_MUTEX_NONE     test/check2_messagebuffers2.cpp )
-#    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_SPINLOCK_LOCKFREE test/check2_messagebuffers2.cpp )
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE BLISS_THREADLOCAL_SPINLOCK_NONE     test/check2_messagebuffers2.cpp )
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_messagebuffers2.cpp BLISS_THREADLOCAL_MUTEX_NONE BLISS_THREADLOCAL_SPINLOCK_NONE)
 
 endif()
 

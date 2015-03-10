@@ -12,14 +12,7 @@
 #ifndef MUTEXLOCK_QUEUE_HPP_
 #define MUTEXLOCK_QUEUE_HPP_
 
-#include <thread>
-#include <mutex>
-#include <condition_variable>
 #include <deque>
-#include <limits>
-#include <atomic>
-#include <stdexcept>
-#include <cassert>
 
 #include "concurrent/threadsafe_queue.hpp"
 
@@ -76,14 +69,14 @@ namespace bliss
          * copy constructor, DISABLED
          * @param other   the source ThreadSafeQueue from which to copy.
          */
-        explicit ThreadSafeQueue(const Derived& other) = delete;
+        DELETED_FUNC_DECL(explicit ThreadSafeQueue(const Derived& other));
 
         /**
          * copy assignment operator
          * @param other   the source ThreadSafeQueue from which to copy.
          * @return
          */
-        Derived& operator=(const Derived& other) = delete;
+        DELETED_FUNC_DECL(Derived& operator=(const Derived& other));
 
 
         /**
@@ -96,7 +89,7 @@ namespace bliss
         	std::swap(q, other.q);
 
           this->capacity = other.capacity; other.capacity = 0;
-          this->size = other.size;   other.size = Base::DISABLED;
+          VAR(this->size) = VAR(other.size);   VAR(other.size) = Base::DISABLED;
 
         };
 
@@ -129,7 +122,7 @@ namespace bliss
 
           std::swap(q, other.q);
           this->capacity = other.capacity; other.capacity = 0;
-          this->size = other.size;  other.size = Base::DISABLED;
+          VAR(this->size) = VAR(other.size);  VAR(other.size) = Base::DISABLED;
 
           return *this;
         }
@@ -142,10 +135,10 @@ namespace bliss
           std::unique_lock<std::mutex> lock(this->mutex);
           q.clear();
           // clear size
-          this->size &= Base::DISABLED;  // keep the push bit, and set size to 0
+          VAR(this->size) &= Base::DISABLED;  // keep the push bit, and set size to 0
           lock.unlock();
 
-          canPushCV.notify_all();
+          CV_NOTIFY_ALL(canPushCV);
         }
 
         /**
@@ -155,9 +148,9 @@ namespace bliss
           // before enablePush, queue is probably empty or no one is writing to it.  so prior side effects don't need to be visible right away.
           // size itself is atomic
           std::unique_lock<std::mutex> lock(this->mutex);
-          this->size &= Base::MAX_SIZE;  // clear the push bit, and leave size as is
+          VAR(this->size) &= Base::MAX_SIZE;  // clear the push bit, and leave size as is
           lock.unlock();
-          canPushCV.notify_all();   // notify, so waitAndPush can check if it can push now.
+          CV_NOTIFY_ALL(canPushCV);   // notify, so waitAndPush can check if it can push now.
           // not notifying canPopCV, used in waitAndPop, as that function exits the loop ONLY when queue is not empty.
         }
 
@@ -167,11 +160,11 @@ namespace bliss
         inline void disablePushImpl() {  // overrides the base class non-virtual version
             // before disable push, should make sure that all writes are visible to all other threads, so release here.
           std::unique_lock<std::mutex> lock(this->mutex);
-          this->size |= Base::DISABLED;   // set the push bit, and leave size as is.
+          VAR(this->size) |= Base::DISABLED;   // set the push bit, and leave size as is.
           lock.unlock();
-          canPushCV.notify_all();   // notify, so waitAndPush can check if it can push now.  (only happens with a full buffer, allows waitToPush to return)
+          CV_NOTIFY_ALL(canPushCV);   // notify, so waitAndPush can check if it can push now.  (only happens with a full buffer, allows waitToPush to return)
                                     // this allows waitAndPush to fail if push is disabled before the queue becomes not full.
-          canPopCV.notify_all();   // notify, so waitAndPop can exit because there is no more data coming in. (only happens with an empty buffer, allows waitToPop to return)
+          CV_NOTIFY_ALL(canPopCV);   // notify, so waitAndPop can exit because there is no more data coming in. (only happens with an empty buffer, allows waitToPop to return)
         }
 
         /**
@@ -185,12 +178,12 @@ namespace bliss
          */
         bool tryPushImpl (T const& data) {
           std::unique_lock<std::mutex> lock(this->mutex);
-
-          if (reinterpret_cast<uint64_t&>(this->size) < static_cast<uint64_t>(this->capacity)) {
+          int64_t s = VAR(this->size);
+          if (reinterpret_cast<uint64_t&>(s) < static_cast<uint64_t>(this->capacity)) {
         	  q.push_back(data);  // insert using predefined copy version of dequeue's push function
-        	  ++this->size;
+        	  ++VAR(this->size);
         	  lock.unlock();
-              canPopCV.notify_one();
+              CV_NOTIFY_ONE(canPopCV);
               return true;
           }  // else at capacity.
 
@@ -213,12 +206,13 @@ namespace bliss
           std::pair<bool, T> res(false, T());
           std::unique_lock<std::mutex> lock(this->mutex);
 
+          int64_t s = VAR(this->size);
 
-          if (reinterpret_cast<uint64_t&>(this->size) < static_cast<uint64_t>(this->capacity)) {
+          if (reinterpret_cast<uint64_t&>(s) < static_cast<uint64_t>(this->capacity)) {
         	  q.push_back(std::forward<T>(data));  // insert using predefined copy version of dequeue's push function
-        	  ++this->size;
+        	  ++VAR(this->size);
         	  lock.unlock();
-              canPopCV.notify_one();
+              CV_NOTIFY_ONE(canPopCV);
 
             res.first = true;
             return std::move(res);
@@ -248,20 +242,23 @@ namespace bliss
 
           if (!this->canPush()) return false;   // if finished, then no more insertion.  return.
           std::unique_lock<std::mutex> lock(this->mutex);
-          while (reinterpret_cast<uint64_t&>(this->size) >= reinterpret_cast<uint64_t&>(this->capacity)) {
+          int64_t s = VAR(this->size);
+
+          while (reinterpret_cast<uint64_t&>(s) >= reinterpret_cast<uint64_t&>(this->capacity)) {
             // full q.  wait for someone to signal (not full && canPush, or !canPush).
-            canPushCV.wait(lock);
+            CV_WAIT(canPushCV, lock);
             // to get here, have to have one of these conditions changed:  pushEnabled, !full
-            if (this->size < 0) {  // blocked.
+            if (VAR(this->size) < 0) {  // blocked.
               lock.unlock();
               return false;  // if finished, then no more insertion.  return.
             }
+            s = VAR(this->size);
           }
-          ++this->size;
+          ++VAR(this->size);
           q.push_back(data);   // insert using predefined copy version of deque's push function
 
           lock.unlock();
-          canPopCV.notify_one();
+          CV_NOTIFY_ONE(canPopCV);
           return true;
 
         }
@@ -288,22 +285,24 @@ namespace bliss
             }
 
             std::unique_lock<std::mutex> lock(this->mutex);
-            while (reinterpret_cast<uint64_t&>(this->size) >= reinterpret_cast<uint64_t&>(this->capacity)) {
+            int64_t s = VAR(this->size);
+            while (reinterpret_cast<uint64_t&>(s) >= reinterpret_cast<uint64_t&>(this->capacity)) {
               // full q.  wait for someone to signal (not full && canPush, or !canPush).
-              canPushCV.wait(lock);
+              CV_WAIT(canPushCV, lock);
 
               // to get here, have to have one of these conditions changed:  pushEnabled, !full
-              if (this->size < 0) {
+              if (VAR(this->size) < 0) {
                 lock.unlock();
                 res.second = std::move(data);
                 return std::move(res);  // if finished, then no more insertion.  return.
               }
+              s = VAR(this->size);
             }
-            ++this->size;
+            ++VAR(this->size);
             q.push_back(std::forward<T>(data));   // insert using predefined copy version of deque's push function
 
             lock.unlock();
-            canPopCV.notify_one();
+            CV_NOTIFY_ONE(canPopCV);
             res.first = true;
             return std::move(res);
 
@@ -332,9 +331,9 @@ namespace bliss
           if (!this->isEmpty()) {
         	  res.second = std::move(q.front());  // convert to movable reference and move-assign.
         	  q.pop_front();
-        	    --this->size;
+        	    --VAR(this->size);
               res.first = true;
-              canPushCV.notify_one();
+              CV_NOTIFY_ONE(canPushCV);
           }
 
           lock.unlock();
@@ -370,7 +369,7 @@ namespace bliss
 
           while (this->isEmpty()) {
             // empty q.  wait for someone to signal (when !isEmpty, or !canPop)
-            canPopCV.wait(lock);
+            CV_WAIT(canPopCV, lock);
 
             // if !canPush and queue is empty, then return false.
             if (!this->canPop()) {
@@ -379,7 +378,7 @@ namespace bliss
             }
           }
 
-          --this->size;
+          --VAR(this->size);
 
           res.second = std::move(q.front());  // convert to movable reference and move-assign.
           q.pop_front();
@@ -387,7 +386,7 @@ namespace bliss
 
           lock.unlock();
 
-          canPushCV.notify_one();
+          CV_NOTIFY_ONE(canPushCV);
 
           return res;
         }

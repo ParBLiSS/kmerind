@@ -10,7 +10,6 @@
  * TODO add License
  */
 
-#include <cstdio>
 #include <vector>
 #include <unordered_map>
 #include "concurrent/copyable_atomic.hpp"

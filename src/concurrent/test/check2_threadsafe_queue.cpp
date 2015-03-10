@@ -12,7 +12,6 @@
 
 
 #include <iostream>
-#include <cstdio>
 #include <unistd.h>
 
 #include "utils/logging.h"

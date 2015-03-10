@@ -36,9 +36,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
   omp_init_lock(&writelock2);
   omp_lock_t writelock3;
   omp_init_lock(&writelock3);
-//  std::atomic_flag writelock = ATOMIC_FLAG_INIT;
-//  std::atomic_flag writelock2 = ATOMIC_FLAG_INIT;
-//  std::atomic_flag writelock3 = ATOMIC_FLAG_INIT;
+
 
 
   INFOF("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %d total counts from unlimited pool\n",

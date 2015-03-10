@@ -39,12 +39,12 @@
 // set of functions
 struct square_fn {
     constexpr double operator()(size_t x) {
-      return x * x;
+      return static_cast<double>(x) * static_cast<double>(x);
     }
 };
 struct sqrt_fn {
     constexpr double operator()(size_t x) {
-      return sqrt(x);
+      return sqrt(static_cast<double>(x));
     }
 };
 
@@ -55,7 +55,7 @@ struct inverse_fn {
 };
 struct log_fn {
     constexpr double operator()(size_t x) {
-      return x == 0 ? std::numeric_limits<double>::lowest() : log(x);
+      return x == 0 ? std::numeric_limits<double>::lowest() : log(static_cast<double>(x));
     }
 };
 
@@ -78,8 +78,8 @@ TYPED_TEST_P(ConstexprArrayTest, compute) {
   constexpr auto N=10;
   constexpr auto a = bliss::utils::make_array<N>(TypeParam());  // OKAY to init one here, but not ahead of time and pass in object.
 
-  constexpr TypeParam f;
-  for (int i = 0; i < N; ++i) {
+  TypeParam f;
+  for (size_t i = 0; i < N; ++i) {
     EXPECT_EQ(f(i), a[i]);
   }
 }

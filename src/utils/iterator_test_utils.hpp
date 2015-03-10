@@ -15,7 +15,6 @@
 #include <vector>
 #include <iterator>
 #include <algorithm>  // for sort
-#include <cstdio>
 #include <sstream>
 
 #include "utils/logging.h"

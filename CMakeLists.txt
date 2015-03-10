@@ -15,11 +15,20 @@ INCLUDE(CMakeDependentOption)
 # Initialize CXXFLAGS.
 add_definitions(-Wall -std=c++11 -fPIC)
 
+set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
+
+
 
 ### tool to speed up compilation
 if(CMAKE_VERSION VERSION_GREATER 2.8.3)
-    set (CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/ext/cotire/CMake")
-    include(cotire)
+    OPTION(ENABLE_COTIRE "Enable using cotire to reduce compilation time (possibly)" OFF)
+    if (ENABLE_COTIRE)
+        set (CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/ext/cotire/CMake")
+        include(cotire)
+    ELSE()
+        function(cotire module_names)
+        endfunction(cotire)  
+    ENDIF()
 else()
     function(cotire module_names)
     endfunction(cotire)  
@@ -52,8 +61,9 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   SET(SUPPORTS_COVERAGE ON CACHE INTERNAL "compiler supports coverage?")
   
 # -Wzero-as-null-pointer-constant : causes a lot of errors in system headers.
+  # -Wfloat-equal : most of comparisons are not with float.
   SET(EXTRA_WARNING_FLAGS "-Wextra -Wuninitialized -Wswitch-default -Wundef")
-  SET(TYPE_CONVERSION_WARNING_FLAGS "-Wdouble-promotion -Wconversion -Wsign-conversion -Wcast-qual -Wuseless-cast -Wfloat-equal")
+  SET(TYPE_CONVERSION_WARNING_FLAGS "-Wdouble-promotion -Wconversion -Wsign-conversion -Wcast-qual -Wuseless-cast")
   SET(SUGGESTION_WARNING_FLAGS "-Wsuggest-override -Wsuggest-final-types -Wsuggest-final-methods")
   
   
@@ -76,7 +86,7 @@ endif ()
 
 
 IF(NOT CMAKE_BUILD_TYPE)
-  SET(CMAKE_BUILD_TYPE Release CACHE STRING
+  SET(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
       "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
       FORCE)
 ENDIF(NOT CMAKE_BUILD_TYPE)
@@ -106,25 +116,18 @@ endif()
 # ----------------------------------------------------------------------------
 OPTION(BUILD_SHARED_LIBS "Build shared libraries (.dll/.so) instead of static ones (.lib/.a)" ON)
 
-# ----------------------------------------------------------------------------
-# Include profiling?
-# Default: NO
-# ----------------------------------------------------------------------------
-OPTION(ENABLE_PROFILING "Enable profiling in the GCC compiler (Add flags: -g -pg)" OFF)
 
-# Profiling?
-if(ENABLE_PROFILING)
-  add_definitions(-pg -g)
-else()
-  # Remove unreferenced functions: function level linking
-  if(NOT APPLE)
-    add_definitions(-ffunction-sections)
-  endif()
-endif()
 
-OPTION(ENABLE_EXTRA_COMPILER_WARNINGS "Enable compiler to generate extra warnings?" OFF)
-OPTION(ENABLE_TYPE_CONVERSION_WARNINGS "Enable compiler to generate extra warnings for type conversions?" OFF)
-OPTION(ENABLE_SUGGESTION_WARNINGS "Enable compiler to generate suggestions for polymorphic type analysis?" OFF)
+
+
+
+###### Extra compiler flags and prettifying.
+OPTION(COMPILER_EXTRA_WARNINGS "EXTRA COMPILATION OPTIONS" OFF)
+CMAKE_DEPENDENT_OPTION(COMPILER_WARNINGS_ENABLE_EXTRA "Enable compiler to generate extra warnings?" OFF "COMPILER_EXTRA_WARNINGS" OFF)
+CMAKE_DEPENDENT_OPTION(COMPILER_WARNINGS_ENABLE_CONVERSIONS "Enable compiler to generate extra warnings for type conversions?" OFF "COMPILER_WARNINGS" OFF)
+CMAKE_DEPENDENT_OPTION(COMPILER_WARNINGS_ENABLE_SUGGESTIONS "Enable compiler to generate suggestions for polymorphic type analysis?" OFF "COMPILER_WARNINGS" OFF)
+           
+include("${CMAKE_SOURCE_DIR}/cmake/GCCFilter.cmake")
 
 
 ###### LOGGING ENGINE configuration
@@ -256,7 +259,7 @@ if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
         unset(Boost_DETAILED_FAILURE_MSG)
         unset(BOOST_ROOT CACHE)
         
-        set(LOG_ENGINE "NO_LOG" CACHE STRING
+        set(LOG_ENGINE "PRINTF" CACHE STRING
             "choose a logging engine.  options are NO_LOG PRINTF CERR BOOST_TRIVIAL BOOST_CUSTOM." FORCE)
         message(WARNING "Did not find boost.  Default Log Engine set to NO_LOG")
         
@@ -359,15 +362,43 @@ endif(DOXYGEN_FOUND)
 
 
 
+
 ###### TESTING
 
-OPTION(ENABLE_TESTING "Enable different testing mechanisms including coverage, thread and address sanitizers, and google test" OFF)
+OPTION(ENABLE_TESTING "Enable different testing mechanisms including coverage, thread and address sanitizers, relacy, and google test" OFF)
+
+# ----------------------------------------------------------------------------
+# Include profiling?
+# Default: NO
+# ----------------------------------------------------------------------------
+CMAKE_DEPENDENT_OPTION(ENABLE_PROFILING "Enable profiling in the GCC compiler (Add flags: -g -pg)" OFF "ENABLE_TESTING" OFF)
+
+# Profiling?
+if(ENABLE_PROFILING)
+  add_definitions(-pg -g)
+else()
+  # Remove unreferenced functions: function level linking
+  if(NOT APPLE)
+    add_definitions(-ffunction-sections)
+  endif()
+endif()
+
+
+
 CMAKE_DEPENDENT_OPTION(ENABLE_COVERAGE "Enable Code Coverage Reporting" OFF
                         "ENABLE_TESTING;SUPPORTS_COVERAGE" OFF)
 CMAKE_DEPENDENT_OPTION(ENABLE_SANITIZER "Enable Sanitizer.  Choose via SANITIZER_STYLE" OFF
                         "ENABLE_TESTING;SUPPORTS_SANITIZER" OFF)
+
+#### turn on/off relacy for thread testing.
+CMAKE_DEPENDENT_OPTION(ENABLE_RELACY "Enable Thread testing with Relacy" OFF
+                        "ENABLE_TESTING;NOT ENABLE_SANITIZER" OFF)
+IF(ENABLE_RELACY)
+    include_directories("${EXT_PROJECTS_DIR}/relacy_2_4")
+    include_directories("${EXT_PROJECTS_DIR}/cq_extracted")
+ENDIF()
                         
-include("${CMAKE_SOURCE_DIR}/cmake/GCCFilter.cmake")
+
 
 ## LOGGING ENGINE configuration
 #function(update_test_options varname cacheaccess varval) 
@@ -440,8 +471,6 @@ function(update_sanitizer_options varname cacheaccess varval)
         ${varname} STREQUAL ENABLE_SANITIZER)
                 
 endfunction(update_sanitizer_options varname cacheaccess varval)
-
-
 variable_watch(ENABLE_SANITIZER update_sanitizer_options)
 
 
@@ -464,7 +493,6 @@ if (ENABLE_TESTING)
 
   message(STATUS "Testing enabled")
   # include/load the Google Test framework
-  set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 #  set_property(DIRECTORY ${EXT_PROJECTS_DIR}/gtest APPEND PROPERTY CMAKE_CXX_FLAGS -fPIC)
 #  set_property(DIRECTORY ${EXT_PROJECTS_DIR}/gtest APPEND PROPERTY CMAKE_C_FLAGS -fPIC)
   add_subdirectory(${EXT_PROJECTS_DIR}/gtest)
@@ -549,18 +577,21 @@ if (ENABLE_TESTING)
   
   endfunction(bliss_add_non_google_test)
 
-  function(bliss_add_metaprog_test module_names module_link metadef)
-      foreach(f ${ARGN})
-        get_filename_component(test_name ${f} NAME_WE)
+    function(bliss_add_metaprog_test module_names module_link filename)
+      get_filename_component(test_name ${filename} NAME_WE)
+      
+      foreach(metadef ${ARGN})
   
         # set the name for the test target and executable
         set(test_target_name ${test_name}_${metadef})
         # add all give files
-        add_executable(${test_target_name} ${f})
+        add_executable(${test_target_name} ${filename})
         # set binary output path for tests
         set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
-        SET_TARGET_PROPERTIES(${test_target_name} PROPERTIES COMPILE_FLAGS -D${metadef})
         
+        #get_target_property(targetCompDefs ${test_target_name} COMPILE_DEFINITIONS )
+        set_target_properties(${test_target_name} PROPERTIES COMPILE_DEFINITIONS ${metadef})
+
         # all the extra libs
         target_link_libraries(${test_target_name} ${EXTRA_LIBS})
     
@@ -580,9 +611,54 @@ if (ENABLE_TESTING)
         # generate google test XML results, to be parsed by Jenkins
         # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
         add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name})
-      endforeach(f)
+      endforeach(metadef)
   
-  endfunction(bliss_add_metaprog_test)
+  endfunction(bliss_add_relacy_test)
+  
+IF(ENABLE_RELACY)  
+    function(bliss_add_relacy_test module_names module_link filename)
+      get_filename_component(test_name ${filename} NAME_WE)
+      
+      foreach(metadef ${ARGN})
+  
+        # set the name for the test target and executable
+        set(test_target_name ${test_name}_${metadef})
+        # add all give files
+        add_executable(${test_target_name} ${filename})
+        # set binary output path for tests
+        set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
+        
+        #get_target_property(targetCompDefs ${test_target_name} COMPILE_DEFINITIONS )
+        set_target_properties(${test_target_name} PROPERTIES COMPILE_DEFINITIONS "${metadef} -DUSE_RELACY")
+
+        # all the extra libs
+        target_link_libraries(${test_target_name} ${EXTRA_LIBS})
+    
+        # link to the tested module (but only if that module produces a linkable
+        # library)
+        if (module_link)
+            target_link_libraries(${test_target_name} ${module_names})
+        endif (module_link)
+        
+        # if code coverage is to be determined: link with gcov
+        if (ENABLE_COVERAGE)
+          target_link_libraries(${test_target_name} gcov)
+        endif(ENABLE_COVERAGE)
+    
+        cotire(${test_target_name})
+    
+        # generate google test XML results, to be parsed by Jenkins
+        # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
+        add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name})
+      endforeach(metadef)
+  
+  endfunction(bliss_add_relacy_test)
+ELSE()
+    function(bliss_add_relacy_test module_names module_link filename)
+  endfunction(bliss_add_relacy_test)
+
+ENDIF()
+
 endif (ENABLE_TESTING)
 
 

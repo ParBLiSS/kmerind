@@ -12,8 +12,6 @@
 #ifndef CONCURRENT_HPP_
 #define CONCURRENT_HPP_
 
-#include <atomic>
-
 namespace bliss {
   namespace concurrent {
 
@@ -29,14 +27,6 @@ namespace bliss {
 
     /// types of thread safety mechanisms
     enum class LockType { NONE = 0, MUTEX = 1, SPINLOCK = 2, LOCKFREE = 4, THREADLOCAL = 8 };
-
-
-    constexpr std::memory_order MO_RELAXED = std::memory_order_relaxed;
-    constexpr std::memory_order MO_CONSUME = std::memory_order_consume;
-    constexpr std::memory_order MO_ACQUIRE = std::memory_order_acquire;
-    constexpr std::memory_order MO_RELEASE = std::memory_order_release;
-    constexpr std::memory_order MO_ACQ_REL = std::memory_order_acq_rel;
-    constexpr std::memory_order MO_SEQ_CST = std::memory_order_seq_cst;
 
   }
 }
