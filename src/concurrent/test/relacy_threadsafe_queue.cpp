@@ -25,6 +25,16 @@
 
 using namespace bliss::concurrent;
 
+// defined here so concurrent queue does not deadlock.
+#if defined(BLISS_LOCKFREE)
+#define THREAD_EXIT_NOTIFIER_START RelacyThreadExitNotifier::notify_relacy_thread_start()
+#define THREAD_EXIT_NOTIFIER_END  RelacyThreadExitNotifier::notify_relacy_thread_exit()
+#else
+#define THREAD_EXIT_NOTIFIER_START
+#define THREAD_EXIT_NOTIFIER_END
+#endif
+
+
 
 // note that relacy simulate threads.
 template<typename T, bliss::concurrent::LockType LT, int nProducers, int nConsumers, int64_t capacity, int64_t entries>
@@ -32,14 +42,20 @@ struct testWaitAndPush :
     rl::test_suite< testWaitAndPush<T, LT, nProducers, nConsumers, capacity, entries>,
     nProducers + nConsumers >
 {
+
       bliss::concurrent::ThreadSafeQueue<T, LT> queue;
-      std::array<int64_t, nProducers + nConsumers> lcount;
+      std::array<int64_t, nProducers + nConsumers> lsuccess;
       std::array<int64_t, nProducers + nConsumers> lfail;
+      static constexpr int64_t expected = (capacity > ((entries/nProducers) * nProducers) ? ((entries/nProducers) * nProducers) : capacity);
+
+
+      testWaitAndPush() : queue(capacity) {};
+
 
 
       void before() {
         for (int i = 0; i < nProducers + nConsumers; ++i) {
-          lcount[i] = 0;
+          lsuccess[i] = 0;
           lfail[i] = 0;
         }
       }
@@ -47,42 +63,35 @@ struct testWaitAndPush :
 
       void thread(unsigned thread_index)
       {
-        RelacyThreadExitNotifier::notify_relacy_thread_start();
+        THREAD_EXIT_NOTIFIER_START;
 
         if (thread_index < nProducers) {
           for (int64_t i = 0; i < entries / nProducers; ++i) {
             if (queue.waitAndPush(T(i * nProducers + thread_index)).first)
-              ++lcount[thread_index];
+              ++lsuccess[thread_index];
             else
               ++lfail[thread_index];
           }
-        } else {
-          sleep(1);
+        } else { //if (thread_index == (nProducers + nConsumers - 1)){
+          while (queue.getSize() < expected);
           queue.disablePush();
         }
-        RelacyThreadExitNotifier::notify_relacy_thread_exit();
+
+        THREAD_EXIT_NOTIFIER_END;
       }
 
       void after() {
-        int64_t count = 0;
+        int64_t success = 0;
         int64_t fail = 0;
         queue.disablePush();
         for (int i = 0; i < nProducers + nConsumers; ++i) {
-          count += lcount[i];
+          success += lsuccess[i];
           fail += lfail[i];
         }
 
-        int64_t expected = std::min(capacity, ((entries/nProducers) * nProducers));
-        assert(count == expected);
-//        if (count != ) {
-//          INFOF("Test WaitAndPush: LT %d nProd %d nCons %d cap %ld elems %ld", LT, nProducers, nConsumers, capacity, entries);
-//          ERRORF("FAIL: TSQueue capacity %ld, finished waitAndPush with %ld success and %ld fail.\n", queue.getCapacity(), count, fail);
-//          for (int i = 0; i < nProducers + nConsumers; ++i) {
-//            ERRORF("FAIL: lcount %d = %ld", i, lcount[i]);
-//          }
-////        } else {
-////          INFOF("PASS");
-//        }
+        //INFOF("Test WaitAndPush: LT %d nProd %d nCons %d cap %ld elems %ld.  capacity %ld, expected %lu  actual %ld, failed %ld", LT, nProducers, nConsumers, queue.getCapacity(), entries, capacity, expected, success, fail);
+        assert(success == expected);
+
       }
 
       void invariant() {
@@ -91,54 +100,205 @@ struct testWaitAndPush :
 
 };
 
+template<typename T, bliss::concurrent::LockType LT, int nProducers, int nConsumers, int64_t capacity, int64_t entries>
+struct testTryPush :
+    rl::test_suite< testTryPush<T, LT, nProducers, nConsumers, capacity, entries>,
+    nProducers + nConsumers >
+{
+
+      bliss::concurrent::ThreadSafeQueue<T, LT> queue;
+      std::array<int64_t, nProducers + nConsumers> lsuccess;
+      std::array<int64_t, nProducers + nConsumers> lfail;
+      static constexpr int64_t expected = (capacity > ((entries/nProducers) * nProducers) ? ((entries/nProducers) * nProducers) : capacity);
+
+
+      testTryPush() : queue(capacity) {};
+
+
+
+      void before() {
+        for (int i = 0; i < nProducers + nConsumers; ++i) {
+          lsuccess[i] = 0;
+          lfail[i] = 0;
+        }
+      }
+
+
+      void thread(unsigned thread_index)
+      {
+        THREAD_EXIT_NOTIFIER_START;
+
+        if (thread_index < nProducers) {
+          for (int64_t i = 0; i < entries / nProducers; ++i) {
+            if (queue.tryPush(T(i * nProducers + thread_index)).first)
+              ++lsuccess[thread_index];
+            else
+              ++lfail[thread_index];
+          }
+        } else { //if (thread_index == (nProducers + nConsumers - 1)){
+          while (queue.getSize() < nProducers * 2);
+          queue.disablePush();
+        }
+
+        THREAD_EXIT_NOTIFIER_END;
+      }
+
+      void after() {
+        int64_t count = 0;
+        int64_t fail = 0;
+        queue.disablePush();
+        for (int i = 0; i < nProducers + nConsumers; ++i) {
+          count += lsuccess[i];
+          fail += lfail[i];
+        }
+
+        //INFOF("Test WaitAndPush: LT %d nProd %d nCons %d cap %ld elems %ld.  capacity %ld, expected %lu  actual %ld, failed %ld", LT, nProducers, nConsumers, queue.getCapacity(), entries, capacity, expected, count, fail);
+        assert(count == expected);
+
+      }
+
+      void invariant() {
+
+      }
+
+};
+
+
+    template<typename T, bliss::concurrent::LockType LT, int nProducers, int nConsumers, int64_t capacity, int64_t entries>
+    struct testWaitAndPop :
+        rl::test_suite< testWaitAndPop<T, LT, nProducers, nConsumers, capacity, entries>,
+        nProducers + nConsumers >
+    {
+
+          bliss::concurrent::ThreadSafeQueue<T, LT> queue;
+          std::array<int64_t, nProducers + nConsumers> lsuccess;
+          std::array<int64_t, nProducers + nConsumers> lfail;
+          static constexpr int64_t expected = entries;
+
+
+          testWaitAndPop() : queue(capacity) {};
+
+
+
+          void before() {
+            for (int i = 0; i < nProducers + nConsumers; ++i) {
+              lsuccess[i] = 0;
+              lfail[i] = 0;
+            }
+
+            for (int64_t i = 0; i < entries; ++i) {
+              queue.waitAndPush(T(i));
+            }
+            queue.disablePush();
+          }
+
+
+          void thread(unsigned thread_index)
+          {
+            THREAD_EXIT_NOTIFIER_START;
+
+            if (thread_index >= nProducers) {
+              while (queue.canPop()) {
+                if (queue.waitAndPop().first)
+                  ++lsuccess[thread_index];
+                else
+                  ++lfail[thread_index];
+              }
+            }
+
+            THREAD_EXIT_NOTIFIER_END;
+          }
+
+          void after() {
+            int64_t count = 0;
+            int64_t fail = 0;
+            queue.disablePush();
+            for (int i = 0; i < nProducers + nConsumers; ++i) {
+              count += lsuccess[i];
+              fail += lfail[i];
+            }
+
+            //INFOF("Test WaitAndPush: LT %d nProd %d nCons %d cap %ld elems %ld.  capacity %ld, expected %lu  actual %ld, failed %ld", LT, nProducers, nConsumers, queue.getCapacity(), entries, capacity, expected, count, fail);
+            assert(count == expected);
+
+          }
+
+          void invariant() {
+
+          }
+
+    };
+
+
+
+        template<typename T, bliss::concurrent::LockType LT, int nProducers, int nConsumers, int64_t capacity, int64_t entries>
+        struct testTryPop :
+            rl::test_suite< testTryPop<T, LT, nProducers, nConsumers, capacity, entries>,
+            nProducers + nConsumers >
+        {
+
+              bliss::concurrent::ThreadSafeQueue<T, LT> queue;
+              std::array<int64_t, nProducers + nConsumers> lsuccess;
+              std::array<int64_t, nProducers + nConsumers> lfail;
+              static constexpr int64_t expected = entries;
+
+
+              testTryPop() : queue(capacity) {};
+
+
+
+              void before() {
+                for (int i = 0; i < nProducers + nConsumers; ++i) {
+                  lsuccess[i] = 0;
+                  lfail[i] = 0;
+                }
+
+                for (int64_t i = 0; i < entries; ++i) {
+                  queue.waitAndPush(T(i));
+                }
+                queue.disablePush();
+              }
+
+
+              void thread(unsigned thread_index)
+              {
+                THREAD_EXIT_NOTIFIER_START;
+
+                if (thread_index >= nProducers) {
+                  while (queue.canPop()) {
+                    if (queue.tryPop().first)
+                      ++lsuccess[thread_index];
+                    else
+                      ++lfail[thread_index];
+                  }
+                }
+
+                THREAD_EXIT_NOTIFIER_END;
+              }
+
+              void after() {
+                int64_t count = 0;
+                int64_t fail = 0;
+                queue.disablePush();
+                for (int i = 0; i < nProducers + nConsumers; ++i) {
+                  count += lsuccess[i];
+                  fail += lfail[i];
+                }
+
+                //INFOF("Test WaitAndPush: LT %d nProd %d nCons %d cap %ld elems %ld.  capacity %ld, expected %lu  actual %ld, failed %ld", LT, nProducers, nConsumers, queue.getCapacity(), entries, capacity, expected, count, fail);
+                assert(count == expected);
+
+              }
+
+              void invariant() {
+
+              }
+
+        };
+
 /*
-template<typename T, bliss::concurrent::LockType LT>
-void testTryPush(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int entries, const int nProducer) {
-  //usleep(1000);
-  int count = 0, count2 = 0;
-#pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+: count, count2)
-  for (int i = 0; i < entries; ++i) {
-    if (queue.tryPush(T(i)).first)
-      ++count;
-    else
-      ++count2;
-//    if (i % 1000 == 0) usleep(20);
-    //usleep(5);
-  }
-  queue.disablePush();
-
-  if (count + count2 != entries || count == 0)
-    FATALF("FAIL: TSQueue capacity %lu, finished tryPush. %d successful, %d failed\n", queue.getCapacity(), count, count2);
-  else INFOF("PASS,");
-
-};
-
-template<typename T, bliss::concurrent::LockType LT>
-void testWaitAndPop1(bliss::concurrent::ThreadSafeQueue<T, LT> &queue) {
-  int count = 0, count3 = 0;
-
-  while (queue.canPop()) {
-//    INFOF("queue waitAndPopping. "); fflush(stdout);
-    if (queue.waitAndPop().first)
-      ++count;
-//    INFOF("queue size = %lu\n", queue.getSize());  fflush(stdout);
-
-    //if (count %1000) usleep(20);
-  }
-      INFOF("done with waitAndPop()\n");  fflush(stdout);
 
 
-  // now empty it
-  while (queue.tryPop().first) {
-    ++count3;
-
-    INFOF("emptying. queue size = %lu\n", queue.getSize());
-
-  }
-  if (!queue.isEmpty() || count3 != 0) FATALF("FAIL: TSQueue capacity %lu, finished waitAndPop 1 thread. %d successful, %d flushed.  empty? %s\n", queue.getCapacity(), count, count3, (queue.isEmpty() ? "yes" : "no"));
-  else INFOF("PASS,");
-
-};
 
 template<typename T, bliss::concurrent::LockType LT>
 void testTryPop1(bliss::concurrent::ThreadSafeQueue<T, LT> &queue) {
@@ -414,38 +574,120 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 */
 int main(int argc, char** argv) {
 
+  int iterations = 1000;
+  if (argc > 1) {
+    iterations = atoi(argv[1]);
+  }
+
+  rl::test_params p;
+  p.search_type = rl::sched_random;
+  p.iteration_count = iterations;
+  p.output_history = true;
+  p.execution_depth_limit = 4000;
 
 #if defined(BLISS_MUTEX)
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
+
 #elif defined(BLISS_SPINLOCK)
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
+
 #else
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCKFREE;
+
 #endif
 
 
 
-  rl::simulate<testWaitAndPush<int, lt, 1, 1, 100, 107> >();
-  rl::simulate<testWaitAndPush<int, lt, 2, 1, 100, 107> >();
-  rl::simulate<testWaitAndPush<int, lt, 3, 1, 100, 107> >();
-  rl::simulate<testWaitAndPush<int, lt, 4, 1, 100, 107> >();
-  rl::simulate<testWaitAndPush<int, lt, 1, 2, 100, 107> >();
-  rl::simulate<testWaitAndPush<int, lt, 1, 3, 100, 107> >();
-  rl::simulate<testWaitAndPush<int, lt, 1, 4, 100, 107> >();
-  rl::simulate<testWaitAndPush<int, lt, 2, 2, 100, 107> >();
-  rl::simulate<testWaitAndPush<int, lt, 2, 3, 100, 107> >();
-  rl::simulate<testWaitAndPush<int, lt, 3, 2, 100, 107> >();
+
+  rl::simulate<testWaitAndPush<int, lt, 1, 1, 20, 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 2, 1, 20, 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 3, 1, 20, 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 4, 1, 20, 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 1, 2, 20, 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 1, 3, 20, 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 1, 4, 20, 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 2, 2, 20, 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 2, 3, 20, 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 3, 2, 20, 29> >(p);
+
+  rl::simulate<testTryPush<int, lt, 1, 1, 20, 29> >(p);
+  rl::simulate<testTryPush<int, lt, 2, 1, 20, 29> >(p);
+  rl::simulate<testTryPush<int, lt, 3, 1, 20, 29> >(p);
+  rl::simulate<testTryPush<int, lt, 4, 1, 20, 29> >(p);
+  rl::simulate<testTryPush<int, lt, 1, 2, 20, 29> >(p);
+  rl::simulate<testTryPush<int, lt, 1, 3, 20, 29> >(p);
+  rl::simulate<testTryPush<int, lt, 1, 4, 20, 29> >(p);
+  rl::simulate<testTryPush<int, lt, 2, 2, 20, 29> >(p);
+  rl::simulate<testTryPush<int, lt, 2, 3, 20, 29> >(p);
+  rl::simulate<testTryPush<int, lt, 3, 2, 20, 29> >(p);
+
+  rl::simulate<testWaitAndPop<int, lt, 1, 1, 20, 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 2, 1, 20, 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 3, 1, 20, 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 4, 1, 20, 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 1, 2, 20, 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 1, 3, 20, 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 1, 4, 20, 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 2, 2, 20, 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 2, 3, 20, 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 3, 2, 20, 29> >(p);
+
+  rl::simulate<testTryPop<int, lt, 1, 1, 20, 29> >(p);
+  rl::simulate<testTryPop<int, lt, 2, 1, 20, 29> >(p);
+  rl::simulate<testTryPop<int, lt, 3, 1, 20, 29> >(p);
+  rl::simulate<testTryPop<int, lt, 4, 1, 20, 29> >(p);
+  rl::simulate<testTryPop<int, lt, 1, 2, 20, 29> >(p);
+  rl::simulate<testTryPop<int, lt, 1, 3, 20, 29> >(p);
+  rl::simulate<testTryPop<int, lt, 1, 4, 20, 29> >(p);
+  rl::simulate<testTryPop<int, lt, 2, 2, 20, 29> >(p);
+  rl::simulate<testTryPop<int, lt, 2, 3, 20, 29> >(p);
+  rl::simulate<testTryPop<int, lt, 3, 2, 20, 29> >(p);
+
+  rl::simulate<testWaitAndPush<int, lt, 1, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 2, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 3, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 4, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 1, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 1, 3, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 1, 4, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 2, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 2, 3, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPush<int, lt, 3, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+
+  rl::simulate<testTryPush<int, lt, 1, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPush<int, lt, 2, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPush<int, lt, 3, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPush<int, lt, 4, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPush<int, lt, 1, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPush<int, lt, 1, 3, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPush<int, lt, 1, 4, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPush<int, lt, 2, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPush<int, lt, 2, 3, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPush<int, lt, 3, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
 
 
-//  rl::simulate<testWaitAndPush<int, lt, 1, 1, std::numeric_limits<int64_t>::max(), 107> >();
-//  rl::simulate<testWaitAndPush<int, lt, 2, 1, std::numeric_limits<int64_t>::max(), 107> >();
-//  rl::simulate<testWaitAndPush<int, lt, 3, 1, std::numeric_limits<int64_t>::max(), 107> >();
-//  rl::simulate<testWaitAndPush<int, lt, 4, 1, std::numeric_limits<int64_t>::max(), 107> >();
-//  rl::simulate<testWaitAndPush<int, lt, 1, 2, std::numeric_limits<int64_t>::max(), 107> >();
-//  rl::simulate<testWaitAndPush<int, lt, 1, 3, std::numeric_limits<int64_t>::max(), 107> >();
-//  rl::simulate<testWaitAndPush<int, lt, 1, 4, std::numeric_limits<int64_t>::max(), 107> >();
-//  rl::simulate<testWaitAndPush<int, lt, 2, 2, std::numeric_limits<int64_t>::max(), 107> >();
-//  rl::simulate<testWaitAndPush<int, lt, 2, 3, std::numeric_limits<int64_t>::max(), 107> >();
-//  rl::simulate<testWaitAndPush<int, lt, 3, 2, std::numeric_limits<int64_t>::max(), 107> >();
+  rl::simulate<testWaitAndPop<int, lt, 1, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 2, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 3, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 4, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 1, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 1, 3, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 1, 4, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 2, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 2, 3, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testWaitAndPop<int, lt, 3, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+
+
+  rl::simulate<testTryPop<int, lt, 1, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPop<int, lt, 2, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPop<int, lt, 3, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPop<int, lt, 4, 1, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPop<int, lt, 1, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPop<int, lt, 1, 3, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPop<int, lt, 1, 4, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPop<int, lt, 2, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPop<int, lt, 2, 3, std::numeric_limits<int64_t>::max(), 29> >(p);
+  rl::simulate<testTryPop<int, lt, 3, 2, std::numeric_limits<int64_t>::max(), 29> >(p);
+
 
 };

@@ -80,23 +80,26 @@ namespace bliss
         mutable int64_t capacity;
 
         /// size encodes 2 things:  sign bit encodes whether a calling thread can push into this queue.  use when suspending or terminating a queue.  rest is size of current queue.
-        typename std::conditional<LT == bliss::concurrent::LockType::LOCKFREE,
-            std::atomic<int64_t>,
-            VAR_T(int64_t) >::type size;
+        typename std::conditional<LT == bliss::concurrent::LockType::NONE,
+            VAR_T(int64_t),
+            std::atomic<int64_t> >::type size;
 
 
         /**
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueueBase(const size_t &_capacity = static_cast<size_t>(MAX_SIZE)) :
+        explicit ThreadSafeQueueBase(const size_t _capacity = static_cast<size_t>(MAX_SIZE)) :
               capacity(static_cast<int64_t>(_capacity))
         {
           assert(_capacity <= static_cast<size_t>(MAX_SIZE));
           if (capacity == 0)
             throw std::invalid_argument("ThreadSafeQueueBase constructor parameter capacity is given as 0");
 
-          VAR(size) = 0;
+          if (LT == bliss::concurrent::LockType::NONE)
+            VAR(size) = 0;
+          else
+            size.store(0, std::memory_order_relaxed);
         };
 
 
@@ -128,14 +131,14 @@ namespace bliss
 
         /// internal, get value in size variable.  not thread safe
         template<bliss::concurrent::LockType L = LT>
-        inline const typename std::enable_if<L == bliss::concurrent::LockType::LOCKFREE, int64_t>::type
+        inline const typename std::enable_if<L != bliss::concurrent::LockType::NONE, int64_t>::type
         getRawSize() const {
-          return size.load(std::memory_order_relaxed);
+          return size.load(std::memory_order_acquire);
         }
 
         /// internal, get value in size variable.  not thread safe.
         template<bliss::concurrent::LockType L = LT>
-        inline const typename std::enable_if<L != bliss::concurrent::LockType::LOCKFREE, int64_t>::type
+        inline const typename std::enable_if<L == bliss::concurrent::LockType::NONE, int64_t>::type
         getRawSize() const {
           std::atomic_thread_fence(std::memory_order_acquire);
           return VAR(size);

@@ -75,7 +75,7 @@ namespace bliss
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueue(const size_t &_capacity = static_cast<size_t>(Base::MAX_SIZE)) :
+        explicit ThreadSafeQueue(const size_t _capacity = static_cast<size_t>(Base::MAX_SIZE)) :
           Base(_capacity), q( _capacity == static_cast<size_t>(Base::MAX_SIZE) ? 128 : _capacity)
         {};
 
@@ -127,7 +127,7 @@ namespace bliss
         inline void enablePushImpl() {
           // before enablePush, queue is probably empty or no one is writing to it.  so prior side effects don't need to be visible right away.
           // size itself is atomic
-          this->size.fetch_and(Base::MAX_SIZE, std::memory_order_acq_rel);  // clear the push bit, and leave size as is
+          this->size.fetch_and(Base::MAX_SIZE, std::memory_order_relaxed);  // clear the push bit, and leave size as is
         }
 
         /**
@@ -135,7 +135,7 @@ namespace bliss
          */
         inline void disablePushImpl() {
           // before disable push, should make sure that all writes are visible to all other threads, so release here.
-          this->size.fetch_or(Base::DISABLED, std::memory_order_acq_rel);   // set the push bit, and leave size as is.
+          this->size.fetch_or(Base::DISABLED, std::memory_order_relaxed);   // set the push bit, and leave size as is.
         }
 
 
@@ -159,18 +159,24 @@ namespace bliss
 //            }
 //          }
 
-          int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);
           bool res = false;
+          int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);  // reserve
           if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity)) {
-          	std::atomic_thread_fence(std::memory_order_acquire);
-          	res = q.enqueue(data);
+
+            // between 0 and capacity - 1.  enqueue.
+            std::atomic_thread_fence(std::memory_order_acq_rel);
+            res = q.enqueue(data);
             std::atomic_thread_fence(std::memory_order_release);
+
             if (res) {
-            	return true;
-            }
-          }  // else at capacity.
-          this->size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
+              return true;
+            } // else  enqueue failed.
+          } // else disabled or full
+			    this->size.fetch_sub(1, std::memory_order_relaxed);
+
+          // at this point, if success, data should be empty.  else data should be untouched.
           return false;
+
         }
 
         /**
@@ -200,16 +206,19 @@ namespace bliss
 
           int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);
           if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity)) {
-          	std::atomic_thread_fence(std::memory_order_acquire);
-          	res.first = q.enqueue(std::forward<T>(data));
-            std::atomic_thread_fence(std::memory_order_release);
-            if (res.first) {
-            	res.first = true;
-            	return std::move(res);
-            }
-          }
 
-          this->size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
+            // else between 0 and capacity - 1.  enqueue.
+            std::atomic_thread_fence(std::memory_order_acq_rel);
+            res.first = q.enqueue(std::forward<T>(data));
+            std::atomic_thread_fence(std::memory_order_release);
+
+            if (res.first) {
+              return std::move(res);
+            } // else  enqueue failed. decrement and try again.
+              
+          } // else disabled or full
+					this->size.fetch_sub(1, std::memory_order_relaxed);
+					
           // at this point, if success, data should be empty.  else data should be untouched.
           res.second = std::move(data);
           return std::move(res);
@@ -230,33 +239,36 @@ namespace bliss
          */
         bool waitAndPushImpl (T const& data) {
 
-          int64_t v;
+          int64_t v = 0L;
           bool res = false;
-          bool first = true;
+
           do {  // loop forever, unless queue is disabled, or insert succeeded.
-            if (first) {
-              v = this->size.fetch_add(1, std::memory_order_relaxed);
-              first = false;
-            } else {
-              v = this->size.load(std::memory_order_relaxed);
-            }
 
-            if (v < 0) {
-              this->size.fetch_sub(1, std::memory_order_relaxed);
-              return false;  // disabled so return false
-            }
-            else if (v < this->capacity) {  // else under capacity, enqueue
-            	std::atomic_thread_fence(std::memory_order_acquire);
-            	res = q.enqueue(data);
-            	std::atomic_thread_fence(std::memory_order_release);
+            v = this->size.load(std::memory_order_relaxed);
 
-              if (res) {  // successfully enqueued.
-                return true;
-              } // else failed enqueue, try again.
-            } // else over capacity
+            if (v < 0L) { // disabled so return false
+              res = false;
+              break;
+            } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
+              res = this->size.compare_exchange_strong(v, v+1, std::memory_order_relaxed);
+              if (res) {
+                std::atomic_thread_fence(std::memory_order_acq_rel);
+                res = q.enqueue(data);
+                std::atomic_thread_fence(std::memory_order_release);
+
+                if (res) {
+                  break;
+                } else {// else  enqueue failed. decrement and try again.
+                  this->size.fetch_sub(1, std::memory_order_relaxed);
+                }
+              } // else reservation failed.
+            }  // else over capacity
+
+            // pause if over capacity, or failed to reserve, or failed to insert.
+            _mm_pause();
           } while (true);
 
-          return false;
+          return res;  // disabled so return false
 
         }
 
@@ -276,35 +288,37 @@ namespace bliss
         std::pair<bool, T> waitAndPushImpl (T && data) {
           std::pair<bool, T> res(false, T());
 
-          int64_t v;
-          bool first = true;
+          int64_t v = 0L;
 
           do {  // loop forever, unless queue is disabled, or insert succeeded.
-            if (first) {
-              v = this->size.fetch_add(1, std::memory_order_relaxed);
-              first = false;
-            } else {
-              v = this->size.load(std::memory_order_relaxed);
-            }
 
-            if (v < 0) {
-              this->size.fetch_sub(1, std::memory_order_relaxed);
+            v = this->size.load(std::memory_order_relaxed);
+
+            if (v < 0L) { // disabled so return false
+              res.first = false;
               res.second = std::move(data);
-              return std::move(res);  // disabled so return false
-            }
-            else if (v < this->capacity) {  // else under capacity, enqueue
-            	std::atomic_thread_fence(std::memory_order_acquire);
-            	res.first = q.enqueue(std::forward<T>(data));
-              std::atomic_thread_fence(std::memory_order_release);
+              break;
+            } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
+              res.first = this->size.compare_exchange_strong(v, v+1, std::memory_order_relaxed);
+              if (res.first) {
+                std::atomic_thread_fence(std::memory_order_acq_rel);
+                res.first = q.enqueue(std::forward<T>(data));
+                std::atomic_thread_fence(std::memory_order_release);
 
-              if (res.first) {  // successfully enqueued.
-                return std::move(res);
-              }  // else failed enqueue, try again.
-            } // else over capacity
+                if (res.first) {
+                  break;
+                } else {// else  enqueue failed. decrement and try again.
+                  this->size.fetch_sub(1, std::memory_order_relaxed);
+                }
+              } // else reservation failed.
+            }  // else over capacity
+
+            // pause if over capacity, or failed to reserve, or failed to insert.
+            _mm_pause();
           } while (true);
 
-          res.second = std::move(data);
-          return std::move(res);
+          return std::move(res);  // disabled so return false
+
         }
 
 
@@ -326,15 +340,23 @@ namespace bliss
           // pop dequeues first, then decrement count
           std::pair<bool, T> res(false, T());
 
-          // don't check if canPop here - this call should return asap.
-          std::atomic_thread_fence(std::memory_order_acquire);
-          res.first = q.try_dequeue(res.second);
-          std::atomic_thread_fence(std::memory_order_release);
+          int64_t v = this->size.load(std::memory_order_relaxed);
 
-          if (res.first == true) {
-            this->size.fetch_sub(1, std::memory_order_relaxed);
-          }
+					if ((v & Base::MAX_SIZE) == 0L) return res;  // nothing to pop
 
+					// use compare_exchange_strong to ensure we are not going into negative territory.
+					res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_relaxed);
+
+					if (res.first) {
+            std::atomic_thread_fence(std::memory_order_acq_rel);
+            res.first = q.try_dequeue(res.second);
+            std::atomic_thread_fence(std::memory_order_release);
+
+            if (!res.first) {
+              this->size.fetch_add(1, std::memory_order_relaxed);
+            }
+
+					}
           return res;
         }
 
@@ -356,24 +378,38 @@ namespace bliss
         std::pair<bool, T> waitAndPopImpl() {
           std::pair<bool, T> res(false, T());
 
-          int64_t v;
-          // while the queue is not disabled nor empty
-          while ( (v = this->size.load(std::memory_order_relaxed)) != Base::DISABLED ) {
-            // check size to see if there are entries to dequeue
-            if ((v & Base::MAX_SIZE) > 0) {
-              std::atomic_thread_fence(std::memory_order_acquire);
-              res.first = q.try_dequeue(res.second);
-              std::atomic_thread_fence(std::memory_order_release);
+          int64_t v = 0L;
 
-              if ((res.first) == true) {
-                this->size.fetch_sub(1, std::memory_order_relaxed);
-                break;
-              }
-            }  // else no entry. so wait.
+          do {
+            v = this->size.load(std::memory_order_relaxed);
+
+            if (v == Base::DISABLED) {  // disabled and empty. return.
+              res.first = false;
+              break;
+            } else if (v != 0L) {
+
+              res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_relaxed);
+              if (res.first)
+              {
+                //  else has some entries
+                std::atomic_thread_fence(std::memory_order_acq_rel);
+                res.first = q.try_dequeue(res.second);
+                std::atomic_thread_fence(std::memory_order_release);
+
+                if (res.first) {
+                  break;
+                } else {
+                  // failed dequeue. need to increment and try again
+                  v = this->size.fetch_add(1, std::memory_order_relaxed);
+                }
+              } // failed reserve.  try again
+            } // else empty, so wait
+
             _mm_pause();
-          }
+          } while (true);
 
           return res;
+
         }
 
 

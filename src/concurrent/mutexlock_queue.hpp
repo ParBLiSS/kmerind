@@ -15,6 +15,7 @@
 #include <deque>
 
 #include "concurrent/threadsafe_queue.hpp"
+#include "utils/logging.h"
 
 // TODO: every operation that's modifying the queue is using unique lock. can this be made better with just careful atomic operations
 // 		 e.g. with memory fence?
@@ -89,7 +90,9 @@ namespace bliss
         	std::swap(q, other.q);
 
           this->capacity = other.capacity; other.capacity = 0;
-          VAR(this->size) = VAR(other.size);   VAR(other.size) = Base::DISABLED;
+
+          this->size.exchange(other.size.exchange(Base::DISABLED, std::memory_order_acq_rel), std::memory_order_release);
+
 
         };
 
@@ -99,7 +102,7 @@ namespace bliss
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueue(const size_t &_capacity = static_cast<size_t>(Base::MAX_SIZE)) :
+        explicit ThreadSafeQueue(const size_t _capacity = static_cast<size_t>(Base::MAX_SIZE)) :
 			   Base(_capacity), q() {};
 
 
@@ -122,7 +125,8 @@ namespace bliss
 
           std::swap(q, other.q);
           this->capacity = other.capacity; other.capacity = 0;
-          VAR(this->size) = VAR(other.size);  VAR(other.size) = Base::DISABLED;
+          this->size.exchange(other.size.exchange(Base::DISABLED, std::memory_order_acq_rel), std::memory_order_release);
+
 
           return *this;
         }
@@ -135,36 +139,35 @@ namespace bliss
           std::unique_lock<std::mutex> lock(this->mutex);
           q.clear();
           // clear size
-          VAR(this->size) &= Base::DISABLED;  // keep the push bit, and set size to 0
+          this->size.fetch_and(Base::DISABLED, std::memory_order_acq_rel);  // keep the push bit, and set size to 0
+
           lock.unlock();
 
           CV_NOTIFY_ALL(canPushCV);
+          std::atomic_thread_fence(std::memory_order_release);
         }
 
         /**
          * set the queue to accept new elements
          */
         inline void enablePushImpl() { // overrides the base class non-virtual version
-          // before enablePush, queue is probably empty or no one is writing to it.  so prior side effects don't need to be visible right away.
-          // size itself is atomic
-          std::unique_lock<std::mutex> lock(this->mutex);
-          VAR(this->size) &= Base::MAX_SIZE;  // clear the push bit, and leave size as is
-          lock.unlock();
+          this->size.fetch_and(Base::MAX_SIZE, std::memory_order_relaxed);  // clear the push bit, and leave size as is        }
           CV_NOTIFY_ALL(canPushCV);   // notify, so waitAndPush can check if it can push now.
           // not notifying canPopCV, used in waitAndPop, as that function exits the loop ONLY when queue is not empty.
+          std::atomic_thread_fence(std::memory_order_release);
         }
 
         /**
          * set the queue to disallow insertion of new elements.
          */
         inline void disablePushImpl() {  // overrides the base class non-virtual version
-            // before disable push, should make sure that all writes are visible to all other threads, so release here.
-          std::unique_lock<std::mutex> lock(this->mutex);
-          VAR(this->size) |= Base::DISABLED;   // set the push bit, and leave size as is.
-          lock.unlock();
+
+          // before disable push, should make sure that all writes are visible to all other threads, so release here.
+          this->size.fetch_or(Base::DISABLED, std::memory_order_relaxed);   // set the push bit, and leave size as is.
           CV_NOTIFY_ALL(canPushCV);   // notify, so waitAndPush can check if it can push now.  (only happens with a full buffer, allows waitToPush to return)
                                     // this allows waitAndPush to fail if push is disabled before the queue becomes not full.
           CV_NOTIFY_ALL(canPopCV);   // notify, so waitAndPop can exit because there is no more data coming in. (only happens with an empty buffer, allows waitToPop to return)
+          std::atomic_thread_fence(std::memory_order_release);
         }
 
         /**
@@ -177,20 +180,24 @@ namespace bliss
          * @return        whether push was successful.
          */
         bool tryPushImpl (T const& data) {
+
           std::unique_lock<std::mutex> lock(this->mutex);
-          int64_t s = VAR(this->size);
+          int64_t s = this->size.fetch_add(1, std::memory_order_acquire);
           if (reinterpret_cast<uint64_t&>(s) < static_cast<uint64_t>(this->capacity)) {
         	  q.push_back(data);  // insert using predefined copy version of dequeue's push function
-        	  ++VAR(this->size);
+            std::atomic_thread_fence(std::memory_order_release);
+
         	  lock.unlock();
               CV_NOTIFY_ONE(canPopCV);
+              std::atomic_thread_fence(std::memory_order_release);
               return true;
-          }  // else at capacity.
+          } else { // else at capacity.
+            this->size.fetch_sub(1, std::memory_order_relaxed);
 
+            lock.unlock();
 
-          lock.unlock();
-
-          return false;
+            return false;
+          }
         }
 
         /**
@@ -204,24 +211,26 @@ namespace bliss
          */
         std::pair<bool, T> tryPushImpl (T && data) {
           std::pair<bool, T> res(false, T());
-          std::unique_lock<std::mutex> lock(this->mutex);
 
-          int64_t s = VAR(this->size);
+
+          std::unique_lock<std::mutex> lock(this->mutex);
+          int64_t s = this->size.fetch_add(1, std::memory_order_acquire);
 
           if (reinterpret_cast<uint64_t&>(s) < static_cast<uint64_t>(this->capacity)) {
-        	  q.push_back(std::forward<T>(data));  // insert using predefined copy version of dequeue's push function
-        	  ++VAR(this->size);
+        	  q.emplace_back(std::forward<T>(data));  // insert using predefined copy version of dequeue's push function
+            std::atomic_thread_fence(std::memory_order_release);
+
         	  lock.unlock();
               CV_NOTIFY_ONE(canPopCV);
-
+              std::atomic_thread_fence(std::memory_order_release);
             res.first = true;
             return std::move(res);
-          }  // else at capacity.
-
-          lock.unlock();
-          res.second = std::move(data);
-          return std::move(res);;
-
+          } else {  // else at capacity.
+            this->size.fetch_sub(1, std::memory_order_relaxed);
+            lock.unlock();
+            res.second = std::move(data);
+            return std::move(res);;
+           }
         }
 
         /**
@@ -238,28 +247,37 @@ namespace bliss
          * @return        whether push was successful.
          */
         bool waitAndPushImpl (T const& data) {
+          bool res = false;
 
+          int64_t v = 0L;
 
-          if (!this->canPush()) return false;   // if finished, then no more insertion.  return.
           std::unique_lock<std::mutex> lock(this->mutex);
-          int64_t s = VAR(this->size);
+          do {  // loop forever, unless queue is disabled, or insert succeeded.
 
-          while (reinterpret_cast<uint64_t&>(s) >= reinterpret_cast<uint64_t&>(this->capacity)) {
-            // full q.  wait for someone to signal (not full && canPush, or !canPush).
-            CV_WAIT(canPushCV, lock);
-            // to get here, have to have one of these conditions changed:  pushEnabled, !full
-            if (VAR(this->size) < 0) {  // blocked.
-              lock.unlock();
-              return false;  // if finished, then no more insertion.  return.
+            v = this->size.load(std::memory_order_relaxed);
+
+            if (v < 0L) { // disabled so return false
+              break;
+            } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
+              res = this->size.compare_exchange_strong(v, v+1, std::memory_order_acquire);
+              if (res) {
+                q.push_back(data);
+                std::atomic_thread_fence(std::memory_order_release);
+
+                lock.unlock();
+
+                CV_NOTIFY_ONE(canPopCV);
+                std::atomic_thread_fence(std::memory_order_release);
+                return true;
+              } // failed reservation.  wait
+            } else {// else over capacity.  wait.
+              std::atomic_thread_fence(std::memory_order_acquire);
+              CV_WAIT(canPushCV, lock);
             }
-            s = VAR(this->size);
-          }
-          ++VAR(this->size);
-          q.push_back(data);   // insert using predefined copy version of deque's push function
-
+          } while (true);
           lock.unlock();
-          CV_NOTIFY_ONE(canPopCV);
-          return true;
+
+          return false;
 
         }
 
@@ -279,33 +297,37 @@ namespace bliss
         std::pair<bool, T> waitAndPushImpl (T && data) {
           std::pair<bool, T> res(false, T());
 
-            if (!this->canPush()) {
+          int64_t v = 0L;
+
+          std::unique_lock<std::mutex> lock(this->mutex);
+          do {  // loop forever, unless queue is disabled, or insert succeeded.
+
+            v = this->size.load(std::memory_order_relaxed);
+
+            if (v < 0L) { // disabled so return false
+              res.first = false;
               res.second = std::move(data);
-          	  return std::move(res);  // if finished, then no more insertion.  return.
-            }
+              break;
+            } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
+              res.first = this->size.compare_exchange_strong(v, v+1, std::memory_order_acquire);
+              if (res.first) {
+                q.emplace_back(std::forward<T>(data));
+                std::atomic_thread_fence(std::memory_order_release);
 
-            std::unique_lock<std::mutex> lock(this->mutex);
-            int64_t s = VAR(this->size);
-            while (reinterpret_cast<uint64_t&>(s) >= reinterpret_cast<uint64_t&>(this->capacity)) {
-              // full q.  wait for someone to signal (not full && canPush, or !canPush).
-              CV_WAIT(canPushCV, lock);
-
-              // to get here, have to have one of these conditions changed:  pushEnabled, !full
-              if (VAR(this->size) < 0) {
                 lock.unlock();
-                res.second = std::move(data);
-                return std::move(res);  // if finished, then no more insertion.  return.
-              }
-              s = VAR(this->size);
+
+                CV_NOTIFY_ONE(canPopCV);
+                std::atomic_thread_fence(std::memory_order_release);
+                return std::move(res);
+              } // failed reservation.  wait
+            } else {// else over capacity.  wait.
+              std::atomic_thread_fence(std::memory_order_acquire);
+              CV_WAIT(canPushCV, lock);
             }
-            ++VAR(this->size);
-            q.push_back(std::forward<T>(data));   // insert using predefined copy version of deque's push function
+          } while (true);
+          lock.unlock();
 
-            lock.unlock();
-            CV_NOTIFY_ONE(canPopCV);
-            res.first = true;
-            return std::move(res);
-
+          return std::move(res);
         }
 
 
@@ -325,18 +347,31 @@ namespace bliss
         std::pair<bool, T> tryPopImpl() {
           std::pair<bool, T> res(false, T());
 
-          if (this->isEmpty()) return res;
+          int64_t v = this->size.load(std::memory_order_relaxed);
+
+          if ((v & Base::MAX_SIZE) == 0L) return res;  // nothing to pop
 
           std::unique_lock<std::mutex> lock(this->mutex);
-          if (!this->isEmpty()) {
-        	  res.second = std::move(q.front());  // convert to movable reference and move-assign.
-        	  q.pop_front();
-        	    --VAR(this->size);
-              res.first = true;
-              CV_NOTIFY_ONE(canPushCV);
-          }
+
+          res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_acquire);
+          
+          if (res.first) {
+            if (!q.empty()) {
+              res.second = std::move(q.front());  // convert to movable reference and move-assign.
+              q.pop_front();
+              std::atomic_thread_fence(std::memory_order_release);
+
+            } else { // size is not zero but q is...
+              lock.unlock();
+              throw std::logic_error("size is non-zero, but queue is empty.");
+            }
+          } // else reservation to pop failed.
 
           lock.unlock();
+
+          CV_NOTIFY_ONE(canPushCV);
+          std::atomic_thread_fence(std::memory_order_release);
+
           return res;
 
         }
@@ -360,33 +395,38 @@ namespace bliss
           std::pair<bool, T> res(false, T());
 
 
-          // if !canPush and queue is empty, then return false.
-          if (!this->canPop()) return res;
-          // else either canPush (queue empty or not), or !canPush and queue is not empty.
+          int64_t v = 0L;
 
-          // while the queue is not disabled nor empty
           std::unique_lock<std::mutex> lock(this->mutex);
+          do {
+            v = this->size.load(std::memory_order_relaxed);
 
-          while (this->isEmpty()) {
-            // empty q.  wait for someone to signal (when !isEmpty, or !canPop)
-            CV_WAIT(canPopCV, lock);
+            if (v == Base::DISABLED) {  // disabled and empty. return.
+              res.first = false;
+              break;
+            } else if (v != 0L) {  // has entries
+              if (!q.empty()) {
+                res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_acquire);
+                if (res.first)
+                {
+                  res.second = std::move(q.front());  // convert to movable reference and move-assign.
+                  q.pop_front();
+                  std::atomic_thread_fence(std::memory_order_release);
 
-            // if !canPush and queue is empty, then return false.
-            if (!this->canPop()) {
-              lock.unlock();
-              return res;
+                  lock.unlock();
+
+                  CV_NOTIFY_ONE(canPushCV);
+                  std::atomic_thread_fence(std::memory_order_release);
+                  return res;
+                } // unable to reserve one to pop.
+
+              } // size is not zero but q is...  okay, someone else may have gotten to the q first.
+            } else { // else empty, not disabled.  wait
+              std::atomic_thread_fence(std::memory_order_acquire);
+              CV_WAIT(canPopCV, lock);
             }
-          }
-
-          --VAR(this->size);
-
-          res.second = std::move(q.front());  // convert to movable reference and move-assign.
-          q.pop_front();
-          res.first = true;
-
+          } while (true);
           lock.unlock();
-
-          CV_NOTIFY_ONE(canPushCV);
 
           return res;
         }

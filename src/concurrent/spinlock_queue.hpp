@@ -74,7 +74,7 @@ namespace bliss
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueue(const size_t &_capacity = static_cast<size_t>(Base::MAX_SIZE)) :
+        explicit ThreadSafeQueue(const size_t _capacity = static_cast<size_t>(Base::MAX_SIZE)) :
           Base(_capacity), q() {};
 
         /**
@@ -87,8 +87,8 @@ namespace bliss
     			std::swap(q, other.q);
 		    	this->capacity = other.capacity; other.capacity = 0;
 			    // ordering may seem strange, but see http://en.cppreference.com/w/cpp/atomic/memory_order re. operator ordering within same thread.
-			    VAR(this->size) = VAR(other.size); VAR(other.size) = Base::DISABLED;
-    			other.spinlock.clear(std::memory_order_release);
+		    	this->size.exchange(other.size.exchange(Base::DISABLED, std::memory_order_relaxed), std::memory_order_relaxed);
+		    	other.spinlock.clear(std::memory_order_release);
         };
 
         /**
@@ -103,7 +103,7 @@ namespace bliss
 
         	std::swap(q, other.q);
         	this->capacity = other.capacity; other.capacity = 0;
-        	VAR(this->size) = VAR(other.size); VAR(other.size) = Base::DISABLED;
+        	this->size.exchange(other.size.exchange(Base::DISABLED, std::memory_order_relaxed), std::memory_order_relaxed);
 
         	other.spinlock.clear(std::memory_order_release);
         	spinlock.clear(std::memory_order_release);
@@ -116,10 +116,10 @@ namespace bliss
          */
         void clearImpl()
         {
+
           while(spinlock.test_and_set(std::memory_order_acq_rel));
+          this->size.fetch_and(Base::DISABLED, std::memory_order_relaxed);  // keep the push bit, and set size to 0
           q.clear();
-          // clear size
-          VAR(this->size) &= Base::DISABLED;  // keep the push bit, and set size to 0
           spinlock.clear(std::memory_order_release);
         }
 
@@ -128,18 +128,15 @@ namespace bliss
          * set the queue to accept new elements
          */
         inline void enablePushImpl() {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-          VAR(this->size) &= Base::MAX_SIZE;  // clear the push bit, and leave size as is
-          spinlock.clear(std::memory_order_release);
+          this->size.fetch_and(Base::MAX_SIZE, std::memory_order_relaxed);  // clear the push bit, and leave size as is        }
         }
 
         /**
          * set the queue to disallow insertion of new elements.
          */
         inline void disablePushImpl() {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-          VAR(this->size) |= Base::DISABLED;  // clear the push bit, and leave size as is
-          spinlock.clear(std::memory_order_release);
+          // before disable push, should make sure that all writes are visible to all other threads, so release here.
+          this->size.fetch_or(Base::DISABLED, std::memory_order_relaxed);   // set the push bit, and leave size as is.
         }
 
 
@@ -154,17 +151,24 @@ namespace bliss
          */
         bool tryPushImpl (T const& data) {
           bool res = false;
-          while(spinlock.test_and_set(std::memory_order_acq_rel));    // critical block instructions confined here via acquire/release
 
-          if (reinterpret_cast<uint64_t&>(VAR(this->size)) < static_cast<uint64_t>(this->capacity)) {
+
+          while(spinlock.test_and_set(std::memory_order_acq_rel));    // critical block instructions confined here via acquire/release
+          int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);
+
+
+
+          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity)) {
             // following 2 instructions cannot be reordered to above this line,
             // and the if check cannot be reordered to below this line
            // std::atomic_thread_fence(std::memory_order_acq_rel);
 
       			q.push_back(data);  // insert using predefined copy version of dequeue's push function
             res = true;
-            ++VAR(this->size);
-          } // else at capacity.
+          } else {
+            // else at capacity or disabled.
+            this->size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
+          }
           spinlock.clear(std::memory_order_release);
           return res;
         }
@@ -182,15 +186,15 @@ namespace bliss
             std::pair<bool, T> res(false, T());
 
             while(spinlock.test_and_set(std::memory_order_acq_rel));   // see const ref version for memory order info.
-
-            if (reinterpret_cast<uint64_t&>(VAR(this->size)) < static_cast<uint64_t>(this->capacity)) {
-              //std::atomic_thread_fence(std::memory_order_acq_rel);
+            int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);
+            if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity)) {
 
           	  q.emplace_back(std::forward<T>(data));  // insert using predefined copy version of dequeue's push function
               res.first = true;
-              ++VAR(this->size);
-            } else { // else at capacity.
+
+            } else { // else at capacity or disabled.
               res.second = std::move(data);
+              this->size.fetch_sub(1, std::memory_order_relaxed); // failed enqueue, decrement size.
             }
 
             spinlock.clear(std::memory_order_release);
@@ -216,27 +220,25 @@ namespace bliss
           bool res = false;
 
           do {  // loop forever, unless queue is disabled, or insert succeeded.
-        	  while(spinlock.test_and_set(std::memory_order_acq_rel));
 
-            v = VAR(this->size);
+            v = this->size.load(std::memory_order_relaxed);
 
             if (v < 0L) { // disabled so return false
-             	spinlock.clear(std::memory_order_release);
+              res = false;
               break;
-            } else if (v >= this->capacity) {   // over capacity.  wait a little
-             	spinlock.clear(std::memory_order_release);
-            	_mm_pause();
-              continue;
-            } else {
-              // else between 0 and capacity - 1.  enqueue.
-              q.push_back(data);  // successfully enqueued.
-              res = true;
-              ++VAR(this->size);
-
+            } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
+              while(spinlock.test_and_set(std::memory_order_acq_rel));
+              res = this->size.compare_exchange_strong(v, v+1, std::memory_order_relaxed);
+              if (res) {
+                q.push_back(data);
+                spinlock.clear(std::memory_order_release);
+                break;
+              } // failed reservation.  wait
               spinlock.clear(std::memory_order_release);
-              break;
-            }
-          } while (!res);
+            } // else over capacity.  wait.
+
+            _mm_pause();
+          } while (true);
 
           return res;
         }
@@ -261,29 +263,26 @@ namespace bliss
           int64_t v = 0L;
 
           do {  // loop forever, unless queue is disabled, or insert succeeded.
-          	while(spinlock.test_and_set(std::memory_order_acq_rel));
 
-            v = VAR(this->size);
+          	v = this->size.load(std::memory_order_relaxed);
 
             if (v < 0L) { // disabled so return false
+              res.first = false;
               res.second = std::move(data);
-            	spinlock.clear(std::memory_order_release);
               break;
-            } else if (v >= this->capacity) {   // over capacity.  wait.
-             	spinlock.clear(std::memory_order_release);
-            	_mm_pause();
-              continue;
-            } else {
-
-              // else between 0 and capacity - 1.  enqueue.
-              q.emplace_back(std::forward<T>(data));  // successfully enqueued.
-              res.first = true;
-              ++VAR(this->size);
-
+            } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
+              while(spinlock.test_and_set(std::memory_order_acq_rel));
+              res.first = this->size.compare_exchange_strong(v, v+1, std::memory_order_relaxed);
+              if (res.first) {
+                q.emplace_back(std::forward<T>(data));
+                spinlock.clear(std::memory_order_release);
+                break;
+              } // failed reservation.  wait
               spinlock.clear(std::memory_order_release);
-              break;
-            }
-          } while (!res.first);
+            } // else over capacity.  wait.
+
+            _mm_pause();
+          } while (true);
 
           return std::move(res);  // disabled so return false
         }
@@ -302,18 +301,23 @@ namespace bliss
         std::pair<bool, T> tryPopImpl() {
           std::pair<bool, T> res(false, T());
 
-          if (this->isEmpty()) return res;
+          int64_t v = this->size.load(std::memory_order_relaxed);
+
+          if ((v & Base::MAX_SIZE) == 0L) return res;  // nothing to pop
 
           while (spinlock.test_and_set(std::memory_order_acq_rel));   // establish critical section
 
-          if (!this->isEmpty()) {
+          res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_relaxed);
 
-        	  res.second = std::move(q.front());  // convert to movable reference and move-assign.
-        	  q.pop_front();
-            res.first = true;
-            --VAR(this->size);
-          }
-
+          if (res.first) {
+            if (!q.empty()) {
+              res.second = std::move(q.front());  // convert to movable reference and move-assign.
+              q.pop_front();
+            } else { // size is not zero but q is...
+              spinlock.clear(std::memory_order_release);
+              throw std::logic_error("size is non-zero, but queue is empty.");
+            }
+          } // else reservation to pop failed.
           spinlock.clear(std::memory_order_release);
 
           return res;
@@ -339,38 +343,31 @@ namespace bliss
           std::pair<bool, T> res(false, T());
 
           int64_t v = 0L;
-          bool breaking = false;
 
           do {
+            v = this->size.load(std::memory_order_relaxed);
 
-            while (spinlock.test_and_set(std::memory_order_acq_rel));
-
-            v = VAR(this->size);
-
-//            if (v < 0) DEBUGF("-");
             if (v == Base::DISABLED) {  // disabled and empty. return.
-//              DEBUGF("-");
-              breaking = true;
-            } else if (v == 0L) {  // empty but not disabled. so wait
-//              DEBUGF("%ld", v);
-            } else {
+              res.first = false;
+              break;
+            } else if (v != 0L) {  // has entries
+              while(spinlock.test_and_set(std::memory_order_acq_rel));  // lock access to q, and make size change and q access bundled.
+              if (!q.empty()) {
+                res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_relaxed);
+                if (res.first)
+                {
+                  res.second = std::move(q.front());  // convert to movable reference and move-assign.
+                  q.pop_front();
+                  spinlock.clear(std::memory_order_release);
+                  break;
+                } // unable to reserve one to pop.
 
-//            DEBUGF("popping...");
-
-              //  else has some entries
-              res.second = std::move(q.front());  // convert to movable reference and move-assign.
-              q.pop_front();
-              
-              res.first = true;
-              --VAR(this->size);
-              breaking = true;
-            }
-            spinlock.clear(std::memory_order_release);
-
-            if (breaking) break;
+              } // size is not zero but q is.  okay because other threads may get there first.
+              spinlock.clear(std::memory_order_release);
+            }  // else empty, not disabled.  wait
           
             _mm_pause();
-          } while (!res.first);
+          } while (true);
 
           return res;
         }

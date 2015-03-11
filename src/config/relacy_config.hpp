@@ -15,7 +15,11 @@
 // NOTE: relacy simulates threads, but not actually spawning threads.
 #if defined(USE_RELACY)
 
-// std::unique_lock and lock_guard does not work with relacy's mutex API. need to redefine those.
+// the following prevents the  error "long jump causes uninitialized stack frame"
+// see http://www.1024cores.net/home/lock-free-algorithms/tricks/fibers
+#undef _FORTIFY_SOURCE
+
+// std::unique_lock and lock_guard do not work with relacy's mutex API. need to define these. below
 // #include <mutex>  // for lock_guard and unique_lock, but needed to be before relacy so that mutex is redefined.
 
 
@@ -49,8 +53,7 @@
 // includes support for atomic_flags
 #define INIT_ATOMIC_FLAG(f) std::atomic_flag f     // initializer is kind of special and we can't use copy or move constructor or assignment operators.
 // concurrent queue's definition uses a atomic<bool>.  changed and included here for use.
-// also, RelacyThreadExitNotifier is critical  - use in "void thread(unsigned thread_index)" method.
-// else we will get error "long jump causes uninitialized stack frame"
+// also, RelacyThreadExitNotifier is critical for concurrent queue - use in "void thread(unsigned thread_index)" method.  else we get deadlock for MPSC or MPMC cases.
 #include <relacy_shims.h>
 
 // std::unique_lock and lock_guard from <mutex> does not work with relacy's mutex API. need to redefine those.

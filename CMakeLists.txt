@@ -613,7 +613,7 @@ if (ENABLE_TESTING)
         add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name})
       endforeach(metadef)
   
-  endfunction(bliss_add_relacy_test)
+  endfunction(bliss_add_metaprog_test)
   
 IF(ENABLE_RELACY)  
     function(bliss_add_relacy_test module_names module_link filename)
