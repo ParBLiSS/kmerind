@@ -141,16 +141,18 @@ namespace bliss
           // clear size
           this->size.fetch_and(Base::DISABLED, std::memory_order_acq_rel);  // keep the push bit, and set size to 0
 
-          lock.unlock();
-
           CV_NOTIFY_ALL(canPushCV);
           std::atomic_thread_fence(std::memory_order_release);
+          lock.unlock();
+
         }
 
         /**
          * set the queue to accept new elements
          */
         inline void enablePushImpl() { // overrides the base class non-virtual version
+          std::lock_guard<std::mutex> lock(this->mutex);
+
           this->size.fetch_and(Base::MAX_SIZE, std::memory_order_relaxed);  // clear the push bit, and leave size as is        }
           CV_NOTIFY_ALL(canPushCV);   // notify, so waitAndPush can check if it can push now.
           // not notifying canPopCV, used in waitAndPop, as that function exits the loop ONLY when queue is not empty.
@@ -161,6 +163,7 @@ namespace bliss
          * set the queue to disallow insertion of new elements.
          */
         inline void disablePushImpl() {  // overrides the base class non-virtual version
+          std::lock_guard<std::mutex> lock(this->mutex);
 
           // before disable push, should make sure that all writes are visible to all other threads, so release here.
           this->size.fetch_or(Base::DISABLED, std::memory_order_relaxed);   // set the push bit, and leave size as is.
@@ -187,9 +190,9 @@ namespace bliss
         	  q.push_back(data);  // insert using predefined copy version of dequeue's push function
             std::atomic_thread_fence(std::memory_order_release);
 
-        	  lock.unlock();
               CV_NOTIFY_ONE(canPopCV);
               std::atomic_thread_fence(std::memory_order_release);
+              lock.unlock();
               return true;
           } else { // else at capacity.
             this->size.fetch_sub(1, std::memory_order_relaxed);
@@ -220,9 +223,9 @@ namespace bliss
         	  q.emplace_back(std::forward<T>(data));  // insert using predefined copy version of dequeue's push function
             std::atomic_thread_fence(std::memory_order_release);
 
-        	  lock.unlock();
               CV_NOTIFY_ONE(canPopCV);
               std::atomic_thread_fence(std::memory_order_release);
+              lock.unlock();
             res.first = true;
             return std::move(res);
           } else {  // else at capacity.
@@ -264,10 +267,10 @@ namespace bliss
                 q.push_back(data);
                 std::atomic_thread_fence(std::memory_order_release);
 
-                lock.unlock();
 
                 CV_NOTIFY_ONE(canPopCV);
                 std::atomic_thread_fence(std::memory_order_release);
+                lock.unlock();
                 return true;
               } // failed reservation.  wait
             } else {// else over capacity.  wait.
@@ -314,10 +317,10 @@ namespace bliss
                 q.emplace_back(std::forward<T>(data));
                 std::atomic_thread_fence(std::memory_order_release);
 
-                lock.unlock();
 
                 CV_NOTIFY_ONE(canPopCV);
                 std::atomic_thread_fence(std::memory_order_release);
+                lock.unlock();
                 return std::move(res);
               } // failed reservation.  wait
             } else {// else over capacity.  wait.
@@ -367,11 +370,11 @@ namespace bliss
             }
           } // else reservation to pop failed.
 
-          lock.unlock();
 
           CV_NOTIFY_ONE(canPushCV);
           std::atomic_thread_fence(std::memory_order_release);
 
+          lock.unlock();
           return res;
 
         }
@@ -413,10 +416,10 @@ namespace bliss
                   q.pop_front();
                   std::atomic_thread_fence(std::memory_order_release);
 
-                  lock.unlock();
 
                   CV_NOTIFY_ONE(canPushCV);
                   std::atomic_thread_fence(std::memory_order_release);
+                  lock.unlock();
                   return res;
                 } // unable to reserve one to pop.
 

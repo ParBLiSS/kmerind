@@ -238,7 +238,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
       ++count2;
   }
   expected = (!queue.isFixedSize()) ? entries+2 : entries;
-  if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2))) FATALF("FAIL: TSQueue capacity %lu, finished tryPop from full, expected %d, success %d, fail %d\n",queue.getCapacity(),  expected, count, count2);
+  if ((count + count2 != (entries+2))) FATALF("FAIL: TSQueue capacity %lu, finished tryPop from full, expected %d, success %d, fail %d\n",queue.getCapacity(),  expected, count, count2);
   else INFOF("PASS\n");
 
 
