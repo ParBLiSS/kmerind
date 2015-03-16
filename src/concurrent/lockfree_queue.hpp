@@ -75,8 +75,8 @@ namespace bliss
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueue(const size_t _capacity = static_cast<size_t>(Base::MAX_SIZE)) :
-          Base(_capacity), q( _capacity == static_cast<size_t>(Base::MAX_SIZE) ? 128 : _capacity)
+        explicit ThreadSafeQueue(const size_t _capacity = Base::MAX_SIZE) :
+          Base(_capacity), q( _capacity >= Base::MAX_SIZE ? 128 : _capacity)
         {};
 
         /**
@@ -151,7 +151,7 @@ namespace bliss
         bool tryPushImpl (T const& data) {
 
 //          // code below produces race condition causes extra items to be pushed.
-//          int64_t v = size.load(std::memory_order_relaxed);
+//          size_t v = size.load(std::memory_order_relaxed);
 //          if ( reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity) ) {
 //            if (q.enqueue(data)) {
 //              size.fetch_add(1, std::memory_order_relaxed);
@@ -160,8 +160,8 @@ namespace bliss
 //          }
 
           bool res = false;
-          int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);  // reserve
-          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity)) {
+          size_t v = this->size.fetch_add(1, std::memory_order_relaxed);  // reserve
+          if (v < this->capacity) {
 
             // between 0 and capacity - 1.  enqueue.
             std::atomic_thread_fence(std::memory_order_acq_rel);
@@ -195,7 +195,7 @@ namespace bliss
          */
         std::pair<bool, T> tryPushImpl (T && data) {
 //          // code below race condition causes extra items to be pushed.
-//          int64_t v = this->size.load(std::memory_order_relaxed);
+//          size_t v = this->size.load(std::memory_order_relaxed);
 //          if ( reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity) ) {
 //            if (q.enqueue(std::forward<T>(data))) {   // depend on q not messing up data if enqueue fails
 //              this->size.fetch_add(1, std::memory_order_relaxed);
@@ -204,8 +204,8 @@ namespace bliss
 //          }
           std::pair<bool, T> res(false, T());
 
-          int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);
-          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity)) {
+          size_t v = this->size.fetch_add(1, std::memory_order_relaxed);
+          if (v < this->capacity) {
 
             // else between 0 and capacity - 1.  enqueue.
             std::atomic_thread_fence(std::memory_order_acq_rel);
@@ -214,7 +214,7 @@ namespace bliss
 
             if (res.first) {
               return std::move(res);
-            } // else  enqueue failed. decrement and try again.
+            } // else  enqueue failed. decrement.
               
           } // else disabled or full
 					this->size.fetch_sub(1, std::memory_order_relaxed);
@@ -239,14 +239,14 @@ namespace bliss
          */
         bool waitAndPushImpl (T const& data) {
 
-          int64_t v = 0L;
+          size_t v = 0UL;
           bool res = false;
 
           do {  // loop forever, unless queue is disabled, or insert succeeded.
 
             v = this->size.load(std::memory_order_relaxed);
 
-            if (v < 0L) { // disabled so return false
+            if (v >= Base::DISABLED) { // disabled so return false
               res = false;
               break;
             } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
@@ -288,13 +288,13 @@ namespace bliss
         std::pair<bool, T> waitAndPushImpl (T && data) {
           std::pair<bool, T> res(false, T());
 
-          int64_t v = 0L;
+          size_t v = 0UL;
 
           do {  // loop forever, unless queue is disabled, or insert succeeded.
 
             v = this->size.load(std::memory_order_relaxed);
 
-            if (v < 0L) { // disabled so return false
+            if (v >= Base::DISABLED) { // disabled so return false
               res.first = false;
               res.second = std::move(data);
               break;
@@ -340,9 +340,9 @@ namespace bliss
           // pop dequeues first, then decrement count
           std::pair<bool, T> res(false, T());
 
-          int64_t v = this->size.load(std::memory_order_relaxed);
+          size_t v = this->size.load(std::memory_order_relaxed);  // don't use fetch_sub because we could wrap around.
 
-					if ((v & Base::MAX_SIZE) == 0L) return res;  // nothing to pop
+					if ((v & Base::MAX_SIZE) == 0UL) return res;  // nothing to pop
 
 					// use compare_exchange_strong to ensure we are not going into negative territory.
 					res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_relaxed);
@@ -378,7 +378,7 @@ namespace bliss
         std::pair<bool, T> waitAndPopImpl() {
           std::pair<bool, T> res(false, T());
 
-          int64_t v = 0L;
+          size_t v = 0UL;
 
           do {
             v = this->size.load(std::memory_order_relaxed);
@@ -386,7 +386,7 @@ namespace bliss
             if (v == Base::DISABLED) {  // disabled and empty. return.
               res.first = false;
               break;
-            } else if (v != 0L) {
+            } else if ((v & Base::MAX_SIZE) > 0) {  // not empty
 
               res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_relaxed);
               if (res.first)

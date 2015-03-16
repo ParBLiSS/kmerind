@@ -74,7 +74,7 @@ namespace bliss
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueue(const size_t _capacity = static_cast<size_t>(Base::MAX_SIZE)) :
+        explicit ThreadSafeQueue(const size_t _capacity = Base::MAX_SIZE) :
           Base(_capacity), q() {};
 
         /**
@@ -154,11 +154,11 @@ namespace bliss
 
 
           while(spinlock.test_and_set(std::memory_order_acq_rel));    // critical block instructions confined here via acquire/release
-          int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);
+          size_t v = this->size.fetch_add(1, std::memory_order_relaxed);
 
 
 
-          if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity)) {
+          if (v < this->capacity) {
             // following 2 instructions cannot be reordered to above this line,
             // and the if check cannot be reordered to below this line
            // std::atomic_thread_fence(std::memory_order_acq_rel);
@@ -186,8 +186,8 @@ namespace bliss
             std::pair<bool, T> res(false, T());
 
             while(spinlock.test_and_set(std::memory_order_acq_rel));   // see const ref version for memory order info.
-            int64_t v = this->size.fetch_add(1, std::memory_order_relaxed);
-            if (reinterpret_cast<uint64_t&>(v) < static_cast<uint64_t>(this->capacity)) {
+            size_t v = this->size.fetch_add(1, std::memory_order_relaxed);
+            if (v < this->capacity) {
 
           	  q.emplace_back(std::forward<T>(data));  // insert using predefined copy version of dequeue's push function
               res.first = true;
@@ -216,14 +216,14 @@ namespace bliss
          */
         bool waitAndPushImpl (T const& data) {
 
-          int64_t v = 0L;
+          size_t v = 0UL;
           bool res = false;
 
           do {  // loop forever, unless queue is disabled, or insert succeeded.
 
             v = this->size.load(std::memory_order_relaxed);
 
-            if (v < 0L) { // disabled so return false
+            if (v >= Base::DISABLED) { // disabled so return false
               res = false;
               break;
             } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
@@ -260,13 +260,13 @@ namespace bliss
 
           std::pair<bool, T> res(false, T());
 
-          int64_t v = 0L;
+          size_t v = 0UL;
 
           do {  // loop forever, unless queue is disabled, or insert succeeded.
 
           	v = this->size.load(std::memory_order_relaxed);
 
-            if (v < 0L) { // disabled so return false
+            if (v >= Base::DISABLED) { // disabled so return false
               res.first = false;
               res.second = std::move(data);
               break;
@@ -301,9 +301,9 @@ namespace bliss
         std::pair<bool, T> tryPopImpl() {
           std::pair<bool, T> res(false, T());
 
-          int64_t v = this->size.load(std::memory_order_relaxed);
+          size_t v = this->size.load(std::memory_order_relaxed);   // dont' fetch_sub incase we are at 0.
 
-          if ((v & Base::MAX_SIZE) == 0L) return res;  // nothing to pop
+          if ((v & Base::MAX_SIZE) == 0UL) return res;  // nothing to pop
 
           while (spinlock.test_and_set(std::memory_order_acq_rel));   // establish critical section
 
@@ -342,7 +342,7 @@ namespace bliss
         std::pair<bool, T> waitAndPopImpl() {
           std::pair<bool, T> res(false, T());
 
-          int64_t v = 0L;
+          size_t v = 0UL;
 
           do {
             v = this->size.load(std::memory_order_relaxed);
@@ -350,7 +350,7 @@ namespace bliss
             if (v == Base::DISABLED) {  // disabled and empty. return.
               res.first = false;
               break;
-            } else if (v != 0L) {  // has entries
+            } else if ((v & Base::MAX_SIZE) > 0) {  // has entries
               while(spinlock.test_and_set(std::memory_order_acq_rel));  // lock access to q, and make size change and q access bundled.
               if (!q.empty()) {
                 res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_relaxed);

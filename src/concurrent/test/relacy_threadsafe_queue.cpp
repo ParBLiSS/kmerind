@@ -20,8 +20,6 @@
 #include "concurrent/spinlock_queue.hpp"
 #include "concurrent/lockfree_queue.hpp"
 
-#include "omp.h"
-
 using namespace bliss::concurrent;
 
 // defined here so concurrent queue does not deadlock.

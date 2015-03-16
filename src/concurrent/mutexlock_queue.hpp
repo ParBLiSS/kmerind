@@ -102,7 +102,7 @@ namespace bliss
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueue(const size_t _capacity = static_cast<size_t>(Base::MAX_SIZE)) :
+        explicit ThreadSafeQueue(const size_t _capacity = Base::MAX_SIZE) :
 			   Base(_capacity), q() {};
 
 
@@ -185,8 +185,8 @@ namespace bliss
         bool tryPushImpl (T const& data) {
 
           std::unique_lock<std::mutex> lock(this->mutex);
-          int64_t s = this->size.fetch_add(1, std::memory_order_acquire);
-          if (reinterpret_cast<uint64_t&>(s) < static_cast<uint64_t>(this->capacity)) {
+          size_t s = this->size.fetch_add(1, std::memory_order_acquire);
+          if (s < this->capacity) {
         	  q.push_back(data);  // insert using predefined copy version of dequeue's push function
             std::atomic_thread_fence(std::memory_order_release);
 
@@ -217,9 +217,9 @@ namespace bliss
 
 
           std::unique_lock<std::mutex> lock(this->mutex);
-          int64_t s = this->size.fetch_add(1, std::memory_order_acquire);
+          size_t s = this->size.fetch_add(1, std::memory_order_acquire);
 
-          if (reinterpret_cast<uint64_t&>(s) < static_cast<uint64_t>(this->capacity)) {
+          if (s < this->capacity) {
         	  q.emplace_back(std::forward<T>(data));  // insert using predefined copy version of dequeue's push function
             std::atomic_thread_fence(std::memory_order_release);
 
@@ -252,14 +252,14 @@ namespace bliss
         bool waitAndPushImpl (T const& data) {
           bool res = false;
 
-          int64_t v = 0L;
+          size_t v = 0UL;
 
           std::unique_lock<std::mutex> lock(this->mutex);
           do {  // loop forever, unless queue is disabled, or insert succeeded.
 
             v = this->size.load(std::memory_order_relaxed);
 
-            if (v < 0L) { // disabled so return false
+            if (v >= Base::DISABLED) { // disabled so return false
               break;
             } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
               res = this->size.compare_exchange_strong(v, v+1, std::memory_order_acquire);
@@ -300,14 +300,14 @@ namespace bliss
         std::pair<bool, T> waitAndPushImpl (T && data) {
           std::pair<bool, T> res(false, T());
 
-          int64_t v = 0L;
+          size_t v = 0UL;
 
           std::unique_lock<std::mutex> lock(this->mutex);
           do {  // loop forever, unless queue is disabled, or insert succeeded.
 
             v = this->size.load(std::memory_order_relaxed);
 
-            if (v < 0L) { // disabled so return false
+            if (v >= Base::DISABLED) { // disabled so return false
               res.first = false;
               res.second = std::move(data);
               break;
@@ -350,9 +350,9 @@ namespace bliss
         std::pair<bool, T> tryPopImpl() {
           std::pair<bool, T> res(false, T());
 
-          int64_t v = this->size.load(std::memory_order_relaxed);
+          size_t v = this->size.load(std::memory_order_relaxed);   // do not use fetch_sub since that can wrap us to negative territory.
 
-          if ((v & Base::MAX_SIZE) == 0L) return res;  // nothing to pop
+          if ((v & Base::MAX_SIZE) == 0UL) return res;  // nothing to pop
 
           std::unique_lock<std::mutex> lock(this->mutex);
 
@@ -398,7 +398,7 @@ namespace bliss
           std::pair<bool, T> res(false, T());
 
 
-          int64_t v = 0L;
+          size_t v = 0UL;
 
           std::unique_lock<std::mutex> lock(this->mutex);
           do {
@@ -407,7 +407,7 @@ namespace bliss
             if (v == Base::DISABLED) {  // disabled and empty. return.
               res.first = false;
               break;
-            } else if (v != 0L) {  // has entries
+            } else if ((v & Base::MAX_SIZE) > 0UL) {  // has entries
               if (!q.empty()) {
                 res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_acquire);
                 if (res.first)

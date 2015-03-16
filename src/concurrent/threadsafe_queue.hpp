@@ -65,9 +65,9 @@ namespace bliss
       public:
 
         /// maximum possible size of a thread safe queue.  initialized to maximum size_t value.
-        static constexpr int64_t MAX_SIZE = std::numeric_limits<int64_t>::max();
+        static constexpr size_t MAX_SIZE = std::numeric_limits<size_t>::max() >> 1;
         /// flag indicating the queue is disabled.
-        static constexpr int64_t DISABLED = std::numeric_limits<int64_t>::lowest();
+        static constexpr size_t DISABLED = std::numeric_limits<size_t>::max() ^ MAX_SIZE;
 
 
       protected:
@@ -76,23 +76,23 @@ namespace bliss
         using Base = ThreadSafeQueueBase< Derived >;
 
 
-        /// capacity of the queue.  if set to std::numeric_limits<int64_t>::max() indicates unlimited size queue
-        mutable int64_t capacity;
+        /// capacity of the queue.  if set to std::numeric_limits<size_t>::max() indicates unlimited size queue
+        mutable size_t capacity;
 
         /// size encodes 2 things:  sign bit encodes whether a calling thread can push into this queue.  use when suspending or terminating a queue.  rest is size of current queue.
         typename std::conditional<LT == bliss::concurrent::LockType::NONE,
-            VAR_T(int64_t),
-            std::atomic<int64_t> >::type size;
+            VAR_T(size_t),
+            std::atomic<size_t> >::type size;
 
 
         /**
          * normal constructor allowing the caller to specify an optional capacity parameter.
          * @param _capacity   The maximum capacity for the thread safe queue.
          */
-        explicit ThreadSafeQueueBase(const size_t _capacity = static_cast<size_t>(MAX_SIZE)) :
-              capacity(static_cast<int64_t>(_capacity))
+        explicit ThreadSafeQueueBase(const size_t _capacity = MAX_SIZE) :
+              capacity(_capacity)
         {
-          assert(_capacity <= static_cast<size_t>(MAX_SIZE));
+          assert(_capacity <= MAX_SIZE);
           if (capacity == 0)
             throw std::invalid_argument("ThreadSafeQueueBase constructor parameter capacity is given as 0");
 
@@ -131,14 +131,14 @@ namespace bliss
 
         /// internal, get value in size variable.  not thread safe
         template<bliss::concurrent::LockType L = LT>
-        inline const typename std::enable_if<L != bliss::concurrent::LockType::NONE, int64_t>::type
+        inline const typename std::enable_if<L != bliss::concurrent::LockType::NONE, size_t>::type
         getRawSize() const {
           return size.load(std::memory_order_acquire);
         }
 
         /// internal, get value in size variable.  not thread safe.
         template<bliss::concurrent::LockType L = LT>
-        inline const typename std::enable_if<L == bliss::concurrent::LockType::NONE, int64_t>::type
+        inline const typename std::enable_if<L == bliss::concurrent::LockType::NONE, size_t>::type
         getRawSize() const {
           std::atomic_thread_fence(std::memory_order_acquire);
           return VAR(size);
@@ -154,7 +154,7 @@ namespace bliss
          * @return    capacity of the queue
          */
         inline const size_t getCapacity() const {
-          return static_cast<size_t>(capacity);
+          return capacity;
         }
 
         /// check if queue is fixed size or growable.
@@ -167,7 +167,7 @@ namespace bliss
          * @return    boolean - whether the queue is full.
          */
         inline bool isFull() const {
-          return (capacity < MAX_SIZE) && (getSize() >= getCapacity());
+          return (capacity < MAX_SIZE) && (getSize() >= capacity);
         }
 
         /**
@@ -185,7 +185,7 @@ namespace bliss
          */
         inline const size_t getSize() const
         {
-          return static_cast<size_t>(getRawSize<LT>() & MAX_SIZE);   // size is atomic, so don't need strong memory ordering itself.
+          return getRawSize<LT>() & MAX_SIZE;   // size is atomic, so don't need strong memory ordering itself.
         }
 
         /**
@@ -217,8 +217,8 @@ namespace bliss
         inline bool canPush() {
           // pushing thread does not immediately care what other threads did before this
           // size is >= 0 (not disabled), and less than capacity.
-          // note that if we reinterpret_cast size to size_t, then disabled (< 0) will have MSB set to 1, so > max(int64_t).
-          return getRawSize<LT>() >= 0L;   // int highest bit set means negative, and means cannot push
+          // note that if we reinterpret_cast size to size_t, then disabled (< 0) will have MSB set to 1, so > max(size_t).
+          return getRawSize<LT>() < DISABLED;   // int highest bit set means negative, and means cannot push
         }
 
         /**
@@ -240,8 +240,7 @@ namespace bliss
          */
         inline bool canPushAndHasRoom() {
           // if we reinterpret this number as a uint64_t, then we only need to check less than capacity, since now highest bits are all way higher.
-          int64_t v = getRawSize<LT>();
-          return reinterpret_cast<uint64_t&>(v) < getCapacity();
+          return getRawSize<LT>() < getCapacity();
         }
 
       public:
@@ -354,7 +353,7 @@ namespace bliss
     /**
      * static templated MAX_SIZE definition.
      */
-    template<typename T, bliss::concurrent::LockType LT> constexpr int64_t ThreadSafeQueueBase<ThreadSafeQueue<T, LT> >::MAX_SIZE;
+    template<typename T, bliss::concurrent::LockType LT> constexpr size_t ThreadSafeQueueBase<ThreadSafeQueue<T, LT> >::MAX_SIZE;
 
     }
 
