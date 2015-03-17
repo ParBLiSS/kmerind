@@ -112,6 +112,7 @@ namespace bliss
           std::atomic_thread_fence(std::memory_order_release);
         };
 
+
         /**
          * @brief Move assignment operator, requiring mutex lock. For between Buffers of the SAME LockType property.
          * @details  Internal data memory moved.
@@ -119,9 +120,11 @@ namespace bliss
          *
          * @param other     Source Buffer to move
          */
+
         template<bliss::concurrent::LockType LT = LockType,
             typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE, int>::type = 0>
         void move_assign(BufferBase && other,
+
             const std::unique_lock<std::mutex> &, const std::unique_lock<std::mutex> &)
         {
 
@@ -133,6 +136,8 @@ namespace bliss
 
             std::atomic_thread_fence(std::memory_order_acquire);
             size.store(other.size.exchange(0, std::memory_order_relaxed), std::memory_order_relaxed);
+
+
 
             other.VAR(start_ptr) = nullptr;
             other.VAR(data_ptr) = nullptr;
@@ -165,6 +170,7 @@ namespace bliss
             other.VAR(start_ptr) = nullptr;
             other.VAR(data_ptr) = nullptr;
             other.VAR(size) = 0;
+
             std::atomic_thread_fence(std::memory_order_release);
           }
         }
@@ -1952,6 +1958,7 @@ namespace bliss
             if (curr >= Capacity) {
               // full or blocked.
 
+
               // reset reserved only when we JUST FILL the buffer, or when there have been too many attempts to reserve a full buffer.
               //  otherwise let the reserved value grow.  this reduces ABA problem very significantly.
               if (curr > BaseType::DISABLED) {
@@ -1960,12 +1967,12 @@ namespace bliss
 
               curr = BaseType::FULL_FLAG;
             } else if (next > Capacity) {
+
               // just filled. curr position not a valid insertion point.
 
               // since only 1 thread reaching here (resv is at next > Capacity so no subsequent threads will get here),
               // just set size, no need to check to make sure we store minimum or maximum
               this->size.store(curr, std::memory_order_relaxed);  // new size is the prev reserved.  reserved will be set to Capacity + 1
-              std::atomic_thread_fence(std::memory_order_release);
       
               curr = BaseType::ALMOST_FULL_FLAG;
             } else if (next == Capacity) {
@@ -1978,12 +1985,12 @@ namespace bliss
               // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.              
               this->size.store(Capacity, std::memory_order_relaxed);
               // curr is okay.
-              std::atomic_thread_fence(std::memory_order_release);
 
             } 
             // else normal case. nothing to do.
 
             std::atomic_thread_fence(std::memory_order_release);
+
             return curr;
         }
 
