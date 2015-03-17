@@ -71,7 +71,7 @@ namespace bliss
      * @tparam BufferLT        Buffer's thread safety model
      * @tparam BufferCapacity  capacity of Buffers to create
      */
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity, size_t MetadataSize>
+    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, size_t BufferCapacity, size_t MetadataSize>
     class MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT> >
     {
       public:
@@ -215,10 +215,10 @@ namespace bliss
      *
      */
 //    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT,
-//    			int64_t BufferCapacity = 8192, size_t MetadataSize>
+//    			size_t BufferCapacity = 8192, size_t MetadataSize>
     template<bliss::concurrent::LockType ArrayLT, typename BufferPool>
     class SendMessageBuffers;
-//    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity = 8192>
+//    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, size_t BufferCapacity = 8192>
 //    class SendMessageBuffers : public MessageBuffers<PoolLT, BufferLT, BufferCapacity>
 //    {
 //      protected:
@@ -718,7 +718,7 @@ namespace bliss
      *
      *
      */
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, int64_t BufferCapacity, size_t MetadataSize>
+    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, size_t BufferCapacity, size_t MetadataSize>
     class SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL,
     		bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT > > :
     public MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT > >
