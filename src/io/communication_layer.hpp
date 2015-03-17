@@ -614,7 +614,9 @@ protected:
                assert(received_count <= (ptr->getCapacity() + ptr->getMetadataSize()));
              }
              ptr->reserve(received_count - ptr->getMetadataSize());  // reserve the data size as well.
+             ptr->complete_write(received_count - ptr->getMetadataSize());
              ptr->block_writes();  // and then block future writes (reservation)
+             //ptr->finish_writes();
 
              // create a data message
              SendDataElementType *msg = new SendDataElementType(ptr, tag, src);
