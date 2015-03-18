@@ -50,9 +50,4 @@ int main(int argc, char** argv) {
                 INFOF("%d: %d\n", i+24, atoms2.at(i+24).load());
         }
 
-
-
-
-
-
 }

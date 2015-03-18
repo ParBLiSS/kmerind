@@ -36,7 +36,7 @@ int bufferSize = 2047;
 template<typename BuffersType>
 void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int nthreads) {
 
-  INFOF("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %d\n", poollt, bufferlt, buffers.getSize(), nthreads);
+  INFOF("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %d", poollt, bufferlt, buffers.getSize(), nthreads);
 
 
   INFOF("TEST append until full: ");
@@ -45,7 +45,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   BufferPtrType ptr = nullptr;
   bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType, bliss::concurrent::LockType::LOCKFREE> fullBuffers;
 
-  //INFOF("test string is \"%s\", length %lu\n", data.c_str(), sizeof(int));
+  //INFOF("test string is \"%s\", length %lu", data.c_str(), sizeof(int));
   int id = 0;
 
   int i;
@@ -57,8 +57,8 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
 #pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, fullBuffers, nelems, bufferSize) reduction(+ : success, failure, sswap, fswap)
   for (i = 0; i < nelems; ++i) {
-    //INFOF("insert %lu chars into %d\n", data.length(), id);
-    //INFOF("insert %lu chars into %d\n", sizeof(int), id);
+    //INFOF("insert %lu chars into %d", data.length(), id);
+    //INFOF("insert %lu chars into %d", sizeof(int), id);
     int data = i;
     std::tie(op_suc, ptr) = buffers.append(&data, sizeof(int), id);
 
@@ -92,14 +92,14 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   else if (((fswap + sswap) > expectedFullMax) || ((sswap + fswap) < expectedFullMin)) ERRORF("FAIL: number of full Buffers is not right: %d+%d should be between %d and %d", sswap, fswap, expectedFullMin, expectedFullMax);
   //else if (count4 != 0) ERRORF("FAIL: number of failed insert due to no buffer should be 0. actual %d", count4);
   else INFOF("PASS");
-  INFOF("\n");
-  INFOF("Number of failed attempt to append to buffer is %d, success %d. full buffers size: %lu.  success swapped = %d, fail swapped = %d.\n", failure, success, fullBuffers.getSize(), sswap, fswap);
+
+  INFOF("Number of failed attempt to append to buffer is %d, success %d. full buffers size: %lu.  success swapped = %d, fail swapped = %d.", failure, success, fullBuffers.getSize(), sswap, fswap);
 
 
 
   INFOF("TEST release: ");
   int sswap2 = 0, fswap2 = 0, error = 0, over = 0;
-//  INFOF("buffer ids 0 to %lu initially in use.\n", buffers.getSize() - 1);
+//  INFOF("buffer ids 0 to %lu initially in use.", buffers.getSize() - 1);
 //  INFOF("releasing: ");
 
   int iterations = (sswap + fswap) + 10;
@@ -132,10 +132,6 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   else if (sswap2 != (sswap + fswap)) ERRORF("FAIL: successful pops. expected %d.  actual %d", (sswap+fswap), sswap2);
   else
     INFOF("PASS");
-  INFOF("\n");
-
-
-
 
   buffers.reset();
 
@@ -162,7 +158,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
       if (ptr) {
       	++sswap3;
         bool updating = ptr->is_writing();
-        if (updating) INFOF("  FULLBUFFER1: size %ld updating? %s, blocked? %s\n", ptr->getSize(), (updating ? "Y" : "N"), (ptr->is_read_only() ? "Y" : "N"));
+        if (updating) INFOF("  FULLBUFFER1: size %ld updating? %s, blocked? %s", ptr->getSize(), (updating ? "Y" : "N"), (ptr->is_read_only() ? "Y" : "N"));
 
         bytes3 += ptr->getSize();
         stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), ptr->operator int*(), ptr->operator int*() + ptr->getSize() / sizeof(int));
@@ -175,7 +171,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
         ++fswap3;
        // count7 = count1;  // save the number of successful inserts so far.
         bool updating = ptr->is_writing();
-        if (updating) INFOF("  FULLBUFFER: size %ld blocked? %s\n", ptr->getSize(), (ptr->is_read_only() ? "Y" : "N"));
+        if (updating) INFOF("  FULLBUFFER: size %ld blocked? %s", ptr->getSize(), (ptr->is_read_only() ? "Y" : "N"));
 
         // result.second->lock_read();
 
@@ -197,10 +193,10 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
   buffers.at(id)->block_and_flush();
   bool updating = buffers.at(id)->is_writing();
-  if (updating) INFOF("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
+  if (updating) INFOF("  PreFLUSH: size %ld updating? %s, blocked? %s", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
 
   std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id);
-  if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) ERRORF("FAIL: expected %d threads have %lu actual.\n", nthreads, finals.size());
+  if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) ERRORF("FAIL: expected %d threads have %lu actual.", nthreads, finals.size());
   for (auto final : finals) {
     gbytes += (final == nullptr) ? 0 : final->getSize();
     if (final) {
@@ -212,7 +208,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   finals.clear();
 
   if ((bytes3 + gbytes) != success3 * sizeof(int)) {
-    ERRORF("FAIL: total bytes (%d + %d) bytes.  expected %ld bytes.\n", bytes3, gbytes, success3 * sizeof(int));
+    ERRORF("FAIL: total bytes (%d + %d) bytes.  expected %ld bytes.", bytes3, gbytes, success3 * sizeof(int));
   }
 
   //if (count7 != count/data.length()) ERRORF("FAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
@@ -226,7 +222,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   finals.clear();
 
   if (gbytes2 != 0) {
-    ERRORF("FAIL: number of bytes STILL in message buffers is %d\n",gbytes2);
+    ERRORF("FAIL: number of bytes STILL in message buffers is %d",gbytes2);
   }
 
 
@@ -254,7 +250,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
 
   if ((bytes3 + gbytes) != success3 * sizeof(int)) {
-    ERRORF("FAIL: total bytes (%d + %d) for expected %ld bytes.\n", bytes3 , gbytes, success*sizeof(int));
+    ERRORF("FAIL: total bytes (%d + %d) for expected %ld bytes.", bytes3 , gbytes, success*sizeof(int));
 
     throw std::logic_error("missing entries.");
   }
@@ -274,10 +270,8 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 //    fflush(stdout);
 //  }
 //  else INFOF("PASS");
-  INFOF("\n");
 
-  //INFOF("\n");
-  INFOF("Number of failed attempt to append to buffer is %d, success %d. full buffers size: %lu.  success swapped = %d, fail swapped = %d. total bytes %d + %d\n", failure3, success3, fullBuffers.getSize(), sswap3, fswap3, bytes3, gbytes);
+  INFOF("Number of failed attempt to append to buffer is %d, success %d. full buffers size: %lu.  success swapped = %d, fail swapped = %d. total bytes %d + %d", failure3, success3, fullBuffers.getSize(), sswap3, fswap3, bytes3, gbytes);
 
 
 };
@@ -287,14 +281,14 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 template<typename BuffersType>
 void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int nthreads) {
 
-  INFOF("*** TESTING Buffers WaitForInsert lock %d buffer lock %d: ntargets = %lu, pool threads %d\n", poollt, bufferlt, buffers.getSize(), nthreads);
+  INFOF("*** TESTING Buffers WaitForInsert lock %d buffer lock %d: ntargets = %lu, pool threads %d", poollt, bufferlt, buffers.getSize(), nthreads);
 
   typedef typename BuffersType::BufferPtrType BufferPtrType;
   bool op_suc = false;
   BufferPtrType ptr = nullptr;
   bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType, bliss::concurrent::LockType::LOCKFREE> fullBuffers;
 
-  //INFOF("test string is \"%s\", length %lu\n", data.c_str(), data.length());
+  //INFOF("test string is \"%s\", length %lu", data.c_str(), data.length());
   int id = 0;
 
   int i;
@@ -320,7 +314,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
         ++swap;
 //        count7 = count1;  // save the number of successful inserts so far.
         bool updating = ptr->is_writing();
-        if (updating) INFOF("  FULLBUFFER1: size %ld updating? %s, blocked? %s\n", ptr->getSize(), (updating ? "Y" : "N"), (ptr->is_read_only() ? "Y" : "N"));
+        if (updating) INFOF("  FULLBUFFER1: size %ld updating? %s, blocked? %s", ptr->getSize(), (updating ? "Y" : "N"), (ptr->is_read_only() ? "Y" : "N"));
 
         bytes += ptr->getSize();
         buffers.releaseBuffer(std::move(ptr));
@@ -334,10 +328,10 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   ptr = buffers.at(id);
   ptr->block_and_flush();
   bool updating = ptr->is_writing();
-  if (updating) INFOF("  PreFLUSH: size %ld updating? %s, blocked? %s\n", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
+  if (updating) INFOF("  PreFLUSH: size %ld updating? %s, blocked? %s", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
 
   std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id);
-  if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) ERRORF("FAIL: expected %d threads have %lu actual.\n", nthreads, finals.size());
+  if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) ERRORF("FAIL: expected %d threads have %lu actual.", nthreads, finals.size());
   for (auto final : finals) {
     gbytes += (final == nullptr) ? 0 : final->getSize();
     buffers.releaseBuffer(std::move(final));
@@ -345,7 +339,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   finals.clear();
 
   if ((bytes + gbytes) != nelems * sizeof(int)) {
-    ERRORF("FAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.\n", (bytes + gbytes), bytes, gbytes, (bytes + gbytes)/sizeof(int), nelems);
+    ERRORF("FAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.", (bytes + gbytes), bytes, gbytes, (bytes + gbytes)/sizeof(int), nelems);
   }
 
   //if (count7 != count/data.length()) ERRORF("FAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
@@ -357,14 +351,12 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   finals.clear();
 
   if (gbytes2 != 0) {
-    ERRORF("FAIL: number of bytes STILL in message buffers is %d\n",gbytes2);
+    ERRORF("FAIL: number of bytes STILL in message buffers is %d",gbytes2);
   }
 
   INFOF("PASS");
-  INFOF("\n");
 
-  //INFOF("\n");
-  INFOF("Number appended to buffer is %d, total attempts is %d. full buffers size: %lu.  success swapped = %d. total bytes %d + %d = %d\n", nelems, attempts, fullBuffers.getSize(), swap, bytes, gbytes, (bytes + gbytes));
+  INFOF("Number appended to buffer is %d, total attempts is %d. full buffers size: %lu.  success swapped = %d. total bytes %d + %d = %d", nelems, attempts, fullBuffers.getSize(), swap, bytes, gbytes, (bytes + gbytes));
 
 
 };

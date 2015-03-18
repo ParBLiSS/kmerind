@@ -12,7 +12,7 @@
 #ifndef COPYABLE_ATOMIC_HPP_
 #define COPYABLE_ATOMIC_HPP_
 
-#include <atomic>
+#include "config/relacy_config.hpp"
 
 namespace bliss
 {

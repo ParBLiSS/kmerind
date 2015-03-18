@@ -9,6 +9,8 @@ if (IS_DIRECTORY ./test)
 
     bliss_add_relacy_test(${PROJECT_NAME} FALSE test/relacy_practice.cpp USE_RELACY  )
 
+    bliss_add_relacy_test(${PROJECT_NAME} FALSE test/relacy_copyable_atomics.cpp USE_RELACY  )
+
     bliss_add_relacy_test(${PROJECT_NAME} FALSE test/relacy_buffer.cpp BLISS_MUTEX BLISS_SPINLOCK BLISS_LOCKFREE BLISS_NONE)
     bliss_add_relacy_test(${PROJECT_NAME} FALSE test/relacy_threadsafe_queue.cpp BLISS_MUTEX BLISS_SPINLOCK BLISS_LOCKFREE )
 

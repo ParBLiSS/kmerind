@@ -529,9 +529,9 @@ namespace bliss
         {
           std::unique_lock<std::mutex> lock(this->mutex);
           VAR(written) += count;
-          lock.unlock();
 
           CV_NOTIFY_ALL(condvar);
+          lock.unlock();
         }
 
       protected:
@@ -567,15 +567,14 @@ namespace bliss
             {
               VAR(reserved) = Capacity + 1 ;
               this->VAR(size) = curr;
-
               curr = BaseType::ALMOST_FULL_FLAG;
-
+              CV_NOTIFY_ALL(condvar);
             }
             else if (curr + count == Capacity)  // filled to capacity, so valid position is returned.
             {
               VAR(reserved) = Capacity + 1 ;
               this->VAR(size) = Capacity;
-
+              CV_NOTIFY_ALL(condvar);
             }  // else normal append
             else {
               VAR(reserved) += count;
@@ -607,6 +606,7 @@ namespace bliss
           if (this->VAR(size) > curr)
           {
         	  this->VAR(size) = curr;
+        	  CV_NOTIFY_ALL(condvar);
           }
 
         }
@@ -626,6 +626,7 @@ namespace bliss
 
           // then reset size to max
           this->VAR(size) = Capacity + 1;
+          CV_NOTIFY_ALL(condvar);
         }
 
         /**
@@ -674,8 +675,8 @@ namespace bliss
           this->VAR(size) = 0;
           VAR(written) = 0;
 
-          lock.unlock();
           CV_NOTIFY_ALL(condvar);
+          lock.unlock();
 
         }
 
@@ -691,8 +692,8 @@ namespace bliss
           this->VAR(size) = Capacity + 1;
           VAR(written) = 0;
 
-          lock.unlock();
           CV_NOTIFY_ALL(condvar);
+          lock.unlock();
         }
 
 
@@ -739,7 +740,7 @@ namespace bliss
           else if (pos == BaseType::ALMOST_FULL_FLAG)
           { // filled to beyond capacity
 
-            flush();
+            block_and_flush();
             return 0x2;  // full, swapping.
           }
           else
@@ -747,6 +748,7 @@ namespace bliss
 
             // write
             std::memcpy(this->VAR(data_ptr) + pos, _data, count);
+            std::atomic_thread_fence(std::memory_order_release);
             complete_write(count); // all full buffers lock the read and unlock the writer
 
             // for DEBUGGING.
@@ -756,8 +758,7 @@ namespace bliss
             { // thread that JUST filled the buffer
 
               // wait for other threads to finish
-              flush();
-
+              block_and_flush();
               return 0x3;  // write to full, swapping, and success
             }
             else
@@ -1247,7 +1248,7 @@ namespace bliss
           else if (pos == BaseType::ALMOST_FULL_FLAG)
           { // filled to beyond capacity
 
-            flush();  // wait for other writes to complete
+            block_and_flush();  // wait for other writes to complete
             return 0x2;  // full, swapping.
           }
           else
@@ -1264,7 +1265,7 @@ namespace bliss
             { // thread that JUST filled the buffer
 
               // wait for other threads to finish
-              flush();
+              block_and_flush();
               return 0x3;  // write to full, swapping, and success
             }
             else
@@ -2018,7 +2019,7 @@ namespace bliss
           // size update depends on value of reserved so we would not have 2 updates to size by different threads.
           size_t curr = reserved.exchange(Capacity + 1, std::memory_order_acq_rel);
           // curr could be greater than capacity, or not.
-          size_t s = this->getSize();
+          size_t s;
 
           if (curr > Capacity) {  // already disabled.
 //            WARNINGF("block_writes called, but already blocked. reserved: %ld, size: %ld", curr, s);
@@ -2026,7 +2027,7 @@ namespace bliss
           }
 
           // thre should only be 1 thread reaching here.  reaching here means  reserve does not change size.
-          if (this->size.exchange(curr, std::memory_order_relaxed) <= Capacity) {
+          if ((s = this->size.exchange(curr, std::memory_order_relaxed)) <= Capacity) {
             ERRORF("block_writes called, but size already set. reserved: %ld, size: %ld", curr, s);
           }
 
@@ -2060,14 +2061,14 @@ namespace bliss
 //            stop = reserved.compare_exchange_weak(curr, end, std::memory_order_relaxed);
 //          }
           size_t s = this->size.exchange(Capacity + 1, std::memory_order_acq_rel);
-          size_t curr = reserved.load(std::memory_order_relaxed);
+          size_t curr;
 
           if (s > Capacity) {
             //WARNINGF("unblock_writes called, but another thread already beat this one to it.  reserved: %ld, size: %ld", curr, s);
             return;
           }
 
-          if (this->reserved.exchange(s, std::memory_order_relaxed) <= Capacity) {
+          if ((curr = this->reserved.exchange(s, std::memory_order_relaxed)) <= Capacity) {
             ERRORF("unblock_writes called, but reserved already unblocked. reserved: %ld, size: %ld", curr, s);
           }
 
@@ -2169,7 +2170,7 @@ namespace bliss
           else if (pos == BaseType::ALMOST_FULL_FLAG)
           { // filled to beyond capacity
 
-           flush();  // wait for other writes to complete
+            block_and_flush();  // wait for other writes to complete
             return 0x2;  // full, swapping.
           }
           else
@@ -2188,7 +2189,7 @@ namespace bliss
             { // thread that JUST filled the buffer
 
               // wait for other threads to finish
-              flush();
+              block_and_flush();
               return 0x3;  // write to full, swapping, and success
             }
             else

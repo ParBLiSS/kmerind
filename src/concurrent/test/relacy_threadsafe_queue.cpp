@@ -43,8 +43,7 @@ struct testWaitAndPush : rl::test_suite<
     std::array<int64_t, nProducers + nConsumers> lsuccess;
     std::array<int64_t, nProducers + nConsumers> lfail;
     static constexpr int64_t expected = (
-        capacity > ((entries / nProducers) * nProducers) ?
-            ((entries / nProducers) * nProducers) : capacity);
+        capacity > entries ? entries : capacity);
 
     testWaitAndPush()
         : queue(capacity)
@@ -67,9 +66,9 @@ struct testWaitAndPush : rl::test_suite<
 
       if (thread_index < nProducers)
       {
-        for (int64_t i = 0; i < entries / nProducers; ++i)
+        for (int64_t i = thread_index; i < entries; i+= nProducers)
         {
-          if (queue.waitAndPush(T(i * nProducers + thread_index)).first)
+          if (queue.waitAndPush(T(i)).first)
             ++lsuccess[thread_index];
           else
             ++lfail[thread_index];
@@ -122,8 +121,7 @@ struct testTryPush : rl::test_suite<
     std::array<int64_t, nProducers + nConsumers> lsuccess;
     std::array<int64_t, nProducers + nConsumers> lfail;
     static constexpr int64_t expected = (
-        capacity > ((entries / nProducers) * nProducers) ?
-            ((entries / nProducers) * nProducers) : capacity);
+        capacity > entries ? entries : capacity);
 
     testTryPush()
         : queue(capacity)
@@ -146,9 +144,9 @@ struct testTryPush : rl::test_suite<
 
       if (thread_index < nProducers)
       {
-        for (int64_t i = 0; i < entries / nProducers; ++i)
+        for (int64_t i = thread_index; i < entries; i+= nProducers)
         {
-          if (queue.tryPush(T(i * nProducers + thread_index)).first)
+          if (queue.tryPush(T(i)).first)
             ++lsuccess[thread_index];
           else
           {
@@ -362,8 +360,7 @@ struct testTryPushAndTryPop : rl::test_suite<
     std::array<int64_t, nProducers + nConsumers> lsuccess;
     std::array<int64_t, nProducers + nConsumers> lfail;
     static constexpr int64_t expectedMin = (
-        capacity > ((entries / nProducers) * nProducers) ?
-            ((entries / nProducers) * nProducers) : capacity);
+        capacity > entries ? entries : capacity);
     static constexpr int64_t expectedMax = entries;
 
     std::atomic<int> doneProducers;
@@ -392,9 +389,9 @@ struct testTryPushAndTryPop : rl::test_suite<
 
       if (thread_index < nProducers)
       {
-        for (int i = 0; i < entries / nProducers; ++i)
+        for (int64_t i = thread_index; i < entries; i+= nProducers)
         {
-          if (queue.tryPush(T(i * nProducers + thread_index)).first)
+          if (queue.tryPush(T(i)).first)
             ++lsuccess[thread_index];
           else
           {
@@ -473,8 +470,7 @@ struct testWaitPushAndTryPop : rl::test_suite<
     std::array<int64_t, nProducers + nConsumers> lsuccess;
     std::array<int64_t, nProducers + nConsumers> lfail;
     static constexpr int64_t expectedMin = (
-        capacity > ((entries / nProducers) * nProducers) ?
-            ((entries / nProducers) * nProducers) : capacity);
+        capacity > entries ? entries : capacity);
     static constexpr int64_t expectedMax = entries;
 
     std::atomic<int> doneProducers;
@@ -503,9 +499,9 @@ struct testWaitPushAndTryPop : rl::test_suite<
 
       if (thread_index < nProducers)
       {
-        for (int i = 0; i < entries / nProducers; ++i)
+        for (int64_t i = thread_index; i < entries; i+= nProducers)
         {
-          if (queue.waitAndPush(T(i * nProducers + thread_index)).first)
+          if (queue.waitAndPush(T(i)).first)
             ++lsuccess[thread_index];
           else
           {
@@ -584,8 +580,7 @@ struct testTryPushAndWaitPop : rl::test_suite<
     std::array<int64_t, nProducers + nConsumers> lsuccess;
     std::array<int64_t, nProducers + nConsumers> lfail;
     static constexpr int64_t expectedMin = (
-        capacity > ((entries / nProducers) * nProducers) ?
-            ((entries / nProducers) * nProducers) : capacity);
+        capacity > entries ? entries : capacity);
     static constexpr int64_t expectedMax = entries;
 
     std::atomic<int> doneProducers;
@@ -614,9 +609,9 @@ struct testTryPushAndWaitPop : rl::test_suite<
 
       if (thread_index < nProducers)
       {
-        for (int i = 0; i < entries / nProducers; ++i)
+        for (int64_t i = thread_index; i < entries; i+= nProducers)
         {
-          if (queue.tryPush(T(i * nProducers + thread_index)).first)
+          if (queue.tryPush(T(i )).first)
             ++lsuccess[thread_index];
           else
           {
@@ -697,8 +692,7 @@ struct testWaitPushAndWaitPop : rl::test_suite<
     std::array<int64_t, nProducers + nConsumers> lsuccess;
     std::array<int64_t, nProducers + nConsumers> lfail;
     static constexpr int64_t expectedMin = (
-        capacity > ((entries / nProducers) * nProducers) ?
-            ((entries / nProducers) * nProducers) : capacity);
+        capacity > entries ? entries : capacity);
     static constexpr int64_t expectedMax = entries;
 
     std::atomic<int> doneProducers;
@@ -727,9 +721,9 @@ struct testWaitPushAndWaitPop : rl::test_suite<
 
       if (thread_index < nProducers)
       {
-        for (int i = 0; i < entries / nProducers; ++i)
+        for (int64_t i = thread_index; i < entries; i+= nProducers)
         {
-          if (queue.waitAndPush(T(i * nProducers + thread_index)).first)
+          if (queue.waitAndPush(T(i )).first)
             ++lsuccess[thread_index];
           else
           {
