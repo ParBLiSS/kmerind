@@ -12,18 +12,17 @@
 #ifndef OBJECTPOOL_HPP_
 #define OBJECTPOOL_HPP_
 
-#include <cassert>
-
-#include <atomic>
 #include <deque>
 #include <unordered_set>
 #include <stdexcept>
 
 #include "utils/logging.h"
 #include "concurrent/concurrent.hpp"
+
+#include "config/relacy_config.hpp"
+
 #include "concurrent/lockfree_queue.hpp"
 
-#include <omp.h>
 
 // TODO: convert to an allocator.
 
@@ -75,7 +74,7 @@ namespace bliss
         /**
          * @brief     capacity of the ObjectPool (in number of Objects)
          */
-        mutable int64_t                                                   capacity;
+        mutable VAR_T(int64_t)                                                   capacity;
 
         /**
          * @brief     Internal queue of available Objects for immediate use.
@@ -98,7 +97,7 @@ namespace bliss
         typename std::conditional<LockType == bliss::concurrent::LockType::LOCKFREE ||
             LockType == bliss::concurrent::LockType::THREADLOCAL,
             std::atomic<int64_t>,
-            int64_t>::type                                                size_in_use;
+            VAR_T(int64_t)>::type                                                size_in_use;
 
 
         //================ member methods
@@ -111,21 +110,23 @@ namespace bliss
          * @param _buffer_capacity     size of the individual buffers
          */
         explicit ObjectPoolBase(const int64_t _pool_capacity = std::numeric_limits<int64_t>::max()) :
-          capacity(_pool_capacity), available(), in_use(), size_in_use(0)
-        {};
+          available(), in_use(), size_in_use(0)
+        {
+          VAR(capacity) = _pool_capacity;
+        };
 
         /// destructor
         virtual ~ObjectPoolBase() {
           // delete all the objects
-          capacity = 0;
+          VAR(capacity) = 0;
           this->clear_storage();
         }
 
         /// deleted default constructor, move and copy constructors and assignment operators.
-        explicit ObjectPoolBase(ObjectPoolBase const &)  = delete;
-        explicit ObjectPoolBase(ObjectPoolBase &&)  = delete;
-        ObjectPoolBase& operator=(ObjectPoolBase const &)  = delete;
-        ObjectPoolBase& operator=(ObjectPoolBase &&)  = delete;
+        explicit DELETED_FUNC_DECL(ObjectPoolBase(ObjectPoolBase const &));
+        explicit DELETED_FUNC_DECL(ObjectPoolBase(ObjectPoolBase &&));
+        ObjectPoolBase& DELETED_FUNC_DECL(operator=(ObjectPoolBase const &));
+        ObjectPoolBase& DELETED_FUNC_DECL(operator=(ObjectPoolBase &&));
 
 
         //-----------  these are support functions.  they should not lock.
@@ -138,7 +139,7 @@ namespace bliss
         template<bliss::concurrent::LockType LT = LockType>
         inline typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE &&
         LT != bliss::concurrent::LockType::THREADLOCAL, int64_t>::type getSizeInUse() const {
-          return size_in_use;
+          return VAR(size_in_use);
         }
 
         template<bliss::concurrent::LockType LT = LockType>
@@ -154,7 +155,7 @@ namespace bliss
 
         /// check if the pool has unlimited capacity
         inline bool isUnlimited() const {
-          return capacity == std::numeric_limits<int64_t>::max();
+          return VAR(capacity) == std::numeric_limits<int64_t>::max();
         }
 
 
@@ -163,7 +164,7 @@ namespace bliss
          * @return  size,
          */
         inline int64_t getAvailableCount() const  {
-          return (isUnlimited() ? capacity : (capacity - this->getSizeInUse<LockType>()));
+          return (isUnlimited() ? VAR(capacity) : (VAR(capacity) - this->getSizeInUse<LockType>()));
         }
 
 
@@ -172,7 +173,7 @@ namespace bliss
          * @return    capacity
          */
         inline const int64_t getCapacity() const {
-          return capacity;
+          return VAR(capacity);
         }
 
 

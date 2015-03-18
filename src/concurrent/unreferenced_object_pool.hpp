@@ -12,17 +12,6 @@
 #ifndef UNREFERENCED_OBJECTPOOL_HPP_
 #define UNREFERENCED_OBJECTPOOL_HPP_
 
-#include <cassert>
-
-#include <atomic>
-#include <mutex>
-#include <deque>
-#include <unordered_set>
-#include <stdexcept>
-
-#include "utils/logging.h"
-#include "concurrent/concurrent.hpp"
-#include "concurrent/lockfree_queue.hpp"
 #include "concurrent/object_pool.hpp"
 
 #include <omp.h>
@@ -105,26 +94,26 @@ namespace bliss
          * @brief     default copy constructor is deleted.
          * @param other   source ObjectPool object to copy from.
          */
-        explicit ObjectPool(const PoolType& other) = delete;
+        explicit DELETED_FUNC_DECL(ObjectPool(const PoolType& other));
 
         /**
          * @brief     default copy assignment operator is deleted.
          * @param other   source ObjectPool object to copy from.
          * @return        self, with member variables copied from other.
          */
-        PoolType& operator=(const PoolType& other) = delete;
+        PoolType& DELETED_FUNC_DECL(operator=(const PoolType& other));
 
         /// move constructor is deleted.
-        explicit ObjectPool(PoolType&& other) = delete;
+        explicit DELETED_FUNC_DECL(ObjectPool(PoolType&& other));
         /// move assignment operator is deleted.
-        PoolType& operator=(PoolType&& other) = delete;
+        PoolType& DELETED_FUNC_DECL(operator=(PoolType&& other));
 
 
         /// clear all allocated objects.
         void clearStorageImpl() {
           std::lock_guard<std::mutex> lock(mutex);
 
-          this->size_in_use = 0;
+          this->VAR(size_in_use) = 0;
 
           // clear the available queue.
           while (!this->available.empty()) {
@@ -146,7 +135,7 @@ namespace bliss
         void resetImpl() {
           std::lock_guard<std::mutex> lock(mutex);
 
-          this->size_in_use = 0;
+          this->VAR(size_in_use) = 0;
         }
 
 
@@ -163,9 +152,9 @@ namespace bliss
           std::unique_lock<std::mutex> lock(mutex);
 
           // first check if we are exceeding capacity.
-          if (this->size_in_use >= this->capacity) {
+          if (this->VAR(size_in_use) >= this->VAR(capacity)) {
             if (this->isUnlimited()) {
-              WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", this->size_in_use);
+              WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", this->VAR(size_in_use));
             }  // else limited size, so return nullptr.
           } else {  // has room.  get one.
 
@@ -181,7 +170,7 @@ namespace bliss
 
             assert(sptr != nullptr);
 
-            ++this->size_in_use;
+            ++this->VAR(size_in_use);
 
           }
           return sptr;
@@ -201,7 +190,7 @@ namespace bliss
           }
 
           std::lock_guard<std::mutex> lock(mutex);
-          if (this->size_in_use == 0) {
+          if (this->VAR(size_in_use) == 0) {
             // trying to release when we are maxed out.
             return false;
           }
@@ -209,7 +198,7 @@ namespace bliss
           // only put back in available queue if it was in use.
           // now make object available.  make sure push_back is done one thread at a time.
           this->available.emplace_back(ptr);
-          this->size_in_use -= 1;
+          this->VAR(size_in_use) -= 1;
 
           return true;
         }
@@ -299,32 +288,32 @@ namespace bliss
       protected:
 
         /// mutex for thread safety
-        mutable std::atomic_flag spinlock = ATOMIC_FLAG_INIT;
+        mutable INIT_ATOMIC_FLAG(spinlock);
 
         /**
          * @brief     default copy constructor is deleted.
          * @param other   source ObjectPool object to copy from.
          */
-        explicit ObjectPool(const PoolType& other) = delete;
+        explicit DELETED_FUNC_DECL(ObjectPool(const PoolType& other));
 
         /**
          * @brief     default copy assignment operator is deleted.
          * @param other   source ObjectPool object to copy from.
          * @return        self, with member variables copied from other.
          */
-        PoolType& operator=(const PoolType& other) = delete;
+        PoolType& DELETED_FUNC_DECL(operator=(const PoolType& other));
 
         /// move constructor is deleted.
-        explicit ObjectPool(PoolType&& other) = delete;
+        explicit DELETED_FUNC_DECL(ObjectPool(PoolType&& other));
         /// move assignment operator is deleted.
-        PoolType& operator=(PoolType&& other) = delete;
+        PoolType& DELETED_FUNC_DECL(operator=(PoolType&& other));
 
 
         /// clear all allocated objects.
         void clearStorageImpl() {
           while (spinlock.test_and_set(std::memory_order_acq_rel));
 
-          this->size_in_use = 0;
+          this->VAR(size_in_use) = 0;
 
           // clear the available queue.
           while (!this->available.empty()) {
@@ -348,7 +337,7 @@ namespace bliss
         void resetImpl() {
           while (spinlock.test_and_set(std::memory_order_acq_rel));
 
-          this->size_in_use = 0;
+          this->VAR(size_in_use) = 0;
 
           spinlock.clear(std::memory_order_release);
         }
@@ -367,9 +356,9 @@ namespace bliss
           while (spinlock.test_and_set(std::memory_order_acq_rel));
 
           // first check if we are exceeding capacity.
-          if (this->size_in_use >= this->capacity) {
+          if (this->VAR(size_in_use) >= this->VAR(capacity)) {
             if (this->isUnlimited()) {
-              WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", this->size_in_use);
+              WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", this->VAR(size_in_use));
             }  // else limited size, so return nullptr.
           } else {  // has room.  get one.
 
@@ -385,7 +374,7 @@ namespace bliss
 
             assert(sptr != nullptr);
 
-            ++this->size_in_use;
+            ++this->VAR(size_in_use);
 
           }
 
@@ -407,7 +396,7 @@ namespace bliss
           }
 
           while (spinlock.test_and_set(std::memory_order_acq_rel));
-          if (this->size_in_use == 0) {
+          if (this->VAR(size_in_use) == 0) {
             spinlock.clear(std::memory_order_release);
 
             // trying to release when we are maxed out.
@@ -418,7 +407,7 @@ namespace bliss
           // only put back in available queue if it was in use.
           // now make object available.  make sure push_back is done one thread at a time.
           this->available.emplace_back(ptr);
-          this->size_in_use -= 1;
+          this->VAR(size_in_use) -= 1;
 
           spinlock.clear(std::memory_order_release);
           return true;
@@ -516,19 +505,19 @@ namespace bliss
          * @brief     default copy constructor is deleted.
          * @param other   source ObjectPool object to copy from.
          */
-        explicit ObjectPool(const PoolType& other) = delete;
+        explicit DELETED_FUNC_DECL(ObjectPool(const PoolType& other));
 
         /**
          * @brief     default copy assignment operator is deleted.
          * @param other   source ObjectPool object to copy from.
          * @return        self, with member variables copied from other.
          */
-        PoolType& operator=(const PoolType& other) = delete;
+        PoolType& DELETED_FUNC_DECL(operator=(const PoolType& other));
 
         /// move constructor is deleted.
-        explicit ObjectPool(PoolType&& other) = delete;
+        explicit DELETED_FUNC_DECL(ObjectPool(PoolType&& other));
         /// move assignment operator is deleted.
-        PoolType& operator=(PoolType&& other) = delete;
+        PoolType& DELETED_FUNC_DECL(operator=(PoolType&& other));
 
 
         /**
@@ -579,7 +568,7 @@ namespace bliss
 
           // okay to add before compare, since object pool is long lasting.
           int64_t prev_size = this->size_in_use.fetch_add(1, std::memory_order_acq_rel);  //reserve
-          if (prev_size >= this->capacity) {
+          if (prev_size >= this->VAR(capacity)) {
             this->size_in_use.fetch_sub(1, std::memory_order_release);
             // leave ptr as nullptr.
             if (this->isUnlimited()) {
@@ -734,24 +723,24 @@ namespace bliss
          * @brief     default copy constructor is deleted.
          * @param other   source ObjectPool object to copy from.
          */
-        explicit ObjectPool(const PoolType& other) = delete;
+        explicit DELETED_FUNC_DECL(ObjectPool(const PoolType& other));
 
         /**
          * @brief     default copy assignment operator is deleted.
          * @param other   source ObjectPool object to copy from.
          * @return        self, with member variables copied from other.
          */
-        PoolType& operator=(const PoolType& other) = delete;
+        PoolType& DELETED_FUNC_DECL(operator=(const PoolType& other));
 
         /// move constructor is deleted.
-        explicit ObjectPool(PoolType&& other) = delete;
+        explicit DELETED_FUNC_DECL(ObjectPool(PoolType&& other));
         /// move assignment operator is deleted.
-        PoolType& operator=(PoolType&& other) = delete;
+        PoolType& DELETED_FUNC_DECL(operator=(PoolType&& other));
 
 
         /// clear all allocated objects.
         void clearStorageImpl() {
-          this->size_in_use = 0;
+          this->VAR(size_in_use) = 0;
 
           // clear the available queue.
           while (!this->available.empty()) {
@@ -771,7 +760,7 @@ namespace bliss
          *            however, care must be taken to ensure that all other threads have completed their work, else data loss is likely.
          */
         void resetImpl() {
-          this->size_in_use = 0;
+          this->VAR(size_in_use) = 0;
 
         }
 
@@ -787,9 +776,10 @@ namespace bliss
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
           // first check if we are exceeding capacity.
-          if (this->size_in_use >= this->capacity) {
+          if (this->VAR(size_in_use) >= this->VAR(capacity)) {
             if (this->isUnlimited()) {
-              WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", this->size_in_use);
+            	int64_t v = this->VAR(size_in_use);
+              WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", v);
             }  // else limited size, so return nullptr.
           } else {  // has room.  get one.
 
@@ -805,7 +795,7 @@ namespace bliss
 
             assert(sptr != nullptr);
 
-            ++this->size_in_use;
+            ++this->VAR(size_in_use);
 
           }
 
@@ -825,13 +815,13 @@ namespace bliss
             return true;
           }
 
-          if (this->size_in_use == 0)
+          if (this->VAR(size_in_use) == 0)
             return false;
 
           // only put back in available queue if it was in use.
           // now make object available.  make sure push_back is done one thread at a time.
           this->available.emplace_back(ptr);
-          this->size_in_use -= 1;
+          this->VAR(size_in_use) -= 1;
 
           return true;
         }
