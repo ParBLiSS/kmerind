@@ -8,4 +8,8 @@ if (ENABLE_SANITIZER)
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fsanitize=${SANITIZER_STYLE} -fno-omit-frame-pointer -pie -static-libtsan")
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=${SANITIZER_STYLE} -fno-omit-frame-pointer -pie -static-libtsan")
   set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=${SANITIZER_STYLE} -fno-omit-frame-pointer -pie -static-libtsan")
+
+  # NOTE: if using thread sanitizer, please use g++ 4.9 and later, compiled with --disable-linux-futex (for libgomp)
+  #  else lots of false positives from OMP will be reported by tsan
+
 endif()
