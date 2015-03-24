@@ -31,8 +31,9 @@ struct copyableAtomicsThreadLocalTest : rl::test_suite<copyableAtomicsThreadLoca
     void before()
     {
       for (int i = 0; i < nelems; ++i) {
-          atoms.emplace(std::make_pair(i, std::move(copyable_atomic<T>(i))));
-          atoms.emplace(i + nelems, copyable_atomic<int>(1));
+          //atoms.emplace(std::make_pair(i, std::move(copyable_atomic<T>(i))));
+        atoms.emplace(std::make_pair(i, copyable_atomic<T>(i)));
+          atoms.emplace(i + nelems, copyable_atomic<T>(1));
           atoms[i + 2 * nelems] = copyable_atomic<T>(1);
           atoms[i + 3 * nelems] = copyable_atomic<T>(1);
       }
@@ -44,7 +45,8 @@ struct copyableAtomicsThreadLocalTest : rl::test_suite<copyableAtomicsThreadLoca
       for (int i = thread_index; i < nelems; i+= nThreads) {
           atoms.at(i + 3*nelems).store(i, std::memory_order_relaxed);
           atoms.at(i + nelems) = copyable_atomic<T>(i);  // copy assignment
-          atoms.at(i + 2*nelems) = std::move(copyable_atomic<T>(i));  // move assignment
+          //atoms.at(i + 2*nelems) = std::move(copyable_atomic<T>(i));  // move assignment
+          atoms.at(i + 2*nelems) = copyable_atomic<T>(i);  // move assignment
 
           atoms.at(i).fetch_xor(atoms.at(i+ nelems).load(std::memory_order_relaxed), std::memory_order_relaxed);
       }
@@ -89,7 +91,8 @@ struct copyableAtomicsTest : rl::test_suite<copyableAtomicsTest<T, nThreads, nel
     void before()
     {
       for (int i = 0; i < nelems; ++i) {
-          atoms.emplace(std::make_pair(i, std::move(copyable_atomic<T>(0))));
+          //atoms.emplace(std::make_pair(i, std::move(copyable_atomic<T>(0))));
+        atoms.emplace(std::make_pair(i, copyable_atomic<T>(0)));
       }
     }
 

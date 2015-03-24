@@ -23,19 +23,19 @@
 
 
 // note that relacy simulate threads.
-template<typename T, typename PoolType, int nProducers, int64_t Iter, int64_t PCAP = std::numeric_limits<int64_t>::max() >
+template<typename T, typename PoolType, int nThreads, int64_t Iter, int64_t PCAP = std::numeric_limits<int64_t>::max() >
 struct testBufferSwap : rl::test_suite<
-  testBufferSwap<T, PoolType, nProducers, Iter, PCAP >,
-    nProducers>
+  testBufferSwap<T, PoolType, nThreads, Iter, PCAP >,
+    nThreads>
 {
   using BufferType = typename PoolType::ObjectType;
 
 
-  std::array<int64_t, nProducers> lsuccess;
-  std::array<int64_t, nProducers> lfail;
-  std::array<int64_t, nProducers> lswap;
-  std::array<std::vector<T>, nProducers > lgold;
-  std::array<std::vector<T>, nProducers > lstored;
+  std::array<int64_t, nThreads> lsuccess;
+  std::array<int64_t, nThreads> lfail;
+  std::array<int64_t, nThreads> lswap;
+  std::array<std::vector<T>, nThreads > lgold;
+  std::array<std::vector<T>, nThreads > lstored;
 
   PoolType pool;
   VAR_T(BufferType*) buf_ptr;
@@ -45,7 +45,7 @@ struct testBufferSwap : rl::test_suite<
 
     void before()
     {
-      for (int i = 0; i < nProducers; ++i)
+      for (int i = 0; i < nThreads; ++i)
       {
         lsuccess[i] = 0;
         lfail[i] = 0;
@@ -60,7 +60,7 @@ struct testBufferSwap : rl::test_suite<
     {
       T v;
       unsigned int r;
-      for (int64_t i = thread_index; i < Iter; i+= nProducers)
+      for (int64_t i = thread_index; i < Iter; i+= nThreads)
       {
 
         if (VAR(buf_ptr)) {
@@ -104,7 +104,7 @@ struct testBufferSwap : rl::test_suite<
       std::vector<T> gold;
       std::vector<T> stored;
 
-      for (int i = 0; i < nProducers; ++i)
+      for (int i = 0; i < nThreads; ++i)
       {
         success += lsuccess[i];
         fail += lfail[i];
@@ -140,25 +140,25 @@ struct testBufferSwap : rl::test_suite<
 
 
 
-template<typename PoolType, int nProducers, int64_t Iter, int64_t PoolCap = std::numeric_limits<int64_t>::max()>
+template<typename PoolType, int nThreads, int64_t Iter, int64_t PoolCap = std::numeric_limits<int64_t>::max()>
 struct testPoolAcquire : rl::test_suite<
-  testPoolAcquire<PoolType, nProducers, Iter, PoolCap >,
-    nProducers>
+  testPoolAcquire<PoolType, nThreads, Iter, PoolCap >,
+    nThreads>
 {
 
   int64_t expectedSuccess, expectedFailure;
 
-  std::array<int64_t, nProducers> lsuccess;
-  std::array<int64_t, nProducers> lfail;
+  std::array<int64_t, nThreads> lsuccess;
+  std::array<int64_t, nThreads> lfail;
 
   PoolType pool;
-  std::array<std::vector<typename PoolType::ObjectType *>, nProducers > objs;
+  std::array<std::vector<typename PoolType::ObjectType *>, nThreads > objs;
 
   testPoolAcquire() : pool(PoolCap) {}
 
     void before()
     {
-      for (int i = 0; i < nProducers; ++i)
+      for (int i = 0; i < nThreads; ++i)
       {
         lsuccess[i] = 0;
         lfail[i] = 0;
@@ -172,7 +172,7 @@ struct testPoolAcquire : rl::test_suite<
 
     void thread(unsigned thread_index)
     {
-      for (int64_t i = thread_index; i < Iter ; i += nProducers)
+      for (int64_t i = thread_index; i < Iter ; i += nThreads)
       {
         auto ptr = pool.tryAcquireObject();
         if (ptr) {
@@ -189,7 +189,7 @@ struct testPoolAcquire : rl::test_suite<
       int64_t success = 0;
       int64_t fail = 0;
 
-      for (int i = 0; i < nProducers; ++i)
+      for (int i = 0; i < nThreads; ++i)
       {
         success += lsuccess[i];
         fail += lfail[i];
@@ -214,25 +214,25 @@ struct testPoolAcquire : rl::test_suite<
 };
 
 
-template<typename PoolType, int nProducers, int64_t Iter, int64_t PoolCap = std::numeric_limits<int64_t>::max()>
+template<typename PoolType, int nThreads, int64_t Iter, int64_t PoolCap = std::numeric_limits<int64_t>::max()>
 struct testPoolRelease : rl::test_suite<
-  testPoolRelease<PoolType, nProducers, Iter, PoolCap>,
-    nProducers>
+  testPoolRelease<PoolType, nThreads, Iter, PoolCap>,
+    nThreads>
 {
   int64_t expectedSuccess, expectedFailure;
 
-  std::array<int64_t, nProducers> lsuccess;
-  std::array<int64_t, nProducers> lfail;
+  std::array<int64_t, nThreads> lsuccess;
+  std::array<int64_t, nThreads> lfail;
 
   PoolType pool;
-  std::array<std::vector<typename PoolType::ObjectType *>, nProducers > objs;
+  std::array<std::vector<typename PoolType::ObjectType *>, nThreads > objs;
   int count;
 
   testPoolRelease() : pool(PoolCap), count(0) {}
 
     void before()
     {
-      for (int i = 0; i < nProducers; ++i)
+      for (int i = 0; i < nThreads; ++i)
       {
         lsuccess[i] = 0;
         lfail[i] = 0;
@@ -246,8 +246,8 @@ struct testPoolRelease : rl::test_suite<
       for (int i = 0; i < Iter; ++i ) {
         auto ptr = pool.tryAcquireObject();
         if (ptr) {
-          objs[i % nProducers].push_back(ptr);
-          objs[(i + 1) % nProducers].push_back(ptr);
+          objs[i % nThreads].push_back(ptr);
+          objs[(i + 1) % nThreads].push_back(ptr);
           ++count;
         }
       }
@@ -271,7 +271,7 @@ struct testPoolRelease : rl::test_suite<
       int64_t success = 0;
       int64_t fail = 0;
 
-      for (int i = 0; i < nProducers; ++i)
+      for (int i = 0; i < nThreads; ++i)
       {
         success += lsuccess[i];
         fail += lfail[i];
@@ -294,88 +294,88 @@ struct testPoolRelease : rl::test_suite<
 };
 
 
-template<bliss::concurrent::LockType LT, int nProducers,
-	typename std::enable_if<nProducers == 1 &&
+template<bliss::concurrent::LockType LT, int nThreads,
+	typename std::enable_if<nThreads == 1 &&
 	(LT == bliss::concurrent::LockType::MUTEX ||
 	 LT == bliss::concurrent::LockType::SPINLOCK), int>::type = 0>
 void simulate(rl::test_params p)
 {
 		using PoolType = bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192>, LT, true >;
 
-	  rl::simulate<testPoolAcquire<PoolType, nProducers, 20> >(p);
-	  rl::simulate<testPoolAcquire<PoolType, nProducers, 10, 16> >(p);
-	  rl::simulate<testPoolAcquire<PoolType, nProducers, 20, 16> >(p);
-	  rl::simulate<testPoolRelease<PoolType, nProducers, 20> >(p);
-	  rl::simulate<testPoolRelease<PoolType, nProducers, 10, 16> >(p);
-	  rl::simulate<testPoolRelease<PoolType, nProducers, 20, 16> >(p);
+	  rl::simulate<testPoolAcquire<PoolType, nThreads, 200> >(p);
+	  rl::simulate<testPoolAcquire<PoolType, nThreads, 100, 150> >(p);
+	  rl::simulate<testPoolAcquire<PoolType, nThreads, 200, 150> >(p);
+	  rl::simulate<testPoolRelease<PoolType, nThreads, 200> >(p);
+	  rl::simulate<testPoolRelease<PoolType, nThreads, 100, 150> >(p);
+	  rl::simulate<testPoolRelease<PoolType, nThreads, 200, 150> >(p);
 
-	  rl::simulate<testBufferSwap<int, PoolType, nProducers, 20 > >(p);
-	  rl::simulate<testBufferSwap<int, PoolType, nProducers, 10, 16 > >(p);
-	  rl::simulate<testBufferSwap<int, PoolType, nProducers, 20, 16 > >(p);
+	  rl::simulate<testBufferSwap<int, PoolType, nThreads, 200 > >(p);
+	  rl::simulate<testBufferSwap<int, PoolType, nThreads, 100, 150 > >(p);
+	  rl::simulate<testBufferSwap<int, PoolType, nThreads, 200, 150 > >(p);
 }
 
-template<bliss::concurrent::LockType LT, int nProducers,
-	typename std::enable_if<nProducers == 1 &&
+template<bliss::concurrent::LockType LT, int nThreads,
+	typename std::enable_if<nThreads == 1 &&
 	(LT == bliss::concurrent::LockType::LOCKFREE ||
 	 LT == bliss::concurrent::LockType::NONE), int>::type = 0>
 void simulate(rl::test_params p)
 {
 using PoolType = bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192>, LT, false >;
 
-  	  rl::simulate<testPoolAcquire<PoolType, nProducers, 20> >(p);
-	  rl::simulate<testPoolAcquire<PoolType, nProducers, 10, 16> >(p);
-	  rl::simulate<testPoolAcquire<PoolType, nProducers, 20, 16> >(p);
+  	  rl::simulate<testPoolAcquire<PoolType, nThreads, 200> >(p);
+	  rl::simulate<testPoolAcquire<PoolType, nThreads, 100, 150> >(p);
+	  rl::simulate<testPoolAcquire<PoolType, nThreads, 200, 150> >(p);
 
-	  rl::simulate<testPoolRelease<PoolType, nProducers, 20> >(p);
-	  rl::simulate<testPoolRelease<PoolType, nProducers, 10, 16> >(p);
-	  rl::simulate<testPoolRelease<PoolType, nProducers, 20, 16> >(p);
+	  rl::simulate<testPoolRelease<PoolType, nThreads, 200> >(p);
+	  rl::simulate<testPoolRelease<PoolType, nThreads, 100, 150> >(p);
+	  rl::simulate<testPoolRelease<PoolType, nThreads, 200, 150> >(p);
 
-	  rl::simulate<testBufferSwap<int, PoolType, nProducers, 20 > >(p);
-	  rl::simulate<testBufferSwap<int, PoolType, nProducers, 10, 16 > >(p);
-	  rl::simulate<testBufferSwap<int, PoolType, nProducers, 20, 16 > >(p);
+	  rl::simulate<testBufferSwap<int, PoolType, nThreads, 200 > >(p);
+	  rl::simulate<testBufferSwap<int, PoolType, nThreads, 100, 150 > >(p);
+	  rl::simulate<testBufferSwap<int, PoolType, nThreads, 200, 150 > >(p);
 }
 
 
-template<bliss::concurrent::LockType LT, int nProducers,
-	typename std::enable_if<nProducers != 1 &&
+template<bliss::concurrent::LockType LT, int nThreads,
+	typename std::enable_if<nThreads != 1 &&
 							(LT == bliss::concurrent::LockType::MUTEX ||
 							 LT == bliss::concurrent::LockType::SPINLOCK), int>::type = 0>
 void simulate(rl::test_params p)
 {
 	using PoolType = bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, LT, true >;
-  rl::simulate<testPoolAcquire<PoolType, nProducers, 20> >(p);
-  rl::simulate<testPoolAcquire<PoolType, nProducers, 10, 16> >(p);
-  rl::simulate<testPoolAcquire<PoolType, nProducers, 20, 16> >(p);
+  rl::simulate<testPoolAcquire<PoolType, nThreads, 200> >(p);
+  rl::simulate<testPoolAcquire<PoolType, nThreads, 100, 150> >(p);
+  rl::simulate<testPoolAcquire<PoolType, nThreads, 200, 150> >(p);
 
-  rl::simulate<testPoolRelease<PoolType, nProducers, 20> >(p);
-  rl::simulate<testPoolRelease<PoolType, nProducers, 10, 16> >(p);
-  rl::simulate<testPoolRelease<PoolType, nProducers, 20, 16> >(p);
+  rl::simulate<testPoolRelease<PoolType, nThreads, 200> >(p);
+  rl::simulate<testPoolRelease<PoolType, nThreads, 100, 150> >(p);
+  rl::simulate<testPoolRelease<PoolType, nThreads, 200, 150> >(p);
 
-  rl::simulate<testBufferSwap<int, PoolType, nProducers, 20 > >(p);
-  rl::simulate<testBufferSwap<int, PoolType, nProducers, 10, 16 > >(p);
-  rl::simulate<testBufferSwap<int, PoolType, nProducers, 20, 16 > >(p);
+  rl::simulate<testBufferSwap<int, PoolType, nThreads, 200 > >(p);
+  rl::simulate<testBufferSwap<int, PoolType, nThreads, 100, 150 > >(p);
+  rl::simulate<testBufferSwap<int, PoolType, nThreads, 200, 150 > >(p);
 }
 
 
-template<bliss::concurrent::LockType LT, int nProducers,
-	typename std::enable_if<nProducers != 1 &&
+template<bliss::concurrent::LockType LT, int nThreads,
+	typename std::enable_if<nThreads != 1 &&
 							(LT == bliss::concurrent::LockType::LOCKFREE ||
 							 LT == bliss::concurrent::LockType::NONE), int>::type = 0>
 void simulate(rl::test_params p)
 {
 	using PoolType = bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, LT, false >;
 
-  rl::simulate<testPoolAcquire<PoolType, nProducers, 20> >(p);
-  rl::simulate<testPoolAcquire<PoolType, nProducers, 10, 16> >(p);
-  rl::simulate<testPoolAcquire<PoolType, nProducers, 20, 16> >(p);
+  rl::simulate<testPoolAcquire<PoolType, nThreads, 200> >(p);
+  rl::simulate<testPoolAcquire<PoolType, nThreads, 100, 150> >(p);
+  rl::simulate<testPoolAcquire<PoolType, nThreads, 200, 150> >(p);
 
-  rl::simulate<testPoolRelease<PoolType, nProducers, 20> >(p);
-  rl::simulate<testPoolRelease<PoolType, nProducers, 10, 16> >(p);
-  rl::simulate<testPoolRelease<PoolType, nProducers, 20, 16> >(p);
+  rl::simulate<testPoolRelease<PoolType, nThreads, 200> >(p);
+  rl::simulate<testPoolRelease<PoolType, nThreads, 100, 150> >(p);
+  rl::simulate<testPoolRelease<PoolType, nThreads, 200, 150> >(p);
 
-  rl::simulate<testBufferSwap<int, PoolType, nProducers, 20 > >(p);
-  rl::simulate<testBufferSwap<int, PoolType, nProducers, 10, 16 > >(p);
-  rl::simulate<testBufferSwap<int, PoolType, nProducers, 20, 16 > >(p);
+  rl::simulate<testBufferSwap<int, PoolType, nThreads, 200 > >(p);
+  rl::simulate<testBufferSwap<int, PoolType, nThreads, 100, 150 > >(p);
+  rl::simulate<testBufferSwap<int, PoolType, nThreads, 200, 150 > >(p);
 }
 
 

@@ -43,6 +43,8 @@
 // relacy redefines "delete".  so for "CTOR(const type&) = delete;", need to use the form below.
 // same for "type& operator=(const type&) = delete;".  form  "CTOR(const type&);"
 #define DELETED_FUNC_DECL(F) F
+#define PURE_VIRTUAL_FUNC(F) F = 0
+#define DEFAULT_FUNC_DECL(F) F {}
 
 // relacy's use of condition_variable also does not follow standard convention
 #define CV_WAIT(CV, LOCK)  do { CV.wait(LOCK, $); } while (false)
@@ -246,6 +248,12 @@ namespace std
       }
 
 
+      bool
+      owns_lock() const noexcept
+      { return _M_owns; }
+
+      explicit operator bool() const noexcept
+      { return owns_lock(); }
 
     private:
       mutex_type*       _M_device;
@@ -344,6 +352,8 @@ namespace std
 
 // needed because relacy redefines "delete" so can't just delete constructor and assignment operators.
 #define DELETED_FUNC_DECL(F) F = delete
+#define PURE_VIRTUAL_FUNC(F) F = 0
+#define DEFAULT_FUNC_DECL(F) F = default
 
 // initializer is kind of special and we can't use copy or move constructor or assignment operators.
 #define INIT_ATOMIC_FLAG(f) std::atomic_flag f = ATOMIC_FLAG_INIT

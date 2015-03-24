@@ -110,6 +110,7 @@ struct norace_test : rl::test_suite<norace_test, 2>
 };
 
 
+
 // template parameter '2' is number of threads
 template<int nthreads, int elems>
 struct condvar_test : rl::test_suite<condvar_test<nthreads, elems>, nthreads>

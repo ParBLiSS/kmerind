@@ -231,32 +231,32 @@ struct testBlockedAppend : rl::test_suite<
 template<bliss::concurrent::LockType LT, int n_threads>
 void simulate(rl::test_params p)
 {
-  rl::simulate<testAppend<int, LT, n_threads, 0, 128, 64> >(p);
-  rl::simulate<testAppend<int, LT, n_threads, 0, 128, 128> >(p);
-  rl::simulate<testAppend<int, LT, n_threads, 0, 128, 128 + sizeof(int)> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 0, 1024, 512> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 0, 1024, 1024> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 0, 1024, 1024 + sizeof(int)> >(p);
 
-  rl::simulate<testAppend<int, LT, n_threads, 0, 127, 64> >(p);
-  rl::simulate<testAppend<int, LT, n_threads, 0, 127, 127> >(p);
-  rl::simulate<testAppend<int, LT, n_threads, 0, 127, 128> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 0, 1023, 512> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 0, 1023, 1023> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 0, 1023, 1024> >(p);
 
-  rl::simulate<testAppend<int, LT, n_threads, 1,   128, 128> >(p);
-  rl::simulate<testAppend<int, LT, n_threads, 2,   128, 128> >(p);
-  rl::simulate<testAppend<int, LT, n_threads, 4,   128, 128> >(p);
-  rl::simulate<testAppend<int, LT, n_threads, 7,   128, 128> >(p);
-  rl::simulate<testAppend<int, LT, n_threads, 8,   128, 128> >(p);
-  rl::simulate<testAppend<int, LT, n_threads, 16,  128, 128> >(p);
-  rl::simulate<testAppend<int, LT, n_threads, 200, 128, 128> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 1,   1024, 1024> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 2,   1024, 1024> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 4,   1024, 1024> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 7,   1024, 1024> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 8,   1024, 1024> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 16,  1024, 1024> >(p);
+  rl::simulate<testAppend<int, LT, n_threads, 200, 1024, 1024> >(p);
 
-  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 128, 128,  0, 64> >(p);
-  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 128, 128,  0, 128> >(p);
-  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 128, 128, 32, 32> >(p);
-  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 128, 128, 32, 64> >(p);
-  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 128, 128, 32, 128> >(p);
+  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 1024, 1024,  0, 512> >(p);
+  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 1024, 1024,  0, 1024> >(p);
+  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 1024, 1024, 256, 256> >(p);
+  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 1024, 1024, 256, 512> >(p);
+  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 1024, 1024, 256, 1024> >(p);
 
-  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 128, 16, 32, 64> >(p);
-  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 128, 48, 32, 64> >(p);
-  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 128, 96, 32, 64> >(p);
-  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 128, 144, 32, 64> >(p);
+  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 1024, 128, 256, 512> >(p);
+  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 1024, 384, 256, 512> >(p);
+  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 1024, 768, 256, 512> >(p);
+  rl::simulate<testBlockedAppend<int, LT, n_threads, 0, 1024, 1280, 256, 512> >(p);
 }
 
 

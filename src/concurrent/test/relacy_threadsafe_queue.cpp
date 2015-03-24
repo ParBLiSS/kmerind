@@ -17,7 +17,7 @@
 #include <algorithm>
 
 #include "concurrent/mutexlock_queue.hpp"
-#include "concurrent/spinlock_queue.hpp"
+//#include "concurrent/spinlock_queue.hpp"
 #include "concurrent/lockfree_queue.hpp"
 
 using namespace bliss::concurrent;
@@ -797,45 +797,45 @@ template<bliss::concurrent::LockType LT, int nProducers, int nConsumers>
 void simulate(rl::test_params p)
 {
 
-  rl::simulate<testWaitAndPush<int, LT, nProducers, nConsumers, 20, 29> >(p);
-  rl::simulate<testTryPush<int, LT, nProducers, nConsumers, 20, 29> >(p);
-  rl::simulate<testWaitAndPop<int, LT, nProducers, nConsumers, 20, 29> >(p);
-  rl::simulate<testTryPop<int, LT, nProducers, nConsumers, 20, 29> >(p);
+  rl::simulate<testWaitAndPush<int, LT, nProducers, nConsumers, 1000, 1009> >(p);
+  rl::simulate<testTryPush<int, LT, nProducers, nConsumers, 1000, 1009> >(p);
+  rl::simulate<testWaitAndPop<int, LT, nProducers, nConsumers, 1000, 1009> >(p);
+  rl::simulate<testTryPop<int, LT, nProducers, nConsumers, 1000, 1009> >(p);
 
-  rl::simulate<testTryPushAndTryPop<int, LT, nProducers, nConsumers, 20, 29> >(
+  rl::simulate<testTryPushAndTryPop<int, LT, nProducers, nConsumers, 1000, 1009> >(
       p);
-  rl::simulate<testWaitPushAndTryPop<int, LT, nProducers, nConsumers, 20, 29> >(
+  rl::simulate<testWaitPushAndTryPop<int, LT, nProducers, nConsumers, 1000, 1009> >(
       p);
-  rl::simulate<testTryPushAndWaitPop<int, LT, nProducers, nConsumers, 20, 29> >(
+  rl::simulate<testTryPushAndWaitPop<int, LT, nProducers, nConsumers, 1000, 1009> >(
       p);
-  rl::simulate<testWaitPushAndWaitPop<int, LT, nProducers, nConsumers, 20, 29> >(
+  rl::simulate<testWaitPushAndWaitPop<int, LT, nProducers, nConsumers, 1000, 1009> >(
       p);
 
   rl::simulate<
       testWaitAndPush<int, LT, nProducers, nConsumers,
-          std::numeric_limits<int64_t>::max(), 29> >(p);
+          std::numeric_limits<int64_t>::max(), 1009> >(p);
   rl::simulate<
       testTryPush<int, LT, nProducers, nConsumers,
-          std::numeric_limits<int64_t>::max(), 29> >(p);
+          std::numeric_limits<int64_t>::max(), 1009> >(p);
   rl::simulate<
       testWaitAndPop<int, LT, nProducers, nConsumers,
-          std::numeric_limits<int64_t>::max(), 29> >(p);
+          std::numeric_limits<int64_t>::max(), 1009> >(p);
   rl::simulate<
       testTryPop<int, LT, nProducers, nConsumers,
-          std::numeric_limits<int64_t>::max(), 29> >(p);
+          std::numeric_limits<int64_t>::max(), 1009> >(p);
 
   rl::simulate<
       testTryPushAndTryPop<int, LT, nProducers, nConsumers,
-          std::numeric_limits<int64_t>::max(), 29> >(p);
+          std::numeric_limits<int64_t>::max(), 1009> >(p);
   rl::simulate<
       testWaitPushAndTryPop<int, LT, nProducers, nConsumers,
-          std::numeric_limits<int64_t>::max(), 29> >(p);
+          std::numeric_limits<int64_t>::max(), 1009> >(p);
   rl::simulate<
       testTryPushAndWaitPop<int, LT, nProducers, nConsumers,
-          std::numeric_limits<int64_t>::max(), 29> >(p);
+          std::numeric_limits<int64_t>::max(), 1009> >(p);
   rl::simulate<
       testWaitPushAndWaitPop<int, LT, nProducers, nConsumers,
-          std::numeric_limits<int64_t>::max(), 29> >(p);
+          std::numeric_limits<int64_t>::max(), 1009> >(p);
 }
 
 int main(int argc, char** argv)
