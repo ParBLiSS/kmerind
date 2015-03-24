@@ -19,9 +19,7 @@ std::atomic<int> answers_received(0);
 template <bool ThreadLocal = true>
 struct Tester
 {
-  const int ANSWER_TAG = 12;
   const int FIRST_TAG = 1;
-  const int LOOKUP_TAG = 13;
 
   int generate_message(const int srcRank, const int dstRank)
   {
@@ -77,6 +75,9 @@ struct Tester
     int nthreads = numThreads;
     for (int it = 0; it < iters; ++it) {
 
+      std::vector<int> msgs(commSize * els);
+
+
       // R: src rank
       // T: thread id
       // I: iteration
@@ -87,18 +88,21 @@ struct Tester
       // L: recv message cont
     	DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PRESEND", my_rank, it, FIRST_TAG, els, msgs_received.load());
       // start sending one message to each:
-#pragma omp parallel for default(none) num_threads(nthreads) shared(els, my_rank, it, stdout)
+#pragma omp parallel for default(none) num_threads(nthreads) shared(msgs, els, my_rank, it, stdout)
       for (int i = 0; i < els; ++i)
       {
-        std::vector<int> msgs(commSize);
+        size_t idx;
+        // TODO: potential issue here.  commLayer SendMessage duration may outlast msgs's lifetime.
+        //std::vector<int> msgs(commSize);
         for (int j = 0; j < commSize; ++j)
         {
-          msgs[j] = generate_message(my_rank, j);
-          commLayer.sendMessage(&(msgs[j]), sizeof(int), j, FIRST_TAG);
+          idx = i * commSize + j;
+          msgs[idx] = generate_message(my_rank, j);
+          commLayer.sendMessage(&(msgs[idx]), sizeof(int), j, FIRST_TAG);
           if (i == 0 || i == els - 1)
-            DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, FIRST_TAG, i, els, msgs[j]);
+            DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, FIRST_TAG, i, els, msgs[idx]);
 
-          if ((msgs[j] / 100000 != my_rank + 1) || (msgs[j] % 1000 != j + 1)) ERRORF("ERROR: DEBUG: build not correct: %d -> %d u= %d", my_rank, j, msgs[j]);
+          if ((msgs[idx] / 100000 != my_rank + 1) || (msgs[idx] % 1000 != j + 1)) ERRORF("ERROR: DEBUG: build not correct: %d -> %d u= %d", my_rank, j, msgs[idx]);
 
         }
       }
