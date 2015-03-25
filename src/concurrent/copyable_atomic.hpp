@@ -43,6 +43,11 @@ namespace bliss
         /// copy constructor.  initialization is not atomic.  required copy constructor
         copyable_atomic(const copyable_atomic<T>& other) noexcept : base(other.load(std::memory_order_relaxed)) {}
 
+        /// copy constructor.  initialization is not atomic.  required copy constructor
+        copyable_atomic(copyable_atomic<T>&& other) noexcept : base(other.exchange(T(), std::memory_order_relaxed)) {
+        }
+
+
         /// nonvirtual destructor, since atomic does not have a virtual destructor.
         ~copyable_atomic() noexcept {
           base::~atomic();
@@ -80,6 +85,18 @@ namespace bliss
           base::store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);
           return *this;
         }
+
+        /// move assign
+        copyable_atomic& operator=(copyable_atomic<T>&& other) noexcept {
+          this->store(other.exchange(T(), std::memory_order_relaxed), std::memory_order_relaxed);
+          return *this;
+        }
+        /// move assign
+        copyable_atomic& operator=(copyable_atomic<T>&& other) volatile noexcept {
+          this->store(other.exchange(T(), std::memory_order_relaxed), std::memory_order_relaxed);
+          return *this;
+        }
+
 
     };
 

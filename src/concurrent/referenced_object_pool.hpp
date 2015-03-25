@@ -135,7 +135,10 @@ namespace bliss
 
           // move all from in_use to available
           for (auto ptr : this->in_use) {
-            if (ptr) this->available.push_back(ptr);
+            if (ptr) {
+              DEBUGF("ObjectPool reset releasing %p from in use.", ptr);
+              this->available.push_back(ptr);
+            }
             else WARNINGF("object pool contains nullptr in in-use set!");
           }
           this->in_use.clear();
@@ -156,7 +159,7 @@ namespace bliss
           std::unique_lock<std::mutex> lock(mutex);
 
           // first check if we are exceeding capacity.
-          if (this->VAR(size_in_use) >= this->VAR(capacity)) {
+          if (this->VAR(size_in_use) >= this->capacity) {
             if (this->isUnlimited()) {
             	int64_t v = this->VAR(size_in_use);
               WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", v);
@@ -278,202 +281,216 @@ namespace bliss
      *  @tparam LockType    The thread safety property for the pool
      *  @tparam T           The object instance type.  object pool stores pointers to T instances.
      */
-    template<class T >
-    class ObjectPool<T, bliss::concurrent::LockType::SPINLOCK, true> :
-    public ObjectPoolBase<ObjectPool<T, bliss::concurrent::LockType::SPINLOCK, true> >
-    {
-
-      protected:
-
-        using PoolType = ObjectPool<T, bliss::concurrent::LockType::SPINLOCK, true>;
-        using BaseType = ObjectPoolBase<PoolType>;
-
-        friend BaseType;
-
-      public:
-        /// object type
-        using ObjectType = typename BaseType::ObjectType;
-
-        /// object pointer type  (prefer shared pointer as c++11 allows atomic operations, however gcc does not support it.)
-        using ObjectPtrType = typename BaseType::ObjectPtrType;
-
-
-      protected:
-
-        /// mutex for thread safety
-        mutable INIT_ATOMIC_FLAG(spinlock);
-
-        /**
-         * @brief     default copy constructor is deleted.
-         * @param other   source ObjectPool object to copy from.
-         */
-        explicit DELETED_FUNC_DECL(ObjectPool(const PoolType& other));
-
-        /**
-         * @brief     default copy assignment operator is deleted.
-         * @param other   source ObjectPool object to copy from.
-         * @return        self, with member variables copied from other.
-         */
-        PoolType& DELETED_FUNC_DECL(operator=(const PoolType& other));
-
-        /// move constructor is deleted.
-        explicit DELETED_FUNC_DECL(ObjectPool(PoolType&& other));
-        /// move assignment operator is deleted.
-        PoolType& DELETED_FUNC_DECL(operator=(PoolType&& other));
-
-
-        /// clear all allocated objects.
-        void clearStorageImpl() {
-          while (spinlock.test_and_set(std::memory_order_acq_rel));
-
-          // clear the in use queue.
-          for (auto ptr : this->in_use) {
-            if (ptr) delete ptr;
-            else WARNINGF("object pool contains nullptr in in-use set!");
-          }
-          this->in_use.clear();
-          this->VAR(size_in_use) = 0;
-
-          // clear the available queue.
-          while (!this->available.empty()) {
-            delete this->available.front();
-            this->available.pop_front();
-          }
-
-          spinlock.clear(std::memory_order_release);
-        }
-
-
-        /**
-         * @brief     Resets the entire ObjectPool: all Objects in pool are  marked as released and available.
-         *
-         * @note      This may not be entirely thread safe.  the available set is cleared by a single thread, but other
-         *            threads may be acquiring objects while they are being released.
-         *
-         *            It is envisioned that this function should be called from a single thread.
-         *            however, care must be taken to ensure that all other threads have completed their work, else data loss is likely.
-         */
-        void resetImpl() {
-          while (spinlock.test_and_set(std::memory_order_acq_rel));
-
-          // move all from in_use to available
-          for (auto ptr : this->in_use) {
-            if (ptr) this->available.push_back(ptr);
-            else WARNINGF("object pool contains nullptr in in-use set!");
-          }
-          this->in_use.clear();
-          this->VAR(size_in_use) = 0;
-
-          spinlock.clear(std::memory_order_release);
-        }
-
-
-        /**
-         * @brief     Get the next available Object.  Mutex or Spin Locked.
-         * @details   if none available, and size is below capacity or pool is unlimited,
-         *            a new object is created.
-         * @return    pointer to acquired object, nullptr if failed.
-         */
-        ObjectPtrType tryAcquireObjectImpl() {
-
-          ObjectPtrType sptr = nullptr;  // default is a null ptr.
-
-          while (spinlock.test_and_set(std::memory_order_acq_rel));
-
-          // first check if we are exceeding capacity.
-
-          if (this->VAR(size_in_use) >= this->VAR(capacity)) {
-            if (this->isUnlimited()) {
-            	int64_t v = this->VAR(size_in_use);
-              WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", v);
-            }  // else limited size, so return nullptr.
-          } else {  // has room.  get one.
-
-
-            // get an object
-            if (this->available.empty()) {  // empty. allocate one.
-              sptr = new ObjectType();
-            } else {
-
-              sptr = this->available.front();
-              this->available.pop_front();
-            }
-
-            assert(sptr != nullptr);
-
-
-            // save in in-use
-            auto res = this->in_use.insert(sptr);
-            if (!res.second) {
-
-              throw std::logic_error("Inserting duplicates into in-use set");
-            }
-            ++this->VAR(size_in_use);
-
-          }
-
-          spinlock.clear(std::memory_order_release);
-          return sptr;
-        }
-
-
-        /**
-         * @brief     Release a buffer back to pool.  Threadsafe via mutex lock
-         * @details   clears object before release back into available.
-         * @param ptr weak_ptr to object.
-         */
-        bool releaseObjectImpl(ObjectPtrType ptr) {
-
-          if (!ptr) {
-            WARNINGF("WARNING: pool releasing a nullptr.");
-            return true;
-          }
-
-          while (spinlock.test_and_set(std::memory_order_acq_rel));
-
-          // erase it
-          int count = this->in_use.erase(ptr);
-
-          if (count == 0) {
-            spinlock.clear(std::memory_order_release);
-            //ERRORF("ERROR: attempting to release an object that is not managed by this object pool.");
-            return false;
-          }
-          if (count > 1) {
-            this->VAR(size_in_use) -= count;
-            spinlock.clear(std::memory_order_release);
-            throw std::logic_error("ERROR: attempting to release an object that has more than 1 entry in the in-use set.");
-          }
-
-
-          // only put back in available queue if it was in use.
-          // now make object available.  make sure push_back is done one thread at a time.
-          this->available.emplace_back(ptr);
-          this->VAR(size_in_use) -= count;
-
-          spinlock.clear(std::memory_order_release);
-          return true;
-        }
-
-
-      public:
-        /**
-         * @brief     construct a Object Pool with buffers of capacity _buffer_capacity.
-         *   the number of buffers in the pool is set to _pool_capacity.
-         *
-         * @param _pool_capacity       number of buffers in the pool
-         */
-        explicit ObjectPool(const int64_t _pool_capacity = std::numeric_limits<int64_t>::max()) :
-        BaseType(_pool_capacity) {};
-
-
-        /**
-         * @brief     default destructor
-         */
-        virtual ~ObjectPool() {};
-
-
-    };
+//    template<class T >
+//    class ObjectPool<T, bliss::concurrent::LockType::SPINLOCK, true> :
+//    public ObjectPoolBase<ObjectPool<T, bliss::concurrent::LockType::SPINLOCK, true> >
+//    {
+//
+//       static_assert(false, "Thread Sanitizer reports races between release-acquire, and acquire - acqurie");
+//
+//      protected:
+//
+//        using PoolType = ObjectPool<T, bliss::concurrent::LockType::SPINLOCK, true>;
+//        using BaseType = ObjectPoolBase<PoolType>;
+//
+//        friend BaseType;
+//
+//      public:
+//        /// object type
+//        using ObjectType = typename BaseType::ObjectType;
+//
+//        /// object pointer type  (prefer shared pointer as c++11 allows atomic operations, however gcc does not support it.)
+//        using ObjectPtrType = typename BaseType::ObjectPtrType;
+//
+//
+//      protected:
+//
+//        /// mutex for thread safety
+//        mutable INIT_ATOMIC_FLAG(spinlock);
+//
+//        /**
+//         * @brief     default copy constructor is deleted.
+//         * @param other   source ObjectPool object to copy from.
+//         */
+//        explicit DELETED_FUNC_DECL(ObjectPool(const PoolType& other));
+//
+//        /**
+//         * @brief     default copy assignment operator is deleted.
+//         * @param other   source ObjectPool object to copy from.
+//         * @return        self, with member variables copied from other.
+//         */
+//        PoolType& DELETED_FUNC_DECL(operator=(const PoolType& other));
+//
+//        /// move constructor is deleted.
+//        explicit DELETED_FUNC_DECL(ObjectPool(PoolType&& other));
+//        /// move assignment operator is deleted.
+//        PoolType& DELETED_FUNC_DECL(operator=(PoolType&& other));
+//
+//
+//        /// clear all allocated objects.
+//        void clearStorageImpl() {
+//          while (spinlock.test_and_set(std::memory_order_acq_rel));
+//
+//          // clear the in use queue.
+//          for (auto ptr : this->in_use) {
+//            if (ptr) delete ptr;
+//            else WARNINGF("object pool contains nullptr in in-use set!");
+//          }
+//          this->in_use.clear();
+//          this->VAR(size_in_use) = 0;
+//
+//          // clear the available queue.
+//          while (!this->available.empty()) {
+//            delete this->available.front();
+//            this->available.pop_front();
+//          }
+//
+//          spinlock.clear(std::memory_order_release);
+//        }
+//
+//
+//        /**
+//         * @brief     Resets the entire ObjectPool: all Objects in pool are  marked as released and available.
+//         *
+//         * @note      This may not be entirely thread safe.  the available set is cleared by a single thread, but other
+//         *            threads may be acquiring objects while they are being released.
+//         *
+//         *            It is envisioned that this function should be called from a single thread.
+//         *            however, care must be taken to ensure that all other threads have completed their work, else data loss is likely.
+//         */
+//        void resetImpl() {
+//          while (spinlock.test_and_set(std::memory_order_acq_rel));
+//
+//          // move all from in_use to available
+//          for (auto ptr : this->in_use) {
+//            if (ptr) this->available.push_back(ptr);
+//            else WARNINGF("object pool contains nullptr in in-use set!");
+//          }
+//          this->in_use.clear();
+//          this->VAR(size_in_use) = 0;
+//
+//          spinlock.clear(std::memory_order_release);
+//        }
+//
+//
+//        /**
+//         * @brief     Get the next available Object.  Mutex or Spin Locked.
+//         * @details   if none available, and size is below capacity or pool is unlimited,
+//         *            a new object is created.
+//         * @return    pointer to acquired object, nullptr if failed.
+//         */
+//        ObjectPtrType tryAcquireObjectImpl() {
+//
+//          ObjectPtrType sptr = nullptr;  // default is a null ptr.
+//
+//          while (spinlock.test_and_set(std::memory_order_acq_rel));
+//
+//          // first check if we are exceeding capacity.
+//
+//          if (this->VAR(size_in_use) >= this->capacity) {
+//            if (this->isUnlimited()) {
+//            	int64_t v = this->VAR(size_in_use);
+//              WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", v);
+//            }  // else limited size, so return nullptr.
+//          } else {  // has room.  get one.
+//
+//
+//            std::atomic_thread_fence(std::memory_order_acq_rel);
+//            // get an object
+//            if (this->available.empty()) {  // empty. allocate one.
+//              sptr = new ObjectType();
+//            } else {
+//              std::atomic_thread_fence(std::memory_order_acq_rel);
+//              sptr = this->available.front();                       // TSAN race here with releaseObj.
+//              this->available.pop_front();
+//              std::atomic_thread_fence(std::memory_order_acq_rel);
+//            }
+//
+//            assert(sptr != nullptr);
+//
+//
+//            // save in in-use
+//            std::atomic_thread_fence(std::memory_order_acq_rel);
+//            auto res = this->in_use.insert(sptr);                 // TSAN race here with self..
+//            std::atomic_thread_fence(std::memory_order_acq_rel);
+//            if (!res.second) {
+//
+//              throw std::logic_error("Inserting duplicates into in-use set");
+//            }
+//            ++this->VAR(size_in_use);
+//
+//          }
+//
+//          spinlock.clear(std::memory_order_release);
+//          return sptr;
+//        }
+//
+//
+//        /**
+//         * @brief     Release a buffer back to pool.  Threadsafe via mutex lock
+//         * @details   clears object before release back into available.
+//         * @param ptr weak_ptr to object.
+//         */
+//        bool releaseObjectImpl(ObjectPtrType ptr) {
+//
+//          if (!ptr) {
+//            WARNINGF("WARNING: pool releasing a nullptr.");
+//            return true;
+//          }
+//
+//          while (spinlock.test_and_set(std::memory_order_acq_rel));
+//
+//          // erase it
+//          std::atomic_thread_fence(std::memory_order_acq_rel);
+//          int count = this->in_use.erase(ptr);
+//          std::atomic_thread_fence(std::memory_order_acq_rel);
+//
+//          if (count == 0) {
+//            spinlock.clear(std::memory_order_release);
+//            //ERRORF("ERROR: attempting to release an object that is not managed by this object pool.");
+//            return false;
+//          }
+//          if (count > 1) {
+//            std::atomic_thread_fence(std::memory_order_acq_rel);
+//            this->VAR(size_in_use) -= count;
+//            std::atomic_thread_fence(std::memory_order_acq_rel);
+//
+//            spinlock.clear(std::memory_order_release);
+//            throw std::logic_error("ERROR: attempting to release an object that has more than 1 entry in the in-use set.");
+//          }
+//
+//
+//          // only put back in available queue if it was in use.
+//          // now make object available.  make sure push_back is done one thread at a time.
+//          std::atomic_thread_fence(std::memory_order_acq_rel);
+//
+//          this->available.emplace_back(ptr);
+//          this->VAR(size_in_use) -= count;
+//          std::atomic_thread_fence(std::memory_order_acq_rel);
+//
+//          spinlock.clear(std::memory_order_release);
+//          return true;
+//        }
+//
+//
+//      public:
+//        /**
+//         * @brief     construct a Object Pool with buffers of capacity _buffer_capacity.
+//         *   the number of buffers in the pool is set to _pool_capacity.
+//         *
+//         * @param _pool_capacity       number of buffers in the pool
+//         */
+//        explicit ObjectPool(const int64_t _pool_capacity = std::numeric_limits<int64_t>::max()) :
+//        BaseType(_pool_capacity) {};
+//
+//
+//        /**
+//         * @brief     default destructor
+//         */
+//        virtual ~ObjectPool() {};
+//
+//
+//    };
 
 
     /**
@@ -644,7 +661,7 @@ namespace bliss
 
           // okay to add before compare, since object pool is long lasting.
           int64_t prev_size = this->size_in_use.fetch_add(1, std::memory_order_acq_rel);  //reserve
-          if (prev_size >= this->VAR(capacity)) {
+          if (prev_size >= this->capacity) {
             this->size_in_use.fetch_sub(1, std::memory_order_release);
             // leave ptr as nullptr.
             if (this->isUnlimited()) {
@@ -890,7 +907,7 @@ namespace bliss
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
           // first check if we are exceeding capacity.
-          if (this->VAR(size_in_use) >= this->VAR(capacity)) {
+          if (this->VAR(size_in_use) >= this->capacity) {
             if (this->isUnlimited()) {
               WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", this->VAR(size_in_use));
             }  // else limited size, so return nullptr.

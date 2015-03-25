@@ -74,7 +74,7 @@ namespace bliss
         /**
          * @brief     capacity of the ObjectPool (in number of Objects)
          */
-        mutable VAR_T(int64_t)                                                   capacity;
+        mutable int64_t                                                   capacity;
 
         /**
          * @brief     Internal queue of available Objects for immediate use.
@@ -110,15 +110,12 @@ namespace bliss
          * @param _buffer_capacity     size of the individual buffers
          */
         explicit ObjectPoolBase(const int64_t _pool_capacity = std::numeric_limits<int64_t>::max()) :
-          available(), in_use(), size_in_use(0)
-        {
-          VAR(capacity) = _pool_capacity;
-        };
+          capacity(_pool_capacity), available(), in_use(), size_in_use(0)
+        {};
 
         /// destructor
         virtual ~ObjectPoolBase() {
           // delete all the objects
-          VAR(capacity) = 0;
           this->clear_storage();
         }
 
@@ -155,7 +152,7 @@ namespace bliss
 
         /// check if the pool has unlimited capacity
         inline bool isUnlimited() const {
-          return VAR(capacity) == std::numeric_limits<int64_t>::max();
+          return capacity == std::numeric_limits<int64_t>::max();
         }
 
 
@@ -164,7 +161,7 @@ namespace bliss
          * @return  size,
          */
         inline int64_t getAvailableCount() const  {
-          return (isUnlimited() ? VAR(capacity) : (VAR(capacity) - this->getSizeInUse<LockType>()));
+          return (isUnlimited() ? capacity : (capacity - this->getSizeInUse<LockType>()));
         }
 
 
@@ -173,7 +170,7 @@ namespace bliss
          * @return    capacity
          */
         inline const int64_t getCapacity() const {
-          return VAR(capacity);
+          return capacity;
         }
 
 

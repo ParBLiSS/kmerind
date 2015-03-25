@@ -67,6 +67,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 
 //    while (writelock2.test_and_set());
 //    omp_set_lock(&writelock2);
+    std::atomic_thread_fence(std::memory_order_acquire);
     auto sptr = buf_ptr;
 //    omp_unset_lock(&writelock2);
 //    writelock2.clear();
@@ -100,6 +101,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 //      omp_set_lock(&writelock2);
       sptr = buf_ptr;
       buf_ptr = new_buf_ptr;
+      std::atomic_thread_fence(std::memory_order_release);
 #pragma omp flush(buf_ptr)
       //new_buf_ptr = tmp;
 //      omp_unset_lock(&writelock2);
@@ -367,23 +369,23 @@ int main(int argc, char** argv) {
 
     // okay to test.  in real life, pools would not be single threaded.
     testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , bliss::concurrent::LockType::NONE, false >()),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
-    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE, false >()), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
+//    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE, false >()), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
     testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, bliss::concurrent::LockType::NONE, false >()), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
 
     // okay to test.  in real life, pools would not be single threaded.
     testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , bliss::concurrent::LockType::NONE, false >(16)),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
-    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE, false >(16)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
+//    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE, false >(16)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
     testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, bliss::concurrent::LockType::NONE, false >(16)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
 
 
     for (int j = 1; j <= 4; ++j) {
 	if (i * j > 16) continue;
       testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , lt, false >()),    lt, bliss::concurrent::LockType::MUTEX, j, i);
-      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt, false >()), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
+//      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt, false >()), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
       testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt, false >()), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
 
       testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , lt, false >(16)),    lt, bliss::concurrent::LockType::MUTEX, j, i);
-      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt, false >(16)), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
+//      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt, false >(16)), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
       testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt, false >(16)), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
 
     }

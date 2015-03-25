@@ -152,7 +152,7 @@ namespace bliss
           std::unique_lock<std::mutex> lock(mutex);
 
           // first check if we are exceeding capacity.
-          if (this->VAR(size_in_use) >= this->VAR(capacity)) {
+          if (this->VAR(size_in_use) >= this->capacity) {
             if (this->isUnlimited()) {
               WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", this->VAR(size_in_use));
             }  // else limited size, so return nullptr.
@@ -356,7 +356,7 @@ namespace bliss
           while (spinlock.test_and_set(std::memory_order_acq_rel));
 
           // first check if we are exceeding capacity.
-          if (this->VAR(size_in_use) >= this->VAR(capacity)) {
+          if (this->VAR(size_in_use) >= this->capacity) {
             if (this->isUnlimited()) {
               WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", this->VAR(size_in_use));
             }  // else limited size, so return nullptr.
@@ -568,7 +568,7 @@ namespace bliss
 
           // okay to add before compare, since object pool is long lasting.
           int64_t prev_size = this->size_in_use.fetch_add(1, std::memory_order_acq_rel);  //reserve
-          if (prev_size >= this->VAR(capacity)) {
+          if (prev_size >= this->capacity) {
             this->size_in_use.fetch_sub(1, std::memory_order_release);
             // leave ptr as nullptr.
             if (this->isUnlimited()) {
@@ -776,7 +776,7 @@ namespace bliss
           ObjectPtrType sptr = nullptr;  // default is a null ptr.
 
           // first check if we are exceeding capacity.
-          if (this->VAR(size_in_use) >= this->VAR(capacity)) {
+          if (this->VAR(size_in_use) >= this->capacity) {
             if (this->isUnlimited()) {
             	int64_t v = this->VAR(size_in_use);
               WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", v);

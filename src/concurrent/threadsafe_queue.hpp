@@ -133,14 +133,13 @@ namespace bliss
         template<bliss::concurrent::LockType L = LT>
         inline const typename std::enable_if<L != bliss::concurrent::LockType::NONE, size_t>::type
         getRawSize() const {
-          return size.load(std::memory_order_acquire);
+          return size.load(std::memory_order_relaxed);
         }
 
         /// internal, get value in size variable.  not thread safe.
         template<bliss::concurrent::LockType L = LT>
         inline const typename std::enable_if<L == bliss::concurrent::LockType::NONE, size_t>::type
         getRawSize() const {
-          std::atomic_thread_fence(std::memory_order_acquire);
           return VAR(size);
         }
         

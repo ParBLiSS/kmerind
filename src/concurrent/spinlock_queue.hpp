@@ -45,6 +45,8 @@ namespace bliss
       public detail::ThreadSafeQueueBase<ThreadSafeQueue<T, bliss::concurrent::LockType::SPINLOCK> >
 
     {
+        static_assert(false, "TSAN reports race conditions in access to deque (front() and push_back())");
+
       protected:
         using Derived = ThreadSafeQueue<T, bliss::concurrent::LockType::SPINLOCK>;
         using Base = detail::ThreadSafeQueueBase< Derived >;

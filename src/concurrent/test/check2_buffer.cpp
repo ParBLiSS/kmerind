@@ -89,8 +89,8 @@ void appendTest()
   bliss::io::Buffer<TS, CAP, MDSize> b1;
   b1.clear_and_unblock_writes();
 
-  int nelems = CAP / sizeof(int);
-  int remainder = CAP % sizeof(int);
+  size_t nelems = CAP / sizeof(int);
+  size_t remainder = CAP % sizeof(int);
 
   int success = 0;
   int failure = 0;
@@ -110,7 +110,7 @@ void appendTest()
   if (success == 0 || (success != nelems / 2) || failure != 0 || swap != 0)
   {
     ERRORF(
-        "FAIL: (actual,added/expected) success (%d,%d/%d), failure (%d,%d/%d), swap(%d,%d/%d)",
+        "FAIL: (actual,added/expected) success (%d,%d/%lu), failure (%d,%d/%d), swap(%d,%d/%d)",
         success, success, nelems/2, failure, failure, 0, swap, swap, 0);
   }
   else
@@ -151,7 +151,7 @@ void appendTest()
   if (success == 0 || (success != nelems) || failure != nelems || swap != 1)
   {
     ERRORF(
-        "FAIL: (actual,added/expected) success (%d,%d/%d), failure (%d,%d/%d), swap(%d,%d/%d)",
+        "FAIL: (actual,added/expected) success (%d,%d/%lu), failure (%d,%d/%lu), swap(%d,%d/%d)",
         success, success2, nelems, failure, failure2, nelems, swap, swap2, 1);
   }
   else
@@ -202,7 +202,7 @@ void appendTest()
   if (success == 0 || (success != nelems) || failure != 0 || swap != swap_exp)
   {
     ERRORF(
-        "FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)",
+        "FAIL: (actual/expected) success (%d/%lu), failure (%d/%d), swap(%d/%d)",
         success, nelems, failure, 0, swap, swap_exp);
   }
   else
@@ -242,7 +242,7 @@ void appendTest()
   if (success == 0 || (success != nelems) || failure != NumThreads || swap != 1)
   {
     ERRORF(
-        "FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)",
+        "FAIL: (actual/expected) success (%d/%lu), failure (%d/%d), swap(%d/%d)",
         success, nelems, failure, NumThreads, swap, 1);
   }
   else
@@ -283,7 +283,7 @@ void appendTest()
   if ((success != 0) || failure != nelems || swap != 0)
   {
     ERRORF(
-        "FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)",
+        "FAIL: (actual/expected) success (%d/%d), failure (%d/%lu), swap(%d/%d)",
         success, 0, failure, nelems, swap, 0);
   }
   else
@@ -323,7 +323,7 @@ void appendTest()
   if (success == 0 || (success != nelems) || failure != 0 || swap != swap_exp)
   {
     ERRORF(
-        "FAIL: (actual/expected) success (%d/%d), failure (%d/%d), swap(%d/%d)",
+        "FAIL: (actual/expected) success (%d/%lu), failure (%d/%d), swap(%d/%d)",
         success, nelems, failure, 0, swap, swap_exp);
   }
   else
@@ -585,9 +585,11 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
         }
         success2 += oldsize;
 
+        int* d = old_ptr->operator int*();
+
         lstored[omp_get_thread_num()].insert(
-            lstored[omp_get_thread_num()].end(), old_ptr->operator int*(),
-            reinterpret_cast<int*>(old_ptr->end()));
+            lstored[omp_get_thread_num()].end(), d,
+            (d + old_ptr->getSize() / sizeof(int)));
 
       }
 
@@ -740,11 +742,11 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
       {
         //if (omp_get_num_threads() > 1) INFOF("INFO: exchanged. thread %d/%d,  old %p, new %p, ptr %p", omp_get_thread_num(), omp_get_num_threads(), old_ptr, new_ptr, ptr.load(std::memory_order_relaxed));
         // this is showing a possible spurious wakeup...
-        int oldsize = old_ptr ? old_ptr->getSize() / elSize : 0;
+        size_t oldsize = old_ptr ? old_ptr->getSize() / elSize : 0;
         if (oldsize != capInEl)
         {
           ERRORF(
-              "FAIL 3 thread %d/%d atomic DID NOT GET %lu elements, actual %d. local swap = %d, i = %lu. oldbuf %p, newbuf %p",
+              "FAIL 3 thread %d/%d atomic DID NOT GET %lu elements, actual %lu. local swap = %d, i = %lu. oldbuf %p, newbuf %p",
               omp_get_thread_num(), omp_get_num_threads(), capInEl, oldsize,
               swap, i, old_ptr, ptr.load());
         }
@@ -773,7 +775,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
   //INFOF("LAST BUFFER 1");
 
   ptr.load()->block_and_flush();
-  int last = ptr.load()->getSize();
+  size_t last = ptr.load()->getSize() / elSize;
   if (last == (capInEl))
   {
     ++swap;
@@ -792,7 +794,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
   if (success == 0 || swap != success / (capInEl))
   {
     ERRORF(
-        "FAIL atomic: success (%d), failure (%d/%d/%d), swap(%d/%ld), last buf size %d.",
+        "FAIL atomic: success (%d), failure (%d/%d/%d), swap(%d/%ld), last buf size %lu.",
         success, failure, failure2, failure3, swap, success / (capInEl), last);
   }
   else
@@ -934,8 +936,8 @@ int main(int argc, char** argv)
 
 #if defined( BLISS_MUTEX)
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::MUTEX;
-#elif defined(BLISS_SPINLOCK)
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
+//#elif defined(BLISS_SPINLOCK)
+//  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::SPINLOCK;
 //#elif defined(BLISS_LOCKFREE)
 //  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCKFREE;
 #else //if defined(BLISS_LOCKFREE)

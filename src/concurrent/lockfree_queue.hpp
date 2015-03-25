@@ -113,12 +113,12 @@ namespace bliss
         void clearImpl()
         {
           // first clear the size, so threads' don't try to dequeue
-         this->size.fetch_and(Base::DISABLED, std::memory_order_acq_rel);  // keep the push bit, and set size to 0
+
 
           // dequeue
           T val;
           while (q.try_dequeue(val)) ;
-          std::atomic_thread_fence(std::memory_order_release);
+          this->size.fetch_and(Base::DISABLED, std::memory_order_release);  // keep the push bit, and set size to 0
         }
 
         /**
@@ -164,7 +164,7 @@ namespace bliss
           if (v < this->capacity) {
 
             // between 0 and capacity - 1.  enqueue.
-            std::atomic_thread_fence(std::memory_order_acq_rel);
+            std::atomic_thread_fence(std::memory_order_acquire);
             res = q.enqueue(data);
             std::atomic_thread_fence(std::memory_order_release);
 
@@ -208,8 +208,8 @@ namespace bliss
           if (v < this->capacity) {
 
             // else between 0 and capacity - 1.  enqueue.
-            std::atomic_thread_fence(std::memory_order_acq_rel);
-            res.first = q.enqueue(std::forward<T>(data));
+            std::atomic_thread_fence(std::memory_order_acquire);
+            res.first = q.enqueue(std::move(data));         // <- TSAN reports data race here.  write
             std::atomic_thread_fence(std::memory_order_release);
 
             if (res.first) {
@@ -252,7 +252,7 @@ namespace bliss
             } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
               res = this->size.compare_exchange_strong(v, v+1, std::memory_order_relaxed);
               if (res) {
-                std::atomic_thread_fence(std::memory_order_acq_rel);
+                std::atomic_thread_fence(std::memory_order_acquire);
                 res = q.enqueue(data);
                 std::atomic_thread_fence(std::memory_order_release);
 
@@ -289,6 +289,7 @@ namespace bliss
           std::pair<bool, T> res(false, T());
 
           size_t v = 0UL;
+          bool r = false;
 
           do {  // loop forever, unless queue is disabled, or insert succeeded.
 
@@ -300,12 +301,15 @@ namespace bliss
               break;
             } else if (v < this->capacity) { // else between 0 and capacity - 1.  enqueue.
               res.first = this->size.compare_exchange_strong(v, v+1, std::memory_order_relaxed);
+
+
               if (res.first) {
-                std::atomic_thread_fence(std::memory_order_acq_rel);
-                res.first = q.enqueue(std::forward<T>(data));
+                std::atomic_thread_fence(std::memory_order_acquire);
+                r = q.enqueue(std::move(data));           // <- TSAN reports data race here.  write
                 std::atomic_thread_fence(std::memory_order_release);
 
-                if (res.first) {
+                if (r) {
+                  res.first = r;
                   break;
                 } else {// else  enqueue failed. decrement and try again.
                   this->size.fetch_sub(1, std::memory_order_relaxed);
@@ -340,23 +344,42 @@ namespace bliss
           // pop dequeues first, then decrement count
           std::pair<bool, T> res(false, T());
 
-          size_t v = this->size.load(std::memory_order_relaxed);  // don't use fetch_sub because we could wrap around.
+          int s = this->size.load(std::memory_order_acquire);
 
-					if ((v & Base::MAX_SIZE) == 0UL) return res;  // nothing to pop
+          res.first = q.try_dequeue(res.second);                 // <- TSAN reports data race here.  read
+          std::atomic_thread_fence(std::memory_order_release);
 
-					// use compare_exchange_strong to ensure we are not going into negative territory.
-					res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_relaxed);
 
-					if (res.first) {
-            std::atomic_thread_fence(std::memory_order_acq_rel);
-            res.first = q.try_dequeue(res.second);
-            std::atomic_thread_fence(std::memory_order_release);
-
-            if (!res.first) {
-              this->size.fetch_add(1, std::memory_order_relaxed);
+          if (res.first) {
+            s = this->size.fetch_sub(1, std::memory_order_relaxed);
+            if ((s & Base::MAX_SIZE) == 0) {
+              throw std::logic_error("able to dequeue, but size was 0.");
+//            } else {
+//              INFOF("data size is %d", s);
             }
+          } else {
+            s = this->size.load( std::memory_order_relaxed);
+          }
 
-					}
+//          size_t v = this->size.load(std::memory_order_relaxed);  // don't use fetch_sub because we could wrap around.
+//
+//					if ((v & Base::MAX_SIZE) == 0UL) return res;  // nothing to pop
+//
+//					// use compare_exchange_strong to ensure we are not going into negative territory.
+//					res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_acq_rel);
+//
+//          bool r = false;
+//					if (res.first) {
+//            //std::atomic_thread_fence(std::memory_order_acq_rel);
+//            r = q.try_dequeue(res.second);                    // <- TSAN reports data race here.  read
+//            //std::atomic_thread_fence(std::memory_order_acq_rel);
+//
+//            if (!r) {
+//              this->size.fetch_add(1, std::memory_order_relaxed);
+//            }
+//            res.first = r;
+//					}
+
           return res;
         }
 
@@ -380,33 +403,52 @@ namespace bliss
 
           size_t v = 0UL;
 
-          do {
-            v = this->size.load(std::memory_order_relaxed);
+          v = this->size.load(std::memory_order_relaxed);
 
-            if (v == Base::DISABLED) {  // disabled and empty. return.
-              res.first = false;
-              break;
-            } else if ((v & Base::MAX_SIZE) > 0) {  // not empty
+          while (v != Base::DISABLED) {
+            std::atomic_thread_fence(std::memory_order_acquire);
+            res.first = q.try_dequeue(res.second);
+            std::atomic_thread_fence(std::memory_order_release);
 
-              res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_relaxed);
-              if (res.first)
-              {
-                //  else has some entries
-                std::atomic_thread_fence(std::memory_order_acq_rel);
-                res.first = q.try_dequeue(res.second);
-                std::atomic_thread_fence(std::memory_order_release);
-
-                if (res.first) {
-                  break;
-                } else {
-                  // failed dequeue. need to increment and try again
-                  v = this->size.fetch_add(1, std::memory_order_relaxed);
-                }
-              } // failed reserve.  try again
-            } // else empty, so wait
-
+            if (res.first) {
+              v = this->size.fetch_sub(1, std::memory_order_relaxed);
+              if ((v & Base::MAX_SIZE) == 0) {
+                throw std::logic_error("able to dequeue, but size was 0.");
+              } else {
+                break;
+              }
+            } else {
+              v = this->size.load(std::memory_order_relaxed);
+            }
             _mm_pause();
-          } while (true);
+          }
+
+//            v = this->size.load(std::memory_order_relaxed);
+//
+//            if (v == Base::DISABLED) {  // disabled and empty. return.
+//              res.first = false;
+//              break;
+//            } else if ((v & Base::MAX_SIZE) > 0) {  // not empty
+//
+//              res.first = this->size.compare_exchange_strong(v, v-1, std::memory_order_relaxed);
+//              if (res.first)
+//              {
+//                //  else has some entries
+//                std::atomic_thread_fence(std::memory_order_acq_rel);
+//                res.first = q.try_dequeue(res.second);
+//                std::atomic_thread_fence(std::memory_order_acq_rel);
+//
+//                if (res.first) {
+//                  break;
+//                } else {
+//                  // failed dequeue. need to increment and try again
+//                  v = this->size.fetch_add(1, std::memory_order_relaxed);
+//                }
+//              } // failed reserve.  try again
+//            } // else empty, so wait
+//
+//            _mm_pause();
+//          } while (true);
 
           return res;
 

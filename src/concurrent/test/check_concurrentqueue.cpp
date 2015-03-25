@@ -18,6 +18,7 @@
 
 #include <thread>
 #include "utils/logging.h"
+#include "utils/iterator_test_utils.hpp"
 
 
 using namespace moodycamel;
@@ -38,7 +39,7 @@ void test1() {
     int v = -1;
     bool r = q.try_dequeue(v);
     assert(r);
-    INFOF("tid %d dequeued %d.  %s\n", omp_get_thread_num(), v, (r? "success" : "failure"));
+    INFOF("tid %d dequeued %d.  %s", omp_get_thread_num(), v, (r? "success" : "failure"));
   }
 
 #pragma omp parallel num_threads(4) shared (q)
@@ -49,7 +50,7 @@ void test1() {
     int v = -1;
     bool r = q.try_dequeue(v);
     assert(r);
-    INFOF("tid %d dequeued %d. %s\n", omp_get_thread_num(), v, (r? "success" : "failure"));
+    INFOF("tid %d dequeued %d. %s", omp_get_thread_num(), v, (r? "success" : "failure"));
   }
 
 
@@ -62,7 +63,7 @@ void test1() {
       }
       q.enqueue(omp_get_thread_num());
 
-      INFOF("tid %d enqueue.\n", omp_get_thread_num());
+      INFOF("tid %d enqueue.", omp_get_thread_num());
       for (volatile int i = 0; i != 4096; ++i) {
         continue;
       }
@@ -77,11 +78,11 @@ void test1() {
   for (std::size_t i = 0; i != MAX_THREADS; ++i) {
 	  r &= q.try_dequeue(v);
     assert(r);
-    if (seenIds[v]) INFOF("already seen %d\n", v);
-    else INFOF("haven't seen %d\n", v);
+    if (seenIds[v]) INFOF("already seen %d", v);
+    else INFOF("haven't seen %d", v);
     seenIds[v] = true;
   }
-  if (!r) INFOF("there was a failed dequeue.\n");
+  if (!r) INFOF("there was a failed dequeue.");
   for (std::size_t i = 0; i != MAX_THREADS; ++i) {
     assert(seenIds[i]);
   }
@@ -174,7 +175,7 @@ void test3() {
         assert(!seenIds[item]);
         seenIds[item] = true;
       }
-      if (!r) INFOF("there was a failed dequeue.\n");
+      if (!r) INFOF("there was a failed dequeue.");
       for (std::size_t i = 0; i != seenIds.size(); ++i) {
         assert(seenIds[i]);
       }
@@ -217,11 +218,143 @@ void test4 () {
 }
 
 
+void test5() {
+
+  int elements = 100000;
+  // Test many threads and implicit queues being created and destroyed concurrently
+  int nThreads = 4;
+  std::vector< int > input(elements);
+
+  for (int i = 0; i < elements; ++i) {
+    input[i] = i;
+  }
+
+  std::vector<std::vector<int> > outputs(nThreads);
+  for (int i = 0; i < nThreads; ++i ) {
+    outputs[i].clear();
+  }
+
+  std::atomic<bool> finished(false);
+  ConcurrentQueue<int> q;
+
+#pragma omp parallel sections default(none) shared(q, input, outputs, nThreads, elements, finished) num_threads(2)
+  {
+#pragma omp section
+    {
+#pragma omp parallel default(none) shared(q, input, elements, finished) num_threads(nThreads)
+      {
+         int tid = omp_get_thread_num();
+         int nt = omp_get_num_threads();
+
+         for (int i = tid; i < elements; i += nt) {
+           q.enqueue(input[i]);
+         }
+      }
+
+      finished.store(true, std::memory_order_release);
+    }
+
+#pragma omp section
+    {
+#pragma omp parallel default(none) shared(q, outputs, finished) num_threads(nThreads)
+      {
+        int tid = omp_get_thread_num();
+        int v = 0;
+        bool r = false;
+
+        while (!finished.load(std::memory_order_acquire) || (r = q.try_dequeue(v))) {
+          if (r) outputs[tid].push_back(v);
+        }
+      }
+    }
+  }
+
+
+  std::vector<int> output;
+  for (int i = 0; i < nThreads; ++i) {
+    output.insert(output.end(), outputs[i].begin(), outputs[i].end());
+  }
+
+  bool result = compareUnorderedSequences(input.begin(), output.begin(), elements);
+  INFOF("enqueue/dequeue result is same? %s", (result ? "y" : "n"));
+}
+
+void testMove5() {
+
+  int elements = 100000;
+  // Test many threads and implicit queues being created and destroyed concurrently
+  int nThreads = 4;
+  std::vector< int > input(elements);
+
+  for (int i = 0; i < elements; ++i) {
+    input[i] = i;
+  }
+
+  std::vector<std::vector<int> > outputs(nThreads);
+  for (int i = 0; i < nThreads; ++i ) {
+    outputs[i].clear();
+  }
+
+  std::atomic<bool> finished(false);
+  ConcurrentQueue<int> q;
+
+#pragma omp parallel sections default(none) shared(q, input, outputs, nThreads, elements, finished) num_threads(2)
+  {
+#pragma omp section
+    {
+#pragma omp parallel default(none) shared(q, input, elements, finished) num_threads(nThreads)
+      {
+         int tid = omp_get_thread_num();
+         int nt = omp_get_num_threads();
+         bool res = false;
+
+         for (int i = tid; i < elements; i += nt) {
+           int v = input[i];
+           res = q.enqueue(std::move(v));
+         }
+      }
+
+      finished.store(true, std::memory_order_release);
+    }
+
+#pragma omp section
+    {
+#pragma omp parallel default(none) shared(q, outputs, finished) num_threads(nThreads)
+      {
+        int tid = omp_get_thread_num();
+        int v = 0;
+        bool r = false;
+
+        while (!finished.load(std::memory_order_acquire) || (r = q.try_dequeue(v))) {
+          if (r) outputs[tid].push_back(v);
+        }
+      }
+    }
+  }
+
+
+  std::vector<int> output;
+  for (int i = 0; i < nThreads; ++i) {
+    output.insert(output.end(), outputs[i].begin(), outputs[i].end());
+  }
+
+  bool result = compareUnorderedSequences(input.begin(), output.begin(), elements);
+  INFOF("enqueue/dequeue result is same? %s", (result ? "y" : "n"));
+}
+
+
+
+
 
 int main (int argc, char** argv) {
 
-   test3();
-   test4();
+
+//   test3();
+//   test4();
    test1();
    test2();
+
+   test5();
+   testMove5();
+
 }

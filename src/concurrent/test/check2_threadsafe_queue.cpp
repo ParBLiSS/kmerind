@@ -46,10 +46,27 @@ void testWaitAndPush(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int
   }
   queue.disablePush();
 
-  if (count != entries) FATALF("FAIL: TSQueue capacity %lu, finished waitAndPush with %d entries.\n", queue.getCapacity(), count);
+  if (count != entries) FATALF("FAIL: TSQueue capacity %lu, finished waitAndPush with %d entries, expected %d.", queue.getCapacity(), count, entries);
   else INFOF("PASS,");
 };
 
+
+template<typename T, bliss::concurrent::LockType LT>
+void testWaitAndPushSome(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int entries, const int nProducer) {
+  //usleep(1000);
+  int count = 0;
+#pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+:count)
+  for (int i = 0; i < entries; ++i) {
+    if (queue.waitAndPush(T(i)).first)
+//    if (i % 1000 == 0) usleep(5);
+      ++count;
+    //usleep(5);
+  }
+  queue.disablePush();
+
+
+  INFOF("PASS, pushed %d of %d", count, entries);
+};
 
 template<typename T, bliss::concurrent::LockType LT>
 void testTryPush(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int entries, const int nProducer) {
@@ -67,7 +84,7 @@ void testTryPush(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int ent
   queue.disablePush();
 
   if (count + count2 != entries || count == 0)
-    FATALF("FAIL: TSQueue capacity %lu, finished tryPush. %d successful, %d failed\n", queue.getCapacity(), count, count2);
+    FATALF("FAIL: TSQueue capacity %lu, finished tryPush. %d successful, %d failed", queue.getCapacity(), count, count2);
   else INFOF("PASS,");
 
 };
@@ -80,21 +97,21 @@ void testWaitAndPop1(bliss::concurrent::ThreadSafeQueue<T, LT> &queue) {
 //    INFOF("queue waitAndPopping. "); fflush(stdout);
     if (queue.waitAndPop().first)
       ++count;
-//    INFOF("queue size = %lu\n", queue.getSize());  fflush(stdout);
+//    INFOF("queue size = %lu", queue.getSize());  fflush(stdout);
 
     //if (count %1000) usleep(20);
   }
-      INFOF("done with waitAndPop()\n");  fflush(stdout);
+      INFOF("done with waitAndPop()");  fflush(stdout);
 
 
   // now empty it
   while (queue.tryPop().first) {
     ++count3;
 
-    INFOF("emptying. queue size = %lu\n", queue.getSize());
+    INFOF("emptying. queue size = %lu", queue.getSize());
 
   }
-  if (!queue.isEmpty() || count3 != 0) FATALF("FAIL: TSQueue capacity %lu, finished waitAndPop 1 thread. %d successful, %d flushed.  empty? %s\n", queue.getCapacity(), count, count3, (queue.isEmpty() ? "yes" : "no"));
+  if (!queue.isEmpty() || count3 != 0) FATALF("FAIL: TSQueue capacity %lu, finished waitAndPop 1 thread. %d successful, %d flushed.  empty? %s", queue.getCapacity(), count, count3, (queue.isEmpty() ? "yes" : "no"));
   else INFOF("PASS,");
 
 };
@@ -115,7 +132,7 @@ void testTryPop1(bliss::concurrent::ThreadSafeQueue<T, LT> &queue) {
   while (queue.tryPop().first) {
     ++count3;
   }
-  if (!queue.isEmpty() || (count == 0 && count3 == 0)) FATALF("FAIL: TSQueue capacity %lu, finished tryPop 1 thread. %d successful, %d failed, %d flushed.  empty? %s\n", queue.getCapacity(), count, count2, count3, (queue.isEmpty() ? "yes" : "no"));
+  if (!queue.isEmpty() || (count == 0 && count3 == 0)) FATALF("FAIL: TSQueue capacity %lu, finished tryPop 1 thread. %d successful, %d failed, %d flushed.  empty? %s", queue.getCapacity(), count, count2, count3, (queue.isEmpty() ? "yes" : "no"));
   else INFOF("PASS,");
 
 };
@@ -135,23 +152,23 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int nCon
     counts2[omp_get_thread_num()] = 0;
     counts3[omp_get_thread_num()] = 0;
 
-#pragma omp single nowait
-    {
+//#pragma omp single nowait
+//    {
       while(queue.canPop()) {
 
         // deferred task to pop.
-#pragma omp task default(none) shared(queue, counts, counts2)
-        {
+//#pragma omp task default(none) shared(queue, counts, counts2)
+//        {
           if (queue.tryPop().first)
             ++counts[omp_get_thread_num()];
           else
             ++counts2[omp_get_thread_num()];
 
           //if ((counts[omp_get_thread_num()] % 1000) == 0) usleep(20);
-        }
+//        }
 
       };
-    }
+//    }
 
   }  // implicit barrier.  won't have issue with reporting too early.
   // NO WASTED TIME here
@@ -179,7 +196,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int nCon
     count2 = counts2[omp_get_thread_num()];
     count3 = counts3[omp_get_thread_num()];
   }
-  if (!queue.isEmpty() || (count == 0 && count3 == 0)) FATALF("FAIL: TSQueue capacity %lu, finished tryPop. %d successful, %d failed, %d flushed.  empty? %s\n", queue.getCapacity(), count, count2, count3, (queue.isEmpty() ? "yes" : "no"));
+  if (!queue.isEmpty() || (count == 0 && count3 == 0)) FATALF("FAIL: TSQueue capacity %lu, finished tryPop. %d successful, %d failed, %d flushed.  empty? %s", queue.getCapacity(), count, count2, count3, (queue.isEmpty() ? "yes" : "no"));
   else INFOF("PASS,");
 
 };
@@ -193,7 +210,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
   int entries = (!queue.isFixedSize()) ? 10000 : queue.getCapacity();
 
-  INFOF("=== TEST %s: %d producers, %d consumers, capacity %lu, entries %d\n", message.c_str(), nProducer, nConsumer, queue.getCapacity(), entries);
+  INFOF("=== TEST %s: %d producers, %d consumers, capacity %lu, entries %d", message.c_str(), nProducer, nConsumer, queue.getCapacity(), entries);
 
 
   int i = 0;
@@ -209,8 +226,8 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     else
       ++count2;
   }
-  if (count2 != entries) FATALF("FAIL: TSQueue capacity %lu, finished tryPop on empty at iteration %d, success %d, fail %d\n", queue.getCapacity(), i, count, count2);
-  else INFOF("PASS\n");
+  if (count2 != entries) FATALF("FAIL: TSQueue capacity %lu, finished tryPop on empty at iteration %d, success %d, fail %d", queue.getCapacity(), i, count, count2);
+  else INFOF("PASS");
 
   INFOF("  CHECK tryPush too much: ");  fflush(stdout);
   count = 0;
@@ -224,8 +241,8 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
       ++count2;
   }
   int expected = (!queue.isFixedSize()) ? entries+2 : entries;
-  if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2)))  FATALF("FAIL: TSQueue capacity %lu, finished tryPush until full, expected %d, success %d, fail %d. \n", queue.getCapacity(), expected, count, count2);
-  else INFOF("PASS\n");
+  if (count != std::min(queue.getCapacity(), 2UL + entries) || (count + count2 != (entries+2)))  FATALF("FAIL: TSQueue capacity %lu, finished tryPush until full, expected %d, success %d, fail %d. ", queue.getCapacity(), expected, count, count2);
+  else INFOF("PASS");
 
   INFOF("  CHECK tryPop too much: ");  fflush(stdout);
   count = 0;
@@ -238,8 +255,8 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
       ++count2;
   }
   expected = (!queue.isFixedSize()) ? entries+2 : entries;
-  if ((count + count2 != (entries+2))) FATALF("FAIL: TSQueue capacity %lu, finished tryPop from full, expected %d, success %d, fail %d\n",queue.getCapacity(),  expected, count, count2);
-  else INFOF("PASS\n");
+  if ((count + count2 != (entries+2))) FATALF("FAIL: TSQueue capacity %lu, finished tryPop from full, expected %d, success %d, fail %d",queue.getCapacity(),  expected, count, count2);
+  else INFOF("PASS");
 
 
 
@@ -259,8 +276,8 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     if (queue.waitAndPop().first)
       ++count2;
   }
-  if (count != entries ||  count2 != count) FATALF("FAIL: TSQueue capacity %lu, finished waitAndPush with %d entries, finished waitAndPop with %d entries.  should be %d\n", queue.getCapacity(), count, count2, entries);
-  else INFOF("PASS\n");
+  if (count != entries ||  count2 != count) FATALF("FAIL: TSQueue capacity %lu, finished waitAndPush with %d entries, finished waitAndPop with %d entries.  should be %d", queue.getCapacity(), count, count2, entries);
+  else INFOF("PASS");
 
 
 
@@ -273,7 +290,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 #pragma omp section
     {
       testTryPush(queue, entries, nProducer);
-      //INFOF("tryPush done correctly.  final queue size (with consumer): %lu\n", queue.size());
+      //INFOF("tryPush done correctly.  final queue size (with consumer): %lu", queue.size());
     }
 
 #pragma omp section
@@ -284,7 +301,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
         testTryPop1(queue);
     }
   }
-  INFOF("\n");
+
 
   INFOF("  CHECK waitAndPush, and tryPop: ");   fflush(stdout);
   queue.clear();
@@ -304,7 +321,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
         testTryPop1(queue);
     }
   }
-  INFOF("\n");
+
 
   INFOF("  CHECK waitAndPush, and disablePush: ");   fflush(stdout);
   queue.clear();
@@ -313,17 +330,17 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   {
 #pragma omp section
     {
-      testWaitAndPush(queue, entries, nProducer);
+      testWaitAndPushSome(queue, entries, nProducer);
     }
 
 #pragma omp section
     {
-	usleep(10000);
+	usleep(1000);
 	queue.disablePush();
 //#pragma omp flush(queue)
     }
   }
-  INFOF("\n");
+
   //TODO: can have !done, waitAndPop, and done=true in other thread, so pop thread never gets to check "done" ->  deadlock.
 
     // not testing this with more than 1 consumer thread.  there could be a lot more consumer tasks generated than
@@ -347,7 +364,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
         testWaitAndPop1(queue);
       }
     }
-    INFOF("\n");
+
 
 
 
@@ -366,7 +383,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
         testWaitAndPop1(queue);
       }
     }
-    INFOF("\n");
+
 };
 
 

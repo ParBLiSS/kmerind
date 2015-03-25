@@ -187,7 +187,6 @@ namespace bliss
          */
         BufferBase() : start_ptr(new uint8_t[Capacity + MetadataSize]()), data_ptr(VAR(start_ptr) + MetadataSize), size(0)
         {
-          std::atomic_thread_fence(std::memory_order_release);
         }
         //start_ptr(new uint8_t[Capacity](), []( uint8_t *p ) { delete [] p; })  if using shared ptr
 
@@ -197,8 +196,8 @@ namespace bliss
         virtual ~BufferBase()
         {
 //          DEBUGF("buffer destructor base called");
+          std::atomic_thread_fence(std::memory_order_acquire);
           delete [] VAR(start_ptr);
-          std::atomic_thread_fence(std::memory_order_release);
         }
 
         /**
@@ -307,6 +306,7 @@ namespace bliss
          */
         template<typename T>
         operator T*() const {
+          std::atomic_thread_fence(std::memory_order_acquire);
           uint8_t* d = VAR(data_ptr);
           return reinterpret_cast<T*>(d);
         }
@@ -315,14 +315,14 @@ namespace bliss
          * @brief   get the capacity of the buffer.
          * @return  maximum capacity of buffer.
          */
-        const size_t getCapacity() const
+        static const size_t getCapacity()
         {
           return Capacity;
         }
 
 
       	/// get the metadata size
-      	const size_t getMetadataSize() const
+      	static const size_t getMetadataSize()
        	{
       	  return MetadataSize;
        	}
@@ -438,7 +438,7 @@ namespace bliss
          */
         virtual ~Buffer()
         {
-          block_and_flush();
+          block_and_flush();  // possible issue here:  see https://code.google.com/p/thread-sanitizer/wiki/PopularDataRaces#Data_race_on_vptr
         }
 
         /**
@@ -465,13 +465,12 @@ namespace bliss
          */
         BufferType& operator=(BufferType && other)
         {
+          std::unique_lock<std::mutex> myLock(this->mutex, std::defer_lock),
+              otherLock(other.mutex, std::defer_lock);
+          std::lock(myLock, otherLock);
 
           if (this->VAR(start_ptr) != other.VAR(start_ptr))
           {
-
-            std::unique_lock<std::mutex> myLock(this->mutex, std::defer_lock),
-                otherLock(other.mutex, std::defer_lock);
-            std::lock(myLock, otherLock);
 
             // move the internal memory.
             this->move_assign(std::move(other), myLock, otherLock);
@@ -827,480 +826,486 @@ namespace bliss
      * @tparam  LockType  controls the type of thread safely.  See concurrent/concurrent.h for allowed values.
      * @tparam  Capacity  size of the allocated byte array
      */
-    template<size_t Capacity, size_t MetadataSize>
-    class Buffer<bliss::concurrent::LockType::SPINLOCK, Capacity, MetadataSize> :
-      public BufferBase<bliss::concurrent::LockType::SPINLOCK, Capacity, MetadataSize>
-    {
-        template<bliss::concurrent::LockType LT, size_t C, size_t MDS>
-        friend std::ostream & operator<<(std::ostream &os, const Buffer<LT, C, MDS>& p);
-
-
-      public:
-        static constexpr bliss::concurrent::LockType LockType = bliss::concurrent::LockType::SPINLOCK;
-
-      protected:
-        using BufferType = Buffer<bliss::concurrent::LockType::SPINLOCK, Capacity, MetadataSize>;
-        using BaseType = BufferBase<bliss::concurrent::LockType::SPINLOCK, Capacity, MetadataSize>;
-
-        // instead of a single "size" variable and a "blocked" variable (to prevent further writes to the buffer)
-        //   (which require concurrent updates to both)
-        // we use Capacity+1 to indicate a blocked state: if reserved is set to Capacity+1, it is blocked..
-        // also, because reservation and actual write may occur separately, we need a "reserved" and a "written"
-        //   for separate incrementing.
-        // having the "written" variable allows us to wait for all writes to complete.
-
-
-        /// position of current start of free space.  for reservation.
-        /// capacity + 1 indicates buffer is blocked/full.  other values indicate that buffer is unblocked.
-        /// exchanges with size.
-        VAR_T(size_t) reserved;
-
-        /// amount of data written so far.  will not update beyond the FINAL size
-        VAR_T(size_t) written;
-
-
-        /// spinlock for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
-        mutable INIT_ATOMIC_FLAG(spinlock);
-
-      private:
-
-        /// remove copy constructor and copy assignement operators.
-        explicit DELETED_FUNC_DECL(Buffer(const BufferType& other));
-        /// remove copy constructor and copy assignement operators.
-        BufferType& DELETED_FUNC_DECL(operator=(const BufferType& other));
-
-
-      public:
-        /**
-         * @brief Constructor.  Allocate and initialize memory with size specified as parameter.
-         */
-        Buffer() : BaseType(),
-         reserved(Capacity + 1), written(0L)
-        {}
-        //start_ptr(new uint8_t[Capacity](), []( uint8_t *p ) { delete [] p; })  if using shared ptr
-
-        /**
-         * @brief Destructor.  waits for all writes and then deallocate memory manually.
-         */
-        virtual ~Buffer()
-        {
-          block_and_flush();
-        }
-
-
-        /**
-         * @brief Move constructs from a Buffer with the SAME LockType property
-         * @details
-         * Thread Safe always, using approach from http://www.justsoftwaresolutions.co.uk/threading/thread-safe-copy-constructors.html
-         *
-         * Constructs a mutex lock and then delegates to another constructor.
-         *
-         * @param other   Source object to move
-         */
-        explicit Buffer(BufferType && other) {
-          while (other.spinlock.test_and_set(std::memory_order_acquire));
-
-          this->VAR(size) = other.VAR(size); other.VAR(size) = 0;
-          this->VAR(start_ptr) = other.VAR(start_ptr); other.VAR(start_ptr) = nullptr;
-          this->VAR(data_ptr) = other.VAR(data_ptr); other.VAR(data_ptr) = nullptr;
-          VAR(written) = other.VAR(written); other.VAR(written) = 0;
-          VAR(reserved) = other.VAR(reserved); other.VAR(reserved) = Capacity + 1;
-
-          other.spinlock.clear(std::memory_order_release);
-        }
-
-
-
-        /**
-         * @brief Move assignment operator, between Buffers of the SAME LockType property.
-         * @details  Internal data memory moved.
-         * The move is done in a thread safe way always.
-         *
-         * @param other     Source Buffer to move
-         * @return          target Buffer reference
-         */
-        BufferType& operator=(BufferType && other)
-        {
-
-          if (this->VAR(start_ptr) != other.VAR(start_ptr))
-          {
-
-            while(spinlock.test_and_set(std::memory_order_acquire));
-            while(other.spinlock.test_and_set(std::memory_order_acquire));
-
-            // move the internal memory.
-            this->VAR(start_ptr) = other.VAR(start_ptr);                 other.VAR(start_ptr) = nullptr;
-            this->VAR(data_ptr) = other.VAR(data_ptr);                   other.VAR(data_ptr) = nullptr;
-            this->VAR(size) = other.VAR(size);                           other.VAR(size) = 0;
-
-            VAR(written) = (size_t)(other.VAR(written));                other.VAR(written) = 0;
-            VAR(reserved) = (size_t)(other.VAR(reserved));              other.VAR(reserved) = Capacity + 1;
-
-            other.spinlock.clear(std::memory_order_release);
-            spinlock.clear(std::memory_order_release);
-          }
-          return *this;
-
-        }
-      protected:
-
-        /**
-         * @brief get the current approximate size of the Buffer.
-         * @return    current size
-         */
-/*        size_t getApproximateSize() const
-        {
-          std::atomic_thread_fence(std::memory_order_acquire);
-          return reserved;
-        }
-*/
-        /**
-         * @brief get the current written data size of the Buffer.
-         * @note  written data may be scattered.
-         * @return    current size
-         */
-/*        size_t getWrittenSize() const
-        {
-          std::atomic_thread_fence(std::memory_order_acquire);
-          return written;
-        }
-*/
-        /// Check if buffer has been blocked from further reservation but still waiting for all writes to finish. via spin lock
-/*        bool is_flushing() const
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-          bool res = (reserved > Capacity) && (written < this->size);
-          spinlock.clear(std::memory_order_release);
-          return res;
-        }
-*/
-
-      public:
-
-
-        /**
-         * @brief   Checks if a buffer is empty.
-         * @note    The return value is approximate due to threading
-         *
-         * @return  true if the buffer is empty, false otherwise.
-         */
-        bool isEmpty() const
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-          bool res = (VAR(written) == 0);
-          spinlock.clear(std::memory_order_release);
-          return res;
-        }
-
-        // TODO:  make this more clear.
-        // need 1. flag to indicate no more new writers
-        //      2. wait for current writers to finish
-        //      3. 3 phases:  writing, flushing, reading.  -> reserve, wirte_unlock, flush_begin, block_writes, unblock_writes
-        //          reserve (counter ++)
-        //          wirte_unlock (counter --)
-        //          flush (MSB = 1)
-        //          block_writes ( wait for MSB==1 && counter == 0)
-        //          unblock_writes ( MSB = 0)
-        // state checks:  is_writing (MSB==0|1 && counter > 0)
-        //                is_flushing (MSB==1 && counter> 0)
-        //                is_read_only ( MSB==1 && counter == 0)
-
-
-        /// check if there are threads writing to the buffer.  uses mutex lock
-        bool is_writing() const
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-          bool res = VAR(written) < this->VAR(size);
-          spinlock.clear(std::memory_order_release);
-          return res;
-        }
-
-        /// check if the buffer is blocked from further writes and no threads need to write to it.  uses spinlock
-        bool is_read_only() const
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-          bool res = (VAR(reserved) > Capacity) && (VAR(written) >= this->VAR(size));
-          spinlock.clear(std::memory_order_release);
-          return res;
-        }
-
-
-
-
-        /// marked write as completed. spinlock version
-        void complete_write(const int count)
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-          VAR(written) += count;
-          spinlock.clear(std::memory_order_release);
-        }
-
-
-        /**
-         * @brief       reserves a position in the buffer at which to insert the count number of bytes.
-         * @details     increment only if we have room (protected by mutex or spinlock).
-         *                if full, return FULL_FLAG.
-         *                if becoming over-capacity, mark as full and return ALMOST_FULL_FLAG to indicate it just became full.
-         *                if becoming exactly full, mark as full and return the reservation
-         *                else return the reservation.
-         * @param       count of bytes to reserve
-         * @return      the position in buffer where the reservation starts.
-         */
-        size_t reserve(const uint32_t count)
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-          size_t curr = VAR(reserved);
-
-          // this part reduces likelihood of accessing freed memory (a different thread tries to reserve to a freed region, i.e. )
-          // does not prevent ABA problem (if the memory is reallocated.)
-          if (curr >= Capacity)
-          {
-            curr = BaseType::FULL_FLAG;
-          }
-          else
-          {
-            if (curr + count > Capacity)  // filled to past capacity, so no valid position is returned.
-            {
-              VAR(reserved) = Capacity + 1 ;
-              this->VAR(size) = curr;
-
-              curr = BaseType::ALMOST_FULL_FLAG;
-
-            }
-            else if (curr + count == Capacity)  // filled to capacity, so valid position is returned.
-            {
-              VAR(reserved) = Capacity + 1 ;
-              this->VAR(size) = Capacity;
-
-            }  // else normal append
-            else {
-              VAR(reserved) += count;
-
-            }
-          }
-
-          spinlock.clear(std::memory_order_release);
-
-          return curr;
-        }
-
-
-
-        /**
-         * @brief  prevents future writes.  block can be turned on while there are writes in progress.  once block is on, reserve will fail.
-         *
-         * @details purpose of this method is to swap the size and reserved, so that reserved is at max+1, and size is the smallest of all locking thread's pointers
-         *         user can specify a size at which which the block occurs.
-         */
-        void block_writes()
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-
-          // if supplied a desired size at which to lock, use it.
-
-          size_t curr = VAR(reserved);
-
-          // set reserve so no further reservations occur.
-          VAR(reserved) = Capacity + 1;
-
-          // choose smallest curr value amount all threads.
-          if (this->VAR(size) > curr)
-          {
-            this->VAR(size) = curr;
-          }
-
-          spinlock.clear(std::memory_order_release);
-        }
-
-
-
-        /**
-         * @brief  allow future writes.  block can be turned off while there are writes in progress.  once block is off, reserve may proceed
-         *
-         * @details purpose of this method is to swap the size and reserved, so that reserved is again below max, and size is the at max+1
-         */
-        void unblock_writes()
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-
-          if (VAR(reserved) > Capacity)
-            VAR(reserved) = this->VAR(size);
-
-          // then reset size to max
-          this->VAR(size) = Capacity + 1;
-
-          spinlock.clear(std::memory_order_release);
-
-        }
-
-
-
-        /**
-         * @brief   Sets the buffer as blocked and wait for all pending writes.
-         */
-        void block_and_flush()
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-
-          // choose smallest curr value amount all threads.
-          if (this->VAR(size) > VAR(reserved))
-          {
-            this->VAR(size) = VAR(reserved);
-          }
-
-          // set reserve so no further reservations occur.
-          VAR(reserved) = Capacity + 1;
-
-          while (VAR(written) < this->VAR(size)) {
-            spinlock.clear(std::memory_order_release);
-            _mm_pause();
-            while (spinlock.test_and_set(std::memory_order_acquire));
-          }
-          
-          spinlock.clear(std::memory_order_release);
-        }
-
-
-        void flush() {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-
-          while (VAR(written) < this->VAR(size)) {
-            spinlock.clear(std::memory_order_release);
-            _mm_pause();
-            while (spinlock.test_and_set(std::memory_order_acquire));
-          }
-          
-          spinlock.clear(std::memory_order_release);
-        }
-
-
-        /**
-         * @brief Clears the buffer. (set the size to 0, leaving the Capacity and the memory allocation intact).  also blocks future writes
-         * @note  const because the caller will have a const reference to the buffer.
-         */
-        void clear_and_block_writes()
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire)) ;
-          VAR(reserved) = Capacity + 1;
-          this->VAR(size) = 0;
-          VAR(written) = 0;
-          spinlock.clear(std::memory_order_release);
-        }
-
-        /**
-         * @brief Clears the buffer. (set the size to 0, leaving the Capacity and the memory allocation intact).  also unblocks the buffer for writes
-         * @note  const because the caller will have a const reference to the buffer.
-         */
-        void clear_and_unblock_writes()
-        {
-          while (spinlock.test_and_set(std::memory_order_acquire));
-          VAR(reserved) = 0;
-          this->VAR(size) = Capacity + 1;
-          VAR(written) = 0;
-
-          spinlock.clear(std::memory_order_release);
-
-        }
-
-
-
-
-        /**
-         * @brief   Append data to the buffer.  DEBUGGING VERSION
-         * @details
-         *          The function first reserves a block of memory,
-         *          if successful, then memcpy the data into that block.
-         *
-         *          reserve is the part that is thread aware.
-         *
-         * method is const because the caller will have const reference to the Buffer.
-         *
-         * This method relies on the current reserved incrementing monotonically (by count) until it exceeds Capacity, and the written
-         * incrementing monotonically (by count) as threads finish writes, chasing the reserved thread.
-         *
-         * The first thread to exceed the Capacity will set the size.  written will never exceed that, and reserved will not
-         * be smaller than size.
-         *
-         *
-         * @param[in] _data   pointer to data to be copied into the Buffer.  this SHOULD NOT be shared between threads
-         * @param[in] count   number of bytes to be copied into the Buffer
-         * @param[out] _inserted  parameter for debugging.  points to location of insertion.
-         *
-         * @return            2 bits:  LSB indicates if data was written.  MSB indicates if buffer is full and require swapping.
-         */
-        unsigned int append(const void* _data, const uint32_t count, void* &_inserted)  // _inserted is for DEBUGGING only.
-        {
-
-          if (count == 0 || _data == nullptr)
-            throw std::invalid_argument("_data is nullptr");
-
-          // reserve a spot.
-          size_t pos = reserve(count);
-          _inserted = nullptr;
-
-          // if fails, then already full
-          if (pos == BaseType::FULL_FLAG)
-          {
-            // already read locked at this point
-
-            return 0x0;  // full and not swapping.
-          }
-          else if (pos == BaseType::ALMOST_FULL_FLAG)
-          { // filled to beyond capacity
-
-            block_and_flush();  // wait for other writes to complete
-            return 0x2;  // full, swapping.
-          }
-          else
-          { // valid position returned, so can write.
-
-            // write
-            std::memcpy(this->VAR(data_ptr) + pos, _data, count);
-            complete_write(count); // all full buffers lock the read and unlock the writer
-
-            // for DEBUGGING.
-            _inserted = this->VAR(data_ptr) + pos;
-
-            if ((pos + count) == Capacity)
-            { // thread that JUST filled the buffer
-
-              // wait for other threads to finish
-              block_and_flush();
-              return 0x3;  // write to full, swapping, and success
-            }
-            else
-            {
-              return 0x1;   // not full, not swapping, successfully inserted.
-            } // no case for pos + count > Capacity.
-
-          }
-        }
-
-        /**
-         * @brief   Append data to the buffer.  Wrapper for DEBUGGING version to present NON_DEBUG API to user.
-         *
-         * @param[in] _data   pointer to data to be copied into the Buffer.  this SHOULD NOT be shared between threads
-         * @param[in] count   number of bytes to be copied into the Buffer
-         *
-         * @return            2 bits:  LSB indicates if data was written.  MSB indicates if buffer is full and require swapping.
-         */
-        unsigned int append(const void* _data, const uint32_t count)
-        {
-          void* output = nullptr;
-          unsigned int result = append(_data, count, output);
-
-//          // DEBUG ONLY.
-//          if (result & 0x1) {
-//            if (output == nullptr) {
-//              ERRORF("ERROR: successful insert but result pointer is null.");
-//            } else if (std::memcmp(_data, output, count) != 0) {
-//              ERRORF("ERROR: A successful insert but input not same as what was memcpy'd.");
+//    template<size_t Capacity, size_t MetadataSize>
+//    class Buffer<bliss::concurrent::LockType::SPINLOCK, Capacity, MetadataSize> :
+//      public BufferBase<bliss::concurrent::LockType::SPINLOCK, Capacity, MetadataSize>
+//    {
+//
+//        static_assert(false, "SPINLOCK Based buffer is not yet safe according to ThreadSanitizer, and has LiveLock according to relacy.  Race in append and complete_write.");
+//
+//        template<bliss::concurrent::LockType LT, size_t C, size_t MDS>
+//        friend std::ostream & operator<<(std::ostream &os, const Buffer<LT, C, MDS>& p);
+//
+//
+//      public:
+//        static constexpr bliss::concurrent::LockType LockType = bliss::concurrent::LockType::SPINLOCK;
+//
+//      protected:
+//        using BufferType = Buffer<bliss::concurrent::LockType::SPINLOCK, Capacity, MetadataSize>;
+//        using BaseType = BufferBase<bliss::concurrent::LockType::SPINLOCK, Capacity, MetadataSize>;
+//
+//        // instead of a single "size" variable and a "blocked" variable (to prevent further writes to the buffer)
+//        //   (which require concurrent updates to both)
+//        // we use Capacity+1 to indicate a blocked state: if reserved is set to Capacity+1, it is blocked..
+//        // also, because reservation and actual write may occur separately, we need a "reserved" and a "written"
+//        //   for separate incrementing.
+//        // having the "written" variable allows us to wait for all writes to complete.
+//
+//
+//        /// position of current start of free space.  for reservation.
+//        /// capacity + 1 indicates buffer is blocked/full.  other values indicate that buffer is unblocked.
+//        /// exchanges with size.
+//        VAR_T(size_t) reserved;
+//
+//        /// amount of data written so far.  will not update beyond the FINAL size
+//        VAR_T(size_t) written;
+//
+//
+//        /// spinlock for locking access to the buffer.  available in both thread safe and unsafe versions so we on't need to extensively enable_if or inherit
+//        mutable INIT_ATOMIC_FLAG(spinlock);
+//
+//      private:
+//
+//        /// remove copy constructor and copy assignement operators.
+//        explicit DELETED_FUNC_DECL(Buffer(const BufferType& other));
+//        /// remove copy constructor and copy assignement operators.
+//        BufferType& DELETED_FUNC_DECL(operator=(const BufferType& other));
+//
+//
+//      public:
+//        /**
+//         * @brief Constructor.  Allocate and initialize memory with size specified as parameter.
+//         */
+//        Buffer() : BaseType(),
+//         reserved(Capacity + 1), written(0L)
+//        {}
+//        //start_ptr(new uint8_t[Capacity](), []( uint8_t *p ) { delete [] p; })  if using shared ptr
+//
+//        /**
+//         * @brief Destructor.  waits for all writes and then deallocate memory manually.
+//         */
+//        virtual ~Buffer()
+//        {
+//          block_and_flush();
+//        }
+//
+//
+//        /**
+//         * @brief Move constructs from a Buffer with the SAME LockType property
+//         * @details
+//         * Thread Safe always, using approach from http://www.justsoftwaresolutions.co.uk/threading/thread-safe-copy-constructors.html
+//         *
+//         * Constructs a mutex lock and then delegates to another constructor.
+//         *
+//         * @param other   Source object to move
+//         */
+//        explicit Buffer(BufferType && other) {
+//          while (other.spinlock.test_and_set(std::memory_order_acquire));
+//
+//          this->VAR(size) = other.VAR(size); other.VAR(size) = 0;
+//          this->VAR(start_ptr) = other.VAR(start_ptr); other.VAR(start_ptr) = nullptr;
+//          this->VAR(data_ptr) = other.VAR(data_ptr); other.VAR(data_ptr) = nullptr;
+//          VAR(written) = other.VAR(written); other.VAR(written) = 0;
+//          VAR(reserved) = other.VAR(reserved); other.VAR(reserved) = Capacity + 1;
+//
+//          other.spinlock.clear(std::memory_order_release);
+//        }
+//
+//
+//
+//        /**
+//         * @brief Move assignment operator, between Buffers of the SAME LockType property.
+//         * @details  Internal data memory moved.
+//         * The move is done in a thread safe way always.
+//         *
+//         * @param other     Source Buffer to move
+//         * @return          target Buffer reference
+//         */
+//        BufferType& operator=(BufferType && other)
+//        {
+//
+//          if (this->VAR(start_ptr) != other.VAR(start_ptr))
+//          {
+//
+//            while(spinlock.test_and_set(std::memory_order_acquire));
+//            while(other.spinlock.test_and_set(std::memory_order_acquire));
+//
+//            // move the internal memory.
+//            this->VAR(start_ptr) = other.VAR(start_ptr);                 other.VAR(start_ptr) = nullptr;
+//            this->VAR(data_ptr) = other.VAR(data_ptr);                   other.VAR(data_ptr) = nullptr;
+//            this->VAR(size) = other.VAR(size);                           other.VAR(size) = 0;
+//
+//            VAR(written) = (size_t)(other.VAR(written));                other.VAR(written) = 0;
+//            VAR(reserved) = (size_t)(other.VAR(reserved));              other.VAR(reserved) = Capacity + 1;
+//
+//            other.spinlock.clear(std::memory_order_release);
+//            spinlock.clear(std::memory_order_release);
+//          }
+//          return *this;
+//
+//        }
+//      protected:
+//
+//        /**
+//         * @brief get the current approximate size of the Buffer.
+//         * @return    current size
+//         */
+// /*        size_t getApproximateSize() const
+//         {
+//           std::atomic_thread_fence(std::memory_order_acquire);
+//           return reserved;
+//         }
+// */
+//         /**
+//          * @brief get the current written data size of the Buffer.
+//          * @note  written data may be scattered.
+//          * @return    current size
+//          */
+// /*        size_t getWrittenSize() const
+//         {
+//           std::atomic_thread_fence(std::memory_order_acquire);
+//           return written;
+//         }
+// */
+//         /// Check if buffer has been blocked from further reservation but still waiting for all writes to finish. via spin lock
+// /*        bool is_flushing() const
+//         {
+//           while (spinlock.test_and_set(std::memory_order_acquire));
+//           bool res = (reserved > Capacity) && (written < this->size);
+//           spinlock.clear(std::memory_order_release);
+//           return res;
+//         }
+// */
+//
+//      public:
+//
+//
+//        /**
+//         * @brief   Checks if a buffer is empty.
+//         * @note    The return value is approximate due to threading
+//         *
+//         * @return  true if the buffer is empty, false otherwise.
+//         */
+//        bool isEmpty() const
+//        {
+//          while (spinlock.test_and_set(std::memory_order_acquire));
+//          bool res = (VAR(written) == 0);
+//          spinlock.clear(std::memory_order_release);
+//          return res;
+//        }
+//
+//        // TODO:  make this more clear.
+//        // need 1. flag to indicate no more new writers
+//        //      2. wait for current writers to finish
+//        //      3. 3 phases:  writing, flushing, reading.  -> reserve, wirte_unlock, flush_begin, block_writes, unblock_writes
+//        //          reserve (counter ++)
+//        //          wirte_unlock (counter --)
+//        //          flush (MSB = 1)
+//        //          block_writes ( wait for MSB==1 && counter == 0)
+//        //          unblock_writes ( MSB = 0)
+//        // state checks:  is_writing (MSB==0|1 && counter > 0)
+//        //                is_flushing (MSB==1 && counter> 0)
+//        //                is_read_only ( MSB==1 && counter == 0)
+//
+//
+//        /// check if there are threads writing to the buffer.  uses mutex lock
+//        bool is_writing() const
+//        {
+//          while (spinlock.test_and_set(std::memory_order_acquire));
+//          bool res = VAR(written) < this->VAR(size);
+//          spinlock.clear(std::memory_order_release);
+//          return res;
+//        }
+//
+//        /// check if the buffer is blocked from further writes and no threads need to write to it.  uses spinlock
+//        bool is_read_only() const
+//        {
+//          while (spinlock.test_and_set(std::memory_order_acquire));
+//          bool res = (VAR(reserved) > Capacity) && (VAR(written) >= this->VAR(size));
+//          spinlock.clear(std::memory_order_release);
+//          return res;
+//        }
+//
+//
+//
+//
+//        /// marked write as completed. spinlock version.  has race condition.  perhaps it's from release allowing subsequent instructions from entering here.
+//        void complete_write(const int count)
+//        {
+//          while (spinlock.test_and_set(std::memory_order_acquire));
+////          std::atomic_thread_fence(std::memory_order_acq_rel);
+//          VAR(written) += count;
+////          std::atomic_thread_fence(std::memory_order_release);
+//          spinlock.clear(std::memory_order_release);
+//        }
+//
+//
+//        /**
+//         * @brief       reserves a position in the buffer at which to insert the count number of bytes.
+//         * @details     increment only if we have room (protected by mutex or spinlock).
+//         *                if full, return FULL_FLAG.
+//         *                if becoming over-capacity, mark as full and return ALMOST_FULL_FLAG to indicate it just became full.
+//         *                if becoming exactly full, mark as full and return the reservation
+//         *                else return the reservation.
+//         * @param       count of bytes to reserve
+//         * @return      the position in buffer where the reservation starts.
+//         */
+//        size_t reserve(const uint32_t count)
+//        {
+//          while (spinlock.test_and_set(std::memory_order_acquire));
+////          std::atomic_thread_fence(std::memory_order_acq_rel);
+//          size_t curr = VAR(reserved);
+//
+//          // this part reduces likelihood of accessing freed memory (a different thread tries to reserve to a freed region, i.e. )
+//          // does not prevent ABA problem (if the memory is reallocated.)
+//          if (curr >= Capacity)
+//          {
+//            curr = BaseType::FULL_FLAG;
+//          }
+//          else
+//          {
+//            if (curr + count > Capacity)  // filled to past capacity, so no valid position is returned.
+//            {
+//              VAR(reserved) = Capacity + 1 ;
+//              this->VAR(size) = curr;
+//
+//              curr = BaseType::ALMOST_FULL_FLAG;
+//
+//            }
+//            else if (curr + count == Capacity)  // filled to capacity, so valid position is returned.
+//            {
+//              VAR(reserved) = Capacity + 1 ;
+//              this->VAR(size) = Capacity;
+//
+//            }  // else normal append
+//            else {
+//              VAR(reserved) += count;
 //            }
 //          }
-
-          return result;
-        }
-    };
+//
+//          spinlock.clear(std::memory_order_release);
+//
+//          return curr;
+//        }
+//
+//
+//
+//        /**
+//         * @brief  prevents future writes.  block can be turned on while there are writes in progress.  once block is on, reserve will fail.
+//         *
+//         * @details purpose of this method is to swap the size and reserved, so that reserved is at max+1, and size is the smallest of all locking thread's pointers
+//         *         user can specify a size at which which the block occurs.
+//         */
+//        void block_writes()
+//        {
+//          while (spinlock.test_and_set(std::memory_order_acquire));
+//
+//          // if supplied a desired size at which to lock, use it.
+//
+//          size_t curr = VAR(reserved);
+//
+//          // set reserve so no further reservations occur.
+//          VAR(reserved) = Capacity + 1;
+//
+//          // choose smallest curr value amount all threads.
+//          if (this->VAR(size) > curr)
+//          {
+//            this->VAR(size) = curr;
+//          }
+//
+//          spinlock.clear(std::memory_order_release);
+//        }
+//
+//
+//
+//        /**
+//         * @brief  allow future writes.  block can be turned off while there are writes in progress.  once block is off, reserve may proceed
+//         *
+//         * @details purpose of this method is to swap the size and reserved, so that reserved is again below max, and size is the at max+1
+//         */
+//        void unblock_writes()
+//        {
+//          while (spinlock.test_and_set(std::memory_order_acquire));
+//
+//          if (VAR(reserved) > Capacity)
+//            VAR(reserved) = this->VAR(size);
+//
+//          // then reset size to max
+//          this->VAR(size) = Capacity + 1;
+//
+//          spinlock.clear(std::memory_order_release);
+//
+//        }
+//
+//
+//
+//        /**
+//         * @brief   Sets the buffer as blocked and wait for all pending writes.
+//         */
+//        void block_and_flush()
+//        {
+//          while (spinlock.test_and_set(std::memory_order_acquire));
+//
+//          // choose smallest curr value amount all threads.
+//          if (this->VAR(size) > VAR(reserved))
+//          {
+//            this->VAR(size) = VAR(reserved);
+//          }
+//
+//          // set reserve so no further reservations occur.
+//          VAR(reserved) = Capacity + 1;
+//
+//          while (VAR(written) < this->VAR(size)) {
+//            spinlock.clear(std::memory_order_release);
+//            _mm_pause();
+//            while (spinlock.test_and_set(std::memory_order_acquire));
+//          }
+//
+//          spinlock.clear(std::memory_order_release);
+//        }
+//
+//
+//        void flush() {
+//          while (spinlock.test_and_set(std::memory_order_acquire));
+//
+//          while (VAR(written) < this->VAR(size)) {
+//            spinlock.clear(std::memory_order_release);
+//            _mm_pause();
+//            while (spinlock.test_and_set(std::memory_order_acquire));
+//          }
+//
+//          spinlock.clear(std::memory_order_release);
+//        }
+//
+//
+//        /**
+//         * @brief Clears the buffer. (set the size to 0, leaving the Capacity and the memory allocation intact).  also blocks future writes
+//         * @note  const because the caller will have a const reference to the buffer.
+//         */
+//        void clear_and_block_writes()
+//        {
+//          while (spinlock.test_and_set(std::memory_order_acquire)) ;
+//          VAR(reserved) = Capacity + 1;
+//          this->VAR(size) = 0;
+//          VAR(written) = 0;
+//          spinlock.clear(std::memory_order_release);
+//        }
+//
+//        /**
+//         * @brief Clears the buffer. (set the size to 0, leaving the Capacity and the memory allocation intact).  also unblocks the buffer for writes
+//         * @note  const because the caller will have a const reference to the buffer.
+//         */
+//        void clear_and_unblock_writes()
+//        {
+//          while (spinlock.test_and_set(std::memory_order_acquire));
+//          VAR(reserved) = 0;
+//          this->VAR(size) = Capacity + 1;
+//          VAR(written) = 0;
+//
+//          spinlock.clear(std::memory_order_release);
+//
+//        }
+//
+//
+//
+//
+//        /**
+//         * @brief   Append data to the buffer.  DEBUGGING VERSION
+//         * @details
+//         *          The function first reserves a block of memory,
+//         *          if successful, then memcpy the data into that block.
+//         *
+//         *          reserve is the part that is thread aware.
+//         *
+//         * method is const because the caller will have const reference to the Buffer.
+//         *
+//         * This method relies on the current reserved incrementing monotonically (by count) until it exceeds Capacity, and the written
+//         * incrementing monotonically (by count) as threads finish writes, chasing the reserved thread.
+//         *
+//         * The first thread to exceed the Capacity will set the size.  written will never exceed that, and reserved will not
+//         * be smaller than size.
+//         *
+//         *
+//         * @param[in] _data   pointer to data to be copied into the Buffer.  this SHOULD NOT be shared between threads
+//         * @param[in] count   number of bytes to be copied into the Buffer
+//         * @param[out] _inserted  parameter for debugging.  points to location of insertion.
+//         *
+//         * @return            2 bits:  LSB indicates if data was written.  MSB indicates if buffer is full and require swapping.
+//         */
+//        unsigned int append(const void* _data, const uint32_t count, void* &_inserted)  // _inserted is for DEBUGGING only.
+//        {
+//
+//          if (count == 0 || _data == nullptr)
+//            throw std::invalid_argument("_data is nullptr");
+//
+//          // reserve a spot.
+//          size_t pos = reserve(count);
+//          _inserted = nullptr;
+//
+//          // if fails, then already full
+//          if (pos == BaseType::FULL_FLAG)
+//          {
+//            // already read locked at this point
+//
+//            return 0x0;  // full and not swapping.
+//          }
+//          else if (pos == BaseType::ALMOST_FULL_FLAG)
+//          { // filled to beyond capacity
+//
+//            block_and_flush();  // wait for other writes to complete
+//            return 0x2;  // full, swapping.
+//          }
+//          else
+//          { // valid position returned, so can write.
+//
+//            // write
+//            std::memcpy(this->VAR(data_ptr) + pos, _data, count);
+//            std::atomic_thread_fence(std::memory_order_release);
+//            complete_write(count); // all full buffers lock the read and unlock the writer
+//
+//            // for DEBUGGING.
+//            _inserted = this->VAR(data_ptr) + pos;
+//
+//            if ((pos + count) == Capacity)
+//            { // thread that JUST filled the buffer
+//
+//              // wait for other threads to finish
+//              block_and_flush();
+//              return 0x3;  // write to full, swapping, and success
+//            }
+//            else
+//            {
+//              return 0x1;   // not full, not swapping, successfully inserted.
+//            } // no case for pos + count > Capacity.
+//
+//          }
+//        }
+//
+//        /**
+//         * @brief   Append data to the buffer.  Wrapper for DEBUGGING version to present NON_DEBUG API to user.
+//         *
+//         * @param[in] _data   pointer to data to be copied into the Buffer.  this SHOULD NOT be shared between threads
+//         * @param[in] count   number of bytes to be copied into the Buffer
+//         *
+//         * @return            2 bits:  LSB indicates if data was written.  MSB indicates if buffer is full and require swapping.
+//         */
+//        unsigned int append(const void* _data, const uint32_t count)
+//        {
+//          void* output = nullptr;
+//          unsigned int result = append(_data, count, output);
+//
+// //          // DEBUG ONLY.
+// //          if (result & 0x1) {
+// //            if (output == nullptr) {
+// //              ERRORF("ERROR: successful insert but result pointer is null.");
+// //            } else if (std::memcmp(_data, output, count) != 0) {
+// //              ERRORF("ERROR: A successful insert but input not same as what was memcpy'd.");
+// //            }
+// //          }
+//
+//          return result;
+//        }
+//    };
 
 
 
@@ -1643,11 +1648,11 @@ namespace bliss
           else
           { // valid position returned, so can write.
 
-            // write
-            std::memcpy(this->VAR(data_ptr) + pos, _data, count);
-
             // for DEBUGGING.
             _inserted = this->VAR(data_ptr) + pos;
+            // write
+            std::memcpy(_inserted, _data, count);
+            std::atomic_thread_fence(std::memory_order_release);
 
             if ((pos + count) == Capacity)
             { // thread that JUST filled the buffer
@@ -1903,7 +1908,7 @@ namespace bliss
         bool is_writing() const
         {
           // is writing - really only for debugging external to this class
-          size_t v = written.load(std::memory_order_acquire);
+          size_t v = written.load(std::memory_order_relaxed);
           return this->getSize() > v;
         }
 
@@ -1911,18 +1916,18 @@ namespace bliss
         bool is_read_only() const
         {
           // is read only - really only for debugging external to this class
-        	std::atomic_thread_fence(std::memory_order_acquire);
-        	bool res =  (reserved.load(std::memory_order_relaxed) > Capacity) &&
-        	    (this->getSize() <= written.load(std::memory_order_relaxed));
-          std::atomic_thread_fence(std::memory_order_release);
-          return res;
+          auto r = reserved.load(std::memory_order_acquire);
+          auto w = written.load(std::memory_order_acquire);
+          auto s = this->getSize();
+        	return (r > Capacity) && (s <= w);
+
         }
 
 
         /// marked write as completed.
         void complete_write(const int count)
         {
-          written.fetch_add(count, std::memory_order_acq_rel);
+          written.fetch_add(count, std::memory_order_release);
         }
 
       protected:
@@ -1963,7 +1968,7 @@ namespace bliss
               // reset reserved only when we JUST FILL the buffer, or when there have been too many attempts to reserve a full buffer.
               //  otherwise let the reserved value grow.  this reduces ABA problem very significantly.
               if (curr > BaseType::DISABLED) {
-                reserved.compare_exchange_strong(next, Capacity + 1, std::memory_order_acq_rel);
+                reserved.compare_exchange_strong(next, Capacity + 1, std::memory_order_relaxed);
               }
 
               curr = BaseType::FULL_FLAG;
@@ -1978,19 +1983,17 @@ namespace bliss
               curr = BaseType::ALMOST_FULL_FLAG;
             } else if (next == Capacity) {
               // just filled.  curr position is a valid insertion point.
+              // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
+              this->size.store(Capacity, std::memory_order_relaxed);
 
               // reset reserved only when we JUST FILL the buffer, or when there have been too many attempts to reserve a full buffer.
               //  otherwise let the reserved value grow.  this reduces ABA problem very significantly.
-              reserved.compare_exchange_strong(next, Capacity + 1, std::memory_order_acq_rel);
+              reserved.compare_exchange_strong(next, Capacity + 1, std::memory_order_release);
 
-              // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.              
-              this->size.store(Capacity, std::memory_order_relaxed);
               // curr is okay.
 
             } 
             // else normal case. nothing to do.
-
-            std::atomic_thread_fence(std::memory_order_release);
 
             return curr;
         }
@@ -2017,7 +2020,7 @@ namespace bliss
         {
           // this line below sequences changes to reserved between diff threads calling blocked writes or reserve or unblock writes.
           // size update depends on value of reserved so we would not have 2 updates to size by different threads.
-          size_t curr = reserved.exchange(Capacity + 1, std::memory_order_acq_rel);
+          size_t curr = reserved.exchange(Capacity + 1, std::memory_order_acquire);
           // curr could be greater than capacity, or not.
           size_t s;
 
@@ -2060,7 +2063,7 @@ namespace bliss
 //          {
 //            stop = reserved.compare_exchange_weak(curr, end, std::memory_order_relaxed);
 //          }
-          size_t s = this->size.exchange(Capacity + 1, std::memory_order_acq_rel);
+          size_t s = this->size.exchange(Capacity + 1, std::memory_order_relaxed);
           size_t curr;
 
           if (s > Capacity) {
@@ -2068,7 +2071,7 @@ namespace bliss
             return;
           }
 
-          if ((curr = this->reserved.exchange(s, std::memory_order_relaxed)) <= Capacity) {
+          if ((curr = this->reserved.exchange(s, std::memory_order_release)) <= Capacity) {
             ERRORF("unblock_writes called, but reserved already unblocked. reserved: %ld, size: %ld", curr, s);
           }
 
@@ -2076,7 +2079,6 @@ namespace bliss
 //        	while (curr > s && !done) {
 //            done = reserved.compare_exchange_weak(curr, s, std::memory_order_acq_rel);
 //        	}
-          std::atomic_thread_fence(std::memory_order_release);
         }
 
 
@@ -2090,7 +2092,6 @@ namespace bliss
         }
 
         void flush() {
-          std::atomic_thread_fence(std::memory_order_acquire);
           while (written.load(std::memory_order_acquire) < this->getSize()) {
             _mm_pause();
           }
@@ -2104,13 +2105,10 @@ namespace bliss
          */
         void clear_and_block_writes()
         {
-          std::atomic_thread_fence(std::memory_order_acquire);
           // blocked
-          reserved.store(Capacity + 1, std::memory_order_relaxed);
+          reserved.store(Capacity + 1, std::memory_order_acquire);
           written.store(0, std::memory_order_relaxed);
-          this->size.store(0, std::memory_order_relaxed);
-          std::atomic_thread_fence(std::memory_order_release);
-
+          this->size.store(0, std::memory_order_release);
         }
 
 
@@ -2120,11 +2118,9 @@ namespace bliss
          */
         void clear_and_unblock_writes()
         {
-          std::atomic_thread_fence(std::memory_order_acquire);
+          reserved.store(0, std::memory_order_acquire);
           written.store(0, std::memory_order_relaxed);
-          reserved.store(0, std::memory_order_relaxed);
-          this->size.store(Capacity + 1, std::memory_order_relaxed);
-          std::atomic_thread_fence(std::memory_order_release);
+          this->size.store(Capacity + 1, std::memory_order_release);
         }
 
         /**
@@ -2176,7 +2172,6 @@ namespace bliss
           else
           { // valid position returned, so can write.
             // for DEBUGGING.
-            std::atomic_thread_fence(std::memory_order_acquire);
             _inserted = this->VAR(data_ptr) + pos;
 
             // write
