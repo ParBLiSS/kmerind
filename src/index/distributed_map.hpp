@@ -1114,7 +1114,7 @@ protected:
   {
     // deserialize
     K* keys = reinterpret_cast<K*>(msg);
-    int key_count = count / sizeof(K);
+    size_t key_count = count / sizeof(K);
 
     //====  now use parallel for to compute the hash,
     int nt = this->nThreads;
@@ -1124,7 +1124,7 @@ protected:
 
     // compute threadhash and store in vector in parallel, (perfectly parallelizable, compute heavy)
 #pragma omp parallel for num_threads(nt) shared(key_count, keys) default(none)
-    for (int i = 0; i < key_count; ++i) {
+    for (size_t i = 0; i < key_count; ++i) {
       this->threadKeys[i] = this->getTargetThread(keys[i]);  // insert hash value
     }
 
@@ -1132,7 +1132,7 @@ protected:
 #pragma omp parallel num_threads(nt) shared(key_count, keys) default(none)
     {
       int tid = omp_get_thread_num();
-      for (int i = 0; i < key_count; ++i) {
+      for (size_t i = 0; i < key_count; ++i) {
         // insert value if hash matches thread id
         if (this->threadKeys[i] == tid) this->local_map[tid][keys[i]]++;
       }

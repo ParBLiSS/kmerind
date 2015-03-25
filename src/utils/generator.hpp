@@ -15,6 +15,7 @@
 #include <string>
 #include <random>
 #include <algorithm>
+#include <functional>
 
 namespace bliss
 {

@@ -17,7 +17,7 @@
 #include <cassert>
 #include "config.hpp"
 
-#include "concurrent/lockfree_queue.hpp"
+#include "concurrent/mutexlock_queue.hpp"
 #include "taskrunner/runner.hpp"
 
 namespace bliss
@@ -40,7 +40,7 @@ class PersonalizedOMPRunner : public Runner
 {
   protected:
     // threadsafe queue because addTask may be called from a different thread.
-    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::LOCKFREE> q;
+    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::MUTEX> q;
 
     const int nThreads;
 

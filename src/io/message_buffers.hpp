@@ -38,18 +38,14 @@
 #include <typeinfo>
 #include <iostream>
 #include <sstream>
-#include <mutex>
-#include <condition_variable>
+#include <iterator> // for ostream_iterator
 #include <xmmintrin.h>
 
 #include "config.hpp"
+#include "config/relacy_config.hpp"
 #include "concurrent/buffer.hpp"
 #include "concurrent/object_pool.hpp"
 #include "concurrent/copyable_atomic.hpp"
-
-#include <atomic>
-
-#include <iterator> // for ostream_iterator
 
 #include "omp.h"
 
@@ -116,7 +112,7 @@ namespace bliss
          *
          * @param other     source MessageBuffers to copy from
          */
-        explicit MessageBuffers(const MessageBuffers& other) = delete;
+        explicit DELETED_FUNC_DECL(MessageBuffers(const MessageBuffers& other));
 
         /**
          * @brief default copy assignment operator.  deleted.   since internal BufferPool does not allow copy construction/assignment.
@@ -125,7 +121,7 @@ namespace bliss
          * @param other     source MessageBuffers to copy from
          * @return          self.
          */
-        MessageBuffers& operator=(const MessageBuffers& other) = delete;
+        MessageBuffers& DELETED_FUNC_DECL(operator=(const MessageBuffers& other));
 
 
         /**
@@ -173,7 +169,7 @@ namespace bliss
         /**
          * @brief Convenience method to release and clear all current Buffers in the pool.
          */
-        virtual void reset() = 0;
+        virtual void PURE_VIRTUAL_FUNC(reset());
     };
 
 
@@ -736,7 +732,7 @@ namespace bliss
         using BufferPoolType = typename BaseType::BufferPoolType;
 
       protected:
-        typedef BufferType* BufferPtrTypeInternal;
+        using BufferPtrTypeInternal = VAR_T(BufferType*);
 
         /**
          * @brief  Vector of vector of buffer pointers that avoids sharing buffers between threads.
@@ -761,20 +757,22 @@ namespace bliss
          * @brief default copy constructor.  deleted.
          * @param other   source SendMessageBuffers to copy from.
          */
-        explicit SendMessageBuffers(const MyType &other) = delete;
+        explicit DELETED_FUNC_DECL(SendMessageBuffers(const MyType &other));
 
         /**
          * @brief default copy assignment operator, deleted.
          * @param other   source SendMessageBuffers to copy from.
          * @return        self
          */
-        MyType& operator=(const MyType &other) = delete;
+        MyType& DELETED_FUNC_DECL(operator=(const MyType &other));
 
 
         /**
          * @brief Default constructor, deleted
          */
-        SendMessageBuffers() = delete;
+        DELETED_FUNC_DECL(SendMessageBuffers());
+
+        mutable int nDests;
 
       public:
         /**
@@ -784,15 +782,15 @@ namespace bliss
          * @param num_threads       The number of threads accessing this MessageBuffer
          */
         explicit SendMessageBuffers(BufferPoolType& _pool, const int num_dests, const int num_threads = 0) :
-          BaseType(_pool), buffers()
+          BaseType(_pool), buffers(num_dests), nDests(num_dests)
         {
           int nThreads = (num_threads <= 0 ? omp_get_max_threads() : num_threads);
 
           // top level vector maps buffers to MPI rank.
           for (int i = 0; i < num_dests; ++i) {
-            buffers.push_back(std::vector<BufferPtrTypeInternal>(nThreads));
+            buffers[i] = std::vector<BufferPtrTypeInternal>(nThreads, nullptr);
           }
-
+          DEBUGF("MessageBuffers CTOR");
           this->reset();
         };
 
@@ -835,8 +833,11 @@ namespace bliss
          * @brief get the number of buffers.  should be same as number of targets for messages
          * @return    number of buffers
          */
-        const size_t getSize() const {
-          return buffers.size();
+        const size_t getNumDests() const {
+          return nDests;
+        }
+        const size_t getNumThreads() const {
+          return buffers[0].size();
         }
 
         /**
@@ -850,7 +851,7 @@ namespace bliss
           // openmp - thread ids are sequential from 0 to nThreads - 1, so can use directly as vector index.
           int tid = (srcThread == -1 ? omp_get_thread_num() : srcThread);
 
-          return (BufferType*)(buffers.at(targetRank).at(tid));
+          return VAR(buffers.at(targetRank).at(tid));
         }
 
 
@@ -858,7 +859,7 @@ namespace bliss
          * @brief get a raw pointer to the the BufferId that a messaging target maps to (FOR THE CALLING THREAD)
          */
         BufferType* operator[](const int targetRank) {
-          return at(targetRank);
+          return at(targetRank, omp_get_thread_num());
         }
 
 
@@ -867,7 +868,7 @@ namespace bliss
          * @note  One thread only should call this.
          */
         virtual void reset() {
-
+          DEBUGF("Reset Start");
           std::lock_guard<std::mutex> lock(mutex);
           int count = buffers.size();
           BufferType* ptr;
@@ -882,23 +883,26 @@ namespace bliss
               ptr = this->at(i, tid);
               if (ptr) {
                 ptr->block_and_flush();
+
+                DEBUGF("Reset release tid %d target %d ptr %p->%p", tid, i, ptr, nullptr);
                 this->pool.releaseObject(ptr);
-                buffers.at(i).at(tid) = nullptr;
+                VAR(buffers.at(i).at(tid)) = nullptr;
               }
             }
           }
-          // reset the pool. local vector should contain a bunch of nullptrs.
-          this->pool.reset();
-
+          // reset the pool. local vector should contain a bunch of nullptrs.  - if we have multiple message buffers, resetting pool is a BAD thing.
+//          this->pool.reset();
 
           // populate the buffers from the pool
           for (int i = 0; i < count; ++i) {
             nthreads = buffers.at(i).size();
 
             for (tid = 0; tid < nthreads; ++tid) {
+              DEBUGF("MessageBuffer Swapping %d %d", tid, i);
               swapInEmptyBuffer(i, tid);
             }
           }
+          DEBUGF("Reset End");
         }
 
 
@@ -947,7 +951,7 @@ namespace bliss
           }
 
           //== if targetProc is outside the valid range, throw an error
-          if (targetProc < 0 || targetProc > getSize()) {
+          if (targetProc < 0 || targetProc > nDests) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
 
@@ -961,7 +965,7 @@ namespace bliss
           unsigned int appendResult = 0x0;
           BufferType* ptr = this->at(targetProc, tid);
 
-          if (ptr) {
+          if (ptr != nullptr) {
             void * result = nullptr;    //DEBUGGING FORM
             appendResult = ptr->append(data, count, result);
           }
@@ -970,15 +974,24 @@ namespace bliss
             throw std::logic_error("ERROR: Append: threadlocal Buffer ptr is null and no way to swap in a different one.");
           }
 
+          if (appendResult != 0x1) {
+            DEBUGF("T %d destRank %d  APPEND RESULT is %u, buffer ptr %p, in vec %p, buffer ptr size %lu, is read only %s", tid, targetProc, appendResult, ptr, this->at(targetProc, tid), ptr->getSize(), (ptr->is_read_only() ? "y" : "n") );
+          }
+
           // now if appendResult is false, then we return false, but also swap in a new buffer.
           // conditions are either full buffer, or blocked buffer.
           // this call will mark the fullBuffer as blocked to prevent multiple write attempts while flushing the buffer
           // ideally, we want it to be a reference that gets updated for all threads.
 
-          if (appendResult & 0x2) { // only 1 thread gets 0x2 result for a buffer.  all other threads either writes successfully or fails.
-            return std::move(std::make_pair(appendResult & 0x1, swapInEmptyBuffer(targetProc, tid) ) );
+          if ((appendResult & 0x2) > 0) { // only 1 thread gets 0x2 result for a buffer.  all other threads either writes successfully or fails.
+            DEBUGF("Swap Start");
+
+            BufferType* oldptr = swapInEmptyBuffer(targetProc, tid);
+            DEBUGF("Swap End");
+            DEBUGF("T %d destRank %d FULL and swap. appendResult is %u, oldptr is %p, newptr %p", tid, targetProc, appendResult, oldptr, this->at(targetProc, tid));
+            return std::make_pair((appendResult & 0x1) > 0, oldptr );
           } else {
-            return std::move(std::make_pair(appendResult & 0x1, nullptr));
+            return std::make_pair((appendResult & 0x1) > 0, nullptr);
           }
 
         }
@@ -993,8 +1006,10 @@ namespace bliss
          * @return
          */
         std::vector<BufferType*> flushBufferForRank(const int targetProc) {
+          DEBUGF("Flush Start");
+
           //== if targetProc is outside the valid range, throw an error
-          if (targetProc < 0 || targetProc > getSize()) {
+          if (targetProc < 0 || targetProc >= nDests) {
             throw (std::invalid_argument("ERROR: messageBuffer append with invalid targetProc"));
           }
 
@@ -1003,9 +1018,10 @@ namespace bliss
           int nthreads = buffers.at(targetProc).size();
           for (int t = 0; t < nthreads; ++t) {
             old = swapInEmptyBuffer(targetProc, t);
-            if (old ) result.push_back(old);  // && !(old->isEmpty())
+            if (old) result.push_back(old);  // && !(old->isEmpty())
 
           }
+          DEBUGF("Flush End");
 
           return result;
         }
@@ -1024,6 +1040,9 @@ namespace bliss
           int tid = thread_id < 0 ? omp_get_thread_num() : thread_id;
 
 
+          BufferType* oldbuf = VAR(buffers.at(dest).at(tid));
+          if (oldbuf) oldbuf->block_and_flush();
+
           BufferType* ptr = this->pool.tryAcquireObject();
           int i = 1;
           while (!ptr) {
@@ -1037,14 +1056,20 @@ namespace bliss
             ptr->clear_and_unblock_writes();
           }
 
-          BufferType* oldbuf = buffers.at(dest).at(tid);
-          if (oldbuf) oldbuf->block_and_flush();
+          VAR(buffers.at(dest).at(tid)) = ptr;  // one thread accessing at a time.
+          if (oldbuf) {
+            if (oldbuf->isEmpty()) {
+              releaseBuffer(oldbuf);
+              oldbuf = nullptr;
+              DEBUGF("MessageBuffers Thread Id = %d, target %d, ptr = empty -> %p", tid, dest, ptr);
+            } else {
+              DEBUGF("MessageBuffers Thread Id = %d, target %d, ptr = %p -> %p", tid, dest, oldbuf, ptr);
+            }
 
-          buffers.at(dest).at(tid) = ptr;  // one thread accessing at a time.
-          if (oldbuf && oldbuf->isEmpty()) {
-            releaseBuffer(oldbuf);
-            oldbuf = nullptr;
+          } else {
+            DEBUGF("MessageBuffers Thread Id = %d, target %d, ptr = nullptr -> %p", tid, dest, ptr);
           }
+
           return oldbuf;
         }
 

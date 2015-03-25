@@ -24,7 +24,7 @@
 #define MESSAGE_TYPES_HPP_
 
 #include "io/mpi_utils.hpp"
-
+#include "config/relacy_config.hpp"
 
 namespace bliss
 {
@@ -49,10 +49,10 @@ namespace bliss
       protected:
         /// The message tag and epoch. tag indicates the type of message (how to interpret the message, control vs data)
         /// epoch indicates the phase, which is global.
-        int tag;
+        const int tag;
 
         /// The message source id
-        int rank;
+        const int rank;
 
       public:
 
@@ -66,7 +66,7 @@ namespace bliss
           : tag(_tag), rank(_rank) {}
  
         /// default constructor
-        MPIMessage() = default;
+        DEFAULT_FUNC_DECL(MPIMessage());
 
         /// needed to create a virtual function table, only then is polymorphism allowed.  (inheritance not sufficient)
         virtual ~MPIMessage() {};
@@ -78,21 +78,21 @@ namespace bliss
         inline int getRank() { return rank; };
 
         /// get the message's epoch
-        virtual uint64_t getEpoch() = 0;
+        virtual uint64_t PURE_VIRTUAL_FUNC(getEpoch());
 
         /// get the payload (Data + metadata)
-        virtual uint8_t* getPayload() = 0;
+        virtual uint8_t* PURE_VIRTUAL_FUNC(getPayload());
 
         /// get the payload (data + metadata) size in bytes
-        virtual size_t getPayloadSize() = 0;
+        virtual size_t PURE_VIRTUAL_FUNC(getPayloadSize());
 
         /// get the payload
-        virtual uint8_t* getData() = 0;
+        virtual uint8_t* PURE_VIRTUAL_FUNC(getData());
 
         /// get the payload size in bytes
-        virtual size_t getDataSize() = 0;
+        virtual size_t PURE_VIRTUAL_FUNC(getDataSize());
     };
-    std::atomic<uint64_t> MPIMessage::nextEpoch(0);
+    std::atomic<uint64_t> MPIMessage::nextEpoch(1);  // initialized so we are not at CONTROL_EPOCH
 
     /**
      * @brief a MPI message representing a control message.  control messages are NOT associated with a message type.   It is used to mark the start and end of communication.
@@ -130,7 +130,7 @@ namespace bliss
 
 
       /// default constructor
-      ControlMessage() = default;
+      DEFAULT_FUNC_DECL(ControlMessage());
 
       /// default destructor
       virtual ~ControlMessage() {};
@@ -267,13 +267,15 @@ namespace bliss
 
 
       /// default constructor
-      DataMessageToSend() = default;
+      DEFAULT_FUNC_DECL(DataMessageToSend());
 
       /// default destructor
       virtual ~DataMessageToSend() {};
 
       void setEpoch(const uint64_t epoch) {
+        std::atomic_thread_fence(std::memory_order_acquire);
     	  *(reinterpret_cast<uint64_t*>(data->metadata_begin())) = epoch;
+    	  std::atomic_thread_fence(std::memory_order_release);
       }
 
       /// get the message's epoch embedded as the first sizeof(uint64_t) bytes.

@@ -15,7 +15,7 @@
 
 #include <cassert>
 
-#include "concurrent/lockfree_queue.hpp"
+#include "concurrent/mutexlock_queue.hpp"
 
 #include "taskrunner/runner.hpp"
 
@@ -35,7 +35,7 @@ class SequentialRunner : public Runner
 {
   protected:
     // using thread safe queue because other threads could be calling addTask.
-    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::LOCKFREE> q;
+    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::MUTEX> q;
 
   public:
     /// constructor

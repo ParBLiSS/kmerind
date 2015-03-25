@@ -21,9 +21,11 @@ endif()
 # load the testing:
 if (IS_DIRECTORY ./test)
     
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_messagebuffers.cpp )
+    bliss_add_relacy_test(${PROJECT_NAME} FALSE test/relacy_messagebuffers.cpp BLISS_MUTEX)
+    
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_messagebuffers.cpp BLISS_MUTEX)
 
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_messagebuffers2.cpp BLISS_THREADLOCAL_MUTEX_NONE BLISS_THREADLOCAL_SPINLOCK_NONE)
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_messagebuffers2.cpp BLISS_MUTEX)
 
 endif()
 

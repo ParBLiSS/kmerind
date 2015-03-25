@@ -16,10 +16,9 @@
 #define MESSAGE_TYPE_INFO_HPP_
 
 
-#include <atomic>
 #include <memory>
 
-
+#include "config/relacy_config.hpp"
 #include "concurrent/copyable_atomic.hpp"
 #include "io/mpi_utils.hpp"
 
@@ -56,10 +55,10 @@ namespace bliss
         mutable std::condition_variable condVar;
 
         /// deleted copy constructor
-        explicit EpochInfo(const EpochInfo& other) = delete;
+        explicit DELETED_FUNC_DECL(EpochInfo(const EpochInfo& other));
 
         /// deleted copy assignment operator
-        EpochInfo& operator=(const EpochInfo& other) = delete;
+        EpochInfo& DELETED_FUNC_DECL(operator=(const EpochInfo& other));
 
         /// mutex locked move constructor.
         EpochInfo(EpochInfo&& other, const std::lock_guard<std::mutex> &) :
@@ -160,7 +159,7 @@ namespace bliss
       	  DEBUGF("WAIT FOR EPOCH RELEASE %lu", epoch);
           std::unique_lock<std::mutex> lock(mutex);
           while (epoch_capacities.count(epoch) > 0) {
-            condVar.wait(lock);
+            CV_WAIT(condVar, lock);
             DEBUGF("WAIT FOR EPOCH RELEASE.  epoch_capacities.size()= %lu, epoch_capacities.count(%lu) = %lu",
                epoch_capacities.size(), epoch, epoch_capacities.count(epoch));
           }
@@ -172,11 +171,11 @@ namespace bliss
       	  DEBUGF("EPOCH RELEASE %lu", epoch);
           std::unique_lock<std::mutex> lock(mutex);
 
-    	  epoch_capacities.erase(epoch);
+          epoch_capacities.erase(epoch);
           totalCount.fetch_sub(1, std::memory_order_release);
-          lock.unlock();
 
-          condVar.notify_all();
+          CV_NOTIFY_ALL(condVar);
+          lock.unlock();
         }
 
     };

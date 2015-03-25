@@ -17,7 +17,7 @@
 
 #include "io/message_buffers.hpp"
 #include "concurrent/referenced_object_pool.hpp"
-#include "concurrent/lockfree_queue.hpp"
+#include "concurrent/mutexlock_queue.hpp"
 
 #include "omp.h"
 #include <cassert>
@@ -32,14 +32,14 @@ std::string data("this is a test.  this a test of the emergency broadcast system
 template<typename BuffersType>
 void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int nthreads) {
 
-  INFOF("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %d", poollt, bufferlt, buffers.getSize(), nthreads);
+  INFOF("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %d", poollt, bufferlt, buffers.getNumDests(), nthreads);
 
 
   INFOF("TEST append until full: ");
   typedef typename BuffersType::BufferPtrType BufferPtrType;
   bool op_suc = false;
   BufferPtrType ptr = nullptr;
-  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType, bliss::concurrent::LockType::LOCKFREE> fullBuffers;
+  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType, bliss::concurrent::LockType::MUTEX> fullBuffers;
 
   //INFOF("test string is \"%s\", length %lu", data.c_str(), data.length());
   int id = 0;
@@ -231,7 +231,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   typedef typename BuffersType::BufferPtrType BufferPtrType;
   bool op_suc = false;
   BufferPtrType ptr = nullptr;
-  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType, bliss::concurrent::LockType::LOCKFREE> fullBuffers;
+  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType, bliss::concurrent::LockType::MUTEX> fullBuffers;
 
   //INFOF("test string is \"%s\", length %lu", data.c_str(), data.length());
   int id = 0;
@@ -313,16 +313,16 @@ int main(int argc, char** argv) {
   }
 
 
-
-#if defined( BLISS_THREADLOCAL_MUTEX_NONE )
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::THREADLOCAL;
+  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
+
+#if defined( BLISS_MUTEX )
   constexpr bliss::concurrent::LockType lt1 = bliss::concurrent::LockType::MUTEX;
-  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
 
-#elif defined( BLISS_THREADLOCAL_SPINLOCK_NONE )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::THREADLOCAL;
-  constexpr bliss::concurrent::LockType lt1 = bliss::concurrent::LockType::SPINLOCK;
-  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
+//#elif defined( BLISS_THREADLOCAL_SPINLOCK_NONE )
+//  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::THREADLOCAL;
+//  constexpr bliss::concurrent::LockType lt1 = bliss::concurrent::LockType::SPINLOCK;
+//  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
 
 
 /// DISABLED BECAUSE SWAPPING BUFFER PTRS IN MUTLITHREADED ENVIRONMENT IS NOT SAFE, because threads hold on to ptrs to perform tasks.

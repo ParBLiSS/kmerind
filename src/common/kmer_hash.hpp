@@ -385,8 +385,8 @@ namespace bliss {
       template <typename KMER>
       class KmerPrefixHash {
         protected:
-          const int shift;
-          const int nBytes;
+          const unsigned int shift;
+          const unsigned int nBytes;
         public:
           /// constructor
           KmerPrefixHash(const unsigned int nBits = sizeof(size_t) * 8) : shift(sizeof(size_t) * 8 - nBits), nBytes((KMER::nBits + 7)/ 8) {
@@ -405,9 +405,9 @@ namespace bliss {
       template<typename KMER>
       class KmerInfixHash {
         protected:
-          const int hashMaxBits;
-          const int shift;
-          const int nBytes;
+          const unsigned int hashMaxBits;
+          const unsigned int shift;
+          const unsigned int nBytes;
           const size_t mask;
           ::std::hash<KMER> hashf;
         public:
@@ -433,7 +433,7 @@ namespace bliss {
       template <typename KMER>
       class KmerSuffixHash {
         protected:
-          const int nBytes;
+          const unsigned int nBytes;
 
           const size_t mask;
           ::bliss::hash::murmur::hash<KMER> hashf;

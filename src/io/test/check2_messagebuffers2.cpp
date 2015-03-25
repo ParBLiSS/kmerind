@@ -19,7 +19,7 @@
 
 #include "io/message_buffers.hpp"
 #include "concurrent/referenced_object_pool.hpp"
-#include "concurrent/lockfree_queue.hpp"
+#include "concurrent/mutexlock_queue.hpp"
 #include "omp.h"
 #include <cassert>
 #include <chrono>
@@ -28,31 +28,31 @@
 
 #include "io/message_types.hpp"
 
-int nelems = 11;
-int bufferSize = 2047;
+unsigned int nelems = 11;
+unsigned int bufferSize = 2047;
 
 
 
 template<typename BuffersType>
-void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int nthreads) {
+void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, unsigned int nthreads) {
 
-  INFOF("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %d", poollt, bufferlt, buffers.getSize(), nthreads);
+  INFOF("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %d", poollt, bufferlt, buffers.getNumDests(), nthreads);
 
 
   INFOF("TEST append until full: ");
   typedef typename BuffersType::BufferPtrType BufferPtrType;
   bool op_suc = false;
   BufferPtrType ptr = nullptr;
-  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType, bliss::concurrent::LockType::LOCKFREE> fullBuffers;
+  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType, bliss::concurrent::LockType::MUTEX> fullBuffers;
 
   //INFOF("test string is \"%s\", length %lu", data.c_str(), sizeof(int));
-  int id = 0;
+  unsigned int id = 0;
 
-  int i;
-  int success = 0;
-  int failure = 0;
-  int sswap = 0;
-  int fswap = 0;
+  unsigned int i;
+  unsigned int success = 0;
+  unsigned int failure = 0;
+  unsigned int sswap = 0;
+  unsigned int fswap = 0;
 
 
 #pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, fullBuffers, nelems, bufferSize) reduction(+ : success, failure, sswap, fswap)
@@ -84,8 +84,8 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
   // compute 2 expected since append returns full buffer only on failed insert and if there are n inserts that brings it to just before full, then it depends on timing
   // as to when the buffer becomes full.  (other threads will fail on append until swap happens, but not return a full buffer.)
-  int expectedFullMin = success / (bufferSize/sizeof(int)) - nthreads;
-  int expectedFullMax = success / (bufferSize/sizeof(int));
+  unsigned int expectedFullMin = success / (bufferSize/sizeof(int)) - nthreads;
+  unsigned int expectedFullMax = success / (bufferSize/sizeof(int));
 
   if (fullBuffers.getSize() != sswap + fswap) ERRORF("FAIL: number of full Buffers do not match: fullbuffer size %ld  full count %d + %d", fullBuffers.getSize(), sswap, fswap);
   // buffer at 23 entries (86 bytes each, 2048 bytes per buffer) will not show as full until the next iterator.
@@ -98,11 +98,11 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
 
   INFOF("TEST release: ");
-  int sswap2 = 0, fswap2 = 0, error = 0, over = 0;
+  unsigned int sswap2 = 0, fswap2 = 0, error = 0, over = 0;
 //  INFOF("buffer ids 0 to %lu initially in use.", buffers.getSize() - 1);
 //  INFOF("releasing: ");
 
-  int iterations = (sswap + fswap) + 10;
+  unsigned int iterations = (sswap + fswap) + 10;
 #pragma omp parallel for num_threads(nthreads) default(none) private(id, op_suc, ptr) shared(buffers, fullBuffers, bufferSize, iterations) reduction(+ : sswap2, fswap2, error, over)
   for (id = 0; id < iterations; ++id) {
     try {
@@ -136,8 +136,8 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   buffers.reset();
 
   INFOF("TEST all operations together: ");
-  int success3 = 0, failure3 = 0, sswap3 = 0, fswap3 = 0, bytes3 = 0;
-  int gbytes = 0;
+  unsigned int success3 = 0, failure3 = 0, sswap3 = 0, fswap3 = 0, bytes3 = 0;
+  unsigned int gbytes = 0;
   //INFOF("full buffer: ");
 
   std::vector< std::vector<int> > stored(nthreads);
@@ -186,15 +186,16 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   // concatenate the vectors
   std::vector<int> allstored;
   std::vector<int> allappended;
-  for (int k = 0; k < nthreads; ++k) {
+  for (unsigned int k = 0; k < nthreads; ++k) {
     allstored.insert(allstored.end(), stored[k].begin(), stored[k].end());
     allappended.insert(allappended.end(), appended[k].begin(), appended[k].end());
   }
 
-  buffers.at(id)->block_and_flush();
-  bool updating = buffers.at(id)->is_writing();
-  if (updating) INFOF("  PreFLUSH: size %ld updating? %s, blocked? %s", buffers.at(id)->getSize(), (updating ? "Y" : "N"), (buffers.at(id)->is_read_only() ? "Y" : "N"));
-
+  for (unsigned int i = 0; i < nthreads; ++i) {
+    buffers.at(id, i)->block_and_flush();
+    bool updating = buffers.at(id, i)->is_writing();
+    if (updating) INFOF("  PreFLUSH: size %ld updating? %s, blocked? %s", buffers.at(id, i)->getSize(), (updating ? "Y" : "N"), (buffers.at(id, i)->is_read_only() ? "Y" : "N"));
+  }
   std::vector<BufferPtrType> finals = buffers.flushBufferForRank(id);
   if (bufferlt == bliss::concurrent::LockType::NONE && finals.size() != nthreads) ERRORF("FAIL: expected %d threads have %lu actual.", nthreads, finals.size());
   for (auto final : finals) {
@@ -213,7 +214,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
   //if (count7 != count/data.length()) ERRORF("FAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
   finals = buffers.flushBufferForRank(id);
-  int gbytes2 = 0;
+  unsigned int gbytes2 = 0;
   for (auto final : finals) {
     gbytes2 += (final == nullptr) ? 0 : final->getSize();
       allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize() / sizeof(int));
@@ -279,29 +280,29 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
 
 template<typename BuffersType>
-void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int nthreads) {
+void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, unsigned int nthreads) {
 
-  INFOF("*** TESTING Buffers WaitForInsert lock %d buffer lock %d: ntargets = %lu, pool threads %d", poollt, bufferlt, buffers.getSize(), nthreads);
+  INFOF("*** TESTING Buffers WaitForInsert lock %d buffer lock %d: ntargets = %lu, pool threads %d", poollt, bufferlt, buffers.getNumDests(), nthreads);
 
   typedef typename BuffersType::BufferPtrType BufferPtrType;
   bool op_suc = false;
   BufferPtrType ptr = nullptr;
-  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType, bliss::concurrent::LockType::LOCKFREE> fullBuffers;
+  bliss::concurrent::ThreadSafeQueue<typename BuffersType::BufferPtrType, bliss::concurrent::LockType::MUTEX> fullBuffers;
 
   //INFOF("test string is \"%s\", length %lu", data.c_str(), data.length());
-  int id = 0;
+  unsigned int id = 0;
 
-  int i;
-  int swap = 0;
+  unsigned int i;
+  unsigned int swap = 0;
 
   buffers.reset();
 
   INFOF("TEST all operations together: ");
-  int bytes= 0;
-  int gbytes = 0, gbytes2 = 0;
+  unsigned int bytes= 0;
+  unsigned int gbytes = 0, gbytes2 = 0;
   //INFOF("full buffer: ");
   id = 0;
-  int attempts = 0;
+  unsigned int attempts = 0;
 #pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, nelems, bufferSize) reduction(+ : swap, bytes, attempts)
   for (i = 0; i < nelems; ++i) {
 
@@ -368,15 +369,15 @@ int main(int argc, char** argv) {
     nelems = atoi(argv[1]);
   }
 
+  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::THREADLOCAL;
+  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
 
-#if defined( BLISS_THREADLOCAL_MUTEX_NONE )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::THREADLOCAL;
+#if defined( BLISS_MUTEX )
   constexpr bliss::concurrent::LockType lt1 = bliss::concurrent::LockType::MUTEX;
-  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
-#elif defined( BLISS_THREADLOCAL_SPINLOCK_NONE )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::THREADLOCAL;
-  constexpr bliss::concurrent::LockType lt1 = bliss::concurrent::LockType::SPINLOCK;
-  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
+//#elif defined( BLISS_SPINLOCK )
+//  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::THREADLOCAL;
+//  constexpr bliss::concurrent::LockType lt1 = bliss::concurrent::LockType::SPINLOCK;
+//  constexpr bliss::concurrent::LockType lt2 = bliss::concurrent::LockType::NONE;
 
 /// DISABLED BECAUSE SWAPPING BUFFER PTRS IN MUTLITHREADED ENVIRONMENT IS NOT SAFE, because threads hold on to ptrs to perform tasks.
 //#elif defined( BLISS_MUTEX_LOCKFREE )
