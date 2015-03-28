@@ -1,5 +1,5 @@
 project(bliss-iterators)
-include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
+include("${bliss_SOURCE_DIR}/cmake/Sanitizer.cmake")
 
 
 if (ENABLE_TESTING)
