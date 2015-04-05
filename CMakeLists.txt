@@ -337,8 +337,11 @@ CMAKE_DEPENDENT_OPTION(ENABLE_COVERAGE "Enable Code Coverage Reporting" OFF
                         "ENABLE_TESTING;SUPPORTS_COVERAGE" OFF)
 CMAKE_DEPENDENT_OPTION(ENABLE_SANITIZER "Enable Sanitizer.  Choose via SANITIZER_STYLE" OFF
                         "ENABLE_TESTING;SUPPORTS_SANITIZER" OFF)
-                        
-include("${PROJECT_SOURCE_DIR}/cmake/GCCFilter.cmake")
+
+OPTION(ENABLE_GCCFILTER "Use GCCFilter for prettifying compiler output" OFF)
+if (ENABLE_GCCFILTER)
+  include("${PROJECT_SOURCE_DIR}/cmake/GCCFilter.cmake")
+endif(ENABLE_GCCFILTER)
 
 ## LOGGING ENGINE configuration
 #function(update_test_options varname cacheaccess varval) 
