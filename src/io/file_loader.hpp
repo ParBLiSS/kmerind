@@ -835,6 +835,7 @@ namespace io
           cache = new L2BlockType[nThreads];
         }
 
+      public:
         /**
          * @brief   compute the approximate size of a data record in the file by reading a few records.
          * @details For FileLoader, which does not treat the file as a collection of records, size returned is 1.

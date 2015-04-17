@@ -160,7 +160,7 @@ namespace bliss
          * @param filename
          * @param nthreads
          */
-        void build(const std::string &filename, const int &nthreads) {
+        void build(const std::string &filename, const int nthreads) {
           build(filename, nthreads, sysconf(_SC_PAGE_SIZE));
         }
 
@@ -170,7 +170,7 @@ namespace bliss
          * @param nthreads
          * @param chunkSize
          */
-        void build(const std::string &filename, const int &nthreads, const int chunkSize) {
+        void build(const std::string &filename, const int nthreads, const int chunkSize) {
           // scoped so FileLoader is deleted after.
           {
             //==== create file Loader

@@ -38,6 +38,8 @@ void testQueryOld(MPI_Comm comm, const std::string & filename, const int nthread
 //            t1 = std::chrono::high_resolution_clock::now();
     // create FASTQ Loader
 
+    DEBUGF("testQueryOld nthreads is %d", nthreads);
+
     typename KmerIndexType::FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
     typename KmerIndexType::FileLoaderType::L1BlockType partition;
 
@@ -111,6 +113,8 @@ void testQuery(MPI_Comm comm, const std::string & filename, const int nthreads, 
   {
 //            t1 = std::chrono::high_resolution_clock::now();
     // create FASTQ Loader
+    DEBUGF("testQuery nthreads is %d", nthreads);
+
 
     typename KmerIndexType::FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
     typename KmerIndexType::FileLoaderType::L1BlockType partition;
@@ -185,6 +189,8 @@ void test(MPI_Comm comm, const std::string & filename, const int nthreads, const
   MPI_Comm_size(comm, &nprocs);
   MPI_Comm_rank(comm, &rank);
 
+  DEBUGF("test nthreads is %d", nthreads);
+
 
 
   std::chrono::high_resolution_clock::time_point t1, t2;
@@ -207,7 +213,7 @@ void test(MPI_Comm comm, const std::string & filename, const int nthreads, const
                                      nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  DEBUGF("RANK %d: ***** building index first pass.", rank);
+  DEBUGF("RANK %d: ***** building index first pass.  %d threads", rank, nthreads);
 
   kmer_index.build(filename, nthreads, chunkSize);
   //kmer_index.flush();

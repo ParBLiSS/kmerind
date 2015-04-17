@@ -68,7 +68,7 @@ struct Tester
   {
     if (buildphase.load(std::memory_order_acquire)) {
       int v = lookup_in_build.fetch_add(1);
-      ERRORF("B R %d lookup while build.  BAD %d", my_rank, (v+ 1) );
+      ERRORF("B R %d <- %d lookup while build.  BAD %d", my_rank, fromRank, (v+1) );
     }
 
     // first: deserialize
@@ -149,6 +149,9 @@ struct Tester
 
     int nthreads = numThreads;
     int it = 0;
+
+	std::vector<int> msgs(els * commSize);
+
     for (; it < iters; ++it) {
 
         // R: src rank
@@ -160,22 +163,25 @@ struct Tester
         // M: message
         // L: recv message cont
 
+	msgs.clear();
 
         // start sending one message to each:
-  #pragma omp parallel for default(none) num_threads(nthreads) shared(els, my_rank, it, stdout)
+  #pragma omp parallel for default(none) num_threads(nthreads) shared(msgs, els, my_rank, it, stdout)
         for (int i = 0; i < els; ++i)
         {
-          int msg;
+          size_t idx;
           for (int j = 0; j < commSize; ++j)
           {
-            msg = generate_message(my_rank, j);
+		idx = i * commSize + j;
+		
+            msgs[idx] = generate_message(my_rank, j);
             if (i == 0 || i == els - 1)
-              DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, FIRST_TAG, i, els, msg);
-            commLayer.sendMessage(&msg, sizeof(int), j, FIRST_TAG);
+              DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, FIRST_TAG, i, els, msgs[idx]);
+            commLayer.sendMessage(&msgs[idx], sizeof(int), j, FIRST_TAG);
           }
         }
 
-        sleep(my_rank);
+        //sleep(my_rank);
 
         DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PREFLUSH", my_rank, it, FIRST_TAG, els, msgs_received.load());
         commLayer.flush(FIRST_TAG);
@@ -194,6 +200,8 @@ struct Tester
   //      msgs_received.store(0);
       }
 
+      commLayer.finish(FIRST_TAG);
+
       bool r = buildphase.exchange(false, std::memory_order_relaxed);
       assert(r);
       INFOF("M R %d, SEND DONE.  buildphase was %s ", commRank, (r? "on" : "off"));
@@ -205,17 +213,19 @@ struct Tester
 
       it = 0;
       for (; it < iters; ++it) {
+	msgs.clear();
         // sending one message to each:
-    #pragma omp parallel for default(none) num_threads(nthreads) shared(els, my_rank, it, after, stdout)
+    #pragma omp parallel for default(none) num_threads(nthreads) shared(msgs, els, my_rank, it, after, stdout)
         for (int i = 0; i < els; ++i)
         {
-          int msg;
+          size_t idx;
           for (int j = 0; j < commSize; ++j)
           {
-            msg = generate_message(my_rank, j);
+		idx = i * commSize + j;
+            msgs[idx] = generate_message(my_rank, j);
             if (i == 0 || i == els - 1 || after)
-              DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, LOOKUP_TAG, i, els, msg);
-            commLayer.sendMessage(&msg, sizeof(int), j, LOOKUP_TAG);
+              DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, LOOKUP_TAG, i, els, msgs[idx]);
+            commLayer.sendMessage(&msgs[idx], sizeof(int), j, LOOKUP_TAG);
           }
         }
 
@@ -235,10 +245,10 @@ struct Tester
       if (v > 0) ERRORF("LEAKY FLUSH:  rank %d:  %d lookups processed during build. ", my_rank, v);
 
 
-      // flush both tags
-      DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PREFINISH", my_rank, it, LOOKUP_TAG, els, msgs_received.load());
-      commLayer.finish(FIRST_TAG);
-      DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d POSTFINISH", my_rank, it, LOOKUP_TAG, els, msgs_received.load());
+//      // flush both tags
+//      DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PREFINISH", my_rank, it, LOOKUP_TAG, els, msgs_received.load());
+//      commLayer.finish(FIRST_TAG);
+//      DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d POSTFINISH", my_rank, it, LOOKUP_TAG, els, msgs_received.load());
 
 
       // flush both tags
