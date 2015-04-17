@@ -27,7 +27,7 @@ struct Tester
   }
 
 
-  void lookup_callback(uint8_t* msg, std::size_t count, int fromRank)
+  void lookup_callback(uint8_t* msg, std::size_t count, int fromRank, uint64_t epoch)
   {
     // first: deserialize
     int* msgs = reinterpret_cast<int*>(msg);
@@ -67,7 +67,7 @@ struct Tester
     if (error) exit(EXIT_FAILURE);
   }
 
-  void answer_callback(uint8_t* msg, std::size_t count, int fromRank)
+  void answer_callback(uint8_t* msg, std::size_t count, int fromRank, uint64_t epoch)
   {
     // first: deserialize
     int* msgs = reinterpret_cast<int*>(msg);
@@ -104,8 +104,8 @@ struct Tester
     // set global rank
     my_rank = commLayer.getCommRank();
     using namespace std::placeholders;
-    commLayer.addReceiveCallback(LOOKUP_TAG, std::bind(&Tester::lookup_callback, this, _1, _2, _3));
-    commLayer.addReceiveCallback(ANSWER_TAG, std::bind(&Tester::answer_callback, this, _1, _2, _3));
+    commLayer.addReceiveCallback(LOOKUP_TAG, std::bind(&Tester::lookup_callback, this, _1, _2, _3, _4));
+    commLayer.addReceiveCallback(ANSWER_TAG, std::bind(&Tester::answer_callback, this, _1, _2, _3, _4));
 
     commLayer.initCommunication();
 

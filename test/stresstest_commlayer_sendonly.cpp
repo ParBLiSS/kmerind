@@ -26,7 +26,7 @@ struct Tester
     return (srcRank + 1) * 100000 + (dstRank + 1);
   }
 
-  void receivedCallback(uint8_t* msg, std::size_t count, const int fromRank)
+  void receivedCallback(uint8_t* msg, std::size_t count, const int fromRank, uint64_t epoch)
   {
     //DEBUG("Rank " << my_rank << " received " << count << " message from process: " << fromRank);
 
@@ -68,7 +68,7 @@ struct Tester
     // set global rank
     my_rank = commLayer.getCommRank();
     using namespace std::placeholders;
-    commLayer.addReceiveCallback(FIRST_TAG, std::bind(&Tester::receivedCallback, this, _1, _2, _3));
+    commLayer.addReceiveCallback(FIRST_TAG, std::bind(&Tester::receivedCallback, this, _1, _2, _3, _4));
 
     commLayer.initCommunication();
 

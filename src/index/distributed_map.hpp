@@ -176,7 +176,7 @@ public:
    * @brief Reserves size
    * @param size_hint
    */
-  void mapReserveCallback(uint8_t* msg, std::size_t count, int fromRank) {
+  void mapReserveCallback(uint8_t* msg, std::size_t count, int fromRank, uint64_t epoch) {
     assert(count == sizeof(size_t));
     assert(fromRank == commRank);
 
@@ -499,7 +499,7 @@ protected:
     using namespace std::placeholders;
     this->commLayer.addReceiveCallback(RESERVE_TAG,
         std::bind(&_distributed_map_base::mapReserveCallback,
-                  this, _1, _2, _3));
+                  this, _1, _2, _3, _4));
 
 
   }
@@ -641,7 +641,7 @@ protected:
    * @param count       The number of bytes received.
    * @param fromRank    The source rank of the message.
    */
-  void receivedLookupCallback(uint8_t* msg, std::size_t count, int fromRank)
+  void receivedLookupCallback(uint8_t* msg, std::size_t count, int fromRank, uint64_t epoch)
   {
     // deserialize
     K* keys = reinterpret_cast<K*>(msg);
@@ -706,7 +706,7 @@ protected:
    * @param count       The number of bytes received.
    * @param fromRank    The source rank of the message.
    */
-  void receivedLookupAnswerCallback(uint8_t* msg, std::size_t count, int fromRank)
+  void receivedLookupAnswerCallback(uint8_t* msg, std::size_t count, int fromRank, uint64_t epoch)
   {
     // deserialize
     std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
@@ -807,13 +807,13 @@ public:
     using namespace std::placeholders;
     this->commLayer.addReceiveCallback(_base_class::INSERT_MPI_TAG,
         std::bind(&distributed_multimap::receivedInsertCallback,
-                  this, _1, _2, _3));
+                  this, _1, _2, _3, _4));
     this->commLayer.addReceiveCallback(_base_class::LOOKUP_MPI_TAG,
         std::bind(&distributed_multimap::receivedLookupCallback,
-                  this, _1, _2, _3));
+                  this, _1, _2, _3, _4));
     this->commLayer.addReceiveCallback(_base_class::LOOKUP_ANSWER_MPI_TAG,
         std::bind(&distributed_multimap::receivedLookupAnswerCallback,
-                  this, _1, _2, _3));
+                  this, _1, _2, _3, _4));
   }
 
   /**
@@ -910,7 +910,7 @@ protected:
    * @param count       The number of bytes received.
    * @param fromRank    The source rank of the message.
    */
-  void receivedInsertCallback(uint8_t* msg, std::size_t count, int fromRank)
+  void receivedInsertCallback(uint8_t* msg, std::size_t count, int fromRank, uint64_t epoch)
   {
     // deserialize
     std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
@@ -1021,13 +1021,13 @@ public:
     using namespace std::placeholders;
     this->commLayer.addReceiveCallback(_base_class::INSERT_MPI_TAG,
         std::bind(&distributed_counting_map::receivedCountCallback,
-                  this, _1, _2, _3));
+                  this, _1, _2, _3, _4));
     this->commLayer.addReceiveCallback(_base_class::LOOKUP_MPI_TAG,
         std::bind(&distributed_counting_map::receivedLookupCallback,
-                  this, _1, _2, _3));
+                  this, _1, _2, _3, _4));
     this->commLayer.addReceiveCallback(_base_class::LOOKUP_ANSWER_MPI_TAG,
         std::bind(&distributed_counting_map::receivedLookupAnswerCallback,
-                  this, _1, _2, _3));
+                  this, _1, _2, _3, _4));
 
   }
 
@@ -1110,7 +1110,7 @@ protected:
    * @param count       The number of bytes received.
    * @param fromRank    The source rank of the message.
    */
-  void receivedCountCallback(uint8_t* msg, std::size_t count, int fromRank)
+  void receivedCountCallback(uint8_t* msg, std::size_t count, int fromRank, uint64_t epoch)
   {
     // deserialize
     K* keys = reinterpret_cast<K*>(msg);

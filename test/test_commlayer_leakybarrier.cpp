@@ -18,7 +18,7 @@ std::atomic<int> answers_received(0);
 volatile bool after = false;
 int elems;
 
-std::atomic<bool> buildphase(true);
+std::atomic<uint64_t> senderEpoch(0);
 std::atomic<int> lookup_in_build(0);
 
 template <bool ThreadLocal = true>
@@ -32,7 +32,7 @@ struct Tester
   {
     return (srcRank + 1) * 100000 + (dstRank + 1);
   }
-  void receivedCallback(uint8_t* msg, std::size_t count, const int fromRank)
+  void receivedCallback(uint8_t* msg, std::size_t count, const int fromRank, uint64_t epoch)
   {
     //DEBUG("Rank " << my_rank << " received " << count << " message from process: " << fromRank);
 
@@ -64,11 +64,12 @@ struct Tester
     if (error) exit(EXIT_FAILURE);
   }
 
-  void lookup_callback(uint8_t* msg, std::size_t count, int fromRank)
+  void lookup_callback(uint8_t* msg, std::size_t count, int fromRank, uint64_t epoch)
   {
-    if (buildphase.load(std::memory_order_acquire)) {
+	  uint64_t se = senderEpoch.load(std::memory_order_acquire);
+    if (epoch <= se) {
       int v = lookup_in_build.fetch_add(1);
-      ERRORF("B R %d <- %d lookup while build.  BAD %d", my_rank, fromRank, (v+1) );
+      ERRORF("B R %d <- %d lookup while build.  epoch %lu, sender Epoch %lu,  BAD %d", my_rank, fromRank, epoch, se, (v+1) );
     }
 
     // first: deserialize
@@ -103,7 +104,7 @@ struct Tester
     if (error) exit(EXIT_FAILURE);
   }
 
-  void answer_callback(uint8_t* msg, std::size_t count, int fromRank)
+  void answer_callback(uint8_t* msg, std::size_t count, int fromRank, uint64_t epoch)
   {
     // first: deserialize
     int* msgs = reinterpret_cast<int*>(msg);
@@ -141,9 +142,9 @@ struct Tester
     // set global rank
     my_rank = commLayer.getCommRank();
     using namespace std::placeholders;
-    commLayer.addReceiveCallback(FIRST_TAG, std::bind(&Tester::receivedCallback, this, _1, _2, _3));
-    commLayer.addReceiveCallback(LOOKUP_TAG, std::bind(&Tester::lookup_callback, this, _1, _2, _3));
-    commLayer.addReceiveCallback(ANSWER_TAG, std::bind(&Tester::answer_callback, this, _1, _2, _3));
+    commLayer.addReceiveCallback(FIRST_TAG, std::bind(&Tester::receivedCallback, this, _1, _2, _3, _4));
+    commLayer.addReceiveCallback(LOOKUP_TAG, std::bind(&Tester::lookup_callback, this, _1, _2, _3, _4));
+    commLayer.addReceiveCallback(ANSWER_TAG, std::bind(&Tester::answer_callback, this, _1, _2, _3, _4));
 
     commLayer.initCommunication();
 
@@ -184,9 +185,9 @@ struct Tester
         //sleep(my_rank);
 
         DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PREFLUSH", my_rank, it, FIRST_TAG, els, msgs_received.load());
-        commLayer.flush(FIRST_TAG);
+        senderEpoch.store(commLayer.flush(FIRST_TAG), std::memory_order_release);
         DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d POSTFLUSH", my_rank, it, FIRST_TAG, els, msgs_received.load());
-
+        INFOF("currnt epoch is %lu", senderEpoch.load(std::memory_order_relaxed));
 
   //      // check that all messages have been received
   //      if (msgs_received.load() != els * commSize)
@@ -200,11 +201,10 @@ struct Tester
   //      msgs_received.store(0);
       }
 
-      commLayer.finish(FIRST_TAG);
 
-      bool r = buildphase.exchange(false, std::memory_order_relaxed);
-      assert(r);
-      INFOF("M R %d, SEND DONE.  buildphase was %s ", commRank, (r? "on" : "off"));
+      senderEpoch.store(commLayer.finish(FIRST_TAG), std::memory_order_release);
+
+      INFOF("M R %d, SEND DONE.  final epoch was %lu ", commRank, senderEpoch.load(std::memory_order_relaxed));
 //      commLayer.finishCommunication2();
 
 
@@ -241,8 +241,6 @@ struct Tester
 
       }
 
-      int v = lookup_in_build.load(std::memory_order_relaxed);
-      if (v > 0) ERRORF("LEAKY FLUSH:  rank %d:  %d lookups processed during build. ", my_rank, v);
 
 
 //      // flush both tags
@@ -292,6 +290,10 @@ struct Tester
 
 
     commLayer.finishCommunication();
+
+    int v = lookup_in_build.load(std::memory_order_relaxed);
+    if (v > 0) ERRORF("LEAKY FLUSH:  rank %d:  %d lookups processed during build. ", my_rank, v);
+
 
     //INFO( "LOOKUP: " << lookup_received << " ANSWERS: " << answers_received );
 
@@ -354,9 +356,9 @@ int main(int argc, char *argv[])
 
   /* code */
   {
-    msgs_received.store(0);
-    lookup_received.store(0);
-    answers_received.store(0);
+    msgs_received.store(0, std::memory_order_relaxed);
+    lookup_received.store(0, std::memory_order_relaxed);
+    answers_received.store(0, std::memory_order_relaxed);
 
 /// SWAPPING BUFFER PTRS IN MULTITHREADED ENVIRONMENT IS NOT SAFE
 //#if defined(THREADLOCAL)

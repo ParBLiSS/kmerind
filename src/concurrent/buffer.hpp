@@ -2106,7 +2106,7 @@ namespace bliss
         void clear_and_block_writes()
         {
           // blocked
-          reserved.store(Capacity + 1, std::memory_order_acquire);
+          reserved.store(Capacity + 1, std::memory_order_release);
           written.store(0, std::memory_order_relaxed);
           this->size.store(0, std::memory_order_release);
         }
@@ -2118,7 +2118,7 @@ namespace bliss
          */
         void clear_and_unblock_writes()
         {
-          reserved.store(0, std::memory_order_acquire);
+          reserved.store(0, std::memory_order_release);
           written.store(0, std::memory_order_relaxed);
           this->size.store(Capacity + 1, std::memory_order_release);
         }

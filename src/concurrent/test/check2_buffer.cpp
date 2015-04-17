@@ -367,7 +367,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
 
   std::atomic<bliss::io::Buffer<TS, CAP, MDSize>*> ptr(
       new bliss::io::Buffer<TS, CAP, MDSize>());             // ensure atomicity
-  ptr.load()->unblock_writes();
+  ptr.load(std::memory_order_relaxed)->unblock_writes();
 
 #pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, full, gold, stderr, stdout, std::cout) reduction(+:success, failure, swap)
   for (int i = 0; i < total_count; ++i)
@@ -378,7 +378,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
 
     std::atomic_thread_fence(std::memory_order_seq_cst);
 
-    unsigned int result = ptr.load()->append(&data, elSize);
+    unsigned int result = ptr.load(std::memory_order_relaxed)->append(&data, elSize);
 
     if (result & 0x1)
     {
@@ -412,7 +412,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
 
       bliss::io::Buffer<TS, CAP, MDSize>* old_ptr = nullptr;
 
-      old_ptr = ptr.exchange(new_ptr);
+      old_ptr = ptr.exchange(new_ptr, std::memory_order_acq_rel);
 #pragma omp flush(ptr)
 //
       // save the old buffer
@@ -426,7 +426,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
             capInEl, old_ptr->getCapacity(), oldsize, old_ptr->getSize(), swap,
             i);
         INFO(
-            "   atomic old buf: " << *(old_ptr) << std::endl << "   atomic new buf: " << *(ptr.load()));
+            "   atomic old buf: " << *(old_ptr) << std::endl << "   atomic new buf: " << *(ptr.load(std::memory_order_relaxed)));
       }
 
       full[omp_get_thread_num()].push_back(
@@ -438,14 +438,14 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
   }
   //INFOF("LAST BUFFER 1");
 
-  ptr.load()->block_and_flush();
-  int last = ptr.load()->getSize();
+  ptr.load(std::memory_order_relaxed)->block_and_flush();
+  int last = ptr.load(std::memory_order_relaxed)->getSize();
   if (last == (capInEl))
   {
     ++swap;
   }
 
-  auto b = ptr.exchange(nullptr);
+  auto b = ptr.exchange(nullptr, std::memory_order_acq_rel);
   full[0].push_back(
       std::move(std::unique_ptr<bliss::io::Buffer<TS, CAP, MDSize> >(b)));
 
@@ -515,8 +515,8 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
 
   int success2 = 0;
 
-  b = ptr.exchange(new bliss::io::Buffer<TS, CAP, MDSize>()); // old pointer was managed by unique ptr.
-  ptr.load()->unblock_writes();
+  b = ptr.exchange(new bliss::io::Buffer<TS, CAP, MDSize>(), std::memory_order_acq_rel); // old pointer was managed by unique ptr.
+  ptr.load(std::memory_order_relaxed)->unblock_writes();
 
 #pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, gold, lstored, stderr, stdout, std::cout) reduction(+:success, failure, swap, success2)
   for (int i = 0; i < total_count; ++i)
@@ -528,7 +528,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
     //auto buf = ptr.load();
     std::atomic_thread_fence(std::memory_order_seq_cst);
 
-    int res = ptr.load()->append(&data, elSize);
+    int res = ptr.load(std::memory_order_relaxed)->append(&data, elSize);
 
     if (res & 0x1)
     {
@@ -567,7 +567,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
 
       new_ptr->unblock_writes();
 
-      old_ptr = ptr.exchange(new_ptr);             //
+      old_ptr = ptr.exchange(new_ptr, std::memory_order_acq_rel);             //
 #pragma omp flush(ptr)
       // save the old buffer
 
@@ -598,8 +598,8 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
   }
 
   //INFOF("LAST BUFFER 2");
-  ptr.load()->block_and_flush();
-  last = ptr.load()->getSize();
+  ptr.load(std::memory_order_relaxed)->block_and_flush();
+  last = ptr.load(std::memory_order_relaxed)->getSize();
   if (last == (capInEl))
   {
     ++swap;
@@ -614,11 +614,11 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
   }
 
   // compare unordered buffer content.
-  stored.insert(stored.end(), ptr.load()->operator int*(),
-                reinterpret_cast<int*>(ptr.load()->end()));
+  stored.insert(stored.end(), ptr.load(std::memory_order_relaxed)->operator int*(),
+                reinterpret_cast<int*>(ptr.load(std::memory_order_relaxed)->end()));
 
   stored_count = stored.size();
-  success2 += ptr.load()->getSize() / elSize;
+  success2 += ptr.load(std::memory_order_relaxed)->getSize() / elSize;
 
   //INFOF("DEBUG: atomic after last buffer (actual/expected)  success (%d,%d/%d), failure (%d/?), swap(%d/%ld), final buf size %d, content match? %s", stored_count, success2, success, failure, swap, success / (capInEl), last, compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
 
@@ -650,7 +650,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
     }
   }
 
-  ptr.exchange(nullptr);
+  ptr.exchange(nullptr, std::memory_order_acq_rel);
   stored.clear();
 
 }
@@ -707,8 +707,8 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
         {
           FATALF(
               "ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. insert buf %p, curr buffer %p, insert dataptr %p, data ptr %p, curr data ptr %p, returned %p, offset %ld",
-              omp_get_thread_num(), data, od, localptr, ptr.load(), dataptr,
-              localptr->operator char*(), ptr.load()->operator char*(),
+              omp_get_thread_num(), data, od, localptr, ptr.load(std::memory_order_relaxed), dataptr,
+              localptr->operator char*(), ptr.load(std::memory_order_relaxed)->operator char*(),
               (char*)out, (char*)out - (localptr->operator char*()));
           fflush(stdout);
           ++failure3;
@@ -748,7 +748,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
           ERRORF(
               "FAIL 3 thread %d/%d atomic DID NOT GET %lu elements, actual %lu. local swap = %d, i = %lu. oldbuf %p, newbuf %p",
               omp_get_thread_num(), omp_get_num_threads(), capInEl, oldsize,
-              swap, i, old_ptr, ptr.load());
+              swap, i, old_ptr, ptr.load(std::memory_order_relaxed));
         }
 
 //        delete old_ptr;
@@ -774,14 +774,14 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
   }
   //INFOF("LAST BUFFER 1");
 
-  ptr.load()->block_and_flush();
-  size_t last = ptr.load()->getSize() / elSize;
+  ptr.load(std::memory_order_relaxed)->block_and_flush();
+  size_t last = ptr.load(std::memory_order_relaxed)->getSize() / elSize;
   if (last == (capInEl))
   {
     ++swap;
   }
 
-  auto b = ptr.exchange(nullptr);
+  auto b = ptr.exchange(nullptr, std::memory_order_acq_rel);
   delete b;
 
   if (failure2 > 0 || failure3 > 0)

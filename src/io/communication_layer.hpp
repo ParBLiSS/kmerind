@@ -906,7 +906,7 @@ protected:
          * @throw std::invalid_argument   If `tag <= 0` or if a callback function has
          *                                already been registered for the given tag.
          */
-        void addReceiveCallback(int tag, std::function<void(uint8_t*, std::size_t, int)> callbackFunction, std::unique_lock<std::mutex>&) throw (std::invalid_argument)
+        void addReceiveCallback(int tag, std::function<void(uint8_t*, std::size_t, int, uint64_t)> callbackFunction, std::unique_lock<std::mutex>&) throw (std::invalid_argument)
         {
 
           // check for valid arguments
@@ -927,7 +927,7 @@ protected:
         CommunicationLayer& commLayer;
 
         /// Registry of callback functions, mapped to by the associated tags
-        std::unordered_map<int, std::function<void(uint8_t*, std::size_t, int)> > callbackFunctions;
+        std::unordered_map<int, std::function<void(uint8_t*, std::size_t, int, uint64_t)> > callbackFunctions;
 
         /// std::thread object for the dedicated callback-handler thread
         std::thread td;
@@ -1009,7 +1009,7 @@ protected:
 
 				  DEBUGF("B R %d <- %d, tag %d epoch %lu, currRecvEpoch = %lu data message processing.",
 												  commLayer.commRank, msg->getRank(), msg->getTag(), msg->getEpoch(), currRecvEpoch);
-				  (callbackFunctions.at(msg->getTag()))(msg->getData(), msg->getDataSize(), msg->getRank());
+				  (callbackFunctions.at(msg->getTag()))(msg->getData(), msg->getDataSize(), msg->getRank(), msg->getEpoch());
 
 				  // finished processing.  release back into pool
 				  commLayer.releaseBuffer(msg->getBuffer());
@@ -1064,7 +1064,8 @@ public:
    * @note    If finish() was not called for all used tags, this will block forever.
    */
   virtual ~CommunicationLayer () {
-    finishCommunication();
+	  if (initialized.load(std::memory_order_relaxed))
+		  finishCommunication();
 
     // final cleanup
     if (!messageBuffers.empty()) {
@@ -1102,7 +1103,7 @@ public:
   {
     //== can't have a data message that has a CONTROL_TAG.
     assert(tag != CONTROL_TAG && tag >= 0);
-    assert(initialized.load(std::memory_order_relaxed));
+    if (!initialized.load(std::memory_order_relaxed)) throw std::logic_error("calling sendMessage before initialization");
 
     //check to see if sendQueue is still accepting (if not, then comm is finished)
     if (!sendQueue.canPush()) {
@@ -1188,7 +1189,7 @@ public:
    * @throw std::invalid_argument   If `tag <= 0` or if a callback function has
    *                                already been registered for the given tag.
    */
-  void addReceiveCallback(int tag, std::function<void(uint8_t*, std::size_t, int)> callbackFunction) throw (std::invalid_argument)
+  void addReceiveCallback(int tag, std::function<void(uint8_t*, std::size_t, int, uint64_t)> callbackFunction) throw (std::invalid_argument)
   {
     assert(omp_get_num_threads() == 1);
     // check for valid arguments
@@ -1227,14 +1228,14 @@ public:
    * @param tag
    * @throw bliss::io::IOException
    */
-  void flush(int tag) throw (bliss::io::IOException)
+  uint64_t flush(int tag) throw (bliss::io::IOException)
   {
     // can only flush data tag.
     assert(tag != CONTROL_TAG && tag >= 0);
-    assert(initialized.load(std::memory_order_relaxed));
+    if (!initialized.load(std::memory_order_relaxed)) throw std::logic_error("calling flush before initialization");
 
     if (!sendQueue.canPush()) {
-      throw std::logic_error("M ERROR flush called after finishCommunication");
+      throw std::logic_error("M ERROR flush called but sendQueue is disabled.");
     }
 
 //    MessageInfo& taginfo = getTagInfo(tag);
@@ -1256,6 +1257,8 @@ public:
     uint64_t oe = startNextEpoch();
     DEBUGF("M R %d,\t,\t,\t,\tt %d\toe %lu,\tRECVED CTRL MSGS", commRank, tag, oe);
 
+    return oe;
+
   }
 
   /**
@@ -1270,14 +1273,14 @@ public:
    * @param tag
    * @throw bliss::io::IOException
    */
-  void finish(int tag) throw (bliss::io::IOException)
+  uint64_t finish(int tag) throw (bliss::io::IOException)
   {
 
     assert(tag != CONTROL_TAG && tag >= 0);
-    if (!initialized.load(std::memory_order_relaxed)) return;
+    if (!initialized.load(std::memory_order_relaxed)) throw std::logic_error("called finish when commLayer is not initialized");
 
     if (!sendQueue.canPush()) {
-      return;
+    	throw std::logic_error("called finish when commLayer sendQueue is disabled.");
     }
 
 //    // Mark tag as finished in the metadata.
@@ -1308,6 +1311,8 @@ public:
 
     // remove this tag from further use.
     deleteTagInfo(tag, lock);
+
+    return oe;
   }
 
 
@@ -1317,11 +1322,11 @@ public:
    *
    * @note Must be called before any other functions can be called.
    */
-  void initCommunication()
+  uint64_t initCommunication()
   {
     assert(omp_get_num_threads() == 1);
 
-    if (initialized.load(std::memory_order_relaxed)) return;  // already initialized.
+    if (initialized.load(std::memory_order_relaxed)) throw std::logic_error("called initCommunication when commLayer is already initialized");
 
 
     // one thread calls this
@@ -1353,6 +1358,8 @@ public:
     commThread.start();
 
     initialized.store(true, std::memory_order_relaxed);
+
+    return ne;
   }
 
 
@@ -1366,11 +1373,11 @@ public:
    * @param tag
    * @throw bliss::io::IOException
    */
-  void finishCommunication() throw (bliss::io::IOException)
+  uint64_t finishCommunication() throw (bliss::io::IOException)
   {
     assert(omp_get_num_threads() == 1);
 
-    if (!initialized.load(std::memory_order_relaxed)) return;
+    if (!initialized.load(std::memory_order_relaxed)) throw std::logic_error("called finishCommunication when commLayer is not initialized");
 
     DEBUGF("M R %d FINISH COMM ", commRank);
 
@@ -1410,6 +1417,8 @@ public:
     if(recvQueue.canPush()) recvQueue.disablePush();
 
     initialized.store(false, std::memory_order_relaxed);
+
+    return oe;
   }
 
 
@@ -1484,15 +1493,16 @@ protected:
   /// start a new epoch.  this assumes no previous epoch.  note that callback thread is not notified here.
   uint64_t startFirstEpoch() {
     // must be initialized
-    assert(!initialized.load(std::memory_order_relaxed));
+    if (initialized.load(std::memory_order_relaxed)) throw std::logic_error("calling startFirstEpoch after initialization");
 
     uint64_t ne = MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed);
 
     // get a new epoch and exchange it.
 //    uint64_t ce = bliss::io::MPIMessage::nextEpoch.fetch_add(1, std::memory_order_relaxed);
-    uint64_t oe = currEpoch.exchange(ne, std::memory_order_relaxed);
+    uint64_t oe = currEpoch.exchange(ne, std::memory_order_acq_rel);
     // must not have previous epoch.
     assert(oe == CONTROL_TAG_EPOCH);
+    DEBUGF("M R %d obtained first epoch %lu, next %lu", commRank, oe, ne);
 
     // finally, register it.
     epochProperties.registerEpoch(ne, std::ref(activeEpochCount));
@@ -1504,7 +1514,7 @@ protected:
   uint64_t startNextEpoch() {
     //=== create a new epoch
     // must be initialized
-    assert(initialized.load(std::memory_order_relaxed));
+    if (!initialized.load(std::memory_order_relaxed)) throw std::logic_error("calling startNextEpoch before initialization");
 
     // queue must be active
     if (!sendQueue.canPush())  throw std::logic_error("M ERROR: sendControlMessagesAndWait already called");
@@ -1516,7 +1526,7 @@ protected:
 
     DEBUGF("M R %d obtain next epoch %lu, next %lu", commRank, currEpoch.load(std::memory_order_relaxed), ne);
 
-    uint64_t oe = currEpoch.exchange(ne, std::memory_order_relaxed);  // old
+    uint64_t oe = currEpoch.exchange(ne, std::memory_order_acq_rel);  // old
     // must have previous epoch.
     assert(oe != CONTROL_TAG_EPOCH);
 
@@ -1555,7 +1565,7 @@ protected:
   /// finishes the last epoch.  this assumes previous epoch is set.
   uint64_t finishLastEpoch() {
     // must be initialized
-    assert(initialized.load(std::memory_order_relaxed));
+	if (!initialized.load(std::memory_order_relaxed)) throw std::logic_error("calling finishLastEpoch before initialization");
 
     // queue must be active
     if (!sendQueue.canPush())  throw std::logic_error("M ERROR: sendControlMessagesAndWait already called");
@@ -1602,16 +1612,16 @@ protected:
    * @param next_epoch    The next epoch - new bufers that are swapped in will have this value.  to just flush, pass in the same value
    * @throw bliss::io::IOException
    */
-  void flushBuffers(int tag) throw (bliss::io::IOException)
+  uint64_t flushBuffers(int tag) throw (bliss::io::IOException)
   {
-    assert(initialized.load(std::memory_order_relaxed));
+	if (!initialized.load(std::memory_order_relaxed)) throw std::logic_error("calling flushBuffers before initialization");
 
     if (!sendQueue.canPush()) {
       throw std::logic_error("W cannot flush buffer: cannot push to sendQueue.");
     }
 
     MessageBuffersType* tptr = getBuffers(tag);
-    uint64_t ce = currEpoch.load(std::memory_order_relaxed);
+    uint64_t ce = currEpoch.load(std::memory_order_acquire);
 
     int target_rank = commRank;
     for (int i = 0; i < commSize; ++i) {
@@ -1643,6 +1653,7 @@ protected:
 
       }
     }
+    return ce;
   }
 
 
