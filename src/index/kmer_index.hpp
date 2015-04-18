@@ -76,7 +76,7 @@ namespace bliss
         //==================== COMMON TYPES
 
         /// DEFINE file loader.  this only provides the L1 and L2 blocks, not reads.
-        using FileLoaderType = bliss::io::FASTQLoader<CharType, false, true>; // raw data type :  use CharType
+        using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
 
         // from FileLoader type, get the block iter type and range type
         using FileBlockIterType = typename FileLoaderType::L2BlockType::iterator;
@@ -178,7 +178,7 @@ namespace bliss
 
             // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
             // index reserve internally sends a message to itself.
-            index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
+            //  TEST TO SEE EFFECT OF THIS... index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
 
             //====  now process the file, one L1 block (block partition by MPI Rank) at a time
             typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();

@@ -566,13 +566,13 @@ protected:
          int hasMessage = 0;
          MPI_Status status;
          //if (commSize > 1)  // iprobe checks low rank first.
-         // MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
-         int srcRank = lastSrcRank;
-         do {
-           MPI_Iprobe(srcRank, MPI_ANY_TAG, comm, &hasMessage, &status);  // fair probe.
-           srcRank = (srcRank + 1) % commSize;
-         } while ((hasMessage == 0) && (srcRank != lastSrcRank));
-         lastSrcRank = srcRank;
+         MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &hasMessage, &status);
+//         int srcRank = lastSrcRank;
+//         do {
+//           MPI_Iprobe(srcRank, MPI_ANY_TAG, comm, &hasMessage, &status);  // fair probe.
+//           srcRank = (srcRank + 1) % commSize;
+//         } while ((hasMessage == 0) && (srcRank != lastSrcRank));
+//         lastSrcRank = srcRank;
 
          // if have message to receive,
          if (hasMessage > 0) {
@@ -781,8 +781,22 @@ protected:
           			 msg->getEpoch(), msg->getNextEpoch());
 
                // counts down.  note that if this is a new epoch, a new entry will be created and activeEpochCount will be incremented.
-               int v = commLayer.epochProperties.countdownEpoch(msg->getEpoch(), std::ref(commLayer.activeEpochCount));
+          	 int v;
+          	 if (commRank == 0) {  // head node.  count down by 1
+               v = commLayer.epochProperties.countdownEpoch(msg->getEpoch(), std::ref(commLayer.activeEpochCount));
                //   doing it this way means we can process the received request right away (in message recv order)
+
+               // if received all, then send messages back to other nodes.
+               if (v == 0) {
+                 for (int i = 1; i < commSize; ++i) {
+                   MPI_Bsend(msg->getData(), msg->getDataSize(), MPI_UNSIGNED_CHAR, i, CONTROL_TAG, comm);
+                 }
+               }
+
+          	 } else {
+          	   // other nodes:  message from head node, so count down the whole thing.
+          	   v = commLayer.epochProperties.countdownEpoch(msg->getEpoch(), std::ref(commLayer.activeEpochCount), commSize);
+          	 }
 
             	 DEBUGF("B R %d <- %d CONTROL countdown %d epoch %lu, nextEpoch %lu, count %d",
             			 commLayer.commRank, msg->getRank(), msg->getTag(),
@@ -1080,6 +1094,10 @@ public:
     }
   }
 
+  bool isInitialized() {
+    return initialized.load(std::memory_order_relaxed);
+  }
+
 
   /**
    * @brief Sends a message (raw bytes) to the given rank asynchronously.
@@ -1129,15 +1147,15 @@ public:
 
       if (ptr) {        // have a full buffer.  implies !result.first
         // verify that the buffer is not empty (may change because of threading)
-    	size_t bufSize = ptr->getSize();
-    	size_t cap = ptr->getCapacity();
+        size_t bufSize = ptr->getSize();
+        size_t cap = ptr->getCapacity();
 
-        if (bufSize <= cap) {
+        if (bufSize <= cap && bufSize > 0) {
           // have a non-empty buffer - put in send queue.
           SendDataElementType* msg = new SendDataElementType(ptr, tag, dst_rank);
 
           msg->setEpoch(currEpoch.load(std::memory_order_relaxed));
-          INFOF("W R %d T %d set msg epoch to %lu, curr %lu", commRank, tid, msg->getEpoch(), currEpoch.load(std::memory_order_relaxed));
+          //INFOF("W R %d T %d full buffer %p, append %s.  set msg epoch to %lu, curr %lu", commRank, tid, ptr, (suc ? "success" : "failed"), msg->getEpoch(), currEpoch.load(std::memory_order_relaxed));
 
           if (!sendQueue.waitAndPush(msg).first) {
             ERRORF("W R %d T %d ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush", commRank, tid);
@@ -1539,7 +1557,7 @@ protected:
 
     //=== THEN finish the last epoch
     // create a control message to send to all MPI processes, and queue it.  also notifies callback thread of epoch change.
-    ControlMessage* msg = new ControlMessage(oe, ne, MPIMessage::ALL_RANKS);
+    ControlMessage* msg = new ControlMessage(oe, ne, 0);
     if (!sendQueue.waitAndPush(msg).first) {
     	DEBUGF("M R %d inserted new control message for epoch %lu, next epoch %lu", commRank, oe, ne);
     	delete msg;
@@ -1576,7 +1594,7 @@ protected:
 
     // create a control message to send to all MPI processes, and queue it.  notifies the callback thread of epoch change.
     // note that use of CONTROL_TAG_EPOCH = FFFFFFFF causes all previous messages to flush.
-    ControlMessage* msg = new ControlMessage(oe, CONTROL_TAG_EPOCH, MPIMessage::ALL_RANKS);
+    ControlMessage* msg = new ControlMessage(oe, CONTROL_TAG_EPOCH, 0);
     if (!sendQueue.waitAndPush(msg).first) {
     	delete msg;
       throw std::logic_error("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");

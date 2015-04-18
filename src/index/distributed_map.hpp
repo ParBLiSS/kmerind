@@ -471,13 +471,15 @@ public:
    * waits for commLayer to finish, which guarantees that all communications are done (to avoid timing issue with MPI_FINALIZE and distributed map object clean up.
    */
   void finish() {
-    this->commLayer.finish(INSERT_MPI_TAG);
-    this->commLayer.finish(LOOKUP_MPI_TAG);
-    this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
-    this->commLayer.finish(RESERVE_TAG);
+    if (this->commLayer.isInitialized()) {
+      this->commLayer.finish(INSERT_MPI_TAG);
+      this->commLayer.finish(LOOKUP_MPI_TAG);
+      this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
+      this->commLayer.finish(RESERVE_TAG);
 
 
-    this->commLayer.finishCommunication();
+      this->commLayer.finishCommunication();
+    }
   }
 
 protected:
