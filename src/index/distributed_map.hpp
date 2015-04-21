@@ -1326,12 +1326,12 @@ protected:
       int tid = omp_get_thread_num();
       for (size_t i = 0; i < key_count; ++i) {
         // insert value if hash matches thread id
-        if (this->threadKeys[i] == tid)  this->local_map[tid][keys[i]]++;
-//        {  // not faster.
-//          auto it = this->local_map[tid].find(keys[i]);
-//           if (it == this->local_map[tid].end()) this->local_map[tid].emplace(keys[i], 1);
-//           else it->second++;
-//        }
+        if (this->threadKeys[i] == tid)  // this->local_map[tid][keys[i]]++;
+        {  // not faster, but correct
+          auto it = this->local_map[tid].find(keys[i]);
+           if (it == this->local_map[tid].end()) this->local_map[tid].emplace(keys[i], 1);
+           else it->second++;
+        }
       }
     }
     t2 = std::chrono::high_resolution_clock::now();
