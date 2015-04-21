@@ -211,7 +211,7 @@ namespace bliss
      *
      */
 //    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT,
-//    			size_t BufferCapacity = 8192, size_t MetadataSize>
+//    			size_t BufferCapacity = 1048576, size_t MetadataSize>
     template<bliss::concurrent::LockType ArrayLT, typename BufferPool>
     class SendMessageBuffers;
 //    template<bliss::concurrent::LockType ArrayLT, bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, size_t BufferCapacity = 8192>
@@ -938,16 +938,12 @@ namespace bliss
          * @param[in] thread_id id of thread performing the append.
          * @return            std::pair containing the status of the append (boolean success/fail), and the id of a full buffer if there is one.
          */
-        std::pair<bool, BufferType*> append(const void* data, const size_t count, const int targetProc, int thread_id = -1) {
+        template <typename T>
+        std::pair<bool, BufferType*> append(const T* data, const uint32_t el_count, T* &data_remain, uint32_t &count_remain, const int targetProc, int thread_id = -1) {
 
           //== if data being set is null, throw error
-          if (data == nullptr || count <= 0) {
+          if (data == nullptr || el_count <= 0) {
             throw (std::invalid_argument("ERROR: calling MessageBuffer append with nullptr"));
-          }
-
-          //== if there is not enough room for the new data in even a new buffer, LOGIC ERROR IN CODE: throw exception
-          if (count > this->getBufferCapacity()) {
-            throw (std::invalid_argument("ERROR: messageBuffer append with count exceeding Buffer capacity"));
           }
 
           //== if targetProc is outside the valid range, throw an error
@@ -966,8 +962,7 @@ namespace bliss
           BufferType* ptr = this->at(targetProc, tid);
 
           if (ptr != nullptr) {
-            void * result = nullptr;    //DEBUGGING FORM
-            appendResult = ptr->append(data, count, result);
+            appendResult = ptr->append(data, el_count, data_remain, count_remain);
           }
           else {
             ERRORF("ERROR: Append: threadlocal Buffer ptr is null and no way to swap in a different one.");

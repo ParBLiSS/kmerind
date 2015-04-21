@@ -17,8 +17,12 @@
 #include <cassert>
 #include "config.hpp"
 
-#include "concurrent/mutexlock_queue.hpp"
+#include "concurrent/lockfree_queue.hpp"
+//#include "concurrent/mutexlock_queue.hpp"
 #include "taskrunner/runner.hpp"
+
+#define LockType bliss::concurrent::LockType::LOCKFREE
+
 
 namespace bliss
 {
@@ -40,7 +44,7 @@ class PersonalizedOMPRunner : public Runner
 {
   protected:
     // threadsafe queue because addTask may be called from a different thread.
-    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::MUTEX> q;
+    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , LockType> q;
 
     const int nThreads;
 
@@ -83,13 +87,13 @@ class PersonalizedOMPRunner : public Runner
           ++proc;
         }
       }
-      INFOF("Personalized runner generated %lu tasks and completed %lu tasks.\n", count, proc);
+      INFOF("Personalized runner generated %lu tasks and completed %lu tasks.", count, proc);
     }
 
     /// add a new task to queue
     virtual bool addTask(std::shared_ptr<Runnable> &&t)
     {
-      DEBUGF("add to Personalized runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
+      DEBUGF("add to Personalized runner.  size %lu, disabled %s", q.getSize(), (q.canPush() ? "n" : "y"));
       return q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t)).first;
     }
 

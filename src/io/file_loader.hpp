@@ -868,6 +868,18 @@ namespace io
           return static_cast<Derived*>(this)->getRecordSizeImpl(count);
         }
 
+        /// get number of estimated kmers, given k.
+        template<typename D = Derived>
+        typename std::enable_if<std::is_void<D>::value, size_t>::type getKmerCountEstimate(const int k) {
+          return this->getFileRange().size() - k + 1;
+        }
+
+        /// get number of estimated kmers, given k.
+        template<typename D = Derived>
+        typename std::enable_if<!std::is_void<D>::value, size_t>::type getKmerCountEstimate(const int k) {
+          return static_cast<Derived*>(this)->getKmerCountEstimateImpl(k);
+        }
+
       private:
         // these methods are not meant to be overridden by subclasses.
 

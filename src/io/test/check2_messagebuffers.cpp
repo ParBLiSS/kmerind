@@ -11,13 +11,14 @@
  */
 
 
-#include <unistd.h>  // for usleep
+//#include <unistd.h>  // for usleep
 
 #include "utils/logging.h"
 
 #include "io/message_buffers.hpp"
 #include "concurrent/referenced_object_pool.hpp"
 #include "concurrent/mutexlock_queue.hpp"
+//#include "concurrent/lockfree_queue.hpp"
 
 #include "omp.h"
 #include <cassert>
@@ -54,8 +55,11 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 #pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, data, fullBuffers, nelems, bufferSize) reduction(+ : success, failure, sswap, fswap)
   for (i = 0; i < nelems; ++i) {
     //INFOF("insert %lu chars into %d", data.length(), id);
+    uint32_t count = data.length();
+    char* data_remain = nullptr;
+    uint32_t count_remain = 0;
 
-    std::tie(op_suc, ptr) = buffers.append(data.c_str(), data.length(), id);
+    std::tie(op_suc, ptr) = buffers.append(data.c_str(), count, data_remain, count_remain, id);
 
     if (op_suc) {
       ++success; // success
@@ -134,12 +138,18 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
   INFOF("TEST all operations together: ");
   int success3 = 0, failure3 = 0, sswap3 = 0, fswap3 = 0, bytes3 = 0, chars3 = 0;
+  int success4 = 0, bytes4 = 0;
   int gbytes = 0;
   //INFOF("full buffer: ");
   id = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, data, nelems, bufferSize) reduction(+ : success3, failure3, sswap3, fswap3, bytes3, chars3)
+#pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, data, nelems, bufferSize) reduction(+ : success3, success4, bytes4, failure3, sswap3, fswap3, bytes3, chars3)
   for (i = 0; i < nelems; ++i) {
-    std::tie(op_suc, ptr) = buffers.append(data.c_str(), data.length(), id);
+    uint32_t count = data.length();
+    char* data_remain = nullptr;
+    uint32_t count_remain = 0;
+
+
+    std::tie(op_suc, ptr) = buffers.append(data.c_str(), count, data_remain, count_remain, id);
 
     if (op_suc) {
       ++success3;
@@ -155,7 +165,12 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
         buffers.releaseBuffer(std::move(ptr));
       }
     } else {
-      ++failure3;
+      if (count_remain == count) {
+        ++failure3;
+      } else {
+        ++success4;
+        bytes4 += (count - count_remain);
+      }
 
       if (ptr) {
         ++fswap3;
@@ -183,9 +198,9 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   }
   finals.clear();
 
-  if ((bytes3 + gbytes) != success3 * data.length()) {
-    ERRORF("FAIL: total bytes %d (%d + %d) for %ld entries.  expected %d entries.",
-	 (bytes3 + gbytes), bytes3, gbytes, (bytes3 + gbytes)/data.length(), success3);
+  if ((bytes3 + gbytes) != success3 * data.length() + bytes4) {
+    ERRORF("FAIL: total bytes %d (%d + %d).  expected %d bytes (%d + %d).",
+	 (bytes3 + gbytes), bytes3, gbytes, success3 * data.length() + bytes4, success3 * data.length(), bytes4);
   }
 
   //if (count7 != count/data.length()) ERRORF("FAIL: append count = %d, actual data inserted is %ld", count7, count/data.length() );
@@ -251,7 +266,11 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   for (i = 0; i < nelems; ++i) {
 
     do {
-      std::tie(op_suc, ptr) = buffers.append(data.c_str(), data.length(), id);
+      uint32_t count = data.length();
+      char* data_remain = nullptr;
+      uint32_t count_remain = 0;
+
+      std::tie(op_suc, ptr) = buffers.append(data.c_str(), count, data_remain, count_remain, id);
       ++attempts;
 
       if (ptr) {

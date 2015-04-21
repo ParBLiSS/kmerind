@@ -39,11 +39,25 @@ void testQueryOld(MPI_Comm comm, const std::string & filename, const int nthread
     // create FASTQ Loader
 
     DEBUGF("testQueryOld nthreads is %d", nthreads);
+    int rank;
+        MPI_Comm_rank(comm, &rank);
+    std::chrono::high_resolution_clock::time_point t1, t2;
+    std::chrono::duration<double> time_span;
+
+    t1 = std::chrono::high_resolution_clock::now();
 
     typename KmerIndexType::FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
-    typename KmerIndexType::FileLoaderType::L1BlockType partition;
 
-    partition = loader.getNextL1Block();
+    t2 = std::chrono::high_resolution_clock::now();
+    time_span =
+         std::chrono::duration_cast<std::chrono::duration<double> >(
+             t2 - t1);
+     INFOF("R %d query file open time: %f", rank, time_span.count());
+
+     t1 = std::chrono::high_resolution_clock::now();
+
+
+    typename KmerIndexType::FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 
     //===  repeatedly load the next L1 Block.
     if (partition.getRange().size() > 0) {
@@ -104,22 +118,50 @@ void testQueryOld(MPI_Comm comm, const std::string & filename, const int nthread
           }
       }
     }
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     INFOF("R %d query file load/kmer gen time: %f", rank, time_span.count());
+
+     t1 = std::chrono::high_resolution_clock::now();
+
     kmer_index.flushQuery();
+
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     INFOF("R %d query flush time: %f", rank, time_span.count());
+
   }  // scope to ensure file loader is destroyed.
 }
 
+// TODO: currently first read only.
 template<typename KmerIndexType>
-void testQuery(MPI_Comm comm, const std::string & filename, const int nthreads, const int chunkSize, KmerIndexType& kmer_index) {
+void testQuery(MPI_Comm comm, const std::string & filename, const int nthreads, const int chunkSize, KmerIndexType& kmer_index)
+{
   {
 //            t1 = std::chrono::high_resolution_clock::now();
     // create FASTQ Loader
     DEBUGF("testQuery nthreads is %d", nthreads);
+    int rank;
+    MPI_Comm_rank(comm, &rank);
 
 
+    std::chrono::high_resolution_clock::time_point t1, t2;
+    std::chrono::duration<double> time_span;
+
+    t1 = std::chrono::high_resolution_clock::now();
     typename KmerIndexType::FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
-    typename KmerIndexType::FileLoaderType::L1BlockType partition;
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double> >(
+             t2 - t1);
+     INFOF("R %d query file open time: %f", rank, time_span.count());
 
-    partition = loader.getNextL1Block();
+     t1 = std::chrono::high_resolution_clock::now();
+    typename KmerIndexType::FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 
     //===  repeatedly load the next L1 Block.
     if (partition.getRange().size() > 0) {
@@ -172,7 +214,22 @@ void testQuery(MPI_Comm comm, const std::string & filename, const int nthreads, 
 
 
     }
+
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     INFOF("R %d query file load/kmer gen time: %f", rank, time_span.count());
+
+     t1 = std::chrono::high_resolution_clock::now();
     kmer_index.flushQuery();
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     INFOF("R %d query flush time: %f", rank, time_span.count());
+
+
   }  // scope to ensure file loader is destroyed.
 
 }
@@ -198,7 +255,6 @@ void test(MPI_Comm comm, const std::string & filename, const int nthreads, const
   std::vector<std::string> timespan_names;
   std::vector<double> timespans;
 
-  size_t result = 0;
   size_t entries = 0;
 
   INFOF("RANK %d: Testing %s", rank, testname.c_str());
@@ -207,13 +263,15 @@ void test(MPI_Comm comm, const std::string & filename, const int nthreads, const
   // initialize index
   DEBUGF("RANK %d: ***** initializing %s.", rank, testname.c_str());
 
+  double callback_time = 0;
+
   IndexType kmer_index(comm, nprocs,
                                      std::bind(IndexType::defaultReceiveAnswerCallback,
-                                               _1, _2, nthreads, std::ref(result), std::ref(entries)),
+                                               _1, _2, nthreads, std::ref(entries), std::ref(callback_time)),
                                      nthreads);
 
   // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  DEBUGF("RANK %d: ***** building index first pass.  %d threads", rank, nthreads);
+  DEBUGF("RANK %d: ***** building index first pass.  %d threads, callback_time %f ", rank, nthreads, callback_time);
 
   kmer_index.build(filename, nthreads, chunkSize);
   //kmer_index.flush();
@@ -232,6 +290,7 @@ void test(MPI_Comm comm, const std::string & filename, const int nthreads, const
   // === test query.  make each node read 1.
   // get the file ready for read
   DEBUGF("RANK %d: ******* query index", rank);
+  callback_time = 0;
   t1 = std::chrono::high_resolution_clock::now();
 
   queryFunction(comm, filename, nthreads, chunkSize, kmer_index);
@@ -242,9 +301,14 @@ void test(MPI_Comm comm, const std::string & filename, const int nthreads, const
           t2 - t1);
   timespan_names.push_back("query");
   timespans.push_back(time_span.count());
+
+  timespan_names.push_back("response portion");
+  timespans.push_back(callback_time);
+
 
   // get the file ready for read
   DEBUGF("RANK %d: ******* query index 2", rank);
+  callback_time = 0;
   t1 = std::chrono::high_resolution_clock::now();
 
   queryFunction(comm, filename, nthreads, chunkSize, kmer_index);
@@ -255,6 +319,10 @@ void test(MPI_Comm comm, const std::string & filename, const int nthreads, const
           t2 - t1);
   timespan_names.push_back("query");
   timespans.push_back(time_span.count());
+
+  timespan_names.push_back("response portion");
+  timespans.push_back(callback_time);
+
 
   std::stringstream ss;
   std::copy(timespan_names.begin(), timespan_names.end(), std::ostream_iterator<std::string>(ss, ","));

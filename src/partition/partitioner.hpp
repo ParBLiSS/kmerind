@@ -128,7 +128,7 @@ namespace bliss
          */
         template <typename R = Range>
         inline typename std::enable_if<std::is_integral<typename R::ValueType>::value, size_t>::type computeNumberOfChunks() {
-          return static_cast<std::size_t>((this->chunkSize - 1 + this->src.size()) / this->chunkSize);
+          return static_cast<std::size_t>( (this->src.size() - 1) / this->chunkSize + 1);
         }
         /**
          * @brief   computes the number of chunks in a src range, excluding the overlap region.  for floating type only.

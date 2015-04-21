@@ -15,9 +15,13 @@
 
 #include <cassert>
 
-#include "concurrent/mutexlock_queue.hpp"
+//#include "concurrent/mutexlock_queue.hpp"
+#include "concurrent/lockfree_queue.hpp"
 
 #include "taskrunner/runner.hpp"
+
+#define LockType bliss::concurrent::LockType::LOCKFREE
+
 
 namespace bliss
 {
@@ -35,7 +39,7 @@ class SequentialRunner : public Runner
 {
   protected:
     // using thread safe queue because other threads could be calling addTask.
-    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::MUTEX> q;
+    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , LockType> q;
 
   public:
     /// constructor
@@ -59,13 +63,13 @@ class SequentialRunner : public Runner
           ++proc;
         }
       }
-      INFOF("Sequential runner completed %lu tasks.\n", proc);
+      INFOF("Sequential runner completed %lu tasks.", proc);
 
     }
     /// add a new task to queue
     virtual bool addTask(std::shared_ptr<Runnable> &&t)
     {
-      DEBUGF("add to Sequential runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
+      DEBUGF("add to Sequential runner.  size %lu, disabled %s", q.getSize(), (q.canPush() ? "n" : "y"));
       return q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t)).first;
     }
 

@@ -42,7 +42,7 @@ void append(const int nthreads, bliss::io::Buffer<TS, CAP, MDSize>& buf,
   for (i = start; i < end; ++i)
   {
     int data = static_cast<int>(i);
-    int result = buf.append(&data, sizeof(int));
+    int result = buf.append(&data, 1);
 
     if ((result & 0x1) > 0)
     {
@@ -378,7 +378,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
 
     std::atomic_thread_fence(std::memory_order_seq_cst);
 
-    unsigned int result = ptr.load(std::memory_order_relaxed)->append(&data, elSize);
+    unsigned int result = ptr.load(std::memory_order_relaxed)->append(&data, 1);
 
     if (result & 0x1)
     {
@@ -528,7 +528,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
     //auto buf = ptr.load();
     std::atomic_thread_fence(std::memory_order_seq_cst);
 
-    int res = ptr.load(std::memory_order_relaxed)->append(&data, elSize);
+    int res = ptr.load(std::memory_order_relaxed)->append(&data, 1);
 
     if (res & 0x1)
     {
@@ -688,7 +688,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
     void* out = nullptr;
     auto localptr = ptr.load(std::memory_order_consume);
     auto dataptr = localptr->operator char*();
-    unsigned int result = localptr->append(&data, elSize, out);
+    unsigned int result = localptr->append(&data, 1, &out);
 
     if ((result & 0x1) > 0)
     {
@@ -851,7 +851,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 //    size_t data = i;
 //    void* out = nullptr;
 //
-//    unsigned int result = ptr->append(&data, elSize, out);
+//    unsigned int result = ptr->append(&data, 1, &out);
 //
 //    if (result & 0x1) {
 //      ++success;

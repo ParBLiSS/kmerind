@@ -16,9 +16,11 @@
 #include <cassert>
 
 #include "config.hpp"
-#include "concurrent/mutexlock_queue.hpp"
+//#include "concurrent/mutexlock_queue.hpp"
+#include "concurrent/lockfree_queue.hpp"
 #include "taskrunner/runner.hpp"
 
+#define LockType bliss::concurrent::LockType::LOCKFREE
 
 namespace bliss
 {
@@ -36,7 +38,7 @@ namespace concurrent
 class DynamicOMPRunner : public Runner
 {
   protected:
-    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , bliss::concurrent::LockType::MUTEX> q;
+    bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable> , LockType> q;
 
     const int nThreads;
 
@@ -63,6 +65,7 @@ class DynamicOMPRunner : public Runner
       size_t *proc = new size_t[nThreads];
 #pragma omp parallel num_threads(nThreads) default(none) shared(proc)
       {
+        proc[omp_get_thread_num()] = 0;
 #pragma omp single nowait
         {  // one thread to do this
 //#pragma omp task untied default(none)                     // this slows it down by ORDERS OF MAGNITUDE.  DO NOT USE
@@ -82,7 +85,7 @@ class DynamicOMPRunner : public Runner
               } // omp task
             } // while
 
-            INFOF("tid %d done generating %lu tasks.\n", omp_get_thread_num(), gen);
+            INFOF("tid %d done generating %lu tasks.", omp_get_thread_num(), gen);
 //          } // omp task untied.
         } // omp single
       } // omp parallel
@@ -92,7 +95,7 @@ class DynamicOMPRunner : public Runner
         sum += proc[i];
       }
 
-      INFOF("Dynamic runner completed %lu tasks.\n", sum);
+      INFOF("Dynamic runner completed %lu tasks.", sum);
 
       delete [] proc;
     }  // operator()
@@ -101,7 +104,7 @@ class DynamicOMPRunner : public Runner
     /// add a new task to queue
     virtual bool addTask(std::shared_ptr<Runnable> &&t)
     {
-      DEBUGF("add to Dynamic runner.  size %lu, disabled %s\n", q.getSize(), (q.canPush() ? "n" : "y"));
+      DEBUGF("add to Dynamic runner.  size %lu, disabled %s", q.getSize(), (q.canPush() ? "n" : "y"));
       return q.waitAndPush(std::forward<std::shared_ptr<Runnable> >(t)).first;
     }
 

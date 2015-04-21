@@ -720,6 +720,16 @@ namespace bliss
           return ss;
         }
 
+        /// estimate the count of kmers generated from this file
+        size_t getKmerCountEstimateImpl(const int k) {
+          size_t recordSize = getRecordSizeImpl();
+          size_t numRecords = (this->getFileRange().size() + recordSize - 1) / recordSize;
+          size_t kmersPerRecord = recordSize / 2 - k + 1;  // fastq has quality.
+
+          return numRecords * kmersPerRecord;
+        }
+
+
       public:
         //== public methods.
 

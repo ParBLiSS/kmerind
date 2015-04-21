@@ -10,7 +10,7 @@
  * TODO add License
  */
 
-#include <unistd.h>  // for usleep
+//#include <unistd.h>  // for usleep
 
 #include "omp.h"
 #include <cassert>
@@ -75,7 +75,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
     if (sptr) {  // valid ptr
 
       data = static_cast<int>(i);
-      result = sptr->append(&data, sizeof(int));
+      result = sptr->append(&data, 1);
     } else {  // expired ptr
       result = 0x0;
     }
@@ -243,7 +243,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     else {
       ptr->clear_and_unblock_writes();
 
-      int res = ptr->append(&v, sizeof(int));
+      int res = ptr->append(&v, 1);
 
 
       if (! (res & 0x1)) {
@@ -272,7 +272,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 #pragma omp parallel num_threads(buffer_threads) default(none) shared(pool, ptr)
   {
     int v = 7;
-    ptr->append(&v, sizeof(int));
+    ptr->append(&v, 1);
   }
 
   bool same = true;
@@ -310,7 +310,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
       int count = 0;
 #pragma omp parallel for num_threads(buffer_threads) default(none) shared(buf, iter) private(j) reduction(+:count)
       for (j = 0; j < iter; ++j) {
-        bool res = buf->append(&j, sizeof(int));
+        bool res = buf->append(&j, 1);
         if (! (res & 0x1)) {
           count++;
         }

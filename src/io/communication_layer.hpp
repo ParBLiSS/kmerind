@@ -269,7 +269,7 @@ class CommunicationLayer
 
 protected:
 
-	 using BufferType = bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192, sizeof(uint64_t)>;
+	 using BufferType = bliss::io::Buffer<bliss::concurrent::LockType::NONE, 1048576, sizeof(uint64_t)>;
 
 	   /// alias BufferPoolType to MessageBuffersType's
 	   using BufferPoolType = bliss::concurrent::ObjectPool< BufferType, bliss::concurrent::LockType::MUTEX>;
@@ -613,7 +613,7 @@ protected:
                ERRORF("C R %d <- %d Recvd count = %d, capacity = %ld", commRank, src, received_count, ptr->getCapacity());
                assert(static_cast<size_t>(received_count) <= (ptr->getCapacity() + ptr->getMetadataSize()));
              }
-             ptr->reserve(received_count - ptr->getMetadataSize());  // reserve the data size as well.
+             ptr->reserve(received_count - ptr->getMetadataSize(), sizeof(uint8_t));  // reserve the data size as well.
              ptr->complete_write(received_count - ptr->getMetadataSize());
              ptr->block_writes();  // and then block future writes (reservation)
              //ptr->finish_writes();
@@ -1113,11 +1113,12 @@ public:
    *   This function is THREAD SAFE
    *
    * @param data        A pointer to the data to be sent.
-   * @param count       The number of bytes of the message.
+   * @param count       The number of elements of the message.
    * @param dst_rank    The rank of the destination processor.
    * @param tag         The tag (type) of the message.
    */
-  void sendMessage(const void* data, const std::size_t nbytes, const int dst_rank, const int tag)
+  template <typename T>
+  void sendMessage(const T* data, const std::size_t count, const int dst_rank, const int tag)
   {
     //== can't have a data message that has a CONTROL_TAG.
     assert(tag != CONTROL_TAG && tag >= 0);
@@ -1137,11 +1138,18 @@ public:
     bool suc = false;
     BufferPtrType ptr = nullptr;
 
+    T* data_to_send = const_cast<T*>(data);
+    T* data_remain = nullptr;
+    uint32_t count_to_send = count;
+    uint32_t count_remain = 0;
+
     int i = 0;
     do {
       // try append.  append fails if there is no buffer or no room
 
-      std::tie(suc, ptr) = tptr->append(data, nbytes, dst_rank, tid);
+      std::tie(suc, ptr) = tptr->append(data_to_send, count_to_send, data_remain, count_remain, dst_rank, tid);
+      data_to_send = data_remain;
+      count_to_send = count_remain;
 
       ++i;
 
@@ -1174,12 +1182,13 @@ public:
       // repeat until success;
 
       if (i % 1000 == 0) {  // majority is small.
-        WARNINGF("W R %d T %d: insert into %p took %d iterations: data %p, size %lu, target %d, tag %d, workers %d", commRank, tid, ptr, i, data, nbytes, dst_rank, tag, omp_get_num_threads());
+      //if (tag == 15)
+        WARNINGF("W R %d T %d: insert into %p took %d iterations: data %p, size %u/%lu, target %d, tag %d, workers %d", commRank, tid, ptr, i, data, count_remain, count, dst_rank, tag, omp_get_num_threads());
       }
     } while (!suc);
 
     if (i > 200) {  // majority is small.
-      WARNINGF("W R %d T %d: NOTICE: insert took %d iterations: data %p, size %lu, target %d, tag %d, workers %d", commRank, tid, i, data, nbytes, dst_rank, tag, omp_get_num_threads());
+      WARNINGF("W R %d T %d: NOTICE: insert took %d iterations: data %p, size %u/%lu, target %d, tag %d, workers %d", commRank, tid, i, data, count_remain, count, dst_rank, tag, omp_get_num_threads());
     }
 
 
@@ -1279,6 +1288,7 @@ public:
 
   }
 
+
   /**
    * @brief stops accepting messages of a particular type and flushes existing messages.  Blocks until completion
    * @details call by a single thread only. throws exception if another thread is flushing at the same time.
@@ -1351,21 +1361,21 @@ public:
     if(!sendQueue.canPush()) sendQueue.enablePush();
     if(!recvQueue.canPush()) recvQueue.enablePush();
 
+    std::unique_lock<std::mutex> lock(mutex);
+
     // reserve space
     if (messageBuffers.size() <= CONTROL_TAG) {
       std::unique_lock<std::mutex> lock(mutex);
       messageBuffers.reserve(CONTROL_TAG * 2 + 1);
     }
 
-
-
     // store Control Tag.
     if (messageBuffers[CONTROL_TAG] == nullptr) {
-
-      std::unique_lock<std::mutex> lock(mutex);
       //== init with control_tag only.  only 1 thread uses this.
       messageBuffers[CONTROL_TAG] = new MessageBuffersType(pool, commSize, 1);  // only 1 thread needs to use this set.
     }
+
+    lock.unlock();
 
     // initialize the epochs
     uint64_t ne = startFirstEpoch();
@@ -1399,7 +1409,6 @@ public:
 
     DEBUGF("M R %d FINISH COMM ", commRank);
 
-    std::unique_lock<std::mutex> lock(mutex);    // ensure a single thread doing this.
 
     // go through all tags and "finish" them, except for the final control tag.
     // recall that MessageTypeInfos are stored in a vector with index == tag.
@@ -1415,10 +1424,12 @@ public:
     uint64_t oe = finishLastEpoch();
     DEBUGF("M R %d FINISH COMM epoch %lu, finished wait for CONTROL messages", commRank, oe);
 
+
+    std::unique_lock<std::mutex> lock(mutex);    // ensure a single thread doing this.
+
     deleteTagInfo(CONTROL_TAG, lock);  // delete and set to null
 
     DEBUGF("remaining epochs: %s", epochProperties.toString().c_str());
-
 
     lock.unlock();
 
@@ -1477,7 +1488,7 @@ protected:
   }
 
   /// delete the MessageTypeInfo object for specified tag.
-  void deleteTagInfo(int tag, std::unique_lock<std::mutex>&) throw (std::invalid_argument){
+  void deleteTagInfo(int tag, std::unique_lock<std::mutex> const &) throw (std::invalid_argument){
     if (messageBuffers[tag] == nullptr) {
       throw std::invalid_argument("W invalid tag: tag has not been registered");
     }
@@ -1646,7 +1657,7 @@ protected:
       // flush buffers in a circular fashion, starting with the next neighbor
       target_rank = (target_rank + 1) % commSize;
 
-      auto ptrs = tptr->flushBufferForRank(target_rank);  // returns vector of buffer pointers
+      auto ptrs = tptr->flushBufferForRank(target_rank);  // returns vector of buffer pointers, one per thread
       // flush/send all remaining non-empty buffers
       for (auto bufPtr : ptrs) {
         if (bufPtr) {
@@ -1655,7 +1666,7 @@ protected:
             SendDataElementType* msg = new SendDataElementType(bufPtr, tag, target_rank);
 
             msg->setEpoch(ce);
-            INFOF("W Flush.  epoch set to %lu actual %lu", ce, msg->getEpoch());
+            //DEBUGF("W Flush tag %d.  epoch set to %lu actual %lu", tag, ce, msg->getEpoch());
 
             if (!sendQueue.waitAndPush(msg).first) {
               releaseBuffer(bufPtr);

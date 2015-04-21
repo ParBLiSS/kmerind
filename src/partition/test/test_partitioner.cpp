@@ -13,9 +13,15 @@
 #include "partition/range.hpp"
 #include "partition/partitioner.hpp"
 
-
+#include "utils/logging.h"
+#include  <type_traits>
 
 using namespace bliss::partition;
+
+#define EXP_EQ(T, x, y)  if (std::is_floating_point<T>::value == true) \
+                            EXPECT_FLOAT_EQ(x, y); \
+                         else \
+                            EXPECT_EQ(x, y);
 
 /*
  * test class holding some information.  Also, needed for the typed tests
@@ -65,8 +71,8 @@ TYPED_TEST_P(PartitionTest, blockPartition){
   {
     for (auto len : lens)
     {
-      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= len) ? start + len : std::numeric_limits<TypeParam>::max());
-
+//      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= len) ? start + len : std::numeric_limits<TypeParam>::max());
+      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start) > len ? start + static_cast<TypeParam>(len) : std::numeric_limits<TypeParam>::max());
       for (auto p : partitionCount)
       {
 //        if (len < i)
@@ -84,9 +90,10 @@ TYPED_TEST_P(PartitionTest, blockPartition){
         r = part.getNext(block);
 //        INFOF("here 1 p = %lu/%lu ", block, p);
 //        INFO( "src: " << src << " part: " << r );
-        EXPECT_EQ(start, r.start);
+        EXP_EQ(TypeParam, start, r.start);
+
         e = (rem == 0 ? (div) : (div + 1)) + start;
-        EXPECT_EQ(e, r.end);
+        EXP_EQ(TypeParam, e, r.end);
 
         part.reset();
 
@@ -97,10 +104,10 @@ TYPED_TEST_P(PartitionTest, blockPartition){
 //        INFO( "src: " << src << " part: " << r );
         e = (rem == 0 ? block * div :
             ( block >= rem ? block * div + rem : block * (div + 1))) + start;
-        EXPECT_EQ(e, r.start);
+        EXP_EQ(TypeParam, e, r.start);
         e = (rem == 0 ? (block + 1) * div :
             ( (block + 1) >= rem ? (block + 1) * div + rem : (block + 1) * (div + 1))) + start;
-        EXPECT_EQ(e, r.end);
+        EXP_EQ(TypeParam, e, r.end);
 
         part.reset();
 
@@ -111,8 +118,8 @@ TYPED_TEST_P(PartitionTest, blockPartition){
 //        INFO( "src: " << src << " part: " << r );
         e = (rem == 0 ? block * div :
             ( block >= rem ? block * div + rem : block * (div + 1))) + start;
-        EXPECT_EQ(e, r.start);
-        EXPECT_EQ(src.end, r.end);
+        EXP_EQ(TypeParam, e, r.start);
+        EXP_EQ(TypeParam, src.end, r.end);
 
       }
     }
@@ -124,6 +131,7 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
   typedef bliss::partition::range<TypeParam> RangeType;
   typedef bliss::partition::CyclicPartitioner<range<TypeParam> > PartitionerType;
   typedef decltype(std::declval<RangeType>().size()) SizeType;
+  typedef typename RangeType::ValueType ValueType;
 
   RangeType src, r;
   TypeParam e;
@@ -149,8 +157,8 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
     {
 //      INFO( "len: " << len );
 
-      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= len) ? start + len : std::numeric_limits<TypeParam>::max());
-
+//      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= len) ? start + len : std::numeric_limits<TypeParam>::max());
+      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start) > len ? start + static_cast<TypeParam>(len) : std::numeric_limits<TypeParam>::max());
       for (auto p : partitionCount)
       {
 //        INFO( "parts: " << p );
@@ -172,12 +180,12 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
         r = part.getNext(block);
 //        INFOF("here 1 p = %lu/%lu ", block, p);
 //        INFO( "src: " << src << " part: " << r );
-        e = std::min(static_cast<SizeType>(src.end),
-                     static_cast<SizeType>(std::min(nChunks, block) * div + start));
-        EXPECT_EQ(e, r.start);
-        e = std::min(static_cast<SizeType>(src.end),
-                     static_cast<SizeType>(std::min(nChunks, block + 1) * div + start));
-        EXPECT_EQ(e, r.end);
+        e = std::min(static_cast<ValueType>(src.end),
+                     static_cast<ValueType>(std::min(nChunks, block) * div + start));
+        EXP_EQ(TypeParam, e, r.start);
+        e = std::min(static_cast<ValueType>(src.end),
+                     static_cast<ValueType>(std::min(nChunks, block + 1) * div + start));
+        EXP_EQ(TypeParam, e, r.end);
 
 
 
@@ -185,13 +193,13 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
         r = part.getNext(block);
 //        INFOF("here 2 p = %lu/%lu ", block, p);
 //        INFO( "src: " << src << " part: " << r );
-        e = std::min(static_cast<SizeType>(src.end),
-                     static_cast<SizeType>(std::min(nChunks, block + p) * div + start));
-        EXPECT_EQ(e, r.start);
+        e = std::min(static_cast<ValueType>(src.end),
+                     static_cast<ValueType>(std::min(nChunks, block + p) * div + start));
+        EXP_EQ(TypeParam, e, r.start);
 //        INFOF("block %lu, partition %lu, start %lu, len %lu, nchunks %lu, div %lu \n", block, p, start, len, nChunks, div);
-        e = std::min(static_cast<SizeType>(src.end),
-                     static_cast<SizeType>(std::min(nChunks, block + p + 1) * div + start));
-        EXPECT_EQ(e, r.end);
+        e = std::min(static_cast<ValueType>(src.end),
+                     static_cast<ValueType>(std::min(nChunks, block + p + 1) * div + start));
+        EXP_EQ(TypeParam, e, r.end);
 
         part.reset();
 
@@ -205,6 +213,7 @@ TYPED_TEST_P(PartitionTest, demandPartition){
   typedef bliss::partition::range<TypeParam> RangeType;
   typedef bliss::partition::DemandDrivenPartitioner<range<TypeParam> > PartitionerType;
   typedef decltype(std::declval<RangeType>().size()) SizeType;
+  typedef typename RangeType::ValueType ValueType;
 
   RangeType src, r;
   TypeParam e;
@@ -226,7 +235,7 @@ TYPED_TEST_P(PartitionTest, demandPartition){
   {
     for (auto len : lens)
     {
-      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= static_cast<TypeParam>(len)) ? start + static_cast<TypeParam>(len) : std::numeric_limits<TypeParam>::max());
+      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start) > len ? start + static_cast<TypeParam>(len) : std::numeric_limits<TypeParam>::max());
 
       for (auto p : partitionCount)
       {
@@ -242,35 +251,35 @@ TYPED_TEST_P(PartitionTest, demandPartition){
 
         // first block
         r = part.getNext(block);
-//        INFOF("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d\n", block, p, len, div, start);
+//        INFOF("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d, src start %d end %d", block, p, len, div, start, src.start, src.end);
 //        INFO( "src: " << src << " part: " << r );
-        EXPECT_EQ(start, r.start);
+        EXP_EQ(TypeParam, start, r.start);
         e = (start >= src.end) ? src.end :
-            std::min(static_cast<SizeType>(src.end),
-                     static_cast<SizeType>(div + start));
-        EXPECT_EQ(e, r.end);
+            std::min(static_cast<ValueType>(src.end),
+                     static_cast<ValueType>(div + start));
+        EXP_EQ(TypeParam, e, r.end);
 
         // middle block
         block = (p-1)/2;
         r = part.getNext(block);
 //        INFOF("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d\n", block, p, len, div, start);
 //        INFO( "src: " << src << " part: " << r );
-        EXPECT_EQ(e, r.start);
+        EXP_EQ(TypeParam, e, r.start);
         e = (e >= src.end) ? src.end :
-            std::min(static_cast<SizeType>(src.end),
-                     static_cast<SizeType>(div + e));
-        EXPECT_EQ(e, r.end);
+            std::min(static_cast<ValueType>(src.end),
+                     static_cast<ValueType>(div + e));
+        EXP_EQ(TypeParam, e, r.end);
 
         // last block
         block = p-1;
         r = part.getNext(block);
 //        INFOF("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d\n", block, p, len, div, start);
 //        INFO( "src: " << src << " part: " << r );
-        EXPECT_EQ(e, r.start);
+        EXP_EQ(TypeParam, e, r.start);
         e = (e >= src.end) ? src.end :
-            std::min(static_cast<SizeType>(src.end),
-                     static_cast<SizeType>(div + e));
-        EXPECT_EQ(e, r.end);
+            std::min(static_cast<ValueType>(src.end),
+                     static_cast<ValueType>(div + e));
+        EXP_EQ(TypeParam, e, r.end);
 
       }
     }

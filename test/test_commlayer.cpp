@@ -87,7 +87,7 @@ struct Tester
 
       }
       int msg = msgs[i] + 1000;
-      commLayer.sendMessage(&msg, sizeof(int), fromRank, ANSWER_TAG);
+      commLayer.sendMessage(&msg, 1, fromRank, ANSWER_TAG);
     }
     if (error) exit(EXIT_FAILURE);
   }
@@ -168,7 +168,7 @@ struct Tester
 
             if (i == 0 || i == els - 1)
               DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, FIRST_TAG, i, els, msgs[idx]);
-            commLayer.sendMessage(&msgs[idx], sizeof(int), j, FIRST_TAG);
+            commLayer.sendMessage(&msgs[idx], 1, j, FIRST_TAG);
           }
         }
 
@@ -225,7 +225,7 @@ struct Tester
             msgs[idx] = generate_message(my_rank, j);
             if (i == 0 || i == els - 1 || after)
               DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, LOOKUP_TAG, i, els, msgs[idx]);
-            commLayer.sendMessage(&msgs[idx], sizeof(int), j, LOOKUP_TAG);
+            commLayer.sendMessage(&msgs[idx], 1, j, LOOKUP_TAG);
           }
         }
 

@@ -65,7 +65,7 @@ struct testBufferSwap : rl::test_suite<
 
         if (VAR(buf_ptr)) {
           v = static_cast<T>(i);
-          r = VAR(buf_ptr)->append(&v, sizeof(T));
+          r = VAR(buf_ptr)->append(&v, 1);
         } else {
           r = 0x0;
         }

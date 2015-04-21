@@ -62,7 +62,7 @@ struct testAppend : rl::test_suite<
       for (int64_t i = thread_index; i < nelems; i += n_threads)
       {
         v = static_cast<T>(i);
-        r = b1.append(&v, sizeof(T));
+        r = b1.append(&v, 1);
         if ((r & 0x1) > 0) {
           ++lsuccess[thread_index];
 
@@ -174,7 +174,7 @@ struct testBlockedAppend : rl::test_suite<
         }
 
         v = static_cast<T>(i);
-        r = b1.append(&v, sizeof(T));
+        r = b1.append(&v, 1);
         if ((r & 0x1) > 0) {
           ++lsuccess[thread_index];
 

@@ -173,23 +173,57 @@ namespace bliss
         void build(const std::string &filename, const int nthreads, const int chunkSize) {
           // scoped so FileLoader is deleted after.
           {
+            std::chrono::high_resolution_clock::time_point t1, t2;
+            std::chrono::duration<double> time_span;
+
+            t1 = std::chrono::high_resolution_clock::now();
             //==== create file Loader
             FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire building process.
+            typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
+            t2 = std::chrono::high_resolution_clock::now();
+             time_span =
+                 std::chrono::duration_cast<std::chrono::duration<double>>(
+                     t2 - t1);
+             INFOF("R %d file open time: %f", rank, time_span.count());
 
+             t1 = std::chrono::high_resolution_clock::now();
             // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
             // index reserve internally sends a message to itself.
-            //  TEST TO SEE EFFECT OF THIS... index.reserve((loader.getFileRange().size() + commSize - 1) / commSize);
+             // call after getting first L1Block to ensure that file is loaded.
+            index.reserve((loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize);
+            t2 = std::chrono::high_resolution_clock::now();
+             time_span =
+                 std::chrono::duration_cast<std::chrono::duration<double>>(
+                     t2 - t1);
+             INFOF("R %d reserve time: %f", rank, time_span.count());
 
+
+             t1 = std::chrono::high_resolution_clock::now();
             //====  now process the file, one L1 block (block partition by MPI Rank) at a time
-            typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
             while (partition.getRange().size() > 0) {
               buildForL1Block(loader, index, rank, nthreads, chunkSize);
               partition = loader.getNextL1Block();
             }
+            t2 = std::chrono::high_resolution_clock::now();
+             time_span =
+                 std::chrono::duration_cast<std::chrono::duration<double>>(
+                     t2 - t1);
+             INFOF("R %d file load/kmer gen time: %f", rank, time_span.count());
 
             // make index communicate all pending messages to other processes.
+             t1 = std::chrono::high_resolution_clock::now();
             index.flush();
+            t2 = std::chrono::high_resolution_clock::now();
+             time_span =
+                 std::chrono::duration_cast<std::chrono::duration<double>>(
+                     t2 - t1);
+             INFOF("R %d kmer flush time: %f", rank, time_span.count());
           }  // scope to ensure file loader is destroyed.
+
+          auto sizes = index.local_sizes();
+          std::stringstream ss;
+          std::copy(sizes.begin(), sizes.end(), std::ostream_iterator<size_t>(ss, ","));
+          INFOF("R %d kmer local per thread assignment load balance: [%s]", rank, ss.str().c_str());
         }
 
         //============== Query API.  sendQuery allows overlapped IO and computation
@@ -218,7 +252,7 @@ namespace bliss
          */
         void query(const std::vector<KmerType>& kmers) {
           // TODO: for now, use the async api
-          for (auto kmer : kmers) {
+          for (auto & kmer : kmers) {
             index.asyncLookup(kmer);
           }
           index.flush();
@@ -385,24 +419,33 @@ namespace bliss
         /**
          *  @brief 	default Count Index Lookup Result callback function
          */
-        static void defaultReceiveAnswerCallback(std::pair<KmerType, CountType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+        static void defaultReceiveAnswerCallback(std::pair<KmerType, CountType>* answers, std::size_t answer_count, int nthreads, size_t& total_entries, double &time)
         {
-          size_t count = 0;
+
+          std::chrono::high_resolution_clock::time_point t1, t2;
+          std::chrono::duration<double> time_span;
+
+          t1 = std::chrono::high_resolution_clock::now();
+
           size_t entries = 0;
-        #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: count, entries)
+          KmerType key;
+          CountType val;
+        #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
           for (size_t i = 0; i < answer_count; ++i) {
-            KmerType key;
-            CountType val;
             std::tie(key, val) = answers[i];
 
-            if (key.toString().length() > 1)
-              count += val;
             ++entries;
             if ((entries % 1000000) == 0) INFOF("count result:  %s <=> %d", key.toString().c_str(), val);
           }
 
-          result += count;
           total_entries += entries;
+
+          t2 = std::chrono::high_resolution_clock::now();
+            time_span =
+                std::chrono::duration_cast<std::chrono::duration<double>>(
+                    t2 - t1);
+
+          time += time_span.count();
         };
 
 
@@ -516,24 +559,32 @@ namespace bliss
         /**
 		 *  @brief 	default Position Index Lookup Result callback function
 		 */
-        static void defaultReceiveAnswerCallback(std::pair<KmerType, IdType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+        static void defaultReceiveAnswerCallback(std::pair<KmerType, IdType>* answers, std::size_t answer_count, int nthreads, size_t& total_entries, double &time)
         {
-          size_t res = 0;
-          size_t entries = 0;
-        #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: entries) reduction(^: res)
-          for (size_t i = 0; i < answer_count; ++i) {
-            KmerType key;
-            IdType val;
-            std::tie(key, val) = answers[i];
+          std::chrono::high_resolution_clock::time_point t1, t2;
+          std::chrono::duration<double> time_span;
 
-            if (key.toString().length() > 1) res ^= val.file_pos;
+          t1 = std::chrono::high_resolution_clock::now();
+
+          size_t entries = 0;
+          KmerType key;
+          IdType val;
+        #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
+          for (size_t i = 0; i < answer_count; ++i) {
+            std::tie(key, val) = answers[i];
 
             ++entries;
             if ((entries % 1000000) == 0) INFOF("position result:  %s <=> [%d %d %d %d]", key.toString().c_str(), val.file_id, val.seq_id_msb, val.seq_id, val.pos);
           }
 
-          result ^= res;
           total_entries += entries;
+
+          t2 = std::chrono::high_resolution_clock::now();
+            time_span =
+                std::chrono::duration_cast<std::chrono::duration<double>>(
+                    t2 - t1);
+
+          time += time_span.count();
         }
 
 
@@ -663,29 +714,33 @@ namespace bliss
         /**
 		 *  @brief 	default Position and quality score Index Lookup Result callback function
 		 */
-        static void defaultReceiveAnswerCallback(std::pair<KmerType, KmerInfoType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+        static void defaultReceiveAnswerCallback(std::pair<KmerType, KmerInfoType>* answers, std::size_t answer_count, int nthreads, size_t& total_entries, double &time)
         {
-          double score = 0;
-          size_t res = 0;
-          size_t entries = 0;
-        #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: entries, score) reduction(^: res)
-          for (size_t i = 0; i < answer_count; ++i) {
+          std::chrono::high_resolution_clock::time_point t1, t2;
+            std::chrono::duration<double> time_span;
+            t1 = std::chrono::high_resolution_clock::now();
 
-            KmerType key;
-            KmerInfoType val;
+
+          size_t entries = 0;
+
+          KmerType key;
+          KmerInfoType val;
+        #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
+          for (size_t i = 0; i < answer_count; ++i) {
             std::tie(key, val) = answers[i];
 
-            if (key.toString().length() > 1) {
-              res ^= val.first.file_pos;
-              score += val.second;
-            }
             ++entries;
             if ((entries % 1000000) == 0) INFOF("position + quality result: %s <=> [%d %d %d %d] %f", key.toString().c_str(), val.first.file_id, val.first.seq_id_msb, val.first.seq_id, val.first.pos, val.second);
           }
 
-          //total_score += score;
-          result += res;
           total_entries += entries;
+
+          t2 = std::chrono::high_resolution_clock::now();
+            time_span =
+                std::chrono::duration_cast<std::chrono::duration<double>>(
+                    t2 - t1);
+
+          time += time_span.count();
         }
 
 
@@ -807,24 +862,33 @@ namespace bliss
           /**
 		   *  @brief 	default Count Index Lookup Result callback function
 		   */
-          static void defaultReceiveAnswerCallback(std::pair<KmerType, CountType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+          static void defaultReceiveAnswerCallback(std::pair<KmerType, CountType>* answers, std::size_t answer_count, int nthreads, size_t& total_entries, double &time)
           {
-            size_t count = 0;
+            std::chrono::high_resolution_clock::time_point t1, t2;
+              std::chrono::duration<double> time_span;
+
+              t1 = std::chrono::high_resolution_clock::now();
+
             size_t entries = 0;
-          #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: count, entries)
+
+            KmerType key;
+            CountType val;
+          #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
             for (size_t i = 0; i < answer_count; ++i) {
-              KmerType key;
-              CountType val;
               std::tie(key, val) = answers[i];
 
-              if (key.toString().length() > 1)
-                count += val;
               ++entries;
               if ((entries % 1000000) == 0) INFOF("count result:  %s <=> %d", key.toString().c_str(), val);
             }
 
-            result += count;
             total_entries += entries;
+
+            t2 = std::chrono::high_resolution_clock::now();
+              time_span =
+                  std::chrono::duration_cast<std::chrono::duration<double>>(
+                      t2 - t1);
+
+            time += time_span.count();
           };
 
         protected:
@@ -934,7 +998,7 @@ namespace bliss
                                int num_threads = 1)  :
                                  BaseIndexType(_comm, _comm_size, callbackFunction, num_threads)
         {
-            //this->index.setLookupAnswerCallback(std::function<void(std::pair<KmerType, IdType>*, std::size_t)>(&receivePositionAnswer<KmerType, IdType>));
+
             this->index.init();
         };
           /// default destructor
@@ -943,24 +1007,33 @@ namespace bliss
           /**
   		 *  @brief 	default Position Index Lookup Result callback function
   		 */
-          static void defaultReceiveAnswerCallback(std::pair<KmerType, IdType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+          static void defaultReceiveAnswerCallback(std::pair<KmerType, IdType>* answers, std::size_t answer_count, int nthreads, size_t& total_entries, double &time)
           {
-            size_t res = 0;
-            size_t entries = 0;
-          #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: entries) reduction(^: res)
-            for (size_t i = 0; i < answer_count; ++i) {
-              KmerType key;
-              IdType val;
-              std::tie(key, val) = answers[i];
+            std::chrono::high_resolution_clock::time_point t1, t2;
+              std::chrono::duration<double> time_span;
 
-              if (key.toString().length() > 1) res ^= val.file_pos;
+              t1 = std::chrono::high_resolution_clock::now();
+
+            size_t entries = 0;
+            KmerType key;
+            IdType val;
+
+         #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
+            for (size_t i = 0; i < answer_count; ++i) {
+              std::tie(key, val) = answers[i];
 
               ++entries;
               if ((entries % 1000000) == 0) INFOF("position result:  %s <=> [%d %d %d %d]", key.toString().c_str(), val.file_id, val.seq_id_msb, val.seq_id, val.pos);
             }
 
-            result ^= res;
             total_entries += entries;
+
+            t2 = std::chrono::high_resolution_clock::now();
+              time_span =
+                  std::chrono::duration_cast<std::chrono::duration<double>>(
+                      t2 - t1);
+
+            time += time_span.count();
           }
 
 
@@ -1104,29 +1177,34 @@ namespace bliss
           /**
   		 *  @brief 	default Position and quality score Index Lookup Result callback function
   		 */
-          static void defaultReceiveAnswerCallback(std::pair<KmerType, KmerInfoType>* answers, std::size_t answer_count, int nthreads, size_t& result, size_t& total_entries)
+          static void defaultReceiveAnswerCallback(std::pair<KmerType, KmerInfoType>* answers, std::size_t answer_count, int nthreads, size_t& total_entries, double &time)
           {
-            double score = 0;
-            size_t res = 0;
+            std::chrono::high_resolution_clock::time_point t1, t2;
+              std::chrono::duration<double> time_span;
+
+              t1 = std::chrono::high_resolution_clock::now();
+
             size_t entries = 0;
-          #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: entries, score) reduction(^: res)
+            KmerType key;
+            KmerInfoType val;
+
+          #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
             for (size_t i = 0; i < answer_count; ++i) {
 
-              KmerType key;
-              KmerInfoType val;
               std::tie(key, val) = answers[i];
 
-              if (key.toString().length() > 1) {
-                res ^= val.first.file_pos;
-                score += val.second;
-              }
               ++entries;
               if ((entries % 1000000) == 0) INFOF("position + quality result: %s <=> [%d %d %d %d] %f", key.toString().c_str(), val.first.file_id, val.first.seq_id_msb, val.first.seq_id, val.first.pos, val.second);
             }
 
-            //total_score += score;
-            result += res;
             total_entries += entries;
+
+            t2 = std::chrono::high_resolution_clock::now();
+              time_span =
+                  std::chrono::duration_cast<std::chrono::duration<double>>(
+                      t2 - t1);
+
+            time += time_span.count();
           }
 
         protected:

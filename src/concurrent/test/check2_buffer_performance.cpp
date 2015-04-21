@@ -55,7 +55,7 @@ void appendTimed(const int iterations) {
 #pragma omp parallel for num_threads(NumThreads) default(none) shared(buf, count) private(i) reduction(+:success, failure)
       for (i = 0; i < count + NumThreads; ++i) {
         int data = static_cast<int>(i);
-        int result = buf.append(&data, sizeof(int));
+        int result = buf.append(&data, 1);
 
         if (result & 0x1) ++success;
         else ++failure;

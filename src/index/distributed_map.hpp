@@ -168,7 +168,7 @@ public:
    * @param size
    */
   void reserve(const size_t& size) {
-    this->commLayer.sendMessage(&size, sizeof(size), commRank, RESERVE_TAG);
+    this->commLayer.sendMessage(&size, 1, commRank, RESERVE_TAG);
     this->commLayer.flush(RESERVE_TAG);
   }
 
@@ -181,6 +181,8 @@ public:
     assert(fromRank == commRank);
 
     size_t addl = *(reinterpret_cast<size_t*>(msg)) / nThreads;
+
+    WARNINGF("M R %d <- %d E %lu Map Reserve Callback called with request for addl %lu for each of %d thread.", commRank, fromRank, epoch, addl, nThreads);
 
     // resize the hashtables.
 #pragma omp parallel num_threads(nThreads) shared(addl)
@@ -228,7 +230,13 @@ public:
     if (has_pending_inserts.exchange(false, std::memory_order_acquire))
     {
       this->commLayer.flush(INSERT_MPI_TAG);
-     }
+      INFOF("R %d insert times : reserve = %f, hash = %f, insert = %f", commRank, insertReserveTime, insertHashTime, insertInsertTime);
+
+      insertReserveTime = 0;
+      insertHashTime = 0;
+      insertInsertTime = 0;
+    }
+
   }
   /**
    * @brief flush all the lookup messages (across all MPI processes)
@@ -240,8 +248,34 @@ public:
    DEBUGF("FLUSH DISTR MAP Lookup");
    if (has_pending_lookups.exchange(false, std::memory_order_acquire))
    {
+
+     std::chrono::high_resolution_clock::time_point t1, t2;
+     std::chrono::duration<double> time_span;
+
+     t1 = std::chrono::high_resolution_clock::now();
+
     this->commLayer.flush(LOOKUP_MPI_TAG);
+
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double> >(
+             t2 - t1);
+     INFOF("R %d query flush lookup time: %f, callback setup %f compute %f send %f", commRank, time_span.count(), lookupSetupTime, lookupComputeTime, lookupSendTime);
+
+
+     t1 = std::chrono::high_resolution_clock::now();
     this->commLayer.flush(LOOKUP_ANSWER_MPI_TAG);
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double> >(
+             t2 - t1);
+     INFOF("R %d query flush response time: %f, callback %f", commRank, time_span.count(), responseTime);
+
+
+     lookupSetupTime = 0;
+     lookupComputeTime = 0;
+     lookupSendTime = 0;
+     responseTime = 0;
    }
   }
 
@@ -475,7 +509,7 @@ public:
       this->commLayer.finish(INSERT_MPI_TAG);
       this->commLayer.finish(LOOKUP_MPI_TAG);
       this->commLayer.finish(LOOKUP_ANSWER_MPI_TAG);
-      this->commLayer.finish(RESERVE_TAG);
+      //this->commLayer.finish(RESERVE_TAG);
 
 
       this->commLayer.finishCommunication();
@@ -494,7 +528,8 @@ protected:
   _distributed_map_base(MPI_Comm mpi_comm, int comm_size, int num_threads = 1, ThreadHasher thread_hash_func = ThreadHasher(), MPIHasher mpi_hash_func = MPIHasher())
       : commLayer(mpi_comm, comm_size, num_threads), comm(mpi_comm), nThreads(num_threads), threadHashFunc(thread_hash_func), mpiHashFunc(mpi_hash_func),
         local_map(num_threads), threadKeys(num_threads),
-        has_pending_inserts(false), has_pending_lookups(false)
+        has_pending_inserts(false), has_pending_lookups(false),
+        insertHashTime(0), insertInsertTime(0), insertReserveTime(0), lookupSetupTime(0), lookupComputeTime(0), lookupSendTime(0), responseTime(0)
   {
 	  MPI_Comm_rank(comm, &commRank);
 
@@ -503,7 +538,19 @@ protected:
         std::bind(&_distributed_map_base::mapReserveCallback,
                   this, _1, _2, _3, _4));
 
+//    for (int i = 0; i < num_threads; ++i) {
+//
+//      tempInsertStorage.push_back(std::vector<std::vector<std::pair<K, T> > >());
+//
+//      for (int j = 0; j < num_threads; ++j) {
+//        tempInsertStorage[i].push_back(std::vector<std::pair<K, T> >());
+//      }
+//
+//    }
 
+    for (int i = 0; i < num_threads; ++i) {
+      responses.push_back(std::vector<std::pair<K, T> >());
+    }
   }
 
   /**
@@ -523,12 +570,8 @@ protected:
    */
   void sendKey(const K& key, const int dstRank, const int tag)
   {
-    // cast key into pointer and get byte size
-    const uint8_t* msg = reinterpret_cast<const uint8_t*>(&key);
-    const std::size_t count = sizeof(key);
-
     // send the key as a message with the approriate tag
-    commLayer.sendMessage(msg, count, dstRank, tag);
+    commLayer.sendMessage(&key, 1, dstRank, tag);
   }
 
   /**
@@ -554,12 +597,8 @@ protected:
    */
   void sendPair(const std::pair<K, T>& keyValue, const int dstRank, const int tag)
   {
-    // create key-value pair and serialize as pointer
-    const uint8_t* msg = reinterpret_cast<const uint8_t*>(&keyValue);
-    const std::size_t count = sizeof(keyValue);
-
     // send the message
-    commLayer.sendMessage(msg, count, dstRank, tag);
+    commLayer.sendMessage(&keyValue, 1, dstRank, tag);
   }
 
   /**
@@ -628,8 +667,9 @@ protected:
   getLocalCount(const Container& localMap, const std::pair<K, T>& item)
   {
     // this is a counting map: i.e. the value of (key,value) is the count
-    assert(localMap.find(item.first) != localMap.end());
-    return static_cast<std::size_t>(item.second);
+    auto it = localMap.find(item.first);
+    if (it == localMap.end()) return 0;
+    else return static_cast<std::size_t>(it->second);
   }
 
 
@@ -651,7 +691,50 @@ protected:
 
     int nt = this->nThreads;
 
-    // for all received requests, send the value from the lookup
+    std::chrono::high_resolution_clock::time_point t1, t2;
+    std::chrono::duration<double> time_span;
+
+    t1 = std::chrono::high_resolution_clock::now();
+
+    // NOT FASTER compared to below.
+//#pragma omp parallel default(none) num_threads(nt)
+//    {
+//      responses[omp_get_thread_num()].clear();
+//    }
+//
+//    t2 = std::chrono::high_resolution_clock::now();
+//     time_span =
+//         std::chrono::duration_cast<std::chrono::duration<double>>(
+//             t2 - t1);
+//     this->lookupSetupTime += time_span.count();
+//
+//     t1 = std::chrono::high_resolution_clock::now();
+//
+//    // for all received requests, send the value from the lookup
+//#pragma omp parallel for default(none) num_threads(nt) shared(key_count, keys)
+//    for (int i = 0; i < key_count; ++i)
+//    {
+//      int tid = omp_get_thread_num();
+//      // check if exists and then send
+//      auto range = this->local_map[this->getTargetThread(keys[i])].equal_range(keys[i]);
+//      responses[tid].insert(responses[tid].end(), range.first, range.second);
+//    }
+//    t2 = std::chrono::high_resolution_clock::now();
+//     time_span =
+//         std::chrono::duration_cast<std::chrono::duration<double>>(
+//             t2 - t1);
+//     this->lookupComputeTime += time_span.count();
+//
+//    t1 = std::chrono::high_resolution_clock::now();
+//
+//    // now batch insert.
+//#pragma omp parallel default(none) num_threads(nt) shared(fromRank)
+//    {
+//      int tid = omp_get_thread_num();
+//      this->commLayer.sendMessage(responses[tid].data(), responses[tid].size(), fromRank, LOOKUP_ANSWER_MPI_TAG);
+//    }
+
+
 #pragma omp parallel for default(none) num_threads(nt) shared(key_count, keys, fromRank)
     for (int i = 0; i < key_count; ++i)
     {
@@ -663,6 +746,13 @@ protected:
         this->sendPair(*it, fromRank, LOOKUP_ANSWER_MPI_TAG);
       }
     }
+
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     this->lookupSendTime += time_span.count();
+
   }
 
 //  /*
@@ -714,7 +804,21 @@ protected:
     std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
     int element_count = count / sizeof(std::pair<K, T>);
 
+
+    std::chrono::high_resolution_clock::time_point t1, t2;
+    std::chrono::duration<double> time_span;
+
+    t1 = std::chrono::high_resolution_clock::now();
+
+
     lookupAnswerCallbackFunc(elements, element_count);
+
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     this->responseTime += time_span.count();
+
   }
 
 protected:
@@ -743,6 +847,10 @@ protected:
 
   /// storage for temporarily generated key to thread mapping.  reused for each received buffer to process.
   std::vector<int> threadKeys;
+  //std::vector<std::vector<std::vector<std::pair<K, T> > > > tempInsertStorage;  // array of size nThreads (src), to array of size nThreads (target), containing array of tuples.
+
+  /// temporary storage used by lookup callback. one per thread.
+  std::vector< std::vector<std::pair<K, T> > > responses;
 
   /// Whether there are pending insert operations
   std::atomic<bool> has_pending_inserts;
@@ -757,6 +865,14 @@ protected:
 
   int commRank;
 
+
+  double insertHashTime;
+  double insertInsertTime;
+  double insertReserveTime;
+  double lookupSetupTime;
+  double lookupComputeTime;
+  double lookupSendTime;
+  double responseTime;
 };
 
 
@@ -920,15 +1036,51 @@ protected:
 
     //====  now use parallel for to compute the hash,
     int nt = this->nThreads;
+
+    std::chrono::high_resolution_clock::time_point t1, t2;
+    std::chrono::duration<double> time_span;
+
+
+    t1 = std::chrono::high_resolution_clock::now();
+
     // clear and make room.  callbacks are invoked in series so only 1 thread uses threadKeys.
     this->threadKeys.clear();
     if (this->threadKeys.capacity() < element_count) this->threadKeys.reserve(element_count);
 
+    // not faster.
+//#pragma omp parallel num_threads(nt) shared(nt, element_count, elements) default(none)
+//{
+//  int tid = omp_get_thread_num();
+//  for (int i = 0; i < nt; ++i) {
+//    this->tempInsertStorage[tid][i].clear();
+//  }
+//}
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     this->insertReserveTime += time_span.count();
+
+     t1 = std::chrono::high_resolution_clock::now();
     // compute threadhash and store in vector in parallel, (perfectly parallelizable, compute heavy)
 #pragma omp parallel for num_threads(nt) shared(element_count, elements) default(none)
     for (int i = 0; i < element_count; ++i) {
       this->threadKeys[i] = this->getTargetThread(elements[i].first);  // insert hash value
     }
+
+    // not faster
+//#pragma omp parallel for num_threads(nt) shared(element_count, elements) default(none)
+//for (int i = 0; i < element_count; ++i) {
+//  int tid = omp_get_thread_num();
+//  this->tempInsertStorage[tid][this->getTargetThread(elements[i].first)].push_back(elements[i]);
+//}
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     this->insertHashTime += time_span.count();
+
+     t1 = std::chrono::high_resolution_clock::now();
 
     // in parallel, each thread walks through entire vector (read only) and if hash matches insert into per thread map  (read vec is not compute heavy.)
 #pragma omp parallel num_threads(nt) shared(element_count, elements) default(none)
@@ -939,6 +1091,21 @@ protected:
         if (this->threadKeys[i] == tid) this->local_map[tid].insert(elements[i]);
       }
     }
+
+    // not faster
+//#pragma omp parallel num_threads(nt) shared(nt, element_count, elements) default(none)
+//{
+//  int tid = omp_get_thread_num();
+//  for (int i = 0; i < nt; ++i) {
+//    this->local_map[tid].insert(this->tempInsertStorage[i][tid].begin(), this->tempInsertStorage[i][tid].end());
+//  }
+//}
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     this->insertInsertTime += time_span.count();
+
 
     // also alternatively
     // T^2 vectors of pointers.
@@ -1121,8 +1288,22 @@ protected:
     //====  now use parallel for to compute the hash,
     int nt = this->nThreads;
     // clear and make room.  callbacks are invoked in series so only 1 thread uses threadKeys.
+    std::chrono::high_resolution_clock::time_point t1, t2;
+    std::chrono::duration<double> time_span;
+
+    t1 = std::chrono::high_resolution_clock::now();
+
     this->threadKeys.clear();
     if (this->threadKeys.capacity() < key_count) this->threadKeys.reserve(key_count);
+
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     this->insertReserveTime += time_span.count();
+
+
+     t1 = std::chrono::high_resolution_clock::now();
 
     // compute threadhash and store in vector in parallel, (perfectly parallelizable, compute heavy)
 #pragma omp parallel for num_threads(nt) shared(key_count, keys) default(none)
@@ -1130,15 +1311,34 @@ protected:
       this->threadKeys[i] = this->getTargetThread(keys[i]);  // insert hash value
     }
 
+
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     this->insertHashTime += time_span.count();
+
+
+     t1 = std::chrono::high_resolution_clock::now();
     // in parallel, each thread walks through entire vector (read only) and if hash matches insert into per thread map  (read vec is not compute heavy.)
 #pragma omp parallel num_threads(nt) shared(key_count, keys) default(none)
     {
       int tid = omp_get_thread_num();
       for (size_t i = 0; i < key_count; ++i) {
         // insert value if hash matches thread id
-        if (this->threadKeys[i] == tid) this->local_map[tid][keys[i]]++;
+        if (this->threadKeys[i] == tid)  this->local_map[tid][keys[i]]++;
+//        {  // not faster.
+//          auto it = this->local_map[tid].find(keys[i]);
+//           if (it == this->local_map[tid].end()) this->local_map[tid].emplace(keys[i], 1);
+//           else it->second++;
+//        }
       }
     }
+    t2 = std::chrono::high_resolution_clock::now();
+     time_span =
+         std::chrono::duration_cast<std::chrono::duration<double>>(
+             t2 - t1);
+     this->insertInsertTime += time_span.count();
 
     // also alternatively
     // T^2 vectors of pointers.

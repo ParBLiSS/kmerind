@@ -61,7 +61,10 @@ struct mbAppend : rl::test_suite<
       for (int64_t i = thread_index; i < nelems; i+= nThreads)
       {
         data = static_cast<T>(i);
-        std::tie(op_suc, ptr) = buffers.append(&data, sizeof(T), 0, thread_index);
+        T * data_remain = nullptr;
+        size_t count_remain = 0;
+
+        std::tie(op_suc, ptr) = buffers.append(&data, 1, data_remain, count_remain, 0, thread_index);
 
         if (op_suc) {
           ++lsuccess[thread_index];
@@ -231,7 +234,10 @@ struct mbTest : rl::test_suite<
       for (int64_t i = thread_index; i < nelems; i+= nThreads)
       {
         data = static_cast<T>(i);
-        std::tie(op_suc, ptr) = buffers.append(&data, sizeof(T), 0, thread_index);
+        T * data_remain = nullptr;
+        size_t count_remain = 0;
+
+        std::tie(op_suc, ptr) = buffers.append(&data, 1, data_remain, count_remain, 0, thread_index);
 
         if (op_suc) {
           ++lsuccess[thread_index];
@@ -385,7 +391,10 @@ struct mbEnsureInsertTest : rl::test_suite<
         data = static_cast<T>(i);
 
         do {
-          std::tie(op_suc, ptr) = buffers.append(&data, sizeof(T), 0, thread_index);
+          T * data_remain = nullptr;
+          size_t count_remain = 0;
+
+          std::tie(op_suc, ptr) = buffers.append(&data, 1, data_remain, count_remain, 0, thread_index);
 
           if (ptr) {
             ++lsswap[thread_index];

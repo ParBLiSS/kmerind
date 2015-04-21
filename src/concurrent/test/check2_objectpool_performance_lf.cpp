@@ -10,7 +10,7 @@
  * TODO add License
  */
 
-#include <unistd.h>  // for usleep
+//#include <unistd.h>  // for usleep
 
 #include "omp.h"
 #include <cassert>
@@ -57,7 +57,7 @@ void timeAppendMultipleBuffers(const int NumThreads, const int total_count, blis
     if (sptr) {  // valid ptr
 
       data = static_cast<int>(i);
-      result = sptr->append(&data, sizeof(int));
+      result = sptr->append(&data, 1);
     } else {  // expired ptr
       result = 0x0;
     }

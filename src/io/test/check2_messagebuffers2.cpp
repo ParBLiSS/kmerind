@@ -13,13 +13,14 @@
 // TODO: replace content here to use messagebuffers.
 
 
-#include <unistd.h>  // for usleep
+//#include <unistd.h>  // for usleep
 
 #include "utils/logging.h"
 
 #include "io/message_buffers.hpp"
 #include "concurrent/referenced_object_pool.hpp"
 #include "concurrent/mutexlock_queue.hpp"
+//#include "concurrent/lockfree_queue.hpp"
 #include "omp.h"
 #include <cassert>
 #include <chrono>
@@ -60,7 +61,10 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
     //INFOF("insert %lu chars into %d", data.length(), id);
     //INFOF("insert %lu chars into %d", sizeof(int), id);
     int data = i;
-    std::tie(op_suc, ptr) = buffers.append(&data, sizeof(int), id);
+    int * data_remain = nullptr;
+    uint32_t count_remain = 0;
+    
+    std::tie(op_suc, ptr) = buffers.append(&data, 1, data_remain, count_remain, id);
 
     if (op_suc) {
       ++success; // success
@@ -77,6 +81,8 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
     }
 
   }
+  INFOF("%u %u %u %u", success, failure, sswap, fswap);
+
 //  if ((count + count2) != nelems) ERRORF("FAIL: number of successful inserts should be %d.  actual %d", nelems, count);
 //  else if (count2 != 0) ERRORF("FAIL: number of failed insert overall should be 0. actual %d", count2);
 //  else
@@ -84,12 +90,13 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
   // compute 2 expected since append returns full buffer only on failed insert and if there are n inserts that brings it to just before full, then it depends on timing
   // as to when the buffer becomes full.  (other threads will fail on append until swap happens, but not return a full buffer.)
-  unsigned int expectedFullMin = success / (bufferSize/sizeof(int)) - nthreads;
+  unsigned int expectedFullMin = success / (bufferSize/sizeof(int)) < nthreads ? 0 : (success / (bufferSize/sizeof(int)) - nthreads);
   unsigned int expectedFullMax = success / (bufferSize/sizeof(int));
 
   if (fullBuffers.getSize() != sswap + fswap) ERRORF("FAIL: number of full Buffers do not match: fullbuffer size %ld  full count %d + %d", fullBuffers.getSize(), sswap, fswap);
   // buffer at 23 entries (86 bytes each, 2048 bytes per buffer) will not show as full until the next iterator.
-  else if (((fswap + sswap) > expectedFullMax) || ((sswap + fswap) < expectedFullMin)) ERRORF("FAIL: number of full Buffers is not right: %d+%d should be between %d and %d", sswap, fswap, expectedFullMin, expectedFullMax);
+  else if (((fswap + sswap) > expectedFullMax) || ((sswap + fswap) < expectedFullMin))
+    ERRORF("FAIL: number of full Buffers is not right: %d+%d should be between %d and %d", sswap, fswap, expectedFullMin, expectedFullMax);
   //else if (count4 != 0) ERRORF("FAIL: number of failed insert due to no buffer should be 0. actual %d", count4);
   else INFOF("PASS");
 
@@ -148,7 +155,10 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 #pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(stored, appended, buffers, nelems, bufferSize) reduction(+ : success3, failure3, sswap3, fswap3, bytes3)
   for (i = 0; i < nelems; ++i) {
     int data = i;
-    std::tie(op_suc, ptr) = buffers.append(&data, sizeof(int), id);
+    int * data_remain = nullptr;
+    uint32_t count_remain = 0;
+    
+    std::tie(op_suc, ptr) = buffers.append(&data, 1, data_remain, count_remain, id);
 
     if (op_suc) {
       ++success3;
@@ -308,7 +318,10 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
 
     do {
       int data = i;
-      std::tie(op_suc, ptr) = buffers.append(&data, sizeof(int), id);
+      int * data_remain = nullptr;
+      uint32_t count_remain = 0;
+      
+      std::tie(op_suc, ptr) = buffers.append(&data, 1, data_remain, count_remain, id);
       ++attempts;
 
       if (ptr) {

@@ -107,7 +107,7 @@ struct commlayerSendOnlyTest : rl::test_suite<commlayerSendOnlyTest<T, nThreads,
         {
           idx = i * p + j;
           msgs[idx] = generate_message(rank, j);
-          commLayer->sendMessage(&(msgs[idx]), sizeof(T), j, FIRST_TAG);
+          commLayer->sendMessage(&(msgs[idx]), 1, j, FIRST_TAG);
 //          if (i == 0 || i == els - 1)
 //            DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", rank, omp_get_thread_num(), it, j, FIRST_TAG, i, els, msgs[j]);
 

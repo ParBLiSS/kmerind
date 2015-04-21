@@ -62,7 +62,7 @@ struct Tester
 
       if ((u[i] / 100000 != fromRank + 1) || (u[i] % 1000 != my_rank + 1)) ERRORF("ERROR: DEBUG: ANSWER message not correct: %d <- %d u= %d", fromRank, my_rank, u[i]);
 
-      commLayer.sendMessage(&(u[i]), sizeof(int), fromRank, ANSWER_TAG);
+      commLayer.sendMessage(&(u[i]), 1, fromRank, ANSWER_TAG);
     }
     if (error) exit(EXIT_FAILURE);
   }
@@ -139,7 +139,7 @@ struct Tester
           idx = i * commSize + j;
           msgs[idx] = generate_message(my_rank, j);
 
-          commLayer.sendMessage(&(msgs[idx]), sizeof(int), j, LOOKUP_TAG);
+          commLayer.sendMessage(&(msgs[idx]), 1, j, LOOKUP_TAG);
 
           if (i == 0 || i == els - 1 || after)
             DEBUGF("W R %d,\tT %d,\tI %d,\tD %d,\tt %d,\ti %d/%d,\tM %d", my_rank, omp_get_thread_num(), it, j, LOOKUP_TAG, i, els, msgs[idx]);

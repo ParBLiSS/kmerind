@@ -331,7 +331,7 @@ namespace bliss
     };
 
 
-    template<bliss::concurrent::LockType LockType, size_t Capacity = 8192L, size_t MetadataSize = 0UL>
+    template<bliss::concurrent::LockType LockType, size_t Capacity = 1048576L, size_t MetadataSize = 0UL>
         class Buffer;
 
     /**
@@ -524,10 +524,10 @@ namespace bliss
 
 
         /// marked write as completed. internal use only
-        void complete_write(const int count)
+        void complete_write(const size_t byte_count)
         {
           std::unique_lock<std::mutex> lock(this->mutex);
-          VAR(written) += count;
+          VAR(written) += byte_count;
 
           CV_NOTIFY_ALL(condvar);
           lock.unlock();
@@ -545,42 +545,58 @@ namespace bliss
          *                if becoming over-capacity, mark as full and return ALMOST_FULL_FLAG to indicate it just became full.
          *                if becoming exactly full, mark as full and return the reservation
          *                else return the reservation.
-         * @param       count of bytes to reserve
-         * @return      the position in buffer where the reservation starts.
+         *
+         * @param[in] el_count       num elements to reserve
+         * @param[in] el_size        element size
+         *
+         * @return      the position in buffer where the reservation starts, and elements reserved
          */
-
-        size_t reserve(const uint32_t count)
+        std::pair<size_t, uint32_t> reserve(const uint32_t el_count, const size_t el_size)
         {
+          assert(el_size <= Capacity);
+
           std::lock_guard<std::mutex> lock(this->mutex);
+
+          uint32_t reserved_count = el_count;
+          size_t byte_count = reserved_count;  byte_count *= el_size;
+
           size_t curr = VAR(reserved);
 
           // this part reduces likelihood of accessing freed memory (a different thread tries to reserve to a freed region, i.e. )
           // does not prevent ABA problem (if the memory is reallocated.)
           if (curr >= Capacity)
           {
+            reserved_count = 0;
             curr = BaseType::FULL_FLAG;
           }
           else
           {
-            if (curr + count > Capacity)  // filled to past capacity, so no valid position is returned.
+            if (curr + byte_count > Capacity)  // filled to past capacity, so no valid position is returned.
             {
               VAR(reserved) = Capacity + 1 ;
-              this->VAR(size) = curr;
-              curr = BaseType::ALMOST_FULL_FLAG;
+
+              // reserve as much as possible.
+              reserved_count = (Capacity - curr) / el_size;  // whatever fits in the remaining part.
+              byte_count = reserved_count;  byte_count *= el_size;
+
+              this->VAR(size) = curr + byte_count;
+
+              if (reserved_count == 0) {
+                curr = BaseType::ALMOST_FULL_FLAG;
+              }
               CV_NOTIFY_ALL(condvar);
             }
-            else if (curr + count == Capacity)  // filled to capacity, so valid position is returned.
+            else if (curr + byte_count == Capacity)  // filled to capacity, so valid position is returned.
             {
               VAR(reserved) = Capacity + 1 ;
               this->VAR(size) = Capacity;
               CV_NOTIFY_ALL(condvar);
             }  // else normal append
             else {
-              VAR(reserved) += count;
-
+              VAR(reserved) += byte_count;
             }
           }
-          return curr;
+          return std::make_pair(curr, reserved_count);
         }
 
       public:
@@ -712,22 +728,33 @@ namespace bliss
          * The first thread to exceed the Capacity will set the size.  written will never exceed that, and reserved will not
          * be smaller than size.
          *
+         *  CHANGED: change to accounting using element count instead of byte count
+         *  CHANGED: will try to write as many as can fit in buffer freespace.
          *
          * @param[in] _data   pointer to data to be copied into the Buffer.  this SHOULD NOT be shared between threads
-         * @param[in] count   number of bytes to be copied into the Buffer
-         * @param[out] _inserted  parameter for debugging.  points to location of insertion.
+         * @param[in] count   number of elements to be copied into the Buffer
+         * @param[out] data_remain   pointer to remaining data.
+         * @param[out] count_remain  number of elements remaining to be copied.
          *
          * @return            2 bits:  LSB indicates if data was written.  MSB indicates if buffer is full and require swapping.
          */
-        unsigned int append(const void* _data, const uint32_t count, void* &_inserted)  // _inserted is for DEBUGGING only.
+        template <typename T>
+        unsigned int append(const T* _data, const uint32_t el_count, T* &data_remain, uint32_t &count_remain,
+                            void** _inserted = nullptr)  // _inserted is for DEBUGGING only.
         {
 
-          if (count == 0 || _data == nullptr)
+          if (el_count == 0 || _data == nullptr)
             throw std::invalid_argument("_data is nullptr");
 
           // reserve a spot.
-          size_t pos = reserve(count);
-          _inserted = nullptr;
+          size_t pos;
+          size_t reserved_count;
+          std::tie(pos, reserved_count) = reserve(el_count, sizeof(T));
+
+          count_remain = el_count - reserved_count;
+          data_remain = const_cast<T*>(_data) + reserved_count;
+
+          if (_inserted != nullptr) *_inserted = nullptr;
 
           // if fails, then already full
           if (pos == BaseType::FULL_FLAG)
@@ -744,16 +771,21 @@ namespace bliss
           }
           else
           { // valid position returned, so can write.
+            size_t byteCount = reserved_count; byteCount *= sizeof(T);
+
+            if (_inserted != nullptr) *_inserted = this->VAR(data_ptr) + pos;
 
             // write
-            std::memcpy(this->VAR(data_ptr) + pos, _data, count);
+            std::memcpy(this->VAR(data_ptr) + pos, _data, byteCount);
             std::atomic_thread_fence(std::memory_order_release);
-            complete_write(count); // all full buffers lock the read and unlock the writer
+            complete_write(byteCount); // all full buffers lock the read and unlock the writer
 
-            // for DEBUGGING.
-            _inserted = this->VAR(data_ptr) + pos;
-
-            if ((pos + count) == Capacity)
+            if (count_remain > 0) {
+              // partial write
+              block_and_flush();
+              return 0x2;
+            }
+            else if ((pos + byteCount) == Capacity)
             { // thread that JUST filled the buffer
 
               // wait for other threads to finish
@@ -772,23 +804,16 @@ namespace bliss
          * @brief   Append data to the buffer.  Wrapper for DEBUGGING version to present NON_DEBUG API to user.
          *
          * @param[in] _data   pointer to data to be copied into the Buffer.  this SHOULD NOT be shared between threads
-         * @param[in] count   number of bytes to be copied into the Buffer
+         * @param[in] count   number of elements to be copied into the Buffer
          *
          * @return            2 bits:  LSB indicates if data was written.  MSB indicates if buffer is full and require swapping.
          */
-        unsigned int append(const void* _data, const uint32_t count)
+        template <typename T>
+        unsigned int append(const T* _data, const uint32_t count, void** _inserted = nullptr)  // _inserted is for DEBUGGING only.
         {
-          void* output = nullptr;
-          unsigned int result = append(_data, count, output);
-
-//          // DEBUG ONLY.
-//          if (result & 0x1) {
-//            if (output == nullptr) {
-//              ERRORF("ERROR: successful insert but result pointer is null.");
-//            } else if (std::memcmp(_data, output, count) != 0) {
-//              ERRORF("ERROR: A successful insert but input not same as what was memcpy'd.");
-//            }
-//          }
+          T* data_remain = nullptr;
+          uint32_t count_remain = 0;
+          unsigned int result = append(_data, count, data_remain, count_remain, _inserted);
 
           return result;
         }
@@ -1506,7 +1531,7 @@ namespace bliss
           return VAR(blocked);
         }
 
-        void complete_write(const uint32_t count) {}
+        void complete_write(const size_t byte_count) {}
 
 
         /**
@@ -1516,34 +1541,54 @@ namespace bliss
          *                if becoming over-capacity, mark as full and return ALMOST_FULL_FLAG to indicate it just became full.
          *                if becoming exactly full, mark as full and return the reservation
          *                else return the reservation.
-          * @param count
-          * @return      pointer at which to insert.
-          */
-        size_t reserve(const uint32_t count)
+         *
+         * @param[in] el_count       num elements to reserve
+         * @param[in] el_size        element size
+         *
+         * @return      the position in buffer where the reservation starts, and elements reserved
+         */
+        std::pair<size_t, uint32_t> reserve(const uint32_t el_count, const size_t el_size)
         {
+          assert(el_size <= Capacity);
+
+          size_t reserved_count = el_count;
+          size_t byte_count = reserved_count;  byte_count *= el_size;
+
           size_t curr = this->VAR(size);
 
           if (VAR(blocked))
           {
+            reserved_count = 0;
             curr = BaseType::FULL_FLAG;
           }
           else
           {
-            if (curr + count > Capacity)  // filled to past capacity, so no valid position is returned.
+            if (curr + byte_count > Capacity)  // filled to past capacity, so no valid position is returned.
             {
               VAR(blocked) = true;
-              curr = BaseType::ALMOST_FULL_FLAG;
 
-            } else if (curr + count == Capacity)  // filled to capacity, so valid position is returned.
+              // reserve as much as possible.
+              reserved_count = (Capacity - curr) / el_size;  // whatever fits in the remaining part.
+              byte_count = reserved_count;  byte_count *= el_size;
+
+              this->VAR(size) += byte_count;
+
+              if (reserved_count == 0) {
+                curr = BaseType::ALMOST_FULL_FLAG;
+              }
+
+            }
+            else if (curr + byte_count == Capacity)  // filled to capacity, so valid position is returned.
             {
               VAR(blocked) = true ;
               this->VAR(size) = Capacity;
             }  // else normal append
-            else
-              this->VAR(size) += count;
+            else {
+              this->VAR(size) += byte_count;
+            }
 
           }
-          return curr;
+          return std::make_pair(curr, reserved_count);
         }
 
 
@@ -1616,22 +1661,33 @@ namespace bliss
          * The first thread to exceed the Capacity will set the size.  written will never exceed that, and reserved will not
          * be smaller than size.
          *
+         *  CHANGED: change to accounting using element count instead of byte count
+         *  CHANGED: will try to write as many as can fit in buffer freespace.
          *
          * @param[in] _data   pointer to data to be copied into the Buffer.  this SHOULD NOT be shared between threads
-         * @param[in] count   number of bytes to be copied into the Buffer
-         * @param[out] _inserted  parameter for debugging.  points to location of insertion.
+         * @param[in] count   number of elements to be copied into the Buffer
+         * @param[out] data_remain   pointer to remaining data.
+         * @param[out] count_remain  number of elements remaining to be copied.
          *
          * @return            2 bits:  LSB indicates if data was written.  MSB indicates if buffer is full and require swapping.
          */
-        unsigned int append(const void* _data, const uint32_t count, void* &_inserted)  // _inserted is for DEBUGGING only.
+        template <typename T>
+        unsigned int append(const T* _data, const uint32_t el_count, T* &data_remain, uint32_t &count_remain,
+                            void** _inserted = nullptr)  // _inserted is for DEBUGGING only.
         {
 
-          if (count == 0 || _data == nullptr)
+          if (el_count == 0 || _data == nullptr)
             throw std::invalid_argument("_data is nullptr");
 
           // reserve a spot.
-          size_t pos = reserve(count);
-          _inserted = nullptr;
+          size_t pos;
+          size_t reserved_count;
+          std::tie(pos, reserved_count) = reserve(el_count, sizeof(T));
+
+          count_remain = el_count - reserved_count;
+          data_remain = const_cast<T*>(_data) + reserved_count;
+
+          if (_inserted != nullptr) *_inserted = nullptr;
 
           // if fails, then already full
           if (pos == BaseType::FULL_FLAG)
@@ -1647,14 +1703,19 @@ namespace bliss
           }
           else
           { // valid position returned, so can write.
+            size_t byteCount = reserved_count; byteCount *= sizeof(T);
 
-            // for DEBUGGING.
-            _inserted = this->VAR(data_ptr) + pos;
+            if (_inserted != nullptr) *_inserted = this->VAR(data_ptr) + pos;
+
             // write
-            std::memcpy(_inserted, _data, count);
+            std::memcpy(this->VAR(data_ptr) + pos, _data, byteCount);
             std::atomic_thread_fence(std::memory_order_release);
 
-            if ((pos + count) == Capacity)
+            if (count_remain > 0) {
+              // partial write
+              return 0x2;
+            }
+            else if ((pos + byteCount) == Capacity)
             { // thread that JUST filled the buffer
 
               // no other threads, so no wait for other threads to finish
@@ -1672,23 +1733,16 @@ namespace bliss
          * @brief   Append data to the buffer.  Wrapper for DEBUGGING version to present NON_DEBUG API to user.
          *
          * @param[in] _data   pointer to data to be copied into the Buffer.  this SHOULD NOT be shared between threads
-         * @param[in] count   number of bytes to be copied into the Buffer
+         * @param[in] count   number of elements to be copied into the Buffer
          *
          * @return            2 bits:  LSB indicates if data was written.  MSB indicates if buffer is full and require swapping.
          */
-        unsigned int append(const void* _data, const uint32_t count)  // _inserted is for DEBUGGING only.
+        template <typename T>
+        unsigned int append(const T* _data, const uint32_t count, void** _inserted = nullptr)  // _inserted is for DEBUGGING only.
         {
-          void* output = nullptr;
-          unsigned int result = append(_data, count, output);
-
-//          // DEBUG ONLY
-//          if (result & 0x1) {
-//            if (output == nullptr) {
-//              ERRORF("ERROR: successful insert but result pointer is null.");
-//            } else if (std::memcmp(_data, output, count) != 0) {
-//              ERRORF("ERROR: B successful insert but input not same as what was memcpy'd.");
-//            }
-//          }
+          T* data_remain = nullptr;
+          uint32_t count_remain = 0;
+          unsigned int result = append(_data, count, data_remain, count_remain, _inserted);
 
           return result;
         }
@@ -1925,9 +1979,9 @@ namespace bliss
 
 
         /// marked write as completed.
-        void complete_write(const int count)
+        void complete_write(const size_t byte_count)
         {
-          written.fetch_add(count, std::memory_order_release);
+          written.fetch_add(byte_count, std::memory_order_release);
         }
 
       protected:
@@ -1940,21 +1994,26 @@ namespace bliss
          *                if becoming over-capacity, mark as full and return ALMOST_FULL_FLAG to indicate it just became full.
          *                if becoming exactly full, mark as full and return the reservation
          *                else return the reservation.
-         * @param       count of bytes to reserve
-         * @return      the position in buffer where the reservation starts.
+         *
+         * @param[in] el_count       num elements to reserve
+         * @param[in] el_size        element size
+         *
+         * @return      the position in buffer where the reservation starts, and elements reserved
          */
-        size_t reserve(const uint32_t count)
+        std::pair<size_t, uint32_t> reserve(const uint32_t el_count, const size_t el_size)
         {
-            assert(count <= Capacity);
+            assert(el_size <= Capacity);
 
             //if (reserved.load(std::memory_order_acquire) > Capacity) return BaseType::FULL_FLAG;   // slows down the reserve.
 
-            
 
             // fetch_add here - if too many calls we may wrap around.  rely on resetting to Capacity + 1.
-            size_t curr = reserved.fetch_add(count, std::memory_order_acquire);
-  
-            size_t next = curr + count;
+            uint32_t reserved_count = el_count;
+            size_t byte_count = reserved_count;  byte_count *= el_size;
+
+            size_t curr = reserved.fetch_add(byte_count, std::memory_order_acquire);
+            size_t next = curr + byte_count;
+
             //--- 4 cases:
             //  curr >= Capacity          full/disabled.
             //       > Capacity - count   just filled and no room for last reserve
@@ -1965,37 +2024,54 @@ namespace bliss
               // full or blocked.
 
 
-              // reset reserved only when we JUST FILL the buffer, or when there have been too many attempts to reserve a full buffer.
+              // reset reserved only when we JUST FILL the buffer, or when there have been too many attempts to reserve a full buffer (this case).
               //  otherwise let the reserved value grow.  this reduces ABA problem very significantly.
               if (curr > BaseType::DISABLED) {
                 reserved.compare_exchange_strong(next, Capacity + 1, std::memory_order_relaxed);
               }
 
+              // no change to el_count.  nothing reserved.  size already updated by some other thread.
+              reserved_count = 0;
               curr = BaseType::FULL_FLAG;
+
             } else if (next > Capacity) {
 
-              // just filled. curr position not a valid insertion point.
+              // reset reserved only when we JUST FILL the buffer, or when there have been too many attempts to reserve a full buffer.
+              //  otherwise let the reserved value grow (this case).  this reduces ABA problem very significantly.
 
+              // reserve as much as possible.
+              reserved_count = (Capacity - curr) / el_size;  // whatever fits in the remaining part.
+              byte_count = reserved_count;  byte_count *= el_size;
               // since only 1 thread reaching here (resv is at next > Capacity so no subsequent threads will get here),
               // just set size, no need to check to make sure we store minimum or maximum
-              this->size.store(curr, std::memory_order_relaxed);  // new size is the prev reserved.  reserved will be set to Capacity + 1
-      
-              curr = BaseType::ALMOST_FULL_FLAG;
+              this->size.store(curr + byte_count, std::memory_order_relaxed);  // new size is the prev reserved.  reserved will be set to Capacity + 1
+
+              // this buffer is full now.  reserved == next is above capacity, so this buffer won't be used again. no need to reset capacity right now.
+
+              if (reserved_count == 0) {
+                // just filled. curr position not a valid insertion point.
+                // can't even insert partial
+
+                curr = BaseType::ALMOST_FULL_FLAG;
+              } // else can insert some, so leave curr as is.
+
             } else if (next == Capacity) {
               // just filled.  curr position is a valid insertion point.
               // since only 1 thread reaching here, just set size, no need to check to make sure we store minimum.
               this->size.store(Capacity, std::memory_order_relaxed);
 
-              // reset reserved only when we JUST FILL the buffer, or when there have been too many attempts to reserve a full buffer.
+              // reset reserved only when we JUST FILL the buffer (this case), or when there have been too many attempts to reserve a full buffer.
               //  otherwise let the reserved value grow.  this reduces ABA problem very significantly.
               reserved.compare_exchange_strong(next, Capacity + 1, std::memory_order_release);
 
-              // curr is okay.
+              // curr is okay.  reserved_count = byte_count.  remaining is 0.
 
-            } 
-            // else normal case. nothing to do.
 
-            return curr;
+            } else {
+              // else normal case. reserved and size are not changed separately.  el_count is 0, reserved_count is count, and success.
+            }
+
+            return std::make_pair(curr, reserved_count);
         }
 
 
@@ -2139,22 +2215,33 @@ namespace bliss
          * The first thread to exceed the Capacity will set the size.  written will never exceed that, and reserved will not
          * be smaller than size.
          *
+         *  CHANGED: change to accounting using element count instead of byte count
+         *  CHANGED: will try to write as many as can fit in buffer freespace.
          *
          * @param[in] _data   pointer to data to be copied into the Buffer.  this SHOULD NOT be shared between threads
-         * @param[in] count   number of bytes to be copied into the Buffer
-         * @param[out] _inserted  parameter for debugging.  points to location of insertion.
+         * @param[in] count   number of elements to be copied into the Buffer
+         * @param[out] data_remain   pointer to remaining data.
+         * @param[out] count_remain  number of elements remaining to be copied.
          *
          * @return            2 bits:  LSB indicates if data was written.  MSB indicates if buffer is full and require swapping.
          */
-        unsigned int append(const void* _data, const uint32_t count, void* &_inserted)  // _inserted is for DEBUGGING only.
+        template <typename T>
+        unsigned int append(const T* _data, const uint32_t el_count, T* &data_remain, uint32_t &count_remain,
+                            void** _inserted = nullptr)  // _inserted is for DEBUGGING only.
         {
 
-          if (count == 0 || _data == nullptr)
+          if (el_count == 0 || _data == nullptr)
             throw std::invalid_argument("_data is nullptr");
 
           // reserve a spot.
-          size_t pos = reserve(count);
-          _inserted = nullptr;
+          size_t pos;             // position to copy in at.
+          size_t reserved_count;  // number of elements we have room for.
+          std::tie(pos, reserved_count) = reserve(el_count, sizeof(T));
+
+          count_remain = el_count - reserved_count;
+          data_remain = const_cast<T*>(_data) + reserved_count;
+
+          if (_inserted != nullptr) *_inserted = nullptr;
 
           // if fails, then already full
           if (pos == BaseType::FULL_FLAG)
@@ -2171,16 +2258,22 @@ namespace bliss
           }
           else
           { // valid position returned, so can write.
-            // for DEBUGGING.
-            _inserted = this->VAR(data_ptr) + pos;
+
+            size_t byteCount = reserved_count;  byteCount *= sizeof(T);
+
+            if (_inserted != nullptr) *_inserted = this->VAR(data_ptr) + pos;
 
             // write
-            std::memcpy(_inserted, _data, count);
+            std::memcpy(this->VAR(data_ptr) + pos, _data, byteCount);
             std::atomic_thread_fence(std::memory_order_release);
-            complete_write(count); // all full buffers lock the read and unlock the writer
+            complete_write(byteCount); // all full buffers lock the read and unlock the writer
 
-
-            if ((pos + count) == Capacity)
+            if (count_remain > 0) {
+              // partial write
+              block_and_flush();
+              return 0x2;
+            }
+            else if ((pos + byteCount) == Capacity)
             { // thread that JUST filled the buffer
 
               // wait for other threads to finish
@@ -2200,24 +2293,16 @@ namespace bliss
          * @brief   Append data to the buffer.  Wrapper for DEBUGGING version to present NON_DEBUG API to user.
          *
          * @param[in] _data   pointer to data to be copied into the Buffer.  this SHOULD NOT be shared between threads
-         * @param[in] count   number of bytes to be copied into the Buffer
+         * @param[in] count   number of elements to be copied into the Buffer
          *
          * @return            2 bits:  LSB indicates if data was written.  MSB indicates if buffer is full and require swapping.
          */
-        unsigned int append(const void* _data, const uint32_t count)  // _inserted is for DEBUGGING only.
+        template <typename T>
+        unsigned int append(const T* _data, const uint32_t count, void** _inserted = nullptr)  // _inserted is for DEBUGGING only.
         {
-          void* output = nullptr;
-          //uint8_t* ptr = this->VAR(data_ptr);
-          unsigned int result = append(_data, count, output);
-
-          // DEBUG ONLY
-//          if (result & 0x1) {
-//            if (output == nullptr) {
-//              ERRORF("ERROR: successful insert but result pointer is null.");
-//            } else if (std::memcmp(_data, output, count) != 0) {
-//              ERRORF("ERROR: C successful insert but input not same as what was memcpy'd.");
-//            }
-//          }
+          T* data_remain = nullptr;
+          uint32_t count_remain = 0;
+          unsigned int result = append(_data, count, data_remain, count_remain, _inserted);
 
           return result;
         }
