@@ -29,7 +29,8 @@
 
 // BLISS includes
 #include "utils/logging.h"
-#include "concurrent/mutexlock_queue.hpp"
+//#include "concurrent/mutexlock_queue.hpp"
+#include "concurrent/lockfree_queue.hpp"
 #include "concurrent/copyable_atomic.hpp"
 #include "concurrent/concurrent.hpp"
 #include "concurrent/referenced_object_pool.hpp"
@@ -44,7 +45,7 @@ namespace bliss
 namespace io
 {
 
-
+#define LOCKTYPE bliss::concurrent::LockType::LOCKFREE
 /**
  * @brief Abstracts asynchronous and buffered point to point communication between all processes via MPI.
  * @details   This class encapsulates the MPI message handling for point to point asynchronous messaging
@@ -782,6 +783,9 @@ protected:
 
                // counts down.  note that if this is a new epoch, a new entry will be created and activeEpochCount will be incremented.
           	 int v;
+
+          	 //               v = commLayer.epochProperties.countdownEpoch(msg->getEpoch(), std::ref(commLayer.activeEpochCount));
+
           	 if (commRank == 0) {  // head node.  count down by 1
                v = commLayer.epochProperties.countdownEpoch(msg->getEpoch(), std::ref(commLayer.activeEpochCount));
                //   doing it this way means we can process the received request right away (in message recv order)
@@ -1569,6 +1573,8 @@ protected:
     //=== THEN finish the last epoch
     // create a control message to send to all MPI processes, and queue it.  also notifies callback thread of epoch change.
     ControlMessage* msg = new ControlMessage(oe, ne, 0);
+    //ControlMessage* msg = new ControlMessage(oe, ne, MPIMessage::ALL_RANKS);
+
     if (!sendQueue.waitAndPush(msg).first) {
     	DEBUGF("M R %d inserted new control message for epoch %lu, next epoch %lu", commRank, oe, ne);
     	delete msg;
@@ -1606,6 +1612,7 @@ protected:
     // create a control message to send to all MPI processes, and queue it.  notifies the callback thread of epoch change.
     // note that use of CONTROL_TAG_EPOCH = FFFFFFFF causes all previous messages to flush.
     ControlMessage* msg = new ControlMessage(oe, CONTROL_TAG_EPOCH, 0);
+    //ControlMessage* msg = new ControlMessage(oe, CONTROL_TAG_EPOCH, MPIMessage::ALL_RANKS);
     if (!sendQueue.waitAndPush(msg).first) {
     	delete msg;
       throw std::logic_error("M ERROR: sendQueue is not accepting new SendQueueElementType due to disablePush");
@@ -1697,11 +1704,11 @@ protected:
 
   /// message queue between sendMessage calling threads (src) and comm-thread
   /// (sink).  multiple producer, single consumer thread-safe queue.
-  bliss::concurrent::ThreadSafeQueue< MPIMessage* , bliss::concurrent::LockType::MUTEX> sendQueue;
+  bliss::concurrent::ThreadSafeQueue< MPIMessage* , LOCKTYPE> sendQueue;
 
   /// message queue between comm thread (src) and callback thread (sink)
   /// single producer potentially multiple consumer queue.
-  bliss::concurrent::ThreadSafeQueue< MPIMessage* , bliss::concurrent::LockType::MUTEX> recvQueue;
+  bliss::concurrent::ThreadSafeQueue< MPIMessage* , LOCKTYPE> recvQueue;
 
 
   // Message buffers per tag (message type) is stored in MessageTypeInfo.

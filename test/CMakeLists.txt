@@ -121,5 +121,9 @@ add_executable(quicktest quicktest.cpp)
 target_link_libraries(quicktest ${EXTRA_LIBS})
 cotire(quicktest )
 
+
+add_executable(hash_vs_sort hash_vs_sort.cpp)
+target_link_libraries(hash_vs_sort ${EXTRA_LIBS})
+
 endif()
 

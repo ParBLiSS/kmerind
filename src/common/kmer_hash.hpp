@@ -409,7 +409,6 @@ namespace bliss {
           const unsigned int shift;
           const unsigned int nBytes;
           const size_t mask;
-          ::std::hash<KMER> hashf;
         public:
           /// constructor
           KmerInfixHash(const unsigned int nBits = ::std::min(static_cast<size_t>(KMER::nBits), sizeof(size_t) * 8), const unsigned int _offset = 0) :
@@ -436,7 +435,6 @@ namespace bliss {
           const unsigned int nBytes;
 
           const size_t mask;
-          ::bliss::hash::murmur::hash<KMER> hashf;
         public:
           /// constructor
           KmerSuffixHash(const unsigned int nBits = sizeof(size_t) * 8) :
