@@ -7,6 +7,7 @@ config.hpp
 # build folder
 #
 build/
+bliss-build/
 
 .ycm_extra_conf.py
 .ycm_extra_conf.pyc
@@ -87,3 +88,7 @@ CMakeFiles
 Makefile
 cmake_install.cmake
 install_manifest.txt
+
+
+### Cscope ###
+cscope.files

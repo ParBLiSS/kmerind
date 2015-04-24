@@ -110,6 +110,14 @@ target_link_libraries(testKmerIndex_KMER bliss-common)
 cotire(testKmerIndex_KMER )
 
 
+add_executable(testKmerCountCorrectness TestKmerCountCorrectness.cpp)
+target_link_libraries(testKmerCountCorrectness ${EXTRA_LIBS})
+target_link_libraries(testKmerCountCorrectness bliss-common)
+
+add_executable(testKmerCountCorrectnessInFasta TestKmerCountCorrectnessInFasta.cpp)
+target_link_libraries(testKmerCountCorrectnessInFasta ${EXTRA_LIBS})
+target_link_libraries(testKmerCountCorrectnessInFasta bliss-common)
+
 ## EXECUTABLES
 add_executable(profile_mem_usage profile_mem_usage.cpp)
 target_link_libraries(profile_mem_usage ${EXTRA_LIBS})

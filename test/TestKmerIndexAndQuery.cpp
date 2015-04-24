@@ -425,13 +425,13 @@ int main(int argc, char** argv) {
 
 #if defined(KMOLECULEINDEX)
   {
-    using IndexType = bliss::index::retired::KmerPositionIndexOld<21, bliss::common::DNA, bliss::io::FASTQ, true>;
+    using IndexType = bliss::index::retired::KmerPositionIndexOld<21, bliss::common::DNA, bliss::io::FASTQ>;
     test<IndexType>(comm, filename, nthreads, chunkSize, testQueryOld<IndexType>, "Kmolecule pos index");
 
   }
 #elif defined(KMERINDEX)
   {
-    using IndexType = bliss::index::KmerPositionIndex<21, bliss::common::DNA, bliss::io::FASTQ, true>;
+    using IndexType = bliss::index::KmerPositionIndex<21, bliss::common::DNA, bliss::io::FASTQ>;
     test<IndexType>(comm, filename, nthreads, chunkSize, testQuery<IndexType>, "Kmer pos index");
 
   }
@@ -444,7 +444,7 @@ int main(int argc, char** argv) {
 
 #if defined(KMOLECULEINDEX)
   {
-  using IndexType = bliss::index::retired::KmerCountIndexOld<21, bliss::common::DNA, bliss::io::FASTQ, true>;
+  using IndexType = bliss::index::retired::KmerCountIndexOld<21, bliss::common::DNA, bliss::io::FASTQ>;
   test<IndexType>(comm, filename, nthreads, chunkSize, testQueryOld<IndexType>, "Kmolecule count index");
 
   }
@@ -452,7 +452,7 @@ int main(int argc, char** argv) {
 #elif defined(KMERINDEX)
 
   {
-  using IndexType = bliss::index::KmerCountIndex<21, bliss::common::DNA, bliss::io::FASTQ, true>;
+  using IndexType = bliss::index::KmerCountIndex<21, bliss::common::DNA, bliss::io::FASTQ>;
   test<IndexType>(comm, filename, nthreads, chunkSize, testQuery<IndexType>, "Kmer count index");
 
   }
@@ -465,7 +465,7 @@ int main(int argc, char** argv) {
 
   // with quality score....
   {
-  using IndexType = bliss::index::retired::KmerPositionAndQualityIndexOld<21, bliss::common::DNA, bliss::io::FASTQ, true>;
+  using IndexType = bliss::index::retired::KmerPositionAndQualityIndexOld<21, bliss::common::DNA, bliss::io::FASTQ>;
 
   test<IndexType>(comm, filename, nthreads, chunkSize, testQueryOld<IndexType>, "Kmolecule pos+qual index");
 
@@ -473,7 +473,7 @@ int main(int argc, char** argv) {
 #elif defined(KMERINDEX)
 
   {
-  using IndexType = bliss::index::KmerPositionAndQualityIndex<21, bliss::common::DNA, bliss::io::FASTQ, true>;
+  using IndexType = bliss::index::KmerPositionAndQualityIndex<21, bliss::common::DNA, bliss::io::FASTQ>;
 
   test<IndexType>(comm, filename, nthreads, chunkSize, testQuery<IndexType>, "Kmer pos+qual index");
 

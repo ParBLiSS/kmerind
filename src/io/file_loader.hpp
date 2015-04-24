@@ -853,6 +853,8 @@ namespace io
           return 1;
         }
 
+      public:
+
         /**
          * @brief   compute the approximate size of a data record in the file by reading a few records.
          * @details For subclasses of FileLoader, this function delegates to the subclass' implementation,

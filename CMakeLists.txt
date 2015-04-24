@@ -15,7 +15,7 @@ INCLUDE(CMakeDependentOption)
 # Initialize CXXFLAGS.
 add_definitions(-Wall -std=c++11 -fPIC)
 
-set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
+set(EXT_PROJECTS_DIR ${CMAKE_SOURCE_DIR}/ext)
 
 
 
@@ -23,7 +23,7 @@ set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 if(CMAKE_VERSION VERSION_GREATER 2.8.3)
     OPTION(ENABLE_COTIRE "Enable using cotire to reduce compilation time (possibly)" OFF)
     if (ENABLE_COTIRE)
-        set (CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/ext/cotire/CMake")
+        set (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/ext/cotire/CMake")
         include(cotire)
     ELSE()
         function(cotire module_names)
@@ -212,8 +212,8 @@ function(update_logging_engine varname cacheaccess varval)
     # set the log engine in the logger_config.hpp file.
     set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
 #    configure_file(
-#        "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
-#        "${PROJECT_BINARY_DIR}/logger_config.hpp"
+#        "${CMAKE_SOURCE_DIR}/src/config/logger_config.hpp.in"
+#        "${CMAKE_BINARY_DIR}/logger_config.hpp"
 #        @ONLY
 #        )
 #        
@@ -265,8 +265,8 @@ if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
         
         set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
 #        configure_file(
-#            "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
-#            "${PROJECT_BINARY_DIR}/logger_config.hpp"
+#            "${CMAKE_SOURCE_DIR}/src/config/logger_config.hpp.in"
+#            "${CMAKE_BINARY_DIR}/logger_config.hpp"
 #            @ONLY
 #            )
     endif(Boost_FOUND)
@@ -400,6 +400,7 @@ ENDIF()
                         
 
 
+
 ## LOGGING ENGINE configuration
 #function(update_test_options varname cacheaccess varval) 
 ##       message(STATUS "${varname} changed to ${varval} with unhandled access: ${cacheaccess}.")
@@ -504,9 +505,9 @@ if (ENABLE_TESTING)
   # Set paths outside of the function so the function can
   # be called from anywhere in the source tree
   #   set path for output of testing binaries
-  set(TEST_BINARY_OUTPUT_DIR ${PROJECT_BINARY_DIR}/test)
+  set(TEST_BINARY_OUTPUT_DIR ${CMAKE_BINARY_DIR}/test)
   #   set path for output of test reports (XML format)
-  set(TEST_XML_OUTPUT_DIR ${PROJECT_BINARY_DIR}/Testing)
+  set(TEST_XML_OUTPUT_DIR ${CMAKE_BINARY_DIR}/Testing)
 
 
   function(bliss_add_test module_name module_link)
@@ -542,6 +543,44 @@ if (ENABLE_TESTING)
     # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
     add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
   endfunction(bliss_add_test)
+
+  function(bliss_add_mpi_test module_name module_link)
+    # set the name for the test target and executable
+    foreach(CPP_FILE ${ARGN})
+      # assume filename is of the format mpi_test_NAME.cpp -> extract NAME as the name for the executable
+      get_filename_component(CPP_FILE_NAME ${CPP_FILE} NAME) 
+      string(REPLACE "mpi_test_" "" CPP_FILE_SUFF ${CPP_FILE_NAME})
+      string(REPLACE ".cpp" "" MPI_TEST_NAME ${CPP_FILE_SUFF})
+      message(STATUS "MPI test module found: ${MPI_TEST_NAME}")
+      set(test_target_name test-mpi-${module_name}-${MPI_TEST_NAME})
+      # add all give files
+      add_executable(${test_target_name} ${CPP_FILE})
+      # add the googletest dependency
+      add_dependencies(${test_target_name} googletest)
+      # set binary output path for tests
+      set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
+      # link test with gtest (no main, since it provides it's own main function)
+      target_link_libraries(${test_target_name} gtest)
+
+      # all the extra libs
+      target_link_libraries(${test_target_name} ${EXTRA_LIBS})
+
+      # link to the tested module (but only if that module produces a linkable
+      # library)
+      if (module_link)
+          target_link_libraries(${test_target_name} ${module_name})
+      endif (module_link)
+      
+      # if code coverage is to be determined: link with gcov
+      if (ENABLE_COVERAGE)
+        target_link_libraries(${test_target_name} gcov)
+      endif(ENABLE_COVERAGE)
+
+      # generate google test XML results, to be parsed by Jenkins
+      # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
+      add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
+    endforeach()
+  endfunction(bliss_add_mpi_test)
 
   function(bliss_add_non_google_test module_names module_link)
       foreach(f ${ARGN})
@@ -664,8 +703,8 @@ endif (ENABLE_TESTING)
 
 ###### Executable and Libraries
 # Save libs and executables in the same place
-set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib CACHE PATH "Output directory for libraries" )
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
+set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib CACHE PATH "Output directory for libraries" )
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
 
 #link_directories( ${LIBRARY_OUTPUT_PATH} )
 
@@ -679,24 +718,24 @@ OPTION(BUILD_EXAMPLE_APPLICATIONS "Inform whether sample applications should be 
 
 # configure a header file to pass some of the CMake settings to the source code
 configure_file(
-    "${PROJECT_SOURCE_DIR}/src/config/config.hpp.in"
-    "${PROJECT_BINARY_DIR}/config.hpp"
+    "${CMAKE_SOURCE_DIR}/src/config/config.hpp.in"
+    "${CMAKE_BINARY_DIR}/config.hpp"
     @ONLY
     )
 configure_file(
-    "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
-    "${PROJECT_BINARY_DIR}/logger_config.hpp"
+    "${CMAKE_SOURCE_DIR}/src/config/logger_config.hpp.in"
+    "${CMAKE_BINARY_DIR}/logger_config.hpp"
     @ONLY
     )
 
 
 # add the binary tree to the search path for include files
 # so that we will find TutorialConfig.h
-include_directories("${PROJECT_BINARY_DIR}")
-include_directories("${PROJECT_SOURCE_DIR}/src")
-include_directories("${PROJECT_SOURCE_DIR}/ext")
-include_directories("${PROJECT_SOURCE_DIR}/ext/farmhash/src")
-#include_directories("${PROJECT_SOURCE_DIR}/ext/sparsehash/src")
+include_directories("${CMAKE_BINARY_DIR}")
+include_directories("${CMAKE_SOURCE_DIR}/src")
+include_directories("${CMAKE_SOURCE_DIR}/ext")
+include_directories("${CMAKE_SOURCE_DIR}/ext/farmhash/src")
+#include_directories("${CMAKE_SOURCE_DIR}/ext/sparsehash/src")
 
 
 
