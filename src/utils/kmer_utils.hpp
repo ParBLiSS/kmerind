@@ -54,39 +54,20 @@ namespace bliss
           using Alphabet = typename Kmer::KmerAlphabet;
 
           static_assert(Kmer::bitsPerChar == bliss::common::AlphabetTraits<Alphabet>::getBitsPerChar(), "Kmer's bits Per Char is different than Alphabet's bits per char.");
-          std::stringstream ss;
 
-          using word_type = typename Kmer::KmerWordType;
-          word_type w = 0;
-          int bit_pos = 0;
-          int word_pos = 0;
-          int bit_pos_in_word = 0;
-          int offset = 0;
-          for (int i = Kmer::size - 1; i >= 0; --i)
+          /* return the char representation of the data array values */
+          std::string result;
+          result.resize(Kmer::size);
+          Kmer cpy(kmer);
+          size_t forBitMask = (1 << Kmer::bitsPerChar) - 1;
+          for (unsigned int i = 0; i < Kmer::size; ++i)
           {
-            // start pos
-            bit_pos = i * Kmer::bitsPerChar;
-            word_pos = bit_pos / (sizeof(WordType) * 8);
-            bit_pos_in_word = bit_pos % (sizeof(WordType) * 8);
-
-            w = (kmer.data[word_pos] >> bit_pos_in_word);
-
-            // now check if char crosses bit boundary.
-            if (bit_pos_in_word + Kmer::bitsPerChar > (sizeof(WordType) * 8)) {  // == means that there were just enough bits in the previous word.
-              offset = (sizeof(WordType) * 8) - bit_pos_in_word;
-              ++word_pos;
-
-              // now need to get the next part.
-              if (word_pos < Kmer::nWords) w = w | (kmer.data[word_pos] << offset);
-
-            }
-            w = w & getLeastSignificantBitsMask<word_type>(Kmer::bitsPerChar);
-
-            ss << Alphabet::TO_ASCII[w];
-
+            result[Kmer::size-i-1] = Alphabet::TO_ASCII[static_cast<size_t>(forBitMask & cpy.data[0])];
+            cpy.do_right_shift(Kmer::bitsPerChar);
           }
 
-          return ss.str();
+          return result;
+
         }
 
     };

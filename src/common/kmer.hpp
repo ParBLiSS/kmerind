@@ -22,6 +22,7 @@
 #include <sstream>
 #include <algorithm>
 #include <utility>  // std::pair
+#include <stack>
 
 
 // own includes
@@ -836,44 +837,41 @@ namespace bliss
       return ss.str();
     }
   
-  
+    // for debug purposes
+    /**
+     * @brief Returns a string representation of this k-mer.
+     *
+     * Usage: for debugging and testing.
+     *
+     * @returns   A std::string representing this k-mer.
+     */
     std::string toAlphabetString() const
     {
-      std::stringstream ss;
-  
-      WordType w = 0;
-      int bit_pos = 0;
-      int word_pos = 0;
-      int bit_pos_in_word = 0;
-      int offset = 0;
-      for (int i = KMER_SIZE - 1; i >= 0; --i)
+      /* return the char representation of the data array values */
+      std::stringstream result;
+      Kmer cpy(*this);
+
+      std::stack<size_t> elementsInReverse;
+      size_t forBitMask = (1 << bitsPerChar) - 1;
+
+      for (unsigned int i = 0; i < size; ++i)
       {
-        // start pos
-        bit_pos = i * bitsPerChar;
-        word_pos = bit_pos / (sizeof(WordType) * 8);
-        bit_pos_in_word = bit_pos % (sizeof(WordType) * 8);
-  
-        w = (data[word_pos] >> bit_pos_in_word);
-  
-        if (bit_pos_in_word + bitsPerChar > (sizeof(WordType) * 8)) {  // == means that there were just enough bits in the previous word.
-          offset = (sizeof(WordType) * 8) - bit_pos_in_word;
-          ++word_pos;
-  
-          // now need to get the next part.
-          if (word_pos < nWords) w = w | (data[word_pos] << offset);
-  
-        }
-        w = w & getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar);
-  
-  
-        ss << w << " ";
-  
+        elementsInReverse.push(static_cast<size_t>(forBitMask & cpy.data[0]));
+        cpy.do_right_shift(bitsPerChar);
       }
-  
-      return ss.str();
+
+      //Pop stack elements to string stream
+      while(!elementsInReverse.empty())
+      {
+        result << elementsInReverse.top() << " ";
+        elementsInReverse.pop();
+      }
+
+      return result.str();
     }
-  
-  
+
+
+
   
   
   
