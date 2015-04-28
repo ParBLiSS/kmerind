@@ -861,8 +861,6 @@ protected:
   /// lookup query is received
   std::function<void(std::pair<K, T>*, std::size_t)> lookupAnswerCallbackFunc;
 
-  std::mutex mutex;
-
   int commRank;
 
 

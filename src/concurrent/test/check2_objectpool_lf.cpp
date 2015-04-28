@@ -39,7 +39,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 
 
 
-  INFOF("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %d total counts from unlimited pool\n",
+  INFOF("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %d total counts from unlimited pool",
          NumThreads, poollt, bufferlt, buffer_cap, total_count);
 
 
@@ -135,14 +135,14 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 
 
   if ( swap != success / (buffer_cap / sizeof(int)) || success != stored_count)
-      FATALF("FAIL: (actual/expected)  success (%d/%d), failure (%d/?), swap(%ld/%d).\n", success, stored_count, failure, success / (buffer_cap / sizeof(int)), swap);
+      FATALF("FAIL: (actual/expected)  success (%d/%d), failure (%d/?), swap(%ld/%d).", success, stored_count, failure, success / (buffer_cap / sizeof(int)), swap);
   else {
-    INFOF("INFO: success %d, failure %d, swap %d, total %d\n", success, failure, swap, total_count);
+    INFOF("INFO: success %d, failure %d, swap %d, total %d", success, failure, swap, total_count);
 
     if (compareUnorderedSequences(stored.begin(), gold.begin(), stored_count)) {
-      INFOF("PASS\n");
+      INFOF("PASS");
     } else {
-      FATALF("FAIL: content not matching\n");
+      FATALF("FAIL: content not matching");
     }
   }
   omp_destroy_lock(&writelock);
@@ -155,7 +155,7 @@ template<typename PoolType>
 void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int pool_threads, int buffer_threads) {
 
 
-  INFOF("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d\n", poollt, bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
+  INFOF("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d", poollt, bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
 
   INFOF("TEST acquire: ");
   int expected;
@@ -171,8 +171,8 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     }
   }
   expected = 0;
-  if (count != expected) FATALF("FAIL: number of failed attempt to acquire buffer should be %d, actual %d.  pool capacity %lu, remaining: %lu \n", expected, count, pool.getCapacity(), pool.getAvailableCount());
-  else INFOF("PASSED.\n");
+  if (count != expected) FATALF("FAIL: number of failed attempt to acquire buffer should be %d, actual %d.  pool capacity %lu, remaining: %lu ", expected, count, pool.getCapacity(), pool.getAvailableCount());
+  else INFOF("PASSED.");
   pool.reset();
 
   INFOF("TEST acquire with growth: ");
@@ -188,8 +188,8 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 	    }
   }
   expected = pool.isUnlimited() ? 0 : 1;
-  if (count != expected) FATALF("FAIL: number of failed attempt to acquire buffer should be %d, actual %d.  pool remaining: %lu \n", expected, count, pool.getAvailableCount());
-  else INFOF("PASSED.\n");
+  if (count != expected) FATALF("FAIL: number of failed attempt to acquire buffer should be %d, actual %d.  pool remaining: %ld/%ld ", expected, count, pool.getAvailableCount(), pool.getCapacity());
+  else INFOF("PASSED.");
   pool.reset();
 
   INFOF("TEST release: ");
@@ -209,20 +209,21 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     ptr->block_and_flush();
     temp.push_back(ptr);
   }
+  int64_t orig = pool.getSizeInUse();
 #pragma omp parallel for num_threads(pool_threads) default(none) shared(pool, mx, temp) private(i) reduction(+ : count)
   for (i = 0; i < mx * 2; ++i) {
 
     typename PoolType::ObjectPtrType ptr = temp[i];
     if (ptr) {
-      if (! pool.releaseObject(ptr)) {
+      if (! pool.releaseObject(ptr) ) {
         ++count; // failed release
         delete ptr;
       }
     }
   }
   expected = mx;  // unlimited or not, can only push back in as much as taken out.
-  if (count != expected) FATALF("FAIL: number of failed attempt to release buffer should be %d, actual %d. pool remaining: %lu \n", expected, count, pool.getAvailableCount());
-  else INFOF("PASSED.\n");
+  if (count != expected) FATALF("FAIL: number of failed attempt to release buffer should be %d, actual %d. started with %ld, pool remaining: %ld/%ld ", expected, count, orig, pool.getAvailableCount(), pool.getCapacity());
+  else INFOF("PASSED.");
   pool.reset();
   temp.clear();
 
@@ -259,10 +260,10 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
       pool.releaseObject(ptr);
     }
   }
-  if (count2 != 0) FATALF("FAIL: acquire failed\n");
-  else if (count != 0) FATALF("FAIL: append failed\n");
-  else if (count1 != 0) FATALF("FAIL: inserted and got back wrong values\n");
-  else INFOF("PASSED.\n");
+  if (count2 != 0) FATALF("FAIL: acquire failed");
+  else if (count != 0) FATALF("FAIL: append failed");
+  else if (count1 != 0) FATALF("FAIL: inserted and got back wrong values");
+  else INFOF("PASSED.");
   pool.reset();
 
   INFOF("TEST access by multiple threads, all to same buffer: ");
@@ -279,8 +280,8 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   for (int i = 0; i < buffer_threads ; ++i) {
     same &= ptr->operator int*()[i] == 7;
   }
-  if (!same) FATALF("FAIL: inserted not same\n");
-  else INFOF("PASSED.\n");
+  if (!same) FATALF("FAIL: inserted not same");
+  else INFOF("PASSED.");
   pool.releaseObject(ptr);
   pool.reset();
 
@@ -302,7 +303,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 //        INFOF(".");
         buf = pool.tryAcquireObject();
       }
-//      INFOF(" done.\n");
+//      INFOF(" done.");
       buf->clear_and_unblock_writes();
 
       // access
@@ -325,16 +326,16 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
       buf->block_and_flush();
 //      INFO( "after block and flush: " << *buf );
 
-//      INFOF("count = %d\n", count);
+//      INFOF("count = %d", count);
 
       if (buf->getSize() != sizeof(int) * iter  || count != 0)
-        FATALF("FAIL: thread %d/%d buffer size is %ld, expected %lu\n", omp_get_thread_num() + 1, pool_threads, buf->getSize(), sizeof(int) * iter);
- // else INFOF("PASSED.\n");
+        FATALF("FAIL: thread %d/%d buffer size is %ld, expected %lu", omp_get_thread_num() + 1, pool_threads, buf->getSize(), sizeof(int) * iter);
+ // else INFOF("PASSED.");
 
       //release
       pool.releaseObject(buf);
       //if (i % 25 == 0)
-//      INFOF("thread %d released buffer %d\n", omp_get_thread_num(), id);
+//      INFOF("thread %d released buffer %d", omp_get_thread_num(), id);
 
     }
   }
@@ -348,9 +349,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 int main(int argc, char** argv) {
 
   // construct, acquire, access, release
-#if defined( BLISS_NONE )
-  constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::NONE;
-#else // #ifdef BLISS_LOCKFREE
+#if defined( BLISS_LOCKFREE )
   constexpr bliss::concurrent::LockType lt = bliss::concurrent::LockType::LOCKFREE;
 #endif
 

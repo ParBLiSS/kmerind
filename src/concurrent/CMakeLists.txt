@@ -26,8 +26,8 @@ if (IS_DIRECTORY ./test)
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_objectpool.cpp BLISS_MUTEX )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_objectpool_performance.cpp BLISS_MUTEX )
 
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_objectpool_lf.cpp BLISS_MUTEX BLISS_LOCKFREE )
-    bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_objectpool_performance_lf.cpp BLISS_MUTEX BLISS_LOCKFREE )
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_objectpool_lf.cpp BLISS_LOCKFREE)
+    bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_objectpool_performance_lf.cpp BLISS_LOCKFREE )
 
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_threadsafe_queue.cpp BLISS_MUTEX BLISS_LOCKFREE )
     bliss_add_metaprog_test(${PROJECT_NAME} FALSE test/check2_threadsafe_queue_performance.cpp BLISS_NONE BLISS_MUTEX BLISS_LOCKFREE )

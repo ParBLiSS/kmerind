@@ -62,7 +62,7 @@ struct mbAppend : rl::test_suite<
       {
         data = static_cast<T>(i);
         T * data_remain = nullptr;
-        size_t count_remain = 0;
+        uint32_t count_remain = 0;
 
         std::tie(op_suc, ptr) = buffers.append(&data, 1, data_remain, count_remain, 0, thread_index);
 
@@ -235,7 +235,7 @@ struct mbTest : rl::test_suite<
       {
         data = static_cast<T>(i);
         T * data_remain = nullptr;
-        size_t count_remain = 0;
+        uint32_t count_remain = 0;
 
         std::tie(op_suc, ptr) = buffers.append(&data, 1, data_remain, count_remain, 0, thread_index);
 

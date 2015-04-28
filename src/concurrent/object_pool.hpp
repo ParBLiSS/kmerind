@@ -80,8 +80,7 @@ namespace bliss
          * @brief     Internal queue of available Objects for immediate use.
          * @details   ThreadSafeQueue to ensure thread safety.
          */
-        typename std::conditional<LockType == bliss::concurrent::LockType::LOCKFREE ||
-            LockType == bliss::concurrent::LockType::THREADLOCAL,
+        typename std::conditional<LockType != bliss::concurrent::LockType::NONE,
             bliss::concurrent::ThreadSafeQueue<ObjectPtrType, bliss::concurrent::LockType::LOCKFREE>,
             std::deque<ObjectPtrType> >::type                             available;
 
@@ -94,8 +93,7 @@ namespace bliss
             std::unordered_set<ObjectPtrType> >::type                      in_use;
 
         /// number of objects currently in use.
-        typename std::conditional<LockType == bliss::concurrent::LockType::LOCKFREE ||
-            LockType == bliss::concurrent::LockType::THREADLOCAL,
+        typename std::conditional<LockType != bliss::concurrent::LockType::NONE,
             std::atomic<int64_t>,
             VAR_T(int64_t)>::type                                                size_in_use;
 
@@ -132,20 +130,18 @@ namespace bliss
         void clear_storage() {
           static_cast<Derived*>(this)->clearStorageImpl();
         }
+      public:
+
 
         template<bliss::concurrent::LockType LT = LockType>
-        inline typename std::enable_if<LT != bliss::concurrent::LockType::LOCKFREE &&
-        LT != bliss::concurrent::LockType::THREADLOCAL, int64_t>::type getSizeInUse() const {
+        inline typename std::enable_if<LT == bliss::concurrent::LockType::NONE, int64_t>::type getSizeInUse() const {
           return VAR(size_in_use);
         }
 
         template<bliss::concurrent::LockType LT = LockType>
-        inline typename std::enable_if<LT == bliss::concurrent::LockType::LOCKFREE ||
-        LT == bliss::concurrent::LockType::THREADLOCAL, int64_t>::type getSizeInUse() const {
+        inline typename std::enable_if<LT != bliss::concurrent::LockType::NONE, int64_t>::type getSizeInUse() const {
           return size_in_use.load(std::memory_order_relaxed);
         }
-
-      public:
 
         /// type of lock for the pool.
         static const bliss::concurrent::LockType poolLT = LockType;
