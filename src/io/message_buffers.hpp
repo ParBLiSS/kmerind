@@ -67,8 +67,8 @@ namespace bliss
      * @tparam BufferLT        Buffer's thread safety model
      * @tparam BufferCapacity  capacity of Buffers to create
      */
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, size_t BufferCapacity, size_t MetadataSize>
-    class MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT> >
+    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, size_t BufferCapacity, size_t MetadataSize, bool ref>
+    class MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT, ref> >
     {
       public:
         /// DEFINE  type of the buffer.
@@ -76,7 +76,7 @@ namespace bliss
 
       protected:
         /// Internal BufferPool Type.  typedefed only to shorten the usage.
-        typedef typename bliss::concurrent::ObjectPool<BufferType, PoolLT>  BufferPoolType;
+        typedef typename bliss::concurrent::ObjectPool<BufferType, PoolLT, ref>  BufferPoolType;
 
       public:
         /// Pointer type of a Buffer, aliased from BufferPool
@@ -714,13 +714,13 @@ namespace bliss
      *
      *
      */
-    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, size_t BufferCapacity, size_t MetadataSize>
+    template<bliss::concurrent::LockType PoolLT, bliss::concurrent::LockType BufferLT, size_t BufferCapacity, size_t MetadataSize, bool ref>
     class SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL,
-    		bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT > > :
-    public MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT > >
+    		bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT, ref > > :
+    public MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT, ref > >
     {
       protected:
-        using BaseType = MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT > >;
+        using BaseType = MessageBuffers<bliss::concurrent::ObjectPool<bliss::io::Buffer<BufferLT, BufferCapacity, MetadataSize>, PoolLT, ref > >;
         using MyType = SendMessageBuffers<bliss::concurrent::LockType::THREADLOCAL, BaseType>;
 
       public:
