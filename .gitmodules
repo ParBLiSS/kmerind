@@ -7,3 +7,6 @@
 [submodule "ext/cotire"]
 	path = ext/cotire
 	url = https://github.com/sakra/cotire.git
+[submodule "ext/psac-copy"]
+	path = ext/psac-copy
+	url = git@github.gatech.edu:pflick3/psac-copy.git
