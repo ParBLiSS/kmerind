@@ -1583,7 +1583,7 @@ protected:
 
     //============= now wait for the old epoch to finish.  the next has been set up.
     DEBUGF("M R %d WAIT for epoch %lu, next %lu, currently flushing.  recvQueue size %lu", commRank, oe, ne, recvQueue.getSize());
-    epochProperties.waitForEpochRelease(oe);  // TODO:  deadlock caused by this not returning/.
+    epochProperties.waitForEpochRelease(oe);
     DEBUGF("M R %d WAITED for epoch %lu, next %lu, currently flushing", commRank, oe, ne);
     // then clean up.
 
