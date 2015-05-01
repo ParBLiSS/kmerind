@@ -174,7 +174,7 @@ namespace bliss
 
     /**
      * kmer generator operator type
-     * The third template parameter acts as a member checker to make sure there is an id field and it's of type bliss::common::FASTQSequenceId
+     * The third template parameter acts as a member checker to make sure there is an id field and it's of type bliss::common::FASTQ::SequenceId
      */
     template<typename Sequence, typename KmerIndex>
     class generate_kmer<Sequence, KmerIndex,

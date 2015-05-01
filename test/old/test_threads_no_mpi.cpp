@@ -48,7 +48,7 @@ typedef bliss::index::KmerSize<21> KmerSize;
 typedef uint64_t KmerType;
 typedef float QualityType;
 typedef DNA Alphabet;
-typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss::io::FASTQSequenceId, QualityType> KmerIndexType;
+typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss::io::FASTQ::SequenceId, QualityType> KmerIndexType;
 
 // define buffer where to put the kmers
 constexpr bool thread_safe = false;

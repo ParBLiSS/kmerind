@@ -38,9 +38,9 @@ typedef bliss::common::Kmer<21, bliss::common::DNA, uint64_t> KmerType;
 
 
 typedef KmerIndexElement<KmerType > KmerIndexType1;
-typedef KmerIndexElementWithId<KmerType, bliss::io::FASTQSequenceId > KmerIndexType2;
-typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::io::FASTQSequenceId, float > KmerIndexType3;
-typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::io::FASTQSequenceId, double > KmerIndexType4;
+typedef KmerIndexElementWithId<KmerType, bliss::io::FASTQ::SequenceId > KmerIndexType2;
+typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::io::FASTQ::SequenceId, float > KmerIndexType3;
+typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::io::FASTQ::SequenceId, double > KmerIndexType4;
 
 
 void checkMemUsed(long long &phyMemUsed, long long &swapUsed, bool print) {

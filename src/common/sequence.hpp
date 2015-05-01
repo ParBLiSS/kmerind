@@ -23,7 +23,7 @@ namespace bliss
      * @details   internally we store 2 iterators, start and end, instead of start + length.
      *            reason is that using length is best for random access iterators and we don't have guarantee of that.
      * @tparam Iterator   allows walking through the sequence data.
-     * @tparam Id     the format and components of the id of a sequence. Differs from FASTA to FASTQ and based on length of reads.  defaults to FASTQSequenceId
+     * @tparam Id     the format and components of the id of a sequence. Differs from FASTA to FASTQ and based on length of reads.  defaults to FASTQ::SequenceId
      */
     template<typename Iterator, typename Id>
     struct Sequence
@@ -48,7 +48,7 @@ namespace bliss
      * @brief     extension of bliss::io::Sequence to include quality scores for each position.
      *
      * @tparam Iterator   allows walking through the sequence data.
-     * @tparam IdType     the format and components of the id of a sequence. Differs from FASTA to FASTQ and based on length of reads.  defaults to FASTQSequenceId
+     * @tparam IdType     the format and components of the id of a sequence. Differs from FASTA to FASTQ and based on length of reads.  defaults to FASTQ::SequenceId
      */
     template<typename Iterator, typename Id>
     struct SequenceWithQuality : public Sequence<Iterator, Id>

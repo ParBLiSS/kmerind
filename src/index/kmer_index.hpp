@@ -499,7 +499,7 @@ namespace bliss
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ>
     class KmerPositionIndex : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
-    bliss::io::FASTQSequenceId,
+    bliss::io::FASTQ::SequenceId,
     bliss::io::CommunicationLayer<true>,
     bliss::hash::farm::KmerSuffixHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
     bliss::hash::farm::KmerInfixHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
@@ -513,7 +513,7 @@ namespace bliss
         /// DEFINE the index storage type.  using an infix of kmer to map to threads,
         /// since prefix is used for distributing to processors.
         using MapType = bliss::index::distributed_multimap<KmerType,
-            bliss::io::FASTQSequenceId,
+            bliss::io::FASTQ::SequenceId,
             bliss::io::CommunicationLayer<true>,
             bliss::hash::farm::KmerSuffixHash<KmerType>,
             bliss::hash::farm::KmerInfixHash<KmerType>,
@@ -642,7 +642,7 @@ namespace bliss
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ>
     class KmerPositionAndQualityIndex : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
-    std::pair<bliss::io::FASTQSequenceId, float>,
+    std::pair<bliss::io::FASTQ::SequenceId, float>,
     bliss::io::CommunicationLayer<true>,
     bliss::hash::farm::KmerSuffixHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
     bliss::hash::farm::KmerInfixHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
@@ -656,7 +656,7 @@ namespace bliss
         /// define the index storage type.  using an infix of kmer to map to threads
         /// since prefix is used for distributing to processors.
         using MapType = bliss::index::distributed_multimap<KmerType,
-            std::pair<bliss::io::FASTQSequenceId, float>,
+            std::pair<bliss::io::FASTQ::SequenceId, float>,
             bliss::io::CommunicationLayer<true>,
             bliss::hash::farm::KmerSuffixHash<KmerType>,
             bliss::hash::farm::KmerInfixHash<KmerType>,
@@ -945,7 +945,7 @@ namespace bliss
        */
       template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ>
       class KmerPositionIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
-      bliss::io::FASTQSequenceId,
+      bliss::io::FASTQ::SequenceId,
       bliss::io::CommunicationLayer<true>,
       bliss::hash::farm::KmerSuffixHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
       bliss::hash::farm::KmerInfixHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
@@ -960,7 +960,7 @@ namespace bliss
           /// DEFINE the index storage type.  using an infix of kmer to map to threads,
                  /// since prefix is used for distributing to processors.
           using MapType = bliss::index::distributed_multimap<KmerType,
-              bliss::io::FASTQSequenceId,
+              bliss::io::FASTQ::SequenceId,
               bliss::io::CommunicationLayer<true>,
               bliss::hash::farm::KmerSuffixHash<KmerType>,
               bliss::hash::farm::KmerInfixHash<KmerType>,
@@ -1099,7 +1099,7 @@ namespace bliss
        */
       template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ>
       class KmerPositionAndQualityIndexOld : public KmerIndex<bliss::index::distributed_multimap<bliss::common::Kmer<Kmer_Size, Alphabet>,
-      std::pair<bliss::io::FASTQSequenceId, float>,
+      std::pair<bliss::io::FASTQ::SequenceId, float>,
       bliss::io::CommunicationLayer<true>,
       bliss::hash::farm::KmerSuffixHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
       bliss::hash::farm::KmerInfixHash<bliss::common::Kmer<Kmer_Size, Alphabet> >,
@@ -1114,7 +1114,7 @@ namespace bliss
           /// define the index storage type.  using an infix of kmer to map to threads
           /// since prefix is used for distributing to processors.
           using MapType = bliss::index::distributed_multimap<KmerType,
-              std::pair<bliss::io::FASTQSequenceId, float>,
+              std::pair<bliss::io::FASTQ::SequenceId, float>,
               bliss::io::CommunicationLayer<true>,
               bliss::hash::farm::KmerSuffixHash<KmerType>,
               bliss::hash::farm::KmerInfixHash<KmerType>,

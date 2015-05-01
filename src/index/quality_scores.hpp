@@ -27,6 +27,8 @@ namespace bliss
 {
 namespace index
 {
+template <typename FileFormat>
+struct QualityType;
 
 
 /**

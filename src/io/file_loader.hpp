@@ -47,6 +47,9 @@ namespace bliss
 {
 namespace io
 {
+   template<typename FileType>
+   struct PositionType;
+
     /**
      * @class FileLoader
      * @brief Opens a file (or a portion of it) via memmap, and optionally copies(portion of) data into memory.

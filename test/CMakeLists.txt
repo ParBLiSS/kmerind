@@ -109,6 +109,11 @@ target_link_libraries(testKmerIndex_KMER ${EXTRA_LIBS})
 target_link_libraries(testKmerIndex_KMER bliss-common)
 cotire(testKmerIndex_KMER )
 
+add_executable(testKmerIndex_ST TestKmerIndexAndQuerySingleThread.cpp)
+SET_TARGET_PROPERTIES(testKmerIndex_ST PROPERTIES COMPILE_FLAGS -DKMERINDEX)
+target_link_libraries(testKmerIndex_ST ${EXTRA_LIBS})
+target_link_libraries(testKmerIndex_ST bliss-common)
+cotire(testKmerIndex_ST )
 
 add_executable(testKmerCountCorrectness TestKmerCountCorrectness.cpp)
 target_link_libraries(testKmerCountCorrectness ${EXTRA_LIBS})

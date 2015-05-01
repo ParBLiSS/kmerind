@@ -22,45 +22,50 @@
 #include "common/sequence.hpp"
 #include "io/file_loader.hpp"
 
+#include "utils/type_utils.hpp"
+
 namespace bliss
 {
   namespace io
   {
     /// dummy class to indicate FASTQ format.
-    struct FASTQ {};
+    struct FASTQ {
 
 
-    /**
-     * @class     bliss::io::FASTQSequenceId
-     * @brief     represents a fastq sequence's id, also used for id of the FASTQ file, and for position inside a FASTQ sequence..
-     * @details    this is set up as a union to allow easy serialization
-     *            and parsing of the content.
-     *            this keeps a 40 bit sequence ID, broken up into a 32 bit id and 8 bit significant bit id
-     *                       an 8 bit file id
-     *                       a 16 bit position within the sequence.
-     *
-     *            A separate FASTA version will have a different fields but keeps the same 64 bit total length.
-     *
-     *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
-     */
-    union FASTQSequenceId
-    {
-        /// the concatenation of the id components as a single unsigned 64 bit field.  should use only 40 bits
-        uint64_t file_pos;
+      /**
+       * @class     bliss::io::FASTQ::SequenceId
+       * @brief     represents a fastq sequence's id, also used for id of the FASTQ file, and for position inside a FASTQ sequence..
+       * @details    this is set up as a union to allow easy serialization
+       *            and parsing of the content.
+       *            this keeps a 40 bit sequence ID, broken up into a 32 bit id and 8 bit significant bit id
+       *                       an 8 bit file id
+       *                       a 16 bit position within the sequence.
+       *
+       *            A separate FASTA version will have a different fields but keeps the same 64 bit total length.
+       *
+       *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
+       */
+      union SequenceId
+      {
+          /// the concatenation of the id components as a single unsigned 64 bit field.  should use only 40 bits
+          uint64_t file_pos;
 
-        /// the id field components.  anonymous struct
-        struct
-        {
-            /// sequence's id, lower 32 of 40 bits (potentially as offset in the containing file)
-            uint32_t seq_id;
-            /// sequence's id, upper 8 of 40 bits (potentially as offset in the containing file)
-            uint8_t seq_id_msb;
-            /// id of fastq file
-            uint8_t file_id;
-            /// offset within the read.  Default 0 refers to the whole sequence
-            uint16_t pos;
-        };
+          /// the id field components.  anonymous struct
+          struct
+          {
+              /// sequence's id, lower 32 of 40 bits (potentially as offset in the containing file)
+              uint32_t seq_id;
+              /// sequence's id, upper 8 of 40 bits (potentially as offset in the containing file)
+              uint8_t seq_id_msb;
+              /// id of fastq file
+              uint8_t file_id;
+              /// offset within the read.  Default 0 refers to the whole sequence
+              uint16_t pos;
+          };
+      };
+
     };
+
 
 
     /**
@@ -98,8 +103,8 @@ namespace bliss
 
         /// Sequence type, conditionally set based on Quality template param to either normal Sequence or SequenceWithQuality.
         typedef typename std::conditional<std::is_void<Quality>::value,
-              bliss::common::Sequence<Iterator, FASTQSequenceId>,
-              bliss::common::SequenceWithQuality<Iterator, FASTQSequenceId> >::type      SequenceType;
+              bliss::common::Sequence<Iterator, FASTQ::SequenceId>,
+              bliss::common::SequenceWithQuality<Iterator, FASTQ::SequenceId> >::type      SequenceType;
 
 
         /// default constructor.
