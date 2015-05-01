@@ -164,6 +164,21 @@ namespace bliss {
           }
       };
 
+
+      /**
+       * @brief  Kmer hash, returns the least significant NumBits directly as identity hash.
+       * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+       */
+      template <typename KMER>
+      class KmerHash {
+        protected:
+          ::std::hash<KMER> hashf;
+        public:
+          /// operator to compute the hash
+          uint64_t operator()(const KMER & kmer) const {
+            return hashf(kmer);
+          }
+      };
     }
 
 
@@ -231,6 +246,18 @@ namespace bliss {
           }
       };
 
+      /**
+       * @brief  Kmer hash, returns the least significant NumBits directly as identity hash.
+       * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+       */
+      template <typename KMER>
+      struct KmerHash {
+        public:
+          /// operator to compute hash value
+          uint64_t operator()(const KMER & kmer) const {
+            return kmer.getSuffix(::std::min(KMER::nBits, 64U));
+          }
+      };
 
     }
 
@@ -285,9 +312,9 @@ namespace bliss {
           };
           /// operator to compute actual hash
           uint64_t operator()(const KMER & kmer) const {
-            uint64_t hl, hh;
-            ::std::tie(hl, hh) = hashf(kmer);
-            return hh >> shift;
+//            uint64_t hl, hh;
+//            ::std::tie(hl, hh) = hashf(kmer);
+            return hashf(kmer).second >> shift;
           };
       };
 
@@ -364,12 +391,26 @@ namespace bliss {
 
           /// operator to compute hash
           uint64_t operator()(const KMER & kmer) const {
-            uint64_t hl, hh;
-            ::std::tie(hl, hh) = hashf(kmer);
-            return hl & mask;
+//            uint64_t hl, hh;
+//            ::std::tie(hl, hh) = hashf(kmer);
+            return hashf(kmer).first & mask;
           }
       };
+      /**
+       * @brief  Kmer hash, returns the least significant NumBits from murmur hash.
+       * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+       */
+      template <typename KMER>
+      class KmerHash {
+        protected:
 
+          ::bliss::hash::murmur::hash<KMER> hashf;
+        public:
+          /// operator to compute hash
+          uint64_t operator()(const KMER & kmer) const {
+            return hashf(kmer).first;
+          }
+      };
 
     } // namespace murmur
 
@@ -439,7 +480,7 @@ namespace bliss {
           /// constructor
           KmerSuffixHash(const unsigned int nBits = sizeof(size_t) * 8) :
             nBytes((KMER::nBits + 7)/ 8),
-            mask(::std::numeric_limits<size_t>::max() >> (sizeof(size_t) * 8 - nBits)){
+            mask(::std::numeric_limits<size_t>::max() >> (sizeof(size_t) * 8 - nBits)) {
             if ((nBits == 0) || (nBits > sizeof(size_t) * 8)) throw ::std::invalid_argument("ERROR: does not support more than size_t  bits for hash");
           };
 
@@ -449,6 +490,19 @@ namespace bliss {
           }
       };
 
+
+      /**
+       * @brief  Kmer hash, returns the least significant NumBits from murmur hash.
+       * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+       */
+      template <typename KMER>
+      class KmerHash {
+        public:
+          /// operator to compute hash
+          size_t operator()(const KMER & kmer) const {
+            return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), (KMER::nBits + 7) / 8);
+          }
+      };
 
     } // namespace farm
 
