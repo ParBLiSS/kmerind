@@ -7,6 +7,6 @@
 [submodule "ext/cotire"]
 	path = ext/cotire
 	url = https://github.com/sakra/cotire.git
-[submodule "mxx"]
-	path = mxx
+[submodule "ext/mxx"]
+	path = ext/mxx
 	url = git@bitbucket.org:tcpan/mxx.git
