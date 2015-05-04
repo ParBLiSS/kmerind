@@ -104,71 +104,6 @@ namespace mxx2 {
   }
 
 
-  template<typename T, typename _TargetP>
-  void compute_all2all_params(const std::vector<T>& msgs, _TargetP target_p_fun,
-                              std::vector<int> &send_counts, std::vector<int> &send_displs,
-                              std::vector<int> &recv_counts, std::vector<int> &recv_displs,
-                              std::vector<int> &pids,
-                              MPI_Comm comm)
-  {
-      // get comm parameters
-      int p, rank;
-      MPI_Comm_size(comm, &p);
-      MPI_Comm_rank(comm, &rank);
-
-      // bucket input by their target processor
-      send_counts.assign(p, 0);
-      pids.assign(msgs.size(), 0);
-      for (size_t i = 0; i < msgs.size(); ++i)
-      {
-        pids[i] = target_p_fun(msgs[i]);
-        send_counts[pids[i]]++;
-      }
-
-      // get all2all params
-      recv_counts = mxx::all2all(send_counts, 1, comm);
-      send_displs = mxx::get_displacements(send_counts);
-      recv_displs = mxx::get_displacements(recv_counts);
-  }
-
-  template <typename T, typename _TargetP>
-  void local_gather_all2all(std::vector<T>& msgs,
-                            const std::vector<int> &send_counts, const std::vector<int> &send_displs,
-                            const std::vector<int> &recv_counts, const std::vector<int> &recv_displs,
-                            const std::vector<int> &pids,
-                            MPI_Comm comm)
-  {
-    // get comm parameters
-    int p, rank;
-    MPI_Comm_size(comm, &p);
-    MPI_Comm_rank(comm, &rank);
-
-    std::vector<int> offset = send_displs;
-    std::vector<T> send_buffer;
-    if (msgs.size() > 0)
-        send_buffer.resize(msgs.size());
-    for (int i = 0; i < msgs.size(); ++i)
-    {
-        send_buffer[offset[pids[i]]++] = msgs[i];
-    }
-
-    // resize messages to fit recv
-      std::size_t recv_size = recv_displs[p-1] + recv_counts[p-1];
-      msgs.clear();
-      //msgs.shrink_to_fit();
-      msgs.resize(recv_size);
-      //msgs = std::vector<T>(recv_size);
-
-
-      // get MPI type
-      mxx::datatype<T> dt;
-      MPI_Datatype mpi_dt = dt.type();
-
-      // all2all
-      MPI_Alltoallv(&send_buffer[0], &send_counts[0], &send_displs[0], mpi_dt,
-                    &msgs[0], &recv_counts[0], &recv_displs[0], mpi_dt, comm);
-      // done, result is returned in vector of input messages
-  }
 
 }
 
@@ -325,7 +260,7 @@ template<typename MapType>
           INFOF("R %d distribute query: %f. received query size = %lu", commRank, time_span.count(), query.size());
 
 
-         // == perform the query
+         // == perform the query  - memory utilization is a potential problem.
          t1 = std::chrono::high_resolution_clock::now();
          std::vector<TupleType> results;
          std::vector<int> send_counts(commSize, 0);
@@ -336,8 +271,8 @@ template<typename MapType>
            // work on query from process i.
            //printf("R %d working on query from proce %d\n", commRank, i);
 
-           for (int j = recv_counts[i]; j > 0 ; --j, ++k) {
-             auto range = map.equal_range(query[k]);
+           for (int j = 0; j < recv_counts[i]; ++j, ++k) {
+              auto range = map.equal_range(query[k]);
 
              s = std::distance(range.first, range.second);
              if (s > 0) {
@@ -345,7 +280,7 @@ template<typename MapType>
                send_counts[i] += s;
              }
            }
-           //printf("R %d added %d results for process %d\n", commRank, send_counts[i], i);
+           printf("R %d added %d results for %d queries for process %d\n", commRank, send_counts[i], recv_counts[i], i);
 
          }
 
@@ -353,7 +288,7 @@ template<typename MapType>
           time_span =
               std::chrono::duration_cast<std::chrono::duration<double> >(
                   t2 - t1);
-          INFOF("R %d query result generated: %f. final size = %lu", commRank, time_span.count(), results.size());
+          INFOF("R %d query result generated: %f. size = %lu", commRank, time_span.count(), results.size());
 
 
           // ==  send back results.
