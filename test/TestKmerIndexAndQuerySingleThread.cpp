@@ -15,6 +15,8 @@
 
 
 #include <functional>
+#include <random>
+#include <algorithm>
 #include "utils/logging.h"
 
 #include "common/alphabets.hpp"
@@ -269,13 +271,42 @@ template<typename MapType>
          time_span =
              std::chrono::duration_cast<std::chrono::duration<double>>(
                  t2 - t1);
-         INFOF("R %d local kmer array time: %f. temp size = %lu", commRank, time_span.count(), query.size());
+         INFOF("R %d local kmer array time: %f. query size = %lu", commRank, time_span.count(), query.size());
 
 
+         // for testing, query 10% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
+         t1 = std::chrono::high_resolution_clock::now();
+         unsigned seed = 1;
+         std::shuffle(query.begin(), query.end(), std::default_random_engine(seed));
+         query.erase(query.begin() + query.size() / 10, query.end());
+         t2 = std::chrono::high_resolution_clock::now();
+         time_span =
+             std::chrono::duration_cast<std::chrono::duration<double>>(
+                 t2 - t1);
+         INFOF("R %d randomly select 10 %% of kmers as query input. new size = %lu", commRank, time_span.count(), query.size());
+
+
+
+         // the code below is actual query processing code.
+
+
+         // remove duplicates
+         t1 = std::chrono::high_resolution_clock::now();
+         std::sort(query.begin(), query.end(), [](const KmerType& x, const KmerType& y) {
+           return x < y;
+         });
+         auto new_end = std::unique(query.begin(), query.end(), [] (const KmerType& x, const KmerType& y) {
+           return x == y;
+         });
+         query.erase(new_end, query.end());
+         t2 = std::chrono::high_resolution_clock::now();
+         time_span =
+             std::chrono::duration_cast<std::chrono::duration<double>>(
+                 t2 - t1);
+         INFOF("R %d removed duplicate query: %f. new size = %lu", commRank, time_span.count(), query.size());
 
          // prepare to distribute
          t1 = std::chrono::high_resolution_clock::now();
-
 
          std::vector<int> recv_counts;
 
@@ -291,23 +322,31 @@ template<typename MapType>
           time_span =
               std::chrono::duration_cast<std::chrono::duration<double>>(
                   t2 - t1);
-          INFOF("R %d distribute query: %f. temp size = %lu", commRank, time_span.count(), query.size());
+          INFOF("R %d distribute query: %f. received query size = %lu", commRank, time_span.count(), query.size());
 
 
          // == perform the query
          t1 = std::chrono::high_resolution_clock::now();
          std::vector<TupleType> results;
          std::vector<int> send_counts(commSize, 0);
-         results.reserve(est_size);
+         results.reserve(query.size());
          int k = 0;
+         int s = 0;
          for (int i = 0; i < commSize; ++i) {
            // work on query from process i.
+           //printf("R %d working on query from proce %d\n", commRank, i);
 
            for (int j = recv_counts[i]; j > 0 ; --j, ++k) {
              auto range = map.equal_range(query[k]);
-             results.insert(results.end(), range.first, range.second);
-             send_counts[i] += std::distance(range.first, range.second);
+
+             s = std::distance(range.first, range.second);
+             if (s > 0) {
+               results.insert(results.end(), range.first, range.second);
+               send_counts[i] += s;
+             }
            }
+           //printf("R %d added %d results for process %d\n", commRank, send_counts[i], i);
+
          }
 
          t2 = std::chrono::high_resolution_clock::now();
