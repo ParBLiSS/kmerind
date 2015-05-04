@@ -22,7 +22,6 @@
 #include "common/sequence.hpp"
 #include "io/file_loader.hpp"
 
-#include "utils/type_utils.hpp"
 
 namespace bliss
 {

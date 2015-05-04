@@ -22,7 +22,6 @@
 #include "io/file_loader.hpp"
 #include "boost/mpi/datatype.hpp"
 
-#include "utils/type_utils.hpp"
 
 
 // include MPI
