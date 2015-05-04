@@ -738,7 +738,7 @@ include_directories("${CMAKE_SOURCE_DIR}/ext/farmhash/src")
 #include_directories("${CMAKE_SOURCE_DIR}/ext/sparsehash/src")
 
 
-include_directories("${EXT_PROJECTS_DIR}/psac-copy/include")
+include_directories("${EXT_PROJECTS_DIR}")
 
 
 ###### LIBRARY
