@@ -452,7 +452,7 @@ int main(int argc, char** argv) {
 #elif defined(KMERINDEX)
 
   {
-  using IndexType = bliss::index::KmerCountIndex<21, bliss::common::DNA, bliss::io::FASTQ>;
+  using IndexType = bliss::index::KmerCountIndex<bliss::common::Kmer<21, bliss::common::DNA>, bliss::io::FASTQ>;
   test<IndexType>(comm, filename, nthreads, chunkSize, testQuery<IndexType>, "Kmer count index");
 
   }

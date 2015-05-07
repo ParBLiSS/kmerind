@@ -814,6 +814,24 @@ namespace bliss
       // return the result
       return rev;
     }
+
+    /**
+     * @brief Returns a reverse complement of a k-mer.
+     *
+     * Note that this does NOT reverse the bit pattern, but reverses
+     * the sequence of `BITS_PER_CHAR` bits each.
+     *
+     * @returns   The reversed k-mer.
+     */
+    Kmer reverse_complement() const
+    {
+      // create a copy of this
+      Kmer revcomp(*this);
+      // reverse it
+      revcomp.do_reverse_complement();
+      // return the result
+      return revcomp;
+    }
   
   
     // for debug purposes
@@ -1116,7 +1134,7 @@ namespace bliss
      */
     inline void do_reverse()
     {
-      // TODO implement logarithmic version (logarithmic in number of bits)
+      // TODO implement logarithmic version (logarithmic in number of bits in a word, linear in number of words).  non power of 2 bitsPerChar is tricky because of byte boundaries.
   
       /* Linear (unefficient) reverse: */
   
@@ -1138,6 +1156,41 @@ namespace bliss
       this->do_sanitize();
     }
   
+    /**
+     * @brief Reverses this k-mer.
+     *
+     * Note that this does NOT reverse the bit pattern, but reverses
+     * the sequence of `BITS_PER_CHAR` bits each.
+     *
+     */
+    inline void do_reverse_complement()
+    {
+      // TODO implement logarithmic version (logarithmic in number of bits in a word, linear in number of words).  non power of 2 bitsPerChar is tricky because of byte boundaries.
+
+      /* Linear (inefficient) reverse: */
+
+      // get temporary copy of this
+      Kmer tmp_copy = *this;
+
+      // get lower most bits from the temp copy and push them into the lower bits
+      // of this
+      WORD_TYPE tmp;
+
+      for (unsigned int i = 0; i < size; ++i)
+      {
+        this->do_left_shift(bitsPerChar);   // shifting the whole thing, inefficient but correct,
+                                            // especially for char that cross word boundaries.
+
+        tmp = ALPHABET::TO_COMPLEMENT[tmp_copy.data[0] & getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar)];
+
+        // copy `bitsperChar` least significant bits
+        copyBitsFixed<WORD_TYPE, bitsPerChar>(this->data[0], tmp);
+        tmp_copy.do_right_shift(bitsPerChar);
+      }
+
+      // set ununsed bits to 0
+      this->do_sanitize();
+    }
   
     /**
      *

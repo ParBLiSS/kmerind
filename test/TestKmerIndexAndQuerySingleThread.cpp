@@ -245,7 +245,7 @@ template<typename MapType>
 
          std::vector<int> recv_counts;
 
-         bliss::hash::farm::KmerPrefixHash<KmerType> hash(2 * ceilLog2(commSize));
+         bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner> hash(ceilLog2(commSize));
          if (commSize > 1)
            recv_counts = mxx2::msgs_all2all(query, [&] ( KmerType const &x) {
               return (hash(x) % commSize);
@@ -461,7 +461,7 @@ template<typename MapType>
 
          std::vector<int> recv_counts;
 
-         bliss::hash::farm::KmerPrefixHash<KmerType> hash(2 * ceilLog2(commSize));
+         bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner> hash(ceilLog2(commSize));
          if (commSize > 1)
            recv_counts = mxx2::msgs_all2all(query, [&] ( KmerType const &x) {
               return (hash(x) % commSize);
@@ -680,7 +680,7 @@ template<typename MapType>
 
          std::vector<int> recv_counts;
 
-         bliss::hash::farm::KmerPrefixHash<KmerType> hash(2 * ceilLog2(commSize));
+         bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner> hash(ceilLog2(commSize));
          if (commSize > 1)
            recv_counts = mxx2::msgs_all2all(query, [&] ( KmerType const &x) {
               return (hash(x) % commSize);
@@ -888,7 +888,7 @@ class PositionIndex {
          // distribute
          t1 = std::chrono::high_resolution_clock::now();
 
-         bliss::hash::farm::KmerPrefixHash<KmerType> hash(2 * ceilLog2(commSize));
+         bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner> hash(ceilLog2(commSize));
       if (commSize > 1)
            mxx2::msgs_all2all(temp, [&] ( TupleType const &x) {
               return (hash(x.first) % commSize);
@@ -1077,7 +1077,7 @@ class PositionQualityIndex {
      // distribute
      t1 = std::chrono::high_resolution_clock::now();
 
-     bliss::hash::farm::KmerPrefixHash<KmerType> hash(2 * ceilLog2(commSize));
+     bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner> hash(ceilLog2(commSize));
 	if (commSize > 1)
 	     mxx2::msgs_all2all(temp, [&] ( TupleType const &x) {
        		return (hash(x.first) % commSize);
@@ -1235,7 +1235,7 @@ class CountIndex {
      // distribute
      t1 = std::chrono::high_resolution_clock::now();
 
-     bliss::hash::farm::KmerPrefixHash<KmerType> hash(2 * ceilLog2(commSize));
+     bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner> hash(ceilLog2(commSize));
 	if (commSize > 1)
 	     mxx2::msgs_all2all(temp, [&] ( KmerType const &x) {
        		return (hash(x) % commSize);
@@ -1450,20 +1450,20 @@ int main(int argc, char** argv) {
   using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
 
   using IdType = bliss::io::FASTQ::SequenceId;
-  using MapType = std::unordered_multimap<KmerType, IdType, bliss::hash::farm::KmerHash<KmerType> >;
+  using MapType = std::unordered_multimap<KmerType, IdType, bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner> >;
   testIndex<PositionIndex<MapType> >(comm, filename, "single thread, position index.");
 
   MPI_Barrier(comm);
 
 
-  using MapType2 = std::unordered_map<KmerType, uint32_t, bliss::hash::farm::KmerHash<KmerType> >;
+  using MapType2 = std::unordered_map<KmerType, uint32_t, bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner> >;
   testIndex<CountIndex<MapType2> > (comm, filename, "single thread, count index.");
 
   MPI_Barrier(comm);
 
   using QualType = float;
   using KmerInfoType = std::pair<IdType, QualType>;
-  using MapType3 = std::unordered_multimap<KmerType, KmerInfoType, bliss::hash::farm::KmerHash<KmerType> >;
+  using MapType3 = std::unordered_multimap<KmerType, KmerInfoType, bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner> >;
   testIndex<PositionQualityIndex<MapType3> >(comm, filename , "single thread, pos+qual index");
 
   MPI_Barrier(comm);
