@@ -47,10 +47,13 @@
 #include <tuple>  // for hash - std::pair
 #include <exception>  // for hash - std::system_error
 #include <algorithm>
+#include <type_traits>  // enable_if
+
+#include "common/kmer.hpp"
 
 // includ the murmurhash code.
 #include "smhasher/MurmurHash3.cpp"
-#include "common/kmer.hpp"
+// and farm hash
 #include "farmhash.cc"
 
 
@@ -132,115 +135,79 @@ namespace bliss {
 
 
         namespace std {
-          template <typename KMER>
+          template <typename KMER, bool Prefix = false>
           class hash;
+
           template <typename KMER>
-          class hash_prefix;
+          using hash_prefix = hash<KMER, true>;
 
           /**
            * @brief  Kmer hash, returns the least significant NumBits directly as identity hash.
            * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
            */
-          template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-          class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
-            protected:
-              using KMER = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
-            public:
-              static constexpr unsigned int default_init_value = ::std::min(KMER::nBits, 64U);
-
-              hash(const unsigned int = default_init_value) {}; // param not used.
-
-              /// operator to compute hash
-              inline size_t operator()(const KMER & kmer) const {
-                // if multiword, nBits > 64, then the returned hash will have meaningful msb.  min(nBits, 64) == 64.
-                // if single word, nBits <= 64, then min(nBits, 64) = nBits, and shift is the right thing.
-                return ::std::hash<KMER>(kmer);
-              }
-
-          };
-
-          // use default prefix/infix/suffix functions
-
-          /**
-           * @brief  Kmer hash, returns the least significant NumBits from murmur hash.
-           * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
-           */
-          template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-          class hash_prefix<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
-
+          template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE, bool Prefix>
+          class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>, Prefix > {
             protected:
               using KMER = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
               const int64_t shift;
             public:
               static constexpr unsigned int default_init_value = ::std::min(KMER::nBits, 64U);
 
-              hash_prefix(const unsigned int prefix_bits = default_init_value) : shift(default_init_value - prefix_bits) {
+              hash(const unsigned int prefix_bits = default_init_value) : shift(default_init_value - prefix_bits) {
                 if (prefix_bits > default_init_value)  throw ::std::invalid_argument("ERROR: prefix larger than available hash size or kmer size.");
               };
 
               /// operator to compute hash
               inline size_t operator()(const KMER & kmer) const {
-                // if multiword, nBits > 64, then the returned hash will have meaningful msb.  min(nBits, 64) == 64.
-                // if single word, nBits <= 64, then min(nBits, 64) = nBits, and shift is the right thing.
-                return ::std::hash<KMER>(kmer) >> shift;
+                if (Prefix)
+                  // if multiword, nBits > 64, then the returned hash will have meaningful msb.  min(nBits, 64) == 64.
+                  // if single word, nBits <= 64, then min(nBits, 64) = nBits, and shift is the right thing.
+                  return ::std::hash<KMER>(kmer) >> shift;
+                else
+                  // if multiword, nBits > 64, then the returned hash will have meaningful msb.  min(nBits, 64) == 64.
+                  // if single word, nBits <= 64, then min(nBits, 64) = nBits, and shift is the right thing.
+                  return ::std::hash<KMER>(kmer);
               }
-          };
 
+          };
 
         }
 
 
         namespace identity {
 
-          template <typename KMER>
+          template <typename KMER, bool Prefix = false>
           class hash;
+
           template <typename KMER>
-          class hash_prefix;
+          using hash_prefix = hash<KMER, true>;
 
           /**
            * @brief  Kmer hash, returns the least significant NumBits directly as identity hash.
            * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
            */
-          template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-          class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
-
-            protected:
-              using KMER = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
-            public:
-              static const unsigned int default_init_value = ::std::min(KMER::nBits, 64U);
-
-              hash(const unsigned int = default_init_value) {}; // param not used.
-
-              /// operator to compute hash value
-              inline uint64_t operator()(const KMER & kmer) const {
-                // if nBits < 64U, then it's padded with 0.  just get it.  else we want the entire 64bit.
-                return kmer.getSuffix(64U);
-              }
-          };
-
-
-          /**
-           * @brief  Kmer hash, returns the most significant bits directly as identity hash.
-           * @note   since the number of buckets is not known at compile time, can't have nbit be a template param.
-           *         limits output to maximum of 64 bit hash
-           */
-          template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-          class hash_prefix<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
+          template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE, bool Prefix>
+          class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>, Prefix > {
 
             protected:
               using KMER = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
               const unsigned int bits;
             public:
-              static constexpr unsigned int default_init_value = ::std::min(KMER::nBits, 64U);
+              static const unsigned int default_init_value = ::std::min(KMER::nBits, 64U);
 
               /// constructor
-              hash_prefix(const unsigned int prefix_bits = default_init_value) : bits(prefix_bits) {
+              hash(const unsigned int prefix_bits = default_init_value) : bits(prefix_bits) {
                 if ((prefix_bits == 0) || (prefix_bits > default_init_value)) throw ::std::invalid_argument("ERROR: prefix size outside of supported range");
               };
+
               /// operator to compute hash value
               inline uint64_t operator()(const KMER & kmer) const {
-                return kmer.getPrefix(bits);  // get the first bits number of bits from kmer.
-              };
+                if (Prefix)
+                  return kmer.getPrefix(bits);  // get the first bits number of bits from kmer.
+                else
+                  // if nBits < 64U, then it's padded with 0.  just get it.  else we want the entire 64bit.
+                  return kmer.getSuffix(64U);
+              }
           };
 
         }
@@ -249,55 +216,27 @@ namespace bliss {
 
         namespace murmur {
 
-          template <typename KMER>
+          template <typename KMER, bool Prefix = false>
           class hash;
+
           template <typename KMER>
-          class hash_prefix;
+          using hash_prefix = hash<KMER, true>;
 
           /**
            * @brief Kmer specialization for MurmurHash.  generated hash is 128 bit.
            */
-          template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-          class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
-
-            protected:
-              using KMER = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
-              static constexpr unsigned int nBytes = (KMER::nBits + 7) / 8;
-            public:
-              static const unsigned int default_init_value = 64U;
-
-              hash(const unsigned int = default_init_value) {}; // param not used.
-
-              inline uint64_t operator()(KMER const& kmer) const
-              {
-                uint64_t h[2];
-                // let compiler optimize out all except one of these.
-                if (sizeof(void*) == 8)
-                  MurmurHash3_x64_128(kmer.getData(), nBytes, 42, h);
-                else if (sizeof(void*) == 4)
-                  MurmurHash3_x86_128(kmer.getData(), nBytes, 42, h);
-                else
-                  throw ::std::logic_error("ERROR: neither 32 bit nor 64 bit system");
-
-                return h[0];
-              }
-          };
-
-
-          /**
-           * @brief Kmer specialization for MurmurHash.  generated hash is 128 bit.
-           */
-          template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-          class hash_prefix<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
+          template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE, bool Prefix>
+          class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>, Prefix > {
 
             protected:
               using KMER = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
               static constexpr unsigned int nBytes = (KMER::nBits + 7) / 8;
               const int64_t shift;
+
             public:
               static const unsigned int default_init_value = 64U;
 
-              hash_prefix(const unsigned int prefix_bits = default_init_value) : shift(default_init_value - prefix_bits) {
+              hash(const unsigned int prefix_bits = default_init_value) : shift(default_init_value - prefix_bits) {
                 if (prefix_bits > default_init_value)  throw ::std::invalid_argument("ERROR: prefix larger than 64 bit.");
               };
 
@@ -313,65 +252,54 @@ namespace bliss {
                   throw ::std::logic_error("ERROR: neither 32 bit nor 64 bit system");
 
                 // use the upper 64 bits.
-                return h[1] >> shift;
+                if (Prefix)
+                  return h[1] >> shift;
+                else
+                  return h[0];
               }
+
           };
 
         }
 
 
         namespace farm {
-          template <typename KMER>
+          template <typename KMER, bool Prefix = false>
           class hash;
+
           template <typename KMER>
-          class hash_prefix;
+          using hash_prefix = hash<KMER, true>;
 
           /**
            * @brief  Kmer hash, returns the least significant NumBits from murmur hash.
            * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+           *
+           * @tparam Prefix:  to get prefix,
            */
-          template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-          class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
-
-            protected:
-              using KMER = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
-              static constexpr unsigned int nBytes = (KMER::nBits + 7) / 8;
-              
-            public:
-              static const unsigned int default_init_value = 64U;
-
-              hash(const unsigned int = default_init_value) {}; // param not used.
-
-              /// operator to compute hash
-              inline size_t operator()(const KMER & kmer) const {
-                return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes);
-              }
-          };
-
-          /**
-           * @brief  Kmer hash, returns the least significant NumBits from murmur hash.
-           * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
-           */
-          template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-          class hash_prefix<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
+          template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE, bool Prefix>
+          class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>, Prefix > {
 
             protected:
               using KMER = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
               static constexpr unsigned int nBytes = (KMER::nBits + 7) / 8;
               const size_t shift;
+
             public:
               static const unsigned int default_init_value = 64U;
 
-              hash_prefix(const unsigned int prefix_bits = default_init_value) : shift(default_init_value - prefix_bits) {
+              hash(const unsigned int prefix_bits = default_init_value) : shift(default_init_value - prefix_bits) {
                 if (prefix_bits > default_init_value)  throw ::std::invalid_argument("ERROR: prefix larger than 64 bit.");
               };
 
               /// operator to compute hash
-              inline size_t operator()(const KMER & kmer) const {
-                return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes) >> shift;
+              inline uint64_t operator()(const KMER & kmer) const {
+                if (Prefix)
+                  return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes) >> shift;
+                else
+                  return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes);
               }
-          };
 
+          };
 
         }
       }
