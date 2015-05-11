@@ -370,8 +370,8 @@ namespace bliss
         KmerT<Kmer_Size, Alphabet, WordType>,
         bliss::io::CommunicationLayer<true>,
         bliss::hash::kmer::hash<KmerT<Kmer_Size, Alphabet, WordType>, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
-        bliss::hash::kmer::hash<KmerT<Kmer_Size, Alphabet, WordType>, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>,
-        bliss::hash::kmer::hash<KmerT<Kmer_Size, Alphabet, WordType>, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>
+        bliss::hash::kmer::hash<KmerT<Kmer_Size, Alphabet, WordType>, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
+        bliss::hash::kmer::hash<KmerT<Kmer_Size, Alphabet, WordType>, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>
       >,
       bliss::io::FASTQ,
       void>
@@ -386,8 +386,8 @@ namespace bliss
             KmerType,
             bliss::io::CommunicationLayer<true>,
             bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
-            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>,
-            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>
+            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
+            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>
         >;
 
         /// DEFINE kmer index value type (std::pair)
@@ -509,8 +509,8 @@ namespace bliss
         bliss::io::FASTQ::SequenceId,
         bliss::io::CommunicationLayer<true>,
     bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
-    bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>,
-    bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner> >,
+    bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
+    bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true> >,
     FileFormat, void>
     {
       public:
@@ -523,8 +523,8 @@ namespace bliss
             bliss::io::FASTQ::SequenceId,
             bliss::io::CommunicationLayer<true>,
             bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
-            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>,
-            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner> >;
+            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
+            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true> >;
 
         /// DEFINE kmer index value type (std::pair)
         using ValueType = typename MapType::value_type;
@@ -655,8 +655,8 @@ namespace bliss
               std::pair<bliss::io::FASTQ::SequenceId, float>,
               bliss::io::CommunicationLayer<true>,
               bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
-              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>,
-              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>
+              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
+              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>
             >,
             FileFormat,
             float>
@@ -671,8 +671,8 @@ namespace bliss
             std::pair<bliss::io::FASTQ::SequenceId, float>,
             bliss::io::CommunicationLayer<true>,
             bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
-            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>,
-            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner> >;
+            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
+            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true> >;
 
         /// DEFINE kmer index value type (std::pair)
         using ValueType = typename MapType::value_type;
@@ -820,8 +820,8 @@ namespace bliss
       class KmerCountIndexOld : public KmerIndex<bliss::index::distributed_counting_map<KmerType,
       bliss::io::CommunicationLayer<true>,
       bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner>,
-      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner>,
-      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner> >,
+      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true>,
+      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true> >,
       FileFormat, void>
       {
 
@@ -834,8 +834,8 @@ namespace bliss
           using MapType = bliss::index::distributed_counting_map<KmerType,
               bliss::io::CommunicationLayer<true>,
               bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner>,
-              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner>,
-              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner> >;
+              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true>,
+              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true> >;
 
           /// DEFINE kmer index value type (std::pair)
           using ValueType = typename MapType::value_type;
@@ -960,8 +960,8 @@ namespace bliss
       bliss::io::FASTQ::SequenceId,
       bliss::io::CommunicationLayer<true>,
       bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner>,
-      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner>,
-      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner> >,
+      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true>,
+      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true> >,
       FileFormat, void>
       {
 
@@ -975,8 +975,8 @@ namespace bliss
               bliss::io::FASTQ::SequenceId,
               bliss::io::CommunicationLayer<true>,
               bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner>,
-              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner>,
-              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner> >;
+              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true>,
+              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true> >;
 
           /// DEFINE kmer index value type (std::pair)
           using ValueType = typename MapType::value_type;
@@ -1114,8 +1114,8 @@ namespace bliss
       std::pair<bliss::io::FASTQ::SequenceId, float>,
       bliss::io::CommunicationLayer<true>,
       bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner>,
-      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner>,
-      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner> >,
+      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true>,
+      bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true> >,
       FileFormat, float>
       {
 
@@ -1129,8 +1129,8 @@ namespace bliss
               std::pair<bliss::io::FASTQ::SequenceId, float>,
               bliss::io::CommunicationLayer<true>,
               bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner>,
-              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner>,
-              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::IdentityCombiner> >;
+              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true>,
+              bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true> >;
 
           /// DEFINE kmer index value type (std::pair)
           using ValueType = typename MapType::value_type;
@@ -1549,8 +1549,8 @@ namespace bliss
        KmerT<Kmer_Size, Alphabet, WordType>,
        bliss::io::CommunicationLayer<true>,
        bliss::hash::kmer::hash<KmerT<Kmer_Size, Alphabet, WordType>, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
-       bliss::hash::kmer::hash<KmerT<Kmer_Size, Alphabet, WordType>, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>,
-       bliss::hash::kmer::hash<KmerT<Kmer_Size, Alphabet, WordType>, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>
+       bliss::hash::kmer::hash<KmerT<Kmer_Size, Alphabet, WordType>, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
+       bliss::hash::kmer::hash<KmerT<Kmer_Size, Alphabet, WordType>, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>
     >,
     bliss::io::FASTA, void>
     {
@@ -1563,8 +1563,8 @@ namespace bliss
         using MapType = bliss::index::distributed_counting_map<KmerType,
             bliss::io::CommunicationLayer<true>,
             bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
-            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner>,
-            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash_prefix, bliss::hash::kmer::LexicographicLessCombiner> >;
+            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
+            bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true> >;
 
         /// DEFINE kmer index value type (std::pair)
         using ValueType = typename MapType::value_type;

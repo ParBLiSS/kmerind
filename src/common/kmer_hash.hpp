@@ -138,8 +138,8 @@ namespace bliss {
           template <typename KMER, bool Prefix = false>
           class hash;
 
-          template <typename KMER>
-          using hash_prefix = hash<KMER, true>;
+//          template <typename KMER>
+//          using hash_prefix = hash<KMER, true>;
 
           /**
            * @brief  Kmer hash, returns the least significant NumBits directly as identity hash.
@@ -179,8 +179,8 @@ namespace bliss {
           template <typename KMER, bool Prefix = false>
           class hash;
 
-          template <typename KMER>
-          using hash_prefix = hash<KMER, true>;
+//          template <typename KMER>
+//          using hash_prefix = hash<KMER, true>;
 
           /**
            * @brief  Kmer hash, returns the least significant NumBits directly as identity hash.
@@ -212,6 +212,8 @@ namespace bliss {
 
         }
 
+        //          template <typename KMER>
+        //          using hash_prefix = hash<KMER, true>;
 
 
         namespace murmur {
@@ -219,8 +221,8 @@ namespace bliss {
           template <typename KMER, bool Prefix = false>
           class hash;
 
-          template <typename KMER>
-          using hash_prefix = hash<KMER, true>;
+//          template <typename KMER>
+//          using hash_prefix = hash<KMER, true>;
 
           /**
            * @brief Kmer specialization for MurmurHash.  generated hash is 128 bit.
@@ -267,8 +269,8 @@ namespace bliss {
           template <typename KMER, bool Prefix = false>
           class hash;
 
-          template <typename KMER>
-          using hash_prefix = hash<KMER, true>;
+//          template <typename KMER>
+//          using hash_prefix = hash<KMER, true>;
 
           /**
            * @brief  Kmer hash, returns the least significant NumBits from murmur hash.
@@ -331,24 +333,24 @@ namespace bliss {
        * @tparam COMBINER    combine function for KMolecule (explicit, or implicit).  if void, no combiner is used.
        */
 
-      template<typename KMER, template <typename> class HASHFUNC, template <typename> class Combiner>
+      template<typename KM, template <typename, bool> class HASHFUNC, template <typename> class Combiner, bool Prefix = false>
       class hash;
 
 //               template <unsigned int, typename, typename> class KMER,
-      template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE,
-               template <typename> class HASHFUNC>
+      template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE, bool Prefix,
+               template <typename, bool> class HASHFUNC>
       class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>,
-                  HASHFUNC, IdentityCombiner>
+                  HASHFUNC, IdentityCombiner, Prefix >
       {
         protected:
           using KmerType = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
 
-          HASHFUNC< KmerType > kmer_hash;
+          HASHFUNC< KmerType, Prefix > kmer_hash;
 
         public:
           using value_type = KmerType;
 
-          hash(unsigned int bits = HASHFUNC<KmerType>::default_init_value) : kmer_hash(bits) {};
+          hash(unsigned int bits = HASHFUNC<KmerType, Prefix>::default_init_value) : kmer_hash(bits) {};
 
           /**
            * @brief function to compute the kmolecule's hash
@@ -363,21 +365,21 @@ namespace bliss {
           }
       };
 
-      template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE,
-               template <typename> class HASHFUNC, template <typename> class COMBINER>
+      template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE, bool Prefix,
+               template <typename, bool> class HASHFUNC, template <typename> class COMBINER>
       class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>,
-                  HASHFUNC, COMBINER>
+                  HASHFUNC, COMBINER, Prefix>
       {
         protected:
           using KmerType = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
 
-          HASHFUNC< KmerType > kmer_hash;
+          HASHFUNC< KmerType, Prefix > kmer_hash;
           COMBINER< KmerType > combiner;
 
         public:
           using value_type = KmerType;
 
-          hash(unsigned int bits = HASHFUNC<KmerType>::default_init_value) : kmer_hash(bits) {};
+          hash(unsigned int bits = HASHFUNC<KmerType, Prefix>::default_init_value) : kmer_hash(bits) {};
 
           /**
            * @brief function to compute the kmolecule's hash
@@ -393,22 +395,22 @@ namespace bliss {
       };
 
       /// xor with rev complement, then hash
-      template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE,
-               template < typename > class HASHFUNC, template <typename> class COMBINER>
+      template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE, bool Prefix,
+               template < typename, bool> class HASHFUNC, template <typename> class COMBINER>
       class hash< ::std::pair<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>,
                               ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> >,
-                  HASHFUNC, COMBINER>
+                  HASHFUNC, COMBINER, Prefix>
       {
         protected:
           using KmerType = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
 
-          HASHFUNC< KmerType > kmer_hash;
+          HASHFUNC< KmerType, Prefix > kmer_hash;
           COMBINER< KmerType > combiner;
 
         public:
           using value_type = ::std::pair<KmerType, KmerType>;
 
-          hash(unsigned int bits = HASHFUNC<KmerType>::default_init_value) : kmer_hash(bits) {};
+          hash(unsigned int bits = HASHFUNC<KmerType, Prefix>::default_init_value) : kmer_hash(bits) {};
 
           /**
            * @brief function to compute the kmolecule's hash
