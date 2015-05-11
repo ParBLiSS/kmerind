@@ -31,8 +31,6 @@
 #include "mpi.h"
 #endif
 
-#include "io/mxx_support.hpp"
-
 //#if defined(USE_OPENMP)
 //#include "omp.h"
 //#endif
@@ -42,26 +40,24 @@
 #include <utility>
 #include <type_traits>
 
-//#include "common/kmer.hpp"
-//#include "common/base_types.hpp"
-//#include "common/alphabet_traits.hpp"
-//#include "io/fastq_loader.hpp"
+#include "io/fastq_loader.hpp"
 //#include "io/fasta_loader.hpp"
 //#include "io/fasta_iterator.hpp"
-//#include "io/file_loader.hpp"
-//#include "io/communication_layer.hpp"
-//#include "index/distributed_map.hpp"
-//#include "iterators/zip_iterator.hpp"
-//#include "iterators/transform_iterator.hpp"
-//#include "io/sequence_id_iterator.hpp"
-//#include "io/sequence_iterator.hpp"
-//#include "common/kmer_iterators.hpp"
-//#include "index/quality_score_iterator.hpp"
-//#include "common/kmer_hash.hpp"
 
-//#include "retired/kmer_index_generator.hpp"
-//#include "retired/kmer_index_functors.hpp"
-//#include "retired/buffered_transform_iterator.hpp"
+#include "utils/logging.h"
+#include "common/alphabets.hpp"
+#include "common/kmer.hpp"
+#include "common/base_types.hpp"
+#include "utils/kmer_utils.hpp"
+
+#include "io/mxx_support.hpp"
+#include "wip/distributed_map.hpp"
+#include "io/sequence_iterator.hpp"
+#include "io/sequence_id_iterator.hpp"
+#include "iterators/transform_iterator.hpp"
+#include "common/kmer_iterators.hpp"
+#include "iterators/zip_iterator.hpp"
+#include "index/quality_score_iterator.hpp"
 
 namespace bliss
 {
@@ -262,6 +258,13 @@ namespace bliss
                     t2 - t1);
             INFOF("R %d inserted: %f. final size = %lu", commRank, time_span.count(), map.size());
 
+            t1 = std::chrono::high_resolution_clock::now();
+            map.update_multiplicity();
+            t2 = std::chrono::high_resolution_clock::now();
+            time_span =
+                std::chrono::duration_cast<std::chrono::duration<double>>(
+                    t2 - t1);
+            INFOF("R %d updated multiplicity: %f. final size = %lu", commRank, time_span.count(), map.size());
           }
 
           std::vector<TupleType> find(std::vector<KmerType> &query) {
@@ -490,6 +493,13 @@ namespace bliss
                     t2 - t1);
             INFOF("R %d inserted: %f. final size = %lu", commRank, time_span.count(), map.size());
 
+            t1 = std::chrono::high_resolution_clock::now();
+            map.update_multiplicity();
+            t2 = std::chrono::high_resolution_clock::now();
+            time_span =
+                std::chrono::duration_cast<std::chrono::duration<double>>(
+                    t2 - t1);
+            INFOF("R %d updated multiplicity: %f. final size = %lu", commRank, time_span.count(), map.size());
           }
 
           std::vector<TupleType> find(std::vector<KmerType> &query) {
@@ -662,6 +672,7 @@ namespace bliss
             INFOF("R %d file open time: %f", commRank, time_span.count());
 
             build(temp);
+
           }
 
           void build(std::vector<KmerType> &temp) {
@@ -694,6 +705,13 @@ namespace bliss
               assert(it->second > 0 && it->second < est_size);
             }
 
+            t1 = std::chrono::high_resolution_clock::now();
+            map.update_multiplicity();
+            t2 = std::chrono::high_resolution_clock::now();
+            time_span =
+                std::chrono::duration_cast<std::chrono::duration<double>>(
+                    t2 - t1);
+            INFOF("R %d updated multiplicity: %f. final size = %lu", commRank, time_span.count(), map.size());
           }
 
           std::vector<TupleType> find(std::vector<KmerType> &query) {

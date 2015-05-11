@@ -262,6 +262,10 @@ namespace dsc  // distributed std container
       /// returns the local storage.  please use sparingly.
       local_container_type& get_local_container() { return c; }
 
+      /// update the multiplicity.  only multimap needs to do this.
+      virtual void update_multiplicity() const {}
+
+
       // note that for each method, there is a local version of the operartion.
       // this is for use by the asynchronous version of communicator as callback for any messages received.
       /// check if empty.
@@ -315,7 +319,7 @@ namespace dsc  // distributed std container
        */
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys) const {
         ::std::vector<::std::pair<Key, size_type> > results;
-        if (keys.size() == 0) return results;
+        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
 
         // keep unique keys
         retain_unique_keys(keys);
@@ -365,7 +369,7 @@ namespace dsc  // distributed std container
       template <typename Predicate>
       ::std::vector<::std::pair<Key, size_type> > count_if(::std::vector<Key>& keys, Predicate const & pred) const {
         ::std::vector<::std::pair<Key, size_type> > results;
-        if (keys.size() == 0) return results;
+        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
 
         // keep unique keys
         retain_unique_keys(keys);
@@ -413,7 +417,7 @@ namespace dsc  // distributed std container
        * @param last
        */
       void erase(::std::vector<Key>& keys) {
-          if (keys.size() == 0) return;
+        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
 
           // remove duplicates
           retain_unique_keys(keys);
@@ -440,7 +444,7 @@ namespace dsc  // distributed std container
        */
       template <typename Predicate>
       void erase_if(::std::vector<Key>& keys, Predicate const & pred) {
-          if (keys.size() == 0) return;
+        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
 
           // remove duplicates
           retain_unique_keys(keys);
@@ -602,7 +606,6 @@ namespace dsc  // distributed std container
 
       virtual ~unordered_map() {};
 
-
       /**
        * @brief find elements with the specified keys in the distributed unordered_multimap.
        * @param first
@@ -610,7 +613,7 @@ namespace dsc  // distributed std container
        */
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys) const {
         ::std::vector<::std::pair<Key, T> > results;
-        if (keys.size() == 0) return results;
+        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
 
         // keep unique keys
         this->retain_unique_keys(keys);
@@ -658,7 +661,7 @@ namespace dsc  // distributed std container
       template <class Predicate>
       ::std::vector<::std::pair<Key, T> > find_if(::std::vector<Key>& keys, Predicate const & pred) const {
         ::std::vector<::std::pair<Key, T> > results;
-        if (keys.size() == 0) return results;
+        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
 
         // keep unique keys
         this->retain_unique_keys(keys);
@@ -705,7 +708,7 @@ namespace dsc  // distributed std container
        * @param last
        */
       void insert(std::vector<::std::pair<Key, T> >& input) {
-        if (input.size() == 0) return;
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
         // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
         retain_unique(input);
@@ -732,7 +735,7 @@ namespace dsc  // distributed std container
        */
       template <class Predicate>
       void insert_if(std::vector<::std::pair<Key, T> >& input, Predicate const & pred) {
-        if (input.size() == 0) return;
+          // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
         // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
         retain_unique(input);
@@ -871,6 +874,22 @@ namespace dsc  // distributed std container
 
       virtual ~unordered_multimap() {}
 
+      /// update the multiplicity.  only multimap needs to do this.
+      virtual void update_multiplicity() const {
+        // one approach is to count the number of unique key then divide the map size by that.  problem is that we know the unique set.
+        //  c.size / #unique.  requires unique set, or add 1 the first time a key is encountered.
+        // another approach is to add up the number of repeats for the key of each entry, then divide by total count.  this is our approach
+        //  sum(count per key) / c.size.
+
+        size_t repeat_count = 0;
+        for (auto it = this->c.cbegin(), end=this->c.cend(); it != end; ++it ) {
+          repeat_count += this->c.count(it->first);
+        }
+
+        // okay to go up by 1 to make the math simpler.
+        this->key_multiplicity = repeat_count / this->c.size() + 1;
+        INFOF("R %d key multiplicity = %lu", this->comm_rank, this->key_multiplicity);
+      }
 
 
       /**
@@ -880,7 +899,7 @@ namespace dsc  // distributed std container
        */
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys) const {
         ::std::vector<::std::pair<Key, T> > results;
-        if (keys.size() == 0) return results;
+        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
 
         // keep unique keys
         this->retain_unique_keys(keys);
@@ -929,7 +948,7 @@ namespace dsc  // distributed std container
       template <typename Predicate>
       ::std::vector<::std::pair<Key, T> > find_if(::std::vector<Key>& keys, Predicate const& pred) const {
         ::std::vector<::std::pair<Key, T> > results;
-        if (keys.size() == 0) return results;
+        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
 
         // keep unique keys
         this->retain_unique_keys(keys);
@@ -978,7 +997,7 @@ namespace dsc  // distributed std container
        * @param last
        */
       void insert(std::vector<::std::pair<Key, T> >& input) {
-        if (input.size() == 0) return;
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
         // communication part
         if (this->comm_size > 1) {
@@ -998,7 +1017,7 @@ namespace dsc  // distributed std container
        */
       template <typename Predicate>
       void insert_if(std::vector<::std::pair<Key, T> >& input, Predicate const & pred) {
-        if (input.size() == 0) return;
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
         // communication part
         if (this->comm_size > 1) {
@@ -1145,7 +1164,7 @@ namespace dsc  // distributed std container
        * @param last
        */
       void insert(std::vector<::std::pair<Key, T> >& input) {
-        if (input.size() == 0) return;
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
         // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
         local_reduction(input);
@@ -1171,7 +1190,7 @@ namespace dsc  // distributed std container
        */
       template <typename Predicate>
       void insert_if(std::vector<::std::pair<Key, T> >& input, Predicate const & pred) {
-        if (input.size() == 0) return;
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
         // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
         local_reduction(input);
@@ -1303,7 +1322,7 @@ namespace dsc  // distributed std container
        * @param last
        */
       void insert(std::vector< Key >& input) {
-        if (input.size() == 0) return;
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
         // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
         auto temp = local_reduction(input);
@@ -1329,7 +1348,7 @@ namespace dsc  // distributed std container
        */
       template <typename Predicate>
       void insert_if(std::vector< Key >& input, Predicate &pred) {
-        if (input.size() == 0) return;
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
         // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
         auto temp = local_reduction(input);

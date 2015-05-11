@@ -17,17 +17,15 @@
 #include <functional>
 #include <random>
 #include <algorithm>
-#include "utils/logging.h"
-
-#include "common/alphabets.hpp"
-
-
-#include "common/kmer.hpp"
-#include "common/base_types.hpp"
 #include <string>
 #include <sstream>
-#include "utils/kmer_utils.hpp"
 #include <chrono>
+
+#include "utils/logging.h"
+#include "common/alphabets.hpp"
+#include "common/kmer.hpp"
+#include "common/base_types.hpp"
+#include "utils/kmer_utils.hpp"
 
 #include "io/mxx_support.hpp"
 #include "wip/distributed_map.hpp"
@@ -323,8 +321,8 @@ int main(int argc, char** argv) {
   //////////////// parse parameters
 
   //std::string filename("/home/tpan/src/bliss/test/data/test.medium.fastq");
-  //std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
-  std::string filename("/mnt/data/1000genome/HG00096/sequence_read/SRR077487_1.filt.0_0078235.fastq");
+  std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
+
   if (argc > 1)
   {
     filename.assign(argv[1]);
