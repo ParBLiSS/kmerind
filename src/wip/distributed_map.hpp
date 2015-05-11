@@ -121,18 +121,7 @@ namespace dsc  // distributed std container
       // defined Communicator as a friend
       friend Comm;
 
-      // note that for each method, there is a local version of the operartion.
-      // this is for use by the asynchronous version of communicator as callback for any messages received.
-      /// check if empty.
-      bool local_empty() const noexcept {
-        return c.empty();
-      }
 
-
-      /// get size of local container
-      size_type local_size() const noexcept {
-        return c.size();
-      }
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_reserve( size_type n) {
@@ -218,16 +207,34 @@ namespace dsc  // distributed std container
       /// returns the local storage.  please use sparingly.
       local_container_type& get_local_container() { return c; }
 
+      // note that for each method, there is a local version of the operartion.
+      // this is for use by the asynchronous version of communicator as callback for any messages received.
+      /// check if empty.
+      bool local_empty() const noexcept {
+        return c.empty();
+      }
+
+
+      /// get size of local container
+      size_type local_size() const noexcept {
+        return c.size();
+      }
+
       /// check if empty.
       bool empty() const noexcept {
-          // all reduce
-        return mxx::test_all(local_empty(), comm);
+        if (comm_size == 1)
+          return local_empty();
+        else // all reduce
+          return mxx::test_all(local_empty(), comm);
       }
 
       /// get size of distributed container
       size_type size() const noexcept {
         size_type s = local_size();
-        return mxx::allreduce(s, comm);
+        if (comm_size == 1)
+          return s;
+        else
+          return mxx::allreduce(s, comm);
       }
 
 
@@ -235,7 +242,7 @@ namespace dsc  // distributed std container
       void reserve( size_type n) {
         // direct reserve + barrier
         local_reserve(n);
-        MPI_Barrier(comm);
+        if (comm_size > 1) MPI_Barrier(comm);
       }
 
 
@@ -243,7 +250,7 @@ namespace dsc  // distributed std container
       void rehash( size_type n) {
         // direct rehash + barrier
         local_rehash(n);
-        MPI_Barrier(comm);
+        if (comm_size > 1) MPI_Barrier(comm);
       }
 
 
@@ -328,7 +335,7 @@ namespace dsc  // distributed std container
       void clear() noexcept {
         // clear + barrier.
         local_clear();
-        MPI_Barrier(comm);
+        if (comm_size > 1) MPI_Barrier(comm);
       }
 
 
