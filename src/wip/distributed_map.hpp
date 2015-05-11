@@ -3,8 +3,10 @@
  * @ingroup index
  * @author  Tony Pan <tpan7@gatech.edu>
  * @author  Patrick Flick <patrick.flick@gmail.com>
- * @brief   Implements the distributed_multimap, distributed reduction map, and distributed_counting_map
+ * @brief   Implements the distributed_multimap, distributed map, and distributed_reduction_map
  *          data structures.
+ *
+ *          implementation is hash-base (O(1) lookup). later will support sort-based (load balanced).
  *
  *          for now, input and output via local vectors.
  *          (later, allow remote vectors,
@@ -14,7 +16,10 @@
  *            may not be efficient though if we don't have local spatial coherence..
  *          )
  *
+ *          most create-find-delete operations support remote filtering via predicates.
+ *          most create-find-delete oeprations support remote transformation.
  *
+ *          signature of predicate is bool pred(T&).  if predicate needs to access the local map, it should be done via its constructor.
  *
  *
  * Copyright (c) 2014 Georgia Institute of Technology. All Rights Reserved.
@@ -59,7 +64,8 @@ namespace dsc  // distributed std container
    * @brief  distributed unordered map following std unordered map's interface.
    * @details   This class is modeled after the std::unordered_map.
    *         it has as much of the same methods of std::unordered_map as possible.  however, all methods consider the fact
-   *         that the data are in distributed memory space, so to access the data, "communication" is needed.
+   *         that the data are in distributed memory space, so to access the data, "communication" is needed.  Also since we
+   *         are working with 'distributed' data, batched operations are preferred.
    *
    *         Note that "communication" is a weak concept here meaning that we are accessing a different local container.
    *         as such, communicator may be defined for MPI, UPC, OpenMP, etc.
@@ -144,9 +150,27 @@ namespace dsc  // distributed std container
           if (first == last) return 0;
 
           size_t before = output.size();  // before size.
-          size_type cc;
           for (auto it = first; it != last; ++it) {
              output.emplace_back(*it, c.count(*it));
+          }
+          return output.size() - before;
+      }
+
+      /**
+       * @brief predicate version of local_count.  example use: count items with counts of 1 only.
+       * @param first
+       * @param last
+       * @param output
+       * @param pred
+       * @return
+       */
+      template<class InputIterator, class Predicate>
+      size_t local_count_if(InputIterator first, InputIterator last, ::std::vector<::std::pair<Key, size_type> > &output, Predicate const & pred) const {
+          if (first == last) return 0;
+
+          size_t before = output.size();  // before size.
+          for (auto it = first; it != last; ++it) {
+             if (pred(*it)) output.emplace_back(*it, c.count(*it));
           }
           return output.size() - before;
       }
@@ -155,12 +179,29 @@ namespace dsc  // distributed std container
       /**
        * @brief insert new elements in the distributed unordered_multimap.
        * @param first
-       * @>>[M#[M [M#[M T?[M T?param last
+       * @param last
        */
       template <class InputIterator>
       void local_insert(InputIterator first, InputIterator last) {
+          if (first == last) return;
+
           c.insert(first, last);
       }
+
+      /**
+       * @brief insert new elements in the distributed unordered_multimap.  example use: stop inserting if more than x entries.
+       * @param first
+       * @param last
+       */
+      template <class InputIterator, class Predicate>
+      void local_insert_if(InputIterator first, InputIterator last, Predicate const &pred) {
+          if (first == last) return;
+
+          for (auto it = first; it != last; ++it) {
+            if (pred(*it)) c.insert(*it);
+          }
+      }
+
 
       /**
        * @brief erase elements with the specified keys in the distributed unordered_multimap.
@@ -174,6 +215,20 @@ namespace dsc  // distributed std container
         for (auto it = first; it != last; ++it) {
           c.erase(*it);
         }      
+      }
+
+      /**
+       * @brief erase elements with the specified keys in the distributed unordered_multimap.  example use:  remove all entries with low frequency
+       * @param first
+       * @param last
+       */
+      template <class InputIterator, class Predicate>
+      void local_erase_if(InputIterator first, InputIterator last, Predicate const &pred) {
+        if (first == last) return;
+
+        for (auto it = first; it != last; ++it) {
+          if (pred(*it)) c.erase(*it);
+        }
       }
 
       /// clears the unordered_map
@@ -213,7 +268,6 @@ namespace dsc  // distributed std container
       bool local_empty() const noexcept {
         return c.empty();
       }
-
 
       /// get size of local container
       size_type local_size() const noexcept {
@@ -304,6 +358,56 @@ namespace dsc  // distributed std container
       }
 
       /**
+       * @brief count elements with the specified keys in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <typename Predicate>
+      ::std::vector<::std::pair<Key, size_type> > count_if(::std::vector<Key>& keys, Predicate const & pred) const {
+        ::std::vector<::std::pair<Key, size_type> > results;
+        if (keys.size() == 0) return results;
+
+        // keep unique keys
+        retain_unique_keys(keys);
+
+        if (comm_size > 1) {
+          // distribute (communication part)
+          std::vector<int> recv_counts;
+
+          recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
+             return (this->hashf(x) % comm_size);
+           }, comm);
+
+          // local find. memory utilization a potential problem.
+          // do for each src proc one at a time.
+
+          results.reserve(keys.size());                   // TODO:  should estimate coverage.
+          auto start = keys.begin();
+          auto end = start;
+          for (int i = 0; i < comm_size; ++i) {
+            ::std::advance(end, recv_counts[i]);
+
+            // work on query from process i.
+            local_count_if( start, end, results, pred);
+
+            if (comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", comm_rank, send_counts[i], recv_counts[i], i);
+
+            start = end;
+          }
+
+          // send back using the constructed recv count
+          mxx::all2all(results, recv_counts, comm);
+
+        } else {
+          local_count_if(keys.begin(), keys.end(), results, pred);
+        }
+
+        return results;
+
+      }
+
+
+      /**
        * @brief erase elements with the specified keys in the distributed unordered_multimap.
        * @param first
        * @param last
@@ -328,6 +432,34 @@ namespace dsc  // distributed std container
           // then call local remove.
           local_erase(keys.begin(), keys.end());
       }
+
+      /**
+       * @brief erase elements with the specified keys in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <typename Predicate>
+      void erase_if(::std::vector<Key>& keys, Predicate const & pred) {
+          if (keys.size() == 0) return;
+
+          // remove duplicates
+          retain_unique_keys(keys);
+
+          if (comm_size > 1) {
+            // redistribute keys
+            mxx2::msgs_all2all(keys, [&] ( Key const &x) {
+               return (this->hashf(x) % comm_size);
+             }, comm);
+
+
+            // remove duplicates again
+            retain_unique_keys(keys);
+          }
+
+          // then call local remove.
+          local_erase_if(keys.begin(), keys.end(), pred);
+      }
+
 
       // update done via erase/insert.
 
@@ -433,7 +565,27 @@ namespace dsc  // distributed std container
           return output.size() - before;  // after size.
       }
 
+      /**
+       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class InputIterator, class Predicate>
+      size_t local_find_if(InputIterator first, InputIterator last, ::std::vector<::std::pair<Key, T> > & output, Predicate const & pred) const {
+          if (first == last) return 0;
 
+          size_t before = output.size();  // before size.
+          for (auto it = first; it != last; ++it) {
+            if (!pred(*it)) continue;
+
+            auto iter = this->c.find(*it);
+
+            if (iter != this->c.end()) {
+              output.insert(output.end(), *iter);
+            }  // no insert if can't find it.
+          }
+          return output.size() - before;  // after size.
+      }
 
       void retain_unique(::std::vector<::std::pair<Key, T> >& input) const {
         if (input.size() == 0) return;
@@ -498,6 +650,54 @@ namespace dsc  // distributed std container
         return results;
       }
 
+      /**
+       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class Predicate>
+      ::std::vector<::std::pair<Key, T> > find_if(::std::vector<Key>& keys, Predicate const & pred) const {
+        ::std::vector<::std::pair<Key, T> > results;
+        if (keys.size() == 0) return results;
+
+        // keep unique keys
+        this->retain_unique_keys(keys);
+
+
+        if (this->comm_size > 1) {
+          // distribute (communication part)
+          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
+             return (this->hashf(x) % this->comm_size);
+           }, this->comm);
+
+          // local find. memory utilization a potential problem.
+          // do for each src proc one at a time.
+
+          std::vector<int> send_counts(this->comm_size, 0);
+          results.reserve(keys.size() * this->key_multiplicity);  // 1 result per key.
+          auto start = keys.begin();
+          auto end = start;
+          for (int i = 0; i < this->comm_size; ++i) {
+            ::std::advance(end, recv_counts[i]);
+
+            // work on query from process i.
+            send_counts[i] = local_find_if( start, end, results, pred);
+
+            if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+
+            start = end;
+          }
+
+          // send back using the constructed recv count
+          mxx::all2all(results, send_counts, this->comm);
+
+        } else {
+          local_find_if(keys.begin(), keys.end(), results, pred);
+        }
+
+        return results;
+      }
+
 
       /**
        * @brief insert new elements in the distributed unordered_multimap.
@@ -522,6 +722,33 @@ namespace dsc  // distributed std container
 
         // local compute part.  called by the communicator.
         this->Base::local_insert(input.begin(), input.end());
+      }
+
+
+      /**
+       * @brief insert new elements in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class Predicate>
+      void insert_if(std::vector<::std::pair<Key, T> >& input, Predicate const & pred) {
+        if (input.size() == 0) return;
+
+        // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+        retain_unique(input);
+
+        // communication part
+        if (this->comm_size > 1) {
+          mxx2::msgs_all2all(input, [&] ( ::std::pair<Key, T> const &x) {
+             return (this->hashf(x.first) % this->comm_size);
+           }, this->comm);
+        }
+
+        // after communication, sort again to keep unique  - may not be needed
+        retain_unique(input);
+
+        // local compute part.  called by the communicator.
+        this->Base::local_insert_if(input.begin(), input.end(), pred);
       }
 
 
@@ -612,6 +839,27 @@ namespace dsc  // distributed std container
           return output.size() - before;  // after size.
       }
 
+      /**
+       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class InputIterator, class Predicate>
+      size_t local_find_if(InputIterator first, InputIterator last, ::std::vector<::std::pair<Key, T> > &output, Predicate const& pred) const {
+          if (first == last) return 0;
+
+          size_t before = output.size();  // before size.
+          for (auto it = first; it != last; ++it) {
+            if (!pred(*it)) continue;
+
+             auto range = this->c.equal_range(*it);
+
+            if (range.first != range.second) {
+              output.insert(output.end(), range.first, range.second);
+            }  // no insert if can't find it.
+          }
+          return output.size() - before;  // after size.
+      }
 
 
     public:
@@ -673,6 +921,55 @@ namespace dsc  // distributed std container
 
       }
 
+      /**
+       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <typename Predicate>
+      ::std::vector<::std::pair<Key, T> > find_if(::std::vector<Key>& keys, Predicate const& pred) const {
+        ::std::vector<::std::pair<Key, T> > results;
+        if (keys.size() == 0) return results;
+
+        // keep unique keys
+        this->retain_unique_keys(keys);
+
+
+        if (this->comm_size > 1) {
+          // distribute (communication part)
+          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
+             return (this->hashf(x) % this->comm_size);
+           }, this->comm);
+
+          // local find. memory utilization a potential problem.
+          // do for each src proc one at a time.
+
+          std::vector<int> send_counts(this->comm_size, 0);
+          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+          auto start = keys.begin();
+          auto end = start;
+          for (int i = 0; i < this->comm_size; ++i) {
+            ::std::advance(end, recv_counts[i]);
+
+            // work on query from process i.
+            send_counts[i] = local_find_if( start, end, results, pred);
+
+            if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+
+            start = end;
+          }
+
+          // send back using the constructed recv count
+          mxx::all2all(results, send_counts, this->comm);
+
+        } else {
+          local_find_if(keys.begin(), keys.end(), results, pred);
+        }
+
+        return results;
+
+      }
+
 
 
       /**
@@ -692,6 +989,26 @@ namespace dsc  // distributed std container
 
         // local compute part.  called by the communicator.
         this->Base::local_insert(input.begin(), input.end());
+      }
+
+      /**
+       * @brief insert new elements in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <typename Predicate>
+      void insert_if(std::vector<::std::pair<Key, T> >& input, Predicate const & pred) {
+        if (input.size() == 0) return;
+
+        // communication part
+        if (this->comm_size > 1) {
+          mxx2::msgs_all2all(input, [&] ( ::std::pair<Key, T> const &x) {
+             return (this->hashf(x.first) % this->comm_size);
+           }, this->comm);
+        }
+
+        // local compute part.  called by the communicator.
+        this->Base::local_insert_if(input.begin(), input.end(), pred);
       }
 
   };
@@ -777,6 +1094,18 @@ namespace dsc  // distributed std container
           }
       }
 
+      /**
+       * @brief insert new elements in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class InputIterator, class Predicate>
+      void local_insert_if(InputIterator first, InputIterator last, Predicate const & pred) {
+          for (auto it = first; it != last; ++it) {
+            if (pred(*it)) this->c[it->first] = r(this->c[it->first], it->second);
+          }
+      }
+
       void local_reduction(::std::vector<::std::pair<Key, T> >& input) {
         if (input.size() == 0) return;
 
@@ -834,6 +1163,33 @@ namespace dsc  // distributed std container
         // local compute part.  called by the communicator.
         local_insert(input.begin(), input.end());
       }
+
+      /**
+       * @brief insert new elements in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <typename Predicate>
+      void insert_if(std::vector<::std::pair<Key, T> >& input, Predicate const & pred) {
+        if (input.size() == 0) return;
+
+        // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+        local_reduction(input);
+
+        // communication part
+        if (this->comm_size > 1) {
+          mxx2::msgs_all2all(input, [&] ( ::std::pair<Key, T> const &x) {
+             return (this->hashf(x.first) % this->comm_size);
+           }, this->comm);
+        }
+
+        // after communication, sort again to keep unique  - may not be needed
+        local_reduction(input);
+
+        // local compute part.  called by the communicator.
+        local_insert_if(input.begin(), input.end(), pred);
+      }
+
 
   };
 
@@ -966,6 +1322,31 @@ namespace dsc  // distributed std container
         this->Base::local_insert(temp.begin(), temp.end());
       }
 
+      /**
+       * @brief insert new elements in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <typename Predicate>
+      void insert_if(std::vector< Key >& input, Predicate &pred) {
+        if (input.size() == 0) return;
+
+        // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+        auto temp = local_reduction(input);
+
+        // communication part
+        if (this->comm_size > 1) {
+          mxx2::msgs_all2all(temp, [&] ( ::std::pair<Key, T> const &x) {
+             return (this->hashf(x.first) % this->comm_size);
+           }, this->comm);
+        }
+
+        // after communication, sort again to keep unique  - may not be needed
+        this->Base::local_reduction(temp);
+
+        // local compute part.  called by the communicator.
+        this->Base::local_insert_if(temp.begin(), temp.end(), pred);
+      }
 
 
   };
