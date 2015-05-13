@@ -59,6 +59,8 @@
 #include "iterators/zip_iterator.hpp"
 #include "index/quality_score_iterator.hpp"
 
+#include "utils/timer.hpp"
+
 namespace bliss
 {
   namespace index
@@ -66,21 +68,185 @@ namespace bliss
     namespace kmer
     {
 
+      template <typename MapType>
+      class Index {
+        protected:
+          MapType map;
 
+          using KmerType = typename MapType::key_type;
+          using IdType   = typename MapType::mapped_type;
+          using TupleType =      std::pair<KmerType, IdType>;
+
+          using Alphabet = typename KmerType::KmerAlphabet;
+
+          using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
+
+          //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+          // from FileLoader type, get the block iter type and range type
+          using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
+
+          using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
+          using SeqType = typename ParserType::SequenceType;
+          using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+
+
+          /// converter from ascii to alphabet values
+          using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+
+          /// kmer generation iterator
+          using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+
+
+          MPI_Comm comm;
+          int commSize;
+          int commRank;
+
+        public:
+          Index(MPI_Comm _comm, int _comm_size) : map(_comm, _comm_size), comm(_comm) {
+            MPI_Comm_size(_comm, &commSize);
+            MPI_Comm_rank(_comm, &commRank);
+          }
+
+          virtual ~Index() {};
+
+
+          MapType & get_map() {
+            return map;
+          }
+
+
+          std::vector<KmerType> read_file_for_kmers(const std::string & filename, MPI_Comm comm) {
+
+            std::vector< KmerType > temp;
+            TIMER_INIT(file);
+
+            {
+
+
+              TIMER_START(file);
+              //==== create file Loader
+              FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+              typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
+              TIMER_END(file, "open", partition.getRange().size());
+
+
+              //== reserve
+              TIMER_START(file);
+              // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
+              // index reserve internally sends a message to itself.
+              // call after getting first L1Block to ensure that file is loaded.
+              size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
+              temp.reserve(est_size);
+              TIMER_END(file, "reserve", est_size);
+
+
+
+              // == create kmer iterator
+              //            kmer_iter start(data, range);
+              //            kmer_iter end(range.second,range.second);
+
+              TIMER_START(file);
+
+              ParserType parser;
+              //=== copy into array
+              while (partition.getRange().size() > 0) {
+                //== process the chunk of data
+                SeqType read;
+
+                //==  and wrap the chunk inside an iterator that emits Reads.
+                SeqIterType seqs_start(parser, partition.begin(), partition.end(), partition.getRange().start);
+                SeqIterType seqs_end(partition.end());
+
+
+                //== loop over the reads
+                for (; seqs_start != seqs_end; ++seqs_start)
+                {
+                  // first get read
+                  read = *seqs_start;
+
+                  // then compute and store into index (this will generate kmers and insert into index)
+                  if (read.seqBegin == read.seqEnd) continue;
+
+                  //== set up the kmer generating iterators.
+                  KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
+                  KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+
+                  temp.insert(temp.end(), start, end);
+                }
+
+                partition = loader.getNextL1Block();
+              }
+              TIMER_END(file, "read", temp.size());
+            }
+
+            TIMER_REPORT_MPI(file, commRank, comm);
+            return temp;
+          }
+
+
+
+          std::vector<TupleType> find(std::vector<KmerType> &query) {
+            return map.find(query);
+          }
+
+          std::vector<std::pair<KmerType, size_t> > count(std::vector<KmerType> &query) {
+            return map.count(query);
+          }
+
+          void erase(std::vector<KmerType> &query) {
+            map.erase(query);
+          }
+
+
+          template <typename Predicate>
+          std::vector<TupleType> find_if(std::vector<KmerType> &query, Predicate const &pred) {
+            return map.find_if(query, pred);
+          }
+          template <typename Predicate>
+          std::vector<TupleType> find_if(Predicate const &pred) {
+            return map.find_if(pred);
+          }
+
+          template <typename Predicate>
+          std::vector<std::pair<KmerType, size_t> > count_if(std::vector<KmerType> &query, Predicate const &pred) {
+            return map.count_if(query, pred);
+          }
+
+          template <typename Predicate>
+          std::vector<std::pair<KmerType, size_t> > count_if(Predicate const &pred) {
+            return map.count_if(pred);
+          }
+
+
+          template <typename Predicate>
+          void erase_if(std::vector<KmerType> &query, Predicate const &pred) {
+            map.erase_if(query, pred);
+          }
+
+          template <typename Predicate>
+          void erase_if(Predicate const &pred) {
+            map.erase_if(pred);
+          }
+
+          size_t local_size() {
+            return map.local_size();
+          }
+
+      };
 
 
       /*
        * TYPE DEFINITIONS
        */
       template <typename MapType>
-      class PositionIndex {
+      class PositionIndex : public Index<MapType > {
         protected:
-          MapType map;
 
+          using Base = Index<MapType >;
 
-          using KmerType = typename MapType::key_type;
-          using IdType = typename MapType::mapped_type;
-          using TupleType = std::pair<KmerType, IdType>;
+          using KmerType = typename Base::KmerType;
+          using IdType =   typename Base::IdType;
+          using TupleType = typename Base::TupleType;
 
           using Alphabet = typename KmerType::KmerAlphabet;
 
@@ -108,63 +274,42 @@ namespace bliss
           using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, IdIterType>;
 
 
-          int commSize;
-          int commRank;
-
-          std::chrono::high_resolution_clock::time_point t1, t2;
-          std::chrono::duration<double> time_span;
-
-
         public:
           using map_type = MapType;
 
-          PositionIndex(MPI_Comm _comm, int _comm_size) : map(_comm, _comm_size) {
-            MPI_Comm_size(_comm, &commSize);
-            MPI_Comm_rank(_comm, &commRank);
-          };
+          PositionIndex(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {};
 
-          MapType & get_map() {
-            return map;
-          }
+          virtual ~PositionIndex() {};
 
 
           std::vector<TupleType> read_file(const std::string & filename, MPI_Comm comm) {
             std::vector< TupleType > temp;
 
+            TIMER_INIT(file);
+
             {
 
-              t1 = std::chrono::high_resolution_clock::now();
+              TIMER_START(file);
               //==== create file Loader
               FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
               typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
-
-              t2 = std::chrono::high_resolution_clock::now();
-              time_span =
-                  std::chrono::duration_cast<std::chrono::duration<double>>(
-                      t2 - t1);
-              INFOF("R %d file open time: %f, file range [%lu, %lu)", commRank, time_span.count(), partition.getRange().start, partition.getRange().end);
+              TIMER_END(file, "open", partition.getRange().size());
 
               //== reserve
-              t1 = std::chrono::high_resolution_clock::now();
+              TIMER_START(file);
               // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
               // index reserve internally sends a message to itself.
               // call after getting first L1Block to ensure that file is loaded.
-              size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
+              size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + this->commSize - 1) / this->commSize;
               temp.reserve(est_size);
 
-              t2 = std::chrono::high_resolution_clock::now();
-              time_span =
-                  std::chrono::duration_cast<std::chrono::duration<double>>(
-                      t2 - t1);
-              INFOF("R %d reserve time: %f", commRank, time_span.count());
-
+              TIMER_END(file, "reserve", est_size);
 
               // == create kmer iterator
               //            kmer_iter start(data, range);
               //            kmer_iter end(range.second,range.second);
 
-              t1 = std::chrono::high_resolution_clock::now();
-
+              TIMER_START(file);
 
               ParserType parser;
               //=== copy into array
@@ -200,18 +345,21 @@ namespace bliss
 
 
                   temp.insert(temp.end(), index_start, index_end);
-                  //        for (auto it = index_start; it != index_end; ++it) {
-                  //          temp.push_back(*it);
-                  //        }
-                  //std::copy(index_start, index_end, temp.end());
-                  //        INFOF("R %d inserted.  new temp size = %lu", commRank, temp.size());
                 }
 
                 partition = loader.getNextL1Block();
               }
+
+              TIMER_END(file, "read", temp.size());
+
             }
+            TIMER_REPORT_MPI(file, this->commRank, this->comm);
+
+
             return temp;
           }
+
+
 
           void build(const std::string & filename, MPI_Comm comm) {
             // ==  open file
@@ -219,63 +367,31 @@ namespace bliss
             //            range = df.open(filename, communicator);  // memmap internally
             //            data = df.data();
 
-            t1 = std::chrono::high_resolution_clock::now();
-
             ::std::vector<TupleType> temp = this->read_file(filename, comm);
-
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d load kmer array time: %f. temp size = %lu", commRank, time_span.count(), temp.size());
 
             build(temp);
           }
 
           void build(std::vector<TupleType> &temp) {
+            TIMER_INIT(build);
 
-
-            t1 = std::chrono::high_resolution_clock::now();
-
-            map.reserve(temp.size());
-
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d local kmer array time: %f. temp size = %lu", commRank, time_span.count(), temp.size());
+            TIMER_START(build);
+            this->map.reserve(temp.size());
+            TIMER_END(build, "reserve", temp.size());
 
 
             // distribute
-            t1 = std::chrono::high_resolution_clock::now();
+            TIMER_START(build);
+            this->map.insert(temp);
+            TIMER_END(build, "insert", this->map.local_size());
 
-            map.insert(temp);
 
+            TIMER_START(build);
+            size_t m = this->map.update_multiplicity();
+            TIMER_END(build, "multiplicity", m);
 
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d inserted: %f. final size = %lu", commRank, time_span.count(), map.size());
+            TIMER_REPORT_MPI(build, this->commRank, this->comm);
 
-            t1 = std::chrono::high_resolution_clock::now();
-            map.update_multiplicity();
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d updated multiplicity: %f. final size = %lu", commRank, time_span.count(), map.size());
-          }
-
-          std::vector<TupleType> find(std::vector<KmerType> &query) {
-            return map.find(query);
-          }
-          std::vector<std::pair<KmerType, size_t> > count(std::vector<KmerType> &query) {
-            return map.count(query);
-          }
-
-          size_t local_size() {
-            return map.local_size();
           }
 
 
@@ -288,19 +404,17 @@ namespace bliss
 
 
       template <typename MapType>
-      class PositionQualityIndex {
+      class PositionQualityIndex : public Index<MapType > {
         protected:
-          MapType map;
+          using Base = Index<MapType>;
 
-
-          using KmerType = typename MapType::key_type;
-          using KmerInfoType = typename MapType::mapped_type;
-          using TupleType = std::pair<KmerType, KmerInfoType>;
+          using KmerType = typename Base::KmerType;
+          using KmerInfoType =  typename Base::IdType;
+          using TupleType = typename Base::TupleType;
 
           using Alphabet = typename KmerType::KmerAlphabet;
           using IdType = typename KmerInfoType::first_type;
           using QualType = typename KmerInfoType::second_type;
-
 
           using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
           using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
@@ -310,7 +424,6 @@ namespace bliss
           using ParserType = bliss::io::FASTQParser<FileBlockIterType, QualType>;
           using SeqType = typename ParserType::SequenceType;
           using SeqIterType = bliss::io::SequencesIterator<ParserType>;
-
 
 
           /// converter from ascii to alphabet values
@@ -327,63 +440,43 @@ namespace bliss
           using KmerInfoIterType = bliss::iterator::ZipIterator<IdIterType, QualIterType>;
           using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, KmerInfoIterType>;
 
-          int commSize;
-          int commRank;
-
-          std::chrono::high_resolution_clock::time_point t1, t2;
-          std::chrono::duration<double> time_span;
-
 
         public:
 
           using map_type = MapType;
 
+          PositionQualityIndex(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {};
 
-          PositionQualityIndex(MPI_Comm _comm, int _comm_size) : map(_comm, _comm_size) {
-            MPI_Comm_size(_comm, &commSize);
-            MPI_Comm_rank(_comm, &commRank);
-          };
+          virtual ~PositionQualityIndex() {};
 
-
-          MapType & get_map() {
-            return map;
-          }
 
           std::vector<TupleType> read_file(const std::string & filename, MPI_Comm comm) {
             std::vector< TupleType > temp;
+            TIMER_INIT(file);
+
             {
-              t1 = std::chrono::high_resolution_clock::now();
+              TIMER_START(file);
               //==== create file Loader
               FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
               typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
-
-              t2 = std::chrono::high_resolution_clock::now();
-              time_span =
-                  std::chrono::duration_cast<std::chrono::duration<double>>(
-                      t2 - t1);
-              INFOF("R %d file open time: %f", commRank, time_span.count());
+              TIMER_END(file, "open", partition.getRange().size());
 
               //== reserve
-              t1 = std::chrono::high_resolution_clock::now();
+              TIMER_START(file);
               // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
               // index reserve internally sends a message to itself.
               // call after getting first L1Block to ensure that file is loaded.
-              size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
+              size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + this->commSize - 1) / this->commSize;
               temp.reserve(est_size);
 
-              t2 = std::chrono::high_resolution_clock::now();
-              time_span =
-                  std::chrono::duration_cast<std::chrono::duration<double>>(
-                      t2 - t1);
-              INFOF("R %d reserve time: %f", commRank, time_span.count());
-
+              TIMER_END(file, "reserve", est_size);
 
 
               // == create kmer iterator
               //            kmer_iter start(data, range);
               //            kmer_iter end(range.second,range.second);
 
-              t1 = std::chrono::high_resolution_clock::now();
+              TIMER_START(file);
 
               ParserType parser;
               //=== copy into array
@@ -437,13 +530,12 @@ namespace bliss
               }
 
 
-              t2 = std::chrono::high_resolution_clock::now();
-              time_span =
-                  std::chrono::duration_cast<std::chrono::duration<double>>(
-                      t2 - t1);
-              INFOF("R %d local kmer array time: %f. temp size = %lu", commRank, time_span.count(), temp.size());
+              TIMER_END(file, "read", temp.size());
+
 
             }
+            TIMER_REPORT_MPI(file, this->commRank, this->comm);
+
 
             return temp;
           }
@@ -454,65 +546,32 @@ namespace bliss
             //            range = df.open(filename, communicator);  // memmap internally
             //            data = df.data();
 
+            ::std::vector<TupleType> temp = this->read_file(filename, comm);
 
-            t1 = std::chrono::high_resolution_clock::now();
-
-            ::std::vector<TupleType> temp = read_file(filename, comm);
-
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d file open time: %f", commRank, time_span.count());
             build(temp);
           }
 
           void build(std::vector<TupleType> &temp) {
+            TIMER_INIT(build);
 
-            //== reserve
-            t1 = std::chrono::high_resolution_clock::now();
-            // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
-            // index reserve internally sends a message to itself.
-            // call after getting first L1Block to ensure that file is loaded.
-            map.reserve(temp.size());
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d reserve time: %f", commRank, time_span.count());
+            TIMER_START(build);
+            this->map.reserve(temp.size());
+            TIMER_END(build, "reserve", temp.size());
 
 
             // distribute
-            t1 = std::chrono::high_resolution_clock::now();
+            TIMER_START(build);
+            this->map.insert(temp);
+            TIMER_END(build, "insert", this->map.local_size());
 
-            map.insert(temp);
 
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d inserted: %f. final size = %lu", commRank, time_span.count(), map.size());
+            TIMER_START(build);
+            size_t m = this->map.update_multiplicity();
+            TIMER_END(build, "multiplicity", m);
 
-            t1 = std::chrono::high_resolution_clock::now();
-            map.update_multiplicity();
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d updated multiplicity: %f. final size = %lu", commRank, time_span.count(), map.size());
+            TIMER_REPORT_MPI(build, this->commRank, this->comm);
+
           }
-
-          std::vector<TupleType> find(std::vector<KmerType> &query) {
-            return map.find(query);
-          }
-          std::vector<std::pair<KmerType, size_t> > count(std::vector<KmerType> &query) {
-            return map.count(query);
-          }
-
-          size_t local_size() {
-            return map.local_size();
-          }
-
 
       };
 
@@ -521,138 +580,26 @@ namespace bliss
 
 
       template <typename MapType>
-      class CountIndex {
+      class CountIndex : public Index<MapType> {
         protected:
-          MapType map;
 
+          using Base = Index<MapType>;
 
-          using KmerType = typename MapType::key_type;
-          using IdType = typename MapType::mapped_type;
-          using TupleType = std::pair<KmerType, IdType>;
-          using Alphabet = typename KmerType::KmerAlphabet;
-
-          using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
-
-          //====  now process the file, one L1 block (block partition by MPI Rank) at a time
-          // from FileLoader type, get the block iter type and range type
-          using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
-
-          using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
-          using SeqType = typename ParserType::SequenceType;
-          using SeqIterType = bliss::io::SequencesIterator<ParserType>;
-
-
-          /// converter from ascii to alphabet values
-          using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
-
-          /// kmer generation iterator
-          using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
-
-          /// combine kmer iterator and position iterator to create an index iterator type.
-          using KmerIndexIterType = KmerIterType;
-
-
-          int commSize;
-          int commRank;
-
-          std::chrono::high_resolution_clock::time_point t1, t2;
-          std::chrono::duration<double> time_span;
+          using KmerType = typename Base::KmerType;
+          using IdType =   typename Base::IdType;
+          using TupleType = typename Base::TupleType;
 
 
         public:
           using map_type = MapType;
 
 
-          CountIndex(MPI_Comm _comm, int _comm_size) : map(_comm, _comm_size) {
-            MPI_Comm_size(_comm, &commSize);
-            MPI_Comm_rank(_comm, &commRank);
-          };
+          CountIndex(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {};
 
-
-          MapType & get_map() {
-            return map;
-          }
+          virtual ~CountIndex() {};
 
           std::vector<KmerType> read_file(const std::string & filename, MPI_Comm comm) {
-
-            std::vector< KmerType > temp;
-
-            {
-              t1 = std::chrono::high_resolution_clock::now();
-              //==== create file Loader
-              FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
-              typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
-
-              t2 = std::chrono::high_resolution_clock::now();
-              time_span =
-                  std::chrono::duration_cast<std::chrono::duration<double>>(
-                      t2 - t1);
-              INFOF("R %d file open time: %f", commRank, time_span.count());
-
-              //== reserve
-              t1 = std::chrono::high_resolution_clock::now();
-              // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
-              // index reserve internally sends a message to itself.
-              // call after getting first L1Block to ensure that file is loaded.
-              size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
-              temp.reserve(est_size);
-              t2 = std::chrono::high_resolution_clock::now();
-              time_span =
-                  std::chrono::duration_cast<std::chrono::duration<double>>(
-                      t2 - t1);
-              INFOF("R %d reserve time: %f", commRank, time_span.count());
-
-
-
-              // == create kmer iterator
-              //            kmer_iter start(data, range);
-              //            kmer_iter end(range.second,range.second);
-
-              t1 = std::chrono::high_resolution_clock::now();
-
-              ParserType parser;
-              //=== copy into array
-              while (partition.getRange().size() > 0) {
-                //== process the chunk of data
-                SeqType read;
-
-                //==  and wrap the chunk inside an iterator that emits Reads.
-                SeqIterType seqs_start(parser, partition.begin(), partition.end(), partition.getRange().start);
-                SeqIterType seqs_end(partition.end());
-
-
-                //== loop over the reads
-                for (; seqs_start != seqs_end; ++seqs_start)
-                {
-                  // first get read
-                  read = *seqs_start;
-
-                  // then compute and store into index (this will generate kmers and insert into index)
-                  if (read.seqBegin == read.seqEnd) continue;
-
-                  //== set up the kmer generating iterators.
-                  KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-                  KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
-
-
-                  temp.insert(temp.end(), start, end);
-                  //        for (auto it = index_start; it != index_end; ++it) {
-                  //          temp.push_back(*it);
-                  //        }
-                  //std::copy(index_start, index_end, temp.end());
-                  //        INFOF("R %d inserted.  new temp size = %lu", commRank, temp.size());
-                }
-
-                partition = loader.getNextL1Block();
-              }
-              t2 = std::chrono::high_resolution_clock::now();
-              time_span =
-                  std::chrono::duration_cast<std::chrono::duration<double>>(
-                      t2 - t1);
-              INFOF("R %d local kmer array time: %f. temp size = %lu", commRank, time_span.count(), temp.size());
-
-            }
-            return temp;
+            return this->read_file_for_kmers(filename, comm);
           }
 
           void build(const std::string & filename, MPI_Comm comm) {
@@ -661,68 +608,31 @@ namespace bliss
             //            range = df.open(filename, communicator);  // memmap internally
             //            data = df.data();
 
-            t1 = std::chrono::high_resolution_clock::now();
-            //==== create file Loader
-            std::vector<KmerType> temp = read_file(filename, comm);
-
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d file open time: %f", commRank, time_span.count());
+            ::std::vector<KmerType> temp = this->read_file(filename, comm);
 
             build(temp);
-
           }
 
           void build(std::vector<KmerType> &temp) {
+            TIMER_INIT(build);
 
-            //== reserve
-            t1 = std::chrono::high_resolution_clock::now();
-            // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
-            // index reserve internally sends a message to itself.
-            // call after getting first L1Block to ensure that file is loaded.
-            map.reserve(temp.size());
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d reserve time: %f", commRank, time_span.count());
+            TIMER_START(build);
+            this->map.reserve(temp.size());
+            TIMER_END(build, "reserve", temp.size());
 
 
             // distribute
-            t1 = std::chrono::high_resolution_clock::now();
+            TIMER_START(build);
+            this->map.insert(temp);
+            TIMER_END(build, "insert", this->map.local_size());
 
-            map.insert(temp);
 
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d inserted: %f. final size = %lu", commRank, time_span.count(), map.size());
+            TIMER_START(build);
+            size_t m = this->map.update_multiplicity();
+            TIMER_END(build, "multiplicity", m);
 
-            for (auto it = map.get_local_container().begin(); it != map.get_local_container().end(); ++it) {
-              assert(it->second > 0 && it->second < est_size);
-            }
+            TIMER_REPORT_MPI(build, this->commRank, this->comm);
 
-            t1 = std::chrono::high_resolution_clock::now();
-            map.update_multiplicity();
-            t2 = std::chrono::high_resolution_clock::now();
-            time_span =
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    t2 - t1);
-            INFOF("R %d updated multiplicity: %f. final size = %lu", commRank, time_span.count(), map.size());
-          }
-
-          std::vector<TupleType> find(std::vector<KmerType> &query) {
-            return map.find(query);
-          }
-          std::vector<std::pair<KmerType, size_t> > count(std::vector<KmerType> &query) {
-            return map.count(query);
-          }
-
-          size_t local_size() {
-            return map.local_size();
           }
 
 

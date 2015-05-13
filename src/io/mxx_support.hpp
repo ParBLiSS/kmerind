@@ -13,9 +13,14 @@
 #define SRC_IO_MXX_SUPPORT_HPP_
 
 #include "mxx/collective.hpp"
+#include "mxx/reduction.hpp"
 
 #include "common/kmer.hpp"
 #include "io/fastq_loader.hpp"
+
+#include "utils/logging.h"
+
+#include <algorithm>  // for std::min
 
 namespace mxx {
 
@@ -34,6 +39,10 @@ namespace mxx {
     public datatype_contiguous<decltype(bliss::io::FASTQ::SequenceId::file_pos),1> {};
 
 }
+
+
+
+
 
 namespace mxx2 {
   // ~ 5 to 15% faster compared to standard version, but requires more memory.
@@ -91,6 +100,50 @@ namespace mxx2 {
 
       return recv_counts;
   }
+
+
+  template <typename T, typename Func>
+  T reduce(T& x, Func func, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
+  {
+    // get user op
+    MPI_Op op = ::mxx::create_user_op<T, Func>(func);
+      // get type
+      ::mxx::datatype<T> dt;
+      // perform reduction
+      T result;
+      MPI_Reduce(&x, &result, 1, dt.type(), op, root, comm);
+      // clean up op
+      ::mxx::free_user_op<T>(op);
+      // return result
+      return result;
+  }
+
+  template <typename T, typename Func>
+  ::std::vector<T> reduce(::std::vector<T> & v, Func func, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
+  {
+    // get user op
+    MPI_Op op = ::mxx::create_user_op<T, Func>(func);
+    // get type
+    ::mxx::datatype<T> dt;
+    // get the max size.
+    size_t s = v.size();
+    size_t min_s = ::mxx::allreduce(s, [](size_t const &x, size_t const &y) { return ::std::min(x, y); }, comm);
+
+    if (s > min_s) {
+      int rank;
+      MPI_Comm_rank(comm, &rank);
+      WARNINGF("WARNING: process %d has larger vector than the min size during vector reduction.", rank);
+    }
+
+    // perform reduction
+    ::std::vector<T> results(v.size());
+    MPI_Reduce(&(v[0]), &(results[0]), min_s, dt.type(), op, root, comm);
+    // clean up op
+    ::mxx::free_user_op<T>(op);
+    // return result
+    return results;
+  }
+
 
 }
 

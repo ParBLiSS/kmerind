@@ -140,6 +140,7 @@ namespace dsc  // distributed std container
         c.rehash(n);
       }
 
+
       /**
        * @brief count elements with the specified keys in the distributed unordered_multimap.
        * @param first
@@ -231,6 +232,8 @@ namespace dsc  // distributed std container
         }
       }
 
+
+
       /// clears the unordered_map
       void local_clear() noexcept {
           c.clear();
@@ -246,13 +249,9 @@ namespace dsc  // distributed std container
       }
 
 
-
       unordered_map_base(MPI_Comm _comm, int _comm_size) : key_multiplicity(1), hashf(ceilLog2(comm_size)), comm(_comm), comm_size(_comm_size) {
         MPI_Comm_rank(comm, &comm_rank);
       }
-
-
-
 
 
     public:
@@ -263,8 +262,42 @@ namespace dsc  // distributed std container
       local_container_type& get_local_container() { return c; }
 
       /// update the multiplicity.  only multimap needs to do this.
-      virtual void update_multiplicity() const {}
+      virtual size_t update_multiplicity() const { return key_multiplicity; }
 
+      /// convert the map to a vector.
+      std::vector<std::pair<Key, T> > to_vector() const {
+        std::vector<std::pair<Key, T> > result;
+        this->to_vector(result);
+        return result;
+      }
+
+      /// convert the map to a vector
+      void to_vector(std::vector<std::pair<Key, T> > & result) const {
+        result.clear();
+        result.reserve(c.size());
+        result.insert(result.end(), c.begin(), c.end());
+      }
+
+      /// extract the keys of a map.
+      std::vector<Key > keys() const {
+        std::vector<Key > result;
+        this->keys(result);
+        return result;
+      }
+
+      /// extract the keys of a map.
+      void keys(std::vector<Key > & result) const {
+        result.clear();
+        result.reserve(c.size());
+
+        // first make a copy
+        for (auto it = c.begin(), end = c.end(); it != end; ++it) {
+          result.emplace_back(it->first);
+        }
+
+        // next remove duplicates
+        retain_unique_keys(result);
+      }
 
       // note that for each method, there is a local version of the operartion.
       // this is for use by the asynchronous version of communicator as callback for any messages received.
@@ -318,25 +351,34 @@ namespace dsc  // distributed std container
        * @param last
        */
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys) const {
+        TIMER_INIT(count);
+
+        TIMER_START(count);
         ::std::vector<::std::pair<Key, size_type> > results;
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+        TIMER_END(count, "begin", keys.size());
 
+        TIMER_START(count);
         // keep unique keys
         retain_unique_keys(keys);
+        TIMER_END(count, "uniq1", keys.size());
 
 
         if (comm_size > 1) {
+          TIMER_START(count);
           // distribute (communication part)
-          std::vector<int> recv_counts;
-
-          recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
+          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
              return (this->hashf(x) % comm_size);
            }, comm);
+          TIMER_END(count, "a2a1", keys.size());
 
-          // local find. memory utilization a potential problem.
+          // local count. memory utilization a potential problem.
           // do for each src proc one at a time.
-
+          TIMER_START(count);
           results.reserve(keys.size());                   // TODO:  should estimate coverage.
+          TIMER_END(count, "reserve", keys.size());
+
+          TIMER_START(count);
           auto start = keys.begin();
           auto end = start;
           for (int i = 0; i < comm_size; ++i) {
@@ -349,13 +391,19 @@ namespace dsc  // distributed std container
 
             start = end;
           }
+          TIMER_END(count, "local_count", results.size());
 
           // send back using the constructed recv count
+          TIMER_START(count);
           mxx::all2all(results, recv_counts, comm);
-
+          TIMER_END(count, "a2a2", results.size());
         } else {
+          TIMER_START(count);
           local_count(keys.begin(), keys.end(), results);
+          TIMER_END(count, "local_count", results.size());
         }
+
+        TIMER_REPORT_MPI(count, this->comm_rank, this->comm);
 
         return results;
 
@@ -411,6 +459,17 @@ namespace dsc  // distributed std container
       }
 
 
+      template <typename Predicate>
+      ::std::vector<::std::pair<Key, size_type> > count_if(Predicate const & pred) const {
+        ::std::vector<::std::pair<Key, size_type> > results;
+        auto keys = this->keys();
+
+        size_t count = local_count_if(keys.begin(), keys.end(), results, pred);
+
+        if (comm_size > 1) MPI_Barrier(comm);
+        return results;
+      }
+
       /**
        * @brief erase elements with the specified keys in the distributed unordered_multimap.
        * @param first
@@ -464,6 +523,14 @@ namespace dsc  // distributed std container
           local_erase_if(keys.begin(), keys.end(), pred);
       }
 
+      template <typename Predicate>
+      void erase_if(Predicate const & pred) {
+          auto keys = this->keys();
+
+          size_t count = local_erase_if(keys.begin(), keys.end(), pred);
+
+          if (comm_size > 1) MPI_Barrier(comm);
+      }
 
       // update done via erase/insert.
 
@@ -591,6 +658,7 @@ namespace dsc  // distributed std container
           return output.size() - before;  // after size.
       }
 
+
       void retain_unique(::std::vector<::std::pair<Key, T> >& input) const {
         if (input.size() == 0) return;
 
@@ -612,24 +680,35 @@ namespace dsc  // distributed std container
        * @param last
        */
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys) const {
+        TIMER_INIT(find);
+
+        TIMER_START(find);
         ::std::vector<::std::pair<Key, T> > results;
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-
+        TIMER_END(find, "begin", keys.size());
         // keep unique keys
+        TIMER_START(find);
         this->retain_unique_keys(keys);
+        TIMER_END(find, "uniq1", keys.size());
 
 
         if (this->comm_size > 1) {
+          TIMER_START(find);
           // distribute (communication part)
           std::vector<int> recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
              return (this->hashf(x) % this->comm_size);
            }, this->comm);
+          TIMER_END(find, "a2a1", keys.size());
 
           // local find. memory utilization a potential problem.
           // do for each src proc one at a time.
 
+          TIMER_START(find);
           std::vector<int> send_counts(this->comm_size, 0);
           results.reserve(keys.size() * this->key_multiplicity);  // 1 result per key.
+          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+
+          TIMER_START(find);
           auto start = keys.begin();
           auto end = start;
           for (int i = 0; i < this->comm_size; ++i) {
@@ -642,13 +721,22 @@ namespace dsc  // distributed std container
 
             start = end;
           }
+          TIMER_END(find, "local_find", results.size());
 
           // send back using the constructed recv count
+          TIMER_START(find);
           mxx::all2all(results, send_counts, this->comm);
+          TIMER_END(find, "a2a2", results.size());
+
 
         } else {
+          TIMER_START(find);
           local_find(keys.begin(), keys.end(), results);
+          TIMER_END(find, "local_find", results.size());
+
         }
+
+        TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
 
         return results;
       }
@@ -699,6 +787,16 @@ namespace dsc  // distributed std container
         }
 
         return results;
+      }
+
+      template <class Predicate>
+      ::std::vector<::std::pair<Key, T> > find_if(Predicate const & pred) const {
+          ::std::vector<::std::pair<Key, T> > results;
+
+          auto keys = this->keys();
+          local_find_if(keys.begin(), keys.end(), results, pred);
+
+          return results;
       }
 
 
@@ -864,7 +962,6 @@ namespace dsc  // distributed std container
           return output.size() - before;  // after size.
       }
 
-
     public:
 
 
@@ -875,7 +972,7 @@ namespace dsc  // distributed std container
       virtual ~unordered_multimap() {}
 
       /// update the multiplicity.  only multimap needs to do this.
-      virtual void update_multiplicity() const {
+      virtual size_t update_multiplicity() const {
         // one approach is to count the number of unique key then divide the map size by that.  problem is that we know the unique set.
         //  c.size / #unique.  requires unique set, or add 1 the first time a key is encountered.
         // another approach is to add up the number of repeats for the key of each entry, then divide by total count.  this is our approach
@@ -888,7 +985,8 @@ namespace dsc  // distributed std container
 
         // okay to go up by 1 to make the math simpler.
         this->key_multiplicity = repeat_count / this->c.size() + 1;
-        INFOF("R %d key multiplicity = %lu", this->comm_rank, this->key_multiplicity);
+
+        return this->key_multiplicity;
       }
 
 
@@ -898,24 +996,35 @@ namespace dsc  // distributed std container
        * @param last
        */
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys) const {
+        TIMER_INIT(find);
+
+        TIMER_START(find);
         ::std::vector<::std::pair<Key, T> > results;
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+        TIMER_END(find, "begin", keys.size());
 
+        TIMER_START(find);
         // keep unique keys
         this->retain_unique_keys(keys);
-
+        TIMER_END(find, "uniq1", keys.size());
 
         if (this->comm_size > 1) {
+          TIMER_START(find);
           // distribute (communication part)
           std::vector<int> recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
              return (this->hashf(x) % this->comm_size);
            }, this->comm);
+          TIMER_END(find, "a2a1", keys.size());
 
           // local find. memory utilization a potential problem.
           // do for each src proc one at a time.
 
+          TIMER_START(find);
           std::vector<int> send_counts(this->comm_size, 0);
           results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+
+          TIMER_START(find);
           auto start = keys.begin();
           auto end = start;
           for (int i = 0; i < this->comm_size; ++i) {
@@ -928,13 +1037,20 @@ namespace dsc  // distributed std container
 
             start = end;
           }
+          TIMER_END(find, "local_find", results.size());
 
+          TIMER_START(find);
           // send back using the constructed recv count
           mxx::all2all(results, send_counts, this->comm);
+          TIMER_END(find, "a2a2", results.size());
 
         } else {
+          TIMER_START(find);
           local_find(keys.begin(), keys.end(), results);
+          TIMER_END(find, "local_find", results.size());
         }
+
+        TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
 
         return results;
 
@@ -989,7 +1105,15 @@ namespace dsc  // distributed std container
 
       }
 
+      template <typename Predicate>
+      ::std::vector<::std::pair<Key, T> > find_if(Predicate const& pred) const {
+        ::std::vector<::std::pair<Key, T> > results;
 
+        auto keys = this->keys();
+        local_find_if(keys.begin(), keys.end(), results, pred);
+
+        return results;
+      }
 
       /**
        * @brief insert new elements in the distributed unordered_multimap.

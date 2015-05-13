@@ -38,6 +38,8 @@
 
 #include "wip/kmer_index.hpp"
 
+#include "utils/timer.hpp"
+
 
 template <typename KmerType>
 std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
@@ -66,27 +68,15 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
 
 
   {
-    std::chrono::high_resolution_clock::time_point t1, t2;
-    std::chrono::duration<double> time_span;
-
-    t1 = std::chrono::high_resolution_clock::now();
     //==== create file Loader
     FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
     typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
     size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
 
-    t2 = std::chrono::high_resolution_clock::now();
-    time_span =
-        std::chrono::duration_cast<std::chrono::duration<double>>(
-            t2 - t1);
-    INFOF("R %d file open time: %f", rank, time_span.count());
-
-
     // == create kmer iterator
     //            kmer_iter start(data, range);
     //            kmer_iter end(range.second,range.second);
 
-    t1 = std::chrono::high_resolution_clock::now();
     query.reserve(est_size);
 
     ParserType parser;
@@ -124,22 +114,6 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
 
       partition = loader.getNextL1Block();
     }
-    t2 = std::chrono::high_resolution_clock::now();
-    time_span =
-        std::chrono::duration_cast<std::chrono::duration<double>>(
-            t2 - t1);
-    INFOF("R %d local kmer array time: %f. query size = %lu", rank, time_span.count(), query.size());
-
-
-
-    //            //distributed_map m(element_count);
-    //            m.reserve(element_count, communicator);
-    //            m.insert(start, end, communicator);
-    //            //m.local_rehash();
-
-    //df.close();
-
-
   }
   return query;
 }
@@ -156,7 +130,7 @@ void sample(std::vector<KmerType> &query, size_t n, unsigned int seed) {
 
 
 template <typename IndexType>
-void testIndex(MPI_Comm comm, const std::string & filename, std::string testname ) {
+void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
 
   int nprocs = 1;
   int rank = 0;
@@ -170,137 +144,70 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string testname
 
   using KmerType = typename IndexType::map_type::key_type;
 
-  std::chrono::high_resolution_clock::time_point t1, t2;
-  std::chrono::duration<double> time_span;
-  std::vector<std::string> timespan_names;
-  std::vector<double> timespans;
-  std::vector<size_t> elements;
+  TIMER_INIT(test);
 
   size_t entries = 0;
 
-  INFOF("RANK %d: Testing %s", rank, testname.c_str());
+  if (rank == 0) INFOF("RANK %d / %d: Testing %s", rank, nprocs, test.c_str());
 
-  t1 = std::chrono::high_resolution_clock::now();
-  // initialize index
-  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  DEBUGF("RANK %d: ***** building index first pass.  %d threads, callback_time %f ", rank, nthreads, callback_time);
-
+  TIMER_START(test);
   idx.build(filename, comm);
-  INFO("RANK " << rank << " Index Building 1 for " << filename );
-
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-          t2 - t1);
-  timespan_names.push_back("build");
-  timespans.push_back(time_span.count());
-  elements.push_back(idx.local_size());
+  TIMER_END(test, "build", idx.local_size());
 
 
-  t1 = std::chrono::high_resolution_clock::now();
+
+  TIMER_START(test);
   auto query = readForQuery<KmerType>(filename, comm);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-          t2 - t1);
-  timespan_names.push_back("read query");
-  timespans.push_back(time_span.count());
-  elements.push_back(query.size());
+  TIMER_END(test, "read query", query.size());
+
 
 
   // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
-  t1 = std::chrono::high_resolution_clock::now();
+  TIMER_START(test);
   unsigned seed = rank * 23;
   sample(query, query.size() / 100, seed);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-          t2 - t1);
-  timespan_names.push_back("select 1%%");
-  timespans.push_back(time_span.count());
-  elements.push_back(query.size());
+  TIMER_END(test, "select 1%", query.size());
 
+  auto query_orig = query;
 
   // process query
-
   // query
-  t1 = std::chrono::high_resolution_clock::now();
-
+  TIMER_START(test);
   auto results = idx.find(query);
+  TIMER_END(test, "query 1%", results.size());
 
- t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double> >(
-          t2 - t1);
-  timespan_names.push_back("query 1%%");
-  timespans.push_back(time_span.count());
-  elements.push_back(results.size());
+  query = query_orig;
 
   // count
-  t1 = std::chrono::high_resolution_clock::now();
-
+  TIMER_START(test);
   auto results2 = idx.count(query);
+  TIMER_END(test, "count 1%", results2.size());
 
- t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double> >(
-          t2 - t1);
-  timespan_names.push_back("count 1%%");
-  timespans.push_back(time_span.count());
-  elements.push_back(results2.size());
 
+  query = query_orig;
 
   // select 1
   // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
-  t1 = std::chrono::high_resolution_clock::now();
+  TIMER_START(test);
   seed = rank * 57;
   sample(query, 1, seed);
-  t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-          t2 - t1);
-  timespan_names.push_back("select 1");
-  timespans.push_back(time_span.count());
-  elements.push_back(query.size());
+  TIMER_END(test, "select 1", query.size());
 
+  query_orig = query;
 
   // query 1
-  t1 = std::chrono::high_resolution_clock::now();
-
+  TIMER_START(test);
   auto results3 = idx.find(query);
+  TIMER_END(test, "query 1", results3.size());
 
- t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double> >(
-          t2 - t1);
-  timespan_names.push_back("query 1");
-  timespans.push_back(time_span.count());
-  elements.push_back(results3.size());
-
+  query = query_orig;
 
   // query 1
-  t1 = std::chrono::high_resolution_clock::now();
-
+  TIMER_START(test);
   auto results4 = idx.count(query);
+  TIMER_END(test, "count 1", results4.size());
 
- t2 = std::chrono::high_resolution_clock::now();
-  time_span =
-      std::chrono::duration_cast<std::chrono::duration<double> >(
-          t2 - t1);
-  timespan_names.push_back("count 1");
-  timespans.push_back(time_span.count());
-  elements.push_back(results4.size());
-
-  std::stringstream ss;
-  std::copy(timespan_names.begin(), timespan_names.end(), std::ostream_iterator<std::string>(ss, ","));
-  std::stringstream ss2;
-  std::copy(timespans.begin(), timespans.end(), std::ostream_iterator<double>(ss2, ","));
-  std::stringstream ss3;
-  std::copy(elements.begin(), elements.end(), std::ostream_iterator<size_t>(ss3, ","));
-
-
-  INFOF("Rank %d Test %s\n\tphases [%s]\n\ttimes [%s]\n\tcount [%s]", rank, testname.c_str(), ss.str().c_str(), ss2.str().c_str(), ss3.str().c_str());
-
+  TIMER_REPORT_MPI(test, rank, comm);
 
 }
 
@@ -357,12 +264,11 @@ int main(int argc, char** argv) {
     char hostname[256];
     memset(hostname, 0, 256);
     gethostname(hostname, 256);
-    INFOF("Rank %d hostname [%s]\n", rank, hostname);
+    INFOF("Rank %d hostname [%s]", rank, hostname);
   }
   MPI_Barrier(comm);
 
-  if (rank == 0)
-    INFOF("USE_MPI is set");
+  if (rank == 0) INFOF("USE_MPI is set");
 #else
   static_assert(false, "MPI used although compilation is not set to use MPI");
 #endif
