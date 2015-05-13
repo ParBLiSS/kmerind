@@ -119,7 +119,6 @@ namespace dsc  // distributed std container
       mutable size_t key_multiplicity;
 
       // communication stuff...
-      bliss::hash::kmer::hash<Key, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true> hashf;
       MPI_Comm comm;
       int comm_size;
       int comm_rank;
@@ -127,7 +126,27 @@ namespace dsc  // distributed std container
       // defined Communicator as a friend
       friend Comm;
 
+      struct KeyToRank {
+          bliss::hash::kmer::hash<Key, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true> proc_hash;
+          int p;
 
+          KeyToRank(int comm_size) : proc_hash(ceilLog2(comm_size)), p(comm_size) {};
+
+          int operator()(Key const & x) {
+        	  return proc_hash(x) % p;
+          }
+      } key_to_rank;
+
+      struct TupleToRank {
+          bliss::hash::kmer::hash<Key, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true> proc_hash;
+          int p;
+
+          TupleToRank(int comm_size) : proc_hash(ceilLog2(comm_size)), p(comm_size) {};
+
+          int operator()(::std::pair<Key, T> const & x) {
+        	  return proc_hash(x.first) % p;
+          }
+      } tuple_to_rank;
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_reserve( size_type n) {
@@ -249,7 +268,7 @@ namespace dsc  // distributed std container
       }
 
 
-      unordered_map_base(MPI_Comm _comm, int _comm_size) : key_multiplicity(1), hashf(ceilLog2(comm_size)), comm(_comm), comm_size(_comm_size) {
+      unordered_map_base(MPI_Comm _comm, int _comm_size) : key_multiplicity(1), key_to_rank(comm_size), tuple_to_rank(comm_size), comm(_comm), comm_size(_comm_size) {
         MPI_Comm_rank(comm, &comm_rank);
       }
 
@@ -367,9 +386,7 @@ namespace dsc  // distributed std container
         if (comm_size > 1) {
           TIMER_START(count);
           // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
-             return (this->hashf(x) % comm_size);
-           }, comm);
+          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, comm);
           TIMER_END(count, "a2a1", keys.size());
 
           // local count. memory utilization a potential problem.
@@ -426,9 +443,7 @@ namespace dsc  // distributed std container
           // distribute (communication part)
           std::vector<int> recv_counts;
 
-          recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
-             return (this->hashf(x) % comm_size);
-           }, comm);
+          recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, comm);
 
           // local find. memory utilization a potential problem.
           // do for each src proc one at a time.
@@ -483,9 +498,7 @@ namespace dsc  // distributed std container
 
           if (comm_size > 1) {
             // redistribute keys
-            mxx2::msgs_all2all(keys, [&] ( Key const &x) {
-               return (this->hashf(x) % comm_size);
-             }, comm);
+            mxx2::msgs_all2all(keys, this->key_to_rank, comm);
             
           
             // remove duplicates again
@@ -510,9 +523,7 @@ namespace dsc  // distributed std container
 
           if (comm_size > 1) {
             // redistribute keys
-            mxx2::msgs_all2all(keys, [&] ( Key const &x) {
-               return (this->hashf(x) % comm_size);
-             }, comm);
+            mxx2::msgs_all2all(keys, this->key_to_rank, comm);
 
 
             // remove duplicates again
@@ -695,9 +706,7 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           TIMER_START(find);
           // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
-             return (this->hashf(x) % this->comm_size);
-           }, this->comm);
+          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
           TIMER_END(find, "a2a1", keys.size());
 
           // local find. memory utilization a potential problem.
@@ -757,9 +766,7 @@ namespace dsc  // distributed std container
 
         if (this->comm_size > 1) {
           // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
-             return (this->hashf(x) % this->comm_size);
-           }, this->comm);
+          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
 
           // local find. memory utilization a potential problem.
           // do for each src proc one at a time.
@@ -813,9 +820,7 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
-          mxx2::msgs_all2all(input, [&] ( ::std::pair<Key, T> const &x) {
-             return (this->hashf(x.first) % this->comm_size);
-           }, this->comm);
+          mxx2::msgs_all2all(input, this->tuple_to_rank, this->comm);
         }
 
         // after communication, sort again to keep unique  - may not be needed
@@ -840,9 +845,7 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
-          mxx2::msgs_all2all(input, [&] ( ::std::pair<Key, T> const &x) {
-             return (this->hashf(x.first) % this->comm_size);
-           }, this->comm);
+          mxx2::msgs_all2all(input, this->tuple_to_rank, this->comm);
         }
 
         // after communication, sort again to keep unique  - may not be needed
@@ -851,8 +854,6 @@ namespace dsc  // distributed std container
         // local compute part.  called by the communicator.
         this->Base::local_insert_if(input.begin(), input.end(), pred);
       }
-
-
   };
 
 
@@ -1011,9 +1012,7 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           TIMER_START(find);
           // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
-             return (this->hashf(x) % this->comm_size);
-           }, this->comm);
+          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
           TIMER_END(find, "a2a1", keys.size());
 
           // local find. memory utilization a potential problem.
@@ -1072,9 +1071,7 @@ namespace dsc  // distributed std container
 
         if (this->comm_size > 1) {
           // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, [&] ( Key const &x) {
-             return (this->hashf(x) % this->comm_size);
-           }, this->comm);
+          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
 
           // local find. memory utilization a potential problem.
           // do for each src proc one at a time.
@@ -1125,9 +1122,7 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
-          mxx2::msgs_all2all(input, [&] ( ::std::pair<Key, T> const &x) {
-             return (this->hashf(x.first) % this->comm_size);
-           }, this->comm);
+          mxx2::msgs_all2all(input, this->tuple_to_rank, this->comm);
         }
 
         // local compute part.  called by the communicator.
@@ -1145,9 +1140,7 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
-          mxx2::msgs_all2all(input, [&] ( ::std::pair<Key, T> const &x) {
-             return (this->hashf(x.first) % this->comm_size);
-           }, this->comm);
+          mxx2::msgs_all2all(input, this->tuple_to_rank, this->comm);
         }
 
         // local compute part.  called by the communicator.
@@ -1295,9 +1288,7 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
-          mxx2::msgs_all2all(input, [&] ( ::std::pair<Key, T> const &x) {
-             return (this->hashf(x.first) % this->comm_size);
-           }, this->comm);
+          mxx2::msgs_all2all(input, this->tuple_to_rank, this->comm);
         }
 
         // after communication, sort again to keep unique  - may not be needed
@@ -1321,9 +1312,7 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
-          mxx2::msgs_all2all(input, [&] ( ::std::pair<Key, T> const &x) {
-             return (this->hashf(x.first) % this->comm_size);
-           }, this->comm);
+          mxx2::msgs_all2all(input, this->tuple_to_rank, this->comm);
         }
 
         // after communication, sort again to keep unique  - may not be needed
@@ -1453,9 +1442,7 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
-          mxx2::msgs_all2all(temp, [&] ( ::std::pair<Key, T> const &x) {
-             return (this->hashf(x.first) % this->comm_size);
-           }, this->comm);
+          mxx2::msgs_all2all(temp, this->tuple_to_rank, this->comm);
         }
 
         // after communication, sort again to keep unique  - may not be needed
@@ -1479,9 +1466,7 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
-          mxx2::msgs_all2all(temp, [&] ( ::std::pair<Key, T> const &x) {
-             return (this->hashf(x.first) % this->comm_size);
-           }, this->comm);
+          mxx2::msgs_all2all(temp, this->tuple_to_rank, this->comm);
         }
 
         // after communication, sort again to keep unique  - may not be needed
