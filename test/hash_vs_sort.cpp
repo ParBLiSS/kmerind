@@ -88,6 +88,7 @@ void query(const std::unordered_multimap<K, V, H> &map, const size_t entries, un
       val = it->second;
     }
   }
+  srand(val);
 }
 
 
@@ -141,6 +142,7 @@ void query(const std::vector<std::pair<K, V> > &vec, const size_t entries, unsig
       val = it->second;
     }
   }
+  srand(val);
 }
 
 /// batched query allows for query terms to be sorted, then searches can be sped up.
@@ -172,6 +174,7 @@ void batched_query(const std::vector<std::pair<K, V> > &vec, const size_t entrie
       iter = range.second;
     }
   }
+  srand(val);
 }
 
 
@@ -188,7 +191,7 @@ int main(int argc, char** argv) {
     max_exp = atoi(argv[1]);
   }
 
-  size_t max_size = 0x1 << 27;
+  size_t max_size = 0x1 << max_exp;
 
   size_t size = 0x1;
 

@@ -199,7 +199,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   finals.clear();
 
   if ((bytes3 + gbytes) != success3 * data.length() + bytes4) {
-    ERRORF("FAIL: total bytes %d (%d + %d).  expected %d bytes (%d + %d).",
+    ERRORF("FAIL: total bytes %d (%d + %d).  expected %ld bytes (%ld + %d).",
 	 (bytes3 + gbytes), bytes3, gbytes, success3 * data.length() + bytes4, success3 * data.length(), bytes4);
   }
 

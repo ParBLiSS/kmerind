@@ -61,7 +61,6 @@ namespace mxx2 {
       // TODO: in-place bucketing??
       std::vector<int> send_counts(p, 0);
       std::vector<int> pids(msgs.size());
-      int pid = 0;
       for (int i = 0; i < msgs.size(); ++i)
       {
           pids[i] = target_p_fun(msgs[i]);
@@ -218,7 +217,7 @@ template<typename MapType>
          time_span =
              std::chrono::duration_cast<std::chrono::duration<double>>(
                  t2 - t1);
-         INFOF("R %d randomly select 1 %% of kmers as query input. new size = %lu", commRank, time_span.count(), query.size());
+         INFOF("R %d randomly select 1 %% of kmers as query input. time %f. new size = %lu", commRank, time_span.count(), query.size());
 
 
 
@@ -434,7 +433,7 @@ template<typename MapType>
          time_span =
              std::chrono::duration_cast<std::chrono::duration<double>>(
                  t2 - t1);
-         INFOF("R %d randomly select 1 of kmers as query input. new size = %lu", commRank, time_span.count(), query.size());
+         INFOF("R %d randomly select 1 of kmers as query input time %f. new size = %lu", commRank, time_span.count(), query.size());
 
 
 
@@ -653,7 +652,7 @@ template<typename MapType>
          time_span =
              std::chrono::duration_cast<std::chrono::duration<double>>(
                  t2 - t1);
-         INFOF("R %d randomly select 1 %% of kmers as query input. new size = %lu", commRank, time_span.count(), query.size());
+         INFOF("R %d randomly select 1 %% of kmers as query input time %f. new size = %lu", commRank, time_span.count(), query.size());
 
 
 
@@ -701,7 +700,6 @@ template<typename MapType>
          std::vector<int> send_counts = recv_counts;
          results.reserve(query.size());  // TODO:  should estimate coverage.
          int k = 0;
-         int s = 0;
          for (int i = 0; i < commSize; ++i) {
            // work on query from process i.
            //printf("R %d working on query from proce %d\n", commRank, i);
@@ -1124,8 +1122,8 @@ class CountIndex {
 
 
   using KmerType = typename MapType::key_type;
-  using IdType = typename MapType::mapped_type;
-  using TupleType = std::pair<KmerType, IdType>;
+//  using IdType = typename MapType::mapped_type;
+//  using TupleType = std::pair<KmerType, IdType>;
   using Alphabet = typename KmerType::KmerAlphabet;
 
   using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
@@ -1146,7 +1144,7 @@ class CountIndex {
   using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
 
   /// combine kmer iterator and position iterator to create an index iterator type.
-  using KmerIndexIterType = KmerIterType;
+//  using KmerIndexIterType = KmerIterType;
 
   int commSize, commRank;
   MPI_Comm_size(comm, &commSize);
@@ -1291,23 +1289,11 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string testname
   std::vector<std::string> timespan_names;
   std::vector<double> timespans;
 
-  size_t entries = 0;
-
   INFOF("RANK %d: Testing %s", rank, testname.c_str());
 
   t1 = std::chrono::high_resolution_clock::now();
   // initialize index
   DEBUGF("RANK %d: ***** initializing %s.", rank, testname.c_str());
-
-  double callback_time = 0;
-
-
-
-
-
-  // start processing.  enclosing with braces to make sure loader is destroyed before MPI finalize.
-  DEBUGF("RANK %d: ***** building index first pass.  %d threads, callback_time %f ", rank, nthreads, callback_time);
-
 
   idx.build(filename, comm);
   //kmer_index.flush();

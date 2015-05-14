@@ -146,8 +146,6 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
 
   TIMER_INIT(test);
 
-  size_t entries = 0;
-
   if (rank == 0) INFOF("RANK %d / %d: Testing %s", rank, nprocs, test.c_str());
 
   TIMER_START(test);
