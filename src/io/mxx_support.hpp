@@ -59,7 +59,6 @@ namespace mxx2 {
       // TODO: in-place bucketing??
       std::vector<int> send_counts(p, 0);
       std::vector<int> pids(msgs.size());
-      int pid = 0;
       for (int i = 0; i < msgs.size(); ++i)
       {
           pids[i] = target_p_fun(msgs[i]);

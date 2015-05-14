@@ -268,7 +268,7 @@ namespace dsc  // distributed std container
       }
 
 
-      unordered_map_base(MPI_Comm _comm, int _comm_size) : key_multiplicity(1), key_to_rank(comm_size), tuple_to_rank(comm_size), comm(_comm), comm_size(_comm_size) {
+      unordered_map_base(MPI_Comm _comm, int _comm_size) : key_multiplicity(1), comm(_comm), comm_size(_comm_size), key_to_rank(comm_size), tuple_to_rank(comm_size) {
         MPI_Comm_rank(comm, &comm_rank);
       }
 
