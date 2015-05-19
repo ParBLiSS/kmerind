@@ -22,6 +22,9 @@
 #include <string>
 #include <algorithm>  // std::min
 
+#include "io/mxx_support.hpp"
+
+
 #define TIMER_INIT(session)      std::chrono::steady_clock::time_point session##_t1, session##_t2; \
                                  std::vector<std::string> session##_names; \
                                  std::vector<double> session##_durations; \
@@ -113,7 +116,7 @@ template <typename T>
             \
             std::stringstream output; \
             output << std::fixed; \
-            output << "R " << rank << "/" << p << " " << #session << " headerOA\t["; \
+            output << "R " << rank << "/" << p << " " << #session << " header\t["; \
             std::ostream_iterator<std::string> nit(output, ","); \
             std::copy(session##_names.begin(), session##_names.end(), nit); \
             output.precision(9); \

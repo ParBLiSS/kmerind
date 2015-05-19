@@ -58,6 +58,7 @@
 #include "common/kmer_iterators.hpp"
 #include "iterators/zip_iterator.hpp"
 #include "index/quality_score_iterator.hpp"
+#include "wip/kmer_hash.hpp"
 
 #include "utils/timer.hpp"
 
