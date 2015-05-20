@@ -32,21 +32,13 @@
 
 
 #include <unordered_map>  // local storage hash table  // for multimap
+#include <unordered_set>  // local storage hash table  // for multimap
 #include <utility> 			  // for std::pair
 
 //#include <sparsehash/dense_hash_map>  // local storage hash table, google dense hash map.
-//#include <vector>
 #include <functional> 		// for std::function and std::hash
-//#include <limits>
-//#include <stdexcept>
 #include <algorithm> 		// for sort, stable_sort, unique, is_sorted
-//#include <atomic>
-//#include <tuple>
-//#include "iterators/concatenating_iterator.hpp"
 #include <iterator>  // advance, distance
-
-//// include MPI
-//#include <mpi.h>
 
 #include <cstdint>  // for uint8, etc.
 
@@ -58,6 +50,8 @@
 
 namespace dsc  // distributed std container
 {
+
+
   /**
    * @brief  distributed unordered map following std unordered map's interface.
    * @details   This class is modeled after the std::unordered_map.
@@ -81,7 +75,10 @@ namespace dsc  // distributed std container
    *    an alternative approach is to hold only canonical keys in the map.
    *    yet another alternative approach is to perform 2 queries for every key.- 2x computation but communication is spread out.
    *
-   *  note: KeyTransform is applied before Hash, Equal, and Less operators.  These operators should have NO KNOWLEDGE of any transform applied, including kmolecule to kmer mapping.
+   *  note: KeyTransform is applied before Hash, and Equal operators.  These operators should have NO KNOWLEDGE of any transform applied, including kmolecule to kmer mapping.
+   *
+   *  any operation that uses sort is not going to scale well.  this includes "retain_unique_key, retain_unique_tuple, local_reduction"...
+   *  to reduce this, we can try by using a hash set instead.  http://www.vldb.org/pvldb/2/vldb09-257.pdf, http://www.vldb.org/pvldb/vol7/p85-balkesen.pdf
    *
    * @tparam Key
    * @tparam T
@@ -90,7 +87,6 @@ namespace dsc  // distributed std container
    * @tparam KeyTransform   transform function for the key.  can supply identity.  requires a single template argument (Key).  useful for mapping kmolecule to kmer.
    * @tparam Hash   hash function for local and distribution.  requires a template arugment (Key), and a bool (prefix, chooses the MSBs of hash instead of LSBs)
    * @tparam Equal   default to ::std::equal_to<Key>   equal function for the local storage.
-   * @tparam Less   default to ::std::less<Key>   comparison function for the any local sort used for reduction or uniqueness.
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
@@ -99,12 +95,53 @@ namespace dsc  // distributed std container
       template <typename> class KeyTransform,
       template <typename, bool> class Hash,
       class Equal = ::std::equal_to<Key>,
-      class Less = ::std::less<Key>,
       class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class unordered_map_base {
+    protected:
+      template <typename K = Key>
+      struct TransformedHash {
+        KeyTransform<K> trans;
+        Hash<K, false> hash;
+        inline uint64_t operator()(K const& k) const {
+          return hash(trans(k));
+        }
+      };
+
+      template <typename K = Key>
+      struct TransformedEqual {
+          KeyTransform<K> trans;
+          Equal equal;
+          inline bool operator()(K const & x, K const & y) const {
+            return equal(trans(x), trans(y));
+          }
+      };
+
+      struct KeyToRank {
+          Hash<Key, true> proc_hash;
+          KeyTransform<Key> trans;
+
+          int p;
+
+          // 2x comm size to allow more even distribution?
+          KeyToRank(int comm_size) : proc_hash(ceilLog2(2 * comm_size)), p(comm_size) {};
+
+          inline int operator()(Key const & x) const {
+//            printf("KeyToRank operator. commsize %d  key.  hashed to %d, mapped to proc %d \n", p, proc_hash(trans(x)), proc_hash(trans(x)) % p);
+            return proc_hash(trans(x)) % p;
+          }
+          inline int operator()(::std::pair<Key, T> const & x) const {
+//            printf("KeyToRank operator.  pair\n");
+            return this->operator()(x.first);
+          }
+          inline int operator()(::std::pair<const Key, T> const & x) const {
+            return this->operator()(x.first);
+          }
+      } key_to_rank;
+
+
     public:
-      using local_container_type = Container<Key, T, Hash<Key, false>, Equal, Alloc>;
+      using local_container_type = Container<Key, T, TransformedHash<Key>, TransformedEqual<Key>, Alloc>;
 
       // std::unordered_multimap public members.
       using key_type              = typename local_container_type::key_type;
@@ -137,65 +174,12 @@ namespace dsc  // distributed std container
       // defined Communicator as a friend
       friend Comm;
 
-      using RankHash = Hash<Key, true>;
-
-      struct KeyToRank {
-          RankHash proc_hash;
-          KeyTransform<Key> trans;
-
-          int p;
-
-          // 2x comm size to allow more even distribution?
-          KeyToRank(int comm_size) : proc_hash(ceilLog2(2 * comm_size)), p(comm_size) {};
-
-          inline int operator()(Key const & x) const {
-        	  return proc_hash(trans(x)) % p;
-          }
-          inline int operator()(::std::pair<Key, T> const & x) const {
-            return this->operator()(x.first) % p;
-          }
-          inline int operator()(::std::pair<const Key, T> const & x) const {
-            return this->operator()(x.first) % p;
-          }
-      } key_to_rank;
-
-      struct KeyLess {
-          Less less;
-          KeyTransform<Key> trans;
-
-          inline bool operator()(Key const & x, Key const & y) const {
-            return less(trans(x), trans(y));
-          }
-          inline bool operator()(::std::pair<Key, T> const & x, ::std::pair<Key, T> const & y) const {
-            return this->operator()(x.first, y.first);
-          }
-          inline bool operator()(::std::pair<const Key, T> const & x, ::std::pair<const Key, T> const & y) const {
-            return this->operator()(x.first, y.first);
-          }
-      } key_less_op;
-
-
-      struct KeyEqual {
-          Equal equal;
-          KeyTransform<Key> trans;
-
-          inline bool operator()(Key const & x, Key const & y) const {
-            return equal(trans(x), trans(y));
-          }
-          inline int operator()(::std::pair<Key, T> const & x, ::std::pair<Key, T> const & y) const {
-            return this->operator()(x.first, y.first);
-          }
-          inline int operator()(::std::pair<const Key, T> const & x, ::std::pair<const Key, T> const & y) const {
-            return this->operator()(x.first, y.first);
-          }
-      } key_equal_op;
-
+      KeyTransform<Key> trans;
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_reserve( size_type n) {
         c.reserve(n);
       }
-
 
       /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_rehash( size_type n) {
@@ -224,7 +208,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        * @param output
-       * @param pred
+       * @param pred        Predicate should account for key transform.
        * @return
        */
       template<class InputIterator, class Predicate>
@@ -233,7 +217,7 @@ namespace dsc  // distributed std container
 
           size_t before = output.size();  // before size.
           for (auto it = first; it != last; ++it) {
-             if (pred(*it)) output.emplace_back(*it, c.count(*it));
+             if (pred(trans(*it))) output.emplace_back(*it, c.count(*it));
           }
           return output.size() - before;
       }
@@ -261,7 +245,7 @@ namespace dsc  // distributed std container
           if (first == last) return;
 
           for (auto it = first; it != last; ++it) {
-            if (pred(*it)) c.insert(*it);
+            if (pred(trans(*it))) c.insert(*it);
           }
       }
 
@@ -290,7 +274,7 @@ namespace dsc  // distributed std container
         if (first == last) return;
 
         for (auto it = first; it != last; ++it) {
-          if (pred(*it)) c.erase(*it);
+          if (pred(trans(*it))) c.erase(*it);
         }
       }
 
@@ -304,14 +288,22 @@ namespace dsc  // distributed std container
       void retain_unique_keys(::std::vector< Key >& input) const {
         if (input.size() == 0) return;
 
-        if (! ::std::is_sorted(input.begin(), input.end(), key_less_op))
-          ::std::stable_sort(input.begin(), input.end(), key_less_op);  // using stable sort to maintain same behavior as map - keeping first inserted.
-        auto end = ::std::unique(input.begin(), input.end(), key_equal_op);
-        input.erase(end, input.end());
+        // sorting is slow.
+//        if (! ::std::is_sorted(input.begin(), input.end(), key_less_op))
+//          ::std::stable_sort(input.begin(), input.end(), key_less_op);  // using stable sort to maintain same behavior as map - keeping first inserted.
+//        auto end = ::std::unique(input.begin(), input.end(), key_equal_op);
+//        input.erase(end, input.end());
+
+        // this function primarily is used to reduce communication volume while keeping the behavior of unordered_map - i.e. first entry is kept.
+        // simplest approach is to use the same type of data container to get the behavior,
+        ::std::unordered_set<Key, TransformedHash<Key>, TransformedEqual<Key> > temp;
+        temp.reserve(input.size());
+        temp.insert(input.begin(), input.end());  // this process removes duplicates
+        input.assign(temp.begin(), temp.end());   // copy back into original input.
       }
 
 
-      unordered_map_base(MPI_Comm _comm, int _comm_size) : key_multiplicity(1), comm(_comm), comm_size(_comm_size), key_to_rank(comm_size) {
+      unordered_map_base(MPI_Comm _comm, int _comm_size) : key_to_rank(_comm_size), key_multiplicity(1), comm(_comm), comm_size(_comm_size) {
         MPI_Comm_rank(comm, &comm_rank);
       }
 
@@ -336,29 +328,29 @@ namespace dsc  // distributed std container
       /// convert the map to a vector
       void to_vector(std::vector<std::pair<Key, T> > & result) const {
         result.clear();
+        if (c.empty()) return;
         result.reserve(c.size());
         result.insert(result.end(), c.begin(), c.end());
       }
 
       /// extract the keys of a map.
-      std::vector<Key > keys() const {
-        std::vector<Key > result;
+      std::vector<Key> keys() const {
+        std::vector<Key> result;
         this->keys(result);
         return result;
       }
 
       /// extract the keys of a map.
-      void keys(std::vector<Key > & result) const {
+      void keys(std::vector<Key> & result) const {
         result.clear();
-        result.reserve(c.size());
+        if (c.empty()) return;
 
-        // first make a copy
+        ::std::unordered_set<Key, TransformedHash<Key>, TransformedEqual<Key> > temp;
+        temp.reserve(c.size());
         for (auto it = c.begin(), end = c.end(); it != end; ++it) {
-          result.emplace_back(it->first);
+          temp.insert(it->first);
         }
-
-        // next remove duplicates
-        retain_unique_keys(result);
+        result.assign(temp.begin(), temp.end());
       }
 
       // note that for each method, there is a local version of the operartion.
@@ -445,7 +437,7 @@ namespace dsc  // distributed std container
             ::std::advance(end, recv_counts[i]);
 
             // work on query from process i.
-            local_count( start, end, results);
+            local_count( start, end, results );
 
             if (comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", comm_rank, send_counts[i], recv_counts[i], i);
 
@@ -536,16 +528,17 @@ namespace dsc  // distributed std container
       void erase(::std::vector<Key>& keys) {
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
 
-          // remove duplicates
-          retain_unique_keys(keys);
-
           if (comm_size > 1) {
+
+            // remove duplicates
+            retain_unique_keys(keys);
+
             // redistribute keys
             mxx2::msgs_all2all(keys, this->key_to_rank, comm);
             
-          
-            // remove duplicates again
-            retain_unique_keys(keys);
+//
+//            // remove duplicates again
+//            retain_unique_keys(keys);
           }
 
           // then call local remove.
@@ -561,16 +554,17 @@ namespace dsc  // distributed std container
       void erase_if(::std::vector<Key>& keys, Predicate const & pred) {
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
 
-          // remove duplicates
-          retain_unique_keys(keys);
 
           if (comm_size > 1) {
+            // remove duplicates
+            retain_unique_keys(keys);
+
             // redistribute keys
             mxx2::msgs_all2all(keys, this->key_to_rank, comm);
 
-
-            // remove duplicates again
-            retain_unique_keys(keys);
+//
+//            // remove duplicates again
+//            retain_unique_keys(keys);
           }
 
           // then call local remove.
@@ -621,7 +615,6 @@ namespace dsc  // distributed std container
    * @tparam KeyTransform   transform function for the key.  can supply identity.  requires a single template argument (Key).  useful for mapping kmolecule to kmer.
    * @tparam Hash   hash function for local and distribution.  requires a template arugment (Key), and a bool (prefix, chooses the MSBs of hash instead of LSBs)
    * @tparam Equal   default to ::std::equal_to<Key>   equal function for the local storage.
-   * @tparam Less   default to ::std::less<Key>   comparison function for the any local sort used for reduction or uniqueness.
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
@@ -629,11 +622,10 @@ namespace dsc  // distributed std container
       template <typename> class KeyTransform,
       template <typename, bool> class Hash,
       class Equal = ::std::equal_to<Key>,
-      class Less = ::std::less<Key>,
       class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class unordered_map : public unordered_map_base<Key, T, ::std::unordered_map, Comm, KeyTransform, Hash, Equal, Less, Alloc> {
-      using Base = unordered_map_base<Key, T, ::std::unordered_map, Comm, KeyTransform, Hash, Equal, Less, Alloc>;
+  class unordered_map : public unordered_map_base<Key, T, ::std::unordered_map, Comm, KeyTransform, Hash, Equal, Alloc> {
+      using Base = unordered_map_base<Key, T, ::std::unordered_map, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 
     public:
@@ -694,7 +686,7 @@ namespace dsc  // distributed std container
 
           size_t before = output.size();  // before size.
           for (auto it = first; it != last; ++it) {
-            if (!pred(*it)) continue;
+            if (!pred(this->trans(*it))) continue;
 
             auto iter = this->c.find(*it);
 
@@ -709,10 +701,17 @@ namespace dsc  // distributed std container
       void retain_unique_tuple(::std::vector<::std::pair<Key, T> >& input) const {
         if (input.size() == 0) return;
 
-        if (! ::std::is_sorted(input.begin(), input.end(), this->key_less_op))
-          ::std::stable_sort(input.begin(), input.end(), this->key_less_op);
-        auto end = ::std::unique(input.begin(), input.end(), this->key_equal_op);
-        input.erase(end, input.end());
+        // sorting can be slow.
+//        if (! ::std::is_sorted(input.begin(), input.end(), this->key_less_op))
+//          ::std::stable_sort(input.begin(), input.end(), this->key_less_op);
+//        auto end = ::std::unique(input.begin(), input.end(), this->key_equal_op);
+//        input.erase(end, input.end());
+
+        // use the same data structure to do the uniqueness reduction
+        local_container_type temp;
+        temp.reserve(input.size);
+        temp.insert(input.begin(), input.end());  // keep first entry only
+        input.assign(temp.begin(), temp.end());   // copy back to input.
       }
 
     public:
@@ -851,20 +850,35 @@ namespace dsc  // distributed std container
        */
       void insert(std::vector<::std::pair<Key, T> >& input) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
+        TIMER_INIT(insert);
 
+        TIMER_START(insert);
+        TIMER_END(insert, "start", input.size());
+
+
+        TIMER_START(insert);
         // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
         retain_unique_tuple(input);
+        TIMER_END(insert, "uniq1", input.size());
 
+        TIMER_START(insert);
         // communication part
         if (this->comm_size > 1) {
           mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
         }
+        TIMER_END(insert, "a2a", input.size());
+//
+//        TIMER_START(insert);
+//        // after communication, sort again to keep unique  - may not be needed
+//        retain_unique_tuple(input);
+//        TIMER_END(insert, "uniq2", input.size());
 
-        // after communication, sort again to keep unique  - may not be needed
-        retain_unique_tuple(input);
-
+        TIMER_START(insert);
         // local compute part.  called by the communicator.
         this->Base::local_insert(input.begin(), input.end());
+        TIMER_END(insert, "insert", this->csize());
+
+        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
       }
 
 
@@ -884,9 +898,9 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
         }
-
-        // after communication, sort again to keep unique  - may not be needed
-        retain_unique_tuple(input);
+//
+//        // after communication, sort again to keep unique  - may not be needed
+//        retain_unique_tuple(input);
 
         // local compute part.  called by the communicator.
         this->Base::local_insert_if(input.begin(), input.end(), pred);
@@ -921,7 +935,6 @@ namespace dsc  // distributed std container
    * @tparam KeyTransform   transform function for the key.  can supply identity.  requires a single template argument (Key).  useful for mapping kmolecule to kmer.
    * @tparam Hash   hash function for local and distribution.  requires a template arugment (Key), and a bool (prefix, chooses the MSBs of hash instead of LSBs)
    * @tparam Equal   default to ::std::equal_to<Key>   equal function for the local storage.
-   * @tparam Less   default to ::std::less<Key>   comparison function for the any local sort used for reduction or uniqueness.
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
@@ -929,11 +942,10 @@ namespace dsc  // distributed std container
       template <typename> class KeyTransform,
       template <typename, bool> class Hash,
       class Equal = ::std::equal_to<Key>,
-      class Less = ::std::less<Key>,
       class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class unordered_multimap : public unordered_map_base<Key, T, ::std::unordered_multimap, Comm, KeyTransform, Hash, Equal, Less, Alloc> {
-      using Base = unordered_map_base<Key, T, ::std::unordered_multimap, Comm, KeyTransform, Hash, Equal, Less, Alloc>;
+  class unordered_multimap : public unordered_map_base<Key, T, ::std::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc> {
+      using Base = unordered_map_base<Key, T, ::std::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 
     public:
@@ -994,7 +1006,7 @@ namespace dsc  // distributed std container
 
           size_t before = output.size();  // before size.
           for (auto it = first; it != last; ++it) {
-            if (!pred(*it)) continue;
+            if (!pred(this->trans(*it))) continue;
 
              auto range = this->c.equal_range(*it);
 
@@ -1212,14 +1224,25 @@ namespace dsc  // distributed std container
        */
       void insert(std::vector<::std::pair<Key, T> >& input) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
+        TIMER_INIT(insert);
+
+
+
+        TIMER_START(insert);
 
         // communication part
         if (this->comm_size > 1) {
           mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
         }
+        TIMER_END(insert, "a2a", input.size());
 
+        TIMER_START(insert);
         // local compute part.  called by the communicator.
         this->Base::local_insert(input.begin(), input.end());
+        TIMER_END(insert, "insert", this->c.size());
+
+        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+
       }
 
       /**
@@ -1270,7 +1293,6 @@ namespace dsc  // distributed std container
    * @tparam Hash   hash function for local and distribution.  requires a template arugment (Key), and a bool (prefix, chooses the MSBs of hash instead of LSBs)
    * @tparam Reduc  default to ::std::plus<key>    reduction operator
    * @tparam Equal   default to ::std::equal_to<Key>   equal function for the local storage.
-   * @tparam Less   default to ::std::less<Key>   comparison function for the any local sort used for reduction or uniqueness.
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
@@ -1279,11 +1301,10 @@ namespace dsc  // distributed std container
       template <typename, bool> class Hash,
       typename Reduc = ::std::plus<T>,
       class Equal = ::std::equal_to<Key>,
-      class Less = ::std::less<Key>,
       class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class reduction_unordered_map : public unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Less, Alloc> {
-      using Base = unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Less, Alloc>;
+  class reduction_unordered_map : public unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc> {
+      using Base = unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc>;
 
       static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
@@ -1334,31 +1355,53 @@ namespace dsc  // distributed std container
       template <class InputIterator, class Predicate>
       void local_insert_if(InputIterator first, InputIterator last, Predicate const & pred) {
           for (auto it = first; it != last; ++it) {
-            if (pred(*it)) this->c[it->first] = r(this->c[it->first], it->second);
+            if (pred(this->trans(*it))) this->c[it->first] = r(this->c[it->first], it->second);
           }
       }
 
       void local_reduction(::std::vector<::std::pair<Key, T> >& input) {
+  
         if (input.size() == 0) return;
 
-        // sort
-        if (! ::std::is_sorted(input.begin(), input.end(), this->key_less_op))
-          ::std::sort(input.begin(), input.end(), this->key_less_op);
+        // sort is slow
+//        if (! ::std::is_sorted(input.begin(), input.end(), this->key_less_op))
+//          ::std::sort(input.begin(), input.end(), this->key_less_op);
+//
+//        // then do reduction
+//        auto first = input.begin();
+//        auto curr = first;  ++curr;
+//        while (curr != input.end()) {
+//          if (this->key_equal_op(*first, *curr))  // if same, do reduction
+//            first->second = r(first->second, curr->second);
+//          else  // else reset first.
+//            first = curr;
+//          ++curr;  // increment second.
+//        }
+//
+//        // keep the first element in each replicated range
+//        auto end = ::std::unique(input.begin(), input.end(), this->key_equal_op);
+//        input.erase(end, input.end());
 
-        // then do reduction
-        auto first = input.begin();
-        auto curr = first;  ++curr;
-        while (curr != input.end()) {
-          if (this->key_equal_op(*first, *curr))  // if same, do reduction
-            first->second = r(first->second, curr->second);
-          else  // else reset first.
-            first = curr;
-          ++curr;  // increment second.
+        // use the target container type.
+
+        TIMER_INIT(reduce_tuple);
+
+        TIMER_START(reduce_tuple);
+        local_container_type temp;
+        temp.reserve(input.size());
+        TIMER_END(reduce_tuple, "reserve", input.size());
+
+        TIMER_START(reduce_tuple);
+        for (auto it = input.begin(), end = input.end(); it != end; ++it) {
+          temp[it->first] = r(temp[it->first], it->second);
         }
+        TIMER_END(reduce_tuple, "reduce", temp.size());
 
-        // keep the first element in each replicated range
-        auto end = ::std::unique(input.begin(), input.end(), this->key_equal_op);
-        input.erase(end, input.end());
+        TIMER_START(reduce_tuple);
+        input.assign(temp.begin(), temp.end());
+        TIMER_END(reduce_tuple, "copy", input.size());
+
+        TIMER_REPORT_MPI(reduce_tuple, this->comm_rank, this->comm);
       }
 
 
@@ -1386,9 +1429,9 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
         }
-
-        // after communication, sort again to keep unique  - may not be needed
-        local_reduction(input);
+//
+//        // after communication, sort again to keep unique  - may not be needed
+//        local_reduction(input);
 
         // local compute part.  called by the communicator.
         local_insert(input.begin(), input.end());
@@ -1410,9 +1453,9 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
         }
-
-        // after communication, sort again to keep unique  - may not be needed
-        local_reduction(input);
+//
+//        // after communication, sort again to keep unique  - may not be needed
+//        local_reduction(input);
 
         // local compute part.  called by the communicator.
         local_insert_if(input.begin(), input.end(), pred);
@@ -1449,7 +1492,6 @@ namespace dsc  // distributed std container
    * @tparam KeyTransform   transform function for the key.  can supply identity.  requires a single template argument (Key).  useful for mapping kmolecule to kmer.
    * @tparam Hash   hash function for local and distribution.  requires a template arugment (Key), and a bool (prefix, chooses the MSBs of hash instead of LSBs)
    * @tparam Equal   default to ::std::equal_to<Key>   equal function for the local storage.
-   * @tparam Less   default to ::std::less<Key>   comparison function for the any local sort used for reduction or uniqueness.
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
@@ -1457,11 +1499,10 @@ namespace dsc  // distributed std container
       template <typename> class KeyTransform,
       template <typename, bool> class Hash,
       class Equal = ::std::equal_to<Key>,
-      class Less = ::std::less<Key>,
       class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class counting_unordered_map : public reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal, Less, Alloc> {
-      using Base = reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal, Less, Alloc>;
+  class counting_unordered_map : public reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal,Alloc> {
+      using Base = reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal, Alloc>;
 
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
 
@@ -1492,29 +1533,68 @@ namespace dsc  // distributed std container
       friend Comm;
 
       ::std::vector<::std::pair<Key, T> > local_reduction(::std::vector<Key>& input) {
+
+        TIMER_INIT(local_reduc);
+
+        TIMER_START(local_reduc);
         ::std::vector<::std::pair<Key, T> > output;
         if (input.size() == 0) return output;
+        TIMER_END(local_reduc, "start", input.size());
 
-        // sort
-        if (! ::std::is_sorted(input.begin(), input.end(), this->key_less_op))
-          ::std::sort(input.begin(), input.end(), this->key_less_op);
 
-        // then do reduction
-        output.reserve(input.size());
+        // sort is slow.
+//        TIMER_START(local_reduc);
+//        if (! ::std::is_sorted(input.begin(), input.end(), this->key_less_op))
+//          ::std::sort(input.begin(), input.end(), this->key_less_op);
+//
+//        TIMER_END(local_reduc, "sort", input.size());
+//
+//
+//        // reserve
+//        TIMER_START(local_reduc);
+//        // then do reduction
+//        output.reserve(input.size());
+//        TIMER_END(local_reduc, "reserve", input.size());
+//
+//
+//        // reduce
+//        TIMER_START(local_reduc);
+//        auto first = input.begin();
+//        output.emplace_back(*first, 1);
+//
+//        auto curr = first;  ++curr;
+//        while (curr != input.end()) {
+//          if (this->key_equal_op(*first, *curr))  // if same, do reduction
+//            ++(output.back().second);
+//          else { // else reset first.
+//            first = curr;
+//            output.emplace_back(*first, 1);
+//          }
+//          ++curr;  // increment second.
+//        }
+//        TIMER_END(local_reduc, "reduce", input.size());
 
-        auto first = input.begin();
-        output.emplace_back(*first, 1);
-
-        auto curr = first;  ++curr;
-        while (curr != input.end()) {
-          if (this->key_equal_op(*first, *curr))  // if same, do reduction
-            ++(output.back().second);
-          else { // else reset first.
-            first = curr;
-            output.emplace_back(*first, 1);
-          }
-          ++curr;  // increment second.
+        // use target container type instead
+        TIMER_START(local_reduc);
+        local_container_type temp;
+        temp.reserve(input.size());
+        for (auto it = input.begin(), end = input.end(); it != end; ++it) {
+          temp[*it]++;
         }
+        TIMER_END(local_reduc, "reduce", temp.size());
+
+        // reserve
+        TIMER_START(local_reduc);
+        // then do reduction
+        output.reserve(temp.size());
+        TIMER_END(local_reduc, "reserve", temp.size());
+
+
+        TIMER_START(local_reduc);
+        output.assign(temp.begin(), temp.end());
+        TIMER_END(local_reduc, "copy", output.size());
+
+        TIMER_REPORT_MPI(local_reduc, this->comm_rank, this->comm);
 
         return output;
       }
@@ -1533,20 +1613,49 @@ namespace dsc  // distributed std container
        */
       void insert(std::vector< Key >& input) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
+        TIMER_INIT(count_insert);
+
+        TIMER_START(count_insert);
+        TIMER_END(count_insert, "start", input.size());
+
+
+        // distribute
+        TIMER_START(count_insert);
 
         // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
         auto temp = local_reduction(input);
+        TIMER_END(count_insert, "reduc1", temp.size());
+
+
+        // distribute
+        TIMER_START(count_insert);
 
         // communication part
         if (this->comm_size > 1) {
           mxx2::msgs_all2all(temp, this->key_to_rank, this->comm);
         }
+        TIMER_END(count_insert, "a2a", temp.size());
 
-        // after communication, sort again to keep unique  - may not be needed
-        this->Base::local_reduction(temp);
+
+//        // distribute
+//        TIMER_START(count_insert);
+//
+//        // after communication, sort again to keep unique  - NOT be needed
+//        this->Base::local_reduction(temp);
+//        TIMER_END(count_insert, "reduc2", temp.size());
+
+
+        // distribute
+        TIMER_START(count_insert);
 
         // local compute part.  called by the communicator.
         this->Base::local_insert(temp.begin(), temp.end());
+        TIMER_END(count_insert, "insert", this->c.size());
+
+
+        // distribute
+        TIMER_REPORT_MPI(count_insert, this->comm_rank, this->comm);
+
       }
 
       /**
@@ -1565,9 +1674,9 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           mxx2::msgs_all2all(temp, this->key_to_rank, this->comm);
         }
-
-        // after communication, sort again to keep unique  - may not be needed
-        this->Base::local_reduction(temp);
+//
+//        // after communication, sort again to keep unique  - NOT be needed
+//        this->Base::local_reduction(temp);
 
         // local compute part.  called by the communicator.
         this->Base::local_insert_if(temp.begin(), temp.end(), pred);
