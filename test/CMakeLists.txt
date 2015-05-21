@@ -136,13 +136,18 @@ target_link_libraries(profile_mem_usage bliss-common)
 cotire(profile_mem_usage )
 
 
-add_executable(quicktest quicktest.cpp)
-target_link_libraries(quicktest ${EXTRA_LIBS})
-cotire(quicktest )
+add_executable(test_get_file_size test_get_file_size.cpp)
+target_link_libraries(test_get_file_size ${EXTRA_LIBS})
+cotire(test_get_file_size )
 
 
 add_executable(hash_vs_sort hash_vs_sort.cpp)
 target_link_libraries(hash_vs_sort ${EXTRA_LIBS})
+
+
+add_executable(kmer_reverse kmer_reverse.cpp)
+target_link_libraries(kmer_reverse ${EXTRA_LIBS})
+target_link_libraries(kmer_reverse bliss-common)
 
 endif()
 

@@ -63,7 +63,6 @@
           fflush(stdout); \
           printf("%s\n", output.str().c_str()); \
           fflush(stdout); \
-          MPI_Barrier(comm); \
         } while (0)
 
 
