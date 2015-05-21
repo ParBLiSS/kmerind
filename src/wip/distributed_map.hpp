@@ -669,7 +669,7 @@ namespace dsc  // distributed std container
              auto iter = this->c.find(*it);
 
             if (iter != this->c.end()) {
-              output.insert(output.end(), *iter);
+              output.push_back(*iter);
             }  // no insert if can't find it.
           }
           return output.size() - before;  // after size.
@@ -691,7 +691,7 @@ namespace dsc  // distributed std container
             auto iter = this->c.find(*it);
 
             if (iter != this->c.end()) {
-              output.insert(output.end(), *iter);
+              output.push_back(*iter);
             }  // no insert if can't find it.
           }
           return output.size() - before;  // after size.
@@ -709,7 +709,7 @@ namespace dsc  // distributed std container
 
         // use the same data structure to do the uniqueness reduction
         local_container_type temp;
-        temp.reserve(input.size);
+        temp.reserve(input.size());
         temp.insert(input.begin(), input.end());  // keep first entry only
         input.assign(temp.begin(), temp.end());   // copy back to input.
       }
@@ -988,9 +988,14 @@ namespace dsc  // distributed std container
           for (auto it = first; it != last; ++it) {
              auto range = this->c.equal_range(*it);
 
-            if (range.first != range.second) {
-              output.insert(output.end(), range.first, range.second);
-            }  // no insert if can't find it.
+             // range's iterators are not random access iterators, so insert needs to call distance repeatedly, slowing down the process.
+             // manually insert improves performance here.
+             for (auto it2 = range.first; it2 != range.second; ++it2) {
+               output.push_back(*it2);
+             }
+//            if (range.first != range.second) {
+//              output.insert(output.end(), range.first, range.second);
+//            }  // no insert if can't find it.
           }
           return output.size() - before;  // after size.
       }
@@ -1010,9 +1015,14 @@ namespace dsc  // distributed std container
 
              auto range = this->c.equal_range(*it);
 
-            if (range.first != range.second) {
-              output.insert(output.end(), range.first, range.second);
-            }  // no insert if can't find it.
+             // range's iterators are not random access iterators, so insert needs to call distance repeatedly, slowing down the process.
+             // manually insert improves performance here.
+             for (auto it2 = range.first; it2 != range.second; ++it2) {
+               output.push_back(*it2);
+             }
+//            if (range.first != range.second) {
+//              output.insert(output.end(), range.first, range.second);
+//            }  // no insert if can't find it.
           }
           return output.size() - before;  // after size.
       }
