@@ -122,7 +122,7 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
 
 template<typename KmerType>
 void sample(std::vector<KmerType> &query, size_t n, unsigned int seed) {
-  std::shuffle(query.begin(), query.end(), std::default_random_engine(seed));
+  std::shuffle(query.begin(), query.begin() + ::std::min(4 * n, query.size()), std::default_random_engine(seed));
   query.erase(query.begin() + n, query.end());
 }
 

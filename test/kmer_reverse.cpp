@@ -61,7 +61,7 @@ void test_reverse() {
 
   using KMER = bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
   KMER kmer, rev, revcomp, rev2, revcomp2;
-  int iterations = 100000;
+  int iterations = 1000001;
 
   printf("testing kmer with k=%d, nbits = %d, word bits =%lu\n", KMER_SIZE, KMER::nBits, sizeof(WORD_TYPE) * 8);
 
@@ -76,25 +76,25 @@ void test_reverse() {
 
   TIMER_START(test);
   for (int i = 0; i  < iterations; ++i) {
-    rev = kmer.reversed_kmer();
+    rev ^= kmer.reversed_kmer2();
   }
   TIMER_END(test, "old reverse", iterations);
 
   TIMER_START(test);
   for (int i = 0; i  < iterations; ++i) {
-    revcomp = kmer.reverse_complement();
+    revcomp ^= kmer.reverse_complement2();
   }
   TIMER_END(test, "old revcomp", iterations);
 
   TIMER_START(test);
   for (int i = 0; i  < iterations; ++i) {
-    rev2 = kmer.reversed_kmer2();
+    rev2 ^= kmer.reversed_kmer();
   }
   TIMER_END(test, "new reverse", iterations);
 
   TIMER_START(test);
   for (int i = 0; i  < iterations; ++i) {
-    revcomp2 = kmer.reverse_complement2();
+    revcomp2 ^= kmer.reverse_complement();
   }
   TIMER_END(test, "new revcomp", iterations);
 

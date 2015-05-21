@@ -810,7 +810,7 @@ namespace bliss
       // create a copy of this
       Kmer rev(*this);
       // reverse it
-      rev.do_reverse();
+      rev.do_reverse<ALPHABET>();
       // return the result
       return rev;
     }
@@ -828,7 +828,7 @@ namespace bliss
       // create a copy of this
       Kmer revcomp(*this);
       // reverse it
-      revcomp.do_reverse_complement();
+      revcomp.do_reverse_complement<ALPHABET>();
       // return the result
       return revcomp;
     }
@@ -847,7 +847,7 @@ namespace bliss
       // create a copy of this
       Kmer rev(*this);
       // reverse it
-      rev.do_reverse2<ALPHABET>();
+      rev.do_reverse_serial();
       // return the result
       return rev;
     }
@@ -865,7 +865,7 @@ namespace bliss
       // create a copy of this
       Kmer revcomp(*this);
       // reverse it
-      revcomp.do_reverse_complement2<ALPHABET>();
+      revcomp.do_reverse_complement_serial();
       // return the result
       return revcomp;
     }
@@ -1168,7 +1168,7 @@ namespace bliss
      * the sequence of `BITS_PER_CHAR` bits each.
      *
      */
-    inline void do_reverse()
+    inline void do_reverse_serial()
     {
       // TODO implement logarithmic version (logarithmic in number of bits in a word, linear in number of words).  non power of 2 bitsPerChar is tricky because of byte boundaries.
   
@@ -1199,7 +1199,7 @@ namespace bliss
      * the sequence of `BITS_PER_CHAR` bits each.
      *
      */
-    inline void do_reverse_complement()
+    inline void do_reverse_complement_serial()
     {
       // TODO implement logarithmic version (logarithmic in number of bits in a word, linear in number of words).  non power of 2 bitsPerChar is tricky because of byte boundaries.
 
@@ -1230,7 +1230,7 @@ namespace bliss
 
 
 
-    /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.
+    /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.  8 to 100 times faster.
     template <typename A = ALPHABET>
     inline typename ::std::enable_if<::std::is_same<A, DNA>::value ||
                                      ::std::is_same<A, RNA>::value, WORD_TYPE>::type word_reverse(WORD_TYPE const & b) {
@@ -1251,7 +1251,7 @@ namespace bliss
 
       return v;
     }
-    // do reverse complement.
+    /// do reverse complement.  8 to 100 times faster than serially reversing the bits.
     template <typename A = ALPHABET>
         inline typename ::std::enable_if<::std::is_same<A, DNA>::value ||
                                          ::std::is_same<A, RNA>::value, WORD_TYPE>::type word_reverse_complement(WORD_TYPE const & b) {
@@ -1261,6 +1261,7 @@ namespace bliss
 
     // reverse via bit swapping in 4 bit increment.  this complement table is then used for lookup.
     /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.
+    /// 8 to 50 times faster than sequentially reverse the bits.
     template <typename A = ALPHABET>
         inline typename ::std::enable_if<::std::is_same<A, DNA16>::value, WORD_TYPE>::type  word_reverse(WORD_TYPE const & b) {
       WORD_TYPE v = b;
@@ -1279,7 +1280,7 @@ namespace bliss
 
       return v;
     }
-    // do reverse complement.
+    /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
     template <typename A = ALPHABET>
             inline typename ::std::enable_if<::std::is_same<A, DNA16>::value, WORD_TYPE>::type word_reverse_complement(WORD_TYPE const & b) {
       // DNA type:
@@ -1320,7 +1321,7 @@ namespace bliss
         typename ::std::enable_if<::std::is_same<A, DNA>::value ||
                                   ::std::is_same<A, RNA>::value ||
                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
-    inline void do_reverse2()
+    inline void do_reverse()
     {
 //      printf("do reverse2 start kmer %s\n", this->toAlphabetString().c_str());
 
@@ -1357,7 +1358,7 @@ namespace bliss
         typename ::std::enable_if<::std::is_same<A, DNA>::value ||
                                   ::std::is_same<A, RNA>::value ||
                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
-    inline void do_reverse_complement2()
+    inline void do_reverse_complement()
     {
       // swap the words and at the same time swap and complement the bits inside.
       WORD_TYPE tmp;
@@ -1385,12 +1386,12 @@ namespace bliss
      *
      */
     template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA5>::value ||
-                                  ::std::is_same<A, RNA5>::value ||
-                                  ::std::is_same<A, DNA_IUPAC>::value , int>::type = 0>
-    inline void do_reverse2()
+        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
+                                    ::std::is_same<A, RNA>::value ||
+                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
+    inline void do_reverse()
     {
-       this->do_reverse();
+       this->do_reverse_serial();
     }
 
     /**
@@ -1401,12 +1402,12 @@ namespace bliss
      *
      */
     template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA5>::value ||
-                                  ::std::is_same<A, RNA5>::value ||
-                                  ::std::is_same<A, DNA_IUPAC>::value , int>::type = 0>
-    inline void do_reverse_complement2()
+        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
+                                    ::std::is_same<A, RNA>::value ||
+                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
+    inline void do_reverse_complement()
     {
-      this->do_reverse_complement();
+      this->do_reverse_complement_serial();
     }
 
     /**
