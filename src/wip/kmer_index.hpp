@@ -118,7 +118,7 @@ namespace bliss
 
           std::vector<KmerType> read_file_for_kmers(const std::string & filename, MPI_Comm comm) {
 
-            std::vector< KmerType > temp;
+            std::vector< KmerType > result;
             TIMER_INIT(file);
 
             {
@@ -137,8 +137,8 @@ namespace bliss
               // index reserve internally sends a message to itself.
               // call after getting first L1Block to ensure that file is loaded.
               size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
-              temp.reserve(est_size);
-              TIMER_END(file, "reserve", est_size);
+              result.reserve(est_size);
+              TIMER_END(file, "reserve", est_size * sizeof(KmerType));
 
 
 
@@ -172,16 +172,16 @@ namespace bliss
                   KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
                   KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
 
-                  temp.insert(temp.end(), start, end);
+                  result.insert(result.end(), start, end);
                 }
 
                 partition = loader.getNextL1Block();
               }
-              TIMER_END(file, "read", temp.size());
+              TIMER_END(file, "read", result.size());
             }
 
             TIMER_REPORT_MPI(file, commRank, comm);
-            return temp;
+            return result;
           }
 
 
@@ -304,7 +304,7 @@ namespace bliss
               size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + this->commSize - 1) / this->commSize;
               temp.reserve(est_size);
 
-              TIMER_END(file, "reserve", est_size);
+              TIMER_END(file, "reserve", est_size * sizeof(TupleType));
 
               // == create kmer iterator
               //            kmer_iter start(data, range);
@@ -470,7 +470,7 @@ namespace bliss
               size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + this->commSize - 1) / this->commSize;
               temp.reserve(est_size);
 
-              TIMER_END(file, "reserve", est_size);
+              TIMER_END(file, "reserve", est_size * sizeof(TupleType));
 
 
               // == create kmer iterator
