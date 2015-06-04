@@ -104,26 +104,26 @@ void benchmark_reverse() {
   if (revcomp3 != revcomp2) {
     printf("ERROR: old and new method of computing reverse complement produced different results:\n\trev2\t%s\n\trev3\t%s\n", revcomp2.toAlphabetString().c_str(), revcomp3.toAlphabetString().c_str());
   }
-
-  TIMER_START(test);
-  for (int i = 0; i  < iterations; ++i) {
-    rev4 ^= kmers[i].reversed_kmer_simd();
-  }
-  TIMER_END(test, "intrinsic reverse 2", iterations);
-
-  TIMER_START(test);
-  for (int i = 0; i  < iterations; ++i) {
-    revcomp4 ^= kmers[i].reverse_complement_simd();
-  }
-  TIMER_END(test, "intrinsic revcomp 2", iterations);
-
-  if (rev4 != rev2) {
-    printf("ERROR: old and new2 method of computing reverse produced different results:\n\trev2\t%s\n\trev4\t%s\n", rev2.toAlphabetString().c_str(), rev4.toAlphabetString().c_str());
-  }
-
-  if (revcomp4 != revcomp2) {
-    printf("ERROR: old and new2 method of computing reverse complement produced different results:\n\trev2\t%s\n\trev4\t%s\n", revcomp2.toAlphabetString().c_str(), revcomp4.toAlphabetString().c_str());
-  }
+//
+//  TIMER_START(test);
+//  for (int i = 0; i  < iterations; ++i) {
+//    rev4 ^= kmers[i].reversed_kmer_simd();
+//  }
+//  TIMER_END(test, "intrinsic reverse 2", iterations);
+//
+//  TIMER_START(test);
+//  for (int i = 0; i  < iterations; ++i) {
+//    revcomp4 ^= kmers[i].reverse_complement_simd();
+//  }
+//  TIMER_END(test, "intrinsic revcomp 2", iterations);
+//
+//  if (rev4 != rev2) {
+//    printf("ERROR: old and new2 method of computing reverse produced different results:\n\trev2\t%s\n\trev4\t%s\n", rev2.toAlphabetString().c_str(), rev4.toAlphabetString().c_str());
+//  }
+//
+//  if (revcomp4 != revcomp2) {
+//    printf("ERROR: old and new2 method of computing reverse complement produced different results:\n\trev2\t%s\n\trev4\t%s\n", revcomp2.toAlphabetString().c_str(), revcomp4.toAlphabetString().c_str());
+//  }
 
 
   TIMER_REPORT(test, 0);
@@ -184,21 +184,21 @@ void test_reverse() {
       break;
     }
 
-    rev4 ^= kmer.reversed_kmer_simd();
-    revcomp4 ^= kmer.reverse_complement_simd();
-
-
-    if (rev != rev4) {
-      printf("Input kmer %s iter %d\n", kmer.toAlphabetString().c_str(),i);
-      printf("ERROR: simd reverse different:\n\trev\t%s\n\trev3\t%s\n", rev.toAlphabetString().c_str(), rev4.toAlphabetString().c_str());
-      break;
-    }
-
-    if (revcomp != revcomp4) {
-      printf("Input kmer %s iter %d\n", kmer.toAlphabetString().c_str(),i);
-      printf("ERROR: simd rev comp different:\n\trev\t%s\n\trev3\t%s\n", revcomp.toAlphabetString().c_str(), revcomp4.toAlphabetString().c_str());
-      break;
-    }
+//    rev4 ^= kmer.reversed_kmer_simd();
+//    revcomp4 ^= kmer.reverse_complement_simd();
+//
+//
+//    if (rev != rev4) {
+//      printf("Input kmer %s iter %d\n", kmer.toAlphabetString().c_str(),i);
+//      printf("ERROR: simd reverse different:\n\trev\t%s\n\trev3\t%s\n", rev.toAlphabetString().c_str(), rev4.toAlphabetString().c_str());
+//      break;
+//    }
+//
+//    if (revcomp != revcomp4) {
+//      printf("Input kmer %s iter %d\n", kmer.toAlphabetString().c_str(),i);
+//      printf("ERROR: simd rev comp different:\n\trev\t%s\n\trev3\t%s\n", revcomp.toAlphabetString().c_str(), revcomp4.toAlphabetString().c_str());
+//      break;
+//    }
 
 
     kmer.nextFromChar(rand() % ALPHABET::SIZE);
