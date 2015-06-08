@@ -170,30 +170,35 @@ std::vector<std::pair<KmerType, IdType> > testQuery(const MapType & map, std::ve
           TIMER_START(find);
          std::vector<int> send_counts(commSize, 0);
          results.reserve(query.size() * 50);                                      // TODO:  should estimate coverage.
+         printf("reserving %lu\n", query.size() * 50);
+
          TIMER_END(find, "reserve", query.size() * 50);
 
          TIMER_START(find);
          int k = 0;
          int s = 0;
+         size_t before = 0;
          for (int i = 0; i < commSize; ++i) {
            // work on query from process i.
            //printf("R %d working on query from proce %d\n", commRank, i);
-           send_counts[i] = 0;
 
+           before = results.size();
            for (int j = 0; j < recv_counts[i]; ++j, ++k) {
               auto range = map.equal_range(query[k]);
 
-             s = std::distance(range.first, range.second);
-             if (s > 0) {
-               results.insert(results.end(), range.first, range.second);
-               send_counts[i] += s;
+              for (auto it2 = range.first; it2 != range.second; ++it2) {
+               results.push_back(*it2);
              }
            }
            //if (rank == 0) printf("R %d added %d results for %d queries for process %d\n", rank, send_counts[i], recv_counts[i], i);
-
+           send_counts[i] = results.size() - before;
          }
          TIMER_END(find, "local_find", results.size());
 
+         for (int z = 0; z < send_counts.size(); ++z) {
+           printf("%d %d;", z, send_counts[z]);
+         }
+         printf("\n");
 
           // ==  send back results.
           TIMER_START(find);

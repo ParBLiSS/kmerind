@@ -36,7 +36,7 @@ namespace mxx {
 
   template<>
   class datatype<bliss::io::FASTQ::SequenceId > :
-    public datatype_contiguous<decltype(bliss::io::FASTQ::SequenceId::file_pos),1> {};
+    public datatype_contiguous<decltype(bliss::io::FASTQ::SequenceId::file_pos), 1> {};
 
 }
 
@@ -45,6 +45,9 @@ namespace mxx {
 
 
 namespace mxx2 {
+
+
+
   // ~ 5 to 15% faster compared to standard version, but requires more memory.
   template<typename T, typename _TargetP>
   std::vector<int> msgs_all2all(std::vector<T>& msgs, _TargetP target_p_fun, MPI_Comm comm)
@@ -64,14 +67,22 @@ namespace mxx2 {
           pids[i] = target_p_fun(msgs[i]);
           send_counts[pids[i]]++;
       }
+  
+    
 
       // get all2all params
       std::vector<int> recv_counts = mxx::all2all(send_counts, 1, comm);
       std::vector<int> send_displs = mxx::get_displacements(send_counts);
       std::vector<int> recv_displs = mxx::get_displacements(recv_counts);
 
-      // copy.  need to be able to track current position within each block.
       std::vector<int> offset = send_displs;
+//      // debug
+//        for (int i = 0; i < p; ++i) {
+//          printf("local rank %d remote rank %d: [%d %d %d %d %d]\n", rank, i, send_counts[i], send_displs[i], recv_counts[i], recv_displs[i], offset[i]);
+//        }
+//
+
+      // copy.  need to be able to track current position within each block.
       std::vector<T> send_buffer;
       if (msgs.size() > 0)
           send_buffer.resize(msgs.size());
@@ -79,6 +90,18 @@ namespace mxx2 {
       {
           send_buffer[offset[pids[i]]++] = msgs[i];
       }
+
+//      int target = target_p_fun(send_buffer[0]);
+//      int count = 1;
+//      for (int i = 1; i < send_buffer.size(); ++i) {
+//        if (target_p_fun(send_buffer[i-1]) == target_p_fun(send_buffer[i])) ++count;
+//        else {
+//          printf("local rank %d remote rank %d actual data count %d\n", rank, target, count);
+//          count = 1;
+//          target = target_p_fun(send_buffer[i]);
+//        }
+//      }
+//      printf("local rank %d remote rank %d actual data count %d\n", rank, target, count);
 
 
       // resize messages to fit recv
@@ -91,6 +114,9 @@ namespace mxx2 {
       // get MPI type
       mxx::datatype<T> dt;
       MPI_Datatype mpi_dt = dt.type();
+      MPI_Aint s;
+      MPI_Type_extent(mpi_dt, &s);
+      if (s != sizeof(T)) printf("ERROR: local rank %d data size for type %lu, mpitype size %ld\n", rank, sizeof(T), s);
 
       // all2all
       MPI_Alltoallv(&send_buffer[0], &send_counts[0], &send_displs[0], mpi_dt,
@@ -99,7 +125,6 @@ namespace mxx2 {
 
       return recv_counts;
   }
-
 
   template <typename T, typename Func>
   T reduce(T& x, Func func, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)

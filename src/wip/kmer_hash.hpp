@@ -116,6 +116,8 @@ namespace std {
         return h;
       }
   };
+
+
 }  // namespace std
 
 
@@ -179,7 +181,7 @@ namespace bliss {
 
       /**
        * @brief  Kmer hash, returns the least significant NumBits directly as identity hash.
-       * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
+       * @note   since the number of buckets is not known ahead of time, can't have nbit be a type.  max is 64bits.
        */
       template<typename KMER, bool Prefix = false>
       class cpp_std {
@@ -230,7 +232,7 @@ namespace bliss {
               return kmer.getPrefix(bits);  // get the first bits number of bits from kmer.
             else
               // if nBits < 64U, then it's padded with 0.  just get it.  else we want the entire 64bit.
-              return kmer.getSuffix(64U);
+              return kmer.getSuffix(default_init_value);
           }
       };
 
@@ -242,17 +244,13 @@ namespace bliss {
 
         protected:
           static constexpr unsigned int nBytes = (KMER::nBits + 7) / 8;
-          const int64_t shift;
 
         public:
-          static const unsigned int default_init_value = 64U;
-
-          murmur(const unsigned int prefix_bits = default_init_value) : shift(default_init_value - prefix_bits) {
-            if (prefix_bits > default_init_value)  throw ::std::invalid_argument("ERROR: prefix larger than 64 bit.");
-          };
+          murmur(const unsigned int) {};
 
           inline uint64_t operator()(KMER const& kmer) const
           {
+            // produces 128 bit hash.
             uint64_t h[2];
             // let compiler optimize out all except one of these.
             if (sizeof(void*) == 8)
@@ -264,7 +262,7 @@ namespace bliss {
 
             // use the upper 64 bits.
             if (Prefix)
-              return h[1] >> shift;
+              return h[1];
             else
               return h[0];
           }
@@ -287,11 +285,11 @@ namespace bliss {
         public:
           static const unsigned int default_init_value = 64U;
 
-          farm(const unsigned int prefix_bits = default_init_value) : shift(default_init_value - prefix_bits) {
+          farm(const unsigned int prefix_bits = default_init_value) : shift(64U - prefix_bits) {
             if (prefix_bits > default_init_value)  throw ::std::invalid_argument("ERROR: prefix larger than 64 bit.");
           };
 
-          /// operator to compute hash
+          /// operator to compute hash.  64 bit again.
           inline uint64_t operator()(const KMER & kmer) const {
             if (Prefix)
               return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes) >> shift;

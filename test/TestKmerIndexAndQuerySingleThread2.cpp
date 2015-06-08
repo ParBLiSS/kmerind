@@ -156,7 +156,6 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
   TIMER_END(test, "read query", query.size());
 
 
-
   // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
   TIMER_START(test);
   unsigned seed = rank * 23;
@@ -164,6 +163,26 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
   TIMER_END(test, "select 1%", query.size());
 
   auto query_orig = query;
+
+  auto query1 = query;
+  query1.resize(1);
+
+  // query 1
+  TIMER_START(test);
+  auto results3 = idx.find(query1);
+  TIMER_END(test, "query 1", results3.size());
+
+  query1 = query;
+  query1.resize(1);
+
+  // query 1
+  TIMER_START(test);
+  auto results4 = idx.count(query1);
+  TIMER_END(test, "count 1", results4.size());
+
+
+
+  query = query_orig;
 
   // process query
   // query
@@ -179,28 +198,7 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
   TIMER_END(test, "count 1%", results2.size());
 
 
-  query = query_orig;
 
-  // select 1
-  // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
-  TIMER_START(test);
-  seed = rank * 57;
-  sample(query, 1, seed);
-  TIMER_END(test, "select 1", query.size());
-
-  query_orig = query;
-
-  // query 1
-  TIMER_START(test);
-  auto results3 = idx.find(query);
-  TIMER_END(test, "query 1", results3.size());
-
-  query = query_orig;
-
-  // query 1
-  TIMER_START(test);
-  auto results4 = idx.count(query);
-  TIMER_END(test, "count 1", results4.size());
 
   TIMER_REPORT_MPI(test, rank, comm);
 

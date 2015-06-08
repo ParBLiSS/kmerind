@@ -154,7 +154,10 @@ public:
 
   protected:
     /// The actual storage of the k-mer
-    WORD_TYPE data[nWords] __attribute__((aligned(16)));
+    WORD_TYPE data[nWords]; //  not compatible with mxx datatype stuff - causes size of std::pair to increase greatly because alignment of elements is based on most resitrictive element.
+                            // __attribute__((aligned(16)));
+    						// actually, worse than that.  built-in types are having problems as well - alignment of primitive types is not reflected in sizeof or alignof keywords.
+                            // TODO: can use MPI_Type_create_resized() to fix this problem for tuple and struct, but for primitive types its's not so easy.
   
 
     static constexpr uint8_t simd_mask_b[16] __attribute__((aligned(16))) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
@@ -652,7 +655,7 @@ public:
      */
     INLINE bool operator==(const Kmer& rhs) const
     {
-      return std::equal(data, data+nWords, rhs.data);
+      return memcmp(data, rhs.data, nWords * sizeof(WORD_TYPE)) == 0;
     }
   
     /**
@@ -678,17 +681,25 @@ public:
      */
     INLINE bool operator<(const Kmer& rhs) const
     {
-      std::pair<const WORD_TYPE*, const WORD_TYPE*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
-      if (unequal.first == this->data + nWords)
-      {
-        // all elements are equal
-        return false;
+      auto first = this->data;
+      auto second = rhs.data;
+
+      for (int i = 0; i < nWords; ++i, ++first, ++second) {
+        if (*first != *second) return (*first < *second);  // if equal, keep comparing. else decide.
       }
-      else
-      {
-        // the comparison of the first unequal element will determine the result
-        return *(unequal.first) < *(unequal.second);
-      }
+      return false;  // all equal
+//      std::pair<const WORD_TYPE*, const WORD_TYPE*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
+//      if (unequal.first == this->data + nWords)
+//      {
+//        // all elements are equal
+//        return false;
+//      }
+//      else
+//      {
+//        // the comparison of the first unequal element will determine the result
+//        return *(unequal.first) < *(unequal.second);
+//      }
+//      return memcmp(data, rhs.data, nWords * sizeof(WORD_TYPE)) < 0;
     }
   
     /**
@@ -700,17 +711,25 @@ public:
      */
     INLINE bool operator<=(const Kmer& rhs) const
     {
-      std::pair<const WORD_TYPE*, const WORD_TYPE*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
-      if (unequal.first == this->data + nWords)
-      {
-        // all elements are equal
-        return true;
+      auto first = this->data;
+      auto second = rhs.data;
+
+      for (int i = 0; i < nWords; ++i, ++first, ++second) {
+        if (*first != *second) return (*first < *second);  // if equal, keep comparing. else decide.
       }
-      else
-      {
-        // the comparison of the first unequal element will determine the result
-        return *(unequal.first) < *(unequal.second);
-      }
+      return true;  // all equal
+//      std::pair<const WORD_TYPE*, const WORD_TYPE*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
+//      if (unequal.first == this->data + nWords)
+//      {
+//        // all elements are equal
+//        return true;
+//      }
+//      else
+//      {
+//        // the comparison of the first unequal element will determine the result
+//        return *(unequal.first) < *(unequal.second);
+//      }
+//      return memcmp(data, rhs.data, nWords * sizeof(WORD_TYPE)) <= 0;
     }
   
     /* symmetric comparison operators */
@@ -830,7 +849,7 @@ public:
      */
     INLINE Kmer& operator>>=(const std::size_t shift_by)
     {
-      this->do_sanitize();
+      this->do_sanitize();  // right shift so need to sanitize upper bits first.
 
       // shift the given number of **characters** !
       this->do_right_shift(shift_by * bitsPerChar);
@@ -862,7 +881,7 @@ public:
      */
     Kmer reversed_kmer() const
     {
-      return do_reverse<ALPHABET>(*this);
+      return ::std::move(do_reverse<ALPHABET>(*this));
     }
 
     /**
@@ -875,7 +894,7 @@ public:
      */
     Kmer reverse_complement() const
     {
-      return do_reverse_complement<ALPHABET>(*this);
+      return ::std::move(do_reverse_complement<ALPHABET>(*this));
     }
   
   
@@ -889,7 +908,7 @@ public:
      */
     Kmer reversed_kmer2() const
     {
-      return do_reverse_serial(*this);
+      return ::std::move(do_reverse_serial(*this));
     }
 
     /**
@@ -902,7 +921,7 @@ public:
      */
     Kmer reverse_complement2() const
     {
-      return do_reverse_complement_serial(*this);
+      return ::std::move(do_reverse_complement_serial(*this));
     }
 
     /**
@@ -915,7 +934,7 @@ public:
      */
     Kmer reversed_kmer_bswap() const
     {
-      return do_reverse_bswap<ALPHABET>(*this);
+      return ::std::move(do_reverse_bswap<ALPHABET>(*this));
     }
 
     /**
@@ -928,36 +947,8 @@ public:
      */
     Kmer reverse_complement_bswap() const
     {
-      return do_reverse_complement_bswap<ALPHABET>(*this);
+      return ::std::move(do_reverse_complement_bswap<ALPHABET>(*this));
     }
-
-
-//    /**
-//     * @brief Returns a reversed k-mer.
-//     *
-//     * Note that this does NOT reverse the bit pattern, but reverses
-//     * the sequence of `BITS_PER_CHAR` bits each.
-//     *
-//     * @returns   The reversed k-mer.
-//     */
-//    Kmer reversed_kmer_simd() const
-//    {
-//      return do_reverse_simd<ALPHABET>(*this);
-//    }
-//
-//    /**
-//     * @brief Returns a reverse complement of a k-mer.
-//     *
-//     * Note that this does NOT reverse the bit pattern, but reverses
-//     * the sequence of `BITS_PER_CHAR` bits each.
-//     *
-//     * @returns   The reversed k-mer.
-//     */
-//    Kmer reverse_complement_simd() const
-//    {
-//      return do_reverse_complement_simd<ALPHABET>(*this);
-//    }
-//
 
     // for debug purposes
     /**
@@ -1208,7 +1199,8 @@ public:
       }
   
       // set all others to 0
-      std::fill(data, data+word_shift, static_cast<WORD_TYPE>(0));
+//      std::fill(data, data+word_shift, static_cast<WORD_TYPE>(0));
+      memset(data, 0, word_shift * sizeof(WORD_TYPE));
     }
   
     /**
@@ -1248,7 +1240,8 @@ public:
         data[nWords - word_shift - 1] = data[nWords-1] >> offset;
       }
       // set all others to 0
-      std::fill(data + (nWords - word_shift), data + nWords, static_cast<WORD_TYPE>(0));
+//      std::fill(data + (nWords - word_shift), data + nWords, static_cast<WORD_TYPE>(0));
+      memset(data + (nWords - word_shift), 0, word_shift * sizeof(WORD_TYPE));
     }
   
     /**
@@ -1283,7 +1276,7 @@ public:
 //      // set ununsed bits to 0
 //      this->do_sanitize();
 
-      return result;
+      return ::std::move(result);
     }
   
     /**
@@ -1322,7 +1315,7 @@ public:
 //      // set ununsed bits to 0
 //      this->do_sanitize();
 
-      return result;
+      return ::std::move(result);
 
     }
 
@@ -1422,7 +1415,6 @@ public:
         } else {
           // not enough room, so need to copy.  maskmoveu is very slow.  why?
           memcpy(result.data, &mword, simd_rem * sizeof(WORD_TYPE));
-
             //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));               // SSE2
         }
       }  // else no rem.
@@ -1445,7 +1437,7 @@ public:
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return result;
+      return ::std::move(result);
     }
 
     /**
@@ -1475,7 +1467,7 @@ public:
           // not enough room, so do maskmoveu.  maskmoveu is very slow.  why?
 // don't need this part...
 //          WORD_TYPE tmp[simd_stride] __attribute__((aligned(16)));
-//          _mm_store_si128((__m128i*)tmp, mword);
+//          _mm_storeu_si128((__m128i*)tmp, mword);
           memcpy(result.data, &mword, simd_rem * sizeof(WORD_TYPE));
 
           //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));                           // SSE2
@@ -1501,7 +1493,7 @@ public:
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return result;
+      return ::std::move(result);
     }
 #else
 
@@ -1610,7 +1602,7 @@ public:
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return result;
+      return ::std::move(result);
     }
   
     /**
@@ -1635,7 +1627,7 @@ public:
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return result;
+      return ::std::move(result);
     }
 
 #endif
@@ -1653,7 +1645,7 @@ public:
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse(Kmer const & src) const
     {
-       return do_reverse_serial(src);
+       return ::std::move(do_reverse_serial(src));
     }
 
     /**
@@ -1669,7 +1661,7 @@ public:
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse_complement(Kmer const & src) const
     {
-      return do_reverse_complement_serial(src);
+      return ::std::move(do_reverse_complement_serial(src));
     }
 
 
@@ -1814,7 +1806,7 @@ public:
             // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return result;
+      return ::std::move(result);
     }
 
     /**
@@ -1863,7 +1855,7 @@ public:
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return result;
+      return ::std::move(result);
     }
 
     /**
@@ -1879,7 +1871,7 @@ public:
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse_bswap(Kmer const & src) const
     {
-       return do_reverse_serial(src);
+       return ::std::move(do_reverse_serial(src));
     }
 
     /**
@@ -1895,7 +1887,7 @@ public:
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse_complement_bswap(Kmer const & src) const
     {
-      return do_reverse_complement_serial(src);
+      return ::std::move(do_reverse_complement_serial(src));
     }
 
     /**
