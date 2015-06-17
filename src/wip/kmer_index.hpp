@@ -51,7 +51,9 @@
 #include "utils/kmer_utils.hpp"
 
 #include "io/mxx_support.hpp"
-#include "wip/distributed_map.hpp"
+#include "wip/distributed_unordered_map.hpp"
+#include "wip/distributed_sorted_map.hpp"
+
 #include "io/sequence_iterator.hpp"
 #include "io/sequence_id_iterator.hpp"
 #include "iterators/transform_iterator.hpp"
@@ -109,7 +111,6 @@ namespace bliss
           }
 
           virtual ~Index() {};
-
 
           MapType & get_map() {
             return map;

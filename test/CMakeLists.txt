@@ -115,11 +115,17 @@ target_link_libraries(testKmerIndex_ST ${EXTRA_LIBS})
 target_link_libraries(testKmerIndex_ST bliss-common)
 cotire(testKmerIndex_ST )
 
-add_executable(testKmerIndex_ST2 TestKmerIndexAndQuerySingleThread2.cpp)
+add_executable(testKmerIndex_ST2 TestKmerIndexAndQuerySingleThread_DHashMap.cpp)
 SET_TARGET_PROPERTIES(testKmerIndex_ST2 PROPERTIES COMPILE_FLAGS -DKMERINDEX)
 target_link_libraries(testKmerIndex_ST2 ${EXTRA_LIBS})
 target_link_libraries(testKmerIndex_ST2 bliss-common)
 cotire(testKmerIndex_ST2 )
+
+add_executable(testKmerIndex_ST3 TestKmerIndexAndQuerySingleThread_DSortedMap.cpp)
+SET_TARGET_PROPERTIES(testKmerIndex_ST3 PROPERTIES COMPILE_FLAGS -DKMERINDEX)
+target_link_libraries(testKmerIndex_ST3 ${EXTRA_LIBS})
+target_link_libraries(testKmerIndex_ST3 bliss-common)
+cotire(testKmerIndex_ST3 )
 
 add_executable(testKmerCountCorrectness TestKmerCountCorrectness.cpp)
 target_link_libraries(testKmerCountCorrectness ${EXTRA_LIBS})

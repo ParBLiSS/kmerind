@@ -176,7 +176,6 @@ std::vector<std::pair<KmerType, IdType> > testQuery(const MapType & map, std::ve
 
          TIMER_START(find);
          int k = 0;
-         int s = 0;
          size_t before = 0;
          for (int i = 0; i < commSize; ++i) {
            // work on query from process i.
