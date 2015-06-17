@@ -49,7 +49,6 @@
 #include "utils/timer.hpp"  // for timing.
 #include "utils/logging.h"
 
-
 namespace dsc  // distributed std container
 {
   /// from http://stackoverflow.com/questions/18724999/why-no-emplacement-iterators-in-c11-or-c14
@@ -75,6 +74,12 @@ namespace dsc  // distributed std container
       back_emplace_iterator& operator++() { return *this; }
       back_emplace_iterator& operator++(int) { return *this; }
   };
+
+  struct Identity {
+	  template <typename T>
+      inline bool operator()(T const & x) const { return true; };
+  };
+
 
 
   /**
