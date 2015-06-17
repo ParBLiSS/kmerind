@@ -35,7 +35,9 @@
 #include "utils/kmer_utils.hpp"
 
 // #include <xmmintrin.h>  // sse2
+#if defined(__SSSE3__)
 #include <tmmintrin.h>  // ssse3  includes sse2
+#endif
 
 #define INLINE inline
 
@@ -881,7 +883,11 @@ public:
      */
     Kmer reversed_kmer() const
     {
-      return ::std::move(do_reverse<ALPHABET>(*this));
+#if defined(__SSSE3__)
+      return ::std::move(do_reverse_simd<ALPHABET>(*this));
+#else
+      return ::std::move(do_reverse_swar<ALPHABET>(*this));
+#endif
     }
 
     /**
@@ -894,7 +900,11 @@ public:
      */
     Kmer reverse_complement() const
     {
-      return ::std::move(do_reverse_complement<ALPHABET>(*this));
+#if defined(__SSSE3__)
+      return ::std::move(do_reverse_complement_simd<ALPHABET>(*this));
+#else
+      return ::std::move(do_reverse_complement_swar<ALPHABET>(*this));
+#endif
     }
   
   
@@ -906,7 +916,7 @@ public:
      *
      * @returns   The reversed k-mer.
      */
-    Kmer reversed_kmer2() const
+    Kmer reverse_serial() const
     {
       return ::std::move(do_reverse_serial(*this));
     }
@@ -919,9 +929,62 @@ public:
      *
      * @returns   The reversed k-mer.
      */
-    Kmer reverse_complement2() const
+    Kmer reverse_complement_serial() const
     {
       return ::std::move(do_reverse_complement_serial(*this));
+    }
+
+#if defined(__SSSE3__)
+    /**
+     * @brief Returns a reversed k-mer.
+     *
+     * Note that this does NOT reverse the bit pattern, but reverses
+     * the sequence of `BITS_PER_CHAR` bits each.
+     *
+     * @returns   The reversed k-mer.
+     */
+    Kmer reverse_simd() const
+    {
+      return ::std::move(do_reverse_simd<ALPHABET>(*this));
+    }
+
+    /**
+     * @brief Returns a reverse complement of a k-mer.
+     *
+     * Note that this does NOT reverse the bit pattern, but reverses
+     * the sequence of `BITS_PER_CHAR` bits each.
+     *
+     * @returns   The reversed k-mer.
+     */
+    Kmer reverse_complement_simd() const
+    {
+      return ::std::move(do_reverse_complement_simd<ALPHABET>(*this));
+    }
+#endif
+    /**
+     * @brief Returns a reversed k-mer.
+     *
+     * Note that this does NOT reverse the bit pattern, but reverses
+     * the sequence of `BITS_PER_CHAR` bits each.
+     *
+     * @returns   The reversed k-mer.
+     */
+    Kmer reverse_swar() const
+    {
+      return ::std::move(do_reverse_swar<ALPHABET>(*this));
+    }
+
+    /**
+     * @brief Returns a reverse complement of a k-mer.
+     *
+     * Note that this does NOT reverse the bit pattern, but reverses
+     * the sequence of `BITS_PER_CHAR` bits each.
+     *
+     * @returns   The reversed k-mer.
+     */
+    Kmer reverse_complement_swar() const
+    {
+      return ::std::move(do_reverse_complement_swar<ALPHABET>(*this));
     }
 
     /**
@@ -932,7 +995,7 @@ public:
      *
      * @returns   The reversed k-mer.
      */
-    Kmer reversed_kmer_bswap() const
+    Kmer reverse_bswap() const
     {
       return ::std::move(do_reverse_bswap<ALPHABET>(*this));
     }
@@ -1401,7 +1464,7 @@ public:
         typename ::std::enable_if<::std::is_same<A, DNA>::value ||
                                   ::std::is_same<A, RNA>::value ||
                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse(Kmer const & src) const
+    INLINE Kmer do_reverse_simd(Kmer const & src) const
     {
       Kmer result;  // empty kmer for output
 
@@ -1451,7 +1514,7 @@ public:
         typename ::std::enable_if<::std::is_same<A, DNA>::value ||
                                   ::std::is_same<A, RNA>::value ||
                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse_complement(Kmer const & src) const
+    INLINE Kmer do_reverse_complement_simd(Kmer const & src) const
     {
       Kmer result;  // empty kmer for output
 
@@ -1495,7 +1558,41 @@ public:
 
       return ::std::move(result);
     }
-#else
+
+    /**
+     * @brief Reverses this k-mer.
+     *
+     * Note that this does NOT reverse the bit pattern, but reverses
+     * the sequence of `BITS_PER_CHAR` bits each.
+     *
+     */
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
+                                    ::std::is_same<A, RNA>::value ||
+                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
+    INLINE Kmer do_reverse_simd(Kmer const & src) const
+    {
+       return ::std::move(do_reverse_serial(src));
+    }
+
+    /**
+     * @brief Reverses this k-mer.
+     *
+     * Note that this does NOT reverse the bit pattern, but reverses
+     * the sequence of `BITS_PER_CHAR` bits each.
+     *
+     */
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
+                                    ::std::is_same<A, RNA>::value ||
+                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
+    INLINE Kmer do_reverse_complement_simd(Kmer const & src) const
+    {
+      return ::std::move(do_reverse_complement_serial(src));
+    }
+
+
+#endif
 
     /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.  8 to 100 times faster.
     template <typename A = ALPHABET>
@@ -1591,7 +1688,7 @@ public:
         typename ::std::enable_if<::std::is_same<A, DNA>::value ||
                                   ::std::is_same<A, RNA>::value ||
                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse(Kmer const & src) const
+    INLINE Kmer do_reverse_swar(Kmer const & src) const
     {
       Kmer result;  // empty kmer for output
 
@@ -1616,7 +1713,7 @@ public:
         typename ::std::enable_if<::std::is_same<A, DNA>::value ||
                                   ::std::is_same<A, RNA>::value ||
                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse_complement(Kmer const & src) const
+    INLINE Kmer do_reverse_complement_swar(Kmer const & src) const
     {
       Kmer result;  // empty kmerfor output
 
@@ -1630,8 +1727,6 @@ public:
       return ::std::move(result);
     }
 
-#endif
-
     /**
      * @brief Reverses this k-mer.
      *
@@ -1643,7 +1738,7 @@ public:
         typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
                                     ::std::is_same<A, RNA>::value ||
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
-    INLINE Kmer do_reverse(Kmer const & src) const
+    INLINE Kmer do_reverse_swar(Kmer const & src) const
     {
        return ::std::move(do_reverse_serial(src));
     }
@@ -1659,7 +1754,7 @@ public:
         typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
                                     ::std::is_same<A, RNA>::value ||
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
-    INLINE Kmer do_reverse_complement(Kmer const & src) const
+    INLINE Kmer do_reverse_complement_swar(Kmer const & src) const
     {
       return ::std::move(do_reverse_complement_serial(src));
     }

@@ -48,14 +48,14 @@
         do { \
           std::stringstream output; \
           output << std::fixed; \
-          output << "R " << rank << " " << #session << " | ["; \
+          output << "R " << rank << " " << #session << " header\t["; \
           std::ostream_iterator<std::string> nit(output, ","); \
           std::copy(session##_names.begin(), session##_names.end(), nit); \
-          output << "] | ["; \
+          output << "]\n" << #session << "\tdur\t\t["; \
           output.precision(9); \
           std::ostream_iterator<double> dit(output, ","); \
           std::copy(session##_durations.begin(), session##_durations.end(), dit); \
-          output << "] | ["; \
+          output << "]\n" << #session << "\tcount\t\t["; \
           output.precision(0); \
           std::ostream_iterator<double> cit(output, ","); \
           std::copy(session##_counts.begin(), session##_counts.end(), cit); \
