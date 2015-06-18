@@ -10,3 +10,6 @@
 [submodule "ext/mxx"]
 	path = ext/mxx
 	url = git@bitbucket.org:tcpan/mxx.git
+[submodule "ext/sparsehash"]
+	path = ext/sparsehash
+	url = https://github.com/tcpan/sparsehash.git

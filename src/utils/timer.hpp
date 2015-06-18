@@ -28,21 +28,31 @@
 #define TIMER_INIT(session)      std::chrono::steady_clock::time_point session##_t1, session##_t2; \
                                  std::vector<std::string> session##_names; \
                                  std::vector<double> session##_durations; \
-                                 std::vector<double> session##_counts;
+                                 std::vector<double> session##_counts; \
+                                 std::chrono::duration<double> session##_time_span;
 
 #define TIMER_RESET(session)     do {  session##_names.clear(); \
                                        session##_durations.clear(); \
                                        session##_count.clear(); \
                                  } while (0)
 
-#define TIMER_START(session)     do { session##_t1 = std::chrono::steady_clock::now(); } while (0)
-
-#define TIMER_END(session, name, n_elem) do { session##_t2 = std::chrono::steady_clock::now(); \
-                                             std::chrono::duration<double> time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(session##_t2 - session##_t1)); \
-                                             session##_names.push_back(name); \
-                                             session##_durations.push_back(time_span.count()); \
+#define TIMER_LOOP(session)     do { session##_time_span = std::chrono::duration<double>::zero(); } while (0)
+#define TIMER_LOOP_RESUME(session)    do { session##_t1 = std::chrono::steady_clock::now(); } while (0)
+#define TIMER_LOOP_PAUSE(session)     do { session##_t2 = std::chrono::steady_clock::now(); \
+                                      session##_time_span += (std::chrono::duration_cast<std::chrono::duration<double> >(session##_t2 - session##_t1)); } while (0)
+#define TIMER_LOOP_END(session, name, n_elem) do { session##_names.push_back(name); \
+                                             session##_durations.push_back(session##_time_span.count()); \
                                              session##_counts.push_back(n_elem); \
                                         } while (0)
+
+#define TIMER_START(session)     do { session##_t1 = std::chrono::steady_clock::now(); } while (0)
+#define TIMER_END(session, name, n_elem) do { session##_t2 = std::chrono::steady_clock::now(); \
+                                             session##_time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(session##_t2 - session##_t1)); \
+                                             session##_names.push_back(name); \
+                                             session##_durations.push_back(session##_time_span.count()); \
+                                             session##_counts.push_back(n_elem); \
+                                        } while (0)
+
 
 #define TIMER_REPORT(session, rank) \
         do { \
@@ -152,6 +162,8 @@ template <typename T>
 #define TIMER_INIT(session)
 #define TIMER_RESET(session)
 #define TIMER_START(session)
+#define TIMER_PAUSE(session)
+#define TIMER_RESUME(session)
 #define TIMER_END(session, name, count)
 #define TIMER_REPORT(session, rank)
 #define TIMER_REPORT_MPI(session, rank, comm)
