@@ -1,5 +1,5 @@
 /**
- * @file    distributed_unordered_map.hpp
+ * @file    distributed_map.hpp
  * @ingroup index
  * @author  Tony Pan <tpan7@gatech.edu>
  * @author  Patrick Flick <patrick.flick@gmail.com>
@@ -27,11 +27,11 @@
  * TODO add Licence
  */
 
-#ifndef BLISS_DISTRIBUTED_UNORDERED_MAP_HPP
-#define BLISS_DISTRIBUTED_UNORDERED_MAP_HPP
+#ifndef BLISS_DISTRIBUTED_MAP_HPP
+#define BLISS_DISTRIBUTED_MAP_HPP
 
 
-#include <unordered_map>  // local storage hash table  // for multimap
+#include <map>  // local storage hash table  // for multimap
 #include <unordered_set>  // local storage hash table  // for multimap
 #include <utility> 			  // for std::pair
 
@@ -52,24 +52,26 @@
 
 #include "wip/distributed_map_base.hpp"
 
+
+
 namespace dsc  // distributed std container
 {
 
 
   /**
-   * @brief  distributed unordered map following std unordered map's interface.
-   * @details   This class is modeled after the std::unordered_map.
-   *         it has as much of the same methods of std::unordered_map as possible.  however, all methods consider the fact
+   * @brief  distributed map following std map's interface.
+   * @details   This class is modeled after the std::map.
+   *         it has as much of the same methods of std::map as possible.  however, all methods consider the fact
    *         that the data are in distributed memory space, so to access the data, "communication" is needed.  Also since we
    *         are working with 'distributed' data, batched operations are preferred.
    *
    *         Note that "communication" is a weak concept here meaning that we are accessing a different local container.
    *         as such, communicator may be defined for MPI, UPC, OpenMP, etc.
    *
-   *         This allows the possibility of using distributed unordered map as local storage for coarser grain distributed container.
+   *         This allows the possibility of using distributed  map as local storage for coarser grain distributed container.
    *
    *         Note that communicator requires a mapping strategy between a key and the target processor/thread/partition.  The mapping
-   *         may be done using a hash, similar to the local distributed unordered map, or it may be done via sorting/lookup or other mapping
+   *         may be done using a hash, similar to the local distributed  map, or it may be done via sorting/lookup or other mapping
    *         mechanisms.  The choice may be constrained by the communication approach, e.g. global sorting  does not work well with
    *         incremental async communication
    *
@@ -100,7 +102,7 @@ namespace dsc  // distributed std container
    *
    * @tparam Key
    * @tparam T
-   * @tparam Container  default to unordered_map and unordered multimap, requiring 5 template params.
+   * @tparam Container  default to map and  multimap, requiring 5 template params.
    * @tparam Comm   default to mpi_collective_communicator       communicator for global communication. may hash or sort.
    * @tparam KeyTransform   transform function for the key.  can supply identity.  requires a single template argument (Key).  useful for mapping kmolecule to kmer.
    * @tparam Hash   hash function for local and distribution.  requires a template arugment (Key), and a bool (prefix, chooses the MSBs of hash instead of LSBs)
@@ -108,16 +110,16 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-    template <typename, typename, typename, typename, typename> class Container,
+    template <typename, typename, typename, typename> class Container,
     class Comm,
     template <typename> class KeyTransform,
     template <typename, bool> class Hash,
-    class Equal = ::std::equal_to<Key>,
+    class Less = ::std::less<Key>,
     class Alloc = ::std::allocator< ::std::pair<const Key, T> >
-  > class unordered_map_base : public ::dsc::map_base<Key, T, Comm, KeyTransform, ::std::less<Key>, Equal, Alloc> {
+  > class distributed_map_base : public ::dsc::map_base<Key, T, Comm, KeyTransform, Less, ::std::equal_to<Key>, Alloc> {
 
     protected:
-      using Base = ::dsc::map_base<Key, T, Comm, KeyTransform, ::std::less<Key>, Equal, Alloc>;
+      using Base = ::dsc::map_base<Key, T, Comm, KeyTransform, Less, ::std::equal_to<Key>, Alloc>;
 
       struct TransformedHash {
           Hash<Key, false> h;
@@ -148,7 +150,7 @@ namespace dsc  // distributed std container
           inline uint64_t operator()(::std::pair<const Key, V> const& x) const {
             return this->operator()(x.first);
           }
-      } hash;
+      };
 
       struct KeyToRank {
           Hash<Key, true> proc_hash;
@@ -173,19 +175,14 @@ namespace dsc  // distributed std container
 
 
     public:
-      using local_container_type = Container<Key, T, TransformedHash, typename Base::TransformedEqual, Alloc>;
+      using local_container_type = Container<Key, T, typename Base::TransformedLess, Alloc>;
 
-      // std::unordered_multimap public members.
+      // std::multimap public members.
       using key_type              = typename local_container_type::key_type;
       using mapped_type           = typename local_container_type::mapped_type;
       using value_type            = typename local_container_type::value_type;
-      using hasher                = typename local_container_type::hasher;
-      using key_equal             = typename local_container_type::key_equal;
-      using allocator_type        = typename local_container_type::allocator_type;
       using iterator              = typename local_container_type::iterator;
       using const_iterator        = typename local_container_type::const_iterator;
-      using local_iterator        = typename local_container_type::local_iterator;
-      using const_local_iterator  = typename local_container_type::const_local_iterator;
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
@@ -194,7 +191,7 @@ namespace dsc  // distributed std container
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_reserve( size_t n) {
-        c.reserve(n);
+        //c.reserve(n);
       }
 
       /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
@@ -203,7 +200,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief count elements with the specified keys in the distributed unordered_multimap.
+       * @brief count elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -239,7 +236,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -251,7 +248,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.  example use: stop inserting if more than x entries.
+       * @brief insert new elements in the distributed multimap.  example use: stop inserting if more than x entries.
        * @param first
        * @param last
        */
@@ -266,7 +263,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief erase elements with the specified keys in the distributed unordered_multimap.
+       * @brief erase elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -280,7 +277,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief erase elements with the specified keys in the distributed unordered_multimap.  example use:  remove all entries with low frequency
+       * @brief erase elements with the specified keys in the distributed multimap.  example use:  remove all entries with low frequency
        * @param first
        * @param last
        */
@@ -295,7 +292,7 @@ namespace dsc  // distributed std container
 
 
 
-      /// clears the unordered_map
+      /// clears the map
       virtual void local_clear() noexcept {
         c.clear();
       }
@@ -309,7 +306,7 @@ namespace dsc  // distributed std container
         //        auto end = ::std::unique(input.begin(), input.end(), key_equal_op);
         //        input.erase(end, input.end());
 
-        // this function primarily is used to reduce communication volume while keeping the behavior of unordered_map - i.e. first entry is kept.
+        // this function primarily is used to reduce communication volume while keeping the behavior of map - i.e. first entry is kept.
         // simplest approach is to use the same type of data container to get the behavior,
         ::std::unordered_set<Key, TransformedHash, typename Base::TransformedEqual > temp(input.begin(), input.end(), input.size());
         input.assign(temp.begin(), temp.end());   // copy back into original input.
@@ -325,13 +322,13 @@ namespace dsc  // distributed std container
 
 
 
-      unordered_map_base(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size),
+      distributed_map_base(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size),
           key_to_rank(_comm_size) {}
 
 
     public:
 
-      virtual ~unordered_map_base() {};
+      virtual ~distributed_map_base() {};
 
       /// returns the local storage.  please use sparingly.
       local_container_type& get_local_container() { return c; }
@@ -396,7 +393,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief count elements with the specified keys in the distributed unordered_multimap.
+       * @brief count elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -458,7 +455,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief count elements with the specified keys in the distributed unordered_multimap.
+       * @brief count elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -517,7 +514,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief erase elements with the specified keys in the distributed unordered_multimap.
+       * @brief erase elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -538,7 +535,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief erase elements with the specified keys in the distributed unordered_multimap.
+       * @brief erase elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -581,18 +578,18 @@ namespace dsc  // distributed std container
 
 
   /**
-   * @brief  distributed unordered map following std unordered map's interface.
-   * @details   This class is modeled after the std::unordered_map.
-   *         it has as much of the same methods of std::unordered_map as possible.  however, all methods consider the fact
+   * @brief  distributed  map following std  map's interface.
+   * @details   This class is modeled after the std::map.
+   *         it has as much of the same methods of std::map as possible.  however, all methods consider the fact
    *         that the data are in distributed memory space, so to access the data, "communication" is needed.
    *
    *         Note that "communication" is a weak concept here meaning that we are accessing a different local container.
    *         as such, communicator may be defined for MPI, UPC, OpenMP, etc.
    *
-   *         This allows the possibility of using distributed unordered map as local storage for coarser grain distributed container.
+   *         This allows the possibility of using distributed  map as local storage for coarser grain distributed container.
    *
    *         Note that communicator requires a mapping strategy between a key and the target processor/thread/partition.  The mapping
-   *         may be done using a hash, similar to the local distributed unordered map, or it may be done via sorting/lookup or other mapping
+   *         may be done using a hash, similar to the local distributed  map, or it may be done via sorting/lookup or other mapping
    *         mechanisms.  The choice may be constrained by the communication approach, e.g. global sorting  does not work well with
    *         incremental async communication
    *
@@ -608,31 +605,22 @@ namespace dsc  // distributed std container
   class Comm,
   template <typename> class KeyTransform,
   template <typename, bool> class Hash,
-  class Equal = ::std::equal_to<Key>,
+  class Less = ::std::less<Key>,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class unordered_map : public unordered_map_base<Key, T, ::std::unordered_map, Comm, KeyTransform, Hash, Equal, Alloc> {
-      using Base = unordered_map_base<Key, T, ::std::unordered_map, Comm, KeyTransform, Hash, Equal, Alloc>;
+  class map : public distributed_map_base<Key, T, ::std::map, Comm, KeyTransform, Hash, Less, Alloc> {
+      using Base = distributed_map_base<Key, T, ::std::map, Comm, KeyTransform, Hash, Less, Alloc>;
 
 
     public:
       using local_container_type = typename Base::local_container_type;
 
-      // std::unordered_multimap public members.
+      // std::multimap public members.
       using key_type              = typename local_container_type::key_type;
       using mapped_type           = typename local_container_type::mapped_type;
       using value_type            = typename local_container_type::value_type;
-      using hasher                = typename local_container_type::hasher;
-      using key_equal             = typename local_container_type::key_equal;
-      using allocator_type        = typename local_container_type::allocator_type;
-      using reference             = typename local_container_type::reference;
-      using const_reference       = typename local_container_type::const_reference;
-      using pointer               = typename local_container_type::pointer;
-      using const_pointer         = typename local_container_type::const_pointer;
       using iterator              = typename local_container_type::iterator;
       using const_iterator        = typename local_container_type::const_iterator;
-      using local_iterator        = typename local_container_type::local_iterator;
-      using const_local_iterator  = typename local_container_type::const_local_iterator;
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
@@ -643,7 +631,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -663,7 +651,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -701,12 +689,12 @@ namespace dsc  // distributed std container
 
     public:
 
-      unordered_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
+      map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
 
-      virtual ~unordered_map() {};
+      virtual ~map() {};
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -772,7 +760,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -829,7 +817,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -868,7 +856,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -896,9 +884,9 @@ namespace dsc  // distributed std container
 
 
   /**
-   * @brief  distributed unordered multimap following std unordered multimap's interface.
-   * @details   This class is modeled after the std::unordered_multimap.
-   *         it does not have all the methods of std::unordered_multimap.  Whatever methods that are present considers the fact
+   * @brief  distributed  multimap following std  multimap's interface.
+   * @details   This class is modeled after the std::multimap.
+   *         it does not have all the methods of std::multimap.  Whatever methods that are present considers the fact
    *         that the data are in distributed memory space, so to access the data, "communication" is needed.
    *
    *         Iterators are assumed to be local rather than distributed, so methods that returns iterators are not provided.
@@ -908,10 +896,10 @@ namespace dsc  // distributed std container
    *         Note that "communication" is a weak concept here meaning that we are accessing a different local container.
    *         as such, communicator may be defined for MPI, UPC, OpenMP, etc.
    *
-   *         This allows the possibility of using distributed unordered map as local storage for coarser grain distributed container.
+   *         This allows the possibility of using distributed  map as local storage for coarser grain distributed container.
    *
    *         Note that communicator requires a mapping strategy between a key and the target processor/thread/partition.  The mapping
-   *         may be done using a hash, similar to the local distributed unordered map, or it may be done via sorting/lookup or other mapping
+   *         may be done using a hash, similar to the local distributed  map, or it may be done via sorting/lookup or other mapping
    *         mechanisms.  The choice may be constrained by the communication approach, e.g. global sorting  does not work well with
    *         incremental async communication
    *
@@ -927,31 +915,22 @@ namespace dsc  // distributed std container
   class Comm,
   template <typename> class KeyTransform,
   template <typename, bool> class Hash,
-  class Equal = ::std::equal_to<Key>,
+  class Less = ::std::less<Key>,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class unordered_multimap : public unordered_map_base<Key, T, ::std::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc> {
-      using Base = unordered_map_base<Key, T, ::std::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc>;
+  class multimap : public distributed_map_base<Key, T, ::std::multimap, Comm, KeyTransform, Hash, Less, Alloc> {
+      using Base = distributed_map_base<Key, T, ::std::multimap, Comm, KeyTransform, Hash, Less, Alloc>;
 
 
     public:
       using local_container_type = typename Base::local_container_type;
 
-      // std::unordered_multimap public members.
+      // std::multimap public members.
       using key_type              = typename local_container_type::key_type;
       using mapped_type           = typename local_container_type::mapped_type;
       using value_type            = typename local_container_type::value_type;
-      using hasher                = typename local_container_type::hasher;
-      using key_equal             = typename local_container_type::key_equal;
-      using allocator_type        = typename local_container_type::allocator_type;
-      using reference             = typename local_container_type::reference;
-      using const_reference       = typename local_container_type::const_reference;
-      using pointer               = typename local_container_type::pointer;
-      using const_pointer         = typename local_container_type::const_pointer;
       using iterator              = typename local_container_type::iterator;
       using const_iterator        = typename local_container_type::const_iterator;
-      using local_iterator        = typename local_container_type::local_iterator;
-      using const_local_iterator  = typename local_container_type::const_local_iterator;
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
@@ -962,7 +941,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -987,7 +966,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1016,17 +995,17 @@ namespace dsc  // distributed std container
     public:
 
 
-      unordered_multimap(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {
+      multimap(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {
         this->key_multiplicity = 50;
       }
 
-      virtual ~unordered_multimap() {}
+      virtual ~multimap() {}
 
       /// update the multiplicity.  only multimap needs to do this.
       virtual size_t update_multiplicity() const {
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
-        // problem with this approach is that for unordered map, to get the count for a key is essentially O(count), so we get quadratic time.
+        // problem with this approach is that for  map, to get the count for a key is essentially O(count), so we get quadratic time.
         // The approach is VERY SLOW for large repeat count.  - (0.0078125 human: 52 sec, synth: FOREVER.)
 
         // a second approach is to count the number of unique key then divide the map size by that.
@@ -1063,14 +1042,14 @@ namespace dsc  // distributed std container
         //          }
         //        }
         //        printf("%lu elements, %lu buckets, %lu unique\n", this->c.size(), this->c.bucket_count(), uniq_count);
-        // alternative approach to get number of unique keys is to use an unordered_set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
+        // alternative approach to get number of unique keys is to use an set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
         ::std::unordered_set<Key, typename Base::TransformedHash, typename Base::Base::TransformedEqual > unique_set(this->c.size());
         for (auto it = this->c.begin(), max = this->c.end(); it != max; ++it) {
           unique_set.emplace(it->first);
         }
         uniq_count = unique_set.size();
         this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
-        printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
+        printf("%lu elements, %lu unique, key multiplicity = %lu\n", this->c.size(), uniq_count, this->key_multiplicity);
 
 
         //        // third approach is to assume each bucket contains only 1 kmer/kmolecule.
@@ -1106,7 +1085,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1171,7 +1150,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1270,7 +1249,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1302,7 +1281,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1324,21 +1303,21 @@ namespace dsc  // distributed std container
 
 
   /**
-   * @brief  distributed unordered reduction map following std unordered map's interface.  Insertion applies the binary reduction operator between the existing and inserted element (in that order).
-   * @details   This class is modeled after the std::unordered_map, but allows a binary reduction operator to be used during insertion.
+   * @brief  distributed  reduction map following std  map's interface.  Insertion applies the binary reduction operator between the existing and inserted element (in that order).
+   * @details   This class is modeled after the std::map, but allows a binary reduction operator to be used during insertion.
    *
    *         the reduction operator is not assumed to be associative.  The operator is called with parameters existing element, then new element to insert.
    *
-   *         it has as much of the same methods of std::unordered_map as possible.  however, all methods consider the fact
+   *         it has as much of the same methods of std::map as possible.  however, all methods consider the fact
    *         that the data are in distributed memory space, so to access the data, "communication" is needed.
    *
    *         Note that "communication" is a weak concept here meaning that we are accessing a different local container.
    *         as such, communicator may be defined for MPI, UPC, OpenMP, etc.
    *
-   *         This allows the possibility of using distributed unordered map as local storage for coarser grain distributed container.
+   *         This allows the possibility of using distributed  map as local storage for coarser grain distributed container.
    *
    *         Note that communicator requires a mapping strategy between a key and the target processor/thread/partition.  The mapping
-   *         may be done using a hash, similar to the local distributed unordered map, or it may be done via sorting/lookup or other mapping
+   *         may be done using a hash, similar to the local distributed  map, or it may be done via sorting/lookup or other mapping
    *         mechanisms.  The choice may be constrained by the communication approach, e.g. global sorting  does not work well with
    *         incremental async communication
    *
@@ -1355,33 +1334,24 @@ namespace dsc  // distributed std container
   class Comm,
   template <typename> class KeyTransform,
   template <typename, bool> class Hash,
+  class Less = ::std::less<Key>,
   typename Reduc = ::std::plus<T>,
-  class Equal = ::std::equal_to<Key>,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class reduction_unordered_map : public unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc> {
-      using Base = unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc>;
+  class reduction_map : public map<Key, T, Comm, KeyTransform, Hash, Less, Alloc> {
+      using Base = map<Key, T, Comm, KeyTransform, Hash, Less, Alloc>;
 
       static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     public:
       using local_container_type = typename Base::local_container_type;
 
-      // std::unordered_multimap public members.
+      // std::multimap public members.
       using key_type              = typename local_container_type::key_type;
       using mapped_type           = typename local_container_type::mapped_type;
       using value_type            = typename local_container_type::value_type;
-      using hasher                = typename local_container_type::hasher;
-      using key_equal             = typename local_container_type::key_equal;
-      using allocator_type        = typename local_container_type::allocator_type;
-      using reference             = typename local_container_type::reference;
-      using const_reference       = typename local_container_type::const_reference;
-      using pointer               = typename local_container_type::pointer;
-      using const_pointer         = typename local_container_type::const_pointer;
       using iterator              = typename local_container_type::iterator;
       using const_iterator        = typename local_container_type::const_iterator;
-      using local_iterator        = typename local_container_type::local_iterator;
-      using const_local_iterator  = typename local_container_type::const_local_iterator;
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
@@ -1392,7 +1362,7 @@ namespace dsc  // distributed std container
       friend Comm;
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1404,7 +1374,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1463,14 +1433,14 @@ namespace dsc  // distributed std container
     public:
 
 
-      reduction_unordered_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
+      reduction_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
 
-      virtual ~reduction_unordered_map() {};
+      virtual ~reduction_map() {};
 
 
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1494,7 +1464,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1525,21 +1495,21 @@ namespace dsc  // distributed std container
 
 
   /**
-   * @brief  distributed unordered counting map following std unordered map's interface.  Insertion applies the binary reduction operator between the existing and inserted element (in that order).
-   * @details   This class is modeled after the std::unordered_map, but allows a binary reduction operator to be used during insertion.
+   * @brief  distributed  counting map following std  map's interface.  Insertion applies the binary reduction operator between the existing and inserted element (in that order).
+   * @details   This class is modeled after the std::map, but allows a binary reduction operator to be used during insertion.
    *
    *         the reduction operator is not assumed to be associative.  The operator is called with parameters existing element, then new element to insert.
    *
-   *         it has as much of the same methods of std::unordered_map as possible.  however, all methods consider the fact
+   *         it has as much of the same methods of std::map as possible.  however, all methods consider the fact
    *         that the data are in distributed memory space, so to access the data, "communication" is needed.
    *
    *         Note that "communication" is a weak concept here meaning that we are accessing a different local container.
    *         as such, communicator may be defined for MPI, UPC, OpenMP, etc.
    *
-   *         This allows the possibility of using distributed unordered map as local storage for coarser grain distributed container.
+   *         This allows the possibility of using distributed  map as local storage for coarser grain distributed container.
    *
    *         Note that communicator requires a mapping strategy between a key and the target processor/thread/partition.  The mapping
-   *         may be done using a hash, similar to the local distributed unordered map, or it may be done via sorting/lookup or other mapping
+   *         may be done using a hash, similar to the local distributed  map, or it may be done via sorting/lookup or other mapping
    *         mechanisms.  The choice may be constrained by the communication approach, e.g. global sorting  does not work well with
    *         incremental async communication
    *
@@ -1555,32 +1525,23 @@ namespace dsc  // distributed std container
   class Comm,
   template <typename> class KeyTransform,
   template <typename, bool> class Hash,
-  class Equal = ::std::equal_to<Key>,
+  class Less = ::std::less<Key>,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class counting_unordered_map : public reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal,Alloc> {
-      using Base = reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal, Alloc>;
+  class counting_map : public reduction_map<Key, T, Comm, KeyTransform, Hash, Less, ::std::plus<T>, Alloc> {
+      using Base = reduction_map<Key, T, Comm, KeyTransform, Hash, Less, ::std::plus<T>, Alloc>;
 
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
 
     public:
       using local_container_type = typename Base::local_container_type;
 
-      // std::unordered_multimap public members.
+      // std::multimap public members.
       using key_type              = typename local_container_type::key_type;
       using mapped_type           = typename local_container_type::mapped_type;
       using value_type            = typename local_container_type::value_type;
-      using hasher                = typename local_container_type::hasher;
-      using key_equal             = typename local_container_type::key_equal;
-      using allocator_type        = typename local_container_type::allocator_type;
-      using reference             = typename local_container_type::reference;
-      using const_reference       = typename local_container_type::const_reference;
-      using pointer               = typename local_container_type::pointer;
-      using const_pointer         = typename local_container_type::const_pointer;
       using iterator              = typename local_container_type::iterator;
       using const_iterator        = typename local_container_type::const_iterator;
-      using local_iterator        = typename local_container_type::local_iterator;
-      using const_local_iterator  = typename local_container_type::const_local_iterator;
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
@@ -1633,7 +1594,7 @@ namespace dsc  // distributed std container
 
         // use target container type instead
         TIMER_START(local_reduc);
-        local_container_type temp(input.size() * 1.33);
+        local_container_type temp;
         for (auto it = input.begin(), end = input.end(); it != end; ++it) {
           temp[*it]++;
         }
@@ -1657,13 +1618,13 @@ namespace dsc  // distributed std container
 
 
     public:
-      counting_unordered_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
+      counting_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
 
-      virtual ~counting_unordered_map() {};
+      virtual ~counting_map() {};
 
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1716,7 +1677,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed multimap.
        * @param first
        * @param last
        */
@@ -1747,4 +1708,4 @@ namespace dsc  // distributed std container
 } /* namespace dsc */
 
 
-#endif // BLISS_DISTRIBUTED_UNORDERED_MAP_HPP
+#endif // BLISS_DISTRIBUTED_MAP_HPP

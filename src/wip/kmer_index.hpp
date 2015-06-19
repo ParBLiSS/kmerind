@@ -53,6 +53,7 @@
 #include "io/mxx_support.hpp"
 #include "wip/distributed_unordered_map.hpp"
 #include "wip/distributed_sorted_map.hpp"
+#include "wip/distributed_map.hpp"
 
 #include "io/sequence_iterator.hpp"
 #include "io/sequence_id_iterator.hpp"

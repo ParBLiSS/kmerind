@@ -186,7 +186,7 @@ namespace bliss {
       template<typename KMER, bool Prefix = false>
       class cpp_std {
         protected:
-          const int64_t shift;
+          int64_t shift;
         public:
           static constexpr unsigned int default_init_value = ::std::min(KMER::nBits, 64U);
 
@@ -217,7 +217,7 @@ namespace bliss {
       class identity {
 
         protected:
-          const unsigned int bits;
+          unsigned int bits;
         public:
           static const unsigned int default_init_value = ::std::min(KMER::nBits, 64U);
 
@@ -280,7 +280,7 @@ namespace bliss {
 
         protected:
           static constexpr unsigned int nBytes = (KMER::nBits + 7) / 8;
-          const size_t shift;
+          size_t shift;
 
         public:
           static const unsigned int default_init_value = 64U;
