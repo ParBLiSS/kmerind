@@ -1100,7 +1100,10 @@ namespace dsc  // distributed std container
       virtual void rehash() {
         TIMER_INIT(rehash);
 
-        printf("c size before: %lu\n", this->c.size());
+        //printf("c size before: %lu\n", this->c.size());
+        TIMER_START(rehash);
+        TIMER_END(rehash, "begin", this->c.size());
+
         if (this->comm_size > 1) {
           // first balance
 
@@ -1131,7 +1134,7 @@ namespace dsc  // distributed std container
             this->key_to_rank.map = ::std::move(::mxx::impl::sample_arbit_decomp(this->c.begin(), this->c.end(), Base::Base::less, this->comm_size -1, this->comm, mpi_dt));
             for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
               // modify the splitters destinations
-              printf("R %d splitters %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
+              //printf("R %d splitters %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
               this->key_to_rank.map[i].second = i;
             }
             TIMER_END(rehash, "splitter1", this->key_to_rank.map.size());
@@ -1173,9 +1176,9 @@ namespace dsc  // distributed std container
           }
           this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
 
-          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
-            printf("R %d key to rank %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
-          }
+//          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
+//            printf("R %d key to rank %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
+//          }
           TIMER_END(rehash, "splitter2", this->c.size());
           // no need to redistribute - each entry is unique so nothing is going to span processor boundaries.
 
@@ -1187,7 +1190,7 @@ namespace dsc  // distributed std container
           TIMER_END(rehash, "unique", this->c.size());
         }
         this->sorted = true; this->balanced = true; this->globally_sorted = true;
-        printf("c size after: %lu\n", this->c.size());
+        //printf("c size after: %lu\n", this->c.size());
 
         TIMER_REPORT_MPI(rehash, this->comm_rank, this->comm);
 
@@ -1338,9 +1341,9 @@ namespace dsc  // distributed std container
           }
           this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
 
-          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
-            printf("R %d key to rank %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
-          }
+//          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
+//            printf("R %d key to rank %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
+//          }
           TIMER_END(rehash, "splitter1", this->key_to_rank.map.size());
 
           //			  mxx::datatype<::std::pair<Key, T> > dt;
@@ -1390,7 +1393,7 @@ namespace dsc  // distributed std container
           this->key_multiplicity = 1;
         else
           this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
-        printf("%lu elements, %lu unique, key multiplicity = %lu\n", this->c.size(), uniq_count, this->key_multiplicity);
+        //printf("%lu elements, %lu unique, key multiplicity = %lu\n", this->c.size(), uniq_count, this->key_multiplicity);
 
 
         //        // third approach is to assume each bucket contains only 1 kmer/kmolecule.
@@ -1769,7 +1772,7 @@ namespace dsc  // distributed std container
 
         // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
         auto temp = this->castToPair(input, sorted_input);
-        printf("r %d count %lu unique %lu\n", this->comm_rank, input.size(), temp.size());
+        //printf("r %d count %lu unique %lu\n", this->comm_rank, input.size(), temp.size());
         TIMER_END(count_insert, "reduc1", temp.size());
 
         bool si = true;

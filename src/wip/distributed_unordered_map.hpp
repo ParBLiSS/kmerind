@@ -122,21 +122,6 @@ namespace dsc  // distributed std container
       struct TransformedHash {
           Hash<Key, false> h;
 
-//          TransformedHash() {};
-//          TransformedHash(TransformedHash && other) : h(::std::move(other.h)) {};
-//          TransformedHash(TransformedHash const & other) : h(other.h) {};
-//
-//
-//          TransformedHash& operator=(TransformedHash && other) {
-//            this->h = ::std::move(other.h);
-//            return *this;
-//          }
-//          TransformedHash& operator=(TransformedHash const & other) {
-//            this->h = other.h;
-//            return *this;
-//          }
-
-
           inline uint64_t operator()(Key const& k) const {
             return h(Base::trans(k));
           }
@@ -1070,7 +1055,7 @@ namespace dsc  // distributed std container
         }
         uniq_count = unique_set.size();
         this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
-        printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
+        //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
 
 
         //        // third approach is to assume each bucket contains only 1 kmer/kmolecule.
@@ -1135,7 +1120,7 @@ namespace dsc  // distributed std container
           TIMER_START(find);
           std::vector<int> send_counts(this->comm_size, 0);
           results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
-          printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
           TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
 
           TIMER_START(find);
@@ -1234,7 +1219,7 @@ namespace dsc  // distributed std container
         for (auto it = input.begin(), max = input.end(); it != max; ++it) {
           unique_set.insert(it->first);
         }
-        printf("r %d: %lu elements, %lu unique\n", this->comm_rank, input.size(), unique_set.size());
+       // printf("r %d: %lu elements, %lu unique\n", this->comm_rank, input.size(), unique_set.size());
         return unique_set.size();
       }
 
@@ -1679,7 +1664,7 @@ namespace dsc  // distributed std container
 
         // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
         auto temp = local_reduction(input);
-        printf("r %d count %lu unique %lu\n", this->comm_rank, input.size(), temp.size());
+        //printf("r %d count %lu unique %lu\n", this->comm_rank, input.size(), temp.size());
         TIMER_END(count_insert, "reduc1", temp.size());
 
         if (this->comm_size > 1) {
