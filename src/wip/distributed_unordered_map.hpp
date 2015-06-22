@@ -169,8 +169,6 @@ namespace dsc  // distributed std container
       using allocator_type        = typename local_container_type::allocator_type;
       using iterator              = typename local_container_type::iterator;
       using const_iterator        = typename local_container_type::const_iterator;
-      using local_iterator        = typename local_container_type::local_iterator;
-      using const_local_iterator  = typename local_container_type::const_local_iterator;
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
@@ -616,8 +614,6 @@ namespace dsc  // distributed std container
       using const_pointer         = typename local_container_type::const_pointer;
       using iterator              = typename local_container_type::iterator;
       using const_iterator        = typename local_container_type::const_iterator;
-      using local_iterator        = typename local_container_type::local_iterator;
-      using const_local_iterator  = typename local_container_type::const_local_iterator;
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
@@ -935,8 +931,6 @@ namespace dsc  // distributed std container
       using const_pointer         = typename local_container_type::const_pointer;
       using iterator              = typename local_container_type::iterator;
       using const_iterator        = typename local_container_type::const_iterator;
-      using local_iterator        = typename local_container_type::local_iterator;
-      using const_local_iterator  = typename local_container_type::const_local_iterator;
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
@@ -951,24 +945,27 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class InputIterator>
-      size_t local_find(InputIterator first, InputIterator last, ::std::vector<::std::pair<Key, T> > &output) const {
+      template <class InputIterator, class OutputIterator>
+      size_t local_find(InputIterator first, InputIterator last, OutputIterator &output) const {
           if (first == last) return 0;
 
-          size_t before = output.size();  // before size.
+          size_t count = 0;  // before size.
           for (auto it = first; it != last; ++it) {
             auto range = this->c.equal_range(*it);
 
             // range's iterators are not random access iterators, so insert needs to call distance repeatedly, slowing down the process.
             // manually insert improves performance here.
             for (auto it2 = range.first; it2 != range.second; ++it2) {
-              output.emplace_back(*it2);
+              *output = *it2;
+              ++output;
+              ++count;
             }
+
             //            if (range.first != range.second) {
             //              output.insert(output.end(), range.first, range.second);
             //            }  // no insert if can't find it.
           }
-          return output.size() - before;  // after size.
+          return count;  // after size.
       }
 
       /**
@@ -976,26 +973,30 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class InputIterator, class Predicate>
-      size_t local_find_if(InputIterator first, InputIterator last, ::std::vector<::std::pair<Key, T> > &output, Predicate const& pred) const {
+      template <class InputIterator, class OutputIterator, class Predicate>
+      size_t local_find_if(InputIterator first, InputIterator last, OutputIterator &output, Predicate const& pred) const {
           if (first == last) return 0;
 
-          size_t before = output.size();  // before size.
+          size_t count = 0;  // before size.
           for (auto it = first; it != last; ++it) {
-            if (!pred(*it)) continue;
 
             auto range = this->c.equal_range(*it);
+            // check range if (!pred(*it)) continue;
 
             // range's iterators are not random access iterators, so insert needs to call distance repeatedly, slowing down the process.
             // manually insert improves performance here.
             for (auto it2 = range.first; it2 != range.second; ++it2) {
-              output.emplace_back(*it2);
+              if (pred(*it2)) {
+                *output = *it2;
+                ++output;
+                ++count;
+              }
             }
             //            if (range.first != range.second) {
             //              output.insert(output.end(), range.first, range.second);
             //            }  // no insert if can't find it.
           }
-          return output.size() - before;  // after size.
+          return count;  // after size.
       }
 
     public:
@@ -1100,6 +1101,7 @@ namespace dsc  // distributed std container
 
         TIMER_START(find);
         ::std::vector<::std::pair<Key, T> > results;
+        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
         TIMER_END(find, "begin", keys.size());
 
@@ -1130,7 +1132,7 @@ namespace dsc  // distributed std container
             ::std::advance(end, recv_counts[i]);
 
             // work on query from process i.
-            send_counts[i] = local_find( start, end, results);
+            send_counts[i] = local_find( start, end,  emplace_iter);
 
             if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
 
@@ -1145,7 +1147,12 @@ namespace dsc  // distributed std container
 
         } else {
           TIMER_START(find);
-          local_find(keys.begin(), keys.end(), results);
+          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+
+          TIMER_START(find);
+          local_find(keys.begin(), keys.end(),  emplace_iter);
           TIMER_END(find, "local_find", results.size());
         }
 
@@ -1164,6 +1171,7 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, T> > find_if(::std::vector<Key>& keys, Predicate const& pred) const {
         ::std::vector<::std::pair<Key, T> > results;
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
         // keep unique keys
         this->retain_unique_keys(keys);
@@ -1184,7 +1192,7 @@ namespace dsc  // distributed std container
             ::std::advance(end, recv_counts[i]);
 
             // work on query from process i.
-            send_counts[i] = local_find_if( start, end, results, pred);
+            send_counts[i] = local_find_if( start, end,  emplace_iter, pred);
 
             if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
 
@@ -1195,7 +1203,9 @@ namespace dsc  // distributed std container
           mxx::all2all(results, send_counts, this->comm);
 
         } else {
-          local_find_if(keys.begin(), keys.end(), results, pred);
+          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+
+          local_find_if(keys.begin(), keys.end(),  emplace_iter, pred);
         }
 
         return results;
@@ -1205,9 +1215,12 @@ namespace dsc  // distributed std container
       template <typename Predicate>
       ::std::vector<::std::pair<Key, T> > find_if(Predicate const& pred) const {
         ::std::vector<::std::pair<Key, T> > results;
+        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
         auto keys = this->keys();
-        local_find_if(keys.begin(), keys.end(), results, pred);
+        results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+
+        local_find_if(keys.begin(), keys.end(), emplace_iter, pred);
 
         return results;
       }
@@ -1365,8 +1378,6 @@ namespace dsc  // distributed std container
       using const_pointer         = typename local_container_type::const_pointer;
       using iterator              = typename local_container_type::iterator;
       using const_iterator        = typename local_container_type::const_iterator;
-      using local_iterator        = typename local_container_type::local_iterator;
-      using const_local_iterator  = typename local_container_type::const_local_iterator;
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
@@ -1564,8 +1575,6 @@ namespace dsc  // distributed std container
       using const_pointer         = typename local_container_type::const_pointer;
       using iterator              = typename local_container_type::iterator;
       using const_iterator        = typename local_container_type::const_iterator;
-      using local_iterator        = typename local_container_type::local_iterator;
-      using const_local_iterator  = typename local_container_type::const_local_iterator;
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 

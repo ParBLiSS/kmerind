@@ -269,6 +269,13 @@ int main(int argc, char** argv) {
   using Alphabet = bliss::common::DNA;
   using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
 
+  using MapType2 = ::dsc::counting_sorted_map<
+      KmerType, uint32_t, int,
+      bliss::kmer::transform::lex_less>;
+  testIndex<bliss::index::kmer::CountIndex<MapType2> > (comm, filename, "single thread, count index.");
+
+  MPI_Barrier(comm);
+
   using IdType = bliss::io::FASTQ::SequenceId;
   using MapType = ::dsc::sorted_multimap<
       KmerType, IdType, int,
@@ -277,13 +284,6 @@ int main(int argc, char** argv) {
 
   MPI_Barrier(comm);
 
-
-  using MapType2 = ::dsc::counting_sorted_map<
-      KmerType, uint32_t, int,
-      bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::CountIndex<MapType2> > (comm, filename, "single thread, count index.");
-
-  MPI_Barrier(comm);
 
   using QualType = float;
   using KmerInfoType = std::pair<IdType, QualType>;

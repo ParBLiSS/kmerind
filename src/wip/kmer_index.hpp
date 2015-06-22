@@ -52,6 +52,7 @@
 
 #include "io/mxx_support.hpp"
 #include "wip/distributed_unordered_map.hpp"
+#include "wip/distributed_unordered_map_vec.hpp"
 #include "wip/distributed_sorted_map.hpp"
 #include "wip/distributed_map.hpp"
 

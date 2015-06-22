@@ -758,6 +758,7 @@ add_subdirectory(src/concurrent)
 add_subdirectory(src/io)
 add_subdirectory(src/index)
 add_subdirectory(src/iterators)
+add_subdirectory(src/wip)
 add_subdirectory(test)
 add_subdirectory(utils)
 
