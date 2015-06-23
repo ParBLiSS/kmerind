@@ -417,13 +417,22 @@ namespace fsc {  // fast standard container
 	  }
 
 	  iterator insert(const value_type & value) {
-		  return emplace(value.first, value.second);
+		  return emplace(::std::forward<value_type>(value));
 	  }
 	  iterator insert(value_type && value) {
-		  return emplace(::std::move(value.first), ::std::move(value.second));
+		  return emplace(::std::forward<value_type>(value));
 	  }
 	  iterator emplace(value_type && value) {
-	    return emplace(::std::move(value.first), ::std::move(value.second));
+	    auto key = value.first;
+      auto iter = map.find(key);
+      if (iter == map.end()) {
+        iter = map.emplace(key, subcontainer_type()).first;
+        map[key].reserve(multiplicity);
+      }
+      auto pos = map[key].end();
+      map[key].emplace_back(::std::forward<value_type>(value));
+      ++s;
+      return iterator(iter, map.end(), pos);
 	  }
 	  iterator emplace(Key&& key, T&& value) {
 		  auto iter = map.find(key);
@@ -432,7 +441,7 @@ namespace fsc {  // fast standard container
 			  map[key].reserve(multiplicity);
 		  }
 		  auto pos = map[key].end();
-		  map[key].emplace_back(::std::move(key), ::std::move(value));
+		  map[key].emplace_back(::std::forward<Key>(key), ::std::forward<T>(value));
 		  ++s;
 		  return iterator(iter, map.end(), pos);
 	  }
@@ -469,7 +478,8 @@ namespace fsc {  // fast standard container
 	  ::std::pair<iterator, iterator> equal_range(Key const & key) {
 		  auto iter = map.find(key);
 
-      if (iter == map.end()) return ::std::make_pair(iterator(iter, iter), iterator(iter, iter));
+      if (iter == map.end()) return ::std::make_pair(iterator(iter, iter),
+                                                     iterator(iter, iter));
 
 		  auto iter2 = iter; ++iter2;
 		  return ::std::make_pair(iterator(iter, iter2, iter->second.begin()),
@@ -478,7 +488,8 @@ namespace fsc {  // fast standard container
 	  ::std::pair<const_iterator, const_iterator> equal_range(Key const & key) const {
 		  auto iter = map.find(key);
 
-      if (iter == map.end()) return ::std::make_pair(iterator(iter, iter), iterator(iter, iter));
+      if (iter == map.end()) return ::std::make_pair(const_iterator(iter, iter),
+                                                     const_iterator(iter, iter));
 
       auto iter2 = iter; ++iter2;
 		  return ::std::make_pair(const_iterator(iter, iter2, iter->second.cbegin()),

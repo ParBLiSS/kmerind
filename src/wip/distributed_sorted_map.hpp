@@ -194,7 +194,7 @@ namespace dsc  // distributed std container
           template <class DBIter, class QueryIter, class OutputIter, class Operator, class Predicate = Identity>
           static size_t process(DBIter range_begin, DBIter range_end,
                                 QueryIter query_begin, QueryIter query_end,
-                                OutputIter output, Operator const & op,
+                                OutputIter &output, Operator const & op,
                                 bool sorted_query = false, Predicate const &pred = Predicate()) {
 
               // no matches in container.
@@ -403,6 +403,7 @@ namespace dsc  // distributed std container
 
       /**
        * @brief erase elements with the specified keys in the distributed sorted_multimap.  return how much was erased.
+       * @note  this method is here because need to move the end segment.
        * @param first
        * @param last
        */
@@ -551,7 +552,7 @@ namespace dsc  // distributed std container
           results.reserve(keys.size() * this->key_multiplicity);  // 1 result per key.
 
           // within start-end, values are unique, so don't need to set unique to true.
-          Intersect<false>::process(this->c.begin(), this->c.end(), keys.begin(), keys.end(), emplace_iter, this->local_find, true, pred);
+          Intersect<false>::process(this->c.begin(), this->c.end(), keys.begin(), keys.end(), emplace_iter, local_find, true, pred);
 
           if (this->comm_size > 1) MPI_Barrier(this->comm);
           return results;
@@ -969,61 +970,9 @@ namespace dsc  // distributed std container
               } else
             	  return 0;
           }
-      } local_find;
+      } find_element;
 
-      //      /**
-      //       * @brief insert new elements in the distributed sorted_map.  result is not sorted.  input must not hvae duplicates;
-      //       * @param first
-      //       * @param last
-      //       */
-      //      template <class InputIterator>
-      //      void local_insert(InputIterator first, InputIterator last, bool sorted_input = false) {
-      //          if (first == last) return;
-      //
-      //          // sort both
-      //          this->local_rehash();
-      //
-      //          // also ensure that input is unique
-      //          if (!sorted_input) Base::Base::sort_ascending(first, last);
-      //
-      //          // walk through.  if exiting entry, remove from input.
-      //          // now walk through the input to count stuff.
-      //          auto t_start = ::std::lower_bound(this->c.begin(), this->c.end(), *first, Base::Base::less);
-      //          auto last2 = first; ::std::advance(last2, ::std::distance(first, last) - 1);
-      //          auto t_end = ::std::upper_bound(t_start, this->c.end(), *last2, Base::Base::less);
-      //
-      //          // go through the input and search the container.
-      //
-      //          // modify input so as to not invalidate the container's iterators, t_start, t_end;
-      //            // iterate through the input and search in output,  moving items up as we go.
-      //            auto it = first;
-      //            auto end = first;
-      //            for (it = first; it != last; ) {  // from large to small
-      //              auto v = *it;
-      //
-      //              // find entry in container.
-      //              t_start = this->template lower_bound<true>(t_start, t_end, v);
-      //
-      //              // if we found it, then t_start != t_end, and equal(v, *t_start)
-      //              // else
-      //              if ((t_start == t_end) || (!this->equal(v, *t_start))) {
-      //                // not matched.  copy the value, move pos up by 1.
-      //                if (end != it) *end = v;
-      //                ++end;
-      //              } // else matched.  so skip it.
-      //
-      //              it = this->upper_bound<true>(it, last, v);
-      //            }
-      //
-      //          // insert at the end.
-      //          if (first != end) {
-      //            this->c.insert(this->c.end(), first, end);
-      //            // after, not sorted
-      //            this->sorted = false;
-      //          }
-      //
-      //      }
-      //
+
       //      /**
       //       * @brief insert new elements in the distributed sorted_map.  example use: stop inserting if more than x entries.
       //       * @param first
@@ -1072,10 +1021,7 @@ namespace dsc  // distributed std container
       //      }
 
       virtual void local_reduction(std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
-        if (!sorted_input) Base::Base::sort_ascending(input.begin(), input.end());
-
-        auto end = ::std::unique(input.begin(), input.end(), this->equal);
-        input.erase(end, input.end());
+        this->Base::retain_unique(input, sorted_input);
       }
 
     public:
@@ -1087,12 +1033,12 @@ namespace dsc  // distributed std container
       template <class Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
-          return Base::find(local_find, keys, sorted_input, pred);
+          return Base::find(find_element, keys, sorted_input, pred);
       }
 
       template <class Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
-          return Base::find(local_find, pred);
+          return Base::find(find_element, pred);
       }
 
 
@@ -1300,7 +1246,7 @@ namespace dsc  // distributed std container
               //output = ::std::copy_if(range_begin, el_end, output, pred);
               // return ::std::distance(output_orig, output);
           }
-      } local_find;
+      } find_element;
 
 
     public:
@@ -1414,53 +1360,13 @@ namespace dsc  // distributed std container
       template <class Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
-          return Base::find(local_find, keys, sorted_input, pred);
+          return Base::find(find_element, keys, sorted_input, pred);
       }
 
       template <class Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
-          return Base::find(local_find, pred);
+          return Base::find(find_element, pred);
       }
-
-      //      size_t count_unique(::std::vector<::std::pair<Key, T> > const & input) const {
-      //        // alternative approach to get number of unique keys is to use an unordered_set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
-      //        ::std::unordered_set<Key, typename Base::TransformedHash, typename Base::template TransformedComp<Equal> > unique_set(this->c.size());
-      //        for (auto it = input.begin(), max = input.end(); it != max; ++it) {
-      //          unique_set.insert(it->first);
-      //        }
-      //        printf("r %d: %lu elements, %lu unique\n", this->comm_rank, input.size(), unique_set.size());
-      //        return unique_set.size();
-      //      }
-      //
-      //      template <typename _TargetP>
-      //      ::std::vector<::std::pair<Key, T> > bucketing(::std::vector<::std::pair<Key, T> > const & msgs, _TargetP target_p_fun, MPI_Comm comm) {
-      //
-      //        int p;
-      //        MPI_Comm_size(comm, &p);
-      //
-      //        // bucket input by their target processor
-      //        // TODO: in-place bucketing??
-      //        std::vector<int> send_counts(p, 0);
-      //        std::vector<int> pids(msgs.size());
-      //        for (int i = 0; i < msgs.size(); ++i)
-      //        {
-      //          pids[i] = target_p_fun(msgs[i]);
-      //          send_counts[pids[i]]++;
-      //        }
-      //
-      //        // get all2all params
-      //        std::vector<int> offset = mxx::get_displacements(send_counts);
-      //
-      //        // copy.  need to be able to track current position within each block.
-      //        ::std::vector<::std::pair<Key, T> > send_buffer;
-      //        if (msgs.size() > 0)
-      //          send_buffer.resize(msgs.size());
-      //        for (int i = 0; i < msgs.size(); ++i)
-      //        {
-      //          send_buffer[offset[pids[i]]++] = msgs[i];
-      //        }
-      //        return send_buffer;
-      //      }
 
 
   };
@@ -1527,52 +1433,7 @@ namespace dsc  // distributed std container
       friend Comm;
 
 
-
-      //      /**
-      //       * @brief insert new elements in the distributed sorted_map.  result is not sorted.  input should not have duplicates
-      //       * @note  input CAN have duplicates
-      //       * @param first
-      //       * @param last
-      //       */
-      //      template <class InputIterator>
-      //      void local_insert(InputIterator first, InputIterator last, bool sorted_input = false) {
-      //          if (first == last) return;
-      //
-      //          this->local_rehash();
-      //
-      //          // has to be locally reduced first.
-      //          auto newlast = local_reduction(first, last, sorted_input);
-      //
-      //          // walk through.  if exiting entry, remove from input.
-      //          // now walk through the input to count stuff.
-      //          auto t_start = ::std::lower_bound(this->c.begin(), this->c.end(), *first, Base::Base::less);
-      //          auto t_end = ::std::upper_bound(t_start, this->c.end(), *(newlast - 1), Base::Base::less);
-      //
-      //          // go through the input and search the container.
-      //          // iterate through the input and search in output,  moving items up as we go.
-      //          auto end = first;
-      //          for (auto it = first; it != newlast; ++it) {  // walk though all input entries
-      //              auto v = *it;
-      //
-      //                // find entry in container.
-      //                t_start = this->lower_bound<true>(t_start, t_end, v);
-      //
-      //                if ((t_start == t_end) || (!this->equal(v, *t_start))) {
-      //                  // not matched.  copy the value, move pos up by 1.
-      //                  if (end != it) *end = v;
-      //                  ++end;
-      //                } else {
-      //                  // matched.  so need to reduce
-      //                  t_start->second = r(t_start->second, v.second);
-      //                }
-      //            }
-      //          // insert at the end.
-      //          if (first != end) {
-      //            this->c.insert(this->c.end(), first, end);
-      //            this->sorted = false;
-      //          }
-      //      }
-
+      //=== below does local insert while reducing. doing reduction after, and letting insert be simple appending vector has lower complexity overall.
       //      /**
       //       * @brief insert new elements in the distributed sorted_map.  example use: stop inserting if more than x entries.
       //       * @param first
@@ -1651,7 +1512,6 @@ namespace dsc  // distributed std container
 
       virtual ~reduction_sorted_map() {};
 
-
   };
 
 
@@ -1712,40 +1572,6 @@ namespace dsc  // distributed std container
       // defined Communicator as a friend
       friend Comm;
 
-      // convert key to a pair.
-      ::std::vector<::std::pair<Key, T> > castToPair(::std::vector<Key>& input, bool sorted_input = false) {
-
-        ::std::vector<::std::pair<Key, T> > output;
-        output.reserve(input.size());
-
-        for (int i = 0; i < input.size(); ++i) {
-          output.emplace_back(input[i], 1);
-        }
-
-        //        if (input.size() == 0) return output;
-        //
-        //        output.reserve(input.size());
-        //
-        //
-        //        if (!sorted_input) Base::Base::sort_ascending(input.begin(), input.end());
-        //
-        //        // then do reduction
-        //        auto curr = input.begin();
-        //        auto v = *curr;
-        //        output.emplace_back(v, 1);
-        //        ++curr;
-        //        while (curr != input.end()) {
-        //          if (this->equal(v, *curr))  // if same, do reduction
-        //            ++(output.back().second);
-        //          else {  // else reset first.
-        //            v = *curr;
-        //            output.emplace_back(v, 1);
-        //          }
-        //          ++curr;  // increment second.
-        //        }
-        return output;
-      }
-
 
     public:
       counting_sorted_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
@@ -1765,44 +1591,22 @@ namespace dsc  // distributed std container
         TIMER_INIT(count_insert);
 
         TIMER_START(count_insert);
-        TIMER_END(count_insert, "start", input.size());
+        ::std::vector<::std::pair<Key, T> > temp;
+        temp.reserve(input.size());
+        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
+        ::std::transform(input.begin(), input.end(), emplace_iter, [](Key const & x) { return ::std::make_pair(x, T(1)); });
+        TIMER_END(count_insert, "convert", input.size());
 
         // distribute
         TIMER_START(count_insert);
-
-        // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-        auto temp = this->castToPair(input, sorted_input);
-        //printf("r %d count %lu unique %lu\n", this->comm_rank, input.size(), temp.size());
-        TIMER_END(count_insert, "reduc1", temp.size());
-
-        bool si = true;
-
-        //        if (this->comm_size > 1) {
-        //
-        //
-        //          // distribute
-        //          TIMER_START(count_insert);
-        //
-        //          // communication part
-        //          mxx2::msgs_all2all(temp, this->key_to_rank, this->comm);
-        //          TIMER_END(count_insert, "a2a", temp.size());
-        //
-        //          si = false;
-        //        }
-
-        // distribute
-        TIMER_START(count_insert);
-
         // local compute part.  called by the communicator.
-        size_t count = this->Base::insert(temp, si, pred);
+        size_t count = this->Base::insert(temp, sorted_input, pred);
         TIMER_END(count_insert, "insert", this->c.size());
 
         // distribute
         TIMER_REPORT_MPI(count_insert, this->comm_rank, this->comm);
         return count;
       }
-
-
 
   };
 

@@ -51,6 +51,7 @@
 #include "utils/logging.h"
 
 #include "wip/distributed_map_base.hpp"
+#include "wip/unordered_multimap.hpp"
 
 namespace dsc  // distributed std container
 {
@@ -157,6 +158,41 @@ namespace dsc  // distributed std container
       } key_to_rank;
 
 
+      /**
+       * @brief count elements with the specified keys in the distributed sorted_multimap.
+       * @note  input cannot have duplicate elements.
+       *
+       * @param first
+       * @param last
+       */
+      struct QueryProcessor {  // assume unique, always.
+
+          // assumes that container is sorted. and exact overlap region is provided.  do not filter output here since it's an output iterator.
+          template <class DB, class QueryIter, class OutputIter, class Operator, class Predicate = Identity>
+          static size_t process(DB &db,
+                                QueryIter query_begin, QueryIter query_end,
+                                OutputIter &output, Operator const & op,
+                                bool sorted_query = false, Predicate const &pred = Predicate()) {
+
+              if (query_begin == query_end) return 0;
+
+              typename ::std::iterator_traits<QueryIter>::value_type v;
+              size_t count = 0;  // before size.
+              for (auto it = query_begin; it != query_end; ++it) {
+                v = *it;
+                if (!::std::is_same<Predicate, Identity>::value)
+                  count += op(db, v, output, pred);
+                else
+                  count += op(db, v, output);
+              }
+              return count;
+          }
+
+      };
+
+
+
+
     public:
       using local_container_type = Container<Key, T, TransformedHash, typename Base::TransformedEqual, Alloc>;
 
@@ -184,42 +220,69 @@ namespace dsc  // distributed std container
       void local_rehash( size_type n) {
       }
 
-
-      /**
-       * @brief count elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <class InputIterator>
-      size_t local_count(InputIterator first, InputIterator last, ::std::vector<::std::pair<Key, size_type> > &output) const {
-          if (first == last) return 0;
-
-          size_t before = output.size();  // before size.
-          for (auto it = first; it != last; ++it) {
-            output.emplace_back(*it, c.count(*it));
+      struct LocalCount {
+          // unfiltered.
+          template<class DB, typename Query, class OutputIter>
+          size_t operator()(DB &db, Query const &v, OutputIter &output) const {
+              *output = ::std::move(::std::make_pair(v, db.count(v)));
+              ++output;
+              return 1;
           }
-          return output.size() - before;
-      }
+          // filtered element-wise.
+          template<class DB, typename Query, class OutputIter, class Predicate = Identity>
+          size_t operator()(DB &db, Query const &v, OutputIter &output,
+                            Predicate const& pred) const {
+              auto range = db.equal_range(v);
 
-      /**
-       * @brief predicate version of local_count.  example use: count items with counts of 1 only.
-       * @param first
-       * @param last
-       * @param output
-       * @param pred        Predicate should account for key transform.
-       * @return
-       */
-      template<class InputIterator, class Predicate>
-      size_t local_count_if(InputIterator first, InputIterator last, ::std::vector<::std::pair<Key, size_type> > &output, Predicate const & pred) const {
-          if (first == last) return 0;
+              // add the output entry.
+              size_t count = 0;
+              if (pred(range.first, range.second))  // operator to decide if range matches.
+                count = ::std::count_if(range.first, range.second, pred);  // operator for each element in range.
 
-          size_t before = output.size();  // before size.
-          for (auto it = first; it != last; ++it) {
-            if (pred(*it)) output.emplace_back(*it, c.count(*it));
+              *output = ::std::move(::std::make_pair(v, count));
+              ++output;
+              return 1;
           }
-          return output.size() - before;
-      }
+          // no filter by range AND elemenet for now.
+      } count_element;
 
+      struct LocalErase {
+          /// Return how much was KEPT.
+          template<class DB, typename Query, class OutputIter>
+          size_t operator()(DB &db, Query const &v, OutputIter &output) {
+              size_t before = db.size();
+              db.erase(v);
+              return before - db.size();
+          }
+          /// Return how much was KEPT.
+          template<class DB, typename Query, class OutputIter, class Predicate = Identity>
+          size_t operator()(DB &db, Query const &v, OutputIter &,
+                            Predicate const & pred) {
+              auto range = db.equal_range(v);
+
+              // check range first.  then erase.  only removed iterators are invalidated.
+              // order of remaining elements preserved.  true for map/multimap, unordered or not.
+              size_t count = 0;
+              auto tmp = range.first;
+              if (pred(range.first, range.second)) { // operator to decide if range matches.
+                for (auto it = range.first; it != range.second;) {
+                  if (pred(*it)) {
+                    // advance, then remove.
+                    tmp = it;  ++it;
+                    // remove.
+                    db.erase(tmp);  // erase entry at 1 iterator position. (not by value).
+                    ++count;
+                  } else {
+                    // keep.  so just advance
+                    ++it;
+                  }
+                }
+              }
+
+              return count;
+          }
+          // no filter by range AND elemenet for now.
+      } erase_element;
 
       /**
        * @brief insert new elements in the distributed unordered_multimap.
@@ -227,10 +290,12 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class InputIterator>
-      void local_insert(InputIterator first, InputIterator last) {
-          if (first == last) return;
+      size_t local_insert(InputIterator first, InputIterator last) {
+          if (first == last) return 0;
 
+          size_t before = c.size();
           c.insert(first, last);
+          return c.size() - before;
       }
 
       /**
@@ -239,73 +304,121 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class InputIterator, class Predicate>
-      void local_insert_if(InputIterator first, InputIterator last, Predicate const &pred) {
-          if (first == last) return;
+      size_t local_insert(InputIterator first, InputIterator last, Predicate const &pred) {
+          if (first == last) return 0;
 
+          size_t before = c.size();
           for (auto it = first; it != last; ++it) {
-            if (pred(*it)) c.insert(*it);
+            if (pred(*it)) c.emplace(::std::move(*it));
           }
+          return c.size() - before;
       }
-
-
-      /**
-       * @brief erase elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <class InputIterator>
-      void local_erase(InputIterator first, InputIterator last) {
-          if (first == last) return;
-
-          for (auto it = first; it != last; ++it) {
-            c.erase(*it);
-          }
-      }
-
-      /**
-       * @brief erase elements with the specified keys in the distributed unordered_multimap.  example use:  remove all entries with low frequency
-       * @param first
-       * @param last
-       */
-      template <class InputIterator, class Predicate>
-      void local_erase_if(InputIterator first, InputIterator last, Predicate const &pred) {
-          if (first == last) return;
-
-          for (auto it = first; it != last; ++it) {
-            if (pred(*it)) c.erase(*it);
-          }
-      }
-
 
 
       /// clears the unordered_map
       virtual void local_clear() noexcept {
-        c.clear();
+          c.clear();
       }
 
-      void retain_unique_keys(::std::vector< Key >& input) const {
+
+      ///  keep the unique keys in the input. primarily for reducing comm volume.   output is sorted.  equal operator forces comparison to Key
+      template <typename V>
+      void retain_unique(::std::vector< V >& input, bool sorted_input = false) const {
         if (input.size() == 0) return;
+        if (sorted_input) {  // already sorted, then just get the unique stuff and remove rest.
+          auto end = ::std::unique(input.begin(), input.end(), this->equal);
+          input.erase(end, input.end());
+        } else {  // not sorted, so use an unordered_set to keep the first occurence.
 
-        // sorting is SLOW and not scalable.  use unordered set. instead.
-        //        if (! ::std::is_sorted(input.begin(), input.end(), key_less_op))
-        //          ::std::stable_sort(input.begin(), input.end(), key_less_op);  // using stable sort to maintain same behavior as map - keeping first inserted.
-        //        auto end = ::std::unique(input.begin(), input.end(), key_equal_op);
-        //        input.erase(end, input.end());
+          // sorting is SLOW and not scalable.  use unordered set instead.
 
-        // this function primarily is used to reduce communication volume while keeping the behavior of unordered_map - i.e. first entry is kept.
-        // simplest approach is to use the same type of data container to get the behavior,
-        ::std::unordered_set<Key, TransformedHash, typename Base::TransformedEqual > temp(input.begin(), input.end(), input.size());
-        input.assign(temp.begin(), temp.end());   // copy back into original input.
+          ::std::unordered_set<V, TransformedHash, typename Base::TransformedEqual > temp(input.begin(), input.end(), input.size());
+          input.assign(temp.begin(), temp.end());
+        }
       }
 
+      /**
+       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class LocalFind, typename Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(LocalFind const & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+        TIMER_INIT(find);
 
-      /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void rehash( size_type n) {
-        // direct rehash + barrier
-        local_rehash(n);
-        if (this->comm_size > 1) MPI_Barrier(this->comm);
+        TIMER_START(find);
+        ::std::vector<::std::pair<Key, T> > results;
+        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+        TIMER_END(find, "begin", keys.size());
+
+        TIMER_START(find);
+        // keep unique keys
+        this->retain_unique(keys, sorted_input);
+        TIMER_END(find, "uniq1", keys.size());
+
+        if (this->comm_size > 1) {
+          TIMER_START(find);
+          // distribute (communication part)
+          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
+          TIMER_END(find, "a2a1", keys.size());
+
+          // local find. memory utilization a potential problem.
+          // do for each src proc one at a time.
+
+          TIMER_START(find);
+          std::vector<int> send_counts(this->comm_size, 0);
+          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+
+          TIMER_START(find);
+          auto start = keys.begin();
+          auto end = start;
+          for (int i = 0; i < this->comm_size; ++i) {
+            ::std::advance(end, recv_counts[i]);
+
+            // work on query from process i.
+            QueryProcessor::process(c, start, end, emplace_iter, find_element, true, pred);
+           // if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+
+            start = end;
+          }
+          TIMER_END(find, "local_find", results.size());
+
+          TIMER_START(find);
+          // send back using the constructed recv count
+          mxx::all2all(results, send_counts, this->comm);
+          TIMER_END(find, "a2a2", results.size());
+
+        } else {
+          TIMER_START(find);
+          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+
+          TIMER_START(find);
+          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, true, pred);
+          TIMER_END(find, "local_find", results.size());
+        }
+
+        TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
+
+        return results;
+
       }
 
+      template <class LocalFind, typename Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(LocalFind const & find_element, Predicate const& pred = Predicate()) const {
+        ::std::vector<::std::pair<Key, T> > results;
+        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+
+        auto keys = this->keys();
+        results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+
+        QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, true, pred);
+        return results;
+      }
 
 
       unordered_map_base(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size),
@@ -353,10 +466,12 @@ namespace dsc  // distributed std container
         ::std::unordered_set<Key, TransformedHash, typename Base::TransformedEqual > temp;
         temp.reserve(c.size());
         for (auto it = c.begin(), end = c.end(); it != end; ++it) {
-          temp.insert(it->first);
+          temp.emplace(it->first);
         }
         result.assign(temp.begin(), temp.end());
       }
+
+
 
       // note that for each method, there is a local version of the operartion.
       // this is for use by the asynchronous version of communicator as callback for any messages received.
@@ -370,7 +485,6 @@ namespace dsc  // distributed std container
         return c.size();
       }
 
-
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void reserve( size_t n) {
         // direct reserve + barrier
@@ -378,22 +492,34 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) MPI_Barrier(this->comm);
       }
 
+
+      /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
+      void rehash( size_type n) {
+        // direct rehash + barrier
+        local_rehash(n);
+        if (this->comm_size > 1) MPI_Barrier(this->comm);
+      }
+
+
       /**
        * @brief count elements with the specified keys in the distributed unordered_multimap.
        * @param first
        * @param last
        */
-      ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys) const {
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
+                                                        Predicate const& pred = Predicate() ) const {
         TIMER_INIT(count);
 
         TIMER_START(count);
         ::std::vector<::std::pair<Key, size_type> > results;
+        back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
         TIMER_END(count, "begin", keys.size());
 
         TIMER_START(count);
         // keep unique keys
-        retain_unique_keys(keys);
+        retain_unique(keys, sorted_input);
         TIMER_END(count, "uniq1", keys.size());
 
 
@@ -415,8 +541,8 @@ namespace dsc  // distributed std container
           for (int i = 0; i < this->comm_size; ++i) {
             ::std::advance(end, recv_counts[i]);
 
-            // work on query from process i.
-            local_count( start, end, results );
+            // within start-end, values are unique, so don't need to set unique to true.
+            QueryProcessor::process(c, start, end, emplace_iter, count_element, true, pred);
 
             if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
 
@@ -430,7 +556,13 @@ namespace dsc  // distributed std container
           TIMER_END(count, "a2a2", results.size());
         } else {
           TIMER_START(count);
-          local_count(keys.begin(), keys.end(), results);
+          results.reserve(keys.size());                   // TODO:  should estimate coverage.
+          TIMER_END(count, "reserve", keys.size());
+
+
+          TIMER_START(count);
+          // within start-end, values are unique, so don't need to set unique to true.
+          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, count_element, true, pred);
           TIMER_END(count, "local_count", results.size());
         }
 
@@ -440,125 +572,66 @@ namespace dsc  // distributed std container
 
       }
 
-      /**
-       * @brief count elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <typename Predicate>
-      ::std::vector<::std::pair<Key, size_type> > count_if(::std::vector<Key>& keys, Predicate const & pred) const {
+
+      template <typename Predicate = Identity>
+      ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
-        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+        back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > emplace_iter(results);
 
-        // keep unique keys
-        retain_unique_keys(keys);
-
-        if (this->comm_size > 1) {
-          // distribute (communication part)
-          std::vector<int> recv_counts;
-
-          recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
-
-          // local find. memory utilization a potential problem.
-          // do for each src proc one at a time.
-
-          results.reserve(keys.size());                   // TODO:  should estimate coverage.
-          auto start = keys.begin();
-          auto end = start;
-          for (int i = 0; i < this->comm_size; ++i) {
-            ::std::advance(end, recv_counts[i]);
-
-            // work on query from process i.
-            local_count_if( start, end, results, pred);
-
-            if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
-
-            start = end;
-          }
-
-          // send back using the constructed recv count
-          mxx::all2all(results, recv_counts, this->comm);
-
-        } else {
-          local_count_if(keys.begin(), keys.end(), results, pred);
-        }
-
-        return results;
-
-      }
-
-
-      template <typename Predicate>
-      ::std::vector<::std::pair<Key, size_type> > count_if(Predicate const & pred) const {
-        ::std::vector<::std::pair<Key, size_type> > results;
         auto keys = this->keys();
+        results.reserve(keys.size());
 
-        size_t count = local_count_if(keys.begin(), keys.end(), results, pred);
+        QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, count_element, true, pred);
 
         if (this->comm_size > 1) MPI_Barrier(this->comm);
         return results;
       }
 
-      /**
-       * @brief erase elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      void erase(::std::vector<Key>& keys) {
-        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
 
-        if (this->comm_size > 1) {
-
-          // remove duplicates
-          retain_unique_keys(keys);
-
-          // redistribute keys
-          mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
-        }
-
-        // then call local remove.
-        local_erase(keys.begin(), keys.end());
-      }
 
       /**
        * @brief erase elements with the specified keys in the distributed unordered_multimap.
        * @param first
        * @param last
        */
-      template <typename Predicate = Identity>
-            size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const & pred = Predicate() ) {
+      template <class Predicate = Identity>
+      size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
-        size_t before = this->c.size();
+          size_t before = this->c.size();
 
-        bool si = sorted_input;
+          bool si = sorted_input;
         if (this->comm_size > 1) {
+
           // remove duplicates
           retain_unique(keys, si);
 
           // redistribute keys
           mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
-
           si = false;
         }
 
+        // remove duplicates
+        retain_unique(keys, si);
+
         // then call local remove.
-        local_erase_if(keys, si, pred);
+        size_t count = QueryProcessor::process(c, keys.begin(), keys.end(), keys.end(), erase_element, true, pred);
+
         return before - this->c.size();
       }
 
-      template <typename Predicate>
-      void erase_if(Predicate const & pred) {
+
+      template <typename Predicate = Identity>
+      size_t erase(Predicate const & pred = Predicate()) {
         auto keys = this->keys();
 
-        size_t count = local_erase_if(keys.begin(), keys.end(), pred);
+        size_t count = QueryProcessor::process(c, keys.begin(), keys.end(), keys.end(), erase_element, true, pred);
 
         if (this->comm_size > 1) MPI_Barrier(this->comm);
+
+        return count;
       }
 
       // update done via erase/insert.
-
-
-
 
   };
 
@@ -622,63 +695,44 @@ namespace dsc  // distributed std container
       // defined Communicator as a friend
       friend Comm;
 
+      struct LocalFind {
+          // unfiltered.
+          template<class DB, typename Query, class OutputIter>
+          size_t operator()(DB &db, Query const &v, OutputIter &output) const {
+              auto iter = db.find(v);
 
-      /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <class InputIterator>
-      size_t local_find(InputIterator first, InputIterator last, ::std::vector<::std::pair<Key, T> > & output) const {
-          if (first == last) return 0;
-
-          size_t before = output.size();  // before size.
-          for (auto it = first; it != last; ++it) {
-            auto iter = this->c.find(*it);
-
-            if (iter != this->c.end()) {
-              output.emplace_back(*iter);
-            }  // no insert if can't find it.
+              if (iter != db.end()) {
+                *output = *iter;
+                ++output;
+                return 1;
+              }  // no insert if can't find it.
+              return 0;
           }
-          return output.size() - before;  // after size.
-      }
+          // filtered element-wise.
+          template<class DB, typename Query, class OutputIter, class Predicate = Identity>
+          size_t operator()(DB &db, Query const &v, OutputIter &output,
+                            Predicate const& pred) const {
+              auto iter = db.find(v);
 
-      /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <class InputIterator, class Predicate>
-      size_t local_find_if(InputIterator first, InputIterator last, ::std::vector<::std::pair<Key, T> > & output, Predicate const & pred) const {
-          if (first == last) return 0;
-
-          size_t before = output.size();  // before size.
-          for (auto it = first; it != last; ++it) {
-            if (!pred(*it)) continue;
-
-            auto iter = this->c.find(*it);
-
-            if (iter != this->c.end()) {
-              output.emplace_back(*iter);
-            }  // no insert if can't find it.
+              // add the output entry.
+              auto next = iter;  ++next;
+              if (iter != db.end()) {
+                if (pred(iter, next) && pred(*iter)) {
+                  *output = *iter;
+                  ++output;
+                  return 1;
+                }
+              }
+              return 0;
           }
-          return output.size() - before;  // after size.
+          // no filter by range AND elemenet for now.
+      } find_element;
+
+
+      virtual void local_reduction(std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
+        this->Base::retain_unique(input, sorted_input);
       }
 
-
-      void retain_unique_tuple(::std::vector<::std::pair<Key, T> >& input) const {
-        if (input.size() == 0) return;
-
-        // sorting can be slow.
-        //        if (! ::std::is_sorted(input.begin(), input.end(), this->key_less_op))
-        //          ::std::stable_sort(input.begin(), input.end(), this->key_less_op);
-        //        auto end = ::std::unique(input.begin(), input.end(), this->key_equal_op);
-        //        input.erase(end, input.end());
-
-        // use the same data structure to do the uniqueness reduction
-        local_container_type temp(input.begin(), input.end(), input.size());
-        input.assign(temp.begin(), temp.end());   // copy back to input.
-      }
 
     public:
 
@@ -686,126 +740,15 @@ namespace dsc  // distributed std container
 
       virtual ~unordered_map() {};
 
-      /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys) const {
-        TIMER_INIT(find);
-
-        TIMER_START(find);
-        ::std::vector<::std::pair<Key, T> > results;
-        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-        TIMER_END(find, "begin", keys.size());
-
-        // keep unique keys
-        TIMER_START(find);
-        this->retain_unique_keys(keys);
-        TIMER_END(find, "uniq1", keys.size());
-
-
-        if (this->comm_size > 1) {
-          TIMER_START(find);
-          // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
-          TIMER_END(find, "a2a1", keys.size());
-
-          // local find. memory utilization a potential problem.
-          // do for each src proc one at a time.
-
-          TIMER_START(find);
-          std::vector<int> send_counts(this->comm_size, 0);
-          results.reserve(keys.size() * this->key_multiplicity);  // 1 result per key.
-          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
-
-          TIMER_START(find);
-          auto start = keys.begin();
-          auto end = start;
-          for (int i = 0; i < this->comm_size; ++i) {
-            ::std::advance(end, recv_counts[i]);
-
-            // work on query from process i.
-            send_counts[i] = local_find( start, end, results);
-
-            if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
-
-            start = end;
-          }
-          TIMER_END(find, "local_find", results.size());
-
-          // send back using the constructed recv count
-          TIMER_START(find);
-          mxx::all2all(results, send_counts, this->comm);
-          TIMER_END(find, "a2a2", results.size());
-
-
-        } else {
-          TIMER_START(find);
-          local_find(keys.begin(), keys.end(), results);
-          TIMER_END(find, "local_find", results.size());
-
-        }
-
-        TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
-
-        return results;
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+          Predicate const& pred = Predicate()) const {
+          return Base::find(find_element, keys, sorted_input, pred);
       }
 
-      /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <class Predicate>
-      ::std::vector<::std::pair<Key, T> > find_if(::std::vector<Key>& keys, Predicate const & pred) const {
-          ::std::vector<::std::pair<Key, T> > results;
-          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-
-          // keep unique keys
-          this->retain_unique_keys(keys);
-
-
-          if (this->comm_size > 1) {
-            // distribute (communication part)
-            std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
-
-            // local find. memory utilization a potential problem.
-            // do for each src proc one at a time.
-
-            std::vector<int> send_counts(this->comm_size, 0);
-            results.reserve(keys.size() * this->key_multiplicity);  // 1 result per key.
-            auto start = keys.begin();
-            auto end = start;
-            for (int i = 0; i < this->comm_size; ++i) {
-              ::std::advance(end, recv_counts[i]);
-
-              // work on query from process i.
-              send_counts[i] = local_find_if( start, end, results, pred);
-
-              if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
-
-              start = end;
-            }
-
-            // send back using the constructed recv count
-            mxx::all2all(results, send_counts, this->comm);
-
-          } else {
-            local_find_if(keys.begin(), keys.end(), results, pred);
-          }
-
-          return results;
-      }
-
-      template <class Predicate>
-      ::std::vector<::std::pair<Key, T> > find_if(Predicate const & pred) const {
-          ::std::vector<::std::pair<Key, T> > results;
-
-          auto keys = this->keys();
-          local_find_if(keys.begin(), keys.end(), results, pred);
-
-          return results;
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
+          return Base::find(find_element, pred);
       }
 
 
@@ -814,7 +757,8 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      void insert(std::vector<::std::pair<Key, T> >& input) {
+      template <typename Predicate = Identity>
+      size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         TIMER_INIT(insert);
 
@@ -826,52 +770,30 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           TIMER_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          retain_unique_tuple(input);
+          local_reduction(input, sorted_input);
           TIMER_END(insert, "uniq1", input.size());
 
           TIMER_START(insert);
           mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
           TIMER_END(insert, "a2a", input.size());
         }
-        //
-        //        TIMER_START(insert);
-        //        // after communication, sort again to keep unique  - may not be needed
-        //        retain_unique_tuple(input);
-        //        TIMER_END(insert, "uniq2", input.size());
+
 
         TIMER_START(insert);
         // local compute part.  called by the communicator.
-        this->Base::local_insert(input.begin(), input.end());
+        size_t count = 0;
+        if (!::std::is_same<Predicate, Identity>::value)
+          count = this->Base::local_insert(input.begin(), input.end(), pred);
+        else
+          count = this->Base::local_insert(input.begin(), input.end());
         TIMER_END(insert, "insert", this->c.size());
 
         TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+
+        return count;
       }
 
 
-      /**
-       * @brief insert new elements in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <class Predicate>
-      void insert_if(std::vector<::std::pair<Key, T> >& input, Predicate const & pred) {
-          // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-
-
-          // communication part
-          if (this->comm_size > 1) {
-            // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-            retain_unique_tuple(input);
-
-            mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
-          }
-          //
-          //        // after communication, sort again to keep unique  - may not be needed
-          //        retain_unique_tuple(input);
-
-          // local compute part.  called by the communicator.
-          this->Base::local_insert_if(input.begin(), input.end(), pred);
-      }
   };
 
 
@@ -939,65 +861,46 @@ namespace dsc  // distributed std container
       // defined Communicator as a friend
       friend Comm;
 
+      struct LocalFind {
+          // unfiltered.
+          template<class DB, typename Query, class OutputIter>
+          size_t operator()(DB &db, Query const &v, OutputIter &output) const {
+              auto range = db.equal_range(v);
 
-      /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <class InputIterator, class OutputIterator>
-      size_t local_find(InputIterator first, InputIterator last, OutputIterator &output) const {
-          if (first == last) return 0;
-
-          size_t count = 0;  // before size.
-          for (auto it = first; it != last; ++it) {
-            auto range = this->c.equal_range(*it);
-
-            // range's iterators are not random access iterators, so insert needs to call distance repeatedly, slowing down the process.
-            // manually insert improves performance here.
-            for (auto it2 = range.first; it2 != range.second; ++it2) {
-              *output = *it2;
-              ++output;
-              ++count;
-            }
-
-            //            if (range.first != range.second) {
-            //              output.insert(output.end(), range.first, range.second);
-            //            }  // no insert if can't find it.
-          }
-          return count;  // after size.
-      }
-
-      /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <class InputIterator, class OutputIterator, class Predicate>
-      size_t local_find_if(InputIterator first, InputIterator last, OutputIterator &output, Predicate const& pred) const {
-          if (first == last) return 0;
-
-          size_t count = 0;  // before size.
-          for (auto it = first; it != last; ++it) {
-
-            auto range = this->c.equal_range(*it);
-            // check range if (!pred(*it)) continue;
-
-            // range's iterators are not random access iterators, so insert needs to call distance repeatedly, slowing down the process.
-            // manually insert improves performance here.
-            for (auto it2 = range.first; it2 != range.second; ++it2) {
-              if (pred(*it2)) {
+              // range's iterators are not random access iterators, so insert calling distance uses ++, slowing down the process.
+              // manually insert improves performance here.
+              size_t count = 0;
+              for (auto it2 = range.first; it2 != range.second; ++it2) {
                 *output = *it2;
                 ++output;
                 ++count;
               }
-            }
-            //            if (range.first != range.second) {
-            //              output.insert(output.end(), range.first, range.second);
-            //            }  // no insert if can't find it.
+
+              return count;
           }
-          return count;  // after size.
-      }
+          // filtered element-wise.
+          template<class DB, typename Query, class OutputIter, class Predicate = Identity>
+          size_t operator()(DB &db, Query const &v, OutputIter &output,
+                            Predicate const& pred) const {
+              auto range = db.equal_range(v);
+
+              // add the output entry.
+              size_t count = 0;
+              if (pred(range.first, range.second)) {
+                for (auto it2 = range.first; it2 != range.second; ++it2) {
+                  if (pred(*it2)) {
+                    *output = *it2;
+                    ++output;
+                    ++count;
+                  }
+                }
+              }
+              return count;
+          }
+          // no filter by range AND elemenet for now.
+      } find_element;
+
+
 
     public:
 
@@ -1007,6 +910,18 @@ namespace dsc  // distributed std container
       }
 
       virtual ~unordered_multimap() {}
+
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+          Predicate const& pred = Predicate()) const {
+          return Base::find(find_element, keys, sorted_input, pred);
+      }
+
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
+          return Base::find(find_element, pred);
+      }
+
 
       /// update the multiplicity.  only multimap needs to do this.
       virtual size_t update_multiplicity() const {
@@ -1091,180 +1006,47 @@ namespace dsc  // distributed std container
       }
 
 
-      /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys) const {
-        TIMER_INIT(find);
-
-        TIMER_START(find);
-        ::std::vector<::std::pair<Key, T> > results;
-        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
-        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-        TIMER_END(find, "begin", keys.size());
-
-        TIMER_START(find);
-        // keep unique keys
-        this->retain_unique_keys(keys);
-        TIMER_END(find, "uniq1", keys.size());
-
-        if (this->comm_size > 1) {
-          TIMER_START(find);
-          // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
-          TIMER_END(find, "a2a1", keys.size());
-
-          // local find. memory utilization a potential problem.
-          // do for each src proc one at a time.
-
-          TIMER_START(find);
-          std::vector<int> send_counts(this->comm_size, 0);
-          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
-          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
-          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
-
-          TIMER_START(find);
-          auto start = keys.begin();
-          auto end = start;
-          for (int i = 0; i < this->comm_size; ++i) {
-            ::std::advance(end, recv_counts[i]);
-
-            // work on query from process i.
-            send_counts[i] = local_find( start, end,  emplace_iter);
-
-            if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
-
-            start = end;
-          }
-          TIMER_END(find, "local_find", results.size());
-
-          TIMER_START(find);
-          // send back using the constructed recv count
-          mxx::all2all(results, send_counts, this->comm);
-          TIMER_END(find, "a2a2", results.size());
-
-        } else {
-          TIMER_START(find);
-          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
-          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
-          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
-
-          TIMER_START(find);
-          local_find(keys.begin(), keys.end(),  emplace_iter);
-          TIMER_END(find, "local_find", results.size());
-        }
-
-        TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
-
-        return results;
-
-      }
-
-      /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <typename Predicate>
-      ::std::vector<::std::pair<Key, T> > find_if(::std::vector<Key>& keys, Predicate const& pred) const {
-        ::std::vector<::std::pair<Key, T> > results;
-        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
-
-        // keep unique keys
-        this->retain_unique_keys(keys);
-
-
-        if (this->comm_size > 1) {
-          // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
-
-          // local find. memory utilization a potential problem.
-          // do for each src proc one at a time.
-
-          std::vector<int> send_counts(this->comm_size, 0);
-          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
-          auto start = keys.begin();
-          auto end = start;
-          for (int i = 0; i < this->comm_size; ++i) {
-            ::std::advance(end, recv_counts[i]);
-
-            // work on query from process i.
-            send_counts[i] = local_find_if( start, end,  emplace_iter, pred);
-
-            if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
-
-            start = end;
-          }
-
-          // send back using the constructed recv count
-          mxx::all2all(results, send_counts, this->comm);
-
-        } else {
-          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
-
-          local_find_if(keys.begin(), keys.end(),  emplace_iter, pred);
-        }
-
-        return results;
-
-      }
-
-      template <typename Predicate>
-      ::std::vector<::std::pair<Key, T> > find_if(Predicate const& pred) const {
-        ::std::vector<::std::pair<Key, T> > results;
-        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
-
-        auto keys = this->keys();
-        results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
-
-        local_find_if(keys.begin(), keys.end(), emplace_iter, pred);
-
-        return results;
-      }
-
-
-      size_t count_unique(::std::vector<::std::pair<Key, T> > const & input) const {
-        // alternative approach to get number of unique keys is to use an unordered_set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
-        ::std::unordered_set<Key, typename Base::TransformedHash, typename Base::Base::TransformedEqual > unique_set(this->c.size());
-        for (auto it = input.begin(), max = input.end(); it != max; ++it) {
-          unique_set.insert(it->first);
-        }
-       // printf("r %d: %lu elements, %lu unique\n", this->comm_rank, input.size(), unique_set.size());
-        return unique_set.size();
-      }
-
-      template <typename _TargetP>
-      ::std::vector<::std::pair<Key, T> > bucketing(::std::vector<::std::pair<Key, T> > const & msgs, _TargetP target_p_fun, MPI_Comm comm) {
-
-        int p;
-        MPI_Comm_size(comm, &p);
-
-        // bucket input by their target processor
-        // TODO: in-place bucketing??
-        std::vector<int> send_counts(p, 0);
-        std::vector<int> pids(msgs.size());
-        for (int i = 0; i < msgs.size(); ++i)
-        {
-          pids[i] = target_p_fun(msgs[i]);
-          send_counts[pids[i]]++;
-        }
-
-        // get all2all params
-        std::vector<int> offset = mxx::get_displacements(send_counts);
-
-        // copy.  need to be able to track current position within each block.
-        ::std::vector<::std::pair<Key, T> > send_buffer;
-        if (msgs.size() > 0)
-          send_buffer.resize(msgs.size());
-        for (int i = 0; i < msgs.size(); ++i)
-        {
-          send_buffer[offset[pids[i]]++] = msgs[i];
-        }
-        return send_buffer;
-      }
+//
+//
+//      size_t count_unique(::std::vector<::std::pair<Key, T> > const & input) const {
+//        // alternative approach to get number of unique keys is to use an unordered_set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
+//        ::std::unordered_set<Key, typename Base::TransformedHash, typename Base::Base::TransformedEqual > unique_set(this->c.size());
+//        for (auto it = input.begin(), max = input.end(); it != max; ++it) {
+//          unique_set.insert(it->first);
+//        }
+//       // printf("r %d: %lu elements, %lu unique\n", this->comm_rank, input.size(), unique_set.size());
+//        return unique_set.size();
+//      }
+//
+//      template <typename _TargetP>
+//      ::std::vector<::std::pair<Key, T> > bucketing(::std::vector<::std::pair<Key, T> > const & msgs, _TargetP target_p_fun, MPI_Comm comm) {
+//
+//        int p;
+//        MPI_Comm_size(comm, &p);
+//
+//        // bucket input by their target processor
+//        // TODO: in-place bucketing??
+//        std::vector<int> send_counts(p, 0);
+//        std::vector<int> pids(msgs.size());
+//        for (int i = 0; i < msgs.size(); ++i)
+//        {
+//          pids[i] = target_p_fun(msgs[i]);
+//          send_counts[pids[i]]++;
+//        }
+//
+//        // get all2all params
+//        std::vector<int> offset = mxx::get_displacements(send_counts);
+//
+//        // copy.  need to be able to track current position within each block.
+//        ::std::vector<::std::pair<Key, T> > send_buffer;
+//        if (msgs.size() > 0)
+//          send_buffer.resize(msgs.size());
+//        for (int i = 0; i < msgs.size(); ++i)
+//        {
+//          send_buffer[offset[pids[i]]++] = msgs[i];
+//        }
+//        return send_buffer;
+//      }
 
 
       /**
@@ -1272,7 +1054,8 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      void insert(std::vector<::std::pair<Key, T> >& input) {
+      template <typename Predicate = Identity>
+      size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         TIMER_INIT(insert);
 
@@ -1292,29 +1075,15 @@ namespace dsc  // distributed std container
 
         TIMER_START(insert);
         // local compute part.  called by the communicator.
-        this->Base::local_insert(input.begin(), input.end());
+        size_t count = 0;
+        if (!::std::is_same<Predicate, Identity>::value)
+          count = this->Base::local_insert(input.begin(), input.end(), pred);
+        else
+          count = this->Base::local_insert(input.begin(), input.end());
         TIMER_END(insert, "insert", this->c.size());
 
         TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
-
-      }
-
-      /**
-       * @brief insert new elements in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <typename Predicate>
-      void insert_if(std::vector<::std::pair<Key, T> >& input, Predicate const & pred) {
-        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-
-        // communication part
-        if (this->comm_size > 1) {
-          mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
-        }
-
-        // local compute part.  called by the communicator.
-        this->Base::local_insert_if(input.begin(), input.end(), pred);
+        return count;
       }
 
   };
@@ -1393,10 +1162,12 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class InputIterator>
-      void local_insert(InputIterator first, InputIterator last) {
+      size_t local_insert(InputIterator first, InputIterator last) {
+          size_t before = this->c.size();
           for (auto it = first; it != last; ++it) {
             this->c[it->first] = r(this->c[it->first], it->second);
           }
+          return this->c.size() - before;
       }
 
       /**
@@ -1405,46 +1176,31 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class InputIterator, class Predicate>
-      void local_insert_if(InputIterator first, InputIterator last, Predicate const & pred) {
+      size_t local_insert(InputIterator first, InputIterator last, Predicate const & pred) {
+          size_t before = this->c.size();
+
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) this->c[it->first] = r(this->c[it->first], it->second);
           }
+          return this->c.size() - before;
+
       }
 
-      void local_reduction(::std::vector<::std::pair<Key, T> >& input) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input) {
 
         if (input.size() == 0) return;
 
-        // sort is slow
-        //        if (! ::std::is_sorted(input.begin(), input.end(), this->key_less_op))
-        //          ::std::sort(input.begin(), input.end(), this->key_less_op);
-        //
-        //        // then do reduction
-        //        auto first = input.begin();
-        //        auto curr = first;  ++curr;
-        //        while (curr != input.end()) {
-        //          if (this->key_equal_op(*first, *curr))  // if same, do reduction
-        //            first->second = r(first->second, curr->second);
-        //          else  // else reset first.
-        //            first = curr;
-        //          ++curr;  // increment second.
-        //        }
-        //
-        //        // keep the first element in each replicated range
-        //        auto end = ::std::unique(input.begin(), input.end(), this->key_equal_op);
-        //        input.erase(end, input.end());
-
-        // use the target container type.
-
+        // sort is slower.  use unordered map.
         TIMER_INIT(reduce_tuple);
 
         TIMER_START(reduce_tuple);
-        local_container_type temp(input.size() * 1.33);
+        local_container_type temp(input.size());
         TIMER_END(reduce_tuple, "reserve", input.size());
 
         TIMER_START(reduce_tuple);
         for (auto it = input.begin(), end = input.end(); it != end; ++it) {
-          temp[it->first] = r(temp[it->first], it->second);
+          if (temp.count(it->first) == 0) temp[it->first] = it->second;  // don't rely on initialization to set T to 0.
+          else temp[it->first] = r(temp[it->first], it->second);
         }
         TIMER_END(reduce_tuple, "reduce", temp.size());
 
@@ -1463,21 +1219,20 @@ namespace dsc  // distributed std container
 
       virtual ~reduction_unordered_map() {};
 
-
-
       /**
        * @brief insert new elements in the distributed unordered_multimap.
        * @param first
        * @param last
        */
-      void insert(std::vector<::std::pair<Key, T> >& input) {
+      template <typename Predicate = Identity>
+      size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
 
         // communication part
         if (this->comm_size > 1) {
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          local_reduction(input);
+          this->local_reduction(input);
 
           mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
         }
@@ -1486,34 +1241,14 @@ namespace dsc  // distributed std container
         //        local_reduction(input);
 
         // local compute part.  called by the communicator.
-        local_insert(input.begin(), input.end());
+        size_t count = 0;
+        if (!::std::is_same<Predicate, Identity>::value)
+          count = this->local_insert(input.begin(), input.end(), pred);
+        else
+          count = this->local_insert(input.begin(), input.end());
+
+        return count;
       }
-
-      /**
-       * @brief insert new elements in the distributed unordered_multimap.
-       * @param first
-       * @param last
-       */
-      template <typename Predicate>
-      void insert_if(std::vector<::std::pair<Key, T> >& input, Predicate const & pred) {
-        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-
-
-        // communication part
-        if (this->comm_size > 1) {
-          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          local_reduction(input);
-
-          mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
-        }
-        //
-        //        // after communication, sort again to keep unique  - may not be needed
-        //        local_reduction(input);
-
-        // local compute part.  called by the communicator.
-        local_insert_if(input.begin(), input.end(), pred);
-      }
-
 
   };
 
@@ -1583,72 +1318,6 @@ namespace dsc  // distributed std container
       // defined Communicator as a friend
       friend Comm;
 
-      ::std::vector<::std::pair<Key, T> > local_reduction(::std::vector<Key>& input) {
-
-        TIMER_INIT(local_reduc);
-
-        TIMER_START(local_reduc);
-        ::std::vector<::std::pair<Key, T> > output;
-        if (input.size() == 0) return output;
-        TIMER_END(local_reduc, "start", input.size());
-
-
-        // sort is slow.
-        //        TIMER_START(local_reduc);
-        //        if (! ::std::is_sorted(input.begin(), input.end(), this->key_less_op))
-        //          ::std::sort(input.begin(), input.end(), this->key_less_op);
-        //
-        //        TIMER_END(local_reduc, "sort", input.size());
-        //
-        //
-        //        // reserve
-        //        TIMER_START(local_reduc);
-        //        // then do reduction
-        //        output.reserve(input.size());
-        //        TIMER_END(local_reduc, "reserve", input.size());
-        //
-        //
-        //        // reduce
-        //        TIMER_START(local_reduc);
-        //        auto first = input.begin();
-        //        output.emplace_back(*first, 1);
-        //
-        //        auto curr = first;  ++curr;
-        //        while (curr != input.end()) {
-        //          if (this->key_equal_op(*first, *curr))  // if same, do reduction
-        //            ++(output.back().second);
-        //          else { // else reset first.
-        //            first = curr;
-        //            output.emplace_back(*first, 1);
-        //          }
-        //          ++curr;  // increment second.
-        //        }
-        //        TIMER_END(local_reduc, "reduce", input.size());
-
-        // use target container type instead
-        TIMER_START(local_reduc);
-        local_container_type temp(input.size() * 1.33);
-        for (auto it = input.begin(), end = input.end(); it != end; ++it) {
-          temp[*it]++;
-        }
-        TIMER_END(local_reduc, "reduce", temp.size());
-
-        // reserve
-        TIMER_START(local_reduc);
-        // then do reduction
-        output.reserve(input.size());
-        TIMER_END(local_reduc, "reserve", input.size());
-
-
-        TIMER_START(local_reduc);
-        output.assign(temp.begin(), temp.end());
-        TIMER_END(local_reduc, "copy", output.size());
-
-        TIMER_REPORT_MPI(local_reduc, this->comm_rank, this->comm);
-
-        return output;
-      }
-
 
     public:
       counting_unordered_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
@@ -1661,52 +1330,171 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      void insert(std::vector< Key >& input) {
+      template <typename Predicate = Identity>
+      size_t insert(std::vector< Key >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         TIMER_INIT(count_insert);
 
         TIMER_START(count_insert);
-        TIMER_END(count_insert, "start", input.size());
+        ::std::vector<::std::pair<Key, T> > temp;
+        temp.reserve(input.size());
+        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
+        ::std::transform(input.begin(), input.end(), emplace_iter, [](Key const & x) { return ::std::make_pair(x, T(1)); });
+        TIMER_END(count_insert, "convert", input.size());
 
-        // distribute
+
         TIMER_START(count_insert);
-
-        // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-        auto temp = local_reduction(input);
-        //printf("r %d count %lu unique %lu\n", this->comm_rank, input.size(), temp.size());
-        TIMER_END(count_insert, "reduc1", temp.size());
-
-        if (this->comm_size > 1) {
-
-
-          // distribute
-          TIMER_START(count_insert);
-
-          // communication part
-          mxx2::msgs_all2all(temp, this->key_to_rank, this->comm);
-          TIMER_END(count_insert, "a2a", temp.size());
-        }
-
-
-        //        // distribute
-        //        TIMER_START(count_insert);
-        //
-        //        // after communication, sort again to keep unique  - NOT be needed
-        //        this->Base::local_reduction(temp);
-        //        TIMER_END(count_insert, "reduc2", temp.size());
-
-
-        // distribute
-        TIMER_START(count_insert);
-
         // local compute part.  called by the communicator.
-        this->Base::local_insert(temp.begin(), temp.end());
+        size_t count = this->Base::insert(temp, sorted_input, pred);
+
         TIMER_END(count_insert, "insert", this->c.size());
 
 
         // distribute
         TIMER_REPORT_MPI(count_insert, this->comm_rank, this->comm);
 
+        return count;
+
+      }
+
+
+
+  };
+
+
+  /**
+   * @brief  distributed unordered multimap following std unordered multimap's interface.
+   * @details   This class is modeled after the std::unordered_multimap.
+   *         it does not have all the methods of std::unordered_multimap.  Whatever methods that are present considers the fact
+   *         that the data are in distributed memory space, so to access the data, "communication" is needed.
+   *
+   *         Iterators are assumed to be local rather than distributed, so methods that returns iterators are not provided.
+   *         as an alternative, vectors are returned.
+   *         methods that accept iterators as input assume that the input data is local.
+   *
+   *         Note that "communication" is a weak concept here meaning that we are accessing a different local container.
+   *         as such, communicator may be defined for MPI, UPC, OpenMP, etc.
+   *
+   *         This allows the possibility of using distributed unordered map as local storage for coarser grain distributed container.
+   *
+   *         Note that communicator requires a mapping strategy between a key and the target processor/thread/partition.  The mapping
+   *         may be done using a hash, similar to the local distributed unordered map, or it may be done via sorting/lookup or other mapping
+   *         mechanisms.  The choice may be constrained by the communication approach, e.g. global sorting  does not work well with
+   *         incremental async communication
+   *
+   * @tparam Key
+   * @tparam T
+   * @tparam Comm   default to mpi_collective_communicator       communicator for global communication. may hash or sort.
+   * @tparam KeyTransform   transform function for the key.  can supply identity.  requires a single template argument (Key).  useful for mapping kmolecule to kmer.
+   * @tparam Hash   hash function for local and distribution.  requires a template arugment (Key), and a bool (prefix, chooses the MSBs of hash instead of LSBs)
+   * @tparam Equal   default to ::std::equal_to<Key>   equal function for the local storage.
+   * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
+   */
+  template<typename Key, typename T,
+  class Comm,
+  template <typename> class KeyTransform,
+  template <typename, bool> class Hash,
+  class Equal = ::std::equal_to<Key>,
+  class Alloc = ::std::allocator< ::std::pair<const Key, T> >
+  >
+  class unordered_multimap_vec : public unordered_map_base<Key, T, ::fsc::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc> {
+      using Base = unordered_map_base<Key, T, ::fsc::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc>;
+
+
+    public:
+      using local_container_type = typename Base::local_container_type;
+
+      // std::unordered_multimap public members.
+      using key_type              = typename local_container_type::key_type;
+      using mapped_type           = typename local_container_type::mapped_type;
+      using value_type            = typename local_container_type::value_type;
+      using hasher                = typename local_container_type::hasher;
+      using key_equal             = typename local_container_type::key_equal;
+      using allocator_type        = typename local_container_type::allocator_type;
+      using reference             = typename local_container_type::reference;
+      using const_reference       = typename local_container_type::const_reference;
+      using pointer               = typename local_container_type::pointer;
+      using const_pointer         = typename local_container_type::const_pointer;
+      using iterator              = typename local_container_type::iterator;
+      using const_iterator        = typename local_container_type::const_iterator;
+      using size_type             = typename local_container_type::size_type;
+      using difference_type       = typename local_container_type::difference_type;
+
+    protected:
+
+      // defined Communicator as a friend
+      friend Comm;
+
+
+      struct LocalFind {
+          // unfiltered.
+          template<class DB, typename Query, class OutputIter>
+          size_t operator()(DB &db, Query const &v, OutputIter &output) const {
+              auto range = db.equal_range_subcontainer(v);
+              output = ::std::copy(range.first, range.second, output);  // tons faster to emplace - almost 3x faster
+              return db.count(v);
+          }
+          // filtered element-wise.
+          template<class DB, typename Query, class OutputIter, class Predicate = Identity>
+          size_t operator()(DB &db, Query const &v, OutputIter &output,
+                            Predicate const& pred) const {
+              auto range = db.equal_range_subcontainer(v);
+
+              // add the output entry.
+              size_t count = 0;
+              if (pred(range.first, range.second)) {
+                for (auto it2 = range.first; it2 != range.second; ++it2) {
+                  if (pred(*it2)) {
+                    *output = *it2;
+                    ++output;
+                    ++count;
+                  }
+                }
+              }
+              return count;
+          }
+          // no filter by range AND elemenet for now.
+      } find_element;
+
+
+    public:
+
+
+      unordered_multimap_vec(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {
+        this->key_multiplicity = 50;
+      }
+
+      virtual ~unordered_multimap_vec() {}
+
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+          Predicate const& pred = Predicate()) const {
+          return Base::find(find_element, keys, sorted_input, pred);
+      }
+
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
+          return Base::find(find_element, pred);
+      }
+
+
+      /// update the multiplicity.  only multimap needs to do this.
+      virtual size_t update_multiplicity() const {
+        // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
+        //  sum(count per key) / c.size.
+        // problem with this approach is that for unordered map, to get the count for a key is essentially O(count), so we get quadratic time.
+        // The approach is VERY SLOW for large repeat count.  - (0.0078125 human: 52 sec, synth: FOREVER.)
+
+        // a second approach is to count the number of unique key then divide the map size by that.
+        //  c.size / #unique.  requires unique set
+        // To find unique set, we take each bucket, copy to vector, sort it, and then count unique.
+        // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
+        // but the n log(n) sort still grows with the duplicate count
+        size_t uniq_count = this->c.unique_size();
+        this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
+        //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
+
+        return this->key_multiplicity;
       }
 
       /**
@@ -1714,28 +1502,40 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate>
-      void insert_if(std::vector< Key >& input, Predicate &pred) {
+      template <typename Predicate = Identity>
+      size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
+        TIMER_INIT(insert);
 
-        // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-        auto temp = local_reduction(input);
+        TIMER_START(insert);
+
+        //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm_rank, sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
+        //        count_unique(input);
+        //        count_unique(bucketing(input, this->key_to_rank, this->comm));
 
         // communication part
         if (this->comm_size > 1) {
-          mxx2::msgs_all2all(temp, this->key_to_rank, this->comm);
+          mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
         }
-        //
-        //        // after communication, sort again to keep unique  - NOT be needed
-        //        this->Base::local_reduction(temp);
+        TIMER_END(insert, "a2a", input.size());
 
+        //        count_unique(input);
+
+        TIMER_START(insert);
         // local compute part.  called by the communicator.
-        this->Base::local_insert_if(temp.begin(), temp.end(), pred);
+        size_t count = 0;
+        if (!::std::is_same<Predicate, Identity>::value)
+          count = this->Base::local_insert(input.begin(), input.end(), pred);
+        else
+          count = this->Base::local_insert(input.begin(), input.end());
+        TIMER_END(insert, "insert", this->c.size());
+
+        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+        return count;
+
       }
 
-
   };
-
 
 
 } /* namespace dsc */
