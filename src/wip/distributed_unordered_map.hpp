@@ -1430,7 +1430,7 @@ namespace dsc  // distributed std container
           // unfiltered.
           template<class DB, typename Query, class OutputIter>
           size_t operator()(DB &db, Query const &v, OutputIter &output) const {
-              auto range = db.equal_range_subcontainer(v);
+              auto range = db.equal_range(v);
               output = ::std::copy(range.first, range.second, output);  // tons faster to emplace - almost 3x faster
               return db.count(v);
           }
@@ -1438,7 +1438,7 @@ namespace dsc  // distributed std container
           template<class DB, typename Query, class OutputIter, class Predicate = Identity>
           size_t operator()(DB &db, Query const &v, OutputIter &output,
                             Predicate const& pred) const {
-              auto range = db.equal_range_subcontainer(v);
+              auto range = db.equal_range(v);
 
               // add the output entry.
               size_t count = 0;
