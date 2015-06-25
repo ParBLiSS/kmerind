@@ -342,7 +342,13 @@ else (USE_OPENMP)
     set(OPENMP_DEFINE "")
 endif (USE_OPENMP)
 
-    
+#### native hardware architecture
+OPTION(USE_SIMD_IF_AVAILABLE "Enable SIMD instructions, if available on hardware. (-march=native)" ON)
+if (USE_SIMD_IF_AVAILABLE)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+endif(USE_SIMD_IF_AVAILABLE)
+
 
 
 ###### Doxygen documentation
