@@ -468,7 +468,7 @@ namespace dsc  // distributed std container
           TIMER_START(find);
           ::std::vector<::std::pair<Key, T> > results;
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-          back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
           TIMER_END(find, "begin", keys.size());
 
           this->assert_sorted_locally();
@@ -546,7 +546,7 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, T> > find(LocalFind const & local_find,
     		  Predicate const & pred = Predicate()) const {
           ::std::vector<::std::pair<Key, T> > results;
-          back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
           auto keys = this->keys();
           results.reserve(keys.size() * this->key_multiplicity);  // 1 result per key.
@@ -698,7 +698,7 @@ namespace dsc  // distributed std container
                   // keep unique keys
         ::std::vector<::std::pair<Key, size_type> > results;
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-        back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
 
         this->assert_sorted_locally();
         TIMER_END(count, "begin", keys.size());
@@ -775,7 +775,7 @@ namespace dsc  // distributed std container
       template <typename Predicate = Identity>
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
-        back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
 
         auto keys = this->keys();
         results.reserve(keys.size());
@@ -801,7 +801,7 @@ namespace dsc  // distributed std container
           TIMER_START(insert);
 
           this->sorted = false; this->balanced = false; this->globally_sorted = false;
-          back_emplace_iterator<local_container_type> emplace_iter(c);
+          ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
 
           if (::std::is_same<Predicate, Identity>::value) ::std::copy(src_begin, src_end, emplace_iter);
           else ::std::copy_if(src_begin, src_end, emplace_iter, pred);
@@ -1593,7 +1593,7 @@ namespace dsc  // distributed std container
         TIMER_START(count_insert);
         ::std::vector<::std::pair<Key, T> > temp;
         temp.reserve(input.size());
-        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
         ::std::transform(input.begin(), input.end(), emplace_iter, [](Key const & x) { return ::std::make_pair(x, T(1)); });
         TIMER_END(count_insert, "convert", input.size());
 

@@ -1,6 +1,7 @@
 
 // include google test
 #include <gtest/gtest.h>
+#include <wip/unordered_vecmap.hpp>
 
 #include <string>
 #include <unordered_map>
@@ -9,7 +10,6 @@
 #include <algorithm>  // for transform.
 
 // include files to test
-#include "wip/unordered_multimap.hpp"
 #include "utils/logging.h"
 
 /*
@@ -20,7 +20,7 @@ class UnorderedMultimapTest : public ::testing::Test
 {
   protected:
     ::std::unordered_multimap<T, T> gold;
-    ::fsc::unordered_multimap<T, T> test;
+    ::fsc::unordered_vecmap<T, T> test;
 
     virtual void SetUp()
     { // generate some inputs

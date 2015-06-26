@@ -1,5 +1,5 @@
 /**
- * @file    unordered_multimap.hpp
+ * @file    unordered_vecmap.hpp
  * @ingroup
  * @author  tpan
  * @brief
@@ -9,8 +9,8 @@
  *
  * TODO add License
  */
-#ifndef SRC_WIP_UNORDERED_MULTIMAP_HPP_
-#define SRC_WIP_UNORDERED_MULTIMAP_HPP_
+#ifndef SRC_WIP_UNORDERED_VECMAP_HPP_
+#define SRC_WIP_UNORDERED_VECMAP_HPP_
 
 #include <unordered_map>
 #include <vector>
@@ -61,7 +61,7 @@ namespace fsc {  // fast standard container
   typename Hash = ::std::hash<Key>,
   typename Equal = ::std::equal_to<Key>,
   typename Allocator = ::std::allocator<::std::pair<const Key, T> > >
-  class unordered_multimap {
+  class unordered_vecmap {
 
     protected:
       using subcontainer_type = ::std::vector<::std::pair<const Key, T>, Allocator >;
@@ -103,8 +103,8 @@ namespace fsc {  // fast standard container
         public:
           template <typename KK, typename TT, typename HH, typename EE, typename AA, typename OutputIterator>
           OutputIterator
-          copy(typename ::fsc::unordered_multimap<KK, TT, HH, EE, AA>::template concat_iter<V> first,
-               typename ::fsc::unordered_multimap<KK, TT, HH, EE, AA>::template concat_iter<V> last, OutputIterator result);
+          copy(typename ::fsc::unordered_vecmap<KK, TT, HH, EE, AA>::template concat_iter<V> first,
+               typename ::fsc::unordered_vecmap<KK, TT, HH, EE, AA>::template concat_iter<V> last, OutputIterator result);
 
 
         protected:
@@ -242,7 +242,7 @@ namespace fsc {  // fast standard container
           type& operator+=(difference_type n)
 		      {
             // ::std::advance will use this or the ++ operator.
-            if (n < 0) throw ::std::logic_error("::fsc::unordered_multimap::iterator does not support decrement.");
+            if (n < 0) throw ::std::logic_error("::fsc::unordered_vecmap::iterator does not support decrement.");
             if (n == 0) return *this;  // nothing to add.
 
             size_t curr_dist;
@@ -350,7 +350,7 @@ namespace fsc {  // fast standard container
 
 
       //  if multiplicity of dataset is kind of known, can initialize data to that to avoid growing vector on average.
-      unordered_multimap(size_type load_factor = 1, size_type bucket_count = 128,
+      unordered_vecmap(size_type load_factor = 1, size_type bucket_count = 128,
                          const Hash& hash = Hash(),
                          const Equal& equal = Equal(),
                          const Allocator& alloc = Allocator()) :
@@ -359,17 +359,17 @@ namespace fsc {  // fast standard container
                            multiplicity(load_factor) {};
 
       template<class InputIt>
-      unordered_multimap(InputIt first, InputIt last,
+      unordered_vecmap(InputIt first, InputIt last,
                          size_type load_factor = 1,
                          size_type bucket_count = 128,
                          const Hash& hash = Hash(),
                          const Equal& equal = Equal(),
                          const Allocator& alloc = Allocator()) :
-                         ::fsc::unordered_multimap<Key, T, Hash, Equal, Allocator>(load_factor, bucket_count, hash, equal, alloc) {
+                         ::fsc::unordered_vecmap<Key, T, Hash, Equal, Allocator>(load_factor, bucket_count, hash, equal, alloc) {
           this->insert(first, last);
       };
 
-      ~unordered_multimap() {};
+      virtual ~unordered_vecmap() {};
 
 
       iterator begin() {
@@ -451,13 +451,14 @@ namespace fsc {  // fast standard container
       // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n)
       template <class InputIt>
       void insert(InputIt first, InputIt last) {
-          for (; first != last; ++first, ++s) {
+          for (; first != last; ++first) {
             Key k = first->first;
             if (map.find(k) == map.end()) {
               map.emplace(k, subcontainer_type());
               map[k].reserve(multiplicity);
             }
             map[k].emplace_back(*first);
+            ++s;
           }
       }
 
@@ -476,28 +477,6 @@ namespace fsc {  // fast standard container
         return map.size();
       }
 
-
-//      ::std::pair<iterator, iterator> equal_range(Key const & key) {
-//        auto iter = map.find(key);
-//
-//        if (iter == map.end()) return ::std::make_pair(iterator(iter, iter),
-//                                                       iterator(iter, iter));
-//
-//        auto iter2 = iter; ++iter2;
-//        return ::std::make_pair(iterator(iter, iter2, iter->second.begin()),
-//                                iterator(iter, iter2, iter->second.end()));
-//      }
-//      ::std::pair<const_iterator, const_iterator> equal_range(Key const & key) const {
-//        auto iter = map.find(key);
-//
-//        if (iter == map.end()) return ::std::make_pair(const_iterator(iter, iter),
-//                                                       const_iterator(iter, iter));
-//
-//        auto iter2 = iter; ++iter2;
-//        return ::std::make_pair(const_iterator(iter, iter2, iter->second.cbegin()),
-//                                const_iterator(iter, iter2, iter->second.cend()));
-//
-//      }
 
       ::std::pair<subiter_type, subiter_type> equal_range(Key const & key) {
         auto iter = map.find(key);
@@ -531,8 +510,8 @@ namespace std {
 
   template <typename Key, typename T, typename Hash, typename Equal, typename Allocator, typename OutputIterator>
   OutputIterator
-  copy(typename ::fsc::unordered_multimap<Key, T, Hash, Equal, Allocator>::iterator first,
-       typename ::fsc::unordered_multimap<Key, T, Hash, Equal, Allocator>::iterator last, OutputIterator result) {
+  copy(typename ::fsc::unordered_vecmap<Key, T, Hash, Equal, Allocator>::iterator first,
+       typename ::fsc::unordered_vecmap<Key, T, Hash, Equal, Allocator>::iterator last, OutputIterator result) {
     auto out_iter = result;
 
     // iterate until both are in the same subcontainer, or first is at end.
@@ -556,8 +535,8 @@ namespace std {
 
   template <typename Key, typename T, typename Hash, typename Equal, typename Allocator, typename OutputIterator>
   OutputIterator
-  copy(typename ::fsc::unordered_multimap<Key, T, Hash, Equal, Allocator>::const_iterator first,
-       typename ::fsc::unordered_multimap<Key, T, Hash, Equal, Allocator>::const_iterator last, OutputIterator result) {
+  copy(typename ::fsc::unordered_vecmap<Key, T, Hash, Equal, Allocator>::const_iterator first,
+       typename ::fsc::unordered_vecmap<Key, T, Hash, Equal, Allocator>::const_iterator last, OutputIterator result) {
     auto out_iter = result;
 
     // iterate until both are in the same subcontainer, or first is at end.
@@ -584,4 +563,4 @@ namespace std {
 
 
 
-#endif /* SRC_WIP_UNORDERED_MAP_HPP_ */
+#endif /* SRC_WIP_UNORDERED_VECMAP_HPP_ */

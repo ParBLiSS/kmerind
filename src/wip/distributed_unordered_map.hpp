@@ -31,6 +31,7 @@
 #define BLISS_DISTRIBUTED_UNORDERED_MAP_HPP
 
 
+#include <wip/unordered_vecmap.hpp>
 #include <unordered_map>  // local storage hash table  // for multimap
 #include <unordered_set>  // local storage hash table  // for multimap
 #include <utility> 			  // for std::pair
@@ -51,7 +52,6 @@
 #include "utils/logging.h"
 
 #include "wip/distributed_map_base.hpp"
-#include "wip/unordered_multimap.hpp"
 
 namespace dsc  // distributed std container
 {
@@ -348,7 +348,7 @@ namespace dsc  // distributed std container
 
         TIMER_START(find);
         ::std::vector<::std::pair<Key, T> > results;
-        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
         TIMER_END(find, "begin", keys.size());
 
@@ -411,7 +411,7 @@ namespace dsc  // distributed std container
       template <class LocalFind, typename Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(LocalFind const & find_element, Predicate const& pred = Predicate()) const {
         ::std::vector<::std::pair<Key, T> > results;
-        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
         auto keys = this->keys();
         results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
@@ -447,7 +447,7 @@ namespace dsc  // distributed std container
         result.clear();
         if (c.empty()) return;
         result.reserve(c.size());
-        ::dsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(result);
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(result);
         ::std::copy(c.begin(), c.end(), emplace_iter);
       }
 
@@ -513,7 +513,7 @@ namespace dsc  // distributed std container
 
         TIMER_START(count);
         ::std::vector<::std::pair<Key, size_type> > results;
-        back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
         TIMER_END(count, "begin", keys.size());
 
@@ -576,7 +576,7 @@ namespace dsc  // distributed std container
       template <typename Predicate = Identity>
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
-        back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > emplace_iter(results);
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > emplace_iter(results);
 
         auto keys = this->keys();
         results.reserve(keys.size());
@@ -1338,7 +1338,7 @@ namespace dsc  // distributed std container
         TIMER_START(count_insert);
         ::std::vector<::std::pair<Key, T> > temp;
         temp.reserve(input.size());
-        back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
         ::std::transform(input.begin(), input.end(), emplace_iter, [](Key const & x) { return ::std::make_pair(x, T(1)); });
         TIMER_END(count_insert, "convert", input.size());
 
@@ -1397,8 +1397,8 @@ namespace dsc  // distributed std container
   class Equal = ::std::equal_to<Key>,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class unordered_multimap_vec : public unordered_map_base<Key, T, ::fsc::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc> {
-      using Base = unordered_map_base<Key, T, ::fsc::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc>;
+  class unordered_multimap_vec : public unordered_map_base<Key, T, ::fsc::unordered_vecmap, Comm, KeyTransform, Hash, Equal, Alloc> {
+      using Base = unordered_map_base<Key, T, ::fsc::unordered_vecmap, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 
     public:
