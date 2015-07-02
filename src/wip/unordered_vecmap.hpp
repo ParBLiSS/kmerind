@@ -431,10 +431,10 @@ namespace fsc {  // fast standard container
           iter = map.emplace(key, subcontainer_type()).first;
           map[key].reserve(multiplicity);
         }
-        auto pos = map[key].end();
         map[key].emplace_back(::std::forward<value_type>(value));
+        auto pos = map[key].end();
         ++s;
-        return iterator(iter, map.end(), pos);
+        return iterator(iter, map.end(), --pos);
       }
       iterator emplace(Key&& key, T&& value) {
         auto iter = map.find(key);
@@ -442,10 +442,10 @@ namespace fsc {  // fast standard container
           iter = map.emplace(key, subcontainer_type()).first;
           map[key].reserve(multiplicity);
         }
-        auto pos = map[key].end();
         map[key].emplace_back(::std::forward<Key>(key), ::std::forward<T>(value));
+        auto pos = map[key].end();
         ++s;
-        return iterator(iter, map.end(), pos);
+        return iterator(iter, map.end(), --pos);
       }
 
       // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n)
