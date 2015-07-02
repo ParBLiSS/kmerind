@@ -1468,7 +1468,7 @@ public:
     {
       Kmer result;  // empty kmer for output
 
-      // do the rem.  When rem is not 0, then it's very slow.  (like 40 to 50 times slower.)  why?
+      // do the rem.  When rem is not 0, then it's very slow.  (like 40 to 50 times slower.)  (because of maskmoveu)
       if (simd_rem > 0) {
         __m128i mword = word_reverse_simd<A>(_mm_loadu_si128((__m128i*)(src.data + nWords - simd_stride)));     // SSE2
         // store back to result - uses a mask to select which bytes are stored.
@@ -1518,7 +1518,7 @@ public:
     {
       Kmer result;  // empty kmer for output
 
-      // do the rem.  When rem is not 0, then it's very slow.  (like 40 to 50 times slower.)  why?
+      // do the rem.  When rem is not 0, then it's very slow.  (like 40 to 50 times slower.)  (because of maskmoveu)
       if (simd_rem > 0) {
         __m128i mword = word_reverse_complement_simd<A>(_mm_loadu_si128((__m128i*)(src.data + nWords - simd_stride)));   // SSE2
         // store back to result - uses a mask to select which bytes are stored.
@@ -1985,6 +1985,8 @@ public:
       return ::std::move(do_reverse_complement_serial(src));
     }
 
+
+  public:
     /**
      *
      * @brief   Create a new k-mer from the given sequence.
