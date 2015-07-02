@@ -14,6 +14,7 @@
 
 #include "common/kmer.hpp"
 #include "common/bit_ops.hpp"
+#include "common/alphabets.hpp"
 
 namespace bliss
 {

@@ -55,6 +55,17 @@ namespace fsc {  // fast standard container
    *
    *          this class internally uses a hashmap of vectors.
    *
+   *
+   *      memory usage:
+   *        supercontainer = map, stores ::std::pair<K, std::vector<> > in linked list for chaining.
+   *          each "bucket" hash size_t + pointer to head of linked list. - 16 bytes, HU hash unique elements.
+   *          each link list node has ::std::pair<K, std::vector> as payload, and at least a next ptr. - 24 bytes,  U unique elements
+   *          each vector stores  std::pair<K, T>, so 16 or 24 bytes.  N elements
+   *
+   *          total: (16N or 24N) + 24U + 16 HU.  assume good hash function, HU = U.
+   *
+   *          bottomline - large amount of memory is needed.
+   *
    */
   template <typename Key,
   typename T,
@@ -410,7 +421,9 @@ namespace fsc {  // fast standard container
 
       /// rehash for new count.  iterators are invalidated.
       void rehash(size_type count) {
-        map.rehash((count + multiplicity - 1) / multiplicity);
+        multiplicity = (s + map.size() - 1) / map.size();
+
+        map.rehash(::std::max(map.size(), (count + multiplicity - 1) / multiplicity));
       }
 
       /// reserve for new count.  iterators may be invalidated.
@@ -428,10 +441,11 @@ namespace fsc {  // fast standard container
         auto key = value.first;
         auto iter = map.find(key);
         if (iter == map.end()) {
-          iter = map.emplace(key, subcontainer_type()).first;
-          map[key].reserve(multiplicity);
+          iter = map.emplace(key, subcontainer_type(1, ::std::forward<value_type>(value))).first;
+//          map[key].reserve(multiplicity);
+        } else {
+          map[key].emplace_back(::std::forward<value_type>(value));
         }
-        map[key].emplace_back(::std::forward<value_type>(value));
         auto pos = map[key].end();
         ++s;
         return iterator(iter, map.end(), --pos);
@@ -440,7 +454,7 @@ namespace fsc {  // fast standard container
         auto iter = map.find(key);
         if (iter == map.end()) {
           iter = map.emplace(key, subcontainer_type()).first;
-          map[key].reserve(multiplicity);
+//          map[key].reserve(multiplicity);
         }
         map[key].emplace_back(::std::forward<Key>(key), ::std::forward<T>(value));
         auto pos = map[key].end();
@@ -452,12 +466,13 @@ namespace fsc {  // fast standard container
       template <class InputIt>
       void insert(InputIt first, InputIt last) {
           for (; first != last; ++first) {
-            Key k = first->first;
-            if (map.find(k) == map.end()) {
-              map.emplace(k, subcontainer_type());
-              map[k].reserve(multiplicity);
+            if (map.find(first->first) == map.end()) {
+              // emplace, and take the result iterator, get the second component (subcontainer), reserve the size.
+              map.emplace(first->first, subcontainer_type(1, *first));
+//              map[k].reserve(multiplicity);
+            } else {
+              map[first->first].emplace_back(*first);
             }
-            map[k].emplace_back(*first);
             ++s;
           }
       }
@@ -476,6 +491,14 @@ namespace fsc {  // fast standard container
       size_type unique_size() const {
         return map.size();
       }
+      size_type get_max_multiplicity() const {
+        size_type max_multiplicity = 0;
+        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+          max_multiplicity = ::std::max(max_multiplicity, it->second.size());
+        }
+        return max_multiplicity;
+      }
+
 
 
       ::std::pair<subiter_type, subiter_type> equal_range(Key const & key) {
