@@ -51,9 +51,9 @@
 #include "utils/kmer_utils.hpp"
 
 #include "io/mxx_support.hpp"
-#include "wip/distributed_unordered_map.hpp"
-#include "wip/distributed_sorted_map.hpp"
-#include "wip/distributed_map.hpp"
+#include <containers/distributed_unordered_map.hpp>
+#include <containers/distributed_sorted_map.hpp>
+#include <containers/distributed_map.hpp>
 
 #include "io/sequence_iterator.hpp"
 #include "io/sequence_id_iterator.hpp"
@@ -121,6 +121,8 @@ namespace bliss
           std::vector<KmerType> read_file_for_kmers(const std::string & filename, MPI_Comm comm) {
 
             std::vector< KmerType > result;
+            ::fsc::back_emplace_iterator<std::vector< KmerType > > emplace_iter(result);
+
             TIMER_INIT(file);
 
             {
@@ -140,7 +142,7 @@ namespace bliss
               // call after getting first L1Block to ensure that file is loaded.
               size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
               result.reserve(est_size);
-              TIMER_END(file, "reserve", est_size * sizeof(KmerType));
+              TIMER_END(file, "reserve", est_size);
 
 
 
@@ -174,7 +176,7 @@ namespace bliss
                   KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
                   KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
 
-                  result.insert(result.end(), start, end);
+                  ::std::copy(start, end, emplace_iter);
                 }
 
                 partition = loader.getNextL1Block();
@@ -287,6 +289,7 @@ namespace bliss
 
           std::vector<TupleType> read_file(const std::string & filename, MPI_Comm comm) {
             std::vector< TupleType > temp;
+            ::fsc::back_emplace_iterator<std::vector< TupleType > > emplace_iter(temp);
 
             TIMER_INIT(file);
 
@@ -306,7 +309,7 @@ namespace bliss
               size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + this->commSize - 1) / this->commSize;
               temp.reserve(est_size);
 
-              TIMER_END(file, "reserve", est_size * sizeof(TupleType));
+              TIMER_END(file, "reserve", est_size);
 
               // == create kmer iterator
               //            kmer_iter start(data, range);
@@ -346,8 +349,7 @@ namespace bliss
                   KmerIndexIterType index_start(start, id_start);
                   KmerIndexIterType index_end(end, id_end);
 
-
-                  temp.insert(temp.end(), index_start, index_end);
+                  ::std::copy(index_start, index_end, emplace_iter);
                 }
 
                 partition = loader.getNextL1Block();
@@ -369,9 +371,8 @@ namespace bliss
             //            distributed_file df;
             //            range = df.open(filename, communicator);  // memmap internally
             //            data = df.data();
-
-            ::std::vector<TupleType> temp = this->read_file(filename, comm);
-
+            ::std::vector<TupleType> temp =
+             this->read_file(filename, comm);
             build(temp);
           }
 
@@ -379,7 +380,7 @@ namespace bliss
             TIMER_INIT(build);
 
             TIMER_START(build);
-            this->map.reserve(temp.size());
+            this->map.reserve(this->map.size() + temp.size());
             TIMER_END(build, "reserve", temp.size());
 
 
@@ -455,6 +456,8 @@ namespace bliss
 
           std::vector<TupleType> read_file(const std::string & filename, MPI_Comm comm) {
             std::vector< TupleType > temp;
+            ::fsc::back_emplace_iterator<std::vector< TupleType > > emplace_iter(temp);
+
             TIMER_INIT(file);
 
             {
@@ -472,7 +475,7 @@ namespace bliss
               size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + this->commSize - 1) / this->commSize;
               temp.reserve(est_size);
 
-              TIMER_END(file, "reserve", est_size * sizeof(TupleType));
+              TIMER_END(file, "reserve", est_size);
 
 
               // == create kmer iterator
@@ -521,7 +524,9 @@ namespace bliss
                   KmerIndexIterType index_end(end, info_end);
 
 
-                  temp.insert(temp.end(), index_start, index_end);
+                  ::std::copy(index_start, index_end, emplace_iter);
+
+//                  temp.insert(temp.end(), index_start, index_end);
                   //        for (auto it = index_start; it != index_end; ++it) {
                   //          temp.push_back(*it);
                   //        }
@@ -558,7 +563,7 @@ namespace bliss
             TIMER_INIT(build);
 
             TIMER_START(build);
-            this->map.reserve(temp.size());
+            this->map.reserve(this->map.size() + temp.size());
             TIMER_END(build, "reserve", temp.size());
 
 
@@ -620,7 +625,7 @@ namespace bliss
             TIMER_INIT(build);
 
             TIMER_START(build);
-            this->map.reserve(temp.size());
+            this->map.reserve(this->map.size() + temp.size());
             TIMER_END(build, "reserve", temp.size());
 
 

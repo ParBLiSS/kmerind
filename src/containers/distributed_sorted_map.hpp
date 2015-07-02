@@ -2,7 +2,6 @@
  * @file    distributed_sorted_map.hpp
  * @ingroup index
  * @author  Tony Pan <tpan7@gatech.edu>
- * @author  Patrick Flick <patrick.flick@gmail.com>
  * @brief   Implements the distributed_multimap, distributed map, and distributed_reduction_map
  *          data structures.
  *
@@ -32,6 +31,7 @@
 #define BLISS_DISTRIBUTED_SORTED_MAP_HPP
 
 
+#include <containers/distributed_map_base.hpp>
 #include <vector>  // local storage hash table
 #include <utility> 			  // for std::pair
 
@@ -49,7 +49,6 @@
 #include "utils/timer.hpp"  // for timing.
 #include "utils/logging.h"
 
-#include "wip/distributed_map_base.hpp"
 
 namespace dsc  // distributed std container
 {
@@ -481,7 +480,7 @@ namespace dsc  // distributed std container
           if (this->comm_size > 1) {
 
 
-            TIMER_START(find);
+            TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
             // distribute (communication part)
             std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
             TIMER_END(find, "a2a1", keys.size());
@@ -515,7 +514,7 @@ namespace dsc  // distributed std container
             TIMER_END(find, "local_find", results.size());
 
             // send back using the constructed recv count
-            TIMER_START(find);
+            TIMER_COLLECTIVE_START(find, "a2a2", this->comm);
             mxx::all2all(results, send_counts, this->comm);
             TIMER_END(find, "a2a2", results.size());
 
@@ -709,7 +708,7 @@ namespace dsc  // distributed std container
           retain_unique(keys, sorted_input);
           TIMER_END(count, "uniq1", keys.size());
 
-          TIMER_START(count);
+          TIMER_COLLECTIVE_START(count, "a2a1", this->comm);
           // distribute (communication part)
           std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
 
@@ -742,7 +741,7 @@ namespace dsc  // distributed std container
           }
           TIMER_END(count, "local_count", results.size());
 
-          TIMER_START(count);
+          TIMER_COLLECTIVE_START(count, "a2a2", this->comm);
 
           // send back using the constructed recv count
           mxx::all2all(results, recv_counts, this->comm);
@@ -788,32 +787,32 @@ namespace dsc  // distributed std container
       }
 
 
-      /**
-       * @brief insert new elements in the distributed sorted_multimap.  example use: stop inserting if more than x entries.
-       * @param src_begin
-       * @param src_end
-       */
-      template <class InputIter, class Predicate = Identity>
-      size_t insert(InputIter src_begin, InputIter src_end, bool sorted_input = false, Predicate const &pred = Predicate()) {
-          if (src_begin == src_end) return 0;
-          TIMER_INIT(insert);
-
-          TIMER_START(insert);
-
-          this->sorted = false; this->balanced = false; this->globally_sorted = false;
-          ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
-
-          if (::std::is_same<Predicate, Identity>::value) ::std::copy(src_begin, src_end, emplace_iter);
-          else ::std::copy_if(src_begin, src_end, emplace_iter, pred);
-
-          size_t c = ::std::distance(src_begin, src_end);
-          TIMER_END(insert, "insert", c);
-
-
-          TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
-
-          return c;
-      }
+//      /**
+//       * @brief insert new elements in the distributed sorted_multimap.  example use: stop inserting if more than x entries.
+//       * @param src_begin
+//       * @param src_end
+//       */
+//      template <class InputIter, class Predicate = Identity>
+//      size_t insert(InputIter src_begin, InputIter src_end, bool sorted_input = false, Predicate const &pred = Predicate()) {
+//          if (src_begin == src_end) return 0;
+//          TIMER_INIT(insert);
+//
+//          TIMER_START(insert);
+//
+//          this->sorted = false; this->balanced = false; this->globally_sorted = false;
+//          ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
+//
+//          if (::std::is_same<Predicate, Identity>::value) ::std::copy(src_begin, src_end, emplace_iter);
+//          else ::std::copy_if(src_begin, src_end, emplace_iter, pred);
+//
+//          size_t count = ::std::distance(src_begin, src_end);
+//          TIMER_END(insert, "insert", count);
+//
+//
+//          TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+//
+//          return count;
+//      }
 
       /**
        * @brief insert new elements in the distributed sorted_multimap.  example use: stop inserting if more than x entries.
@@ -822,7 +821,30 @@ namespace dsc  // distributed std container
        */
       template <class Predicate = Identity>
       size_t insert(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
-          return insert(input.begin(), input.end(), sorted_input, pred);
+          if (input.size() == 0) return 0;
+          TIMER_INIT(insert);
+          this->sorted = false; this->balanced = false; this->globally_sorted = false;
+
+          size_t before = c.size();
+          TIMER_START(insert);
+
+          ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
+          if (::std::is_same<Predicate, Identity>::value) {
+            if (c.size() == 0)   // container is empty, so swap it in.
+              c.swap(input);
+            else
+              ::std::move(input.begin(), input.end(), emplace_iter);    // else move it in.
+          }
+          else ::std::copy_if(::std::make_move_iterator(input.begin()),
+                              ::std::make_move_iterator(input.end()), emplace_iter, pred);  // predicate needed.  move it though.
+
+          size_t count = c.size() - before;
+          TIMER_END(insert, "insert", count);
+
+
+          TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+
+          return count;
       }
 
 
@@ -1087,7 +1109,7 @@ namespace dsc  // distributed std container
 
 
 
-            TIMER_START(rehash);
+            TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
             // distribute
             ::mxx2::msgs_all2all(this->c, this->key_to_rank, this->comm);
             TIMER_END(rehash, "a2a", this->c.size());
@@ -1120,7 +1142,8 @@ namespace dsc  // distributed std container
             // only send for the first p-1 proc, and only if they have a kmer to split with.
             this->key_to_rank.map.emplace_back(this->c.back().first, this->comm_rank);
           }
-          this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+          this->key_to_rank.map = ::std::move(::mxx::allgatherv(this->key_to_rank.map, this->comm));
+
 
 //          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
 //            printf("R %d key to rank %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
@@ -1131,7 +1154,7 @@ namespace dsc  // distributed std container
         } else {
           TIMER_START(rehash);
           // local unique
-          this->retain_unique(this->c, this->sorted);
+          this->local_reduction(this->c, this->sorted);
 
           TIMER_END(rehash, "unique", this->c.size());
         }
@@ -1270,6 +1293,7 @@ namespace dsc  // distributed std container
           if (!this->balanced) {
             TIMER_START(rehash);
             this->c = std::move(::mxx::stable_block_decompose(this->c, this->comm));
+
             TIMER_END(rehash, "block1", this->c.size());
           }
 
@@ -1279,8 +1303,8 @@ namespace dsc  // distributed std container
           TIMER_END(rehash, "mxxsort", this->c.size());
 
           // get new pivots
-          // next compute the splitters.
           TIMER_START(rehash);
+          this->key_to_rank.map.clear();
           if ((this->comm_rank < (this->comm_size - 1)) && (this->c.size() > 0)) {
             // only send for the first p-1 proc, and only if they have a kmer to split with.
             this->key_to_rank.map.emplace_back(this->c.back().first, this->comm_rank);
@@ -1297,7 +1321,7 @@ namespace dsc  // distributed std container
           //			  this->key_to_rank.map = ::mxx::sample_block_decomp(d.begin(), d.end(), Base::Base::less, this->comm_size - 1, this->comm, mpi_dt);
 
           // redistribute
-          TIMER_START(rehash);
+          TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
           ::mxx2::msgs_all2all(this->c, this->key_to_rank, this->comm);
           TIMER_END(rehash, "a2a", this->c.size());
         } else {
@@ -1601,6 +1625,8 @@ namespace dsc  // distributed std container
         TIMER_START(count_insert);
         // local compute part.  called by the communicator.
         size_t count = this->Base::insert(temp, sorted_input, pred);
+        ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
+
         TIMER_END(count_insert, "insert", this->c.size());
 
         // distribute

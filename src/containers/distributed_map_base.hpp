@@ -9,10 +9,10 @@
  *
  * TODO add License
  */
-#ifndef SRC_WIP_DISTRIBUTED_MAP_BASE_HPP_
-#define SRC_WIP_DISTRIBUTED_MAP_BASE_HPP_
+#ifndef SRC_CONTAINERS_DISTRIBUTED_MAP_BASE_HPP_
+#define SRC_CONTAINERS_DISTRIBUTED_MAP_BASE_HPP_
 
-#include <wip/container_utils.hpp>
+#include <containers/container_utils.hpp>
 #include <functional>
 #include <iterator>
 
@@ -225,4 +225,4 @@ namespace dsc
 
 
 
-#endif /* SRC_WIP_DISTRIBUTED_MAP_BASE_HPP_ */
+#endif /* SRC_CONTAINERS_DISTRIBUTED_MAP_BASE_HPP_ */

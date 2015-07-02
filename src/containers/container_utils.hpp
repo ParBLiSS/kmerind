@@ -9,12 +9,102 @@
  *
  * TODO add License
  */
-#ifndef SRC_WIP_CONTAINER_UTILS_HPP_
-#define SRC_WIP_CONTAINER_UTILS_HPP_
+#ifndef SRC_CONTAINERS_CONTAINER_UTILS_HPP_
+#define SRC_CONTAINERS_CONTAINER_UTILS_HPP_
 
 #include <iterator>  // iterator_traits
+#include <unordered_set>
+#include <algorithm>  // upper bound, unique, sort, etc.
 
 namespace fsc {
+
+
+  struct Identity {
+      template <typename T>
+      T operator()(T const& v) {return v;};
+  };
+
+  template <typename Key, typename Comp, typename Transform = Identity>
+  struct Comparator {
+      Comp comp;
+      Transform trans;
+
+      Comparator(Comp const & _cmp = Comp(), Transform const _trans = Transform()) : comp(_cmp), trans(_trans) {};
+
+      inline bool operator()(Key const & x, Key const & y) const {
+        return comp(trans(x), trans(y));
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const & x, Key const & y) const {
+        return this->operator()(x.first, y);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const & x, Key const & y) const {
+        return this->operator()(x.first, y);
+      }
+      template<typename V>
+      inline bool operator()(Key const & x, ::std::pair<Key, V> const & y) const {
+        return this->operator()(x, y.first);
+      }
+      template<typename V>
+      inline bool operator()(Key const & x, ::std::pair<const Key, V> const & y) const {
+        return this->operator()(x, y.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) const {
+        return this->operator()(x.first, y.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) const {
+        return this->operator()(x.first, y.first);
+      }
+  };
+
+  template <typename Key, typename Comp>
+  struct Comparator<Key, Comp, Identity> {
+      Comp comp;
+
+      Comparator(Comp const & cmp = Comp()) : comp(cmp) {};
+
+      inline bool operator()(Key const & x, Key const & y) const {
+        return comp(x, y);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const & x, Key const & y) const {
+        return this->operator()(x.first, y);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const & x, Key const & y) const {
+        return this->operator()(x.first, y);
+      }
+      template<typename V>
+      inline bool operator()(Key const & x, ::std::pair<Key, V> const & y) const {
+        return this->operator()(x, y.first);
+      }
+      template<typename V>
+      inline bool operator()(Key const & x, ::std::pair<const Key, V> const & y) const {
+        return this->operator()(x, y.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) const {
+        return this->operator()(x.first, y.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) const {
+        return this->operator()(x.first, y.first);
+      }
+  };
+
+
+  template <typename Key, typename Less = ::std::less<Key> >
+  struct Greater {
+      Less lt;
+      inline bool operator()(Key const &x, Key const &y) const {
+        return lt(y, x);
+      }
+  };
+
+
 
   /// append to container via emplace.
   /// modified based on http://stackoverflow.com/questions/18724999/why-no-emplacement-iterators-in-c11-or-c14
@@ -93,4 +183,4 @@ namespace fsc {
 }
 
 
-#endif /* SRC_WIP_CONTAINER_UTILS_HPP_ */
+#endif /* SRC_CONTAINERS_CONTAINER_UTILS_HPP_ */

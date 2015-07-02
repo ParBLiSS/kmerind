@@ -16,7 +16,7 @@
  * test class holding some information.  Also, needed for the typed tests
  */
 template<typename T>
-class UnorderedMultimapTest : public ::testing::Test
+class UnorderedVecMapTest : public ::testing::Test
 {
   protected:
     ::std::unordered_multimap<T, T> gold;
@@ -41,11 +41,11 @@ class UnorderedMultimapTest : public ::testing::Test
 };
 
 // indicate this is a typed test
-TYPED_TEST_CASE_P(UnorderedMultimapTest);
+TYPED_TEST_CASE_P(UnorderedVecMapTest);
 
 
 
-TYPED_TEST_P(UnorderedMultimapTest, equal_range)
+TYPED_TEST_P(UnorderedVecMapTest, equal_range)
 {
   bool same = false;
 	  for (int i = 0; i < 99; ++i) {
@@ -84,14 +84,14 @@ TYPED_TEST_P(UnorderedMultimapTest, equal_range)
 }
 
 
-TYPED_TEST_P(UnorderedMultimapTest, count)
+TYPED_TEST_P(UnorderedVecMapTest, count)
 {
     for (int i = 0; i < 99; ++i) {
       EXPECT_EQ(this->gold.count(i), this->test.count(i));
     }
 }
 
-TYPED_TEST_P(UnorderedMultimapTest, iterator)
+TYPED_TEST_P(UnorderedVecMapTest, iterator)
 {
   using valType = ::std::pair<TypeParam, TypeParam>;
 
@@ -136,7 +136,7 @@ TYPED_TEST_P(UnorderedMultimapTest, iterator)
 }
 
 
-TYPED_TEST_P(UnorderedMultimapTest, copy)
+TYPED_TEST_P(UnorderedVecMapTest, copy)
 {
   using valType = ::std::pair<TypeParam, TypeParam>;
 
@@ -180,11 +180,11 @@ TYPED_TEST_P(UnorderedMultimapTest, copy)
 
 
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(UnorderedMultimapTest, equal_range, count, iterator, copy);
+REGISTER_TYPED_TEST_CASE_P(UnorderedVecMapTest, equal_range, count, iterator, copy);
 
 
 //////////////////// RUN the tests with different types.
 
 typedef ::testing::Types<int8_t, int16_t, int32_t,
-    int64_t, uint64_t> UnorderedMultimapTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(Bliss, UnorderedMultimapTest, UnorderedMultimapTestTypes);
+    int64_t, uint64_t> UnorderedVecMapTestTypes;
+INSTANTIATE_TYPED_TEST_CASE_P(Bliss, UnorderedVecMapTest, UnorderedVecMapTestTypes);

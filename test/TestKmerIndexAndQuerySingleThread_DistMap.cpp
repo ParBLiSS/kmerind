@@ -20,7 +20,7 @@
 #include <string>
 #include <sstream>
 #include <chrono>
-
+#include <iostream>  // for system("pause");
 #include "utils/logging.h"
 #include "common/alphabets.hpp"
 #include "common/kmer.hpp"
@@ -227,6 +227,10 @@ int main(int argc, char** argv) {
     filename.assign(argv[1]);
   }
 
+  int which = -1;
+  if (argc > 2)
+	which = atoi(argv[2]);
+
 
   int rank = 0;
 	int nthreads = 1;
@@ -256,7 +260,7 @@ int main(int argc, char** argv) {
     char hostname[256];
     memset(hostname, 0, 256);
     gethostname(hostname, 256);
-    INFOF("Rank %d hostname [%s]", rank, hostname);
+    //INFOF("Rank %d hostname [%s]", rank, hostname);
   }
   MPI_Barrier(comm);
 
@@ -264,6 +268,8 @@ int main(int argc, char** argv) {
 #else
   static_assert(false, "MPI used although compilation is not set to use MPI");
 #endif
+  
+  if (which != -1) std::cin.get();
 
 
   using Alphabet = bliss::common::DNA;
@@ -273,106 +279,122 @@ int main(int argc, char** argv) {
   using QualType = float;
   using KmerInfoType = std::pair<IdType, QualType>;
 
-  {
-  using MapType = ::dsc::counting_unordered_map<
-      KmerType, uint32_t, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, hash, count index.");
-  }
-  MPI_Barrier(comm);
-
-  {
-  using MapType = ::dsc::unordered_multimap<
-      KmerType, IdType, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, hash, position index.");
-  }
-  MPI_Barrier(comm);
-
-  {
-  using MapType = ::dsc::unordered_multimap<
-      KmerType, KmerInfoType, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, hash, pos+qual index");
-  }
-  MPI_Barrier(comm);
-
+  if (which == -1 || which == 1) 
   {
   using MapType = ::dsc::unordered_multimap_vec<
       KmerType, IdType, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
   testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, hashvec, position index.");
-  }
+  
   MPI_Barrier(comm);
+	}
 
+  if (which == -1 || which == 2)
+  {
+  using MapType = ::dsc::counting_unordered_map<
+      KmerType, uint32_t, int,
+      bliss::kmer::transform::lex_less,
+      bliss::kmer::hash::farm >;
+  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, hash, count index.");
+    MPI_Barrier(comm);
+}
+
+  if (which == -1 || which == 3)
+  {
+  using MapType = ::dsc::counting_sorted_map<
+      KmerType, uint32_t, int,
+      bliss::kmer::transform::lex_less>;
+  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, sort, count index.");
+    MPI_Barrier(comm);
+}
+
+  if (which == -1 || which == 4)
+  {
+  using MapType = ::dsc::unordered_multimap<
+      KmerType, IdType, int,
+      bliss::kmer::transform::lex_less,
+      bliss::kmer::hash::farm >;
+  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, hash, position index.");
+    MPI_Barrier(comm);
+}
+
+    if (which == -1 || which == 5)
+{
+  using MapType = ::dsc::sorted_multimap<
+      KmerType, IdType, int,
+      bliss::kmer::transform::lex_less>;
+  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, sort, position index.");
+    MPI_Barrier(comm);
+}
+
+  if (which == -1 || which == 6)
   {
   using MapType = ::dsc::unordered_multimap_vec<
       KmerType, KmerInfoType, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
   testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, hashvec, pos+qual index");
-  }
-  MPI_Barrier(comm);
+    MPI_Barrier(comm);
+}
 
+
+  if (which == -1 || which == 7)
   {
-  using MapType = ::dsc::counting_sorted_map<
-      KmerType, uint32_t, int,
-      bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, sort, count index.");
-  }
-  MPI_Barrier(comm);
+  using MapType = ::dsc::unordered_multimap<
+      KmerType, KmerInfoType, int,
+      bliss::kmer::transform::lex_less,
+      bliss::kmer::hash::farm >;
+  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, hash, pos+qual index");
+    MPI_Barrier(comm);
+}
 
-  {
-  using MapType = ::dsc::sorted_multimap<
-      KmerType, IdType, int,
-      bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, sort, position index.");
-  }
-  MPI_Barrier(comm);
 
+  if (which == -1 || which == 8)
   {
   using MapType = ::dsc::sorted_multimap<
       KmerType, KmerInfoType, int,
       bliss::kmer::transform::lex_less>;
   testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, sort, pos+qual index");
-  }
-  MPI_Barrier(comm);
+    MPI_Barrier(comm);
+}
 
+
+
+  if (which == 9)
   {
-  using MapType2 = ::dsc::counting_map<
+  using MapType = ::dsc::counting_map<
       KmerType, uint32_t, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::CountIndex<MapType2> > (comm, filename, "ST, map, count index.");
-  }
-  MPI_Barrier(comm);
+  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, map, count index.");
+    MPI_Barrier(comm);
+}
 
+  if (which == 10)
   {
   using MapType = ::dsc::multimap<
       KmerType, IdType, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
   testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, map, position index.");
-  }
-  MPI_Barrier(comm);
+    MPI_Barrier(comm);
+}
 
+  if (which == 11)
   {
-  using MapType3 = ::dsc::multimap<
+  using MapType = ::dsc::multimap<
       KmerType, KmerInfoType, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType3> >(comm, filename , "ST, map, pos+qual index");
-  }
-  MPI_Barrier(comm);
+  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, map, pos+qual index");
+    MPI_Barrier(comm);
+}
 
   //////////////  clean up MPI.
   MPI_Finalize();
 
-  INFOF("M Rank %d called MPI_Finalize", rank);
+  //INFOF("M Rank %d called MPI_Finalize", rank);
 
 
 
