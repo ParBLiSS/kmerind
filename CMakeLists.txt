@@ -583,7 +583,7 @@ if (ENABLE_TESTING)
     # generate google test XML results, to be parsed by Jenkins
     # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
     add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
-  endfunction(bliss_add_test)
+  endfunction(bliss_add_test_new)
 
   function(bliss_add_mpi_test module_name module_link)
     # set the name for the test target and executable
