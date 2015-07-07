@@ -1361,9 +1361,9 @@ namespace dsc  // distributed std container
       size_t local_insert(InputIterator first, InputIterator last) {
           size_t before = this->c.size();
           for (auto it = first; it != last; ++it) {
-            if (this->c.count(it->first) == 0) this->c.emplace(*it);
+            if (this->c.find(it->first) == this->c.end()) this->c.emplace(*it);
             else
-              this->c[it->first] = r(this->c[it->first], it->second);
+              this->c.at(it->first) = r(this->c.at(it->first), it->second);
           }
           return this->c.size() - before;
       }
@@ -1379,9 +1379,9 @@ namespace dsc  // distributed std container
 
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) {
-              if (this->c.count(it->first) == 0) this->c.emplace(*it);
+              if (this->c.find(it->first) == this->c.end()) this->c.emplace(*it);
               else
-                this->c[it->first] = r(this->c[it->first], it->second);
+                this->c.at(it->first) = r(this->c.at(it->first), it->second);
             }
           }
           return this->c.size() - before;
@@ -1407,8 +1407,8 @@ namespace dsc  // distributed std container
         for (auto it = input.begin(), end = input.end(); it != end; ++it) {
           k = it->first;
           v = it->second;
-          if (temp.count(k) == 0) temp[k] = v;  // don't rely on initialization to set T to 0.
-          else temp[k] = r(temp[k], v);
+          if (temp.find(k) == temp.end()) temp.emplace(k, v);  // don't rely on initialization to set T to 0.
+          else temp.at(k) = r(temp.at(k), v);
         }
         TIMER_END(reduce_tuple, "reduce", temp.size());
 

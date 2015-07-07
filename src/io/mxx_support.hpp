@@ -226,13 +226,13 @@ namespace mxx2 {
       for (auto it = start; it != end; ++it) {
         key = it->first;
         val = it->second;
-        if (map.count(key) == 0) map[key] = val;  // don't rely on initialization to set T to 0.
-        else map[key] = r(map[key], val);
+        if (map.find(key) == map.end()) map.emplace(key, val);
+        else map.at(key) = r(map.at(key), val);
       }
   
       newend = ::std::copy(map.begin(), map.end(), newstart);
 
-      send_counts[i] = ::std::distance(newstart, newend);
+      send_counts[i] = map.size();
 
       start = end;
       newstart = newend;
