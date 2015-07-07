@@ -411,7 +411,33 @@ namespace mxx2 {
     return results;
   }
 
+  /*  untested.
+  template <typename T, typename Func>
+  T reduce_scatter(::std::vector<T> & v, Func func, MPI_Comm comm = MPI_COMM_WORLD)
+  {
+    // get user op
+    MPI_Op op = ::mxx::create_user_op<T, Func>(func);
+    // get type
+    ::mxx::datatype<T> dt;
 
+    int p;
+    MPI_Comm_size(comm, &p);
+
+    if (v.size() != p) {
+      int rank;
+      MPI_Comm_rank(comm, &rank);
+      WARNINGF("WARNING: process %d has vector size %lu that is not same as communicator size %d.", rank, v.size(), p);
+    }
+
+    // perform reduction
+    T result;
+    MPI_Reduce_scatter_block(&(v[0]), &result, 1, dt.type(), op, comm);
+    // clean up op
+    ::mxx::free_user_op<T>(op);
+    // return result
+    return result;
+  }
+*/
 }
 
 #endif /* SRC_IO_MXX_SUPPORT_HPP_ */

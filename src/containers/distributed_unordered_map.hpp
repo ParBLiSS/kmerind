@@ -340,14 +340,13 @@ namespace dsc  // distributed std container
 //          ::std::unordered_set<V, TransformedHash, typename Base::TransformedEqual >().swap(temp);  // helps
         }
       }
-
       /**
        * @brief find elements with the specified keys in the distributed unordered_multimap.
        * @param first
        * @param last
        */
       template <class LocalFind, typename Predicate = Identity>
-      ::std::vector<::std::pair<Key, T> > find(LocalFind const & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+      ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind const & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
         TIMER_INIT(find);
 
         TIMER_START(find);
@@ -425,15 +424,194 @@ namespace dsc  // distributed std container
 
       }
 
+      /**
+       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class LocalFind, typename Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(LocalFind const & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+        TIMER_INIT(find);
+
+        TIMER_START(find);
+        ::std::vector<::std::pair<Key, T> > results;
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+
+        ::std::vector<::std::pair<Key, T> > local_results;
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
+        TIMER_END(find, "begin", keys.size());
+
+        if (this->comm_size > 1) {
+          TIMER_START(find);
+          // distribute (communication part)
+          std::vector<int> send_counts = mxx2::bucketing(keys, this->key_to_rank, this->comm_size);
+          TIMER_END(find, "bucket", keys.size());
+
+          TIMER_START(find);
+          // distribute (communication part)
+          mxx2::retain_unique<::std::unordered_set<Key,
+                                                   TransformedHash,
+                                                   typename Base::TransformedEqual >, typename Base::TransformedEqual >(keys, send_counts, sorted_input);
+          TIMER_END(find, "unique", keys.size());
+
+
+          TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
+          // distribute (communication part)
+          auto recv_counts = mxx2::all2all(keys, send_counts, this->comm);
+          TIMER_END(find, "a2a1", keys.size());
+
+          // local count to determine amount of memory to allocate at destination.
+          TIMER_START(find);
+          ::std::vector<::std::pair<Key, size_t> > count_results;
+          count_results.reserve(this->comm_size);
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+
+          auto start = keys.begin();
+          auto end = start;
+          size_t total = 0;
+          for (int i = 0; i < this->comm_size; ++i) {
+            ::std::advance(end, recv_counts[i]);
+
+            // count results for process i
+            count_results.clear();
+            QueryProcessor::process(c, start, end, count_emplace_iter, count_element, true, pred);
+            send_counts[i] = 0;
+            for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+              send_counts[i] += it->second;
+            }
+            total += send_counts[i];
+            start = end;
+            //printf("Rank %d local count for src rank %d:  recv %d send %d\n", this->comm_rank, i, recv_counts[i], send_counts[i]);
+          }
+          ::std::vector<::std::pair<Key, size_t> >().swap(count_results);
+          TIMER_END(find, "local_count", total);
+
+
+          TIMER_COLLECTIVE_START(find, "a2a_count", this->comm);
+          auto resp_counts = mxx::all2all(send_counts, 1, this->comm);  // compute counts of response to receive
+          TIMER_END(find, "a2a_count", keys.size());
+
+          TIMER_START(find);
+          auto resp_displs = mxx::get_displacements(resp_counts);  // compute response displacements.
+
+          int resp_total = resp_displs[this->comm_size - 1] + resp_counts[this->comm_size - 1];
+          int max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
+          results.resize(resp_total);   // allocate, not just reserve
+          local_results.reserve(max_send_count);
+          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+          TIMER_END(find, "reserve", resp_total);
+
+          TIMER_START(find);
+          auto recv_displs = mxx::get_displacements(recv_counts);  // compute response displacements.
+          int recv_from, send_to;
+          int found;
+          total = 0;
+          std::vector<MPI_Request> reqs(2 * this->comm_size);
+          for (int i = 0; i < this->comm_size; ++i) {
+            recv_from = (this->comm_rank + (this->comm_size - i)) % this->comm_size; // rank to recv data from
+
+            // set up receive.
+            mxx::datatype<::std::pair<Key, T> > dt;
+            MPI_Irecv(&results[resp_displs[recv_from]], resp_counts[recv_from], dt.type(),
+                      recv_from, i, this->comm, &reqs[2 * i]);
+
+
+            send_to = (this->comm_rank + i) % this->comm_size;    // rank to send data to
+
+            //== get data for the dest rank
+            start = keys.begin();                                   // keys for the query for the dest rank
+            ::std::advance(start, recv_displs[send_to]);
+            end = start;
+            ::std::advance(end, recv_counts[send_to]);
+
+            local_results.clear();
+            // work on query from process i.
+            found = QueryProcessor::process(c, start, end, local_emplace_iter, find_element, true, pred);
+           // if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+            total += found;
+            //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
+
+            MPI_Isend(&(local_results[0]), found, dt.type(), send_to,
+                      i, this->comm, &reqs[2 * i + 1]);
+
+            // wait for both requests to complete.
+            MPI_Waitall(2, &reqs[2 * i], MPI_STATUSES_IGNORE);
+
+
+            // verify correct? done by comparing to previous code.
+
+
+            //printf("Rank %d local find send to %d:  query %d result sent %d (%d).  recv from %d received %d\n", this->comm_rank, send_to, recv_counts[send_to], found, send_counts[send_to], recv_from, resp_counts[recv_from]);
+          }
+          //printf("Rank %d total find %lu\n", this->comm_rank, total);
+          TIMER_END(find, "find_send", results.size());
+
+//          TIMER_COLLECTIVE_START(find, "a2a2", this->comm);
+//          // send back using the constructed recv count
+//          mxx2::all2all(results, send_counts, this->comm);
+//          TIMER_END(find, "a2a2", results.size());
+
+        } else {
+
+          TIMER_START(find);
+          // keep unique keys
+          this->retain_unique(keys, sorted_input);
+          TIMER_END(find, "uniq1", keys.size());
+
+
+          TIMER_START(find);
+          ::std::vector<::std::pair<Key, size_t> > count_results;
+          count_results.reserve(keys.size());
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+
+          // count now.
+          QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
+          int count = 0;
+          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+            count += it->second;
+          }
+          TIMER_END(find, "local_count", count);
+
+          TIMER_START(find);
+          results.reserve(count);                   // TODO:  should estimate coverage.
+          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+          TIMER_END(find, "reserve", count);
+
+          TIMER_START(find);
+          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, true, pred);
+          TIMER_END(find, "local_find", results.size());
+        }
+
+        TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
+
+        return results;
+
+      }
+
       template <class LocalFind, typename Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(LocalFind const & find_element, Predicate const& pred = Predicate()) const {
         ::std::vector<::std::pair<Key, T> > results;
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
         auto keys = this->keys();
-        results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+
+        ::std::vector<::std::pair<Key, size_t> > count_results;
+        count_results.reserve(keys.size());
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+
+        // count now.
+        QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
+        int count = 0;
+        for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+          count += it->second;
+        }
+
+        // then reserve
+        results.reserve(count);                   // TODO:  should estimate coverage.
 
         QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, true, pred);
+
         return results;
       }
 
@@ -922,7 +1100,6 @@ namespace dsc  // distributed std container
                 ++output;
                 ++count;
               }
-
               return count;
           }
           // filtered element-wise.
@@ -1512,6 +1689,15 @@ namespace dsc  // distributed std container
           template<class DB, typename Query, class OutputIter>
           size_t operator()(DB &db, Query const &v, OutputIter &output) const {
               auto range = db.equal_range(v);
+
+//              // DEBUG
+//              bool equal = true;
+//              typename Base::TransformedEqual eq;
+//              for (auto it = range.first; it != range.second; ++it) {
+//                equal &= eq(*it, v);
+//              }
+//              if (!equal)  printf("ERROR: NOT EQUAL!");
+
               output = ::std::copy(range.first, range.second, output);  // tons faster to emplace - almost 3x faster
               return db.count(v);
           }
@@ -1550,6 +1736,39 @@ namespace dsc  // distributed std container
       template <class Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate()) const {
+/*
+
+
+          // DEBUG
+
+          auto keys2 = keys;
+          auto result_a2a =  Base::find_a2a(find_element, keys2, sorted_input, pred);
+          auto result = Base::find(find_element, keys, sorted_input, pred);
+
+
+          // DEBUG
+          if (result.size() != result_a2a.size()) {
+              throw ::std::logic_error("ERROR: not same size");
+
+          }
+
+          ::std::stable_sort(result.begin(), result.end(), typename Base::Base::TransformedLess());
+          ::std::stable_sort(result_a2a.begin(), result_a2a.end(), typename Base::Base::TransformedLess());
+
+          typename Base::Base::TransformedEqual eq;
+          for (int i = 0; i < result_a2a.size(); ++i) {
+            if (!eq(result[i], result_a2a[i])) {
+              printf("failing at %d:  result: %s, result_a2a: %s\n", i, result[i].first.toAlphabetString().c_str(), result_a2a[i].first.toAlphabetString().c_str());
+              printf("  before   %d:  result: %s, result_a2a: %s\n", i-1, result[i-1].first.toAlphabetString().c_str(), result_a2a[i-1].first.toAlphabetString().c_str());
+              printf("  after    %d:  result: %s, result_a2a: %s\n", i+1, result[i+1].first.toAlphabetString().c_str(), result_a2a[i+1].first.toAlphabetString().c_str());
+              throw ::std::logic_error("ERROR: not same.");
+            }
+          }
+//          bool same = ::std::equal(result.begin(), result.end(), result_a2a.begin(), typename Base::Base::TransformedEqual());
+//          if (!same) throw ::std::logic_error("ERROR: not same.");
+
+          return result;
+*/
           return Base::find(find_element, keys, sorted_input, pred);
       }
 
@@ -1575,12 +1794,7 @@ namespace dsc  // distributed std container
         this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
         //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
 
-        size_t max_multiplicity = this->c.get_max_multiplicity();
-        ::mxx2::reduce(max_multiplicity, [](double const &x, double const &y) { return ::std::max(x,y); }, this->comm, 0);
-        if (this->comm_rank == 0) printf("max_multiplicity = %lu", max_multiplicity);
-
-
-        return this->key_multiplicity;
+        return this->c.get_max_multiplicity();
       }
 
       /**

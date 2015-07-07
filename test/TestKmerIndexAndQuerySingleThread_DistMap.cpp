@@ -163,7 +163,7 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
 
   auto query_orig = query;
 
-  auto query1 = query;
+  auto query1 = query_orig;
   query1.resize(1);
 
   // query 1
@@ -171,7 +171,7 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
   auto results3 = idx.find(query1);
   TIMER_END(test, "query 1", results3.size());
 
-  query1 = query;
+  query1 = query_orig;
   query1.resize(1);
 
   // query 1

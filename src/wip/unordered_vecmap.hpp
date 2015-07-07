@@ -498,6 +498,23 @@ namespace fsc {  // fast standard container
         }
         return max_multiplicity;
       }
+      size_type get_min_multiplicity() const {
+        size_type min_multiplicity = ::std::numeric_limits<size_type>::max();
+        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+          min_multiplicity = ::std::min(min_multiplicity, it->second.size());
+        }
+        return min_multiplicity;
+      }
+      double get_mean_multiplicity() const {
+        return static_cast<double>(s) / double(map.size());
+      }
+      double get_stdev_multiplicity() const {
+        double stdev_multiplicity = 0;
+        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+          stdev_multiplicity += (it->second.size() * it->second.size());
+        }
+        return stdev_multiplicity / double(map.size()) - get_mean_multiplicity();
+      }
 
 
 

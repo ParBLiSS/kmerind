@@ -460,9 +460,13 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class LocalFind, class Predicate = Identity >
-      ::std::vector<::std::pair<Key, T> > find(LocalFind const & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind const & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate() ) const {
           TIMER_INIT(find);
+
+//          for (int j = 0; j < keys.size(); ++j) {
+//            printf("fa2a rank %d originally has key %s\n", this->comm_rank, keys[j].toAlphabetString().c_str());
+//          }
 
           TIMER_START(find);
           ::std::vector<::std::pair<Key, T> > results;
@@ -484,6 +488,10 @@ namespace dsc  // distributed std container
             // distribute (communication part)
             std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
             TIMER_END(find, "a2a1", keys.size());
+
+//            for (int j = 0; j < keys.size(); ++j) {
+//              printf("fa2a rank %d after a2a has key %s\n", this->comm_rank, keys[j].toAlphabetString().c_str());
+//            }
 
             // local find. memory utilization a potential problem.
             // do for each src proc one at a time.
@@ -507,17 +515,24 @@ namespace dsc  // distributed std container
               // within start-end, values are unique, so don't need to set unique to true.
               send_counts[i] = Intersect<false>::process(overlap.first, overlap.second, start, end, emplace_iter, local_find, true, pred);
 
-              if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+//              if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
 
               start = end;
             }
             TIMER_END(find, "local_find", results.size());
 
+//            for (int j = 0; j < results.size(); ++j) {
+//              printf("rank %d found %s\n", this->comm_rank, results[j].first.toAlphabetString().c_str());
+//            }
+
             // send back using the constructed recv count
             TIMER_COLLECTIVE_START(find, "a2a2", this->comm);
-            mxx::all2all(results, send_counts, this->comm);
+            mxx2::all2all(results, send_counts, this->comm);
             TIMER_END(find, "a2a2", results.size());
 
+//            for (int j = 0; j < results.size(); ++j) {
+//              printf("rank %d moved results %s\n", this->comm_rank, results[j].first.toAlphabetString().c_str());
+//            }
 
           } else {
 
@@ -541,6 +556,191 @@ namespace dsc  // distributed std container
           return results;
       }
 
+
+      /**
+       * @brief find elements with the specified keys in the distributed sorted_multimap.
+       * @param first
+       * @param last
+       */
+      template <class LocalFind, class Predicate = Identity >
+      ::std::vector<::std::pair<Key, T> > find(LocalFind const & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
+          Predicate const& pred = Predicate() ) const {
+          TIMER_INIT(find);
+//
+//          for (int j = 0; j < keys.size(); ++j) {
+//            printf("rank %d originally has key %s\n", this->comm_rank, keys[j].toAlphabetString().c_str());
+//          }
+
+          TIMER_START(find);
+          ::std::vector<::std::pair<Key, T> > results;
+          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+
+          ::std::vector<::std::pair<Key, T> > local_results;
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
+          TIMER_END(find, "begin", keys.size());
+
+          this->assert_sorted_locally();
+
+          // keep unique keys
+          TIMER_START(find);
+          this->retain_unique(keys, sorted_input);
+          TIMER_END(find, "uniq1", keys.size());
+
+          if (this->comm_size > 1) {
+
+
+            TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
+            // distribute (communication part)
+            std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
+            TIMER_END(find, "a2a1", keys.size());
+
+
+//            for (int j = 0; j < keys.size(); ++j) {
+//              printf("rank %d after a2a key is %s\n", this->comm_rank, keys[j].toAlphabetString().c_str());
+//            }
+
+            // local count to determine amount of memory to allocate at destination.
+            TIMER_START(find);
+            std::vector<int> send_counts(this->comm_size, 0);
+
+            ::std::vector<::std::pair<Key, size_t> > count_results;
+            count_results.reserve(this->comm_size);
+            ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+
+            auto start = keys.begin();
+            auto end = start;
+            size_t total = 0;
+            for (int i = 0; i < this->comm_size; ++i) {
+              ::std::advance(end, recv_counts[i]);
+
+              // count results for process i
+              count_results.clear();
+              auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), start, end, true);
+              Intersect<false>::process(overlap.first, overlap.second, start, end, count_emplace_iter, count_element, true, pred);
+              send_counts[i] = 0;
+              for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+                send_counts[i] += it->second;
+              }
+              total += send_counts[i];
+
+              start = end;
+              //printf("Rank %d local count for src rank %d:  recv %d send %d\n", this->comm_rank, i, recv_counts[i], send_counts[i]);
+            }
+            ::std::vector<::std::pair<Key, size_t> >().swap(count_results);
+            TIMER_END(find, "local_count", total);
+
+
+            TIMER_COLLECTIVE_START(find, "a2a_count", this->comm);
+            auto resp_counts = mxx::all2all(send_counts, 1, this->comm);  // compute counts of response to receive
+            TIMER_END(find, "a2a_count", keys.size());
+
+
+
+            TIMER_START(find);
+            auto resp_displs = mxx::get_displacements(resp_counts);  // compute response displacements.
+
+            int resp_total = resp_displs[this->comm_size - 1] + resp_counts[this->comm_size - 1];
+            int max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
+            results.resize(resp_total);   // allocate, not just reserve
+            local_results.reserve(max_send_count);
+            TIMER_END(find, "reserve", resp_total);
+
+            TIMER_START(find);
+            auto recv_displs = mxx::get_displacements(recv_counts);  // compute response displacements.
+            int recv_from, send_to;
+            int found;
+            total = 0;
+            std::vector<MPI_Request> reqs(2 * this->comm_size);
+
+            mxx::datatype<::std::pair<Key, T> > dt;
+            for (int i = 0; i < this->comm_size; ++i) {
+              recv_from = (this->comm_rank + (this->comm_size - i)) % this->comm_size; // rank to recv data from
+
+              // set up receive.
+              MPI_Irecv(&results[resp_displs[recv_from]], resp_counts[recv_from], dt.type(),
+                        recv_from, i, this->comm, &reqs[2 * i]);
+
+
+              send_to = (this->comm_rank + i) % this->comm_size;    // rank to send data to
+
+              //== get data for the dest rank
+              start = keys.begin();                                   // keys for the query for the dest rank
+              ::std::advance(start, recv_displs[send_to]);
+              end = start;
+              ::std::advance(end, recv_counts[send_to]);
+
+              local_results.clear();
+              // work on query from process i.
+              auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), start, end, true);
+              found = Intersect<false>::process(overlap.first, overlap.second, start, end, local_emplace_iter, local_find, true, pred);
+             // if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+              total += found;
+              //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
+
+//              for (int j = 0; j < local_results.size(); ++j) {
+//                printf("rank %d -> %d sent %s\n", this->comm_rank, send_to, local_results[j].first.toAlphabetString().c_str());
+//              }
+
+              MPI_Isend(&(local_results[0]), found, dt.type(), send_to,
+                        i, this->comm, &reqs[2 * i + 1]);
+
+              // wait for both requests to complete.
+              MPI_Waitall(2, &reqs[2 * i], MPI_STATUSES_IGNORE);
+
+//              for (int j = 0; j < resp_counts[recv_from]; ++j) {
+//                printf("rank %d -> %d recv %s\n", recv_from, this->comm_rank, results[resp_displs[recv_from] + j].first.toAlphabetString().c_str());
+//              }
+
+              // within start-end, values are unique, so don't need to set unique to true.
+
+            }
+
+            TIMER_END(find, "local_find", results.size());
+//
+//            // send back using the constructed recv count
+//            TIMER_COLLECTIVE_START(find, "a2a2", this->comm);
+//            mxx2::all2all(results, send_counts, this->comm);
+//            TIMER_END(find, "a2a2", results.size());
+//
+
+          } else {
+
+            TIMER_START(find);
+
+            ::std::vector<::std::pair<Key, size_t> > count_results;
+            count_results.reserve(keys.size());
+            ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+
+            // count now.
+            auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), keys.begin(), keys.end(), sorted_input);
+            Intersect<false>::process(overlap.first, overlap.second, keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
+            int count = 0;
+            for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+              count += it->second;
+            }
+            TIMER_END(find, "local_count", count);
+
+            TIMER_START(find);
+            results.reserve(count);  // 1 result per key.
+            TIMER_END(find, "reserve", count);
+
+
+            TIMER_START(find);
+
+            // within start-end, values are unique, so don't need to set unique to true.
+            Intersect<false>::process(overlap.first, overlap.second, keys.begin(), keys.end(), emplace_iter, local_find, true, pred);
+
+            TIMER_END(find, "local_find", results.size());
+
+          }
+
+          TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
+
+          return results;
+      }
+
+
       template <class LocalFind, class Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(LocalFind const & local_find,
     		  Predicate const & pred = Predicate()) const {
@@ -548,7 +748,19 @@ namespace dsc  // distributed std container
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
           auto keys = this->keys();
-          results.reserve(keys.size() * this->key_multiplicity);  // 1 result per key.
+
+          ::std::vector<::std::pair<Key, size_t> > count_results;
+          count_results.reserve(keys.size());
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+
+          // count now.
+          Intersect<false>::process(this->c.begin(), this->c.end(), keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
+          int count = 0;
+          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+            count += it->second;
+          }
+
+          results.reserve(count);  // 1 result per key.
 
           // within start-end, values are unique, so don't need to set unique to true.
           Intersect<false>::process(this->c.begin(), this->c.end(), keys.begin(), keys.end(), emplace_iter, local_find, true, pred);
@@ -744,7 +956,7 @@ namespace dsc  // distributed std container
           TIMER_COLLECTIVE_START(count, "a2a2", this->comm);
 
           // send back using the constructed recv count
-          mxx::all2all(results, recv_counts, this->comm);
+          mxx2::all2all(results, recv_counts, this->comm);
           TIMER_END(count, "a2a2", results.size());
 
 
@@ -1385,6 +1597,39 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
+
+/*         // DEBUG
+
+          auto keys2 = keys;
+          auto result = Base::find(find_element, keys, sorted_input, pred);
+          auto result_a2a =  Base::find_a2a(find_element, keys2, sorted_input, pred);
+
+
+          // DEBUG
+          if (result.size() != result_a2a.size()) {
+              throw ::std::logic_error("ERROR: not same size");
+
+          }
+
+          ::std::stable_sort(result.begin(), result.end(), this->less);
+          ::std::stable_sort(result_a2a.begin(), result_a2a.end(), this->less);
+
+
+          for (int i = 0; i < result_a2a.size(); ++i) {
+            if (!this->equal(result[i], result_a2a[i])) {
+              printf("rank %d failing at %d:  result: %s, result_a2a: %s\n", this->comm_rank, i, result[i].first.toAlphabetString().c_str(), result_a2a[i].first.toAlphabetString().c_str());
+              if ( i > 0)
+                printf("rank %d   before   %d:  result: %s, result_a2a: %s\n", this->comm_rank, i-1, result[i-1].first.toAlphabetString().c_str(), result_a2a[i-1].first.toAlphabetString().c_str());
+              if (i < result_a2a.size() - 1)
+                printf("rank %d   after    %d:  result: %s, result_a2a: %s\n", this->comm_rank, i+1, result[i+1].first.toAlphabetString().c_str(), result_a2a[i+1].first.toAlphabetString().c_str());
+              throw ::std::logic_error("ERROR: not same.");
+            }
+          }
+//          bool same = ::std::equal(result.begin(), result.end(), result_a2a.begin(), typename Base::Base::TransformedEqual());
+//          if (!same) throw ::std::logic_error("ERROR: not same.");
+
+          return result;
+*/
       }
 
       template <class Predicate = Identity>

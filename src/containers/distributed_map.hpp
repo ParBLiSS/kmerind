@@ -7,6 +7,9 @@
  *
  *          implementation is hash-base (O(1) lookup). later will support sort-based (load balanced).
  *
+ *          PERFORMANCE OF THIS CLASS IS VERY BAD BECAUSE OF THE TREE INSERT/SEARCH.  USE AT YOUR OWN PERIL.
+ *
+ *
  *          for now, input and output via local vectors.
  *          (later, allow remote vectors,
  *            which can have remote ranges  (all to all to "sort" remote ranges to src proc,
@@ -383,7 +386,7 @@ namespace dsc  // distributed std container
 
           TIMER_COLLECTIVE_START(find, "a2a2", this->comm);
           // send back using the constructed recv count
-          mxx::all2all(results, send_counts, this->comm);
+          mxx2::all2all(results, send_counts, this->comm);
           TIMER_END(find, "a2a2", results.size());
 
         } else {
@@ -547,7 +550,7 @@ namespace dsc  // distributed std container
 
           // send back using the constructed recv count
           TIMER_COLLECTIVE_START(count, "a2a2", this->comm);
-          mxx::all2all(results, recv_counts, this->comm);
+          mxx2::all2all(results, recv_counts, this->comm);
           TIMER_END(count, "a2a2", results.size());
         } else {
           TIMER_START(count);
