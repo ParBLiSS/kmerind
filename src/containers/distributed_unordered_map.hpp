@@ -378,9 +378,9 @@ namespace dsc  // distributed std container
           // do for each src proc one at a time.
 
           TIMER_START(find);
-          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+          results.reserve(keys.size());                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
-          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+          TIMER_END(find, "reserve", keys.size());
 
           TIMER_START(find);
           auto start = keys.begin();
@@ -409,9 +409,9 @@ namespace dsc  // distributed std container
           TIMER_END(find, "uniq1", keys.size());
 
           TIMER_START(find);
-          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+          results.reserve(keys.size());                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
-          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+          TIMER_END(find, "reserve", keys.size() );
 
           TIMER_START(find);
           QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, true, pred);
@@ -1155,7 +1155,7 @@ namespace dsc  // distributed std container
           return Base::find(find_element, pred);
       }
 
-
+/*
       /// update the multiplicity.  only multimap needs to do this.
       virtual size_t update_multiplicity() const {
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
@@ -1237,7 +1237,7 @@ namespace dsc  // distributed std container
 
         return this->key_multiplicity;
       }
-
+*/
 
 
       /**
@@ -1700,7 +1700,7 @@ namespace dsc  // distributed std container
 
 
       unordered_multimap_vec(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {
-        this->key_multiplicity = 50;
+        //this->key_multiplicity = 10;
       }
 
       virtual ~unordered_multimap_vec() {}
@@ -1750,7 +1750,7 @@ namespace dsc  // distributed std container
       }
 
 
-      /// update the multiplicity.  only multimap needs to do this.
+/*      /// update the multiplicity.  only multimap needs to do this.
       virtual size_t update_multiplicity() const {
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
@@ -1768,7 +1768,7 @@ namespace dsc  // distributed std container
 
         return this->c.get_max_multiplicity();
       }
-
+*/
       /**
        * @brief insert new elements in the distributed unordered_multimap.
        * @param first

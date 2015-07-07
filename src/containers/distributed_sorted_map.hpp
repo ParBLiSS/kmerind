@@ -500,10 +500,8 @@ namespace dsc  // distributed std container
             // do for each src proc one at a time.
 
             TIMER_START(find);
-            results.reserve(keys.size() * this->key_multiplicity);  // 1 result per key.
-
-
-            TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+            results.reserve(keys.size() );
+            TIMER_END(find, "reserve", keys.size() );
 
             TIMER_START(find);
             auto start = keys.begin();
@@ -539,8 +537,8 @@ namespace dsc  // distributed std container
           } else {
 
             TIMER_START(find);
-            results.reserve(keys.size() * this->key_multiplicity);  // 1 result per key.
-            TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+            results.reserve(keys.size());  // 1 result per key.
+            TIMER_END(find, "reserve", keys.size() );
 
 
             TIMER_START(find);
@@ -1548,7 +1546,7 @@ namespace dsc  // distributed std container
         // but the n log(n) sort still grows with the duplicate count
 
         this->rehash();
-
+/*
         size_t uniq_count = 0;
         ::std::pair<Key, T> v;
         for (auto it = this->c.begin(), max = this->c.end(); it != max;) {
@@ -1561,7 +1559,7 @@ namespace dsc  // distributed std container
         else
           this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
         //printf("%lu elements, %lu unique, key multiplicity = %lu\n", this->c.size(), uniq_count, this->key_multiplicity);
-
+*/
 
         //        // third approach is to assume each bucket contains only 1 kmer/kmolecule.
         //        // This is not generally true for all hash functions, so this is an over estimation of the repeat count.
