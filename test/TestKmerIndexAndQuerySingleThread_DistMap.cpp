@@ -279,17 +279,7 @@ int main(int argc, char** argv) {
   using QualType = float;
   using KmerInfoType = std::pair<IdType, QualType>;
 
-  if (which == -1 || which == 1) 
-  {
-  using MapType = ::dsc::unordered_multimap_vec<
-      KmerType, IdType, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, hashvec, position index.");
-  
-  MPI_Barrier(comm);
-	}
-/*
+
   if (which == -1 || which == 2)
   {
   using MapType = ::dsc::counting_unordered_map<
@@ -297,15 +287,6 @@ int main(int argc, char** argv) {
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
   testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, hash, count index.");
-    MPI_Barrier(comm);
-}
-
-  if (which == -1 || which == 3)
-  {
-  using MapType = ::dsc::counting_sorted_map<
-      KmerType, uint32_t, int,
-      bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, sort, count index.");
     MPI_Barrier(comm);
 }
 
@@ -318,16 +299,27 @@ int main(int argc, char** argv) {
   testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, hash, position index.");
     MPI_Barrier(comm);
 }
-*/
-    if (which == -1 || which == 5)
-{
-  using MapType = ::dsc::sorted_multimap<
-      KmerType, IdType, int,
-      bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, sort, position index.");
+  if (which == -1 || which == 7)
+  {
+  using MapType = ::dsc::unordered_multimap<
+      KmerType, KmerInfoType, int,
+      bliss::kmer::transform::lex_less,
+      bliss::kmer::hash::farm >;
+  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, hash, pos+qual index");
     MPI_Barrier(comm);
 }
-/*
+
+  if (which == -1 || which == 1)
+  {
+  using MapType = ::dsc::unordered_multimap_vec<
+      KmerType, IdType, int,
+      bliss::kmer::transform::lex_less,
+      bliss::kmer::hash::farm >;
+  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, hashvec, position index.");
+
+  MPI_Barrier(comm);
+  }
+
   if (which == -1 || which == 6)
   {
   using MapType = ::dsc::unordered_multimap_vec<
@@ -339,16 +331,23 @@ int main(int argc, char** argv) {
 }
 
 
-  if (which == -1 || which == 7)
+  if (which == -1 || which == 3)
   {
-  using MapType = ::dsc::unordered_multimap<
-      KmerType, KmerInfoType, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, hash, pos+qual index");
+  using MapType = ::dsc::counting_sorted_map<
+      KmerType, uint32_t, int,
+      bliss::kmer::transform::lex_less>;
+  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, sort, count index.");
     MPI_Barrier(comm);
 }
 
+    if (which == -1 || which == 5)
+{
+  using MapType = ::dsc::sorted_multimap<
+      KmerType, IdType, int,
+      bliss::kmer::transform::lex_less>;
+  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, sort, position index.");
+    MPI_Barrier(comm);
+}
 
   if (which == -1 || which == 8)
   {
@@ -358,7 +357,7 @@ int main(int argc, char** argv) {
   testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, sort, pos+qual index");
     MPI_Barrier(comm);
 }
-*/
+
 //
 //
 //  if (which == 9)
