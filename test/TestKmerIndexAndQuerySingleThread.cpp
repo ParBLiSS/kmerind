@@ -202,7 +202,7 @@ std::vector<std::pair<KmerType, IdType> > testQuery(const MapType & map, std::ve
           // ==  send back results.
           TIMER_START(find);
 
-          mxx::all2all(results, send_counts, comm);
+          mxx2::all2all(results, send_counts, comm);
           TIMER_END(find, "a2a2", results.size());
 
           TIMER_REPORT_MPI(find, rank, comm);
@@ -238,7 +238,7 @@ std::vector<std::pair<KmerType, size_t> > testCount(const MapType & map, std::ve
         TIMER_START(count);
 
          // the code below is actual query processing code.
-        std::vector<int> recv_counts;
+        std::vector<size_t> recv_counts;
 
         bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true> hash(ceilLog2(commSize));
         TIMER_END(count, "begin", query.size());
@@ -257,11 +257,16 @@ std::vector<std::pair<KmerType, size_t> > testCount(const MapType & map, std::ve
          // prepare to distribute
          TIMER_START(count);
 
-         if (commSize > 1)
-           recv_counts = mxx2::msgs_all2all(query, [&] ( KmerType const &x) {
-              return (hash(x) % commSize);
-            }, comm);
-         else
+         if (commSize > 1) {
+           // distribute (communication part)
+           std::vector<size_t> send_counts = mxx2::bucketing(query, [&] ( KmerType const &x) {
+             return (hash(x) % commSize);
+           }, commSize);
+
+           // distribute (communication part)
+           recv_counts = mxx2::all2all(query, send_counts, comm);
+
+         } else
            recv_counts.insert(recv_counts.begin(), query.size());
          TIMER_END(count, "a2a1", query.size());
 
@@ -293,7 +298,7 @@ std::vector<std::pair<KmerType, size_t> > testCount(const MapType & map, std::ve
           // ==  send back results.
           TIMER_START(count);
 
-          mxx::all2all(results, send_counts, comm);
+          mxx2::all2all(results, send_counts, comm);
           TIMER_END(count, "a2a2", results.size());
 
           TIMER_REPORT_MPI(count, rank, comm);

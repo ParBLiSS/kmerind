@@ -358,7 +358,7 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           TIMER_START(find);
           // distribute (communication part)
-          std::vector<int> send_counts = mxx2::bucketing(keys, this->key_to_rank, this->comm_size);
+          std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
           TIMER_END(find, "bucket", keys.size());
 
           TIMER_START(find);
@@ -371,7 +371,7 @@ namespace dsc  // distributed std container
 
           TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
           // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::all2all(keys, send_counts, this->comm);
+          auto recv_counts = mxx2::all2all(keys, send_counts, this->comm);
           TIMER_END(find, "a2a1", keys.size());
 
           // local find. memory utilization a potential problem.
@@ -445,20 +445,21 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           TIMER_START(find);
           // distribute (communication part)
-          std::vector<int> send_counts = mxx2::bucketing(keys, this->key_to_rank, this->comm_size);
+          std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
           TIMER_END(find, "bucket", keys.size());
 
           TIMER_START(find);
           // distribute (communication part)
           mxx2::retain_unique<::std::unordered_set<Key,
                                                    TransformedHash,
-                                                   typename Base::TransformedEqual >, typename Base::TransformedEqual >(keys, send_counts, sorted_input);
+                                                   typename Base::TransformedEqual >,
+                              typename Base::TransformedEqual >(keys, send_counts, sorted_input);
           TIMER_END(find, "unique", keys.size());
 
 
           TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
           // distribute (communication part)
-          auto recv_counts = mxx2::all2all(keys, send_counts, this->comm);
+          std::vector<size_t> recv_counts = mxx2::all2all(keys, send_counts, this->comm);
           TIMER_END(find, "a2a1", keys.size());
 
           // local count to determine amount of memory to allocate at destination.
@@ -476,10 +477,14 @@ namespace dsc  // distributed std container
             // count results for process i
             count_results.clear();
             QueryProcessor::process(c, start, end, count_emplace_iter, count_element, true, pred);
-            send_counts[i] = 0;
-            for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-              send_counts[i] += it->second;
-            }
+            send_counts[i] =
+                ::std::accumulate(count_results.begin(), count_results.end(), 0,
+                                  [](size_t v, ::std::pair<Key, size_t> const & x) {
+              return v + x.second;
+            });
+//            for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+//              send_counts[i] += it->second;
+//            }
             total += send_counts[i];
             start = end;
             //printf("Rank %d local count for src rank %d:  recv %d send %d\n", this->comm_rank, i, recv_counts[i], send_counts[i]);
@@ -495,8 +500,8 @@ namespace dsc  // distributed std container
           TIMER_START(find);
           auto resp_displs = mxx::get_displacements(resp_counts);  // compute response displacements.
 
-          int resp_total = resp_displs[this->comm_size - 1] + resp_counts[this->comm_size - 1];
-          int max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
+          auto resp_total = resp_displs[this->comm_size - 1] + resp_counts[this->comm_size - 1];
+          auto max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
           results.resize(resp_total);   // allocate, not just reserve
           local_results.reserve(max_send_count);
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
@@ -505,7 +510,7 @@ namespace dsc  // distributed std container
           TIMER_START(find);
           auto recv_displs = mxx::get_displacements(recv_counts);  // compute response displacements.
           int recv_from, send_to;
-          int found;
+          size_t found;
           total = 0;
           std::vector<MPI_Request> reqs(2 * this->comm_size);
           for (int i = 0; i < this->comm_size; ++i) {
@@ -567,10 +572,13 @@ namespace dsc  // distributed std container
 
           // count now.
           QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
-          int count = 0;
-          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-            count += it->second;
-          }
+          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), 0,
+                                            [](size_t v, ::std::pair<Key, size_t> const & x) {
+                        return v + x.second;
+                      });
+//          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+//            count += it->second;
+//          }
           TIMER_END(find, "local_count", count);
 
           TIMER_START(find);
@@ -602,10 +610,10 @@ namespace dsc  // distributed std container
 
         // count now.
         QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
-        int count = 0;
-        for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-          count += it->second;
-        }
+        size_t count = ::std::accumulate(count_results.begin(), count_results.end(), 0,
+                                      [](size_t v, ::std::pair<Key, size_t> const & x) {
+                  return v + x.second;
+                });
 
         // then reserve
         results.reserve(count);                   // TODO:  should estimate coverage.
@@ -717,7 +725,7 @@ namespace dsc  // distributed std container
 
           TIMER_START(count);
           // distribute (communication part)
-          std::vector<int> send_counts = mxx2::bucketing(keys, this->key_to_rank, this->comm_size);
+          std::vector<size_t> send_counts = ::mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
           TIMER_END(count, "bucket", keys.size());
 
           TIMER_START(count);
@@ -730,7 +738,7 @@ namespace dsc  // distributed std container
 
           TIMER_COLLECTIVE_START(count, "a2a1", this->comm);
           // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::all2all(keys, send_counts, this->comm);
+          auto recv_counts = mxx2::all2all(keys, send_counts, this->comm);
           TIMER_END(count, "a2a1", keys.size());
 
 
@@ -816,16 +824,17 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
 
           // distribute (communication part)
-          std::vector<int> send_counts = mxx2::bucketing(keys, this->key_to_rank, this->comm_size);
+          std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
 
           // distribute (communication part)
           mxx2::retain_unique<::std::unordered_set<::std::pair<Key, T>,
                                                    TransformedHash,
-                                                   typename Base::TransformedEqual >, typename Base::TransformedEqual >(keys, send_counts, si);
+                                                   typename Base::TransformedEqual >,
+                              typename Base::TransformedEqual >(keys, send_counts, si);
 
 
           // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::all2all(keys, send_counts, this->comm);
+          mxx2::all2all(keys, send_counts, this->comm);
 
           si = false;
         }
@@ -990,7 +999,7 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           TIMER_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          auto send_counts = mxx2::bucketing(input, this->key_to_rank, this->comm_size);
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(input, this->key_to_rank, this->comm_size);
           TIMER_END(insert, "bucket", input.size());
 
           TIMER_START(insert);
@@ -1230,48 +1239,6 @@ namespace dsc  // distributed std container
       }
 
 
-//
-//
-//      size_t count_unique(::std::vector<::std::pair<Key, T> > const & input) const {
-//        // alternative approach to get number of unique keys is to use an unordered_set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
-//        ::std::unordered_set<Key, typename Base::TransformedHash, typename Base::Base::TransformedEqual > unique_set(this->c.size());
-//        for (auto it = input.begin(), max = input.end(); it != max; ++it) {
-//          unique_set.insert(it->first);
-//        }
-//       // printf("r %d: %lu elements, %lu unique\n", this->comm_rank, input.size(), unique_set.size());
-//        return unique_set.size();
-//      }
-//
-//      template <typename _TargetP>
-//      ::std::vector<::std::pair<Key, T> > bucketing(::std::vector<::std::pair<Key, T> > const & msgs, _TargetP target_p_fun, MPI_Comm comm) {
-//
-//        int p;
-//        MPI_Comm_size(comm, &p);
-//
-//        // bucket input by their target processor
-//        // TODO: in-place bucketing??
-//        std::vector<int> send_counts(p, 0);
-//        std::vector<int> pids(msgs.size());
-//        for (int i = 0; i < msgs.size(); ++i)
-//        {
-//          pids[i] = target_p_fun(msgs[i]);
-//          send_counts[pids[i]]++;
-//        }
-//
-//        // get all2all params
-//        std::vector<int> offset = mxx::get_displacements(send_counts);
-//
-//        // copy.  need to be able to track current position within each block.
-//        ::std::vector<::std::pair<Key, T> > send_buffer;
-//        if (msgs.size() > 0)
-//          send_buffer.resize(msgs.size());
-//        for (int i = 0; i < msgs.size(); ++i)
-//        {
-//          send_buffer[offset[pids[i]]++] = msgs[i];
-//        }
-//        return send_buffer;
-//      }
-
 
       /**
        * @brief insert new elements in the distributed unordered_multimap.
@@ -1283,7 +1250,6 @@ namespace dsc  // distributed std container
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         TIMER_INIT(insert);
 
-        TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
 
         //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm_rank, sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
         //        count_unique(input);
@@ -1291,9 +1257,15 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
-          mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
+          TIMER_START(insert);
+          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(input, this->key_to_rank, this->comm_size);
+          TIMER_END(insert, "bucket", input.size());
+
+          TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
+          mxx2::all2all(input, send_counts, this->comm);
+          TIMER_END(insert, "a2a", input.size());
         }
-        TIMER_END(insert, "a2a", input.size());
 
         //        count_unique(input);
 
@@ -1475,7 +1447,7 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           TIMER_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          auto send_counts = mxx2::bucketing(input, this->key_to_rank, this->comm_size);
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(input, this->key_to_rank, this->comm_size);
           TIMER_END(insert, "bucket", input.size());
 
           TIMER_START(insert);
@@ -1816,8 +1788,13 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
+          TIMER_START(insert);
+          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(input, this->key_to_rank, this->comm_size);
+          TIMER_END(insert, "bucket", input.size());
+
           TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
-          mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
+          mxx2::all2all(input, send_counts, this->comm);
           TIMER_END(insert, "a2a", input.size());
         }
 

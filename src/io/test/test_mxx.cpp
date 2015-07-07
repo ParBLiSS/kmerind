@@ -66,13 +66,13 @@ TEST_P(Mxx2Test, bucketing)
 
 
   TIMER_START(bucket);
-  std::vector<int> gold_counts = ::mxx2::bucketing_copy(this->input, this->gold, [&pp](TypeParam const & x) { return x % pp; }, pp);
+  std::vector<int> gold_counts = ::mxx2::bucketing_copy<int>(this->input, this->gold, [&pp](TypeParam const & x) { return x % pp; }, pp);
   TIMER_END(bucket, "gold", this->input.size());
 
   this->test = this->input;
 
   TIMER_START(bucket);
-  std::vector<int> test_counts = ::mxx2::bucketing(this->test, [&pp](TypeParam const & x) { return x % pp; }, pp);
+  std::vector<int> test_counts = ::mxx2::bucketing<int>(this->test, [&pp](TypeParam const & x) { return x % pp; }, pp);
   TIMER_END(bucket, "test", this->input.size());
 
   printf("bucket: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
@@ -143,7 +143,7 @@ TEST_P(Mxx2Test, unique)
   this->gold.erase(end, this->gold.end());
   TIMER_END(unique, "gold_erase", this->gold.size());
   TIMER_START(unique);
-  ::std::vector<int> gold_counts = ::mxx2::bucketing(this->gold, [&pp](TypeParam const & x) { return x % pp; }, pp);
+  ::std::vector<int> gold_counts = ::mxx2::bucketing<int>(this->gold, [&pp](TypeParam const & x) { return x % pp; }, pp);
   TIMER_END(unique, "gold_bucket", this->gold.size());
 
   {
@@ -156,7 +156,7 @@ TEST_P(Mxx2Test, unique)
   TIMER_END(unique, "global_unique", global_reduc.size());
 
   TIMER_START(unique);
-  ::std::vector<int> global_counts = ::mxx2::bucketing(global_reduc, [&](TypeParam const & x) { return x % pp; }, pp);
+  ::std::vector<int> global_counts = ::mxx2::bucketing<int>(global_reduc, [&](TypeParam const & x) { return x % pp; }, pp);
   TIMER_END(unique, "global_bucket", global_reduc.size());
   }
 
@@ -165,7 +165,7 @@ TEST_P(Mxx2Test, unique)
   this->test = this->input;
 
   TIMER_START(unique);
-  std::vector<int> test_counts = ::mxx2::bucketing(this->test, [&pp](TypeParam const & x) { return x % pp; }, pp);
+  std::vector<int> test_counts = ::mxx2::bucketing<int>(this->test, [&pp](TypeParam const & x) { return x % pp; }, pp);
   TIMER_END(unique, "test_bucket", this->test.size());
   TIMER_START(unique);
   ::mxx2::retain_unique<::std::unordered_set<TypeParam>, ::std::equal_to<TypeParam> >(this->test, test_counts);
@@ -253,7 +253,7 @@ TEST_P(Mxx2Test, reduce)
   }
 
   TIMER_START(reduc);
-  ::std::vector<int> gold_counts = ::mxx2::bucketing(this->reduc_gold, [&pp](TypeParam const & x) { return x.first % pp; }, pp);
+  ::std::vector<int> gold_counts = ::mxx2::bucketing<int>(this->reduc_gold, [&pp](TypeParam const & x) { return x.first % pp; }, pp);
   TIMER_END(reduc, "gold_bucket", this->reduc_gold.size());
 
   {
@@ -274,14 +274,14 @@ TEST_P(Mxx2Test, reduce)
   TIMER_END(reduc, "global_reduce", global_reduc.size());
 
   TIMER_START(reduc);
-  ::std::vector<int> global_counts = ::mxx2::bucketing(global_reduc, [&](TypeParam const & x) { return x.first % pp; }, pp);
+  ::std::vector<int> global_counts = ::mxx2::bucketing<int>(global_reduc, [&](TypeParam const & x) { return x.first % pp; }, pp);
   TIMER_END(reduc, "global_bucket", global_reduc.size());
   }
 
   this->reduc_test = this->reduc_input;
 
   TIMER_START(reduc);
-  std::vector<int> test_counts = ::mxx2::bucketing(this->reduc_test, [&pp](TypeParam const & x) { return x.first % pp; }, pp);
+  std::vector<int> test_counts = ::mxx2::bucketing<int>(this->reduc_test, [&pp](TypeParam const & x) { return x.first % pp; }, pp);
   TIMER_END(reduc, "test_bucket", this->reduc_test.size());
   TIMER_START(reduc);
   ::mxx2::bucket_reduce<::std::unordered_map<Key, int>, ::std::plus<int> >(this->reduc_test, test_counts);
@@ -477,13 +477,13 @@ TEST_P(Mxx2KmerTest, bucketing)
 
 
   TIMER_START(bucket);
-  std::vector<int> gold_counts = ::mxx2::bucketing_copy(this->input, this->gold, [&](TypeParam const & x) { return h(x) % pp; }, pp);
+  std::vector<int> gold_counts = ::mxx2::bucketing_copy<int>(this->input, this->gold, [&](TypeParam const & x) { return h(x) % pp; }, pp);
   TIMER_END(bucket, "gold", this->input.size());
 
   this->test = this->input;
 
   TIMER_START(bucket);
-  std::vector<int> test_counts = ::mxx2::bucketing(this->test, [&](TypeParam const & x) { return h(x) % pp; }, pp);
+  std::vector<int> test_counts = ::mxx2::bucketing<int>(this->test, [&](TypeParam const & x) { return h(x) % pp; }, pp);
   TIMER_END(bucket, "test", this->input.size());
 
   printf("bucket: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
@@ -559,7 +559,7 @@ TEST_P(Mxx2KmerTest, unique)
   this->gold.erase(end, this->gold.end());
   TIMER_END(unique, "gold_erase", this->gold.size());
   TIMER_START(unique);
-  ::std::vector<int> gold_counts = ::mxx2::bucketing(this->gold, [&](TypeParam const & x) { return h(x) % pp; }, pp);
+  ::std::vector<int> gold_counts = ::mxx2::bucketing<int>(this->gold, [&](TypeParam const & x) { return h(x) % pp; }, pp);
   TIMER_END(unique, "gold_bucket", this->gold.size());
 
 
@@ -574,7 +574,7 @@ TEST_P(Mxx2KmerTest, unique)
   TIMER_END(unique, "global_unique", global_reduc.size());
 
   TIMER_START(unique);
-  ::std::vector<int> global_counts = ::mxx2::bucketing(global_reduc, [&](TypeParam const & x) { return h(x) % pp; }, pp);
+  ::std::vector<int> global_counts = ::mxx2::bucketing<int>(global_reduc, [&](TypeParam const & x) { return h(x) % pp; }, pp);
   TIMER_END(unique, "global_bucket", global_reduc.size());
   }
 
@@ -583,7 +583,7 @@ TEST_P(Mxx2KmerTest, unique)
   this->test = this->input;
 
   TIMER_START(unique);
-  std::vector<int> test_counts = ::mxx2::bucketing(this->test, [&](TypeParam const & x) { return h(x) % pp; }, pp);
+  std::vector<int> test_counts = ::mxx2::bucketing<int>(this->test, [&](TypeParam const & x) { return h(x) % pp; }, pp);
   TIMER_END(unique, "test_bucket", this->test.size());
   TIMER_START(unique);
   ::mxx2::retain_unique<typename Mxx2KmerTest::Set, typename Mxx2KmerTest::TransformedEqual >(this->test, test_counts);
@@ -676,7 +676,7 @@ TEST_P(Mxx2KmerTest, reduce)
   }
 
   TIMER_START(reduc);
-  ::std::vector<int> gold_counts = ::mxx2::bucketing(this->reduc_gold, [&](TypeParam const & x) { return h(x) % pp; }, pp);
+  ::std::vector<int> gold_counts = ::mxx2::bucketing<int>(this->reduc_gold, [&](TypeParam const & x) { return h(x) % pp; }, pp);
   TIMER_END(reduc, "gold_bucket", this->reduc_gold.size());
 
 
@@ -698,7 +698,7 @@ TEST_P(Mxx2KmerTest, reduce)
   TIMER_END(reduc, "global_reduce", global_reduc.size());
 
   TIMER_START(reduc);
-  ::std::vector<int> global_counts = ::mxx2::bucketing(global_reduc, [&](TypeParam const & x) { return h(x) % pp; }, pp);
+  ::std::vector<int> global_counts = ::mxx2::bucketing<int>(global_reduc, [&](TypeParam const & x) { return h(x) % pp; }, pp);
   TIMER_END(reduc, "global_bucket", global_reduc.size());
   }
 
@@ -706,7 +706,7 @@ TEST_P(Mxx2KmerTest, reduce)
   this->reduc_test = this->reduc_input;
 
   TIMER_START(reduc);
-  std::vector<int> test_counts = ::mxx2::bucketing(this->reduc_test, [&](TypeParam const & x) { return h(x) % pp; }, pp);
+  std::vector<int> test_counts = ::mxx2::bucketing<int>(this->reduc_test, [&](TypeParam const & x) { return h(x) % pp; }, pp);
   TIMER_END(reduc, "test_bucket", this->reduc_test.size());
   TIMER_START(reduc);
   ::mxx2::bucket_reduce<typename Mxx2KmerTest::Map, ::std::plus<int> >(this->reduc_test, test_counts);

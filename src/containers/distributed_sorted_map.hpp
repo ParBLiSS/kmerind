@@ -137,7 +137,7 @@ namespace dsc  // distributed std container
       // note that this makes in-between values go with the larger proc id.
       struct KeyToRank {
           ::std::vector<::std::pair<Key, unsigned int> > map;
-          int p;
+          unsigned int p;
           KeyToRank(int _comm_size) : p(_comm_size) {};
 
           // return id of selected element
@@ -483,10 +483,13 @@ namespace dsc  // distributed std container
 
           if (this->comm_size > 1) {
 
+            TIMER_START(find);
+            // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
+            TIMER_END(find, "bucket", keys.size());
 
             TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
-            // distribute (communication part)
-            std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
+            auto recv_counts = mxx2::all2all(keys, send_counts, this->comm);
             TIMER_END(find, "a2a1", keys.size());
 
 //            for (int j = 0; j < keys.size(); ++j) {
@@ -497,7 +500,6 @@ namespace dsc  // distributed std container
             // do for each src proc one at a time.
 
             TIMER_START(find);
-            std::vector<int> send_counts(this->comm_size, 0);
             results.reserve(keys.size() * this->key_multiplicity);  // 1 result per key.
 
 
@@ -589,10 +591,13 @@ namespace dsc  // distributed std container
 
           if (this->comm_size > 1) {
 
+            TIMER_START(find);
+            // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
+            TIMER_END(find, "bucket", keys.size());
 
             TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
-            // distribute (communication part)
-            std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
+            auto recv_counts = mxx2::all2all(keys, send_counts, this->comm);
             TIMER_END(find, "a2a1", keys.size());
 
 
@@ -602,7 +607,6 @@ namespace dsc  // distributed std container
 
             // local count to determine amount of memory to allocate at destination.
             TIMER_START(find);
-            std::vector<int> send_counts(this->comm_size, 0);
 
             ::std::vector<::std::pair<Key, size_t> > count_results;
             count_results.reserve(this->comm_size);
@@ -618,10 +622,13 @@ namespace dsc  // distributed std container
               count_results.clear();
               auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), start, end, true);
               Intersect<false>::process(overlap.first, overlap.second, start, end, count_emplace_iter, count_element, true, pred);
-              send_counts[i] = 0;
-              for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-                send_counts[i] += it->second;
-              }
+              send_counts[i] = ::std::accumulate(count_results.begin(), count_results.end(), 0,
+                                                 [](size_t v, ::std::pair<Key, size_t> const & x) {
+                             return v + x.second;
+                           });
+//              for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+//                send_counts[i] += it->second;
+//              }
               total += send_counts[i];
 
               start = end;
@@ -640,8 +647,8 @@ namespace dsc  // distributed std container
             TIMER_START(find);
             auto resp_displs = mxx::get_displacements(resp_counts);  // compute response displacements.
 
-            int resp_total = resp_displs[this->comm_size - 1] + resp_counts[this->comm_size - 1];
-            int max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
+            auto resp_total = resp_displs[this->comm_size - 1] + resp_counts[this->comm_size - 1];
+            auto max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
             results.resize(resp_total);   // allocate, not just reserve
             local_results.reserve(max_send_count);
             TIMER_END(find, "reserve", resp_total);
@@ -649,7 +656,7 @@ namespace dsc  // distributed std container
             TIMER_START(find);
             auto recv_displs = mxx::get_displacements(recv_counts);  // compute response displacements.
             int recv_from, send_to;
-            int found;
+            size_t found;
             total = 0;
             std::vector<MPI_Request> reqs(2 * this->comm_size);
 
@@ -715,10 +722,13 @@ namespace dsc  // distributed std container
             // count now.
             auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), keys.begin(), keys.end(), sorted_input);
             Intersect<false>::process(overlap.first, overlap.second, keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
-            int count = 0;
-            for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-              count += it->second;
-            }
+            size_t count = ::std::accumulate(count_results.begin(), count_results.end(), 0,
+                                          [](size_t v, ::std::pair<Key, size_t> const & x) {
+                      return v + x.second;
+                    });
+//            for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+//              count += it->second;
+//            }
             TIMER_END(find, "local_count", count);
 
             TIMER_START(find);
@@ -755,10 +765,13 @@ namespace dsc  // distributed std container
 
           // count now.
           Intersect<false>::process(this->c.begin(), this->c.end(), keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
-          int count = 0;
-          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-            count += it->second;
-          }
+          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), 0,
+                                           [](size_t v, ::std::pair<Key, size_t> const & x) {
+                       return v + x.second;
+                     });
+//          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+//            count += it->second;
+//          }
 
           results.reserve(count);  // 1 result per key.
 
@@ -846,52 +859,7 @@ namespace dsc  // distributed std container
       }
 
 
-      //      /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
-      //      virtual void rehash( size_type n = 0) {
-      //        // direct rehash + barrier
-      //
-      //
-      //        this->key_to_rank.map.clear();
-      //        if (this->comm_size > 1) {
-      //
-      //        	// at this point, local data is sorted and unique locally for map and derived, and not sorted nor unique for multimap
-      //        	// content sizes may be uneven
-      //
-      //        	// first balance
-      //            printf("R %d container size b4 block decompose: %lu\n", this->comm_rank, c.size());
-      //            auto d = ::mxx::stable_block_decompose(c, this->comm);
-      //            printf("R %d container size after block decompose: %lu\n", this->comm_rank, d.size());
-      //
-      //        	// then sort
-      //            ::mxx::sort(d.begin(), d.end(), Base::less, this->comm, false);
-      //
-      //            // get new splitter
-      //            // next compute the splitters.
-      //            if ((this->comm_rank < (this->comm_size - 1)) && (d.size() > 0)) {
-      //              // only send for the first p-1 proc, and only if they have a kmer to split with.
-      //              this->key_to_rank.map.emplace_back(d.back().first, this->comm_rank);
-      //            }
-      //            this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
-      //
-      //            for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
-      //          	  printf("R %d key to rank %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
-      //            }
-      //
-      //            // redistribute.
-      //            c.clear();
-      //            ::mxx2::msgs_all2all(d, this->key_to_rank, this->comm);
-      //
-      //            c.assign(d.begin(), d.end());
-      //            printf("R %d container size after redistribute: %lu\n", this->comm_rank, c.size());
-      //
-      //            this->sorted = true;
-      //
-      //        } else {
-      //			// locally sort
-      //			local_rehash(n);
-      //        }
-      //
-      //      }
+
 
 
       /**
@@ -902,6 +870,8 @@ namespace dsc  // distributed std container
       template <typename Predicate = Identity>
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const & pred = Predicate()) const {
+
+
         TIMER_INIT(count);
 
         TIMER_START(count);
@@ -920,11 +890,15 @@ namespace dsc  // distributed std container
           retain_unique(keys, sorted_input);
           TIMER_END(count, "uniq1", keys.size());
 
-          TIMER_COLLECTIVE_START(count, "a2a1", this->comm);
-          // distribute (communication part)
-          std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
+          TIMER_START(count);
+          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
+          TIMER_END(count, "bucket", keys.size());
 
+          TIMER_COLLECTIVE_START(count, "a2a1", this->comm);
+          auto recv_counts = mxx2::all2all(keys, send_counts, this->comm);
           TIMER_END(count, "a2a1", keys.size());
+
 
           TIMER_START(count);
           // local find. memory utilization a potential problem.
@@ -1074,8 +1048,10 @@ namespace dsc  // distributed std container
           // remove duplicates
           retain_unique(keys, si);
 
-          // redistribute keys
-          mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
+          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
+
+          mxx2::all2all(keys, send_counts, this->comm);
 
           si = false;
         }
@@ -1320,10 +1296,13 @@ namespace dsc  // distributed std container
             TIMER_END(rehash, "splitter1", this->key_to_rank.map.size());
 
 
+            TIMER_START(rehash);
+            // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(this->c, this->key_to_rank, this->comm_size);
+            TIMER_END(rehash, "bucket", this->c.size());
 
             TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
-            // distribute
-            ::mxx2::msgs_all2all(this->c, this->key_to_rank, this->comm);
+            mxx2::all2all(this->c, send_counts, this->comm);
             TIMER_END(rehash, "a2a", this->c.size());
 
 
@@ -1533,9 +1512,15 @@ namespace dsc  // distributed std container
           //			  this->key_to_rank.map = ::mxx::sample_block_decomp(d.begin(), d.end(), Base::Base::less, this->comm_size - 1, this->comm, mpi_dt);
 
           // redistribute
+          TIMER_START(rehash);
+          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(this->c, this->key_to_rank, this->comm_size);
+          TIMER_END(rehash, "bucket", this->c.size());
+
           TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
-          ::mxx2::msgs_all2all(this->c, this->key_to_rank, this->comm);
+          mxx2::all2all(this->c, send_counts, this->comm);
           TIMER_END(rehash, "a2a", this->c.size());
+
         } else {
           TIMER_START(rehash);
           this->local_sort();
