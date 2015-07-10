@@ -361,7 +361,8 @@ namespace fsc {  // fast standard container
 
 
       //  if multiplicity of dataset is kind of known, can initialize data to that to avoid growing vector on average.
-      unordered_vecmap(size_type load_factor = 1, size_type bucket_count = 128,
+      unordered_vecmap(size_type load_factor = 3,
+    		  	  	   size_type bucket_count = 128,
                          const Hash& hash = Hash(),
                          const Equal& equal = Equal(),
                          const Allocator& alloc = Allocator()) :
@@ -371,7 +372,7 @@ namespace fsc {  // fast standard container
 
       template<class InputIt>
       unordered_vecmap(InputIt first, InputIt last,
-                         size_type load_factor = 1,
+                         size_type load_factor = 3,
                          size_type bucket_count = 128,
                          const Hash& hash = Hash(),
                          const Equal& equal = Equal(),
@@ -441,12 +442,11 @@ namespace fsc {  // fast standard container
         auto key = value.first;
         auto iter = map.find(key);
         if (iter == map.end()) {
-          iter = map.emplace(key, subcontainer_type(1, ::std::forward<value_type>(value))).first;
-//          map[key].reserve(multiplicity);
-        } else {
-          map[key].emplace_back(::std::forward<value_type>(value));
+          iter = map.emplace(key, subcontainer_type()).first;
+//          map.at(key).reserve(multiplicity);
         }
-        auto pos = map[key].end();
+        map.at(key).emplace_back(::std::forward<value_type>(value));
+        auto pos = map.at(key).end();
         ++s;
         return iterator(iter, map.end(), --pos);
       }
@@ -456,8 +456,8 @@ namespace fsc {  // fast standard container
           iter = map.emplace(key, subcontainer_type()).first;
 //          map[key].reserve(multiplicity);
         }
-        map[key].emplace_back(::std::forward<Key>(key), ::std::forward<T>(value));
-        auto pos = map[key].end();
+        map.at(key).emplace_back(::std::forward<Key>(key), ::std::forward<T>(value));
+        auto pos = map.at(key).end();
         ++s;
         return iterator(iter, map.end(), --pos);
       }
@@ -468,11 +468,11 @@ namespace fsc {  // fast standard container
           for (; first != last; ++first) {
             if (map.find(first->first) == map.end()) {
               // emplace, and take the result iterator, get the second component (subcontainer), reserve the size.
-              map.emplace(first->first, subcontainer_type(1, *first));
+              map.emplace(first->first, subcontainer_type());
 //              map[k].reserve(multiplicity);
-            } else {
-              map[first->first].emplace_back(*first);
             }
+            map.at(first->first).emplace_back(::std::forward<value_type>(*first));
+
             ++s;
           }
       }
@@ -487,6 +487,17 @@ namespace fsc {  // fast standard container
         if (map.find(key) == map.end()) return 0;
         else return map.at(key).size();
       }
+
+      void shrink_to_fit() {
+    	  // update multiplicity.
+    	  this->multiplicity = (s + map.size() - 1) / map.size();
+
+    	  // for each vector, shrink it.
+    	  for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+    		  it->second.shrink_to_fit();
+    	  }
+      }
+
 
       size_type unique_size() const {
         return map.size();
