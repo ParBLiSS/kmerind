@@ -293,11 +293,12 @@ namespace dsc  // distributed std container
           if (first == last) return 0;
 
           size_t before = c.size();
+          this->c.reserve(before + ::std::distance(first, last));
 
-          for (auto it = first; it != last; ++it) {
-            c.emplace(::std::move(*it));
-          }
-          //c.insert(first, last);
+//          for (auto it = first; it != last; ++it) {
+//            c.emplace(::std::move(*it));
+//          }
+          c.insert(first, last);
           return c.size() - before;
       }
 
@@ -311,6 +312,8 @@ namespace dsc  // distributed std container
           if (first == last) return 0;
 
           size_t before = c.size();
+          this->c.reserve(before + ::std::distance(first, last));
+
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) c.emplace(::std::move(*it));
           }
@@ -465,7 +468,8 @@ namespace dsc  // distributed std container
           // local count to determine amount of memory to allocate at destination.
           TIMER_START(find);
           ::std::vector<::std::pair<Key, size_t> > count_results;
-          count_results.reserve(this->comm_size);
+          size_t max_key_count = *(::std::max_element(recv_counts.begin(), recv_counts.end()));
+          count_results.reserve(max_key_count);
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
 
           auto start = keys.begin();
@@ -998,14 +1002,14 @@ namespace dsc  // distributed std container
         // communication part
         if (this->comm_size > 1) {
           TIMER_START(insert);
-          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          // get mapping to proc
           ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(input, this->key_to_rank, this->comm_size);
           TIMER_END(insert, "bucket", input.size());
 
-          TIMER_START(insert);
-          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          mxx2::retain_unique<local_container_type, typename Base::TransformedEqual>(input, send_counts, sorted_input);
-          TIMER_END(insert, "uniq1", input.size());
+//          TIMER_START(insert);
+//          // keep unique only.  may not be needed - comm speed may be faster than we can compute unique.
+//          mxx2::retain_unique<local_container_type, typename Base::TransformedEqual>(input, send_counts, sorted_input);
+//          TIMER_END(insert, "uniq1", input.size());
 
           TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
           mxx2::all2all(input, send_counts, this->comm);
@@ -1360,6 +1364,9 @@ namespace dsc  // distributed std container
       template <class InputIterator>
       size_t local_insert(InputIterator first, InputIterator last) {
           size_t before = this->c.size();
+
+          this->c.reserve(before + ::std::distance(first, last));
+
           for (auto it = first; it != last; ++it) {
             if (this->c.find(it->first) == this->c.end()) this->c.emplace(*it);
             else
@@ -1376,6 +1383,8 @@ namespace dsc  // distributed std container
       template <class InputIterator, class Predicate>
       size_t local_insert(InputIterator first, InputIterator last, Predicate const & pred) {
           size_t before = this->c.size();
+
+          this->c.reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) {
@@ -1446,16 +1455,17 @@ namespace dsc  // distributed std container
         // communication part
         if (this->comm_size > 1) {
           TIMER_START(insert);
-          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          // find mapping to proc
           ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(input, this->key_to_rank, this->comm_size);
           TIMER_END(insert, "bucket", input.size());
 
-          TIMER_START(insert);
-          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          mxx2::bucket_reduce<local_container_type>(input, send_counts, this->r, sorted_input);
-          TIMER_END(insert, "reduce", input.size());
+//          TIMER_START(insert);
+//          // locally reduce  may not be needed
+//          mxx2::bucket_reduce<local_container_type>(input, send_counts, this->r, sorted_input);
+//          TIMER_END(insert, "reduce", input.size());
 
           TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
+          // move the data to the target proc
           mxx2::all2all(input, send_counts, this->comm);
           TIMER_END(insert, "a2a", input.size());
         }
@@ -1750,8 +1760,8 @@ namespace dsc  // distributed std container
       }
 
 
-/*      /// update the multiplicity.  only multimap needs to do this.
-      virtual size_t update_multiplicity() const {
+      /// update the multiplicity.  only multimap needs to do this.
+      virtual size_t update_multiplicity() {
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
         // problem with this approach is that for unordered map, to get the count for a key is essentially O(count), so we get quadratic time.
@@ -1766,9 +1776,12 @@ namespace dsc  // distributed std container
         this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
         //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
 
+        this->c.shrink_to_fit();
+
         return this->c.get_max_multiplicity();
+
       }
-*/
+
       /**
        * @brief insert new elements in the distributed unordered_multimap.
        * @param first
@@ -1789,7 +1802,7 @@ namespace dsc  // distributed std container
         // communication part
         if (this->comm_size > 1) {
           TIMER_START(insert);
-          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          // map to procs
           ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(input, this->key_to_rank, this->comm_size);
           TIMER_END(insert, "bucket", input.size());
 

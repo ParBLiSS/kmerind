@@ -136,21 +136,21 @@ namespace dsc  // distributed std container
       // uses sorted lookup table to map to target ranks.  assume we store in a vector a pair:  <first kmer on proc, proc id>.  then we can use lower_bound to search.
       // note that this makes in-between values go with the larger proc id.
       struct KeyToRank {
-          ::std::vector<::std::pair<Key, unsigned int> > map;
-          unsigned int p;
+          ::std::vector<::std::pair<Key, int> > map;  // the splitters need to support [map[i], map[i+1]), so they need to be constructed from the first element of the next range, and map to curr range = next-1.
+          int p;
           KeyToRank(int _comm_size) : p(_comm_size) {};
 
-          // return id of selected element
-          inline unsigned int operator()(Key const & x) const {
-            auto pos = ::std::lower_bound(map.begin(), map.end(), x, Base::less);
+          /// return id of selected element based on lookup table.  ranges are [map[i], map[i+1])
+          inline int operator()(Key const & x) const {
+            auto pos = ::std::upper_bound(map.begin(), map.end(), x, Base::less);  // if equal, goes to next range.
             return (pos == map.end()) ? (p-1) : pos->second;
           }
           template<typename V>
-          inline unsigned int operator()(::std::pair<Key, V> const & x) const {
+          inline int operator()(::std::pair<Key, V> const & x) const {
             return this->operator()(x.first);
           }
           template<typename V>
-          inline unsigned int operator()(::std::pair<const Key, V> const & x) const {
+          inline int operator()(::std::pair<const Key, V> const & x) const {
             return this->operator()(x.first);
           }
       } key_to_rank;
@@ -485,7 +485,7 @@ namespace dsc  // distributed std container
 
             TIMER_START(find);
             // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
+            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank.map, Base::less);  // keys are sorted
             TIMER_END(find, "bucket", keys.size());
 
             TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
@@ -591,7 +591,7 @@ namespace dsc  // distributed std container
 
             TIMER_START(find);
             // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
+            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank.map, Base::less);
             TIMER_END(find, "bucket", keys.size());
 
             TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
@@ -607,7 +607,8 @@ namespace dsc  // distributed std container
             TIMER_START(find);
 
             ::std::vector<::std::pair<Key, size_t> > count_results;
-            count_results.reserve(this->comm_size);
+            size_t max_key_count = *(::std::max_element(recv_counts.begin(), recv_counts.end()));
+            count_results.reserve(max_key_count);
             ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
 
             auto start = keys.begin();
@@ -890,7 +891,7 @@ namespace dsc  // distributed std container
 
           TIMER_START(count);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank.map, Base::less);
           TIMER_END(count, "bucket", keys.size());
 
           TIMER_COLLECTIVE_START(count, "a2a1", this->comm);
@@ -1016,11 +1017,16 @@ namespace dsc  // distributed std container
           if (::std::is_same<Predicate, Identity>::value) {
             if (c.size() == 0)   // container is empty, so swap it in.
               c.swap(input);
-            else
-              ::std::move(input.begin(), input.end(), emplace_iter);    // else move it in.
+            else {
+            	c.reserve(before + input.size());
+                ::std::move(input.begin(), input.end(), emplace_iter);    // else move it in.
+            }
           }
-          else ::std::copy_if(::std::make_move_iterator(input.begin()),
-                              ::std::make_move_iterator(input.end()), emplace_iter, pred);  // predicate needed.  move it though.
+          else {
+        	  c.reserve(before + input.size());
+        	  ::std::copy_if(::std::make_move_iterator(input.begin()),
+                      ::std::make_move_iterator(input.end()), emplace_iter, pred);  // predicate needed.  move it though.
+          }
 
           size_t count = c.size() - before;
           TIMER_END(insert, "insert", count);
@@ -1047,7 +1053,7 @@ namespace dsc  // distributed std container
           retain_unique(keys, si);
 
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank.map, Base::less);
 
           mxx2::all2all(keys, send_counts, this->comm);
 
@@ -1264,74 +1270,163 @@ namespace dsc  // distributed std container
 
           if (!this->balanced) {
             TIMER_START(rehash);
-            this->c = ::std::move(::mxx::stable_block_decompose(this->c, this->comm));
+            this->c = ::mxx::stable_block_decompose(this->c, this->comm);
             TIMER_END(rehash, "block1", this->c.size());
           }
 
 
           // sort if needed
-          if (!this->globally_sorted) {
-            TIMER_START(rehash);
-            // kway merge / sort
-            Base::Base::sort_ascending(this->c.begin(), this->c.end());
-            TIMER_END(rehash, "sort1", this->c.size());
+//          if (!this->globally_sorted) {
+//          TIMER_START(rehash);
+//          // kway merge / sort
+//          Base::Base::sort_ascending(this->c.begin(), this->c.end());
+//          TIMER_END(rehash, "sort1", this->c.size());
+//
+          // sort if needed
+          TIMER_START(rehash);
+          if (!this->globally_sorted) ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm, false);
+          TIMER_END(rehash, "mxxsort", this->c.size());
+
 
             TIMER_START(rehash);
             // local unique
             this->local_reduction(this->c, true);
             TIMER_END(rehash, "reduc1", this->c.size());
 
+            // check to see if any value cross the boundary:
+            // get the values from both sides of the boundaries, gather to rank 0
+            // merge duplicate boundary values.
+            // use a vector to indicate which to delete and which to keep.  (keep entry at start of a partition)
+            // apply to remote.
+
             TIMER_START(rehash);
-            // sample
-            mxx::datatype<::std::pair<Key, T> > dt;
-            MPI_Datatype mpi_dt = dt.type();
-            this->key_to_rank.map = ::std::move(::mxx::impl::sample_arbit_decomp(this->c.begin(), this->c.end(), Base::Base::less, this->comm_size -1, this->comm, mpi_dt));
-            for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
-              // modify the splitters destinations
-              //printf("R %d splitters %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
-              this->key_to_rank.map[i].second = i;
+            // allgather the left and right elements.  then each proc makes own decision.  relies on uniqueness within a proc.
+            ::std::vector<value_type > boundary_values;
+            ::std::vector<int > boundary_ids;
+            if (this->c.size() > 1) {  // insert left if we have more than 1 entry.  (if 0, no insert.  if 1, will be inserted as right)
+              boundary_values.emplace_back(this->c.front());
+              boundary_ids.emplace_back(this->comm_rank);
             }
-            TIMER_END(rehash, "splitter1", this->key_to_rank.map.size());
+            if (this->c.size() > 0) {  // insert right if we have at least 1 entry
+              boundary_values.emplace_back(this->c.back());
+              boundary_ids.emplace_back(this->comm_rank);
+            }
+            // allgather the boundary entries and ranks.
+            boundary_values = ::mxx::allgatherv(boundary_values, this->comm);
+            boundary_ids = ::mxx::allgatherv(boundary_ids, this->comm);
+
+            if (this->c.size() > 0) {
+              // now reduce the range matching the left element and assign to last rank in that range.
+              auto range = ::std::equal_range(boundary_values.begin(), boundary_values.end(), this->c.front(),
+                                              Base::Base::less);
+              size_t dist = ::std::distance(range.first, range.second);
+              if (dist > 1) {  // if > 1, then value crossed boundary and need to reduce.
+
+                size_t offset = ::std::distance(boundary_values.begin(), range.second);
+                if (boundary_ids[offset - 1] == this->comm_rank) { // this processor owns this value
+                  // copy and reduce this range.
+                  ::std::vector<value_type > reduced(range.first, range.second);
+                  this->local_reduction(reduced, true);  //
+                  this->c.front() = reduced[0];    // replace the left element
+                } // else processor does not own the value so no update
+              } // else there is only 1 entry, done. (guaranteed at least 1)
+
+              // now remove the other entries from the local container
+              range = ::std::equal_range(boundary_values.begin(), boundary_values.end(), this->c.back(),
+                                                          Base::Base::less);
+              dist = ::std::distance(range.first, range.second);
+              if (dist > 1) {  // if > 1, the value crossed boundary and we have extra entries to remove.
+
+                size_t offset = ::std::distance(boundary_values.begin(), range.second);
+                if (boundary_ids[offset - 1] < this->comm_rank) {  // not an owner, so need to remove this element
+                  // now remove this element.  there is only 1, since it's unique.  also c is at least 1 in size before.
+                  this->c.pop_back();
+
+                }
+              }  // back entry is unique.  keep.
+            }
+            TIMER_END(rehash, "reduced boundaries", this->c.size());
+
+            // then reblock.
 
 
-            TIMER_START(rehash);
-            // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(this->c, this->key_to_rank, this->comm_size);
-            TIMER_END(rehash, "bucket", this->c.size());
 
-            TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
-            mxx2::all2all(this->c, send_counts, this->comm);
-            TIMER_END(rehash, "a2a", this->c.size());
+//            // goal of the next block of code is to rebalance of the blocks, while keeping all of same elements in the same processor
+//            // first thought is to resample using the sample sort logic.  however this is flawed and will introduce imbalance.
+//            // for sorted input using the sample_arbit_decomp would result in imbalance that increases with decreasing p:
+//            // first p-1 get (p-1) partitions, last p get p+1 partitions.  we can increase sampling rate,
+//            // but that still does not remove the imbalance.  in addition, sampling is even within the blocks, which is not good for sorted blocks.
+//
+//            // alternative is to reblock first.  for there to be a run > 2 of same element, a processor would have had a single element.
+//            // this means that the number of elements for the processor with the run post rebalance is not going to be very different,
+//            // so we can just let the some procs idle (after their size 1 partitions are moved entirely.)
+//
+//            // rebalance block first
+//            TIMER_START(rehash);
+//            this->c = ::mxx::stable_block_decompose(this->c, this->comm);
+//            TIMER_END(rehash, "block1", this->c.size());
+//
+// //            TIMER_START(rehash);
+// //            // sample
+// //            mxx::datatype<::std::pair<Key, T> > dt;
+// //            MPI_Datatype mpi_dt = dt.type();
+// //            this->key_to_rank.map = ::mxx::impl::sample_arbit_decomp(this->c.begin(), this->c.end(), Base::Base::less, this->comm_size - 1, this->comm, mpi_dt);
+// //            for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
+// //              // modify the splitters destinations
+// //              //printf("R %d splitters %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
+// //              this->key_to_rank.map[i].second = i;
+// //            }
+// //            TIMER_END(rehash, "splitter1", this->key_to_rank.map.size());
+//
+//            // get pivots using the last elements.
+//            TIMER_START(rehash);
+//            this->key_to_rank.map.clear();
+//            if ((this->comm_rank > 0) && (this->c.size() > 0)) {  // splitters need to be the first entry of the next partition.
+//              // only send for the first p-1 proc, and only if they have a kmer to split with.
+//              this->key_to_rank.map.emplace_back(this->c.front().first, this->comm_rank - 1);
+//            }
+//            this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+//            TIMER_END(rehash, "splitter1", this->c.size());
+//
+//            // rebucket by pivots, so no value crosses boundaries
+//            TIMER_START(rehash);
+//            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(this->c, this->key_to_rank.map, Base::Base::less);
+//            TIMER_END(rehash, "bucket", this->c.size());
+//
+//            TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
+//            mxx2::all2all(this->c, send_counts, this->comm);
+//            TIMER_END(rehash, "a2a", this->c.size());
+//
+//
+////          TIMER_START(rehash);
+////          // kway merge / sort
+////          Base::Base::sort_ascending(this->c.begin(), this->c.end());
+////          TIMER_END(rehash, "sort2", this->c.size());
+////
+//
+//            // final reduction - nothing crosses boundaries now.
+//            TIMER_START(rehash);
+//            // local unique
+//            this->local_reduction(this->c, true);
+//            TIMER_END(rehash, "reduc2", this->c.size());
 
-
-            TIMER_START(rehash);
-            // kway merge / sort
-            Base::Base::sort_ascending(this->c.begin(), this->c.end());
-            TIMER_END(rehash, "sort2", this->c.size());
-
-
-            TIMER_START(rehash);
-            // local unique
-            this->local_reduction(this->c, true);
-            TIMER_END(rehash, "reduc2", this->c.size());
-
-
+            // and final rebalance
             TIMER_START(rehash);
             // rebalance
-            this->c = ::std::move(::mxx::stable_block_decompose(this->c, this->comm));
+            this->c = ::mxx::stable_block_decompose(this->c, this->comm);
             TIMER_END(rehash, "block2", this->c.size());
 
-          }
-
+//          }
+//
           TIMER_START(rehash);
           // get new pivots
           // next compute the splitters.
           this->key_to_rank.map.clear();
-          if ((this->comm_rank < (this->comm_size - 1)) && (this->c.size() > 0)) {
+          if ((this->comm_rank > 0) && (this->c.size() > 0)) {
             // only send for the first p-1 proc, and only if they have a kmer to split with.
-            this->key_to_rank.map.emplace_back(this->c.back().first, this->comm_rank);
+            this->key_to_rank.map.emplace_back(this->c.front().first, this->comm_rank - 1);
           }
-          this->key_to_rank.map = ::std::move(::mxx::allgatherv(this->key_to_rank.map, this->comm));
+          this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
 
 
 //          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
@@ -1345,7 +1440,7 @@ namespace dsc  // distributed std container
           // local unique
           this->local_reduction(this->c, this->sorted);
 
-          TIMER_END(rehash, "unique", this->c.size());
+          TIMER_END(rehash, "reduc", this->c.size());
         }
         this->sorted = true; this->balanced = true; this->globally_sorted = true;
         //printf("c size after: %lu\n", this->c.size());
@@ -1494,9 +1589,9 @@ namespace dsc  // distributed std container
           // get new pivots
           TIMER_START(rehash);
           this->key_to_rank.map.clear();
-          if ((this->comm_rank < (this->comm_size - 1)) && (this->c.size() > 0)) {
+          if ((this->comm_rank > 0) && (this->c.size() > 0)) {
             // only send for the first p-1 proc, and only if they have a kmer to split with.
-            this->key_to_rank.map.emplace_back(this->c.back().first, this->comm_rank);
+            this->key_to_rank.map.emplace_back(this->c.front().first, this->comm_rank - 1);
           }
           this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
 
@@ -1509,10 +1604,9 @@ namespace dsc  // distributed std container
           //			  MPI_Datatype mpi_dt = dt.type();
           //			  this->key_to_rank.map = ::mxx::sample_block_decomp(d.begin(), d.end(), Base::Base::less, this->comm_size - 1, this->comm, mpi_dt);
 
-          // redistribute
+          // redistribute.  in trouble if we have a value that takes up a large part of the partition.
           TIMER_START(rehash);
-          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(this->c, this->key_to_rank, this->comm_size);
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(this->c, this->key_to_rank.map, Base::Base::less);
           TIMER_END(rehash, "bucket", this->c.size());
 
           TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
