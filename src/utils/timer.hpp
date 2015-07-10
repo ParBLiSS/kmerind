@@ -86,42 +86,42 @@
           fflush(stdout); \
         } while (0)
 
-
-template <typename T>
-::std::vector<::std::tuple<T, T, T, T> > compute_elem_stats(::std::vector<T> const & v, MPI_Comm comm) {
-  int p;
-  MPI_Comm_size(comm, &p);
-
-  ::std::vector<::std::tuple<T, T, T, T> > u(v.size());
-  ::std::transform(v.begin(), v.end(), u.begin(), [](T const & x) { return ::std::make_tuple(x, x, x, x*x); });
-  auto stats = ::mxx2::reduce(u, [](::std::tuple<T, T, T, T> const &x, ::std::tuple<T, T, T, T> const &y) {
-    return ::std::make_tuple(::std::min(::std::get<0>(x), ::std::get<0>(y)),
-                             ::std::max(::std::get<1>(x), ::std::get<1>(y)),
-                             ::std::plus<T>(::std::get<2>(x), ::std::get<2>(y)),
-                             ::std::plus<T>(::std::get<3>(x), ::std::get<3>(y)));
-    }, comm, 0);
-  ::std::transform(stats.begin(), stats.end(), stats.begin(), [p](::std::tuple<T, T, T, T> x) {
-    ::std::get<2>(x) /= p;
-    ::std::get<3>(x) = ::std::sqrt(::std::get<3>(x) / p - ::std::get<2>(x) * ::std::get<2>(x));
-    return x;
-  });
-
-  return stats;
-}
+// not used.
+//template <typename T>
+//::std::vector<::std::tuple<T, T, T, T> > compute_elem_stats(::std::vector<T> const & v, MPI_Comm comm) {
+//  int p;
+//  MPI_Comm_size(comm, &p);
+//
+//  ::std::vector<::std::tuple<T, T, T, T> > u(v.size());
+//  ::std::transform(v.begin(), v.end(), u.begin(), [](T const & x) { return ::std::make_tuple(x, x, x, x*x); });
+//  auto stats = ::mxx2::reduce(u, [](::std::tuple<T, T, T, T> const &x, ::std::tuple<T, T, T, T> const &y) {
+//    return ::std::make_tuple(::std::min(::std::get<0>(x), ::std::get<0>(y)),
+//                             ::std::max(::std::get<1>(x), ::std::get<1>(y)),
+//                             ::std::plus<T>(::std::get<2>(x), ::std::get<2>(y)),
+//                             ::std::plus<T>(::std::get<3>(x), ::std::get<3>(y)));
+//    }, comm, 0);
+//  ::std::transform(stats.begin(), stats.end(), stats.begin(), [p](::std::tuple<T, T, T, T> x) {
+//    ::std::get<2>(x) /= p;
+//    ::std::get<3>(x) = ::std::sqrt(::std::get<3>(x) / p - ::std::get<2>(x) * ::std::get<2>(x));
+//    return x;
+//  });
+//
+//  return stats;
+//}
 
 #define TIMER_REPORT_MPI(timing, rank, comm) \
         do { \
           int p; \
           MPI_Comm_size(comm, &p); \
           \
-          auto dur_mins = ::mxx2::reduce(timing##_durations, [](double const &x, double const &y) { return ::std::min(x,y); }, comm, 0); \
-          auto dur_maxs = ::mxx2::reduce(timing##_durations, [](double const &x, double const &y) { return ::std::max(x,y); }, comm, 0); \
+          auto dur_mins = ::mxx2::reduce_loc(timing##_durations, MPI_MINLOC, comm, 0); \
+          auto dur_maxs = ::mxx2::reduce_loc(timing##_durations, MPI_MAXLOC, comm, 0); \
           auto dur_means = ::mxx2::reduce(timing##_durations, ::std::plus<double>(), comm, 0); \
           ::std::for_each(timing##_durations.begin(), timing##_durations.end(), [](double &x) { x = x*x; }); \
           auto dur_stdevs = ::mxx2::reduce(timing##_durations, ::std::plus<double>(), comm, 0); \
           \
-          auto cnt_mins = ::mxx2::reduce(timing##_counts, [](double const &x, double const &y) { return ::std::min(x,y); }, comm, 0); \
-          auto cnt_maxs = ::mxx2::reduce(timing##_counts, [](double const &x, double const &y) { return ::std::max(x,y); }, comm, 0); \
+          auto cnt_mins = ::mxx2::reduce_loc(timing##_counts, MPI_MINLOC, comm, 0); \
+          auto cnt_maxs = ::mxx2::reduce_loc(timing##_counts, MPI_MAXLOC, comm, 0); \
           auto cnt_means = ::mxx2::reduce(timing##_counts, ::std::plus<double>(), comm, 0); \
           ::std::for_each(timing##_counts.begin(), timing##_counts.end(), [](double &x) { x = x*x; }); \
           auto cnt_stdevs = ::mxx2::reduce(timing##_counts, ::std::plus<double>(), comm, 0); \
@@ -135,25 +135,34 @@ template <typename T>
                              [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); }); \
             \
             std::stringstream output; \
+            std::ostream_iterator<double> dit(output, ","); \
+            std::ostream_iterator<int> iit(output, ","); \
             output << std::fixed; \
             output << "R " << rank << "/" << p << " " << #timing << " header\t["; \
             std::ostream_iterator<std::string> nit(output, ","); \
             std::copy(timing##_names.begin(), timing##_names.end(), nit); \
             output.precision(9); \
             output << "]\n" << #timing << "\tdur_min\t\t["; \
-            std::ostream_iterator<double> dit(output, ","); \
-            std::copy(dur_mins.begin(), dur_mins.end(), dit); \
+            std::copy(dur_mins.first.begin(), dur_mins.first.end(), dit); \
+            output << "]\n" << #timing << "\tdur_min_idx\t\t["; \
+            std::copy(dur_mins.second.begin(), dur_mins.second.end(), iit); \
             output << "]\n" << #timing << "\tdur_max\t\t["; \
-            std::copy(dur_maxs.begin(), dur_maxs.end(), dit); \
+            std::copy(dur_maxs.first.begin(), dur_maxs.first.end(), dit); \
+            output << "]\n" << #timing << "\tdur_max_idx\t\t["; \
+            std::copy(dur_maxs.second.begin(), dur_maxs.second.end(), iit); \
             output << "]\n" << #timing << "\tdur_mean\t["; \
             std::copy(dur_means.begin(), dur_means.end(), dit); \
             output << "]\n" << #timing << "\tdur_stdev\t["; \
             std::copy(dur_stdevs.begin(), dur_stdevs.end(), dit); \
             output.precision(0); \
             output << "]\n" << #timing << "\tcnt_min\t\t["; \
-            std::copy(cnt_mins.begin(), cnt_mins.end(), dit); \
+            std::copy(cnt_mins.first.begin(), cnt_mins.first.end(), dit); \
+            output << "]\n" << #timing << "\tcnt_min_idx\t\t["; \
+            std::copy(cnt_mins.second.begin(), cnt_mins.second.end(), iit); \
             output << "]\n" << #timing << "\tcnt_max\t\t["; \
-            std::copy(cnt_maxs.begin(), cnt_maxs.end(), dit); \
+            std::copy(cnt_maxs.first.begin(), cnt_maxs.first.end(), dit); \
+            output << "]\n" << #timing << "\tcnt_max_idx\t\t["; \
+            std::copy(cnt_maxs.second.begin(), cnt_maxs.second.end(), iit); \
             output.precision(2); \
             output << "]\n" << #timing << "\tcnt_mean\t["; \
             std::copy(cnt_means.begin(), cnt_means.end(), dit); \

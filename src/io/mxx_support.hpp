@@ -50,6 +50,32 @@ namespace mxx {
 namespace mxx2 {
 
 
+  /// in place bucketing.  expect buffer and map both to be sorted by key.
+  /// (in fact, no need to rebucket. just compute the send_counts.)
+  template<typename count_t, typename T, typename Key, typename Comp>
+  std::vector<count_t> bucketing(std::vector<T>& buffer, ::std::vector<::std::pair<Key, int> > map, Comp const & comp) {
+
+    //== track the send count
+    std::vector<count_t> send_counts(map.size() + 1, 0);
+
+    if (buffer.size() == 0) return send_counts;
+
+    //== since both sorted, search map entry in buffer - mlog(n).  the otherway around is nlog(m).
+    // note that map contains splitters.  range defined as [map[i], map[i+1]), so when searching in buffer using entry in map, search via lower_bound
+    auto b = buffer.begin();
+    auto e = b;
+    for (int i = 0; i < map.size(); ++i) {
+      e = ::std::lower_bound(b, buffer.end(), map[i].first, comp);
+      send_counts[i] = ::std::distance(b, e);
+      b = e;
+    }
+    // last 1
+    send_counts[map.size()] = ::std::distance(b, buffer.end());
+
+    return send_counts;
+  }
+
+
   /// in place bucketing.  uses an extra vector of same size as msgs.  hops around msgs vector until no movement is possible.
   /// complexity is O(b) * O(n).  scales badly, same as bucketing_copy, but with a factor of 2 for large data.
   /// when fixed n, slight increase with b..  else increases with n.
@@ -454,6 +480,66 @@ namespace mxx2 {
     return results;
   }
 
+  /// reduce operation with minloc
+  template <typename T>
+  ::std::pair<::std::vector<T>, ::std::vector<int> > reduce_loc(::std::vector<T> & v, MPI_Op op, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
+  {
+    if ((op != MPI_MINLOC) && (op != MPI_MAXLOC)) throw std::logic_error("reduce_loc only support MPI_MINLOC and MPI_MAXLOC");
+
+
+    // get the mpi type
+    MPI_Datatype dt;
+    if (::std::is_same<T, float>::value) dt = MPI_FLOAT_INT;
+    else if (::std::is_same<T, double>::value) dt = MPI_DOUBLE_INT;
+    else if (::std::is_same<T, long>::value) dt = MPI_LONG_INT;
+    else if (::std::is_same<T, int>::value) dt = MPI_2INT;
+    else if (::std::is_same<T, short>::value) dt = MPI_SHORT_INT;
+    else if (::std::is_same<T, long double>::value) dt = MPI_LONG_DOUBLE_INT;
+    else
+        throw std::logic_error("type param T is not one of float, double, long, int, short, or long double.");
+
+
+    // struct
+    struct vi {
+        T val;
+        int rank;
+    };
+
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+
+    // get the max size.
+    size_t s = v.size();
+    size_t min_s = ::mxx::allreduce(s, [](size_t const &x, size_t const &y) { return ::std::min(x, y); }, comm);
+
+    if (s > min_s) {
+      WARNINGF("WARNING: process %d has larger vector than the min size during vector reduction.", rank);
+    }
+
+
+    // set up the data structure
+    ::std::vector< vi > temp(s);
+    for (int i = 0; i < s; ++i) {
+      temp[i].val = v[i];
+      temp[i].rank = rank;
+    }
+
+    // perform reduction
+    ::std::vector< vi > temp2(s);
+    MPI_Reduce(&(temp[0]), &(temp2[0]), min_s, dt, op, root, comm);
+
+    // now extract the results
+    ::std::vector<T> outVal(s);
+    ::std::vector<int> outIdx(s);
+    for (int i = 0; i < s; ++i) {
+      outVal[i] = temp2[i].val;
+      outIdx[i] = temp2[i].rank;
+    }
+
+    // return result
+    return ::std::make_pair(outVal, outIdx);
+  }
+
 
   template <typename T, typename Func>
   T reduce_scatter(::std::vector<T> & v, Func func, MPI_Comm comm = MPI_COMM_WORLD)
@@ -480,6 +566,105 @@ namespace mxx2 {
     // return result
     return result;
   }
+
+  template <typename T>
+  ::std::vector<T> gathern(::std::vector<T> const & v, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+    // get data type
+    ::mxx::datatype<T> dt;
+
+    // allocate result
+    int p;
+    int rank;
+    MPI_Comm_size(comm, &p);
+    MPI_Comm_rank(comm, &rank);
+
+    // get the max size.
+    size_t count = v.size();
+    size_t min_s = ::mxx::allreduce(count, [](size_t const &x, size_t const &y) { return ::std::min(x, y); }, comm);
+
+    if (count > min_s) {
+      WARNINGF("WARNING: gathern process %d trying to send %lu, more than min of %lu.", rank, count, min_s);
+    }
+    if (min_s > (::std::numeric_limits<int>::max() / p)) {
+      WARNINGF("WARNING: gathern process %d trying to send min of %lu, more than max_int/p.", rank, min_s);
+    }
+
+    ::std::vector<T> results;
+
+    if (rank == root) {
+      results.resize(p * min_s);
+    }
+
+    // perform gather.  does not explicitly support large count.
+    MPI_Gather(&(v[0]), min_s, dt.type(), &(results[0]), min_s, dt.type(), root, comm);
+    // return result
+    return results;
+  }
+
+  template <typename T>
+  ::std::vector<T> scattern(::std::vector<T> const & v, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+    // get data type
+    ::mxx::datatype<T> dt;
+
+    // allocate result
+    int p;
+    MPI_Comm_size(comm, &p);
+
+    size_t count = v.size() / p;
+
+    if ((v.size() %p) != 0)
+      WARNINGF("WARNING: mxx2::scattern called with %lu elements, some elements not sent %lu", v.size(), v.size() % p);
+
+    ::std::vector<T> results;
+
+    // perform gather  - does not explicitly support large count.
+    MPI_Scatter(&(v[0]), count, dt.type(), &(results[0]), count, dt.type(), root, comm);
+    // return result
+    return results;
+  }
+
+  template <typename T>
+  ::std::vector<T> gather(T const& v, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+    // get data type
+    ::mxx::datatype<T> dt;
+
+    // allocate result
+    int p;
+    int rank;
+    MPI_Comm_size(comm, &p);
+    MPI_Comm_rank(comm, &rank);
+
+    ::std::vector<T> results;
+
+    if (rank == root) {
+      results.resize(p);
+    }
+
+    // perform gather.  does not explicitly support large count.
+    MPI_Gather(&v, 1, dt.type(), &(results[0]), 1, dt.type(), root, comm);
+    // return result
+    return results;
+  }
+
+  template <typename T>
+  T scatter(::std::vector<T> const & v, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+    // get data type
+    ::mxx::datatype<T> dt;
+
+    // allocate result
+    int p;
+    MPI_Comm_size(comm, &p);
+    if (v.size() < p)
+      WARNINGF("ERROR: mxx2::scatter called with %lu elements, less than p (%d)", v.size(), p);
+
+    T results;
+
+    // perform gather  - does not explicitly support large count.
+    MPI_Scatter(&(v[0]), 1, dt.type(), &results, 1, dt.type(), root, comm);
+    // return result
+    return results;
+  }
+
 
 }
 
