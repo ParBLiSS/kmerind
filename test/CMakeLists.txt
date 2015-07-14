@@ -121,6 +121,13 @@ target_link_libraries(testKmerIndex_ST2 ${EXTRA_LIBS})
 target_link_libraries(testKmerIndex_ST2 bliss-common)
 #cotire(testKmerIndex_ST2 )
 
+add_executable(testKmerIndex_read TestKmerIndex_ParseOnly.cpp)
+SET_TARGET_PROPERTIES(testKmerIndex_read PROPERTIES COMPILE_FLAGS -DKMERINDEX)
+target_link_libraries(testKmerIndex_read ${EXTRA_LIBS})
+target_link_libraries(testKmerIndex_read bliss-common)
+#cotire(testKmerIndex_ST2 )
+
+
 #add_executable(testKmerIndex_ST2 TestKmerIndexAndQuerySingleThread_DHashMap.cpp)
 #SET_TARGET_PROPERTIES(testKmerIndex_ST2 PROPERTIES COMPILE_FLAGS -DKMERINDEX)
 #target_link_libraries(testKmerIndex_ST2 ${EXTRA_LIBS})
@@ -167,6 +174,10 @@ target_link_libraries(hash_vs_sort ${EXTRA_LIBS})
 add_executable(kmer_reverse kmer_reverse.cpp)
 target_link_libraries(kmer_reverse ${EXTRA_LIBS})
 target_link_libraries(kmer_reverse bliss-common)
+
+add_executable(cust_alloc test_custom_allocator.cpp)
+target_link_libraries(cust_alloc ${EXTRA_LIBS})
+target_link_libraries(cust_alloc bliss-common)
 
 endif()
 
