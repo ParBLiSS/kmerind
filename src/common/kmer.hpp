@@ -1917,7 +1917,7 @@ public:
                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
     INLINE Kmer do_reverse_complement_bswap(Kmer const & src) const
     {
-      Kmer result;  // empty kmerfor output
+      Kmer result;  // empty kmer for output
 
 
       // swap the word order.  also do rev_comp for the chars in the word at the same time.

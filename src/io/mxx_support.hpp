@@ -24,6 +24,7 @@
 
 #include <algorithm>  // for std::min
 
+#include <unistd.h>   // for gethostname
 
 namespace mxx {
 
@@ -39,7 +40,16 @@ namespace mxx {
 
   template<>
   class datatype<bliss::io::FASTQ::SequenceId > :
-    public datatype_contiguous<decltype(bliss::io::FASTQ::SequenceId::file_pos), 1> {};
+    public datatype<decltype(bliss::io::FASTQ::SequenceId::file_pos)> {};
+
+  template <typename T>
+  class datatype<bliss::partition::range<T> > :
+    public datatype_contiguous<T, sizeof(bliss::partition::range<T>) / sizeof(T)> {};
+
+  template <typename T>
+  class datatype<const bliss::partition::range<T> > :
+    public datatype_contiguous<T, sizeof(bliss::partition::range<T>) / sizeof(T)> {};
+
 
 }
 
@@ -48,6 +58,124 @@ namespace mxx {
 
 
 namespace mxx2 {
+#if !defined(HOST_NAME_MAX)
+#define HOST_NAME_MAX 256
+#endif
+
+
+  /**
+   * @brief     create a parent communicator and a child communicator, grouped by host names
+   * @details   first we gather all the host names, and then 1 process will sort and pick unique host/rank pairs.
+   *            the master than scatter, for each node, 2 colors, the first for the parent communicator, and second for the child communicator
+   *
+   *            all processes then participate to create the communicators.  for the non-selected processes (for the parent communicator), a null communicator is created.
+   *
+   * @param comm
+   * @return    pair.  the first is a communicator with 1 proc per host machine.  the second is a communicator for all procs for that host machine.
+   */
+  ::std::pair<MPI_Comm, MPI_Comm> split_communicator_by_host(MPI_Comm comm = MPI_COMM_WORLD) {
+
+    ::std::vector<char> host(HOST_NAME_MAX, 0);
+    gethostname(&(host[0]), HOST_NAME_MAX);
+
+    int rank;
+    int p;
+    MPI_Comm_size(comm, &p);
+    MPI_Comm_rank(comm, &rank);
+
+
+    ::std::vector<char> hosts = ::mxx::gather_vectors(host, comm);
+    using ElemType = ::std::tuple<int, ::std::vector<char>, int > ;
+    ::std::vector<ElemType> host_strs;
+
+    ::std::vector<int > colors;
+    int color;
+
+    if (rank == 0) {
+      // convert to strings
+      auto b = hosts.begin();
+      auto e = b;
+      for (int i = 0; i < p; ++i) {
+        e += HOST_NAME_MAX;
+        host_strs.emplace_back(i, ::std::vector<char>(b, e), MPI_UNDEFINED);
+        b = e;
+      }
+      // sort the rank-hostname tuples.
+      ::std::sort(host_strs.begin(), host_strs.end(), [](ElemType const &x,
+                                                         ElemType const &y) {
+        int same = strncmp(&((::std::get<1>(x))[0]), &((::std::get<1>(y))[0]), HOST_NAME_MAX);
+        if (same < 0) return true;
+        else if ((same == 0) && (::std::get<0>(x) < ::std::get<0>(y))) return true;
+        else return false;
+      });
+
+
+      // identify the one for each host name with the lowest rank and mark them
+      color = 0;
+      ::std::get<2>(host_strs[0]) = color;
+      int same;
+      for (int i = 1; i < p; ++i) {
+        same = strncmp(&((::std::get<1>(host_strs[i-1]))[0]), &((::std::get<1>(host_strs[i]))[0]), HOST_NAME_MAX);
+        if (same < 0) {
+          ++color;
+        }
+        ::std::get<2>(host_strs[i]) = color;
+      }
+
+      // for each host name, color the result.
+      // print them for debug
+      printf("sorted hostnames:\n");
+      for (int i = 0; i < p; ++i) {
+        printf("%d, %s, %d\n", ::std::get<0>(host_strs[i]), &((::std::get<1>(host_strs[i]))[0]), ::std::get<2>(host_strs[i]));
+      }
+
+
+      // unsort
+      ::std::sort(host_strs.begin(), host_strs.end(), [](ElemType const &x,
+                                                         ElemType const &y) {
+        return ::std::get<0>(x) < ::std::get<0>(y);
+      });
+
+      // copy to output vector.
+      for (int i = 0; i < p; ++i) {
+        colors.emplace_back(::std::get<2>(host_strs[i]));
+      }
+    }
+
+    // scatter colors.
+    color = MPI_UNDEFINED;
+    MPI_Scatter(&(colors[0]), 1, MPI_INT, &color, 1, MPI_INT, 0, comm);
+
+    // now create the sub communicators for each host's processes
+    MPI_Comm group;
+    MPI_Comm_split(comm, color, rank, &group);
+
+    int group_rank;
+    int group_size;
+    MPI_Comm_rank(group, &group_rank);
+    MPI_Comm_size(group, &group_size);
+
+    // for the lowest rank process in the subcommunicator, create a spannng communicator.
+    if (group_rank == 0) {
+      color = 0;
+    } else color = MPI_UNDEFINED;
+
+
+    MPI_Comm group_leaders;
+    MPI_Comm_split(comm, color, rank, &group_leaders);
+
+    int group_leader_rank = MPI_UNDEFINED;
+    int group_leader_size = MPI_UNDEFINED;
+    if (group_leaders != MPI_COMM_NULL) {
+      MPI_Comm_rank(group_leaders, &group_leader_rank);
+      MPI_Comm_size(group_leaders, &group_leader_size);
+    }
+
+    printf("%d/%d, group %d/%d, leader %d/%d\n", rank, p, group_rank, group_size, group_leader_rank, group_leader_size);
+
+
+    return ::std::make_pair(group_leaders, group);
+  }
 
 
   /// in place bucketing.  expect buffer and map both to be sorted by key.
@@ -273,6 +401,48 @@ namespace mxx2 {
   /// modified version of mxx all2all, to replace content of buffer, and to return the recv counts.
   /// also, determine whether to use the large data version of mxx all2all at runtime.
   template<typename T, typename count_t = int>
+  std::vector<count_t> all2all_nocast(std::vector<T>& buffer, const std::vector<count_t>& send_counts, MPI_Comm comm = MPI_COMM_WORLD)
+  {
+      // get counts and displacements
+      std::vector<count_t> recv_counts = mxx::all2all(send_counts, 1, comm);
+      // get total size
+      std::size_t recv_size = 0;
+      for (int i = 0; i < recv_counts.size(); ++i) {
+        recv_size += recv_counts[i];
+      }
+      std::vector<T> recv_buffer(recv_size);
+      // all-2-all  - automatically chooses between isend/irecv version or collective version based on type of count_t
+      ::mxx::all2all(buffer.begin(), recv_buffer.begin(), send_counts, recv_counts, comm);
+
+      // return the buffer
+      buffer.swap(recv_buffer);
+      // return the receive buffer
+      return recv_counts;
+  }
+
+
+  /// modified version of mxx all2all, to replace content of buffer, and to return the recv counts.
+  /// also, determine whether to use the large data version of mxx all2all at runtime.
+  template<typename internal_count_t, typename T, typename count_t = int>
+  std::vector<count_t> all2all_cast(std::vector<T>& buffer, const std::vector<count_t>& send_counts, MPI_Comm comm = MPI_COMM_WORLD)
+  {
+      std::vector<internal_count_t> sc(send_counts.size());
+      ::std::transform(send_counts.begin(), send_counts.end(), sc.begin(), [](count_t const &x) { return static_cast<internal_count_t>(x); });
+
+      // get counts and displacements
+      std::vector<internal_count_t> rc = ::mxx2::all2all_nocast(buffer, sc, comm);
+
+      // convert recv_count from int to count_t
+      std::vector<count_t> recv_counts(rc.size());
+      ::std::transform(rc.begin(), rc.end(), recv_counts.begin(), [](int const &x) { return static_cast<count_t>(x); });
+
+      // return the receive buffer
+      return recv_counts;
+  }
+
+  /// modified version of mxx all2all, to replace content of buffer, and to return the recv counts.
+  /// also, determine whether to use the large data version of mxx all2all at runtime.
+  template<typename T, typename count_t = int>
   std::vector<count_t> all2all(std::vector<T>& buffer, const std::vector<count_t>& send_counts, MPI_Comm comm = MPI_COMM_WORLD)
   {
     //== first determine the max chunk to be sent around.  it should be smaller than max_int / p.
@@ -283,52 +453,16 @@ namespace mxx2 {
     bool smaller = (max_count < (::std::numeric_limits<int>::max() / p));
     smaller = mxx::test_all(smaller, comm);
 
-    if (!smaller && ::std::is_same<count_t, int>::value)
-      // more data than datatype or api can SAFELY handle.  throw error.
-      throw std::logic_error("Specified send count using int, but data size is greater than (max_int / p).  please convert to using size_t.");
-
-
-    if (smaller && ::std::is_same<count_t, size_t>::value) {
-      // convert count_t to int for send_count.  uses a2a.
-
-      std::vector<int> sc(send_counts.size());
-      ::std::transform(send_counts.begin(), send_counts.end(), sc.begin(), [](count_t const &x) { return x; });
-
-      // get counts and displacements
-      std::vector<int> rc = mxx::all2all(sc, 1, comm);
-      // get total size
-      std::size_t recv_size = ::std::accumulate(rc.begin(), rc.end(), 0);
-      std::vector<T> recv_buffer(recv_size);
-      // all-2-all  - automatically chooses between isend/irecv version or collective version based on type of count_t
-      ::mxx::all2all(buffer.begin(), recv_buffer.begin(), sc, rc, comm);
-
-      // return the buffer
-      buffer.swap(recv_buffer);
-
-      // convert recv_count from int to count_t
-      std::vector<count_t> recv_counts(rc.size());
-      ::std::transform(rc.begin(), rc.end(), recv_counts.begin(), [](int const &x) { return x; });
-
-      // return the receive buffer
-      return recv_counts;
-
-    } else {  // else smaller & using int, or larger & using size_t.  use mxx api as is.
-
-
-      // get counts and displacements
-      std::vector<count_t> recv_counts = mxx::all2all(send_counts, 1, comm);
-      // get total size
-      std::size_t recv_size = ::std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
-      std::vector<T> recv_buffer(recv_size);
-      // all-2-all  - automatically chooses between isend/irecv version or collective version based on type of count_t
-      ::mxx::all2all(buffer.begin(), recv_buffer.begin(), send_counts, recv_counts, comm);
-
-      // return the buffer
-      buffer.swap(recv_buffer);
-      // return the receive buffer
-      return recv_counts;
-    }
+    if (smaller && ::std::is_same<count_t, size_t>::value)
+      return ::mxx2::all2all_cast<int>(buffer, send_counts, comm);
+    else if (smaller && ::std::is_same<count_t, int>::value)
+      return ::mxx2::all2all_nocast(buffer, send_counts, comm);
+    else if (!smaller && ::std::is_same<count_t, size_t>::value)
+      return ::mxx2::all2all_nocast(buffer, send_counts, comm);
+    else
+      return ::mxx2::all2all_cast<size_t>(buffer, send_counts, comm);
   }
+
 
 //
 //  /// send only unique elements.  bucketing via in-place bucketing, and unique is computed per bucket.
@@ -611,11 +745,14 @@ namespace mxx2 {
     MPI_Comm_size(comm, &p);
 
     size_t count = v.size() / p;
+    MPI_Bcast(&count, 1, MPI_LONG, 0, comm);
 
+    if (count == 0)
+      WARNINGF("ERROR: mxx2::scattern called with %lu elements, not enough elements to sent to communicator size %d", v.size(), p);
     if ((v.size() %p) != 0)
       WARNINGF("WARNING: mxx2::scattern called with %lu elements, some elements not sent %lu", v.size(), v.size() % p);
 
-    ::std::vector<T> results;
+    ::std::vector<T> results(count);
 
     // perform gather  - does not explicitly support large count.
     MPI_Scatter(&(v[0]), count, dt.type(), &(results[0]), count, dt.type(), root, comm);
@@ -647,14 +784,17 @@ namespace mxx2 {
   }
 
   template <typename T>
-  T scatter(::std::vector<T> const & v, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+  T scatter(::std::vector<T>& v, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
     // get data type
     ::mxx::datatype<T> dt;
 
     // allocate result
     int p;
+    int rank;
     MPI_Comm_size(comm, &p);
-    if (v.size() < p)
+    MPI_Comm_rank(comm, &rank);
+
+    if (rank == root && v.size() < p)
       WARNINGF("ERROR: mxx2::scatter called with %lu elements, less than p (%d)", v.size(), p);
 
     T results;
@@ -662,6 +802,157 @@ namespace mxx2 {
     // perform gather  - does not explicitly support large count.
     MPI_Scatter(&(v[0]), 1, dt.type(), &results, 1, dt.type(), root, comm);
     // return result
+    return results;
+  }
+
+
+  template <typename Iterator, typename T = typename ::std::iterator_traits<Iterator>::value_type>
+  ::std::vector<T> 
+  scatterv(Iterator begin, ::std::vector<int>& send_counts, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+
+    // get the amount to receive.
+    int count;
+    ::mxx::datatype<int> count_dt;
+    MPI_Scatter(&(send_counts[0]), 1, count_dt.type(), &count, 1, count_dt.type(), root, comm);
+
+    // get the data's type
+    ::mxx::datatype<T> dt;
+
+    // allocate the output
+    ::std::vector<T> results;
+    results.resize(count);
+
+    // displacements in source.
+    auto send_displ = ::mxx::get_displacements(send_counts);
+   
+    // now determine if we should send via scatterv or isend/irecv
+    int rank;
+    int p;
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &p);
+
+    size_t total = 0;
+    if (rank == root) {
+      for (int i = 0; i < p; ++i) {
+        total += send_counts[i];
+      }
+    }
+    MPI_Bcast(&total, 1, MPI_LONG, root, comm);
+
+    bool smaller = (total <= static_cast<size_t>(::std::numeric_limits<int>::max()));
+
+    if (smaller) {  // total amount to send is smaller than max int, so can use scatterv.
+        // using int.  no conversion needed.
+
+        MPI_Scatterv(begin, &(send_counts[0]), &(send_displ[0]), dt.type(), &(results[0]), count, dt.type(), root, comm);
+    } else {  // not smaller.  need isend/irecv.
+
+      // check to see if each isend has fewer than max_int number of elements.
+      int max_count = 0;
+      if (rank == root) {
+        max_count = ::std::max(send_counts.begin(), send_counts.end());
+      }
+      MPI_Bcast(&max_count, 1, MPI_LONG, 0, comm);
+
+      if (max_count > static_cast<size_t>(::std::numeric_limits<int>::max()))
+        throw ::std::logic_error("trying to send more than max_int number of elements.  implementation to handle this is not yet in place");
+
+
+      // set up the requests
+      ::std::vector<MPI_Request> reqs((rank == root) ? (p+1) : 1);
+
+      // everyone receives
+      MPI_Irecv(&(results[0]), count, dt.type(), 0, rank, comm, &(reqs[0]));
+
+      // root send
+      if (rank == root) {
+        for (int i = 0; i < p; ++i) {
+          MPI_Isend(begin + send_displ[i], send_counts[i], dt.type(), i, i, comm, &(reqs[i + 1]));
+        }
+      }
+
+      MPI_Waitall((rank == root) ? (p+1) : 1, &(reqs[0]), MPI_STATUSES_IGNORE);
+    }
+
+
+    return results;
+  }
+
+  template <typename Iterator, typename T = typename ::std::iterator_traits<Iterator>::value_type>
+  ::std::vector<T>
+  scatterv(Iterator begin, ::std::vector<size_t>& send_counts, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+
+    // get the amount to receive.
+    size_t count;
+    ::mxx::datatype<size_t> count_dt;
+    MPI_Scatter(&(send_counts[0]), 1, count_dt.type(), &count, 1, count_dt.type(), root, comm);
+
+    // get the data's type
+    ::mxx::datatype<T> dt;
+
+    // allocate the output
+    ::std::vector<T> results;
+    results.resize(count);
+
+    // displacements in source.
+    auto send_displ = ::mxx::get_displacements(send_counts);
+
+    // now determine if we should send via scatterv or isend/irecv
+    int rank;
+    int p;
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &p);
+
+    size_t total = 0;
+    if (rank == root) {
+      for (int i = 0; i < p; ++i) {
+        total += send_counts[i];
+      }
+    }
+    MPI_Bcast(&total, 1, MPI_LONG, root, comm);
+
+    bool smaller = (total <= static_cast<size_t>(::std::numeric_limits<int>::max()));
+
+    if (smaller) {  // total amount to send is smaller than max int, so can use scatterv.
+        // convert to int
+        ::std::vector<int> sc(send_counts.size());
+        ::std::transform(send_counts.begin(), send_counts.end(), sc.begin(), [](size_t const& x) { return static_cast<int>(x); });
+      
+        // get displacements
+        ::std::vector<int> sd(send_counts.size());
+        ::std::transform(send_displ.begin(), send_displ.end(), sd.begin(), [](size_t const& x) { return static_cast<int>(x); });
+  
+        MPI_Scatterv(begin, &(sc[0]), &(sd[0]), dt.type(), &(results[0]), count, dt.type(), root, comm);
+    } else {  // not smaller.  need isend/irecv.
+  
+      // check to see if each isend has fewer than max_int number of elements.
+      size_t max_count = 0;
+      if (rank == root) {
+        max_count = *(::std::max(send_counts.begin(), send_counts.end()));
+      }
+      MPI_Bcast(&max_count, 1, MPI_LONG, 0, comm);
+
+      if (max_count > static_cast<size_t>(::std::numeric_limits<int>::max()))
+        throw ::std::logic_error("trying to send more than max_int number of elements.  implementation to handle this is not yet in place");
+
+
+      // set up the requests
+      ::std::vector<MPI_Request> reqs((rank == root) ? (p+1) : 1);
+
+      // everyone receives
+      MPI_Irecv(&(results[0]), count, dt.type(), 0, rank, comm, &(reqs[0]));
+
+      // root send
+      if (rank == root) {
+        for (int i = 0; i < p; ++i) {
+          MPI_Isend(begin + send_displ[i], send_counts[i], dt.type(), i, i, comm, &(reqs[i + 1]));
+        }
+      }
+
+      MPI_Waitall((rank == root) ? (p+1) : 1, &(reqs[0]), MPI_STATUSES_IGNORE);
+    }
+  
+  
     return results;
   }
 
