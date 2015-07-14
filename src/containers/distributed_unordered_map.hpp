@@ -295,10 +295,10 @@ namespace dsc  // distributed std container
           size_t before = c.size();
           this->c.reserve(before + ::std::distance(first, last));
 
-//          for (auto it = first; it != last; ++it) {
-//            c.emplace(::std::move(*it));
-//          }
-          c.insert(first, last);
+          for (auto it = first; it != last; ++it) {
+            c.emplace(::std::move(*it));
+          }
+//          c.insert(first, last);  // mem usage?
           return c.size() - before;
       }
 
@@ -673,7 +673,7 @@ namespace dsc  // distributed std container
         ::std::unordered_set<Key, TransformedHash, typename Base::TransformedEqual > temp;
         temp.reserve(c.size());
         for (auto it = c.begin(), end = c.end(); it != end; ++it) {
-          temp.emplace(it->first);
+          temp.emplace((*it).first);
         }
         result.assign(temp.begin(), temp.end());
       }
@@ -1242,7 +1242,12 @@ namespace dsc  // distributed std container
         return this->key_multiplicity;
       }
 */
-
+      virtual size_t update_multiplicity() const {
+        printf("unordered map bucket count: %lu\n", this->c.bucket_count());
+        printf("unordered map load factor: %f\n", this->c.load_factor());
+        printf("unordered map unique entries: %lu\n", this->c.size());
+        return this->key_multiplicity;
+      }
 
       /**
        * @brief insert new elements in the distributed unordered_multimap.
@@ -1776,7 +1781,7 @@ namespace dsc  // distributed std container
         this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
         //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
 
-        this->c.shrink_to_fit();
+        this->c.report();
 
         return this->c.get_max_multiplicity();
 
@@ -1829,6 +1834,236 @@ namespace dsc  // distributed std container
       }
 
   };
+
+
+  /**
+   * @brief  distributed unordered multimap following std unordered multimap's interface.
+   * @details   This class is modeled after the std::unordered_multimap.
+   *         it does not have all the methods of std::unordered_multimap.  Whatever methods that are present considers the fact
+   *         that the data are in distributed memory space, so to access the data, "communication" is needed.
+   *
+   *         Iterators are assumed to be local rather than distributed, so methods that returns iterators are not provided.
+   *         as an alternative, vectors are returned.
+   *         methods that accept iterators as input assume that the input data is local.
+   *
+   *         Note that "communication" is a weak concept here meaning that we are accessing a different local container.
+   *         as such, communicator may be defined for MPI, UPC, OpenMP, etc.
+   *
+   *         This allows the possibility of using distributed unordered map as local storage for coarser grain distributed container.
+   *
+   *         Note that communicator requires a mapping strategy between a key and the target processor/thread/partition.  The mapping
+   *         may be done using a hash, similar to the local distributed unordered map, or it may be done via sorting/lookup or other mapping
+   *         mechanisms.  The choice may be constrained by the communication approach, e.g. global sorting  does not work well with
+   *         incremental async communication
+   *
+   * @tparam Key
+   * @tparam T
+   * @tparam Comm   default to mpi_collective_communicator       communicator for global communication. may hash or sort.
+   * @tparam KeyTransform   transform function for the key.  can supply identity.  requires a single template argument (Key).  useful for mapping kmolecule to kmer.
+   * @tparam Hash   hash function for local and distribution.  requires a template arugment (Key), and a bool (prefix, chooses the MSBs of hash instead of LSBs)
+   * @tparam Equal   default to ::std::equal_to<Key>   equal function for the local storage.
+   * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
+   */
+  template<typename Key, typename T,
+  class Comm,
+  template <typename> class KeyTransform,
+  template <typename, bool> class Hash,
+  class Equal = ::std::equal_to<Key>,
+  class Alloc = ::std::allocator< ::std::pair<const Key, T> >
+  >
+  class unordered_multimap_compact_vec : public unordered_map_base<Key, T, ::fsc::unordered_compact_vecmap, Comm, KeyTransform, Hash, Equal, Alloc> {
+      using Base = unordered_map_base<Key, T, ::fsc::unordered_compact_vecmap, Comm, KeyTransform, Hash, Equal, Alloc>;
+
+
+    public:
+      using local_container_type = typename Base::local_container_type;
+
+      // std::unordered_multimap public members.
+      using key_type              = typename local_container_type::key_type;
+      using mapped_type           = typename local_container_type::mapped_type;
+      using value_type            = typename local_container_type::value_type;
+      using hasher                = typename local_container_type::hasher;
+      using key_equal             = typename local_container_type::key_equal;
+      using allocator_type        = typename local_container_type::allocator_type;
+      using reference             = typename local_container_type::reference;
+      using const_reference       = typename local_container_type::const_reference;
+      using pointer               = typename local_container_type::pointer;
+      using const_pointer         = typename local_container_type::const_pointer;
+      using iterator              = typename local_container_type::iterator;
+      using const_iterator        = typename local_container_type::const_iterator;
+      using size_type             = typename local_container_type::size_type;
+      using difference_type       = typename local_container_type::difference_type;
+
+    protected:
+
+      // defined Communicator as a friend
+      friend Comm;
+
+
+      struct LocalFind {
+          // unfiltered.
+          template<class DB, typename Query, class OutputIter>
+          size_t operator()(DB &db, Query const &v, OutputIter &output) const {
+              auto range = db.equal_range(v);
+
+//              // DEBUG
+//              bool equal = true;
+//              typename Base::TransformedEqual eq;
+//              for (auto it = range.first; it != range.second; ++it) {
+//                equal &= eq(*it, v);
+//              }
+//              if (!equal)  printf("ERROR: NOT EQUAL!");
+
+              output = ::std::copy(range.first, range.second, output);  // tons faster to emplace - almost 3x faster
+              return db.count(v);
+          }
+          // filtered element-wise.
+          template<class DB, typename Query, class OutputIter, class Predicate = Identity>
+          size_t operator()(DB &db, Query const &v, OutputIter &output,
+                            Predicate const& pred) const {
+              auto range = db.equal_range(v);
+
+              // add the output entry.
+              size_t count = 0;
+              if (pred(range.first, range.second)) {
+                for (auto it2 = range.first; it2 != range.second; ++it2) {
+                  if (pred(*it2)) {
+                    *output = *it2;
+                    ++output;
+                    ++count;
+                  }
+                }
+              }
+              return count;
+          }
+          // no filter by range AND elemenet for now.
+      } find_element;
+
+
+    public:
+
+
+      unordered_multimap_compact_vec(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {
+        //this->key_multiplicity = 10;
+      }
+
+      virtual ~unordered_multimap_compact_vec() {}
+
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+          Predicate const& pred = Predicate()) const {
+/*
+
+
+          // DEBUG
+
+          auto keys2 = keys;
+          auto result_a2a =  Base::find_a2a(find_element, keys2, sorted_input, pred);
+          auto result = Base::find(find_element, keys, sorted_input, pred);
+
+
+          // DEBUG
+          if (result.size() != result_a2a.size()) {
+              throw ::std::logic_error("ERROR: not same size");
+
+          }
+
+          ::std::stable_sort(result.begin(), result.end(), typename Base::Base::TransformedLess());
+          ::std::stable_sort(result_a2a.begin(), result_a2a.end(), typename Base::Base::TransformedLess());
+
+          typename Base::Base::TransformedEqual eq;
+          for (int i = 0; i < result_a2a.size(); ++i) {
+            if (!eq(result[i], result_a2a[i])) {
+              printf("failing at %d:  result: %s, result_a2a: %s\n", i, result[i].first.toAlphabetString().c_str(), result_a2a[i].first.toAlphabetString().c_str());
+              printf("  before   %d:  result: %s, result_a2a: %s\n", i-1, result[i-1].first.toAlphabetString().c_str(), result_a2a[i-1].first.toAlphabetString().c_str());
+              printf("  after    %d:  result: %s, result_a2a: %s\n", i+1, result[i+1].first.toAlphabetString().c_str(), result_a2a[i+1].first.toAlphabetString().c_str());
+              throw ::std::logic_error("ERROR: not same.");
+            }
+          }
+//          bool same = ::std::equal(result.begin(), result.end(), result_a2a.begin(), typename Base::Base::TransformedEqual());
+//          if (!same) throw ::std::logic_error("ERROR: not same.");
+
+          return result;
+*/
+          return Base::find(find_element, keys, sorted_input, pred);
+      }
+
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
+          return Base::find(find_element, pred);
+      }
+
+
+      /// update the multiplicity.  only multimap needs to do this.
+      virtual size_t update_multiplicity() {
+        // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
+        //  sum(count per key) / c.size.
+        // problem with this approach is that for unordered map, to get the count for a key is essentially O(count), so we get quadratic time.
+        // The approach is VERY SLOW for large repeat count.  - (0.0078125 human: 52 sec, synth: FOREVER.)
+
+        // a second approach is to count the number of unique key then divide the map size by that.
+        //  c.size / #unique.  requires unique set
+        // To find unique set, we take each bucket, copy to vector, sort it, and then count unique.
+        // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
+        // but the n log(n) sort still grows with the duplicate count
+        size_t uniq_count = this->c.unique_size();
+        this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
+        //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
+
+        this->c.report();
+
+        return this->c.get_max_multiplicity();
+
+      }
+
+      /**
+       * @brief insert new elements in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <typename Predicate = Identity>
+      size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
+        TIMER_INIT(insert);
+
+        TIMER_START(insert);
+        TIMER_END(insert, "begin", input.size());
+
+        //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm_rank, sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
+        //        count_unique(input);
+        //        count_unique(bucketing(input, this->key_to_rank, this->comm));
+
+        // communication part
+        if (this->comm_size > 1) {
+          TIMER_START(insert);
+          // map to procs
+          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(input, this->key_to_rank, this->comm_size);
+          TIMER_END(insert, "bucket", input.size());
+
+          TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
+          mxx2::all2all(input, send_counts, this->comm);
+          TIMER_END(insert, "a2a", input.size());
+        }
+
+        // reserve should be done outside of insert.
+
+
+        TIMER_START(insert);
+        // local compute part.  called by the communicator.
+        size_t count = 0;
+        if (!::std::is_same<Predicate, Identity>::value)
+          count = this->Base::local_insert(input.begin(), input.end(), pred);
+        else
+          count = this->Base::local_insert(input.begin(), input.end());
+        TIMER_END(insert, "insert", this->c.size());
+
+        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+        return count;
+
+      }
+
+  };
+
 
 
 } /* namespace dsc */
