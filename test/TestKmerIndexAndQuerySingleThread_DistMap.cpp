@@ -42,7 +42,7 @@
 
 template <typename KmerType>
 std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
-  using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
+  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
 
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   // from FileLoader type, get the block iter type and range type
@@ -357,6 +357,28 @@ int main(int argc, char** argv) {
   testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, sort, pos+qual index");
     MPI_Barrier(comm);
 }
+
+  if (which == -1 || which == 9)
+  {
+  using MapType = ::dsc::unordered_multimap_compact_vec<
+      KmerType, IdType, int,
+      bliss::kmer::transform::lex_less,
+      bliss::kmer::hash::farm >;
+  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, hashvec2, position index.");
+
+  MPI_Barrier(comm);
+  }
+
+  if (which == -1 || which == 10)
+  {
+  using MapType = ::dsc::unordered_multimap_compact_vec<
+      KmerType, KmerInfoType, int,
+      bliss::kmer::transform::lex_less,
+      bliss::kmer::hash::farm >;
+  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, hashvec2, pos+qual index");
+    MPI_Barrier(comm);
+}
+
 
 //
 //

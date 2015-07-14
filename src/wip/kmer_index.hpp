@@ -83,22 +83,7 @@ namespace bliss
 
           using Alphabet = typename KmerType::KmerAlphabet;
 
-          using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
 
-          //====  now process the file, one L1 block (block partition by MPI Rank) at a time
-          // from FileLoader type, get the block iter type and range type
-          using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
-
-          using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
-          using SeqType = typename ParserType::SequenceType;
-          using SeqIterType = bliss::io::SequencesIterator<ParserType>;
-
-
-          /// converter from ascii to alphabet values
-          using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
-
-          /// kmer generation iterator
-          using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
 
 
           MPI_Comm comm;
@@ -118,9 +103,27 @@ namespace bliss
           }
 
 
-          std::vector<KmerType> read_file_for_kmers(const std::string & filename, MPI_Comm comm) {
+          size_t read_file(const std::string & filename, std::vector<KmerType> & result, MPI_Comm comm) {
 
-            std::vector< KmerType > result;
+            using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
+
+            //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+            // from FileLoader type, get the block iter type and range type
+            using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
+
+            using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
+            using SeqType = typename ParserType::SequenceType;
+            using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+
+
+            /// converter from ascii to alphabet values
+            using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+
+            /// kmer generation iterator
+            using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+
+
+            size_t before = result.size();
             ::fsc::back_emplace_iterator<std::vector< KmerType > > emplace_iter(result);
 
             TIMER_INIT(file);
@@ -185,9 +188,150 @@ namespace bliss
             }
 
             TIMER_REPORT_MPI(file, commRank, comm);
-            return result;
+            return result.size() - before;
           }
 
+
+          size_t read_file_mpi_subcomm(const std::string & filename, std::vector<KmerType>& result, MPI_Comm comm) {
+
+            // split the communcator so 1 proc from each host does the read, then redistribute.
+            MPI_Comm group_leaders;
+            MPI_Comm group;
+            ::std::tie(group_leaders, group) = ::mxx2::split_communicator_by_host(comm);
+
+            int g_size, g_rank;
+            MPI_Comm_rank(group, &g_rank);
+            MPI_Comm_size(group, &g_size);
+
+            int gl_size = MPI_UNDEFINED;
+            int gl_rank = MPI_UNDEFINED;
+            if (group_leaders != MPI_COMM_NULL) {
+              MPI_Comm_rank(group_leaders, &gl_rank);
+              MPI_Comm_size(group_leaders, &gl_size);
+            }
+
+            // raw data type :  use CharType.   block partition at L1 and L2.  no buffering at all, since we will be copying data to the group members anyways.
+            using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false, bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >;
+
+            //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+            // from FileLoader type, get the block iter type and range type
+            using FileBlockIterType = typename FileLoaderType::L2BlockType::iterator;
+
+
+            using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
+            using SeqType = typename ParserType::SequenceType;
+            using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+
+            /// converter from ascii to alphabet values
+            using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+
+            /// kmer generation iterator
+            using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+
+
+            ::fsc::back_emplace_iterator<std::vector< KmerType > > emplace_iter(result);
+
+            size_t before = result.size();
+
+            TIMER_INIT(file);
+
+            {
+              typename FileLoaderType::L2BlockType block;
+              typename FileLoaderType::RangeType range;
+              ::std::vector<CharType> data;
+
+              ::std::vector<typename FileLoaderType::RangeType> ranges;
+              ::std::vector<size_t> send_counts;
+              typename FileLoaderType::L1BlockType partition;
+
+              // first load the file using the group loader's communicator.
+              TIMER_START(file);
+              size_t est_size = 1;
+              if (group_leaders != MPI_COMM_NULL) {
+                //==== create file Loader
+                FileLoaderType loader(group_leaders, filename, g_size, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+                partition = loader.getNextL1Block();
+
+                //====  now compute the send counts and ranges to be scattered.
+                ranges.resize(g_size);
+                send_counts.resize(g_size);
+                for (size_t i = 0; i < g_size; ++i) {
+                  block = loader.getNextL2Block(i);
+                  send_counts[i] = block.getRange().size();
+                  ranges[i] = block.getRange();
+                }
+
+                // scatter the data .  this call here relies on FileLoader still having the memory mapped.
+                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+
+                // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
+                // index reserve internally sends a message to itself.
+                // call after getting first L1Block to ensure that file is loaded.
+                est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
+
+              } else {
+                // scatter the data.  here the partition does not need to be mapped.
+                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+              }
+
+              // scatter the ranges
+              range = ::mxx2::scatter(ranges, group, 0);
+
+              // now create the L2Blocks from the data  (reuse block)
+              block.assign(&(data[0]), &(data[0]) + range.size(), range);
+
+              TIMER_END(file, "open", data.size());
+
+
+
+              //== reserve
+              TIMER_START(file);
+              // broadcast the estimated size
+              MPI_Bcast(&est_size, 1, MPI_LONG, 0, group);
+              result.reserve(est_size);
+              TIMER_END(file, "reserve", est_size);
+
+
+
+              // == create kmer iterator
+              //            kmer_iter start(data, range);
+              //            kmer_iter end(range.second,range.second);
+
+              TIMER_START(file);
+
+              ParserType parser;
+              //=== copy kmers into array
+
+              //== process the chunk of data
+              SeqType read;
+
+              //==  and wrap the chunk inside an iterator that emits Reads.
+              SeqIterType seqs_start(parser, block.begin(), block.end(), block.getRange().start);
+              SeqIterType seqs_end(block.end());
+
+
+              //== loop over the reads
+              for (; seqs_start != seqs_end; ++seqs_start)
+              {
+                // first get read
+                read = *seqs_start;
+
+                // then compute and store into index (this will generate kmers and insert into index)
+                if (read.seqBegin == read.seqEnd) continue;
+
+                //== set up the kmer generating iterators.
+                KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
+                KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+
+                ::std::copy(start, end, emplace_iter);
+              }
+
+              TIMER_END(file, "read", result.size());
+            }
+
+            TIMER_REPORT_MPI(file, commRank, comm);
+            return result.size() - before;
+          }
 
 
           std::vector<TupleType> find(std::vector<KmerType> &query) {
@@ -237,6 +381,29 @@ namespace bliss
             return map.local_size();
           }
 
+          template <typename T>
+          void build(std::vector<T> &temp) {
+            TIMER_INIT(build);
+
+            TIMER_START(build);
+            this->map.reserve(this->map.size() + temp.size());
+            TIMER_END(build, "reserve", temp.size());
+
+
+            // distribute
+            TIMER_START(build);
+            this->map.insert(temp);
+            TIMER_END(build, "insert", this->map.local_size());
+
+
+            TIMER_START(build);
+            size_t m = this->map.update_multiplicity();
+            TIMER_END(build, "multiplicity", m);
+
+            TIMER_REPORT_MPI(build, this->commRank, this->comm);
+
+          }
+
       };
 
 
@@ -256,27 +423,6 @@ namespace bliss
           using Alphabet = typename KmerType::KmerAlphabet;
 
 
-          using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
-
-          //====  now process the file, one L1 block (block partition by MPI Rank) at a time
-          // from FileLoader type, get the block iter type and range type
-          using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
-
-          using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
-          using SeqType = typename ParserType::SequenceType;
-          using SeqIterType = bliss::io::SequencesIterator<ParserType>;
-
-
-          /// converter from ascii to alphabet values
-          using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
-
-          /// kmer generation iterator
-          using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
-          /// kmer position iterator type
-          using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
-
-          /// combine kmer iterator and position iterator to create an index iterator type.
-          using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, IdIterType>;
 
 
         public:
@@ -287,10 +433,34 @@ namespace bliss
           virtual ~PositionIndex() {};
 
 
-          std::vector<TupleType> read_file(const std::string & filename, MPI_Comm comm) {
-            std::vector< TupleType > temp;
-            ::fsc::back_emplace_iterator<std::vector< TupleType > > emplace_iter(temp);
+          size_t read_file(const std::string & filename, std::vector<TupleType> & result, MPI_Comm comm) {
 
+            using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
+
+            //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+            // from FileLoader type, get the block iter type and range type
+            using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
+
+            using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
+            using SeqType = typename ParserType::SequenceType;
+            using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+
+
+            /// converter from ascii to alphabet values
+            using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+
+            /// kmer generation iterator
+            using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+            /// kmer position iterator type
+            using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
+
+            /// combine kmer iterator and position iterator to create an index iterator type.
+            using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, IdIterType>;
+
+
+            ::fsc::back_emplace_iterator<std::vector< TupleType > > emplace_iter(result);
+
+            size_t before = result.size();
             TIMER_INIT(file);
 
             {
@@ -307,7 +477,7 @@ namespace bliss
               // index reserve internally sends a message to itself.
               // call after getting first L1Block to ensure that file is loaded.
               size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + this->commSize - 1) / this->commSize;
-              temp.reserve(est_size);
+              result.reserve(est_size);
 
               TIMER_END(file, "reserve", est_size);
 
@@ -355,13 +525,169 @@ namespace bliss
                 partition = loader.getNextL1Block();
               }
 
-              TIMER_END(file, "read", temp.size());
+              TIMER_END(file, "read", result.size());
 
             }
             TIMER_REPORT_MPI(file, this->commRank, this->comm);
 
 
-            return temp;
+            return result.size() - before;
+          }
+
+          size_t read_file_mpi_subcomm(const std::string & filename, std::vector<TupleType>& result, MPI_Comm comm) {
+
+            // split the communcator so 1 proc from each host does the read, then redistribute.
+            MPI_Comm group_leaders;
+            MPI_Comm group;
+            ::std::tie(group_leaders, group) = ::mxx2::split_communicator_by_host(comm);
+
+            int g_size, g_rank;
+            MPI_Comm_rank(group, &g_rank);
+            MPI_Comm_size(group, &g_size);
+
+            int gl_size = MPI_UNDEFINED;
+            int gl_rank = MPI_UNDEFINED;
+            if (group_leaders != MPI_COMM_NULL) {
+              MPI_Comm_rank(group_leaders, &gl_rank);
+              MPI_Comm_size(group_leaders, &gl_size);
+            }
+
+            // raw data type :  use CharType.   block partition at L1 and L2.  no buffering at all, since we will be copying data to the group members anyways.
+            using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false, bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >;
+
+            //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+            // from FileLoader type, get the block iter type and range type
+            using FileBlockIterType = typename FileLoaderType::L2BlockType::iterator;
+
+
+            using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
+            using SeqType = typename ParserType::SequenceType;
+            using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+
+            /// converter from ascii to alphabet values
+            using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+
+            /// kmer generation iterator
+            using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+            /// kmer position iterator type
+            using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
+
+            /// combine kmer iterator and position iterator to create an index iterator type.
+            using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, IdIterType>;
+
+
+            ::fsc::back_emplace_iterator<std::vector< TupleType > > emplace_iter(result);
+
+            size_t before = result.size();
+
+            TIMER_INIT(file);
+
+            {
+              typename FileLoaderType::L2BlockType block;
+              typename FileLoaderType::RangeType range;
+              ::std::vector<CharType> data;
+
+              ::std::vector<typename FileLoaderType::RangeType> ranges;
+              ::std::vector<size_t> send_counts;
+              typename FileLoaderType::L1BlockType partition;
+
+              // first load the file using the group loader's communicator.
+              TIMER_START(file);
+              size_t est_size = 1;
+              if (group_leaders != MPI_COMM_NULL) {
+                //==== create file Loader
+                FileLoaderType loader(group_leaders, filename, g_size, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+                partition = loader.getNextL1Block();
+
+                //====  now compute the send counts and ranges to be scattered.
+                ranges.resize(g_size);
+                send_counts.resize(g_size);
+                for (size_t i = 0; i < g_size; ++i) {
+                  block = loader.getNextL2Block(i);
+                  send_counts[i] = block.getRange().size();
+                  ranges[i] = block.getRange();
+                }
+
+                // scatter the data .  this call here relies on FileLoader still having the memory mapped.
+                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+
+                // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
+                // index reserve internally sends a message to itself.
+                // call after getting first L1Block to ensure that file is loaded.
+                est_size = (loader.getKmerCountEstimate(KmerType::size) + this->commSize - 1) / this->commSize;
+
+              } else {
+                // scatter the data.  here the partition does not need to be mapped.
+                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+              }
+
+              // scatter the ranges
+              range = ::mxx2::scatter(ranges, group, 0);
+
+              // now create the L2Blocks from the data  (reuse block)
+              block.assign(&(data[0]), &(data[0]) + range.size(), range);
+
+              TIMER_END(file, "open", data.size());
+
+
+
+              //== reserve
+              TIMER_START(file);
+              // broadcast the estimated size
+              MPI_Bcast(&est_size, 1, MPI_LONG, 0, group);
+              result.reserve(est_size);
+              TIMER_END(file, "reserve", est_size);
+
+
+
+              // == create kmer iterator
+              //            kmer_iter start(data, range);
+              //            kmer_iter end(range.second,range.second);
+
+              TIMER_START(file);
+
+              ParserType parser;
+              //=== copy kmers into array
+
+              //== process the chunk of data
+              SeqType read;
+
+              //==  and wrap the chunk inside an iterator that emits Reads.
+              SeqIterType seqs_start(parser, block.begin(), block.end(), block.getRange().start);
+              SeqIterType seqs_end(block.end());
+
+
+              //== loop over the reads
+              for (; seqs_start != seqs_end; ++seqs_start)
+              {
+                // first get read
+                read = *seqs_start;
+
+                // then compute and store into index (this will generate kmers and insert into index)
+                if (read.seqBegin == read.seqEnd) continue;
+
+                //== set up the kmer generating iterators.
+                KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
+                KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+
+                //== set up the position iterators
+                IdIterType id_start(read.id);
+                IdIterType id_end(read.id);
+
+                // ==== set up the zip iterators
+                KmerIndexIterType index_start(start, id_start);
+                KmerIndexIterType index_end(end, id_end);
+
+
+                ::std::copy(index_start, index_end, emplace_iter);
+              }
+
+              TIMER_END(file, "read", result.size());
+            }
+
+            TIMER_REPORT_MPI(file, this->commRank, this->comm);
+
+            return result.size() - before;
           }
 
 
@@ -371,31 +697,20 @@ namespace bliss
             //            distributed_file df;
             //            range = df.open(filename, communicator);  // memmap internally
             //            data = df.data();
-            ::std::vector<TupleType> temp =
-             this->read_file(filename, comm);
-            build(temp);
+            ::std::vector<TupleType> temp;
+             this->read_file(filename, temp, comm);
+             this->Base::build(temp);
           }
+          void build_with_mpi_subcomm(const std::string & filename, MPI_Comm comm) {
+            // ==  open file
+            //            distributed_file df;
+            //            range = df.open(filename, communicator);  // memmap internally
+            //            data = df.data();
 
-          void build(std::vector<TupleType> &temp) {
-            TIMER_INIT(build);
+            ::std::vector<TupleType> temp;
+            this->read_file_mpi_subcomm(filename, temp, comm);
 
-            TIMER_START(build);
-            this->map.reserve(this->map.size() + temp.size());
-            TIMER_END(build, "reserve", temp.size());
-
-
-            // distribute
-            TIMER_START(build);
-            this->map.insert(temp);
-            TIMER_END(build, "insert", this->map.local_size());
-
-
-            TIMER_START(build);
-            size_t m = this->map.update_multiplicity();
-            TIMER_END(build, "multiplicity", m);
-
-            TIMER_REPORT_MPI(build, this->commRank, this->comm);
-
+            this->Base::build(temp);
           }
 
 
@@ -420,29 +735,6 @@ namespace bliss
           using IdType = typename KmerInfoType::first_type;
           using QualType = typename KmerInfoType::second_type;
 
-          using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
-          using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
-
-          //====  now process the file, one L1 block (block partition by MPI Rank) at a time
-
-          using ParserType = bliss::io::FASTQParser<FileBlockIterType, QualType>;
-          using SeqType = typename ParserType::SequenceType;
-          using SeqIterType = bliss::io::SequencesIterator<ParserType>;
-
-
-          /// converter from ascii to alphabet values
-          using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
-
-          /// kmer generation iterator
-          using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
-          /// kmer position iterator type
-          using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
-
-          using QualIterType = bliss::index::QualityScoreGenerationIterator<typename SeqType::IteratorType, 21, bliss::index::Illumina18QualityScoreCodec<QualType> >;
-
-          /// combine kmer iterator and position iterator to create an index iterator type.
-          using KmerInfoIterType = bliss::iterator::ZipIterator<IdIterType, QualIterType>;
-          using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, KmerInfoIterType>;
 
 
         public:
@@ -454,10 +746,36 @@ namespace bliss
           virtual ~PositionQualityIndex() {};
 
 
-          std::vector<TupleType> read_file(const std::string & filename, MPI_Comm comm) {
-            std::vector< TupleType > temp;
-            ::fsc::back_emplace_iterator<std::vector< TupleType > > emplace_iter(temp);
+          size_t read_file(const std::string & filename, std::vector<TupleType>& result, MPI_Comm comm) {
+            using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
 
+            using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
+
+            //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+
+            using ParserType = bliss::io::FASTQParser<FileBlockIterType, QualType>;
+            using SeqType = typename ParserType::SequenceType;
+            using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+
+
+            /// converter from ascii to alphabet values
+            using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+
+            /// kmer generation iterator
+            using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+            /// kmer position iterator type
+            using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
+
+            using QualIterType = bliss::index::QualityScoreGenerationIterator<typename SeqType::IteratorType, 21, bliss::index::Illumina18QualityScoreCodec<QualType> >;
+
+            /// combine kmer iterator and position iterator to create an index iterator type.
+            using KmerInfoIterType = bliss::iterator::ZipIterator<IdIterType, QualIterType>;
+            using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, KmerInfoIterType>;
+
+
+            ::fsc::back_emplace_iterator<std::vector< TupleType > > emplace_iter(result);
+
+            size_t before = result.size();
             TIMER_INIT(file);
 
             {
@@ -473,7 +791,7 @@ namespace bliss
               // index reserve internally sends a message to itself.
               // call after getting first L1Block to ensure that file is loaded.
               size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + this->commSize - 1) / this->commSize;
-              temp.reserve(est_size);
+              result.reserve(est_size);
 
               TIMER_END(file, "reserve", est_size);
 
@@ -530,23 +848,193 @@ namespace bliss
                   //        for (auto it = index_start; it != index_end; ++it) {
                   //          temp.push_back(*it);
                   //        }
-                  //std::copy(index_start, index_end, temp.end());
-                  //        INFOF("R %d inserted.  new temp size = %lu", commRank, temp.size());
+                  //std::copy(index_start, index_end, result.end());
+                  //        INFOF("R %d inserted.  new temp size = %lu", commRank, result.size());
                 }
 
                 partition = loader.getNextL1Block();
               }
 
 
-              TIMER_END(file, "read", temp.size());
+              TIMER_END(file, "read", result.size());
 
 
             }
             TIMER_REPORT_MPI(file, this->commRank, this->comm);
 
 
-            return temp;
+            return result.size() - before;
           }
+
+
+          size_t read_file_mpi_subcomm(const std::string & filename, std::vector<TupleType>& result, MPI_Comm comm) {
+
+            // split the communcator so 1 proc from each host does the read, then redistribute.
+            MPI_Comm group_leaders;
+            MPI_Comm group;
+            ::std::tie(group_leaders, group) = ::mxx2::split_communicator_by_host(comm);
+
+            int g_size, g_rank;
+            MPI_Comm_rank(group, &g_rank);
+            MPI_Comm_size(group, &g_size);
+
+            int gl_size = MPI_UNDEFINED;
+            int gl_rank = MPI_UNDEFINED;
+            if (group_leaders != MPI_COMM_NULL) {
+              MPI_Comm_rank(group_leaders, &gl_rank);
+              MPI_Comm_size(group_leaders, &gl_size);
+            }
+
+            // raw data type :  use CharType.   block partition at L1 and L2.  no buffering at all, since we will be copying data to the group members anyways.
+            using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false, bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >;
+
+            //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+            // from FileLoader type, get the block iter type and range type
+            using FileBlockIterType = typename FileLoaderType::L2BlockType::iterator;
+
+
+            using ParserType = bliss::io::FASTQParser<FileBlockIterType, QualType>;
+            using SeqType = typename ParserType::SequenceType;
+            using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+
+            /// converter from ascii to alphabet values
+            using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+
+            /// kmer generation iterator
+            using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+            /// kmer position iterator type
+            using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
+
+            using QualIterType = bliss::index::QualityScoreGenerationIterator<typename SeqType::IteratorType, 21, bliss::index::Illumina18QualityScoreCodec<QualType> >;
+
+
+            /// combine kmer iterator and position iterator to create an index iterator type.
+            using KmerInfoIterType = bliss::iterator::ZipIterator<IdIterType, QualIterType>;
+            using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, KmerInfoIterType>;
+
+
+            ::fsc::back_emplace_iterator<std::vector< TupleType > > emplace_iter(result);
+
+            size_t before = result.size();
+
+            TIMER_INIT(file);
+
+            {
+              typename FileLoaderType::L2BlockType block;
+              typename FileLoaderType::RangeType range;
+              ::std::vector<CharType> data;
+
+              ::std::vector<typename FileLoaderType::RangeType> ranges;
+              ::std::vector<size_t> send_counts;
+              typename FileLoaderType::L1BlockType partition;
+
+              // first load the file using the group loader's communicator.
+              TIMER_START(file);
+              size_t est_size = 1;
+              if (group_leaders != MPI_COMM_NULL) {
+                //==== create file Loader
+                FileLoaderType loader(group_leaders, filename, g_size, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+                partition = loader.getNextL1Block();
+
+                //====  now compute the send counts and ranges to be scattered.
+                ranges.resize(g_size);
+                send_counts.resize(g_size);
+                for (size_t i = 0; i < g_size; ++i) {
+                  block = loader.getNextL2Block(i);
+                  send_counts[i] = block.getRange().size();
+                  ranges[i] = block.getRange();
+                }
+
+                // scatter the data .  this call here relies on FileLoader still having the memory mapped.
+                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+
+                // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
+                // index reserve internally sends a message to itself.
+                // call after getting first L1Block to ensure that file is loaded.
+                est_size = (loader.getKmerCountEstimate(KmerType::size) + this->commSize - 1) / this->commSize;
+
+              } else {
+                // scatter the data.  here the partition does not need to be mapped.
+                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+              }
+
+              // scatter the ranges
+              range = ::mxx2::scatter(ranges, group, 0);
+
+              // now create the L2Blocks from the data  (reuse block)
+              block.assign(&(data[0]), &(data[0]) + range.size(), range);
+
+              TIMER_END(file, "open", data.size());
+
+
+
+              //== reserve
+              TIMER_START(file);
+              // broadcast the estimated size
+              MPI_Bcast(&est_size, 1, MPI_LONG, 0, group);
+              result.reserve(est_size);
+              TIMER_END(file, "reserve", est_size);
+
+
+
+              // == create kmer iterator
+              //            kmer_iter start(data, range);
+              //            kmer_iter end(range.second,range.second);
+
+              TIMER_START(file);
+
+              ParserType parser;
+              //=== copy kmers into array
+
+              //== process the chunk of data
+              SeqType read;
+
+              //==  and wrap the chunk inside an iterator that emits Reads.
+              SeqIterType seqs_start(parser, block.begin(), block.end(), block.getRange().start);
+              SeqIterType seqs_end(block.end());
+
+
+              //== loop over the reads
+              for (; seqs_start != seqs_end; ++seqs_start)
+              {
+                // first get read
+                read = *seqs_start;
+
+                // then compute and store into index (this will generate kmers and insert into index)
+                if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) continue;
+
+                //== set up the kmer generating iterators.
+                KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
+                KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+
+                //== set up the position iterators
+                IdIterType id_start(read.id);
+                IdIterType id_end(read.id);
+
+                QualIterType qual_start(read.qualBegin);
+                QualIterType qual_end(read.qualEnd);
+
+                KmerInfoIterType info_start(id_start, qual_start);
+                KmerInfoIterType info_end(id_end, qual_end);
+
+
+                // ==== set up the zip iterators
+                KmerIndexIterType index_start(start, info_start);
+                KmerIndexIterType index_end(end, info_end);
+
+
+                ::std::copy(index_start, index_end, emplace_iter);
+              }
+
+              TIMER_END(file, "read", result.size());
+            }
+
+            TIMER_REPORT_MPI(file, this->commRank, this->comm);
+
+            return result.size() - before;
+          }
+
+
 
           void build(const std::string & filename, MPI_Comm comm) {
             // ==  open file
@@ -554,31 +1042,22 @@ namespace bliss
             //            range = df.open(filename, communicator);  // memmap internally
             //            data = df.data();
 
-            ::std::vector<TupleType> temp = this->read_file(filename, comm);
+            ::std::vector<TupleType> temp;
+            this->read_file(filename, temp, comm);
 
-            build(temp);
+            this->Base::build(temp);
           }
 
-          void build(std::vector<TupleType> &temp) {
-            TIMER_INIT(build);
+          void build_with_mpi_subcomm(const std::string & filename, MPI_Comm comm) {
+            // ==  open file
+            //            distributed_file df;
+            //            range = df.open(filename, communicator);  // memmap internally
+            //            data = df.data();
 
-            TIMER_START(build);
-            this->map.reserve(this->map.size() + temp.size());
-            TIMER_END(build, "reserve", temp.size());
+            ::std::vector<TupleType> temp;
+            this->read_file_mpi_subcomm(filename, temp, comm);
 
-
-            // distribute
-            TIMER_START(build);
-            this->map.insert(temp);
-            TIMER_END(build, "insert", this->map.local_size());
-
-
-            TIMER_START(build);
-            size_t m = this->map.update_multiplicity();
-            TIMER_END(build, "multiplicity", m);
-
-            TIMER_REPORT_MPI(build, this->commRank, this->comm);
-
+            this->Base::build(temp);
           }
 
       };
@@ -606,9 +1085,6 @@ namespace bliss
 
           virtual ~CountIndex() {};
 
-          std::vector<KmerType> read_file(const std::string & filename, MPI_Comm comm) {
-            return this->read_file_for_kmers(filename, comm);
-          }
 
           void build(const std::string & filename, MPI_Comm comm) {
             // ==  open file
@@ -616,32 +1092,24 @@ namespace bliss
             //            range = df.open(filename, communicator);  // memmap internally
             //            data = df.data();
 
-            ::std::vector<KmerType> temp = this->read_file(filename, comm);
+            ::std::vector<KmerType> temp;
+            this->read_file(filename, temp, comm);
 
-            build(temp);
+            this->Base::build(temp);
           }
 
-          void build(std::vector<KmerType> &temp) {
-            TIMER_INIT(build);
+          void build_with_mpi_subcomm(const std::string & filename, MPI_Comm comm) {
+            // ==  open file
+            //            distributed_file df;
+            //            range = df.open(filename, communicator);  // memmap internally
+            //            data = df.data();
 
-            TIMER_START(build);
-            this->map.reserve(this->map.size() + temp.size());
-            TIMER_END(build, "reserve", temp.size());
+            ::std::vector<KmerType> temp;
+            this->read_file_mpi_subcomm(filename, temp, comm);
 
-
-            // distribute
-            TIMER_START(build);
-            this->map.insert(temp);
-            TIMER_END(build, "insert", this->map.local_size());
-
-
-            TIMER_START(build);
-            size_t m = this->map.update_multiplicity();
-            TIMER_END(build, "multiplicity", m);
-
-            TIMER_REPORT_MPI(build, this->commRank, this->comm);
-
+            this->Base::build(temp);
           }
+
 
 
       };

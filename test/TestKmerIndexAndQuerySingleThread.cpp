@@ -38,7 +38,7 @@
 
 template <typename KmerType>
 std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
-  using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
+  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
 
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   // from FileLoader type, get the block iter type and range type
@@ -334,7 +334,7 @@ class PositionIndex {
     //            range = df.open(filename, communicator);  // memmap internally
     //            data = df.data();
 
-      using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
+      using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
 
       //====  now process the file, one L1 block (block partition by MPI Rank) at a time
       // from FileLoader type, get the block iter type and range type
@@ -488,7 +488,7 @@ class PositionQualityIndex {
 //            data = df.data();
 
 
-  using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
+  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
   using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
 
 
@@ -650,7 +650,7 @@ class CountIndex {
 //  using TupleType = std::pair<KmerType, IdType>;
   using Alphabet = typename KmerType::KmerAlphabet;
 
-  using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
+  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
 
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   // from FileLoader type, get the block iter type and range type
