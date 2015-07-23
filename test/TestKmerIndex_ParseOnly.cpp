@@ -9,6 +9,9 @@
  *
  * TODO add License
  */
+
+#define BENCHMARK 1
+
 #include "config.hpp"
 
 #include <unistd.h>  // get hostname
@@ -277,7 +280,7 @@ int main(int argc, char** argv) {
       KmerType, uint32_t, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, hash, count index.");
+  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, hash, all read, count index.");
     MPI_Barrier(comm);
 }
 
@@ -287,7 +290,7 @@ int main(int argc, char** argv) {
       KmerType, uint32_t, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex2<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, hash, count index.");
+  testIndex2<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, hash, read_and_dist, count index.");
     MPI_Barrier(comm);
 }
 

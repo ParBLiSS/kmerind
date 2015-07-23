@@ -32,7 +32,7 @@
  */
 
 
-
+#define BENCHMARK 1
 #include "farmhash.cc"
 #include <vector>
 #include <unordered_map>

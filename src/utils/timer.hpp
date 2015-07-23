@@ -12,7 +12,6 @@
 #ifndef SRC_UTILS_TIMER_HPP_
 #define SRC_UTILS_TIMER_HPP_
 
-#define BENCHMARK 1
 
 #if defined(BENCHMARK)
 
