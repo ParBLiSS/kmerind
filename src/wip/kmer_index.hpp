@@ -262,7 +262,7 @@ namespace bliss
                 }
 
                 // scatter the data .  this call here relies on FileLoader still having the memory mapped.
-                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+                data = ::mxx2::scatterv(partition.begin(), partition.end(), send_counts, group, 0);
 
                 // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
                 // index reserve internally sends a message to itself.
@@ -271,7 +271,7 @@ namespace bliss
 
               } else {
                 // scatter the data.  here the partition does not need to be mapped.
-                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+                data = ::mxx2::scatterv(partition.begin(), partition.end(), send_counts, group, 0);
               }
 
               // scatter the ranges
@@ -287,7 +287,8 @@ namespace bliss
               //== reserve
               TIMER_START(file);
               // broadcast the estimated size
-              MPI_Bcast(&est_size, 1, MPI_LONG, 0, group);
+              mxx::datatype<size_t> size_dt;
+              MPI_Bcast(&est_size, 1, size_dt.type(), 0, group);
               result.reserve(est_size);
               TIMER_END(file, "reserve", est_size);
 
@@ -609,7 +610,7 @@ namespace bliss
                 }
 
                 // scatter the data .  this call here relies on FileLoader still having the memory mapped.
-                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+                data = ::mxx2::scatterv(partition.begin(), partition.end(), send_counts, group, 0);
 
                 // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
                 // index reserve internally sends a message to itself.
@@ -618,7 +619,7 @@ namespace bliss
 
               } else {
                 // scatter the data.  here the partition does not need to be mapped.
-                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+                data = ::mxx2::scatterv(partition.begin(), partition.end(), send_counts, group, 0);
               }
 
               // scatter the ranges
@@ -634,7 +635,8 @@ namespace bliss
               //== reserve
               TIMER_START(file);
               // broadcast the estimated size
-              MPI_Bcast(&est_size, 1, MPI_LONG, 0, group);
+              mxx::datatype<size_t> size_dt;
+              MPI_Bcast(&est_size, 1, size_dt.type(), 0, group);
               result.reserve(est_size);
               TIMER_END(file, "reserve", est_size);
 
@@ -946,7 +948,7 @@ namespace bliss
                 }
 
                 // scatter the data .  this call here relies on FileLoader still having the memory mapped.
-                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+                data = ::mxx2::scatterv(partition.begin(), partition.end(), send_counts, group, 0);
 
                 // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
                 // index reserve internally sends a message to itself.
@@ -955,7 +957,7 @@ namespace bliss
 
               } else {
                 // scatter the data.  here the partition does not need to be mapped.
-                data = ::mxx2::scatterv(partition.begin(), send_counts, group, 0);
+                data = ::mxx2::scatterv(partition.begin(), partition.end(), send_counts, group, 0);
               }
 
               // scatter the ranges
@@ -971,7 +973,8 @@ namespace bliss
               //== reserve
               TIMER_START(file);
               // broadcast the estimated size
-              MPI_Bcast(&est_size, 1, MPI_LONG, 0, group);
+              mxx::datatype<size_t> size_dt;
+              MPI_Bcast(&est_size, 1, size_dt.type(), 0, group);
               result.reserve(est_size);
               TIMER_END(file, "reserve", est_size);
 

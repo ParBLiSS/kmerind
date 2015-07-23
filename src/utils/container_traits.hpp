@@ -15,16 +15,82 @@
 #include <utility>
 #include <type_traits>
 
+#include <vector>
+#include <string>
+#include <valarray>
+#include <array>
+
+
     // preprocessor macro to save some typing
 #define BLISS_UTILS_CONTAINER_HAS_METHOD_WITH_NAME(NAME) \
         template<typename CC = C> \
-        static constexpr auto has_##NAME(CC*) -> decltype(std::declval<CC>().NAME(), std::true_type()); \
+        static constexpr auto has_##NAME(CC*) -> decltype(std::declval<CC>().NAME(), ::std::true_type()); \
         template<typename> \
-        static constexpr std::false_type has_##NAME(...);
+        static constexpr ::std::false_type has_##NAME(...);
 
 
 namespace bliss {
   namespace utils {
+
+    // TCP test if iterator may be from a contiguous container.
+    template <typename Container>
+    struct container_mem_traits { static constexpr bool is_contiguous = false; };
+
+    template <>
+    template <typename T, typename A>
+    struct container_mem_traits<::std::vector<T, A> > { static constexpr bool is_contiguous = true; };
+
+    template <>
+    template <typename T, ::std::size_t N>
+    struct container_mem_traits<::std::array<T, N> > { static constexpr bool is_contiguous = true; };
+
+    template <>
+    template <typename CharT, typename Traits, typename Allocator>
+    struct container_mem_traits<::std::basic_string<CharT, Traits, Allocator>> { static constexpr bool is_contiguous = true; };
+
+    template <>
+    template <typename T>
+    struct container_mem_traits<::std::valarray<T> > { static constexpr bool is_contiguous = true; };
+
+    template <>
+    template <typename T>
+    struct container_mem_traits<::std::initializer_list<T> > { static constexpr bool is_contiguous = true; };
+
+
+    template <>
+    template <typename T>
+    struct container_mem_traits< T* > { static constexpr bool is_contiguous = true; };
+
+
+    template <typename Iterator>
+    static constexpr bool is_contiguous(Iterator) { return false; }
+
+    template <typename Container>
+    static constexpr bool is_contiguous(typename Container::iterator) { return container_mem_traits<Container>::is_contiguous; }
+
+    template <typename Container>
+    static constexpr bool is_contiguous(typename Container::const_iterator) { return container_mem_traits<Container>::is_contiguous; }
+
+    template <typename Container>
+    static constexpr bool is_contiguous(typename Container::reverse_iterator) { return container_mem_traits<Container>::is_contiguous; }
+
+    template <typename Container>
+    static constexpr bool is_contiguous(typename Container::const_reverse_iterator) { return container_mem_traits<Container>::is_contiguous; }
+
+    template <typename T>
+    static constexpr bool is_contiguous(decltype(::std::begin(std::declval<::std::valarray<T>& >()))) { return true; }
+
+    template <typename T>
+    static constexpr bool is_contiguous(decltype(::std::begin(std::declval<const ::std::valarray<T>& >()))) { return true; }
+
+    template <typename T, std::size_t N>
+    static constexpr bool is_contiguous(T (&array)[N]) { return true; }
+
+    template <typename T>
+    static constexpr bool is_contiguous(T*) { return true; }
+
+
+
 
     /**
      * @class container_traits
@@ -109,11 +175,11 @@ namespace bliss {
          */
         template<typename CC = C>
         static constexpr auto has_assign(CC*) ->
-            decltype(std::declval<CC>().assign(std::declval<decltype(std::declval<CC>().begin())>(),
-                                               std::declval<decltype(std::declval<CC>().end())>()
-                                               ), std::true_type());
+            decltype(std::declval<CC>().assign(::std::declval<decltype(std::declval<CC>().begin())>(),
+                                               ::std::declval<decltype(std::declval<CC>().end())>()
+                                               ), ::std::true_type());
         template<typename>
-        static constexpr std::false_type has_assign(...);
+        static constexpr ::std::false_type has_assign(...);
 
       public:
 
@@ -121,25 +187,26 @@ namespace bliss {
          * @var       isConstIterable
          * @brief     static bool indicating if container supports constant iteration (has cbegin and cend)
          */
-        static constexpr bool isConstIterable = std::is_same<decltype(has_cbegin<C>(nullptr)), std::true_type>::value
-                  && std::is_same<decltype(has_cend<C>(nullptr)), std::true_type>::value;
+        static constexpr bool isConstIterable = ::std::is_same<decltype(has_cbegin<C>(nullptr)), ::std::true_type>::value
+                  && ::std::is_same<decltype(has_cend<C>(nullptr)), ::std::true_type>::value;
 
 
         /**
          * @var       isIterable
          * @brief     static bool indicating if container supports iteration (has begin and end)
          */
-        static constexpr bool isIterable = std::is_same<decltype(has_begin<C>(nullptr)), std::true_type>::value
-            && std::is_same<decltype(has_end<C>(nullptr)), std::true_type>::value;
+        static constexpr bool isIterable = ::std::is_same<decltype(has_begin<C>(nullptr)), ::std::true_type>::value
+            && ::std::is_same<decltype(has_end<C>(nullptr)), ::std::true_type>::value;
 
 
         /**
          * @var       isAssignable
          * @brief     static bool indicating if container supports assignment.
          */
-        static constexpr bool isAssignable = std::is_same<decltype(has_assign<C>(nullptr)), std::true_type>::value;
+        static constexpr bool isAssignable = ::std::is_same<decltype(has_assign<C>(nullptr)), ::std::true_type>::value;
 
     };
+
 
 
   } //namespace utils

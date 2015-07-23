@@ -1427,6 +1427,9 @@ namespace dsc  // distributed std container
             this->key_to_rank.map.emplace_back(this->c.front().first, this->comm_rank - 1);
           }
           this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+          // note that key_to_rank.map needs to be unique.
+          auto map_end = std::unique(this->key_to_rank.map.begin(), this->key_to_rank.map.end(), Base::Base::equal);
+          this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
 
 
 //          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
@@ -1594,6 +1597,11 @@ namespace dsc  // distributed std container
             this->key_to_rank.map.emplace_back(this->c.front().first, this->comm_rank - 1);
           }
           this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+          // note that key_to_rank.map needs to be unique.
+          auto map_end = std::unique(this->key_to_rank.map.begin(), this->key_to_rank.map.end(),
+                                     Base::Base::equal);
+          this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
+
 
 //          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
 //            printf("R %d key to rank %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
