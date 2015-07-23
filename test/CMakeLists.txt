@@ -175,9 +175,11 @@ add_executable(kmer_reverse kmer_reverse.cpp)
 target_link_libraries(kmer_reverse ${EXTRA_LIBS})
 target_link_libraries(kmer_reverse bliss-common)
 
-add_executable(cust_alloc test_custom_allocator.cpp)
-target_link_libraries(cust_alloc ${EXTRA_LIBS})
-target_link_libraries(cust_alloc bliss-common)
+if (Boost_FOUND)
+	add_executable(cust_alloc test_custom_allocator.cpp)
+	target_link_libraries(cust_alloc ${EXTRA_LIBS})
+	target_link_libraries(cust_alloc bliss-common)
+endif()
 
 endif()
 
