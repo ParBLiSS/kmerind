@@ -24,7 +24,12 @@ constexpr T getLeastSignificantBitsMask(const BitSizeType nBits)
   // max for signed integer has sign bit (msb) == 0, but digits does not count sign bit.
   // this does not make sense for floating or any other type, so assert.
   static_assert(std::is_integral<T>::value, "getBitMask only accepts primitive, integral type.");
-  return static_cast<T>(std::numeric_limits<T>::max() >> (std::numeric_limits<T>::digits - nBits));
+
+  // if T is signed, we'd have a leading 0.
+  //return static_cast<T>(std::numeric_limits<T>::max() >> (std::numeric_limits<T>::digits - nBits));
+
+  // no problem with T being signed, if nBits > 1.  may be ever so slightly faster?
+  return static_cast<T>(~(std::numeric_limits<T>::max() << nBits));
   //return static_cast<T>((static_cast<T>(0x1) << nBits) - static_cast<T>(1));
 }
 

@@ -254,11 +254,11 @@ if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
       set(EXTRA_LIBS ${EXTRA_LIBS} ${Boost_LIBRARIES})
       add_definitions(-DBOOST_LOG_DYN_LINK)
     else(Boost_FOUND)
-        unset(Boost_USE_MULTITHREADED)
-        unset(Boost_ADDITIONAL_VERSIONS)
-        unset(Boost_DETAILED_FAILURE_MSG)
-        unset(BOOST_ROOT CACHE)
-        
+      unset(Boost_USE_MULTITHREADED)
+      unset(Boost_ADDITIONAL_VERSIONS)
+      unset(Boost_DETAILED_FAILURE_MSG)
+      unset(BOOST_ROOT CACHE)
+
         set(LOG_ENGINE "PRINTF" CACHE STRING
             "choose a logging engine.  options are NO_LOG PRINTF CERR BOOST_TRIVIAL BOOST_CUSTOM." FORCE)
         message(WARNING "Did not find boost.  Default Log Engine set to NO_LOG")
@@ -342,7 +342,13 @@ else (USE_OPENMP)
     set(OPENMP_DEFINE "")
 endif (USE_OPENMP)
 
-    
+#### native hardware architecture
+OPTION(USE_SIMD_IF_AVAILABLE "Enable SIMD instructions, if available on hardware. (-march=native)" ON)
+if (USE_SIMD_IF_AVAILABLE)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+endif(USE_SIMD_IF_AVAILABLE)
+
 
 
 ###### Doxygen documentation
@@ -544,6 +550,41 @@ if (ENABLE_TESTING)
     add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
   endfunction(bliss_add_test)
 
+
+  function(bliss_add_test_new module_name module_link modules)
+    # set the name for the test target and executable
+    set(test_target_name test-${module_name})
+    # add all give files
+    message(STATUS ${ARGN})
+    add_executable(${test_target_name} ${ARGN})
+    # add the googletest dependency
+    add_dependencies(${test_target_name} googletest)
+    # set binary output path for tests
+    set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
+    # link test with gtest_main
+    target_link_libraries(${test_target_name} gtest_main)
+
+    # all the extra libs
+    target_link_libraries(${test_target_name} ${EXTRA_LIBS})
+
+    # link to the tested module (but only if that module produces a linkable
+    # library)
+    if (module_link)
+        target_link_libraries(${test_target_name} ${modules})
+    endif (module_link)
+    
+    # if code coverage is to be determined: link with gcov
+    if (ENABLE_COVERAGE)
+      target_link_libraries(${test_target_name} gcov)
+    endif(ENABLE_COVERAGE)
+
+    cotire(${test_target_name})
+
+    # generate google test XML results, to be parsed by Jenkins
+    # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
+    add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
+  endfunction(bliss_add_test_new)
+
   function(bliss_add_mpi_test module_name module_link)
     # set the name for the test target and executable
     foreach(CPP_FILE ${ARGN})
@@ -738,15 +779,6 @@ include_directories("${CMAKE_SOURCE_DIR}/ext/farmhash/src")
 #include_directories("${CMAKE_SOURCE_DIR}/ext/sparsehash/src")
 
 
-
-
-###### LIBRARY
-#set(libsrcs CmdlineParser.cpp Communicator_I.cpp CommHandler_I.cpp Process.cpp PullCommHandler.cpp PushCommHandler.cpp RandomScheduler.cpp RoundRobinScheduler.cpp NullSinkAction.cpp DataBuffer.cpp MPIDataBuffer.cpp MPISendDataBuffer.cpp MPIRecvDataBuffer.cpp)
-#set(libname runtime)
-# Add rule to generate execution engine, as a shared library (.so)
-#add_library("${libname}" SHARED ${libsrcs})
-# Link opencv stuff to the execution engine
-
 add_subdirectory(src/utils)
 
 set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)
@@ -758,6 +790,7 @@ add_subdirectory(src/concurrent)
 add_subdirectory(src/io)
 add_subdirectory(src/index)
 add_subdirectory(src/iterators)
+add_subdirectory(src/wip)
 add_subdirectory(test)
 add_subdirectory(utils)
 

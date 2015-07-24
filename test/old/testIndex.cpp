@@ -242,7 +242,7 @@ typedef bliss::io::fastq_loader<DNA, float> FileLoaderType;
 typedef bliss::index::KmerSize<21> KmerSize;
 typedef uint64_t KmerType;
 typedef float QualityType;
-typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss::io::FASTQSequenceId, QualityType> KmerIndexType;
+typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss::io::FASTQ::SequenceId, QualityType> KmerIndexType;
 
 typedef CharType* BaseIterType;
 

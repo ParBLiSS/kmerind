@@ -112,6 +112,10 @@ public:
   /// MPI message tag for answers to lookup queries
   static constexpr int LOOKUP_ANSWER_MPI_TAG = 15;
 
+  using ThreadHashType = ThreadHasher;
+  using ProcessHashType = MPIHasher;
+
+
   /**
    * @brief Returns an iterator to the first element of the local container(s).
    *
@@ -903,6 +907,9 @@ public:
   /// The value type of the map
   typedef std::pair<K, T> value_type;
 
+  using ThreadHashType = ThreadHasher;
+  using ProcessHashType = MPIHasher;
+
 
   /**
    * @brief Constructs the distributed multimap
@@ -1168,6 +1175,9 @@ public:
 
   // the value type of the (key,value) pairs in the hash table
   typedef count_t T;
+
+  using ThreadHashType = ThreadHasher;
+  using ProcessHashType = MPIHasher;
 
   /**
    * @brief Constructs the distributed counting map.

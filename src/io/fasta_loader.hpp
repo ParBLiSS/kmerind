@@ -22,6 +22,8 @@
 #include "io/file_loader.hpp"
 #include "boost/mpi/datatype.hpp"
 
+
+
 // include MPI
 #if defined(USE_MPI)
 #include "mpi.h"
@@ -31,6 +33,12 @@ namespace bliss
 {
   namespace io
   {
+    //dummy struct to indicate FASTA format
+    struct FASTA {
+        using SequenceId = size_t;
+    };
+
+
     /**
      * @class FASTALoader
      * @brief FileLoader subclass specialized for the FASTA file format

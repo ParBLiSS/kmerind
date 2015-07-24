@@ -45,8 +45,6 @@ namespace bliss
 {
   namespace io
   {
-    //dummy struct to indicate FASTA format
-    struct FASTA {};
 
      /**
      * @class     bliss::io::FASTAParser

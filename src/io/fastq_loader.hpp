@@ -22,45 +22,49 @@
 #include "common/sequence.hpp"
 #include "io/file_loader.hpp"
 
+
 namespace bliss
 {
   namespace io
   {
     /// dummy class to indicate FASTQ format.
-    struct FASTQ {};
+    struct FASTQ {
 
 
-    /**
-     * @class     bliss::io::FASTQSequenceId
-     * @brief     represents a fastq sequence's id, also used for id of the FASTQ file, and for position inside a FASTQ sequence..
-     * @details    this is set up as a union to allow easy serialization
-     *            and parsing of the content.
-     *            this keeps a 40 bit sequence ID, broken up into a 32 bit id and 8 bit significant bit id
-     *                       an 8 bit file id
-     *                       a 16 bit position within the sequence.
-     *
-     *            A separate FASTA version will have a different fields but keeps the same 64 bit total length.
-     *
-     *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
-     */
-    union FASTQSequenceId
-    {
-        /// the concatenation of the id components as a single unsigned 64 bit field.  should use only 40 bits
-        uint64_t file_pos;
+      /**
+       * @class     bliss::io::FASTQ::SequenceId
+       * @brief     represents a fastq sequence's id, also used for id of the FASTQ file, and for position inside a FASTQ sequence..
+       * @details    this is set up as a union to allow easy serialization
+       *            and parsing of the content.
+       *            this keeps a 40 bit sequence ID, broken up into a 32 bit id and 8 bit significant bit id
+       *                       an 8 bit file id
+       *                       a 16 bit position within the sequence.
+       *
+       *            A separate FASTA version will have a different fields but keeps the same 64 bit total length.
+       *
+       *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
+       */
+      union SequenceId
+      {
+          /// the concatenation of the id components as a single unsigned 64 bit field.  should use only 40 bits
+          uint64_t file_pos;
 
-        /// the id field components.  anonymous struct
-        struct
-        {
-            /// sequence's id, lower 32 of 40 bits (potentially as offset in the containing file)
-            uint32_t seq_id;
-            /// sequence's id, upper 8 of 40 bits (potentially as offset in the containing file)
-            uint8_t seq_id_msb;
-            /// id of fastq file
-            uint8_t file_id;
-            /// offset within the read.  Default 0 refers to the whole sequence
-            uint16_t pos;
-        };
+          /// the id field components.  anonymous struct
+          struct
+          {
+              /// sequence's id, lower 32 of 40 bits (potentially as offset in the containing file)
+              uint32_t seq_id;
+              /// sequence's id, upper 8 of 40 bits (potentially as offset in the containing file)
+              uint8_t seq_id_msb;
+              /// id of fastq file
+              uint8_t file_id;
+              /// offset within the read.  Default 0 refers to the whole sequence
+              uint16_t pos;
+          };
+      };
+
     };
+
 
 
     /**
@@ -98,8 +102,8 @@ namespace bliss
 
         /// Sequence type, conditionally set based on Quality template param to either normal Sequence or SequenceWithQuality.
         typedef typename std::conditional<std::is_void<Quality>::value,
-              bliss::common::Sequence<Iterator, FASTQSequenceId>,
-              bliss::common::SequenceWithQuality<Iterator, FASTQSequenceId> >::type      SequenceType;
+              bliss::common::Sequence<Iterator, FASTQ::SequenceId>,
+              bliss::common::SequenceWithQuality<Iterator, FASTQ::SequenceId> >::type      SequenceType;
 
 
         /// default constructor.
@@ -697,34 +701,78 @@ namespace bliss
          * @param count    number of records to read to compute the approximation.  default = 3.
          * @return  approximate size of a record.
          */
-        size_t getRecordSizeImpl(int iterations = 3) {
+        size_t getRecordSizeImpl(int iterations = 10) {
 
           if (!this->loaded) throw std::logic_error("ERROR: getting record's size before file is loaded");
 
 
           std::size_t s, e;
-          std::size_t ss = 1;
+          std::size_t ss = ::std::numeric_limits<::std::size_t>::max();
           RangeType loaded(this->L1Block.getRange());
           RangeType search(this->L1Block.getRange());
 
           s = findStart(this->L1Block.begin(), loaded, loaded, search);
 
           for (int i = 0; i < iterations; ++i) {
-            search.start = s + ss;   // advance by 1, in order to search for next entry.
+            search.start = s + 1;   // advance by 1, in order to search for next entry.
             search.intersect(loaded);
             e = findStart(this->L1Block.begin(), loaded, loaded, search);
-            ss = std::max(ss, (e - s));
+            ss = ::std::min(ss, (e - s));  // return smallest record size.
             s = e;
           }
 
           return ss;
         }
 
+        /// estimate number of kmers per record.
+        size_t getCharsPerRecordImpl(int iterations = 10) {
+
+          if (!this->loaded) throw std::logic_error("ERROR: getting record's size before file is loaded");
+
+
+          std::size_t s, e;
+          std::size_t ss = 0;
+          RangeType loaded(this->L1Block.getRange());
+          RangeType search(this->L1Block.getRange());
+
+          s = findStart(this->L1Block.begin(), loaded, loaded, search);
+
+
+
+          for (int i = 0; i < iterations; ++i) {
+            search.start = s + 1;   // advance by 1, in order to search for next entry.
+            search.intersect(loaded);
+            e = findStart(this->L1Block.begin(), loaded, loaded, search);
+
+            // get the starting iterator
+            auto start = this->L1Block.begin() + (s - loaded.start);
+            auto end = this->L1Block.begin() + (e - loaded.start);
+
+            // advance past first eol
+            while ((start != end) && (*start != '\n')) ++start;
+            if ((start != end) && (*start == '\n')) ++start;
+
+            // now start counting
+            while ((start != end) && (*start != '\n')) {
+              ++ss;
+              ++start;
+            }
+
+            s = e;
+          }
+
+          return ss / iterations;
+        }
+
+
         /// estimate the count of kmers generated from this file
         size_t getKmerCountEstimateImpl(const int k) {
           size_t recordSize = getRecordSizeImpl();
           size_t numRecords = (this->getFileRange().size() + recordSize - 1) / recordSize;
-          size_t kmersPerRecord = recordSize / 2 - k + 1;  // fastq has quality.
+          size_t kmersPerRecord = getCharsPerRecordImpl() - k + 1;  // fastq has quality.
+
+         // printf("file range [%lu, %lu], recordSize = %lu, kmersPerRecord = %lu, numRecords = %lu\n",
+         //        this->getFileRange().start, this->getFileRange().end, recordSize, kmersPerRecord, numRecords);
 
           return numRecords * kmersPerRecord;
         }

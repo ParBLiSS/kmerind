@@ -47,6 +47,9 @@ namespace bliss
 {
 namespace io
 {
+   template<typename FileType>
+   struct PositionType;
+
     /**
      * @class FileLoader
      * @brief Opens a file (or a portion of it) via memmap, and optionally copies(portion of) data into memory.
@@ -825,7 +828,7 @@ namespace io
           //=====  adjust the L2BlockSize adaptively.
           // look through 3 records to see the approximate size of records.
           // update the chunkSize  to at least 2x record size, (passes back to called).
-          chunkSize = std::max(chunkSize, 2 * getRecordSize<Derived>(3));
+          chunkSize = std::max(chunkSize, 2 * getRecordSize<Derived>(10));
 
           // then configure the partitinoer to use the right number of threads.
           partitioner.configure(L1Block.getRange(), nThreads, chunkSize);
@@ -848,7 +851,7 @@ namespace io
          * @return  approximate size of a record.
          */
         template<typename D = Derived>
-        typename std::enable_if<std::is_void<D>::value, size_t>::type getRecordSize(const int count = 3) {
+        typename std::enable_if<std::is_void<D>::value, size_t>::type getRecordSize(const int count = 10) {
           // this method is enabled if Derived is void, which indicates self.
           return 1;
         }
@@ -866,7 +869,7 @@ namespace io
          * @return  approximate size of a record.
          */
         template<typename D = Derived>
-        typename std::enable_if<!std::is_void<D>::value, size_t>::type getRecordSize(const int count = 3) {
+        typename std::enable_if<!std::is_void<D>::value, size_t>::type getRecordSize(const int count = 10) {
           return static_cast<Derived*>(this)->getRecordSizeImpl(count);
         }
 

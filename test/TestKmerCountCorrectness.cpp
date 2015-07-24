@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
   printf("***** initializing index.\n");
 
   const int kmerLength = 21;
-  typedef bliss::index::KmerCountIndex<kmerLength, bliss::common::DNA, bliss::io::FASTQ> KmerIndexType;
+  typedef bliss::index::KmerCountIndex<bliss::common::Kmer<kmerLength, bliss::common::DNA>, bliss::io::FASTQ> KmerIndexType;
 
   size_t entries = 0;
   double time = 0;
