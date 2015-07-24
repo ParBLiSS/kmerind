@@ -779,15 +779,6 @@ include_directories("${CMAKE_SOURCE_DIR}/ext/farmhash/src")
 #include_directories("${CMAKE_SOURCE_DIR}/ext/sparsehash/src")
 
 
-
-
-###### LIBRARY
-#set(libsrcs CmdlineParser.cpp Communicator_I.cpp CommHandler_I.cpp Process.cpp PullCommHandler.cpp PushCommHandler.cpp RandomScheduler.cpp RoundRobinScheduler.cpp NullSinkAction.cpp DataBuffer.cpp MPIDataBuffer.cpp MPISendDataBuffer.cpp MPIRecvDataBuffer.cpp)
-#set(libname runtime)
-# Add rule to generate execution engine, as a shared library (.so)
-#add_library("${libname}" SHARED ${libsrcs})
-# Link opencv stuff to the execution engine
-
 add_subdirectory(src/utils)
 
 set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)

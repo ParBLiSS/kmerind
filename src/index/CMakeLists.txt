@@ -3,11 +3,7 @@ include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
 include("${CMAKE_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 if (ENABLE_TESTING)
-#add_subdirectory(testlib)
-# TODO: add .cpp files (if we have some)
-#add_library(${PROJECT_NAME}
-#    kmer_index_functors.cpp)
-#target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS})
+
 
 # load the testing:
 if (IS_DIRECTORY ./test)
