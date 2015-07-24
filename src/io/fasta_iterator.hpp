@@ -31,7 +31,7 @@
 #include <utils/logging.h>
 #include <partition/range.hpp>
 #include <common/kmer_iterators.hpp>
-#include <common/alphabets.cpp>
+#include <common/alphabets.hpp>
 #include <io/fasta_loader.hpp>
 
 // boost iterators used
