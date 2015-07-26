@@ -1,11 +1,10 @@
-project(bliss-utils)
-include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
-include("${CMAKE_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
+include("${PROJECT_SOURCE_DIR}/cmake/Sanitizer.cmake")
+include("${PROJECT_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 
 ## EXECUTABLES
-add_library(${PROJECT_NAME} logging.cpp)
-target_link_libraries(${PROJECT_NAME} ${EXTRA_LIBS})
+add_library(bliss-utils logging.cpp)
+target_link_libraries(bliss-utils ${EXTRA_LIBS})
 
 if (ENABLE_TESTING)
 

@@ -1,7 +1,7 @@
 
 #add_subdirectory(testlib)
-include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
-include("${CMAKE_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
+include("${PROJECT_SOURCE_DIR}/cmake/Sanitizer.cmake")
+include("${PROJECT_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 
 ## EXECUTABLES

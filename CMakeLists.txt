@@ -16,7 +16,7 @@ INCLUDE(CMakeDependentOption)
 # Initialize CXXFLAGS.
 add_definitions(-Wall -std=c++11 -fPIC)
 
-set(EXT_PROJECTS_DIR ${CMAKE_SOURCE_DIR}/ext)
+set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
 
 
@@ -24,7 +24,7 @@ set(EXT_PROJECTS_DIR ${CMAKE_SOURCE_DIR}/ext)
 if(CMAKE_VERSION VERSION_GREATER 2.8.3)
     OPTION(ENABLE_COTIRE "Enable using cotire to reduce compilation time (possibly)" OFF)
     if (ENABLE_COTIRE)
-        set (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/ext/cotire/CMake")
+        set (CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/ext/cotire/CMake")
         include(cotire)
     ELSE()
         function(cotire module_names)
@@ -128,7 +128,7 @@ CMAKE_DEPENDENT_OPTION(COMPILER_WARNINGS_ENABLE_EXTRA "Enable compiler to genera
 CMAKE_DEPENDENT_OPTION(COMPILER_WARNINGS_ENABLE_CONVERSIONS "Enable compiler to generate extra warnings for type conversions?" OFF "COMPILER_WARNINGS" OFF)
 CMAKE_DEPENDENT_OPTION(COMPILER_WARNINGS_ENABLE_SUGGESTIONS "Enable compiler to generate suggestions for polymorphic type analysis?" OFF "COMPILER_WARNINGS" OFF)
            
-include("${CMAKE_SOURCE_DIR}/cmake/GCCFilter.cmake")
+include("${PROJECT_SOURCE_DIR}/cmake/GCCFilter.cmake")
 
 
 ###### LOGGING ENGINE configuration
@@ -213,7 +213,7 @@ function(update_logging_engine varname cacheaccess varval)
     # set the log engine in the logger_config.hpp file.
     set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
 #    configure_file(
-#        "${CMAKE_SOURCE_DIR}/src/config/logger_config.hpp.in"
+#        "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
 #        "${CMAKE_BINARY_DIR}/logger_config.hpp"
 #        @ONLY
 #        )
@@ -266,7 +266,7 @@ if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
         
         set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
 #        configure_file(
-#            "${CMAKE_SOURCE_DIR}/src/config/logger_config.hpp.in"
+#            "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
 #            "${CMAKE_BINARY_DIR}/logger_config.hpp"
 #            @ONLY
 #            )
@@ -760,12 +760,12 @@ OPTION(BUILD_EXAMPLE_APPLICATIONS "Inform whether sample applications should be 
 
 # configure a header file to pass some of the CMake settings to the source code
 configure_file(
-    "${CMAKE_SOURCE_DIR}/src/config/config.hpp.in"
+    "${PROJECT_SOURCE_DIR}/src/config/config.hpp.in"
     "${CMAKE_BINARY_DIR}/config.hpp"
     @ONLY
     )
 configure_file(
-    "${CMAKE_SOURCE_DIR}/src/config/logger_config.hpp.in"
+    "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
     "${CMAKE_BINARY_DIR}/logger_config.hpp"
     @ONLY
     )
@@ -774,10 +774,10 @@ configure_file(
 # add the binary tree to the search path for include files
 # so that we will find TutorialConfig.h
 include_directories("${CMAKE_BINARY_DIR}")
-include_directories("${CMAKE_SOURCE_DIR}/src")
-include_directories("${CMAKE_SOURCE_DIR}/ext")
-include_directories("${CMAKE_SOURCE_DIR}/ext/farmhash/src")
-#include_directories("${CMAKE_SOURCE_DIR}/ext/sparsehash/src")
+include_directories("${PROJECT_SOURCE_DIR}/src")
+include_directories("${PROJECT_SOURCE_DIR}/ext")
+include_directories("${PROJECT_SOURCE_DIR}/ext/farmhash/src")
+#include_directories("${PROJECT_SOURCE_DIR}/ext/sparsehash/src")
 
 
 add_subdirectory(src/utils)
