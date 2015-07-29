@@ -1,6 +1,6 @@
-project(bliss-iterators)
-include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
-include("${CMAKE_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
+#project(bliss-iterators)
+include("${PROJECT_SOURCE_DIR}/cmake/Sanitizer.cmake")
+include("${PROJECT_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 
 

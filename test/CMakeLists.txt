@@ -1,7 +1,6 @@
-project(bliss_test_apps)
-
-include("${CMAKE_SOURCE_DIR}/cmake/Sanitizer.cmake")
-include("${CMAKE_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
+#project(bliss_test_apps)
+include("${PROJECT_SOURCE_DIR}/cmake/Sanitizer.cmake")
+include("${PROJECT_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 if(ENABLE_TESTING)
 
