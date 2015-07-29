@@ -12,8 +12,9 @@
 #ifndef SRC_UTILS_TIMER_HPP_
 #define SRC_UTILS_TIMER_HPP_
 
+#include "logger_config.hpp"
 
-#if defined(BENCHMARK)
+#if BENCHMARK == 1
 
 #include <chrono>   // clock
 //#include <cstdio>   // printf
@@ -21,9 +22,8 @@
 #include <string>
 #include <algorithm>  // std::min
 
-#include "utils/logging.h"
-
 #include "io/mxx_support.hpp"
+
 
 
 #define TIMER_INIT(timing)      std::chrono::steady_clock::time_point timing##_t1, timing##_t2; \
@@ -31,6 +31,7 @@
                                  std::vector<double> timing##_durations; \
                                  std::vector<double> timing##_counts; \
                                  std::chrono::duration<double> timing##_time_span;
+
 
 #define TIMER_RESET(timing)     do {  timing##_names.clear(); \
                                        timing##_durations.clear(); \
@@ -81,7 +82,7 @@
           std::copy(timing##_counts.begin(), timing##_counts.end(), cit); \
           output << "]"; \
           fflush(stdout); \
-          INFOF("%s\n", output.str().c_str()); \
+          printf("[BENCH]\t%s\n", output.str().c_str()); \
           fflush(stdout); \
         } while (0)
 
@@ -169,7 +170,7 @@
             std::copy(cnt_stdevs.begin(), cnt_stdevs.end(), dit); \
             output << "]"; \
             fflush(stdout); \
-            INFOF("%s\n", output.str().c_str()); \
+            printf("[BENCH]\t%s\n", output.str().c_str()); \
             fflush(stdout); \
           } \
           MPI_Barrier(comm); \

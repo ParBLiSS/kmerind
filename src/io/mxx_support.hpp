@@ -126,9 +126,9 @@ namespace mxx2 {
 
       // for each host name, color the result.
       // print them for debug
-      printf("sorted hostnames:\n");
+      DEBUGF("sorted hostnames:\n");
       for (int i = 0; i < p; ++i) {
-        printf("%d, %s, %d\n", ::std::get<0>(host_strs[i]), &((::std::get<1>(host_strs[i]))[0]), ::std::get<2>(host_strs[i]));
+        DEBUGF("%d, %s, %d\n", ::std::get<0>(host_strs[i]), &((::std::get<1>(host_strs[i]))[0]), ::std::get<2>(host_strs[i]));
       }
 
 
@@ -173,7 +173,7 @@ namespace mxx2 {
       MPI_Comm_size(group_leaders, &group_leader_size);
     }
 
-    printf("%d/%d, group %d/%d, leader %d/%d\n", rank, p, group_rank, group_size, group_leader_rank, group_leader_size);
+    INFOF("world %d/%d, host group %d/%d, host leaders %d/%d\n", rank, p, group_rank, group_size, group_leader_rank, group_leader_size);
 
 
     return ::std::make_pair(group_leaders, group);
@@ -828,7 +828,7 @@ namespace mxx2 {
     if (smaller) {  // total amount to send is smaller than max int, so can use scatterv.
         // using int.  no conversion needed.
 
-        MPI_Scatterv(src, &(send_counts[0]), &(send_displ[0]), dt.type(), &(results[0]), count, dt.type(), root, comm);
+      MPI_Scatterv(src, &(send_counts[0]), &(send_displ[0]), dt.type(), &(results[0]), count, dt.type(), root, comm);
     } else {  // not smaller.  need isend/irecv.
 
       // check to see if each isend has fewer than max_int number of elements.

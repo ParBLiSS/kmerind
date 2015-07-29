@@ -9,4 +9,7 @@ file comment
 #define USE_LOGGER BLISS_LOGGING_@LOG_ENGINE@
 #define LOGGER_VERBOSITY BLISS_LOGGER_VERBOSITY_@LOGGER_VERBOSITY@
 
+// benchmarking
+#define BENCHMARK @BENCHMARK@
+
 #endif /* CONFIG_H */

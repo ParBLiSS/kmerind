@@ -10,8 +10,6 @@
  * TODO add License
  */
 
-#define BENCHMARK 1
-
 
 #include "config.hpp"
 

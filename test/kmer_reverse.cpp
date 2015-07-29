@@ -11,8 +11,6 @@
  */
 
 
-#define BENCHMARK 1
-
 #include <string>
 #include <random>
 

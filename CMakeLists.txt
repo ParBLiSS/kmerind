@@ -757,6 +757,14 @@ CMAKE_DEPENDENT_OPTION(BUILD_TEST_APPLICATIONS "Inform whether test applications
 # Check if the user want to build sample applications
 OPTION(BUILD_EXAMPLE_APPLICATIONS "Inform whether sample applications should be built" OFF)
 
+OPTION(ENABLE_BENCHMARKING "Enable timing measurements for benchmarking." OFF)
+if (ENABLE_BENCHMARKING)
+  SET(BENCHMARK 1)
+else(ENABLE_BENCHMARKING)
+  SET(BENCHMARK 0)
+endif(ENABLE_BENCHMARKING)
+  
+
 # configure a header file to pass some of the CMake settings to the source code
 configure_file(
     "${CMAKE_SOURCE_DIR}/src/config/config.hpp.in"

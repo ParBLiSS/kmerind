@@ -1,6 +1,4 @@
 
-#define BENCHMARK 1
-
 // include google test
 #include <gtest/gtest.h>
 #include <io/mxx_support.hpp>

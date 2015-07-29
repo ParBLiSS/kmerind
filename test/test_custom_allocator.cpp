@@ -1,5 +1,3 @@
-#define BENCHMARK 1
-
 #include <cstdio>
 #include <stdint.h>
 
