@@ -9,7 +9,7 @@
  *
  * TODO add License
  */
-#include "config.hpp"
+#include "bliss-config.hpp"
 
 #include <functional>
 #include <fstream>

@@ -15,7 +15,7 @@
 #include "mpi.h"
 #include "cassert"
 
-#include "config.hpp"
+#include "bliss-config.hpp"
 #include "taskrunner/runner.hpp"
 
 namespace bliss

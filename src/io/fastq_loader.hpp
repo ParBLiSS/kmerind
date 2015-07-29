@@ -16,7 +16,7 @@
 #include <iterator>  // for ostream_iterator
 #include <algorithm> // for copy.
 
-#include "config.hpp"
+#include "bliss-config.hpp"
 
 #include "common/base_types.hpp"
 #include "common/sequence.hpp"

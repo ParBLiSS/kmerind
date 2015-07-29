@@ -18,7 +18,7 @@
 #include <cmath>
 #include <limits>
 
-#include "config.hpp"
+#include "bliss-config.hpp"
 
 //// adapted from from http://stackoverflow.com/questions/10060110/how-does-gtest-compare-the-values-in-two-arrays
 //template<typename T, size_t size>

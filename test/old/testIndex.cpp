@@ -29,7 +29,7 @@
 
 
 #include "utils/logging.h"
-#include "config.hpp"
+#include "bliss-config.hpp"
 
 #include "iterators/range.hpp"
 #include "io/fastq_loader.hpp"

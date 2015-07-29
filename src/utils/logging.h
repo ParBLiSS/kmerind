@@ -89,7 +89,7 @@
 #define BLISS_LOGGER_VERBOSITY_TRACE   5
 
 /// include logger_config.hpp to get the cmake configured logger settings.
-#include "logger_config.hpp"
+#include "bliss-logger_config.hpp"
 
 // set default logger (in case none is specified via compiler flags)
 #ifndef USE_LOGGER

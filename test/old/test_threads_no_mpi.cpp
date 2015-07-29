@@ -22,7 +22,7 @@
 
 #include "omp.h"
 
-#include "config.hpp"
+#include "bliss-config.hpp"
 #define OLD_USE_MPI (USE_MPI)
 #undef USE_MPI
 

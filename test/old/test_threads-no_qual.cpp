@@ -9,7 +9,7 @@
  *
  * TODO add License
  */
-#include "config.hpp"
+#include "bliss-config.hpp"
 
 #if defined(USE_MPI)
 #include "mpi.h"

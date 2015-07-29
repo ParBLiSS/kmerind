@@ -1,4 +1,4 @@
-#project(bliss_test_apps)
+set(TEST_NAME bliss_test_apps)
 include("${PROJECT_SOURCE_DIR}/cmake/Sanitizer.cmake")
 include("${PROJECT_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 

@@ -1,4 +1,4 @@
-#include "config.hpp"
+#include "bliss-config.hpp"
 
 #include <iostream> // cout
 #include <iomanip>  // for setprecision

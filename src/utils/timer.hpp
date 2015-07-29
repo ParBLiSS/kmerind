@@ -12,7 +12,7 @@
 #ifndef SRC_UTILS_TIMER_HPP_
 #define SRC_UTILS_TIMER_HPP_
 
-#include "logger_config.hpp"
+#include "bliss-logger_config.hpp"
 
 #if BENCHMARK == 1
 

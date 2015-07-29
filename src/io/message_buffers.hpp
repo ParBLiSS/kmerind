@@ -41,7 +41,7 @@
 #include <iterator> // for ostream_iterator
 #include <xmmintrin.h>
 
-#include "config.hpp"
+#include "bliss-config.hpp"
 #include "config/relacy_config.hpp"
 #include "concurrent/buffer.hpp"
 #include "concurrent/object_pool.hpp"

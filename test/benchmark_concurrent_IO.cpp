@@ -1,6 +1,6 @@
 //#define USE_OPENMP 1
 
-#include "config.hpp"
+#include "bliss-config.hpp"
 
 #include <iostream> // cout
 #include <iomanip>  // for setprecision

@@ -10,7 +10,7 @@
  * TODO add License
  */
 
-#include "config.hpp"
+#include "bliss-config.hpp"
 
 #include <unistd.h>  // get hostname
 

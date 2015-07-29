@@ -24,7 +24,7 @@ set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 if(CMAKE_VERSION VERSION_GREATER 2.8.3)
     OPTION(ENABLE_COTIRE "Enable using cotire to reduce compilation time (possibly)" OFF)
     if (ENABLE_COTIRE)
-        set (CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/ext/cotire/CMake")
+        set (CMAKE_MODULE_PATH "${EXT_PROJECTS_DIR}/cotire/CMake")
         include(cotire)
     ELSE()
         function(cotire module_names)
@@ -212,12 +212,7 @@ function(update_logging_engine varname cacheaccess varval)
         
     # set the log engine in the logger_config.hpp file.
     set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
-#    configure_file(
-#        "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
-#        "${CMAKE_BINARY_DIR}/logger_config.hpp"
-#        @ONLY
-#        )
-#        
+
 endfunction(update_logging_engine varname cacheaccess varval)
 
 
@@ -265,11 +260,7 @@ if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
         message(WARNING "Did not find boost.  Default Log Engine set to NO_LOG")
         
         set(LOGGER_DEFINE "#define USE_LOGGER BLISS_LOGGING_${LOG_ENGINE}")
-#        configure_file(
-#            "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
-#            "${CMAKE_BINARY_DIR}/logger_config.hpp"
-#            @ONLY
-#            )
+
     endif(Boost_FOUND)
     
     # need this flag for boost log
@@ -769,12 +760,12 @@ endif(ENABLE_BENCHMARKING)
 # configure a header file to pass some of the CMake settings to the source code
 configure_file(
     "${PROJECT_SOURCE_DIR}/src/config/config.hpp.in"
-    "${CMAKE_BINARY_DIR}/config.hpp"
+    "${CMAKE_BINARY_DIR}/${PROJECT_NAME}-config.hpp"
     @ONLY
     )
 configure_file(
     "${PROJECT_SOURCE_DIR}/src/config/logger_config.hpp.in"
-    "${CMAKE_BINARY_DIR}/logger_config.hpp"
+    "${CMAKE_BINARY_DIR}/${PROJECT_NAME}-logger_config.hpp"
     @ONLY
     )
 
@@ -783,9 +774,8 @@ configure_file(
 # so that we will find TutorialConfig.h
 include_directories("${CMAKE_BINARY_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/src")
-include_directories("${PROJECT_SOURCE_DIR}/ext")
-include_directories("${PROJECT_SOURCE_DIR}/ext/farmhash/src")
-#include_directories("${PROJECT_SOURCE_DIR}/ext/sparsehash/src")
+include_directories("${EXT_PROJECTS_DIR}")
+include_directories("${EXT_PROJECTS_DIR}/farmhash/src")
 
 
 add_subdirectory(src/utils)

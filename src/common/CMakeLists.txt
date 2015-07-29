@@ -1,4 +1,4 @@
-#project(bliss-common)
+set(TEST_NAME bliss-common)
 include("${PROJECT_SOURCE_DIR}/cmake/Sanitizer.cmake")
 include("${PROJECT_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
@@ -8,6 +8,6 @@ if (ENABLE_TESTING)
 if (IS_DIRECTORY ./test)
     # get all files from ./test
     FILE(GLOB TEST_FILES test/test_*.cpp test/benchmark_*.cpp)
-    bliss_add_test(${PROJECT_NAME} FALSE ${TEST_FILES})
+    bliss_add_test(${TEST_NAME} FALSE ${TEST_FILES})
 endif()
 endif()

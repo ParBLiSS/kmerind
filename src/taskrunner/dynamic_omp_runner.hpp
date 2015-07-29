@@ -15,7 +15,7 @@
 #include "omp.h"
 #include <cassert>
 
-#include "config.hpp"
+#include "bliss-config.hpp"
 //#include "concurrent/mutexlock_queue.hpp"
 #include "concurrent/lockfree_queue.hpp"
 #include "taskrunner/runner.hpp"

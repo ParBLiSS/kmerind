@@ -12,7 +12,7 @@
 #ifndef FILE_LOADER_HPP_
 #define FILE_LOADER_HPP_
 
-#include "config.hpp"
+#include "bliss-config.hpp"
 
 #if defined(USE_MPI)
 #include "mpi.h"

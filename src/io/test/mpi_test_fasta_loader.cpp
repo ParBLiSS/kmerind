@@ -6,7 +6,7 @@
  */
 
 
-#include "config.hpp"    // for location of data.
+#include "bliss-config.hpp"    // for location of data.
 
 #if defined(USE_MPI)
 #include "mpi.h"
