@@ -103,10 +103,10 @@ namespace fsc {  // fast standard container
        */
       template<typename V>
       class concat_iter :
-    public ::std::iterator<
-    typename ::std::random_access_iterator_tag,
-    V
-    >
+        public ::std::iterator<
+          typename ::std::random_access_iterator_tag,
+          V
+          >
       {
         protected:
           using subiterator_type = typename ::std::conditional<::std::is_const<V>::value,

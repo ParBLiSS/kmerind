@@ -46,7 +46,9 @@ namespace bliss
       protected:
 
         /// value type
-        using T = typename std::iterator_traits<ZipIterator<FirstIter, SecondIter> >::value_type;
+//        using T = typename std::iterator_traits<ZipIterator<FirstIter, SecondIter> >::value_type;
+        using T = std::pair<typename std::iterator_traits<FirstIter>::value_type,
+            typename std::iterator_traits<SecondIter>::value_type >;
 
         /// difference type
         using D = std::ptrdiff_t;

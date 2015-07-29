@@ -110,7 +110,8 @@ namespace fsc {
   /// modified based on http://stackoverflow.com/questions/18724999/why-no-emplacement-iterators-in-c11-or-c14
   template<class Container>
   class back_emplace_iterator : public std::iterator< std::output_iterator_tag,
-                                                      void, void, void, void >
+                                                      typename::std::iterator_traits<decltype(std::declval<Container>().begin())>::value_type,
+                                                      void, void, void >
   {
   protected:
       Container* container;

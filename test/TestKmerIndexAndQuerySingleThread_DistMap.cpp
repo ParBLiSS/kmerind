@@ -10,8 +10,6 @@
  * TODO add License
  */
 
-#define BENCHMARK 1
-
 #include "config.hpp"
 
 #include <unistd.h>  // get hostname
@@ -43,82 +41,101 @@
 #include "utils/timer.hpp"
 
 
-template <typename KmerType>
+template <typename IndexType, typename KmerType = typename IndexType::KmerType>
 std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
-  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
 
-  //====  now process the file, one L1 block (block partition by MPI Rank) at a time
-  // from FileLoader type, get the block iter type and range type
-  using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
+  ::std::vector<KmerType> query;
+  IndexType::template read_file<KmerType, ::bliss::index::kmer::KmerParser>(filename, query, comm);
 
-  using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
-  using SeqType = typename ParserType::SequenceType;
-  using SeqIterType = bliss::io::SequencesIterator<ParserType>;
-
-  using Alphabet = typename KmerType::KmerAlphabet;
-
-  /// converter from ascii to alphabet values
-  using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
-
-  /// kmer generation iterator
-  using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
-  std::vector< KmerType > query;
-
-  int commSize, rank;
-  MPI_Comm_size(comm, &commSize);
-  MPI_Comm_rank(comm, &rank);
-
-
-  {
-    //==== create file Loader
-    FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
-    typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
-    size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
-
-    // == create kmer iterator
-    //            kmer_iter start(data, range);
-    //            kmer_iter end(range.second,range.second);
-
-    query.reserve(est_size);
-
-    ParserType parser;
-    //=== copy into array
-    while (partition.getRange().size() > 0) {
-      //== process the chunk of data
-      SeqType read;
-
-      //==  and wrap the chunk inside an iterator that emits Reads.
-      SeqIterType seqs_start(parser, partition.begin(), partition.end(), partition.getRange().start);
-      SeqIterType seqs_end(partition.end());
-
-
-      //== loop over the reads
-      for (; seqs_start != seqs_end; ++seqs_start)
-      {
-        // first get read
-        read = *seqs_start;
-
-        // then compute and store into index (this will generate kmers and insert into index)
-        if (read.seqBegin == read.seqEnd) continue;
-
-        //== set up the kmer generating iterators.
-        KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-        KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
-
-
-        query.insert(query.end(), start, end);
-        //        for (auto it = index_start; it != index_end; ++it) {
-        //          temp.push_back(*it);
-        //        }
-        //std::copy(index_start, index_end, temp.end());
-        //        INFOF("R %d inserted.  new temp size = %lu", rank, temp.size());
-      }
-
-      partition = loader.getNextL1Block();
-    }
-  }
   return query;
 }
+
+
+template <typename IndexType, typename KmerType = typename IndexType::KmerType>
+std::vector<KmerType> readForQuery_subcomm(const std::string & filename, MPI_Comm comm) {
+
+  ::std::vector<KmerType> query;
+  IndexType::template read_file_mpi_subcomm<KmerType, ::bliss::index::kmer::KmerParser>(filename, query, comm);
+
+  return query;
+}
+
+//template <typename KmerType>
+//std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
+//  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
+//
+//  //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+//  // from FileLoader type, get the block iter type and range type
+//  using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
+//
+//  using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
+//  using SeqType = typename ParserType::SequenceType;
+//  using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+//
+//  using Alphabet = typename KmerType::KmerAlphabet;
+//
+//  /// converter from ascii to alphabet values
+//  using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+//
+//  /// kmer generation iterator
+//  using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+//  std::vector< KmerType > query;
+//
+//  int commSize, rank;
+//  MPI_Comm_size(comm, &commSize);
+//  MPI_Comm_rank(comm, &rank);
+//
+//
+//  {
+//    //==== create file Loader
+//    FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+//    typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
+//    size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
+//
+//    // == create kmer iterator
+//    //            kmer_iter start(data, range);
+//    //            kmer_iter end(range.second,range.second);
+//
+//    query.reserve(est_size);
+//
+//    ParserType parser;
+//    //=== copy into array
+//    while (partition.getRange().size() > 0) {
+//      //== process the chunk of data
+//      SeqType read;
+//
+//      //==  and wrap the chunk inside an iterator that emits Reads.
+//      SeqIterType seqs_start(parser, partition.begin(), partition.end(), partition.getRange().start);
+//      SeqIterType seqs_end(partition.end());
+//
+//
+//      //== loop over the reads
+//      for (; seqs_start != seqs_end; ++seqs_start)
+//      {
+//        // first get read
+//        read = *seqs_start;
+//
+//        // then compute and store into index (this will generate kmers and insert into index)
+//        if (read.seqBegin == read.seqEnd) continue;
+//
+//        //== set up the kmer generating iterators.
+//        KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
+//        KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+//
+//
+//        query.insert(query.end(), start, end);
+//        //        for (auto it = index_start; it != index_end; ++it) {
+//        //          temp.push_back(*it);
+//        //        }
+//        //std::copy(index_start, index_end, temp.end());
+//        //        INFOF("R %d inserted.  new temp size = %lu", rank, temp.size());
+//      }
+//
+//      partition = loader.getNextL1Block();
+//    }
+//  }
+//  return query;
+//}
 
 
 
@@ -141,8 +158,6 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
 
   IndexType idx(comm, nprocs);
 
-  using KmerType = typename IndexType::map_type::key_type;
-
   TIMER_INIT(test);
 
   if (rank == 0) INFOF("RANK %d / %d: Testing %s", rank, nprocs, test.c_str());
@@ -154,7 +169,7 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
 
 
   TIMER_START(test);
-  auto query = readForQuery<KmerType>(filename, comm);
+  auto query = readForQuery<IndexType>(filename, comm);
   TIMER_END(test, "read query", query.size());
 
 

@@ -1347,6 +1347,29 @@ namespace dsc  // distributed std container
 
 
 
+      /**
+       * @brief insert new elements in the distributed multimap.
+       * @param first
+       * @param last
+       */
+      template <typename Predicate = Identity>
+      size_t insert(std::vector< std::pair< Key, T> >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
+        TIMER_INIT(count_insert);
+
+        TIMER_START(count_insert);
+        // local compute part.  called by the communicator.
+        size_t count = this->Base::insert(input, sorted_input, pred);
+        TIMER_END(count_insert, "insert", this->c.size());
+
+
+        // distribute
+        TIMER_REPORT_MPI(count_insert, this->comm_rank, this->comm);
+
+        return count;
+
+      }
+
   };
 
 } /* namespace dsc */
