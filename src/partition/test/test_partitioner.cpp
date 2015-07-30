@@ -5,7 +5,7 @@
  *      Author: Tony Pan <tpan7@gatech.edu>
  */
 
-#include <config.hpp>
+#include "bliss-config.hpp"
 #include <gtest/gtest.h>
 #include <cstdint>  // for uint64_t, etc.
 #include <vector>
