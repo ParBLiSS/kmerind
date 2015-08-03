@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
 
 
 
-  INFO( "please enter start and end positions.  enter a negative number to exit." );
+  std::cout << "please enter start and end positions.  enter a negative number to exit." << std::endl;
   ///
   int pos = 0;
   int endpos = 0;
@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
     endpos = 0;
     std::cin >> pos >> endpos;
     if (pos >= 0) {
-      INFO( "char at pos " << pos << " - " << endpos );
+      std::cout << "char at pos " << pos << " - " << endpos << std::endl;
       std::ostream_iterator<unsigned char> oit(std::cout);
       std::copy(data + pos, data + endpos, oit);
       std::cout << std::endl;
