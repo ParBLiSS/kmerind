@@ -1583,48 +1583,28 @@ namespace mxx2 {
   /// segmented scan operations.  requires that the segments have unique ids and all elements in the same segment id
     struct seg_scan {
 
-      /// segments marker type: at start only
-      struct SegmentStartMarked {};
-      /// segments marker type: fully marked.  not necessarily unique
-      struct SegmentFullyMarked {};
-      /// segments marker type: fully marked.  not necessarily unique
-      struct SegmentUniquelyMarked {};
-
-
       /**
        * @brief segmented scan helper function - converts the user specified operation into a segmented scan operation
        */
-      template <typename T, typename SegT, typename Func, typename SegmentMarkerType>
+      template <typename T, typename SegT, typename Func>
       struct seg_scan_op {
           Func f;
           const uint8_t non_terminus_val;
 
           seg_scan_op(Func _f, uint8_t middle_val = 0) : f(_f), non_terminus_val(middle_val) {}
 
-          template <typename Marker = SegmentMarkerType>
-          typename std::enable_if<!std::is_same<Marker, SegmentStartMarked>::value, std::pair<T, SegT> >::type
-          operator()(std::pair<T, SegT> const & x, std::pair<T, SegT> const & y) {
+          /// performs the reduction operator, using segment value as guide.  Note that there are no "segment start marker" version of this since we'd need a corresponding "segment end marker" version, whcih complicates things.
+          std::pair<T, SegT> operator()(std::pair<T, SegT> const & x, std::pair<T, SegT> const & y) {
             return (x.second == y.second) ?
               std::pair<T, SegT>(this->f(x.first, y.first), y.second) : y;
-          }
-
-          /** @note  this is the version where the starting position only is marked.
-          */
-          template <typename Marker = SegmentMarkerType>
-          typename std::enable_if<std::is_same<Marker, SegmentStartMarked>::value, std::pair<T, SegT> >::type
-          operator()(std::pair<T, uint8_t> const & x, std::pair<T, uint8_t> const & y) {
-            // flag OR replaced with this conditional - chooses y if y.second is not 0, else do scan and choose x.second (this is the OR part)
-            return (y.second == non_terminus_val) ?
-                std::pair<T, uint8_t>(this->f(x.first, y.first), y.second) : y;
           }
       };
 
 
 
       /// MPI Scan  with uniquely marked segments.  we can then split the comm and do normal scan
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
-      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, T>::type
-      scan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
+      static T scan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         int rank;
         MPI_Comm_rank(comm, &rank);
 
@@ -1638,9 +1618,8 @@ namespace mxx2 {
         return result;
       }
 
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
-      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, T>::type
-      scan_reverse(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
+      static T scan_reverse(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         // reverse the comm, then split it using the same coloring, results in individual reversed comms.
         int rank, p;
         MPI_Comm_rank(comm, &rank);
@@ -1656,50 +1635,21 @@ namespace mxx2 {
         return result;
       }
 
-
-      /// MPI Scan  with non-uniquely marked segments or only markers for segment starts.  have to do a full scan.
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
-      static typename std::enable_if<!std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, T>::type
-      scan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-          // converted data structure
-          std::pair<T, SegT> in(x, seg);
-
-          // converted op.
-          seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
-
-          std::pair<T, SegT> out = scan_op::scan<std::pair<T, SegT>, seg_scan_op<T, SegT, Func, SegmentMarkerType>, exclusive>(in, f, comm);
-
-          return out.first;
-      }
-
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
-      static typename std::enable_if<!std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, T>::type
-      scan_reverse(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        MPI_Comm rev_comm;
-        mxx::rev_comm(comm, rev_comm);
-
-        // now call local scan
-        T result = seg_scan::scan<SegmentMarkerType, T, SegT, Func, exclusive>(x, seg, f, rev_comm);
-
-        MPI_Comm_free(&rev_comm);
-        return result;
-      }
-
       /// exclusive scan
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      template <typename T, typename SegT, typename Func = std::plus<T> >
       static T exscan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::scan<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+        return seg_scan::scan<T, SegT, Func, true>(x, seg, f, comm);
       }
 
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      template <typename T, typename SegT, typename Func = std::plus<T> >
       static T exscan_reverse(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::scan_reverse<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+        return seg_scan::scan_reverse<T, SegT, Func, true>(x, seg, f, comm);
       }
 
 
 
       /// scan of a vector, element-wise across all processors.
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
+      template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
       static std::vector<T> scan_elementwise(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         // can't do this via comm split because segments may not line up at different element positions.
 
@@ -1717,9 +1667,9 @@ namespace mxx2 {
         std::transform(x.begin(), x.begin() + s, seg.begin(), marked.begin(), [](T & x, SegT & y) { return std::pair<T, SegT>(x, y); } );
 
         // converted op.
-        seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+        seg_scan_op<T, SegT, Func> func(f);
 
-        std::vector<std::pair<T, SegT> > out = scan_op::scan_elementwise<std::pair<T, SegT>, seg_scan_op<T, SegT, Func, SegmentMarkerType>, exclusive>(marked, func, comm);
+        std::vector<std::pair<T, SegT> > out = scan_op::scan_elementwise<std::pair<T, SegT>, seg_scan_op<T, SegT, Func>, exclusive>(marked, func, comm);
 
         // convert data back to original form
         std::vector<T> results(out.size());
@@ -1729,7 +1679,7 @@ namespace mxx2 {
 
       }
 
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
+      template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
       static std::vector<T> scan_reverse_elementwise(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         // since we cannot do this via comm splitting (segments at different position in vector may not line up
         // we can just call the scan_elementwise function with a reverse comm.
@@ -1738,7 +1688,7 @@ namespace mxx2 {
         mxx::rev_comm(comm, rev_comm);
 
         // now call local scan
-        auto results = seg_scan::scan_elementwise<SegmentMarkerType, T, SegT, Func, exclusive>(x, seg, f, rev_comm);
+        auto results = seg_scan::scan_elementwise<T, SegT, Func, exclusive>(x, seg, f, rev_comm);
 
         MPI_Comm_free(&rev_comm);
         return results;
@@ -1747,28 +1697,27 @@ namespace mxx2 {
 
 
       /// exclusive segmented scan.  first element of a segment is not valid.
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      template <typename T, typename SegT, typename Func = std::plus<T> >
       static std::vector<T> exscan_elementwise(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::scan_elementwise<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+        return seg_scan::scan_elementwise<T, SegT, Func, true>(x, seg, f, comm);
       }
 
       /// exclusive segmented scan in reverse.  last element of a segment is not valid.
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      template <typename T, typename SegT, typename Func = std::plus<T> >
       static std::vector<T> exscan_reverse_elementwise(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::scan_reverse_elementwise<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+        return seg_scan::scan_reverse_elementwise<T, SegT, Func, true>(x, seg, f, comm);
       }
 
 
       /**
        * @brief Scan of partitioned vector.
        * @note  cannot split communicator.
-       * @details if the SegmentMarkerType is NOT SegmentUniquelyMarked, last (or first) element in the vector
+       * @details if the segment ids are not unique for each segment, the last (or first) element in the vector
        *   from 2 adjacent processes may have the same segment value when they are not in same segment due to intervening vector elements.
        *   simplest solution is to convert to Unique segment ids first.
        */
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
-      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, std::vector<T> >::type
-      scanv(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
+      static std::vector<T> scanv(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         // convert make sure seg is converted to Unique first.
 
         // can't do this via comm split because segments may not line up at different element positions.
@@ -1783,25 +1732,15 @@ namespace mxx2 {
         int rank, p;
         MPI_Comm_rank(comm, &rank);
         MPI_Comm_size(comm, &p);
-//        for (int i = 0; i < p; ++i) {
-//          printf("R %d,%d transformed input %lu, seg %d \n", rank, i, marked[i].first, marked[i].second);
-//        }
-
-
 
         // converted op.
-        seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+        seg_scan_op<T, SegT, Func> func(f);
 
         std::vector<std::pair<T, SegT> > out;
         if (exclusive)
           scan_op::exscanv(marked, func, comm).swap(out);
         else
           scan_op::scanv(marked, func, comm).swap(out);
-
-//        for (int i = 0; i < p; ++i) {
-//          printf("R %d,%d transformed scanv %lu, seg %d \n", rank, i, out[i].first, out[i].second);
-//        }
-
 
         // convert data back to original form
         std::vector<T> results(out.size());
@@ -1812,28 +1751,9 @@ namespace mxx2 {
       }
 
 
-      template <typename SegmentMarkerType, typename T, typename SegT = size_t, typename Func = std::plus<T>, bool exclusive = false  >
-      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentStartMarked>::value, std::vector<T> >::type
-      scanv(std::vector<T> & x, std::vector<uint8_t> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        auto useg = segment<SegT>::to_unique_segment_id_from_start_v(seg, 0, comm);
 
-        return seg_scan::scanv<SegmentUniquelyMarked, T, SegT, Func, exclusive>(x, useg, f, comm);
-      }
-
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
-      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentFullyMarked>::value, std::vector<T> >::type
-      scanv(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        // convert make sure seg is converted to Unique first.
-        auto useg = segment<SegT>::to_unique_segment_id_v(seg, comm);
-
-        return seg_scan::scanv<SegmentUniquelyMarked, T, SegT, Func, exclusive>(x, useg, f, comm);
-      }
-
-
-
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
-      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, std::vector<T> >::type
-      scanv_reverse(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
+      static std::vector<T> scanv_reverse(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         // convert make sure seg is converted to Unique first.
 
         // can't do this via comm split because segments may not line up at different element positions.
@@ -1846,7 +1766,7 @@ namespace mxx2 {
         std::transform(x.begin(), x.end(), seg.begin(), marked.begin(), [](T & x, SegT & y) { return std::pair<T, SegT>(x, y); } );
 
         // converted op.
-        seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+        seg_scan_op<T, SegT, Func> func(f);
 
 
         std::vector<std::pair<T, SegT> > out;
@@ -1863,33 +1783,16 @@ namespace mxx2 {
 
       }
 
-      template <typename SegmentMarkerType, typename T, typename SegT = size_t, typename Func = std::plus<T>, bool exclusive = false  >
-      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentStartMarked>::value, std::vector<T> >::type
-      scanv_reverse(std::vector<T> & x, std::vector<uint8_t> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        auto useg = segment<SegT>::to_unique_segment_id_from_end_v(seg, 0, comm);
-
-        return seg_scan::scanv_reverse<SegmentUniquelyMarked, T, SegT, Func, exclusive>(x, useg, f, comm);
-      }
-
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
-      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentFullyMarked>::value, std::vector<T> >::type
-      scanv_reverse(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        // convert make sure seg is converted to Unique first.
-        auto useg = segment<SegT>::to_unique_segment_id_v(seg, comm);
-
-        return seg_scan::scanv_reverse<SegmentUniquelyMarked, T, SegT, Func, exclusive>(x, useg, f, comm);
-      }
-
 
       // NOTE for segmented exclusive scan, the "first" element of a segment is NOT valid.
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      template <typename T, typename SegT, typename Func = std::plus<T> >
       static std::vector<T> exscanv(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::scanv<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+        return seg_scan::scanv<T, SegT, Func, true>(x, seg, f, comm);
       }
 
-      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      template <typename T, typename SegT, typename Func = std::plus<T> >
       static std::vector<T> exscanv_reverse(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::scanv_reverse<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+        return seg_scan::scanv_reverse<T, SegT, Func, true>(x, seg, f, comm);
 
       }
 
@@ -1897,41 +1800,28 @@ namespace mxx2 {
 
 
 
-  /// perform segmented reduction.  results has same distribution as original data.
+  /// perform segmented reduction.  results has same distribution as original data.  segment ids should be unique, with each segment marked with same id.
   struct seg_reduce {
 
         /**
          * @brief segmented scan helper function - converts the user specified operation into a segmented scan operation
          */
-        template <typename T, typename SegT, typename SegmentMarkerType>
+        template <typename T, typename SegT>
         struct replace_op {
             const uint8_t non_terminus_val;
 
             replace_op(uint8_t middle_val = 0) : non_terminus_val(middle_val) {}
 
-            template <typename Marker = SegmentMarkerType>
-            typename std::enable_if<!std::is_same<Marker, seg_scan::SegmentStartMarked>::value, std::pair<T, SegT> >::type
-            operator()(std::pair<T, SegT> const & x, std::pair<T, SegT> const & y) {
+            std::pair<T, SegT> operator()(std::pair<T, SegT> const & x, std::pair<T, SegT> const & y) {
               return (x.second == y.second) ?
                 x : y;
-            }
-
-            /** @note  this is the version where the starting position only is marked.
-            */
-            template <typename Marker = SegmentMarkerType>
-            typename std::enable_if<std::is_same<Marker, seg_scan::SegmentStartMarked>::value, std::pair<T, SegT> >::type
-            operator()(std::pair<T, uint8_t> const & x, std::pair<T, uint8_t> const & y) {
-              // flag OR replaced with this conditional - chooses y if y.second is not 0, else do scan and choose x.second (this is the OR part)
-              return (y.second == non_terminus_val) ?
-                  x : y;
             }
         };
 
 
 
-        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
-        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentUniquelyMarked>::value, T >::type
-        reduce(T & x, SegT & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        template <typename T, typename SegT, typename Func = std::plus<T> >
+        static T reduce(T & x, SegT & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
 
           int rank;
           MPI_Comm_rank(comm, &rank);
@@ -1958,27 +1848,9 @@ namespace mxx2 {
           return result;
         }
 
-        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
-        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentFullyMarked>::value, T >::type
-        reduce(T & x, SegT & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-          // convert make sure seg is converted to Unique first.
-          auto useg = segment<SegT>::to_unique_segment_id(seg, comm);
 
-          return reduce<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
-        }
-
-        template <typename SegmentMarkerType, typename T, typename SegT = size_t, typename Func = std::plus<T> >
-        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentStartMarked>::value, T >::type
-        reduce(T & x, uint8_t & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-          // first convert segment marker type to uniquely marked.
-          auto useg = segment<SegT>::to_unique_segment_id_from_start(seg, 0, comm);
-
-          return reduce<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
-        }
-
-        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
-        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentUniquelyMarked>::value, std::vector<T> >::type
-        reducen(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        template <typename T, typename SegT, typename Func = std::plus<T> >
+        static std::vector<T> reducen(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
 
           if (seg.size() != x.size())
             throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
@@ -1995,14 +1867,14 @@ namespace mxx2 {
 
 
           // first do a forward segmented scan with the user function.
-          seg_scan::seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+          seg_scan::seg_scan_op<T, SegT, Func> func(f);
           std::vector<std::pair<T, SegT> > out = scan_op::scan_elementwise(marked, func, comm);
 
 
           // then do a reverse segmented scan with a "replace" function
           MPI_Comm rev_comm;
           mxx::rev_comm(comm, rev_comm);
-          replace_op<T, SegT, SegmentMarkerType> func2;
+          replace_op<T, SegT> func2;
           out = scan_op::scan_reverse_elementwise(out, func2, comm);
           MPI_Comm_free(&rev_comm);
 
@@ -2013,29 +1885,21 @@ namespace mxx2 {
           return results;
         }
 
-        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
-        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentFullyMarked>::value, std::vector<T> >::type
-        reducen(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-          // convert make sure seg is converted to Unique first.
-          auto useg = segment<SegT>::to_unique_segment_id_elementwise(seg, comm);
 
-          return reducen<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
-
-        }
-
-        template <typename SegmentMarkerType, typename T, typename SegT = size_t, typename Func = std::plus<T> >
-        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentStartMarked>::value, std::vector<T> >::type
-        reducen(std::vector<T> & x, std::vector<uint8_t> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-          // convert make sure seg is converted to Unique first.
-          auto useg = segment<SegT>::to_unique_segment_id_from_start_elementwise(seg, 0, comm);
-
-          return reducen<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
-
-        }
-
-        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
-        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentUniquelyMarked>::value, std::vector<T> >::type
-        reducev(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        /**
+         * @brief  perform allreduce for each segment.
+         * @details if the segment ids are not unique for each segment, the last (or first) element in the vector
+         *   from 2 adjacent processes may have the same segment value when they are not in same segment due to intervening vector elements.
+         *   simplest solution is to convert to Unique segment ids first.
+         *
+         * @param x
+         * @param seg
+         * @param f
+         * @param comm
+         * @return
+         */
+        template <typename T, typename SegT, typename Func = std::plus<T> >
+        static std::vector<T> reducev(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
           if (seg.size() != x.size())
             throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
 
@@ -2046,14 +1910,14 @@ namespace mxx2 {
 
 
           // first do a forward segmented scan with the user function.
-          seg_scan::seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+          seg_scan::seg_scan_op<T, SegT, Func> func(f);
           std::vector<std::pair<T, SegT> > out = scan_op::scanv(marked, func, comm);
 
 
           // then do a reverse segmented scan with a "replace" function
           MPI_Comm rev_comm;
           mxx::rev_comm(comm, rev_comm);
-          replace_op<T, SegT, SegmentMarkerType> func2;
+          replace_op<T, SegT> func2;
           out = scan_op::scanv_reverse(out, func2, comm);
           MPI_Comm_free(&rev_comm);
 
@@ -2065,115 +1929,7 @@ namespace mxx2 {
 
         }
 
-        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
-        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentFullyMarked>::value, std::vector<T> >::type
-        reducev(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-          // convert make sure seg is converted to Unique first.
-          auto useg = segment<SegT>::to_unique_segment_id_v(seg, comm);
-
-          return reducev<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
-
-        }
-
-        template <typename SegmentMarkerType, typename T, typename SegT = size_t, typename Func = std::plus<T> >
-        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentStartMarked>::value, std::vector<T> >::type
-        reducev(std::vector<T> & x, std::vector<uint8_t> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-          // convert make sure seg is converted to Unique first.
-          auto useg = segment<SegT>::to_unique_segment_id_from_start_v(seg, 0, comm);
-
-          return reducev<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
-
-        }
-
   };
-
-
-
-
-
-
-
-
-//
-//  /**
-//   * @brief performs an segmented reduce.
-//   * @param x      input data
-//   * @param seg    segment id.  should be contiguous.  can be computed by: a. mark start of segment with 1's, do prefix sum.
-//   * @param func   function to apply for the scan. should be associative
-//   * @param comm   communicator to use
-//   * @return       scan result at position rank.
-//   */
-//  template <typename T, typename Func>
-//  T seg_allreduce(T& x, int seg, Func func, MPI_Comm comm = MPI_COMM_WORLD) {
-//    int rank;
-//    MPI_Comm_rank(comm, &rank);
-//
-//    MPI_Comm seg_comm;
-//    MPI_Comm_split(comm, seg, rank, &seg_comm);
-//
-//
-//    // get user op note that this is NOT communitative
-//    MPI_Op op = mxx::create_user_op<T, Func >(func);
-//    // get type
-//    mxx::datatype<T > dt;
-//    T result;
-//    // perform reduction
-//    MPI_Allreduce(&x, &result, 1, dt.type(), op, seg_comm);
-//    // clean up op
-//    mxx::free_user_op<T >(op);
-//    MPI_Comm_free(&seg_comm);
-//
-//    return result;
-//  }
-//
-//
-//  /**
-//   * @brief performs a segmented allreduce on vectors.
-//   * @details      to support arbitrary associative functions, this had to be implemented as
-//   * @param x      input data
-//   * @param seg    segment id.  should be contiguous.  can be computed by: a. mark start of segment with 1's, do prefix sum.
-//   * @param func   function to apply for the scan. should be associative
-//   * @param comm   communicator to use
-//   * @return       scan result at position rank.
-//   */
-//  template <typename T, typename Func>
-//  std::vector<T> seg_allreduce(std::vector<T> & x, std::vector<int> seg, Func func, MPI_Comm comm = MPI_COMM_WORLD) {
-//
-//    if (seg.size() != x.size())
-//      throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
-//
-//    // minimum size:
-//    size_t s = x.size();
-//    s = mxx::allreduce(s, [](size_t &x , size_t & y){ return ::std::min(x, y); }, comm);
-//    if (s < x.size())
-//      WARNINGF("WARNING: %lu elements out of %lu used in scan.", s, x.size());
-//
-//    // converted data structure
-//    std::vector<seg_scan_pair<T> > ins(s), outs(s);
-//    std::transform(x.begin(), x.begin() + s, seg.begin(), ins.begin(), [](T & x, int & y) { return seg_scan_pair<T>(x, y); } );
-//
-//    // converted op.
-//    seg_scan_op<T, Func> f(func);
-//
-//    // get user op  note that this is NOT communitative
-//    MPI_Op op = mxx::create_user_op<seg_scan_pair<T>, seg_scan_op<T, Func>, false >(f);
-//    // get type
-//    mxx::datatype<seg_scan_pair<T> > dt;
-//    // perform reduction
-//    MPI_Scan(&(ins[0]), &(outs[0]), s, dt.type(), op, comm);
-//    // clean up op
-//    mxx::free_user_op<seg_scan_pair<T> >(op);
-//
-//    // convert data back to original form
-//    std::vector<T> results(outs.size());
-//    std::transform(outs.begin(), outs.end(), results.begin(), [](seg_scan_pair<T> & x) { return x.first; } );
-//
-//    return results;
-//  }
-//
-
-
-  // segmented exclusive scan not implemented here because the we need an identity value defined for each operator.
 }
 
 #endif /* SRC_IO_MXX_SUPPORT_HPP_ */

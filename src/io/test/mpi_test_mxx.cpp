@@ -687,13 +687,12 @@ INSTANTIATE_TYPED_TEST_CASE_P(Bliss, Mxx2MPITest, Mxx2MPITestTypes);
 /*
  * test class holding some information.  Also, needed for the typed tests
  */
-template <typename T>
 class Mxx2SegmentedMPITest : public ::testing::Test
 {
   protected:
     virtual void SetUp() {};
 
-    template <bool start, typename TT, typename ST, typename Func>
+    template <typename TT, typename ST, typename Func>
     std::vector<TT> seq_seg_reduce_v(std::vector<TT> x, std::vector<ST> seg, Func f) {
       std::vector<TT> result(x.size());
 
@@ -702,7 +701,7 @@ class Mxx2SegmentedMPITest : public ::testing::Test
       // forward.
       result[0] = x[0];
       for (int i = 1; i < x.size(); ++i) {
-        if ((start && (seg[i] == 0)) || (!start && (seg[i-1] == seg[i]))) {
+        if (seg[i-1] == seg[i]) {
           result[i] = f(result[i-1], x[i]);
         }
         else result[i] = x[i];
@@ -710,7 +709,7 @@ class Mxx2SegmentedMPITest : public ::testing::Test
 
       // then reverse
       for (int i = result.size() - 2; i >= 0; --i) {
-        if ((start && (seg[i] == 0)) || (!start && (seg[i+1] == seg[i]))) {
+        if (seg[i+1] == seg[i]) {
           result[i] = result[i+1];
         }
       }
@@ -718,7 +717,7 @@ class Mxx2SegmentedMPITest : public ::testing::Test
       return result;
     }
 
-    template <bool start, typename TT, typename ST, typename Func>
+    template <typename TT, typename ST, typename Func>
     std::vector<TT> seq_seg_scan_v(std::vector<TT> x, std::vector<ST> seg, Func f) {
       std::vector<TT> result(x.size());
 
@@ -726,7 +725,7 @@ class Mxx2SegmentedMPITest : public ::testing::Test
 
       result[0] = x[0];
       for (int i = 1; i < x.size(); ++i) {
-        if ((start && (seg[i] == 0)) || (!start && (seg[i-1] == seg[i]))) {
+        if (seg[i-1] == seg[i]) {
           result[i] = f(result[i-1], x[i]);
         }
         else result[i] = x[i];
@@ -735,28 +734,28 @@ class Mxx2SegmentedMPITest : public ::testing::Test
     }
 
 
-    template <bool start, typename TT, typename ST, typename Func>
+    template <typename TT, typename ST, typename Func>
     std::vector<TT> seq_seg_exscan_v(std::vector<TT> x, std::vector<ST> seg, Func f) {
       std::vector<TT> result(x.size());
 
       if (x.size() < 2) return result;
 
       result[0] = TT();
-      result[1] = x[0];
-      for (int i = 2; i < x.size(); ++i) {
-        if ((start && (seg[i] == 0)) || (!start && (seg[i-1] == seg[i]))) {
-          result[i] = f(result[i-1], x[i-1]);
+      TT temp = x[0];
+      for (int i = 1; i < x.size(); ++i) {
+        if (seg[i-1] == seg[i]) {
+          result[i] = temp;
+          temp = f(temp, x[i]);
         }
         else {
           result[i] = TT();
-          ++i;
-          if (i < x.size()) result[i] = x[i-1];
+          temp = x[i];
         }
       }
       return result;
     }
 
-    template <bool start, typename TT, typename ST, typename Func>
+    template <typename TT, typename ST, typename Func>
     std::vector<TT> seq_seg_scan_v_reverse(std::vector<TT> x, std::vector<ST> seg, Func f) {
       std::vector<TT> result(x.size());
 
@@ -765,7 +764,7 @@ class Mxx2SegmentedMPITest : public ::testing::Test
 
       result.back() = x.back();
       for (int i = x.size() - 2; i >= 0; --i) {
-        if ((start && (seg[i] == 0)) || (!start && (seg[i+1] == seg[i]))) {
+        if (seg[i+1] == seg[i]) {
           result[i] = f(result[i+1], x[i]);
         }
         else result[i] = x[i];
@@ -773,29 +772,28 @@ class Mxx2SegmentedMPITest : public ::testing::Test
       return result;
     }
 
-    template <bool start, typename TT, typename ST, typename Func>
+    template <typename TT, typename ST, typename Func>
     std::vector<TT> seq_seg_exscan_v_reverse(std::vector<TT> x, std::vector<ST> seg, Func f) {
       std::vector<TT> result(x.size());
 
       if (x.size() < 2) return result;
 
-      int i = x.size()-1;
-      result[i] = TT(); --i;
-      result[i] = x[i+1];
-      for (; i >= 0; --i) {
-        if ((start && (seg[i] == 0)) || (!start && (seg[i+1] == seg[i]))) {
-          result[i] = f(result[i+1], x[i+1]);
+      result.back() = TT();
+      TT temp = x.back();
+      for (int i = x.size()-2; i >= 0; --i) {
+        if (seg[i+1] == seg[i]) {
+          result[i] = temp;
+          temp = f(temp, x[i]);
         }
         else {
           result[i] = TT();
-          --i;
-          if (i >= 0) result[i] = x[i+1];
+          temp = x[i];
         }
       }
       return result;
     }
 
-    template <bool start, bool reverse, bool exclusive, typename TT, typename ST>
+    template <bool reverse, bool exclusive, typename TT, typename ST>
     bool equal(std::vector<TT> test, std::vector<TT> gold, std::vector<ST> seg) {
       if (!exclusive) {
         return std::equal(test.begin(), test.end(), gold.begin());
@@ -804,19 +802,16 @@ class Mxx2SegmentedMPITest : public ::testing::Test
 
       auto starts = seg;
 
-      if (!start) {
-        // not in start/end form.
-        if (reverse) {
-          starts.back() = 1;
-          std::transform(seg.rbegin(), seg.rend() - 1, seg.rbegin() + 1, starts.rbegin() + 1, [](ST &x, ST &y){ return (x == y) ? 0 : 1; });
-        } else {
-          starts.front() = 1;
-          std::transform(seg.begin(), seg.end() - 1, seg.begin() + 1, starts.begin() + 1, [](ST &x, ST &y){ return (x == y) ? 0 : 1; });
-        }
+      // not in start/end form.
+      if (reverse) {
+        starts.back() = 1;
+        std::transform(seg.rbegin(), seg.rend() - 1, seg.rbegin() + 1, starts.rbegin() + 1, [](ST &x, ST &y){ return (x == y) ? 0 : 1; });
+      } else {
+        starts.front() = 1;
+        std::transform(seg.begin(), seg.end() - 1, seg.begin() + 1, starts.begin() + 1, [](ST &x, ST &y){ return (x == y) ? 0 : 1; });
+      }
 
 //        printvec(starts, "starts");
-      }  // already in start/end form
-
 
       bool same = true;
 
@@ -842,10 +837,7 @@ class Mxx2SegmentedMPITest : public ::testing::Test
 };
 
 
-// indicate this is a typed test
-TYPED_TEST_CASE_P(Mxx2SegmentedMPITest);
-
-TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan)
+TEST_F(Mxx2SegmentedMPITest, seg_scan)
 {
   int rank, p;
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -853,60 +845,86 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan)
   MPI_Comm_size(comm, &p);
 
   // create segments
-  uint seg;
-  if (std::is_same<TypeParam, mxx2::seg_scan::SegmentUniquelyMarked>::value ) seg = rank / 3;
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentFullyMarked>::value ) seg = (rank / 3) % 3;
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value ) seg = (rank % 3 == 0);
+  uint seg = rank / 3;
 
-  int result = mxx2::seg_scan::scan<TypeParam>(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
-  if (result != rank - (rank % 3)) {
-    printf("R %d seg %d scan result %d\n", rank, seg, result);
-  }
-  EXPECT_EQ(result, rank - (rank % 3));
+  auto allinputs = mxx2::gather(rank, comm, 0);
+
+  auto allseg = mxx2::gather(seg, comm, 0);
+
+  std::vector<int> gold;
+  bool same;
+
+  int result = mxx2::seg_scan::scan(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
 
+  auto print = mxx2::gather(result, comm, 0);
+  if (rank == 0) {
+    gold = this->template seq_seg_scan_v(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
 
-  result = mxx2::seg_scan::exscan<TypeParam>(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
-  int gold;
-  if (rank % 3 > 0) {
-    gold = std::max(0, rank - (rank % 3));
-    if (result != gold) {
-      printf("R %d seg %d scan result %d\n", rank, seg, result);
+    same = this->template equal<false, false>(print, gold, allseg);
+    if (!same) {
+      this->template printvec(allseg, "seg");
+      this->template printvec(allinputs, "input");
+      this->template printvec(print, "scan");
+      this->template printvec(gold, "scan gold");
     }
-    EXPECT_EQ(result, gold);
+    EXPECT_TRUE(same);
   }
 
+
+  result = mxx2::seg_scan::exscan(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
   MPI_Barrier(MPI_COMM_WORLD);
+  print = mxx2::gather(result, comm, 0);
+  if (rank == 0) {
+    gold = this->template seq_seg_exscan_v(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
 
-// for reverse
-  if (std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value ) seg = (rank % 3 == 2) || (rank == p-1);
-
-
-  result = mxx2::seg_scan::scan_reverse<TypeParam>(rank, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
-  gold = std::min(p-1, rank + 2 - (rank % 3));
-  if (rank < p-1) {
-    if (result != gold) {
-      printf("R %d seg %d scan result %d\n", rank, seg, result);
+    same = this->template equal<false, true>(print, gold, allseg);
+    if (!same) {
+      this->template printvec(allseg, "seg");
+      this->template printvec(allinputs, "input");
+      this->template printvec(print, "exscan");
+      this->template printvec(gold, "exscan gold");
     }
-    EXPECT_EQ(result, gold);
+    EXPECT_TRUE(same);
   }
+
+
+  result = mxx2::seg_scan::scan_reverse(rank, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
   MPI_Barrier(MPI_COMM_WORLD);
+  print = mxx2::gather(result, comm, 0);
+  if (rank == 0) {
+    gold = this->template seq_seg_scan_v_reverse(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
 
-
-  result = mxx2::seg_scan::exscan_reverse<TypeParam>(rank, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
-  if ((rank % 3 < 2) && (rank < p-1)) {
-    gold = std::min(p-1, rank + 2 - (rank % 3));
-    if (result != gold) {
-      printf("R %d seg %d scan result %d\n", rank, seg, result);
+    same = this->template equal<true, false>(print, gold, allseg);
+    if (!same) {
+      this->template printvec(allseg, "seg");
+      this->template printvec(allinputs, "input");
+      this->template printvec(print, "rscan");
+      this->template printvec(gold, "rscan gold");
     }
-    EXPECT_EQ(result, gold);
+    EXPECT_TRUE(same);
   }
 
+
+  result = mxx2::seg_scan::exscan_reverse(rank, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
   MPI_Barrier(MPI_COMM_WORLD);
+  print = mxx2::gather(result, comm, 0);
+  if (rank == 0) {
+    gold = this->template seq_seg_exscan_v_reverse(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
+
+    same = this->template equal<true, true>(print, gold, allseg);
+    if (!same) {
+      this->template printvec(allseg, "seg");
+      this->template printvec(allinputs, "input");
+      this->template printvec(print, "rexscan");
+      this->template printvec(gold, "rexscan gold");
+    }
+    EXPECT_TRUE(same);
+  }
 }
 
-TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan_n)
+TEST_F(Mxx2SegmentedMPITest, seg_scan_n)
 {
   int rank, p;
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -915,88 +933,132 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan_n)
 
   // create segments
   std::vector<uint> seg(3);
-  if (std::is_same<TypeParam, mxx2::seg_scan::SegmentUniquelyMarked>::value ) {
     seg[0] = rank / 3;
     seg[1] = (rank + 1) / 3;
     seg[2] = (rank + 2) / 3;
-  }
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentFullyMarked>::value ) {
-    seg[0] = (rank / 3) % 3;
-    seg[1] = ((rank + 1) / 3) % 3;
-    seg[2] = ((rank + 2) / 3) % 3;
-  }
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value ) {
-    seg[0] = (rank % 3 == 0) ? 1 : 0;
-    seg[1] = ((rank + 1) % 3 == 0) ? 1 : 0;
-    seg[2] = ((rank + 2) % 3 == 0) ? 1 : 0;
-  }
+
   std::vector<int> inputs(3);
   inputs[0] = rank;
   inputs[1] = rank;
   inputs[2] = rank;
 
+  std::vector<int> gold;
+  bool same;
 
-  int gold;
-  auto result = mxx2::seg_scan::scan_elementwise<TypeParam>(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  auto result = mxx2::seg_scan::scan_elementwise(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
   for ( int i = 0; i < 3; ++i) {
-    gold = std::max(0, rank - ((rank + i) % 3));
-    if (result[i] != gold) {
-      printf("R %d seg %d scan result %d\n", rank, seg[i], result[i]);
-    }
-    EXPECT_EQ(gold, result[i]);
-    }
-  MPI_Barrier(MPI_COMM_WORLD);
+    auto allseg = mxx2::gather(seg[i], comm, 0);
+    auto vals = mxx2::gather(inputs[i], comm, 0);
+    auto outs = mxx2::gather(result[i], comm, 0);
 
+    if (rank == 0) {
 
-  result = mxx2::seg_scan::exscan_elementwise<TypeParam>(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
-  for ( int i = 0; i < 3; ++i) {
-    gold = std::max(0,rank - ((rank + i) % 3));
-    if ((rank + i) % 3 > 0) {
-      if (result[i] != gold) {
-        printf("R %d seg %d scan result %d\n", rank, seg[i], result[i]);
+      auto golds = this->template seq_seg_scan_v(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
+
+      same = this->template equal<false, false>(outs, golds, allseg);
+
+      if (!same) {
+        this->template printvec(allseg, "seg");
+        this->template printvec(vals, "input");
+        this->template printvec(outs, "scann");
+        this->template printvec(golds, "scann gold");
       }
-      EXPECT_EQ(result[i], gold);
+
+
+      EXPECT_TRUE(same);
+
     }
+
   }
   MPI_Barrier(MPI_COMM_WORLD);
 
-// for reverse
-  if (std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value ) {
-    seg[0] = (rank % 3 == 2) || (rank == p-1) ? 1 : 0;
-    seg[1] = ((rank + 1) % 3 == 2) || (rank == p-1) ? 1 : 0;
-    seg[2] = ((rank + 2) % 3 == 2) || (rank == p-1) ? 1 : 0;
-  }
-
-
-  result = mxx2::seg_scan::scan_reverse_elementwise<TypeParam>(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  result = mxx2::seg_scan::exscan_elementwise(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
   for ( int i = 0; i < 3; ++i) {
-    gold = std::max(0, std::min(p-1, rank + 2 - ((rank + i) % 3)));
-    if (rank < p-1) {
-      if (result[i] != gold) {
-        printf("R %d seg %d scan result %d\n", rank, seg[i], result[i]);
+    auto allseg = mxx2::gather(seg[i], comm, 0);
+    auto vals = mxx2::gather(inputs[i], comm, 0);
+    auto outs = mxx2::gather(result[i], comm, 0);
+
+    if (rank == 0) {
+
+      auto golds = this->template seq_seg_exscan_v(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
+
+      same = this->template equal<false, true>(outs, golds, allseg);
+
+      if (!same) {
+        this->template printvec(allseg, "seg");
+        this->template printvec(vals, "input");
+        this->template printvec(outs, "exscann");
+        this->template printvec(golds, "exscann gold");
       }
-      EXPECT_EQ(result[i], gold);
+
+
+      EXPECT_TRUE(same);
+
     }
+
   }
   MPI_Barrier(MPI_COMM_WORLD);
 
 
-  result = mxx2::seg_scan::exscan_reverse_elementwise<TypeParam>(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  result = mxx2::seg_scan::scan_reverse_elementwise(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
   for ( int i = 0; i < 3; ++i) {
-    gold = std::max(0, std::min(p-1, rank + 2 - ((rank + i) % 3)));
-    if (((rank + i) % 3 < 2) && (rank < p-1)) {
-      if (result[i] != gold) {
-        printf("R %d seg %d scan result %d\n", rank, seg[i], result[i]);
+    auto allseg = mxx2::gather(seg[i], comm, 0);
+    auto vals = mxx2::gather(inputs[i], comm, 0);
+    auto outs = mxx2::gather(result[i], comm, 0);
+
+    if (rank == 0) {
+
+      auto golds = this->template seq_seg_scan_v_reverse(vals, allseg, [](int const &x, int const &y){ return std::max(x, y); } );
+
+      same = this->template equal<true, false>(outs, golds, allseg);
+
+      if (!same) {
+        this->template printvec(allseg, "seg");
+        this->template printvec(vals, "input");
+        this->template printvec(outs, "rscann");
+        this->template printvec(golds, "rscann gold");
       }
-      EXPECT_EQ(result[i], gold);
+
+
+      EXPECT_TRUE(same);
+
     }
+
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+
+
+  result = mxx2::seg_scan::exscan_reverse_elementwise(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  for ( int i = 0; i < 3; ++i) {
+    auto allseg = mxx2::gather(seg[i], comm, 0);
+    auto vals = mxx2::gather(inputs[i], comm, 0);
+    auto outs = mxx2::gather(result[i], comm, 0);
+
+    if (rank == 0) {
+
+      auto golds = this->template seq_seg_exscan_v_reverse(vals, allseg, [](int const &x, int const &y){ return std::max(x, y); } );
+
+      same = this->template equal<true, true>(outs, golds, allseg);
+
+      if (!same) {
+        this->template printvec(allseg, "seg");
+        this->template printvec(vals, "input");
+        this->template printvec(outs, "rexscann");
+        this->template printvec(golds, "rexscann gold");
+      }
+
+
+      EXPECT_TRUE(same);
+
+    }
+
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
 }
 
 
-TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan_v)
+TEST_F(Mxx2SegmentedMPITest, seg_scan_v)
 {
   int rank, p;
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -1004,29 +1066,13 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan_v)
   MPI_Comm_size(comm, &p);
 
   // create segments
-  std::vector<typename std::conditional<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, uint8_t, uint>::type> seg(p);
-  if (std::is_same<TypeParam, mxx2::seg_scan::SegmentUniquelyMarked>::value ) {
+  std::vector< uint> seg(p);
     for (int i = 0; i < rank; ++i) {
       seg[i] = rank - 1;
     }
     for (int i = rank; i < p; ++i) {
       seg[i] = rank;
     }
-  }
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentFullyMarked>::value ) {
-    for (int i = 0; i < rank; ++i) {
-      seg[i] = (rank - 1) % 2;
-    }
-    for (int i = rank; i < p; ++i) {
-      seg[i] = rank % 2;
-    }
-  }
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value ) {
-    for (int i = 0; i < p; ++i) {
-      seg[i] = 0;
-    }
-    seg[rank] = 1;
-  }
   std::vector<int> inputs(p);
   for (int i = 0; i < p; ++i)
     inputs[i] = i;
@@ -1042,14 +1088,14 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan_v)
   std::vector<int> gold;
   bool same;
 
-  auto result = mxx2::seg_scan::scanv<TypeParam>(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  auto result = mxx2::seg_scan::scanv(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
   auto print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_scan_v<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value>(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
+    gold = this->template seq_seg_scan_v(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
 
-    same = this->template equal<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, false, false>(print, gold, allseg);
+    same = this->template equal<false, false>(print, gold, allseg);
     if (!same) {
       this->template printvec(allseg, "seg");
       this->template printvec(allinputs, "input");
@@ -1060,16 +1106,16 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan_v)
   }
 
 
-  result = mxx2::seg_scan::exscanv<TypeParam>(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  result = mxx2::seg_scan::exscanv(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
 
   print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_exscan_v<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value>(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
+    gold = this->template seq_seg_exscan_v(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
 
 
-    same = this->template equal<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, false, true>(print, gold, allseg);
+    same = this->template equal<false, true>(print, gold, allseg);
     if (!same) {
       this->template printvec(allseg, "seg");
       this->template printvec(allinputs, "input");
@@ -1079,28 +1125,16 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan_v)
     EXPECT_TRUE(same);
   }
 
-// for reverse
-  if (std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value ) {
-    for (int i = 0; i < p - 1; ++i) {
-      seg[i] = 0;
-    }
-    if (rank > 0) seg[rank-1] = 1;
 
-    allseg = mxx2::gathern(seg, comm, 0);
-
-  }
-
-
-
-  result = mxx2::seg_scan::scanv_reverse<TypeParam>(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  result = mxx2::seg_scan::scanv_reverse(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
 
   print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_scan_v_reverse<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value>(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
+    gold = this->template seq_seg_scan_v_reverse(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
 
-    same = this->template equal<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, true, false>(print, gold, allseg);
+    same = this->template equal<true, false>(print, gold, allseg);
 
     if (!same) {
       this->template printvec(allseg, "seg");
@@ -1112,17 +1146,17 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan_v)
     EXPECT_TRUE(same);
   }
 
-  result = mxx2::seg_scan::exscanv_reverse<TypeParam>(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  result = mxx2::seg_scan::exscanv_reverse(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
 
   print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
 
-    gold = this->template seq_seg_exscan_v_reverse<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value>(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
+    gold = this->template seq_seg_exscan_v_reverse(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
 
 
-    same = this->template equal<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, true, true>(print, gold, allseg);
+    same = this->template equal<true, true>(print, gold, allseg);
 
     if (!same) {
       this->template printvec(allseg, "seg");
@@ -1136,7 +1170,7 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_scan_v)
   }
 }
 
-TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce)
+TEST_F(Mxx2SegmentedMPITest, seg_reduce)
 {
   int rank, p;
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -1144,31 +1178,22 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce)
   MPI_Comm_size(comm, &p);
 
   // create segments
-  typename std::conditional<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, uint8_t, uint>::type seg;
-  if (std::is_same<TypeParam, mxx2::seg_scan::SegmentUniquelyMarked>::value ) {
-    seg = rank / 3;
-  }
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentFullyMarked>::value ) {
-    seg = (rank / 3) % 3;
-  }
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value ) {
-    seg = (rank % 3 == 0) ? 1 : 0;
-  }
+  uint seg = rank / 3;
 
   auto allseg = mxx2::gather(seg, comm, 0);
 
   auto vals = mxx2::gather(rank, comm, 0);
 
 
-  int result = mxx2::seg_reduce::reduce<TypeParam>(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  int result = mxx2::seg_reduce::reduce(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
 
   auto outs = mxx2::gather(result, comm, 0);
 
   if (rank == 0) {
 
-    auto golds = this->template seq_seg_reduce_v<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value>(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
+    auto golds = this->template seq_seg_reduce_v(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
 
-    bool same = this->template equal<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, false, false>(outs, golds, allseg);
+    bool same = this->template equal<false, false>(outs, golds, allseg);
 
     if (!same) {
       this->template printvec(allseg, "seg");
@@ -1182,21 +1207,21 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce)
   }
 
 
-  result = mxx2::seg_reduce::reduce<TypeParam>(rank, seg, std::plus<int>(), comm);
+  result = mxx2::seg_reduce::reduce(rank, seg, std::plus<int>(), comm);
 
   outs = mxx2::gather(result, comm, 0);
 
   if (rank == 0) {
 
-    auto golds = this->template seq_seg_reduce_v<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value>(vals, allseg, std::plus<int>() );
+    auto golds = this->template seq_seg_reduce_v(vals, allseg, std::plus<int>() );
 
-    bool same = this->template equal<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, false, false>(outs, golds, allseg);
+    bool same = this->template equal<false, false>(outs, golds, allseg);
 
     if (!same) {
       this->template printvec(allseg, "seg");
       this->template printvec(vals, "input");
-      this->template printvec(outs, "reduce");
-      this->template printvec(golds, "reduce gold");
+      this->template printvec(outs, "reduce+");
+      this->template printvec(golds, "reduce+ gold");
     }
 
 
@@ -1208,7 +1233,7 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce)
 }
 
 
-TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce_n)
+TEST_F(Mxx2SegmentedMPITest, seg_reduce_n)
 {
   int rank, p;
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -1216,22 +1241,11 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce_n)
   MPI_Comm_size(comm, &p);
 
   // create segments
-  std::vector<typename std::conditional<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, uint8_t, uint>::type> seg(3);
-  if (std::is_same<TypeParam, mxx2::seg_scan::SegmentUniquelyMarked>::value ) {
+  std::vector<uint> seg(3);
+
     seg[0] = rank / 3;
     seg[1] = (rank + 1) / 3;
     seg[2] = (rank + 2) / 3;
-  }
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentFullyMarked>::value ) {
-    seg[0] = (rank / 3) % 3;
-    seg[1] = ((rank + 1) / 3) % 3;
-    seg[2] = ((rank + 2) / 3) % 3;
-  }
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value ) {
-    seg[0] = (rank % 3 == 0) ? 1 : 0;
-    seg[1] = ((rank + 1) % 3 == 0) ? 1 : 0;
-    seg[2] = ((rank + 2) % 3 == 0) ? 1 : 0;
-  }
   std::vector<int> inputs(3);
   inputs[0] = rank;
   inputs[1] = rank;
@@ -1240,7 +1254,7 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce_n)
 
   int gold, len;
   bool same;
-  auto result = mxx2::seg_reduce::reducen<TypeParam>(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  auto result = mxx2::seg_reduce::reducen(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
   for ( int i = 0; i < 3; ++i) {
     auto allseg = mxx2::gather(seg[i], comm, 0);
     auto vals = mxx2::gather(inputs[i], comm, 0);
@@ -1248,9 +1262,9 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce_n)
 
     if (rank == 0) {
 
-      auto golds = this->template seq_seg_reduce_v<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value>(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
+      auto golds = this->template seq_seg_reduce_v(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
 
-      same = this->template equal<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, false, false>(outs, golds, allseg);
+      same = this->template equal<false, false>(outs, golds, allseg);
 
       if (!same) {
         this->template printvec(allseg, "seg");
@@ -1268,22 +1282,22 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce_n)
   MPI_Barrier(MPI_COMM_WORLD);
 
 
-  result = mxx2::seg_reduce::reducen<TypeParam>(inputs, seg, std::plus<int>(), comm);
+  result = mxx2::seg_reduce::reducen(inputs, seg, std::plus<int>(), comm);
   for ( int i = 0; i < 3; ++i) {
     auto allseg = mxx2::gather(seg[i], comm, 0);
     auto vals = mxx2::gather(inputs[i], comm, 0);
     auto outs = mxx2::gather(result[i], comm, 0);
 
     if (rank == 0) {
-      auto golds = this->template seq_seg_reduce_v<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value>(vals, allseg, std::plus<int>() );
+      auto golds = this->template seq_seg_reduce_v(vals, allseg, std::plus<int>() );
 
-      same = this->template equal<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, false, false>(outs, golds, allseg);
+      same = this->template equal<false, false>(outs, golds, allseg);
 
       if (!same) {
         this->template printvec(allseg, "seg");
         this->template printvec(vals, "input");
-        this->template printvec(outs, "reducen");
-        this->template printvec(golds, "reducen gold");
+        this->template printvec(outs, "reducen+");
+        this->template printvec(golds, "reducen+ gold");
       }
 
       EXPECT_TRUE(same);
@@ -1294,7 +1308,7 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce_n)
 }
 
 
-TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce_v)
+TEST_F(Mxx2SegmentedMPITest, seg_reduce_v)
 {
   int rank, p;
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -1302,30 +1316,16 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce_v)
   MPI_Comm_size(comm, &p);
 
   // create segments
-  std::vector<typename std::conditional<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, uint8_t, uint>::type> seg(p);
+  std::vector<uint> seg(p);
   auto allseg = seg;
-  if (std::is_same<TypeParam, mxx2::seg_scan::SegmentUniquelyMarked>::value ) {
+
     for (int i = 0; i < rank; ++i) {
       seg[i] = rank - 1;
     }
     for (int i = rank; i < p; ++i) {
       seg[i] = rank;
     }
-  }
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentFullyMarked>::value ) {
-    for (int i = 0; i < rank; ++i) {
-      seg[i] = (rank - 1) % 2;
-    }
-    for (int i = rank; i < p; ++i) {
-      seg[i] = rank % 2;
-    }
-  }
-  else if (std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value ) {
-    for (int i = 0; i < p; ++i) {
-      seg[i] = 0;
-    }
-    seg[rank] = 1;
-  }
+
   std::vector<int> inputs(p);
   for (int i = 0; i < p; ++i)
     inputs[i] = i;
@@ -1341,14 +1341,14 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce_v)
   std::vector<int> gold;
   bool same;
 
-  auto result = mxx2::seg_reduce::reducev<TypeParam>(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  auto result = mxx2::seg_reduce::reducev(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
   auto print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_reduce_v<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value>(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
+    gold = this->template seq_seg_reduce_v(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
 
-    same = this->template equal<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, false, false>(print, gold, allseg);
+    same = this->template equal<false, false>(print, gold, allseg);
     if (!same) {
       this->template printvec(allseg, "seg");
       this->template printvec(allinputs, "input");
@@ -1358,36 +1358,26 @@ TYPED_TEST_P(Mxx2SegmentedMPITest, seg_reduce_v)
     EXPECT_TRUE(same);
   }
 
-  result = mxx2::seg_reduce::reducev<TypeParam>(inputs, seg, std::plus<int>(), comm);
+  result = mxx2::seg_reduce::reducev(inputs, seg, std::plus<int>(), comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
   print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_reduce_v<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value>(allinputs, allseg, std::plus<int>());
+    gold = this->template seq_seg_reduce_v(allinputs, allseg, std::plus<int>());
 
-    same = this->template equal<std::is_same<TypeParam, mxx2::seg_scan::SegmentStartMarked>::value, false, false>(print, gold, allseg);
+    same = this->template equal<false, false>(print, gold, allseg);
 
     if (!same) {
       this->template printvec(allseg, "seg");
       this->template printvec(allinputs, "input");
-      this->template printvec(print, "reducev");
-      this->template printvec(gold, "reducev gold");
+      this->template printvec(print, "reducev+");
+      this->template printvec(gold, "reducev+ gold");
     }
 
     EXPECT_TRUE(same);
   }
 
 }
-
-
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(Mxx2SegmentedMPITest, seg_scan, seg_scan_n, seg_scan_v, seg_reduce, seg_reduce_n, seg_reduce_v);
-
-
-//////////////////// RUN the tests with different types.
-typedef ::testing::Types<mxx2::seg_scan::SegmentFullyMarked, mxx2::seg_scan::SegmentStartMarked, mxx2::seg_scan::SegmentUniquelyMarked > Mxx2SegmentedMPITestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(Bliss, Mxx2SegmentedMPITest, Mxx2SegmentedMPITestTypes);
-
 
 int main(int argc, char* argv[]) {
     int result = 0;
