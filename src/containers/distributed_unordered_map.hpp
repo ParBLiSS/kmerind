@@ -296,7 +296,7 @@ namespace dsc  // distributed std container
           this->c.reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
-            c.emplace(::std::move(*it));
+            c.emplace(*it);
           }
 //          c.insert(first, last);  // mem usage?
           return c.size() - before;
@@ -315,7 +315,7 @@ namespace dsc  // distributed std container
           this->c.reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
-            if (pred(*it)) c.emplace(::std::move(*it));
+            if (pred(*it)) c.emplace(*it);
           }
           return c.size() - before;
       }
