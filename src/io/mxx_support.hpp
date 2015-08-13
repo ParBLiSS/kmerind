@@ -14,6 +14,7 @@
 
 #include "mxx/collective.hpp"
 #include "mxx/reduction.hpp"
+#include "mxx/shift.hpp"
 
 #include "common/kmer.hpp"
 #include "io/fastq_loader.hpp"
@@ -27,6 +28,7 @@
 #include <unistd.h>   // for gethostname
 
 #include "utils/container_traits.hpp"
+#include "containers/container_utils.hpp"
 
 namespace mxx {
 
@@ -55,15 +57,91 @@ namespace mxx {
 
 }
 
-
+template <typename T1, typename T2>
+std::ostream &operator<<(std::ostream &os, std::pair<T1, T2> const &t) {
+    return os << t.first << ":" << static_cast<uint64_t>(t.second);
+}
 
 
 
 namespace mxx2 {
+
+  template <typename T>
+  std::vector<T> right_shift(std::vector<T> & t, MPI_Comm comm = MPI_COMM_WORLD)
+  {
+      // get datatype
+      mxx::datatype<T> dt;
+      MPI_Datatype mpi_dt = dt.type();
+
+      // get communication parameters
+      // TODO: mxx::comm or boost::mpi::comm
+      int p, rank;
+      MPI_Comm_size(comm, &p);
+      MPI_Comm_rank(comm, &rank);
+
+      // TODO: handle tags with MXX (get unique tag function)
+      int tag = 13;
+
+      std::vector<T> left_value(t.size()); // result is the value that lies on the previous processor
+      MPI_Request recv_req;
+      if (rank > 0) // if not last processor
+      {
+          MPI_Irecv(&(left_value[0]), t.size(), mpi_dt, rank-1, tag,
+                    comm, &recv_req);
+      }
+      if (rank < p-1) // if not first processor
+      {
+          // send my most right element to the right
+          MPI_Send(&(t[0]), t.size(), mpi_dt, rank+1, tag, comm);
+      }
+      if (rank > 0)
+      {
+          // wait for the async receive to finish
+          MPI_Wait(&recv_req, MPI_STATUS_IGNORE);
+      }
+      return left_value;
+  }
+
+  template <typename T>
+  std::vector<T> left_shift(std::vector<T>& t, MPI_Comm comm = MPI_COMM_WORLD)
+  {
+      // get datatype
+      mxx::datatype<T> dt;
+      MPI_Datatype mpi_dt = dt.type();
+
+      // get communication parameters
+      // TODO: mxx comm or boost::mpi::comm
+      int p, rank;
+      MPI_Comm_size(comm, &p);
+      MPI_Comm_rank(comm, &rank);
+
+      // TODO: handle tags with MXX (get unique tag function)
+      int tag = 15;
+
+      std::vector<T> right_value(t.size()); // result is the value that lies on the previous processor
+      MPI_Request recv_req;
+      if (rank < p-1) // if not last processor
+      {
+          MPI_Irecv(&(right_value[0]), t.size(), mpi_dt, rank+1, tag,
+                    comm, &recv_req);
+      }
+      if (rank > 0) // if not first processor
+      {
+          // send my most right element to the right
+          MPI_Send(&(t[0]), t.size(), mpi_dt, rank-1, tag, comm);
+      }
+      if (rank < p-1)
+      {
+          // wait for the async receive to finish
+          MPI_Wait(&recv_req, MPI_STATUS_IGNORE);
+      }
+      return right_value;
+  }
+
+
 #if !defined(HOST_NAME_MAX)
 #define HOST_NAME_MAX 256
 #endif
-
 
   /**
    * @brief     create a parent communicator and a child communicator, grouped by host names
@@ -179,6 +257,15 @@ namespace mxx2 {
     return ::std::make_pair(group_leaders, group);
   }
 
+  // function returns color to split by.
+  template <typename Func>
+  void split_communicator_by_function(MPI_Comm comm, Func f, MPI_Comm & new_comm) {
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+    int color = f();
+    MPI_Comm_split(comm, color, rank, &new_comm);
+  }
+
 
   /// in place bucketing.  expect buffer and map both to be sorted by key.
   /// (in fact, no need to rebucket. just compute the send_counts.)
@@ -194,11 +281,23 @@ namespace mxx2 {
     // note that map contains splitters.  range defined as [map[i], map[i+1]), so when searching in buffer using entry in map, search via lower_bound
     auto b = buffer.begin();
     auto e = b;
-    for (int i = 0; i < map.size(); ++i) {
-      e = ::std::lower_bound(b, buffer.end(), map[i].first, comp);
-      send_counts[i] = ::std::distance(b, e);
-      b = e;
-    }
+
+    // if mlog(n) is larger than n, then linear would be faster
+    bool linear = (map.size() * std::log(buffer.size()) ) > buffer.size();
+
+    if (linear)
+      for (int i = 0; i < map.size(); ++i) {
+        e = ::fsc::lower_bound<true>(b, buffer.end(), map[i].first, comp);
+        send_counts[i] = ::std::distance(b, e);
+        b = e;
+      }
+    else
+      for (int i = 0; i < map.size(); ++i) {
+        e = ::fsc::lower_bound<false>(b, buffer.end(), map[i].first, comp);
+        send_counts[i] = ::std::distance(b, e);
+        b = e;
+      }
+
     // last 1
     send_counts[map.size()] = ::std::distance(b, buffer.end());
 
@@ -466,45 +565,6 @@ namespace mxx2 {
   }
 
 
-//
-//  /// send only unique elements.  bucketing via in-place bucketing, and unique is computed per bucket.
-//  template<typename T, typename _TargetP, typename count_t = int>
-//  std::vector<count_t> all2all_unique(std::vector<T>& buffer, _TargetP target_p_fun, MPI_Comm comm)
-//  {
-//      // get comm parameters
-//      int p, rank;
-//      MPI_Comm_size(comm, &p);
-//      MPI_Comm_rank(comm, &rank);
-//
-//      // bucket input by their target processor
-//      ::std::vector<count_t> send_counts = ::mxx2::bucketing(msgs, target_p_fun, p);
-//
-//      // retain unique and change send_counts.  note that inplace bucketing does not allow
-//      retain_unique<>(msgs, send_counts);
-//
-//      // send and return the recv count
-//      return mxx2::all2all(msgs, send_counts, comm);
-//  }
-//
-//
-//  /// send only unique elements.  bucketing via in-place bucketing, and unique is computed per bucket.
-//  template<typename T, typename _TargetP, typename count_t = int>
-//  std::vector<count_t> all2all_reduce(std::vector<T>& msgs, _TargetP target_p_fun, MPI_Comm comm)
-//  {
-//      // get comm parameters
-//      int p, rank;
-//      MPI_Comm_size(comm, &p);
-//      MPI_Comm_rank(comm, &rank);
-//
-//      // bucket input by their target processor
-//      ::std::vector<count_t> send_counts = ::mxx2::bucketing(msgs, target_p_fun, p);
-//
-//      // retain unique and change send_counts.  note that inplace bucketing does not allow
-//      retain_unique(msgs, send_counts);
-//
-//      // send and return the recv count
-//      return mxx2::all2all(msgs, send_counts, comm);
-//  }
 
 
 /* deprecated.  use bucketing + all2all in this file instead - more flexible and allows large data (size > int)
@@ -574,109 +634,9 @@ namespace mxx2 {
   }
   */
 
-  template <typename T, typename Func>
-  T reduce(T& x, Func func, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
-  {
-    // get user op
-    MPI_Op op = ::mxx::create_user_op<T, Func>(func);
-      // get type
-      ::mxx::datatype<T> dt;
-      // perform reduction
-      T result;
-      MPI_Reduce(&x, &result, 1, dt.type(), op, root, comm);
-      // clean up op
-      ::mxx::free_user_op<T>(op);
-      // return result
-      return result;
-  }
-
-  template <typename T, typename Func>
-  ::std::vector<T> reduce(::std::vector<T> & v, Func func, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
-  {
-    // get user op
-    MPI_Op op = ::mxx::create_user_op<T, Func>(func);
-    // get type
-    ::mxx::datatype<T> dt;
-    // get the max size.
-    size_t s = v.size();
-    size_t min_s = ::mxx::allreduce(s, [](size_t const &x, size_t const &y) { return ::std::min(x, y); }, comm);
-
-    if (s > min_s) {
-      int rank;
-      MPI_Comm_rank(comm, &rank);
-      WARNINGF("WARNING: process %d has larger vector than the min size during vector reduction.", rank);
-    }
-
-    // perform reduction
-    ::std::vector<T> results(v.size());
-    MPI_Reduce(&(v[0]), &(results[0]), min_s, dt.type(), op, root, comm);
-    // clean up op
-    ::mxx::free_user_op<T>(op);
-    // return result
-    return results;
-  }
-
-  /// reduce operation with minloc
-  template <typename T>
-  ::std::pair<::std::vector<T>, ::std::vector<int> > reduce_loc(::std::vector<T> & v, MPI_Op op, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
-  {
-    if ((op != MPI_MINLOC) && (op != MPI_MAXLOC)) throw std::logic_error("reduce_loc only support MPI_MINLOC and MPI_MAXLOC");
 
 
-    // get the mpi type
-    MPI_Datatype dt;
-    if (::std::is_same<T, float>::value) dt = MPI_FLOAT_INT;
-    else if (::std::is_same<T, double>::value) dt = MPI_DOUBLE_INT;
-    else if (::std::is_same<T, long>::value) dt = MPI_LONG_INT;
-    else if (::std::is_same<T, int>::value) dt = MPI_2INT;
-    else if (::std::is_same<T, short>::value) dt = MPI_SHORT_INT;
-    else if (::std::is_same<T, long double>::value) dt = MPI_LONG_DOUBLE_INT;
-    else
-        throw std::logic_error("type param T is not one of float, double, long, int, short, or long double.");
-
-
-    // struct
-    struct vi {
-        T val;
-        int rank;
-    };
-
-    int rank;
-    MPI_Comm_rank(comm, &rank);
-
-    // get the max size.
-    size_t s = v.size();
-    size_t min_s = ::mxx::allreduce(s, [](size_t const &x, size_t const &y) { return ::std::min(x, y); }, comm);
-
-    if (s > min_s) {
-      WARNINGF("WARNING: process %d has larger vector than the min size during vector reduction.", rank);
-    }
-
-
-    // set up the data structure
-    ::std::vector< vi > temp(s);
-    for (int i = 0; i < s; ++i) {
-      temp[i].val = v[i];
-      temp[i].rank = rank;
-    }
-
-    // perform reduction
-    ::std::vector< vi > temp2(s);
-    MPI_Reduce(&(temp[0]), &(temp2[0]), min_s, dt, op, root, comm);
-
-    // now extract the results
-    ::std::vector<T> outVal(s);
-    ::std::vector<int> outIdx(s);
-    for (int i = 0; i < s; ++i) {
-      outVal[i] = temp2[i].val;
-      outIdx[i] = temp2[i].rank;
-    }
-
-    // return result
-    return ::std::make_pair(outVal, outIdx);
-  }
-
-
+  /// gathers n elements from each process to the root
   template <typename T>
   ::std::vector<T> gathern(::std::vector<T> & v, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
     // get data type
@@ -711,6 +671,7 @@ namespace mxx2 {
     return results;
   }
 
+  /// scatters n elements from root to each process
   template <typename T>
   ::std::vector<T> scattern(::std::vector<T> & v, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
     // get data type
@@ -737,6 +698,7 @@ namespace mxx2 {
     return results;
   }
 
+  /// default gather (1)
   template <typename T>
   ::std::vector<T> gather(T &v, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
     // get data type
@@ -760,6 +722,7 @@ namespace mxx2 {
     return results;
   }
 
+  /// default scatter (1)
   template <typename T>
   T scatter(::std::vector<T>& v, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
     // get data type
@@ -782,7 +745,7 @@ namespace mxx2 {
     return results;
   }
 
-
+  /// scatter with variable number of elements.  integer send_counts
   template <typename Iterator, typename T = typename ::std::iterator_traits<Iterator>::value_type>
   ::std::vector<T> 
   scatterv(Iterator begin, Iterator end, ::std::vector<int>& send_counts, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
@@ -860,6 +823,7 @@ namespace mxx2 {
     return results;
   }
 
+  /// scatter with variable number of elements.  size_t send_counts
   template <typename Iterator, typename T = typename ::std::iterator_traits<Iterator>::value_type>
   ::std::vector<T>
   scatterv(Iterator begin, Iterator end, ::std::vector<size_t>& send_counts, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
@@ -911,7 +875,7 @@ namespace mxx2 {
 
         MPI_Scatterv(src, &(sc[0]), &(sd[0]), dt.type(), &(results[0]), count, dt.type(), root, comm);
     } else {  // not smaller.  need isend/irecv.
-      printf("NOTE: scatterv using isend version.\n");
+      INFOF("NOTE: scatterv using isend version.");
       // check to see if each isend has fewer than max_int number of elements.
       size_t max_count = *(std::max_element(send_counts.begin(), send_counts.end()));
       MPI_Bcast(&max_count, 1, count_dt.type(), root, comm);
@@ -941,6 +905,1275 @@ namespace mxx2 {
   }
 
 
+
+  struct scan_op {
+
+      /// MPI Scan
+      template <typename T, typename Func = std::plus<T>, bool exclusive = false >
+      static T scan(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        MPI_Op op = mxx::create_user_op<T, Func >(f);
+        mxx::datatype<T> dt;
+        T result;
+        if (exclusive)
+          MPI_Exscan(&x, &result, 1, dt.type(), op, comm );
+        else
+          MPI_Scan(&x, &result, 1, dt.type(), op, comm );
+        mxx::free_user_op<T>(op);
+        return result;
+      }
+
+      template <typename T, typename Func = std::plus<T>, bool exclusive = false  >
+      static T scan_reverse(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        MPI_Comm rev_comm;
+        mxx::rev_comm(comm, rev_comm);
+        auto result = scan<T, Func, exclusive>(x, f, rev_comm);
+        MPI_Comm_free(&rev_comm);
+        return result;
+      }
+
+      template <typename T, typename Func = std::plus<T> >
+      static T exscan(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        return scan<T, Func, true>(x, f, comm);
+      }
+
+      template <typename T, typename Func = std::plus<T> >
+      static T exscan_reverse(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        return scan_reverse<T, Func, true>(x, f, comm);
+      }
+
+      template <typename T, typename Func = std::plus<T>, bool exclusive = false >
+      static std::vector<T> scan_elementwise(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        size_t s = x.size();
+        s = mxx::allreduce(s, [](size_t &x , size_t & y){ return ::std::min(x, y); }, comm);
+        if (s < x.size()) {
+          int rank;
+          MPI_Comm_rank(comm, &rank);
+          WARNINGF("WARNING: Rank %d  %lu elements out of %lu used in scan.", rank, s, x.size());
+        }
+
+        MPI_Op op = mxx::create_user_op<T, Func >(f);
+        mxx::datatype<T> dt;
+        std::vector<T> results(s);
+        if (exclusive)
+          MPI_Exscan(&(x[0]), &(results[0]), s, dt.type(), op, comm );
+        else
+          MPI_Scan(&(x[0]), &(results[0]), s, dt.type(), op, comm );
+        mxx::free_user_op<T>(op);
+        return results;
+      }
+
+      template <typename T, typename Func = std::plus<T>, bool exclusive = false >
+      static std::vector<T> scan_reverse_elementwise(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        MPI_Comm rev_comm;
+        mxx::rev_comm(comm, rev_comm);
+        auto results = scan_elementwise<T, Func, exclusive>(x, f, rev_comm);
+        MPI_Comm_free(&rev_comm);
+        return results;
+      }
+
+      template <typename T, typename Func = std::plus<T> >
+      static std::vector<T> exscan_elementwise(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        return scan_elementwise<T, Func, true>(x, f, comm);
+      }
+
+      template <typename T, typename Func = std::plus<T> >
+      static std::vector<T> exscan_reverse_elementwise(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        return scan_reverse_elementwise<T, Func, true>(x, f, comm);
+      }
+
+
+      template <typename T, typename Func = std::plus<T> >
+      static std::vector<T> scanv(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+
+        std::vector<T> results(x.size());
+
+        // create subcommuinicator with processors that have non-zero values.  this avoids special cases.
+        MPI_Comm in_comm;
+        ::mxx2::split_communicator_by_function(comm, [&x](){ return (x.size() > 0) ? 1 : MPI_UNDEFINED; }, in_comm);
+
+        if (in_comm != MPI_COMM_NULL) {  // only do this for valid comm (i.e. x.size > 0)
+
+          int rank, p;
+          MPI_Comm_rank(in_comm, &rank);
+          MPI_Comm_size(in_comm, &p);
+
+          // first scan locally.
+          std::partial_sum(x.begin(), x.end(), results.begin(), f);
+
+          // then do global exscan
+          T last = results.back();
+          last = exscan(last, f, in_comm);
+
+          // finally update local values
+          if (rank > 0) {  // rank 0 does not participate
+            // note that the order of argument when calling f matters for segmented scan - not communitive
+            std::for_each(results.begin(), results.end(), [&last, &f](T & x) { x = f(last, x); });
+          }
+
+          MPI_Comm_free(&in_comm);
+        }
+
+        return results;
+      }
+
+      template <typename T, typename Func = std::plus<T> >
+      static std::vector<T> scanv_reverse(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        std::vector<T> results(x.size());
+
+        // create subcommuinicator with processors that have non-zero values.  this avoids special cases.
+        MPI_Comm in_comm;
+        ::mxx2::split_communicator_by_function(comm, [&x](){ return (x.size() > 0) ? 1 : MPI_UNDEFINED; }, in_comm);
+
+        if (in_comm != MPI_COMM_NULL) {  // only do this for valid comm (i.e. x.size > 0)
+
+          // first scan locally.
+          std::partial_sum(x.rbegin(), x.rend(), results.rbegin(), f);
+
+          // then do global exscan
+          T first = results.front();
+          first = exscan_reverse(first, f, in_comm);
+
+          // finally update local values
+          int rank, p;
+          MPI_Comm_rank(in_comm, &rank);
+          MPI_Comm_size(in_comm, &p);
+          if (rank < p - 1) {  // last rank does not participate
+            // note that the order of argument when calling f matters for segmented scan - not communitive
+            std::for_each(results.begin(), results.end(), [&first, &f](T & x) { x = f(first, x); });
+          }
+
+          MPI_Comm_free(&in_comm);
+        }
+
+        return results;
+      }
+
+
+      template <typename T, typename Func = std::plus<T> >
+      static std::vector<T> exscanv(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        std::vector<T> results(x.size());
+
+        // create subcommuinicator with processors that have non-zero values.  this avoids special cases.
+        MPI_Comm in_comm;
+        ::mxx2::split_communicator_by_function(comm, [&x](){ return (x.size() > 0) ? 1 : MPI_UNDEFINED; }, in_comm);
+
+        if (in_comm != MPI_COMM_NULL) {  // only do this for valid comm (i.e. x.size > 0)
+          int rank, p;
+          MPI_Comm_rank(in_comm, &rank);
+          MPI_Comm_size(in_comm, &p);
+
+
+//          for (int i = 0; i < p; ++i) {
+//            std::cout << "R " << rank << "," << i << " scan input " << x[i] << std::endl;
+//          }
+
+          // first scan locally.  scan 0 to m-1 and store at 1 to m
+          std::partial_sum(x.begin(), x.end() - 1, results.begin() + 1, f);
+
+//          for (int i = 0; i < p; ++i) {
+//            std::cout << "R " << rank << "," << i << " local prefix " << results[i] << std::endl;
+//          }
+
+
+          // then do global exscan with result of local _SCAN_ (not exscan)
+          // note that the order of argument when calling f matters for segmented scan - not communitive
+          T last = (x.size() == 1) ? x.back() : f(results.back(), x.back());  // special case if length == 1
+          last = exscan(last, f, in_comm);
+//          std::cout << "R " << rank << "," << " last " << last << std::endl;
+
+          // finally update local values
+          if (rank > 0) {  // rank 0 does not participate
+            results.front() = last;  // exclusive scan takes value from last proc
+            // note that the order of argument when calling f matters for segmented scan - not communitive
+            std::for_each(results.begin() + 1, results.end(), [&last, &f](T & x) { x = f(last, x); });
+          }
+
+//          for (int i = 0; i < p; ++i) {
+//            std::cout << "R " << rank << "," << i << " global prefix " << results[i] << std::endl;
+//          }
+
+          MPI_Comm_free(&in_comm);
+        }
+
+        return results;
+      }
+
+      template <typename T, typename Func = std::plus<T> >
+      static std::vector<T> exscanv_reverse(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        std::vector<T> results(x.size());
+
+        // create subcommuinicator with processors that have non-zero values.  this avoids special cases.
+        MPI_Comm in_comm;
+        ::mxx2::split_communicator_by_function(comm, [&x](){ return (x.size() > 0) ? 1 : MPI_UNDEFINED; }, in_comm);
+
+        if (in_comm != MPI_COMM_NULL) {  // only do this for valid comm (i.e. x.size > 0)
+
+          // first scan locally.  scan 0 to m-1 and store at 1 to m
+          std::partial_sum(x.rbegin(), x.rend() - 1, results.rbegin() + 1, f);
+
+          // then do global exscan with result of local _SCAN_ (not exscan)
+          // note that the order of argument when calling f matters for segmented scan - not communitive
+          T first = (x.size() == 1) ? x.front() : f(results.front(), x.front());  // special case if length == 1
+          first = exscan_reverse(first, f, in_comm);
+
+          // finally update local values
+          int rank, p;
+          MPI_Comm_rank(in_comm, &rank);
+          MPI_Comm_size(in_comm, &p);
+          if (rank < p - 1) {  // last rank does not participate
+            results.back() = first;  // exclusive scan takes value from last proc
+            // note that the order of argument when calling f matters for segmented scan - not communitive
+            std::for_each(results.begin(), results.end() - 1, [&first, &f](T & x) { x = f(first, x); });
+          }
+          MPI_Comm_free(&in_comm);
+        }
+
+        return results;
+      }
+
+  };
+
+  struct reduce_op {
+      template <typename T, typename Func = std::plus<T> >
+      static T reduce(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+        MPI_Op op = mxx::create_user_op<T, Func >(f);
+        mxx::datatype<T> dt;
+        T result;
+        MPI_Reduce(&x, &result, 1, dt.type(), op, root, comm );
+        mxx::free_user_op<T>(op);
+        return result;
+      }
+      template <typename T, typename Func = std::plus<T> >
+      static std::vector<T> reduce_elementwise(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+        size_t s = x.size();
+        s = mxx::allreduce(s, [](size_t &x , size_t & y){ return ::std::min(x, y); }, comm);
+        if (s < x.size()) {
+          int rank;
+          MPI_Comm_rank(comm, &rank);
+          WARNINGF("WARNING: Rank %d  %lu elements out of %lu used in scan.", rank, s, x.size());
+        }
+
+        MPI_Op op = mxx::create_user_op<T, Func >(f);
+        mxx::datatype<T> dt;
+        std::vector<T> results(s);
+        MPI_Reduce(&(x[0]), &(results[0]), s, dt.type(), op, root, comm );
+        mxx::free_user_op<T>(op);
+        return results;
+      }
+      template <typename T, typename Func = std::plus<T> >
+      static T reducev(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+
+        T result;
+
+        // create subcommuinicator with processors that have non-zero values.  this avoids special cases.
+        MPI_Comm in_comm;
+        ::mxx2::split_communicator_by_function(comm, [&x](){ return (x.size() > 0) ? 1 : MPI_UNDEFINED; }, in_comm);
+
+        int in_rank = MPI_UNDEFINED;
+        if (in_comm != MPI_COMM_NULL) {  // only do this for valid comm (i.e. x.size > 0)
+
+          // first reduce locally.
+          result = std::accumulate(x.begin() + 1, x.end(), x.front(), f);
+
+          // then do global reduce, directly to the root if possible.
+          result = reduce_op::reduce(result, f, in_comm, 0);
+
+          // assume rank 0 in in_comm is not root rank.
+          MPI_Comm_rank(in_comm, &in_rank);
+          //printf("in_rank == %d\n", in_rank);
+
+          MPI_Comm_free(&in_comm);
+
+        }
+
+        int rank;
+        MPI_Comm_rank(comm, &rank);
+
+        MPI_Request reqs[2];
+
+        ::mxx::datatype<T> dt;
+        if (rank == root) {
+          //printf("receiving on %d\n", root);
+          MPI_Irecv(&result, 1, dt.type(), MPI_ANY_SOURCE, 770, comm,  reqs);
+        }
+        if (in_rank == 0) {
+          //printf("sending from %d (in_rank == 0) \n", rank);
+          MPI_Isend(&result, 1, dt.type(), root, 770, comm, reqs + 1);
+        }
+
+        if (in_rank == 0)
+          MPI_Wait(reqs + 1, MPI_STATUS_IGNORE);
+
+        if (rank == root)
+          MPI_Wait(reqs, MPI_STATUS_IGNORE);
+
+        return result;
+      }
+
+
+      /// reduce operation with minloc, elementwise
+      template <typename T>
+      static ::std::pair<T, int > reduce_loc(T & v, MPI_Op op, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
+      {
+        if ((op != MPI_MINLOC) && (op != MPI_MAXLOC)) throw std::logic_error("reduce_loc only support MPI_MINLOC and MPI_MAXLOC");
+
+
+        // get the mpi type
+        MPI_Datatype dt;
+        if (::std::is_same<T, float>::value) dt = MPI_FLOAT_INT;
+        else if (::std::is_same<T, double>::value) dt = MPI_DOUBLE_INT;
+        else if (::std::is_same<T, long>::value) dt = MPI_LONG_INT;
+        else if (::std::is_same<T, int>::value) dt = MPI_2INT;
+        else if (::std::is_same<T, short>::value) dt = MPI_SHORT_INT;
+        else if (::std::is_same<T, long double>::value) dt = MPI_LONG_DOUBLE_INT;
+        else
+            throw std::logic_error("type param T is not one of float, double, long, int, short, or long double.");
+
+
+        // struct because pair may not have the right ordering in memory.
+        struct vi {
+            T val;
+            int rank;
+        };
+
+        int rank;
+        MPI_Comm_rank(comm, &rank);
+
+        // set up the data structure
+        vi temp = {v, rank};
+
+        // perform reduction
+        vi temp2;
+        MPI_Reduce(&temp, &temp2, 1, dt, op, root, comm);
+
+        // return result
+        return ::std::make_pair(temp2.val, temp2.rank);
+      }
+
+      /// reduce operation with minloc, elementwise
+      template <typename T>
+      static ::std::pair<::std::vector<T>, ::std::vector<int> > reduce_loc_elementwise(::std::vector<T> & v, MPI_Op op, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
+      {
+        if ((op != MPI_MINLOC) && (op != MPI_MAXLOC)) throw std::logic_error("reduce_loc only support MPI_MINLOC and MPI_MAXLOC");
+
+
+        // get the mpi type
+        MPI_Datatype dt;
+        if (::std::is_same<T, float>::value) dt = MPI_FLOAT_INT;
+        else if (::std::is_same<T, double>::value) dt = MPI_DOUBLE_INT;
+        else if (::std::is_same<T, long>::value) dt = MPI_LONG_INT;
+        else if (::std::is_same<T, int>::value) dt = MPI_2INT;
+        else if (::std::is_same<T, short>::value) dt = MPI_SHORT_INT;
+        else if (::std::is_same<T, long double>::value) dt = MPI_LONG_DOUBLE_INT;
+        else
+            throw std::logic_error("type param T is not one of float, double, long, int, short, or long double.");
+
+
+        // struct because pair may not have the right ordering in memory.
+        struct vi {
+            T val;
+            int rank;
+        };
+
+        int rank;
+        MPI_Comm_rank(comm, &rank);
+
+        // get the max size.
+        size_t s = v.size();
+        size_t min_s = ::mxx::allreduce(s, [](size_t const &x, size_t const &y) { return ::std::min(x, y); }, comm);
+
+        if (s > min_s) {
+          WARNINGF("WARNING: process %d has larger vector than the min size during vector reduction.", rank);
+        }
+
+
+        // set up the data structure
+        ::std::vector< vi > temp(s);
+        for (int i = 0; i < s; ++i) {
+          temp[i].val = v[i];
+          temp[i].rank = rank;
+        }
+
+        // perform reduction
+        ::std::vector< vi > temp2(s);
+        MPI_Reduce(&(temp[0]), &(temp2[0]), min_s, dt, op, root, comm);
+
+        // now extract the results
+        ::std::vector<T> outVal(s);
+        ::std::vector<int> outIdx(s);
+        for (int i = 0; i < s; ++i) {
+          outVal[i] = temp2[i].val;
+          outIdx[i] = temp2[i].rank;
+        }
+
+        // return result
+        return ::std::make_pair(outVal, outIdx);
+      }
+
+      template <typename T, typename Func = std::plus<T> >
+      static T allreduce(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        MPI_Op op = mxx::create_user_op<T, Func >(f);
+        mxx::datatype<T> dt;
+        T result;
+        MPI_Allreduce(&x, &result, 1, dt.type(), op, comm );
+        mxx::free_user_op<T>(op);
+        return result;
+      }
+      template <typename T, typename Func = std::plus<T> >
+      static std::vector<T> allreduce_elementwise(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        size_t s = x.size();
+        s = mxx::allreduce(s, [](size_t &x , size_t & y){ return ::std::min(x, y); }, comm);
+        if (s < x.size()) {
+          int rank;
+          MPI_Comm_rank(comm, &rank);
+          WARNINGF("WARNING: Rank %d  %lu elements out of %lu used in scan.", rank, s, x.size());
+        }
+
+        MPI_Op op = mxx::create_user_op<T, Func >(f);
+        mxx::datatype<T> dt;
+        std::vector<T> results(s);
+        MPI_Allreduce(&(x[0]), &(results[0]), s, dt.type(), op, comm );
+        mxx::free_user_op<T>(op);
+        return results;
+      }
+      template <typename T, typename Func = std::plus<T> >
+      static T allreducev(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+
+        T result;
+
+        // create subcommuinicator with processors that have non-zero values.  this avoids special cases.
+        MPI_Comm in_comm;
+        ::mxx2::split_communicator_by_function(comm, [&x](){ return (x.size() > 0) ? 1 : MPI_UNDEFINED; }, in_comm);
+
+        int root = MPI_UNDEFINED;
+        if (in_comm != MPI_COMM_NULL) {  // only do this for valid comm (i.e. x.size > 0)
+
+          // first reduce locally.
+          result = std::accumulate(x.begin() + 1, x.end(), x.front(), f);
+
+          // then do global reduce.
+          result = reduce_op::reduce(result, f, in_comm, 0);
+
+          // mark the root
+          int rank;
+          MPI_Comm_rank(in_comm, &rank);
+          if (rank == 0)
+            MPI_Comm_rank(comm, &root);  // only 1 will have defined rank (as root)
+
+          MPI_Comm_free(&in_comm);
+        }
+
+        // let every one know the rank of the root.
+        if (root == MPI_UNDEFINED) root = -1;  // reset all others to -1.  root has a rank so >= 0
+        root = reduce_op::allreduce(root, [](int & x, int & y){ return ::std::max(x, y); }, comm);
+
+        // broadcast the results
+        mxx::datatype<T> dt;
+        //printf("broadcast from %d\n", root);
+        MPI_Bcast(&result, 1, dt.type(), root, comm);
+
+        return result;
+      }
+
+  };
+
+
+
+  template <typename T>
+  struct segment {
+
+    static uint8_t is_start(T const & seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
+      // right shift
+      T prev = mxx::right_shift(seg_id, comm);
+
+      // compare equal
+      int rank;
+      MPI_Comm_rank(comm, &rank);
+      return (rank == 0 || prev != seg_id) ? 1 : 0;
+    }
+
+    static std::vector<uint8_t> is_start_elementwise(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+      // right shift
+      std::vector<T> prev = mxx2::right_shift(seg_ids, comm);
+
+      // compare equal
+      int rank;
+      MPI_Comm_rank(comm, &rank);
+
+      std::vector<uint8_t> results(seg_ids.size());
+      std::transform(seg_ids.begin(), seg_ids.end(), prev.begin(), results.begin(),
+                      [&rank](T const &x, T const &y) { return (rank == 0 || x != y) ? 1 : 0; });
+
+      return results;
+    }
+
+
+    static std::vector<uint8_t> is_start_v(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+      // exclude empty procs
+	  MPI_Comm work_comm;
+	  mxx2::split_communicator_by_function(comm, [&seg_ids](){ return (seg_ids.size() == 0) ? MPI_UNDEFINED : 1; }, work_comm);
+
+	  // compute all except first
+	  std::vector<uint8_t> results(seg_ids.size());
+
+	  if (seg_ids.size() > 0)
+	    std::transform(seg_ids.begin(), seg_ids.end() - 1, seg_ids.begin() + 1, results.begin() + 1,
+			  	  	  [](T const &x, T const &y) { return (x == y) ? 0 : 1; });
+
+	  // now compute the first.
+
+	  // right shift last
+	  if (work_comm != MPI_COMM_NULL) {  // also means non-zero vector
+		  T prev = mxx::right_shift(seg_ids.back(), work_comm);
+
+		  // local compare equal first element
+      int rank;
+      MPI_Comm_rank(comm, &rank);
+		  results[0] = (rank == 0 || prev != seg_ids.front()) ? 1 : 0;
+
+      MPI_Comm_free(&work_comm);
+
+	  }
+
+      return results;
+    }
+
+
+    static uint8_t is_end(T const & seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
+      // (more complicated to use reverse communicator)
+      // left shift
+      T next = mxx::left_shift(seg_id, comm);
+
+      // compare equal?
+      int rank;
+      MPI_Comm_rank(comm, &rank);
+      int p;
+      MPI_Comm_size(comm, &p);
+      return (rank == p - 1 || next != seg_id) ? 1 : 0;
+    }
+
+    static std::vector<uint8_t> is_end_elementwise(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+      // right shift
+      std::vector<T> next = mxx2::left_shift(seg_ids, comm);
+
+      // compare equal
+      int rank;
+      MPI_Comm_rank(comm, &rank);
+      int p;
+      MPI_Comm_size(comm, &p);
+
+      std::vector<uint8_t> results(seg_ids.size());
+      std::transform(seg_ids.begin(), seg_ids.end(), next.begin(), results.begin(),
+                      [&rank, &p](T const &x, T const &y) { return (rank == p - 1 || x != y) ? 1 : 0; });
+
+      return results;
+    }
+
+
+    static std::vector<uint8_t> is_end_v(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+      // exclude empty procs
+  	  MPI_Comm work_comm;
+  	  mxx2::split_communicator_by_function(comm, [&seg_ids](){ return (seg_ids.size() == 0) ? MPI_UNDEFINED : 1; }, work_comm);
+
+  	  // compute all except first
+  	  std::vector<uint8_t> results(seg_ids.size());
+
+  	  if (seg_ids.size() > 0)
+  	    std::transform(seg_ids.begin()+1, seg_ids.end(), seg_ids.begin(), results.begin(),
+  			  	  	  [](T const &x, T const &y) { return (x == y) ? 0 : 1; });
+
+  	  // now compute the last.
+
+  	  // left shift last
+  	  if (work_comm != MPI_COMM_NULL) {  // also means non-zero vector
+  		  T next = mxx::left_shift(seg_ids.front(), work_comm);
+
+  		  // local compare equal first element
+        int rank;
+        MPI_Comm_rank(comm, &rank);
+        int p;
+        MPI_Comm_size(comm, &p);
+
+  		  results.back() = (rank == p - 1 || next != seg_ids.back()) ? 1 : 0;
+
+  		  MPI_Comm_free(&work_comm);
+  	  }
+
+        return results;
+    }
+
+
+    static T to_unique_segment_id_from_start(uint8_t const & start, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+      // convert to 1 and 0.
+    	T seg_id = (start == non_start_value) ? 0 : 1;
+
+      // scan
+    	return scan_op::scan(seg_id, std::plus<T>(), comm);
+    }
+
+    static std::vector<T> to_unique_segment_id_from_start_elementwise(std::vector<uint8_t> & starts, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+      // convert to 1 and 0
+      std::vector<T> seg_ids(starts.size());
+      std::transform(starts.begin(), starts.end(), seg_ids.begin(), [&non_start_value](uint8_t & x){ return (x == non_start_value) ? 0 : 1; });
+
+      // scan
+      return scan_op::scan_elementwise(seg_ids, std::plus<T>(), comm);
+    }
+
+
+    static std::vector<T> to_unique_segment_id_from_start_v(std::vector<uint8_t> & starts, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+      // convert to 1 and 0
+      std::vector<T> seg_ids(starts.size());
+      if (starts.size() > 0)
+        std::transform(starts.begin(), starts.end(), seg_ids.begin(), [&non_start_value](uint8_t & x){ return (x == non_start_value) ? 0 : 1; });
+      
+      // scan
+      return scan_op::scanv(seg_ids, std::plus<T>(), comm);
+    }
+
+
+
+    static T to_unique_segment_id_from_end(uint8_t const & end, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+      // convert to 1 and 0.
+    	T seg_id = (end == non_end_value) ? 0 : 1;
+
+      // reverse scan
+    	return scan_op::scan_reverse(seg_id, std::plus<T>(), comm);
+    }
+
+    static std::vector<T> to_unique_segment_id_from_end_elementwise(std::vector<uint8_t> & ends, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+      // convert to 1 and 0
+      std::vector<T> results(ends.size());
+      std::transform(ends.begin(), ends.end(), results.begin(), [&non_end_value](uint8_t & x) { return (x == non_end_value) ? 0 : 1; });
+
+      // reverse scan
+      return scan_op::scan_reverse_elementwise(results, std::plus<T>(), comm);
+    }
+
+    static std::vector<T> to_unique_segment_id_from_end_v(std::vector<uint8_t> & ends, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+      // convert to 1 and 0
+      std::vector<T> results(ends.size());
+      if (ends.size() > 0)
+        std::transform(ends.begin(), ends.end(), results.begin(), [&non_end_value](uint8_t & x) { return (x == non_end_value) ? 0 : 1; });
+      
+      // reverse scan
+      return scan_op::scanv_reverse(results, std::plus<T>(), comm);
+    }
+
+    static T to_unique_segment_id(T const & non_unique_seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
+      auto start = is_start(non_unique_seg_id, comm);
+      return to_unique_segment_id_from_start(start, 0, comm);
+    }
+
+    static std::vector<T> to_unique_segment_id_elementwise(std::vector<T> & non_unique_seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+      auto start = is_start_elementwise(non_unique_seg_ids, comm);
+      return to_unique_segment_id_from_start_elementwise(start, 0, comm);
+    }
+
+    static std::vector<T> to_unique_segment_id_v(std::vector<T> & non_unique_seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+      auto start = is_start_v(non_unique_seg_ids, comm);
+      return to_unique_segment_id_from_start_v(start, 0, comm);
+    }
+    
+
+  };
+
+
+
+  /// segmented scan operations.  requires that the segments have unique ids and all elements in the same segment id
+    struct seg_scan {
+
+      /// segments marker type: at start only
+      struct SegmentStartMarked {};
+      /// segments marker type: fully marked.  not necessarily unique
+      struct SegmentFullyMarked {};
+      /// segments marker type: fully marked.  not necessarily unique
+      struct SegmentUniquelyMarked {};
+
+
+      /**
+       * @brief segmented scan helper function - converts the user specified operation into a segmented scan operation
+       */
+      template <typename T, typename SegT, typename Func, typename SegmentMarkerType>
+      struct seg_scan_op {
+          Func f;
+          const uint8_t non_terminus_val;
+
+          seg_scan_op(Func _f, uint8_t middle_val = 0) : f(_f), non_terminus_val(middle_val) {}
+
+          template <typename Marker = SegmentMarkerType>
+          typename std::enable_if<!std::is_same<Marker, SegmentStartMarked>::value, std::pair<T, SegT> >::type
+          operator()(std::pair<T, SegT> const & x, std::pair<T, SegT> const & y) {
+            return (x.second == y.second) ?
+              std::pair<T, SegT>(this->f(x.first, y.first), y.second) : y;
+          }
+
+          /** @note  this is the version where the starting position only is marked.
+          */
+          template <typename Marker = SegmentMarkerType>
+          typename std::enable_if<std::is_same<Marker, SegmentStartMarked>::value, std::pair<T, SegT> >::type
+          operator()(std::pair<T, uint8_t> const & x, std::pair<T, uint8_t> const & y) {
+            // flag OR replaced with this conditional - chooses y if y.second is not 0, else do scan and choose x.second (this is the OR part)
+            return (y.second == non_terminus_val) ?
+                std::pair<T, uint8_t>(this->f(x.first, y.first), y.second) : y;
+          }
+      };
+
+
+
+      /// MPI Scan  with uniquely marked segments.  we can then split the comm and do normal scan
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
+      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, T>::type
+      scan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        int rank;
+        MPI_Comm_rank(comm, &rank);
+
+        MPI_Comm seg_comm;
+        MPI_Comm_split(comm, seg, rank, &seg_comm);
+
+        // calling normal scan function.
+        T result = scan_op::scan<T, Func, exclusive>(x, f, seg_comm);
+
+        MPI_Comm_free(&seg_comm);
+        return result;
+      }
+
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
+      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, T>::type
+      scan_reverse(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        // reverse the comm, then split it using the same coloring, results in individual reversed comms.
+        int rank, p;
+        MPI_Comm_rank(comm, &rank);
+        MPI_Comm_size(comm, &p);
+
+        MPI_Comm rev_seg_comm;
+        MPI_Comm_split(comm, seg, p - rank, &rev_seg_comm);
+
+        // now call local scan
+        T result = scan_op::scan<T, Func, exclusive>(x, f, rev_seg_comm);
+
+        MPI_Comm_free(&rev_seg_comm);
+        return result;
+      }
+
+
+      /// MPI Scan  with non-uniquely marked segments or only markers for segment starts.  have to do a full scan.
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
+      static typename std::enable_if<!std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, T>::type
+      scan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+          // converted data structure
+          std::pair<T, SegT> in(x, seg);
+
+          // converted op.
+          seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+
+          std::pair<T, SegT> out = scan_op::scan<std::pair<T, SegT>, seg_scan_op<T, SegT, Func, SegmentMarkerType>, exclusive>(in, f, comm);
+
+          return out.first;
+      }
+
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
+      static typename std::enable_if<!std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, T>::type
+      scan_reverse(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        MPI_Comm rev_comm;
+        mxx::rev_comm(comm, rev_comm);
+
+        // now call local scan
+        T result = seg_scan::scan<SegmentMarkerType, T, SegT, Func, exclusive>(x, seg, f, rev_comm);
+
+        MPI_Comm_free(&rev_comm);
+        return result;
+      }
+
+      /// exclusive scan
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      static T exscan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        return seg_scan::scan<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+      }
+
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      static T exscan_reverse(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        return seg_scan::scan_reverse<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+      }
+
+
+
+      /// scan of a vector, element-wise across all processors.
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
+      static std::vector<T> scan_elementwise(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        // can't do this via comm split because segments may not line up at different element positions.
+
+        if (seg.size() != x.size())
+          throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
+
+        // minimum size:
+        size_t s = x.size();
+        s = ::mxx::allreduce(s, [](size_t &x , size_t & y){ return ::std::min(x, y); }, comm);
+        if (s < x.size())
+          WARNINGF("WARNING: %lu elements out of %lu used in scan.", s, x.size());
+
+        // converted data structure
+        std::vector<std::pair<T, SegT> > marked(s);
+        std::transform(x.begin(), x.begin() + s, seg.begin(), marked.begin(), [](T & x, SegT & y) { return std::pair<T, SegT>(x, y); } );
+
+        // converted op.
+        seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+
+        std::vector<std::pair<T, SegT> > out = scan_op::scan_elementwise<std::pair<T, SegT>, seg_scan_op<T, SegT, Func, SegmentMarkerType>, exclusive>(marked, func, comm);
+
+        // convert data back to original form
+        std::vector<T> results(out.size());
+        std::transform(out.begin(), out.end(), results.begin(), [](std::pair<T, SegT> & x) { return x.first; } );
+
+        return results;
+
+      }
+
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
+      static std::vector<T> scan_reverse_elementwise(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        // since we cannot do this via comm splitting (segments at different position in vector may not line up
+        // we can just call the scan_elementwise function with a reverse comm.
+
+        MPI_Comm rev_comm;
+        mxx::rev_comm(comm, rev_comm);
+
+        // now call local scan
+        auto results = seg_scan::scan_elementwise<SegmentMarkerType, T, SegT, Func, exclusive>(x, seg, f, rev_comm);
+
+        MPI_Comm_free(&rev_comm);
+        return results;
+
+      }
+
+
+      /// exclusive segmented scan.  first element of a segment is not valid.
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      static std::vector<T> exscan_elementwise(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        return seg_scan::scan_elementwise<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+      }
+
+      /// exclusive segmented scan in reverse.  last element of a segment is not valid.
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      static std::vector<T> exscan_reverse_elementwise(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        return seg_scan::scan_reverse_elementwise<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+      }
+
+
+      /**
+       * @brief Scan of partitioned vector.
+       * @note  cannot split communicator.
+       * @details if the SegmentMarkerType is NOT SegmentUniquelyMarked, last (or first) element in the vector
+       *   from 2 adjacent processes may have the same segment value when they are not in same segment due to intervening vector elements.
+       *   simplest solution is to convert to Unique segment ids first.
+       */
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
+      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, std::vector<T> >::type
+      scanv(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        // convert make sure seg is converted to Unique first.
+
+        // can't do this via comm split because segments may not line up at different element positions.
+
+        if (seg.size() != x.size())
+          throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
+
+        // converted data structure
+        std::vector<std::pair<T, SegT> > marked(x.size());
+        std::transform(x.begin(), x.end(), seg.begin(), marked.begin(), [](T & x, SegT & y) { return std::pair<T, SegT>(x, y); } );
+
+        int rank, p;
+        MPI_Comm_rank(comm, &rank);
+        MPI_Comm_size(comm, &p);
+//        for (int i = 0; i < p; ++i) {
+//          printf("R %d,%d transformed input %lu, seg %d \n", rank, i, marked[i].first, marked[i].second);
+//        }
+
+
+
+        // converted op.
+        seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+
+        std::vector<std::pair<T, SegT> > out;
+        if (exclusive)
+          scan_op::exscanv(marked, func, comm).swap(out);
+        else
+          scan_op::scanv(marked, func, comm).swap(out);
+
+//        for (int i = 0; i < p; ++i) {
+//          printf("R %d,%d transformed scanv %lu, seg %d \n", rank, i, out[i].first, out[i].second);
+//        }
+
+
+        // convert data back to original form
+        std::vector<T> results(out.size());
+        std::transform(out.begin(), out.end(), results.begin(), [](std::pair<T, SegT> & x) { return x.first; } );
+
+        return results;
+
+      }
+
+
+      template <typename SegmentMarkerType, typename T, typename SegT = size_t, typename Func = std::plus<T>, bool exclusive = false  >
+      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentStartMarked>::value, std::vector<T> >::type
+      scanv(std::vector<T> & x, std::vector<uint8_t> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        auto useg = segment<SegT>::to_unique_segment_id_from_start_v(seg, 0, comm);
+
+        return seg_scan::scanv<SegmentUniquelyMarked, T, SegT, Func, exclusive>(x, useg, f, comm);
+      }
+
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
+      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentFullyMarked>::value, std::vector<T> >::type
+      scanv(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        // convert make sure seg is converted to Unique first.
+        auto useg = segment<SegT>::to_unique_segment_id_v(seg, comm);
+
+        return seg_scan::scanv<SegmentUniquelyMarked, T, SegT, Func, exclusive>(x, useg, f, comm);
+      }
+
+
+
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
+      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentUniquelyMarked>::value, std::vector<T> >::type
+      scanv_reverse(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        // convert make sure seg is converted to Unique first.
+
+        // can't do this via comm split because segments may not line up at different element positions.
+
+        if (seg.size() != x.size())
+          throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
+
+        // converted data structure
+        std::vector<std::pair<T, SegT> > marked(x.size());
+        std::transform(x.begin(), x.end(), seg.begin(), marked.begin(), [](T & x, SegT & y) { return std::pair<T, SegT>(x, y); } );
+
+        // converted op.
+        seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+
+
+        std::vector<std::pair<T, SegT> > out;
+        if (exclusive)
+          scan_op::exscanv_reverse(marked, func, comm).swap(out);
+        else
+          scan_op::scanv_reverse(marked, func, comm).swap(out);
+
+        // convert data back to original form
+        std::vector<T> results(out.size());
+        std::transform(out.begin(), out.end(), results.begin(), [](std::pair<T, SegT> & x) { return x.first; } );
+
+        return results;
+
+      }
+
+      template <typename SegmentMarkerType, typename T, typename SegT = size_t, typename Func = std::plus<T>, bool exclusive = false  >
+      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentStartMarked>::value, std::vector<T> >::type
+      scanv_reverse(std::vector<T> & x, std::vector<uint8_t> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        auto useg = segment<SegT>::to_unique_segment_id_from_end_v(seg, 0, comm);
+
+        return seg_scan::scanv_reverse<SegmentUniquelyMarked, T, SegT, Func, exclusive>(x, useg, f, comm);
+      }
+
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
+      static typename std::enable_if<std::is_same<SegmentMarkerType, SegmentFullyMarked>::value, std::vector<T> >::type
+      scanv_reverse(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        // convert make sure seg is converted to Unique first.
+        auto useg = segment<SegT>::to_unique_segment_id_v(seg, comm);
+
+        return seg_scan::scanv_reverse<SegmentUniquelyMarked, T, SegT, Func, exclusive>(x, useg, f, comm);
+      }
+
+
+      // NOTE for segmented exclusive scan, the "first" element of a segment is NOT valid.
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      static std::vector<T> exscanv(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        return seg_scan::scanv<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+      }
+
+      template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+      static std::vector<T> exscanv_reverse(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        return seg_scan::scanv_reverse<SegmentMarkerType, T, SegT, Func, true>(x, seg, f, comm);
+
+      }
+
+  };
+
+
+
+  /// perform segmented reduction.  results has same distribution as original data.
+  struct seg_reduce {
+
+        /**
+         * @brief segmented scan helper function - converts the user specified operation into a segmented scan operation
+         */
+        template <typename T, typename SegT, typename SegmentMarkerType>
+        struct replace_op {
+            const uint8_t non_terminus_val;
+
+            replace_op(uint8_t middle_val = 0) : non_terminus_val(middle_val) {}
+
+            template <typename Marker = SegmentMarkerType>
+            typename std::enable_if<!std::is_same<Marker, seg_scan::SegmentStartMarked>::value, std::pair<T, SegT> >::type
+            operator()(std::pair<T, SegT> const & x, std::pair<T, SegT> const & y) {
+              return (x.second == y.second) ?
+                x : y;
+            }
+
+            /** @note  this is the version where the starting position only is marked.
+            */
+            template <typename Marker = SegmentMarkerType>
+            typename std::enable_if<std::is_same<Marker, seg_scan::SegmentStartMarked>::value, std::pair<T, SegT> >::type
+            operator()(std::pair<T, uint8_t> const & x, std::pair<T, uint8_t> const & y) {
+              // flag OR replaced with this conditional - chooses y if y.second is not 0, else do scan and choose x.second (this is the OR part)
+              return (y.second == non_terminus_val) ?
+                  x : y;
+            }
+        };
+
+
+
+        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentUniquelyMarked>::value, T >::type
+        reduce(T & x, SegT & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+
+          int rank;
+          MPI_Comm_rank(comm, &rank);
+
+          // split the comm
+          MPI_Comm seg_comm;
+          MPI_Comm_split(comm, seg, rank, &seg_comm);
+
+
+          // then do allreduce for each comm
+
+          // get user op note that this is NOT communitative
+          MPI_Op op = mxx::create_user_op<T, Func >(f);
+          // get type
+          mxx::datatype<T > dt;
+          T result;
+          // perform reduction
+          MPI_Allreduce(&x, &result, 1, dt.type(), op, seg_comm);
+
+          // clean up op
+          mxx::free_user_op<T >(op);
+          MPI_Comm_free(&seg_comm);
+
+          return result;
+        }
+
+        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentFullyMarked>::value, T >::type
+        reduce(T & x, SegT & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+          // convert make sure seg is converted to Unique first.
+          auto useg = segment<SegT>::to_unique_segment_id(seg, comm);
+
+          return reduce<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
+        }
+
+        template <typename SegmentMarkerType, typename T, typename SegT = size_t, typename Func = std::plus<T> >
+        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentStartMarked>::value, T >::type
+        reduce(T & x, uint8_t & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+          // first convert segment marker type to uniquely marked.
+          auto useg = segment<SegT>::to_unique_segment_id_from_start(seg, 0, comm);
+
+          return reduce<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
+        }
+
+        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentUniquelyMarked>::value, std::vector<T> >::type
+        reducen(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+
+          if (seg.size() != x.size())
+            throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
+
+          // minimum size:
+          size_t s = x.size();
+          s = ::mxx::allreduce(s, [](size_t &x , size_t & y){ return ::std::min(x, y); }, comm);
+          if (s < x.size())
+            WARNINGF("WARNING: %lu elements out of %lu used in scan.", s, x.size());
+
+          // converted data structure
+          std::vector<std::pair<T, SegT> > marked(s);
+          std::transform(x.begin(), x.begin() + s, seg.begin(), marked.begin(), [](T & x, SegT & y) { return std::pair<T, SegT>(x, y); } );
+
+
+          // first do a forward segmented scan with the user function.
+          seg_scan::seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+          std::vector<std::pair<T, SegT> > out = scan_op::scan_elementwise(marked, func, comm);
+
+
+          // then do a reverse segmented scan with a "replace" function
+          MPI_Comm rev_comm;
+          mxx::rev_comm(comm, rev_comm);
+          replace_op<T, SegT, SegmentMarkerType> func2;
+          out = scan_op::scan_reverse_elementwise(out, func2, comm);
+          MPI_Comm_free(&rev_comm);
+
+          // convert data back to original form
+          std::vector<T> results(out.size());
+          std::transform(out.begin(), out.end(), results.begin(), [](std::pair<T, SegT> & x) { return x.first; } );
+
+          return results;
+        }
+
+        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentFullyMarked>::value, std::vector<T> >::type
+        reducen(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+          // convert make sure seg is converted to Unique first.
+          auto useg = segment<SegT>::to_unique_segment_id_elementwise(seg, comm);
+
+          return reducen<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
+
+        }
+
+        template <typename SegmentMarkerType, typename T, typename SegT = size_t, typename Func = std::plus<T> >
+        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentStartMarked>::value, std::vector<T> >::type
+        reducen(std::vector<T> & x, std::vector<uint8_t> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+          // convert make sure seg is converted to Unique first.
+          auto useg = segment<SegT>::to_unique_segment_id_from_start_elementwise(seg, 0, comm);
+
+          return reducen<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
+
+        }
+
+        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentUniquelyMarked>::value, std::vector<T> >::type
+        reducev(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+          if (seg.size() != x.size())
+            throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
+
+
+          // converted data structure
+          std::vector<std::pair<T, SegT> > marked(x.size());
+          std::transform(x.begin(), x.end(), seg.begin(), marked.begin(), [](T & x, SegT & y) { return std::pair<T, SegT>(x, y); } );
+
+
+          // first do a forward segmented scan with the user function.
+          seg_scan::seg_scan_op<T, SegT, Func, SegmentMarkerType> func(f);
+          std::vector<std::pair<T, SegT> > out = scan_op::scanv(marked, func, comm);
+
+
+          // then do a reverse segmented scan with a "replace" function
+          MPI_Comm rev_comm;
+          mxx::rev_comm(comm, rev_comm);
+          replace_op<T, SegT, SegmentMarkerType> func2;
+          out = scan_op::scanv_reverse(out, func2, comm);
+          MPI_Comm_free(&rev_comm);
+
+          // convert data back to original form
+          std::vector<T> results(out.size());
+          std::transform(out.begin(), out.end(), results.begin(), [](std::pair<T, SegT> & x) { return x.first; } );
+
+          return results;
+
+        }
+
+        template <typename SegmentMarkerType, typename T, typename SegT, typename Func = std::plus<T> >
+        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentFullyMarked>::value, std::vector<T> >::type
+        reducev(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+          // convert make sure seg is converted to Unique first.
+          auto useg = segment<SegT>::to_unique_segment_id_v(seg, comm);
+
+          return reducev<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
+
+        }
+
+        template <typename SegmentMarkerType, typename T, typename SegT = size_t, typename Func = std::plus<T> >
+        static typename std::enable_if<std::is_same<SegmentMarkerType, seg_scan::SegmentStartMarked>::value, std::vector<T> >::type
+        reducev(std::vector<T> & x, std::vector<uint8_t> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+          // convert make sure seg is converted to Unique first.
+          auto useg = segment<SegT>::to_unique_segment_id_from_start_v(seg, 0, comm);
+
+          return reducev<seg_scan::SegmentUniquelyMarked>(x, useg, f, comm);
+
+        }
+
+  };
+
+
+
+
+
+
+
+
+//
+//  /**
+//   * @brief performs an segmented reduce.
+//   * @param x      input data
+//   * @param seg    segment id.  should be contiguous.  can be computed by: a. mark start of segment with 1's, do prefix sum.
+//   * @param func   function to apply for the scan. should be associative
+//   * @param comm   communicator to use
+//   * @return       scan result at position rank.
+//   */
+//  template <typename T, typename Func>
+//  T seg_allreduce(T& x, int seg, Func func, MPI_Comm comm = MPI_COMM_WORLD) {
+//    int rank;
+//    MPI_Comm_rank(comm, &rank);
+//
+//    MPI_Comm seg_comm;
+//    MPI_Comm_split(comm, seg, rank, &seg_comm);
+//
+//
+//    // get user op note that this is NOT communitative
+//    MPI_Op op = mxx::create_user_op<T, Func >(func);
+//    // get type
+//    mxx::datatype<T > dt;
+//    T result;
+//    // perform reduction
+//    MPI_Allreduce(&x, &result, 1, dt.type(), op, seg_comm);
+//    // clean up op
+//    mxx::free_user_op<T >(op);
+//    MPI_Comm_free(&seg_comm);
+//
+//    return result;
+//  }
+//
+//
+//  /**
+//   * @brief performs a segmented allreduce on vectors.
+//   * @details      to support arbitrary associative functions, this had to be implemented as
+//   * @param x      input data
+//   * @param seg    segment id.  should be contiguous.  can be computed by: a. mark start of segment with 1's, do prefix sum.
+//   * @param func   function to apply for the scan. should be associative
+//   * @param comm   communicator to use
+//   * @return       scan result at position rank.
+//   */
+//  template <typename T, typename Func>
+//  std::vector<T> seg_allreduce(std::vector<T> & x, std::vector<int> seg, Func func, MPI_Comm comm = MPI_COMM_WORLD) {
+//
+//    if (seg.size() != x.size())
+//      throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
+//
+//    // minimum size:
+//    size_t s = x.size();
+//    s = mxx::allreduce(s, [](size_t &x , size_t & y){ return ::std::min(x, y); }, comm);
+//    if (s < x.size())
+//      WARNINGF("WARNING: %lu elements out of %lu used in scan.", s, x.size());
+//
+//    // converted data structure
+//    std::vector<seg_scan_pair<T> > ins(s), outs(s);
+//    std::transform(x.begin(), x.begin() + s, seg.begin(), ins.begin(), [](T & x, int & y) { return seg_scan_pair<T>(x, y); } );
+//
+//    // converted op.
+//    seg_scan_op<T, Func> f(func);
+//
+//    // get user op  note that this is NOT communitative
+//    MPI_Op op = mxx::create_user_op<seg_scan_pair<T>, seg_scan_op<T, Func>, false >(f);
+//    // get type
+//    mxx::datatype<seg_scan_pair<T> > dt;
+//    // perform reduction
+//    MPI_Scan(&(ins[0]), &(outs[0]), s, dt.type(), op, comm);
+//    // clean up op
+//    mxx::free_user_op<seg_scan_pair<T> >(op);
+//
+//    // convert data back to original form
+//    std::vector<T> results(outs.size());
+//    std::transform(outs.begin(), outs.end(), results.begin(), [](seg_scan_pair<T> & x) { return x.first; } );
+//
+//    return results;
+//  }
+//
+
+
+  // segmented exclusive scan not implemented here because the we need an identity value defined for each operator.
 }
 
 #endif /* SRC_IO_MXX_SUPPORT_HPP_ */
