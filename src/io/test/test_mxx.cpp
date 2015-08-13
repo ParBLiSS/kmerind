@@ -58,25 +58,19 @@ class Mxx2Test : public ::testing::TestWithParam<::std::pair<int, int> >
 TEST_P(Mxx2Test, bucketing)
 {
 
-  TIMER_INIT(bucket);
 
   auto pp = this->p;
 
   typedef typename Mxx2Test::T TypeParam;
 
 
-  TIMER_START(bucket);
   std::vector<int> gold_counts = ::mxx2::bucketing_copy<int>(this->input, this->gold, [&pp](TypeParam const & x) { return x % pp; }, pp);
-  TIMER_END(bucket, "gold", this->input.size());
 
   this->test = this->input;
 
-  TIMER_START(bucket);
   std::vector<int> test_counts = ::mxx2::bucketing<int>(this->test, [&pp](TypeParam const & x) { return x % pp; }, pp);
-  TIMER_END(bucket, "test", this->input.size());
 
-  printf("bucket: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
-  TIMER_REPORT(bucket, 0);
+//  printf("bucket: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
 
   bool same_counts = ::std::equal(gold_counts.begin(), gold_counts.end(), test_counts.begin());
   if (!same_counts)
@@ -125,7 +119,6 @@ TEST_P(Mxx2Test, bucketing)
 TEST_P(Mxx2Test, unique)
 {
 
-  TIMER_INIT(unique);
 
   auto pp = this->p;
   typedef typename Mxx2Test::T TypeParam;
@@ -133,47 +126,30 @@ TEST_P(Mxx2Test, unique)
 
   this->gold = this->input;
 
-  TIMER_START(unique);
   ::std::sort(this->gold.begin(), this->gold.end());
-  TIMER_END(unique, "gold_sort", this->gold.size());
-  TIMER_START(unique);
   auto end = ::std::unique(this->gold.begin(), this->gold.end());
-  TIMER_END(unique, "gold_unique", this->gold.size());
-  TIMER_START(unique);
   this->gold.erase(end, this->gold.end());
-  TIMER_END(unique, "gold_erase", this->gold.size());
-  TIMER_START(unique);
   ::std::vector<int> gold_counts = ::mxx2::bucketing<int>(this->gold, [&pp](TypeParam const & x) { return x % pp; }, pp);
-  TIMER_END(unique, "gold_bucket", this->gold.size());
 
   {
   auto global_reduc = this->input;
 
-  TIMER_START(unique);
   ::std::unordered_set<TypeParam> set(global_reduc.begin(), global_reduc.end(), global_reduc.size());
   auto newend = ::std::copy(set.begin(), set.end(), global_reduc.begin());
   global_reduc.erase(newend, global_reduc.end());
-  TIMER_END(unique, "global_unique", global_reduc.size());
 
-  TIMER_START(unique);
   ::std::vector<int> global_counts = ::mxx2::bucketing<int>(global_reduc, [&](TypeParam const & x) { return x % pp; }, pp);
-  TIMER_END(unique, "global_bucket", global_reduc.size());
   }
 
 
 
   this->test = this->input;
 
-  TIMER_START(unique);
   std::vector<int> test_counts = ::mxx2::bucketing<int>(this->test, [&pp](TypeParam const & x) { return x % pp; }, pp);
-  TIMER_END(unique, "test_bucket", this->test.size());
-  TIMER_START(unique);
   ::mxx2::retain_unique<::std::unordered_set<TypeParam>, ::std::equal_to<TypeParam> >(this->test, test_counts);
-  TIMER_END(unique, "test_unique", this->test.size());
 
-  printf("unique: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
+//  printf("unique: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
 
-  TIMER_REPORT(unique, 0);
 
   bool same_counts = ::std::equal(gold_counts.begin(), gold_counts.end(), test_counts.begin());
   if (!same_counts)
@@ -217,7 +193,6 @@ TEST_P(Mxx2Test, unique)
 TEST_P(Mxx2Test, reduce)
 {
 
-  TIMER_INIT(reduc);
 
   auto pp = this->p;
   typedef typename Mxx2Test::T Key;
@@ -226,16 +201,13 @@ TEST_P(Mxx2Test, reduce)
 
   this->reduc_gold = this->reduc_input;
 
-  TIMER_START(reduc);
   ::std::sort(this->reduc_gold.begin(), this->reduc_gold.end(),
               [](::std::pair<Key, int> const & x,
                  ::std::pair<Key, int> const & y) { return x.first < y.first; });
-  TIMER_END(reduc, "gold_sort", this->reduc_gold.size());
 
   if (this->reduc_gold.size() > 0) {
     auto curr = this->reduc_gold.begin();
     auto it = this->reduc_gold.begin(); ++it;
-    TIMER_START(reduc);
     for (auto max = this->reduc_gold.end(); it != max; ++it) {
       if (it->first == curr->first) {
         curr->second += it->second;
@@ -245,21 +217,15 @@ TEST_P(Mxx2Test, reduce)
       }
     }
     ++curr;  // very end, move to next entry.
-    TIMER_END(reduc, "gold_reduce", this->reduc_gold.size());
 
-    TIMER_START(reduc);
     this->reduc_gold.erase(curr, this->reduc_gold.end());
-    TIMER_END(reduc, "gold_erase", this->reduc_gold.size());
   }
 
-  TIMER_START(reduc);
   ::std::vector<int> gold_counts = ::mxx2::bucketing<int>(this->reduc_gold, [&pp](TypeParam const & x) { return x.first % pp; }, pp);
-  TIMER_END(reduc, "gold_bucket", this->reduc_gold.size());
 
   {
   auto global_reduc = this->reduc_input;
 
-  TIMER_START(reduc);
   Key key;
   int val;
   ::std::unordered_map<Key, int> map(global_reduc.size());
@@ -271,25 +237,17 @@ TEST_P(Mxx2Test, reduce)
   }
   auto newend = ::std::copy(map.begin(), map.end(), global_reduc.begin());
   global_reduc.erase(newend, global_reduc.end());
-  TIMER_END(reduc, "global_reduce", global_reduc.size());
 
-  TIMER_START(reduc);
   ::std::vector<int> global_counts = ::mxx2::bucketing<int>(global_reduc, [&](TypeParam const & x) { return x.first % pp; }, pp);
-  TIMER_END(reduc, "global_bucket", global_reduc.size());
   }
 
   this->reduc_test = this->reduc_input;
 
-  TIMER_START(reduc);
   std::vector<int> test_counts = ::mxx2::bucketing<int>(this->reduc_test, [&pp](TypeParam const & x) { return x.first % pp; }, pp);
-  TIMER_END(reduc, "test_bucket", this->reduc_test.size());
-  TIMER_START(reduc);
   ::mxx2::bucket_reduce<::std::unordered_map<Key, int>, ::std::plus<int> >(this->reduc_test, test_counts);
-  TIMER_END(reduc, "test_unique", this->reduc_test.size());
 
-  printf("unique: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
+//  printf("unique: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
 
-  TIMER_REPORT(reduc, 0);
 
   bool same_counts = ::std::equal(gold_counts.begin(), gold_counts.end(), test_counts.begin());
   if (!same_counts)
@@ -342,20 +300,18 @@ TEST_P(Mxx2Test, reduce)
 
 //////////////////// RUN the tests with different types.
 
-INSTANTIATE_TEST_CASE_P(Bliss, Mxx2Test, ::testing::Values(::std::make_pair(1000000, 16),
-                                                           ::std::make_pair(1000000, 32),
-                                                           ::std::make_pair(1000000, 64),
-                                                           ::std::make_pair(1000000, 128),
-                                                           ::std::make_pair(1000000, 256),
-                                                           ::std::make_pair(1000000, 512),
-                                                           ::std::make_pair(1000000, 1024),
-                                                           ::std::make_pair(1000000, 2048),
-                                                           ::std::make_pair(2000000, 512),
-                                                           ::std::make_pair(4000000, 512),
-                                                           ::std::make_pair(8000000, 512),
-                                                           ::std::make_pair(16000000, 512),
-                                                           ::std::make_pair(32000000, 512),
-                                                           ::std::make_pair(64000000, 512)
+INSTANTIATE_TEST_CASE_P(Bliss, Mxx2Test, ::testing::Values(::std::make_pair(100000, 16),
+                                                           ::std::make_pair(100000, 32),
+                                                           ::std::make_pair(100000, 64),
+                                                           ::std::make_pair(100000, 128),
+                                                           ::std::make_pair(100000, 256),
+                                                           ::std::make_pair(100000, 512),
+                                                           ::std::make_pair(100000, 1024),
+                                                           ::std::make_pair(100000, 2048),
+                                                           ::std::make_pair(200000, 512),
+                                                           ::std::make_pair(400000, 512),
+                                                           ::std::make_pair(800000, 512),
+                                                           ::std::make_pair(1600000, 512)
                                                            ));
 //INSTANTIATE_TEST_CASE_P(Bliss, Mxx2Test, ::testing::Values(::std::make_pair(100, 16),
 //                                                           ::std::make_pair(100, 32)
@@ -468,7 +424,6 @@ class Mxx2KmerTest : public ::testing::TestWithParam<::std::pair<int, int> >
 TEST_P(Mxx2KmerTest, bucketing)
 {
 
-  TIMER_INIT(bucket);
 
   auto pp = this->p;
   auto h = this->hash;
@@ -476,18 +431,13 @@ TEST_P(Mxx2KmerTest, bucketing)
   typedef typename Mxx2KmerTest::Key TypeParam;
 
 
-  TIMER_START(bucket);
   std::vector<int> gold_counts = ::mxx2::bucketing_copy<int>(this->input, this->gold, [&](TypeParam const & x) { return h(x) % pp; }, pp);
-  TIMER_END(bucket, "gold", this->input.size());
 
   this->test = this->input;
 
-  TIMER_START(bucket);
   std::vector<int> test_counts = ::mxx2::bucketing<int>(this->test, [&](TypeParam const & x) { return h(x) % pp; }, pp);
-  TIMER_END(bucket, "test", this->input.size());
 
-  printf("bucket: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
-  TIMER_REPORT(bucket, 0);
+//  printf("bucket: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
 
   bool same_counts = ::std::equal(gold_counts.begin(), gold_counts.end(), test_counts.begin());
   if (!same_counts)
@@ -540,7 +490,6 @@ TEST_P(Mxx2KmerTest, bucketing)
 TEST_P(Mxx2KmerTest, unique)
 {
 
-  TIMER_INIT(unique);
 
   auto pp = this->p;
   auto h = this->hash;
@@ -549,49 +498,32 @@ TEST_P(Mxx2KmerTest, unique)
 
   this->gold = this->input;
 
-  TIMER_START(unique);
   ::std::sort(this->gold.begin(), this->gold.end(), Mxx2KmerTest::TransformedLess());
-  TIMER_END(unique, "gold_sort", this->gold.size());
-  TIMER_START(unique);
   auto end = ::std::unique(this->gold.begin(), this->gold.end(), Mxx2KmerTest::TransformedEqual());
-  TIMER_END(unique, "gold_unique", this->gold.size());
-  TIMER_START(unique);
   this->gold.erase(end, this->gold.end());
-  TIMER_END(unique, "gold_erase", this->gold.size());
-  TIMER_START(unique);
   ::std::vector<int> gold_counts = ::mxx2::bucketing<int>(this->gold, [&](TypeParam const & x) { return h(x) % pp; }, pp);
-  TIMER_END(unique, "gold_bucket", this->gold.size());
 
 
   {
   auto global_reduc = this->input;
 
-  TIMER_START(unique);
   typename Mxx2KmerTest::Key key;
   typename Mxx2KmerTest::Set set(global_reduc.begin(), global_reduc.end(), global_reduc.size());
   auto newend = ::std::copy(set.begin(), set.end(), global_reduc.begin());
   global_reduc.erase(newend, global_reduc.end());
-  TIMER_END(unique, "global_unique", global_reduc.size());
 
-  TIMER_START(unique);
   ::std::vector<int> global_counts = ::mxx2::bucketing<int>(global_reduc, [&](TypeParam const & x) { return h(x) % pp; }, pp);
-  TIMER_END(unique, "global_bucket", global_reduc.size());
   }
 
 
 
   this->test = this->input;
 
-  TIMER_START(unique);
   std::vector<int> test_counts = ::mxx2::bucketing<int>(this->test, [&](TypeParam const & x) { return h(x) % pp; }, pp);
-  TIMER_END(unique, "test_bucket", this->test.size());
-  TIMER_START(unique);
   ::mxx2::retain_unique<typename Mxx2KmerTest::Set, typename Mxx2KmerTest::TransformedEqual >(this->test, test_counts);
-  TIMER_END(unique, "test_unique", this->test.size());
 
-  printf("unique: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
+//  printf("unique: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
 
-  TIMER_REPORT(unique, 0);
 
   bool same_counts = ::std::equal(gold_counts.begin(), gold_counts.end(), test_counts.begin());
   if (!same_counts)
@@ -641,7 +573,6 @@ TEST_P(Mxx2KmerTest, unique)
 TEST_P(Mxx2KmerTest, reduce)
 {
 
-  TIMER_INIT(reduc);
 
   auto pp = this->p;
   auto h = this->hash;
@@ -651,14 +582,11 @@ TEST_P(Mxx2KmerTest, reduce)
 
   this->reduc_gold = this->reduc_input;
 
-  TIMER_START(reduc);
   ::std::sort(this->reduc_gold.begin(), this->reduc_gold.end(), Mxx2KmerTest::TransformedLess());
-  TIMER_END(reduc, "gold_sort", this->reduc_gold.size());
 
   if (this->reduc_gold.size() > 0) {
     auto curr = this->reduc_gold.begin();
     auto it = this->reduc_gold.begin(); ++it;
-    TIMER_START(reduc);
     for (auto max = this->reduc_gold.end(); it != max; ++it) {
       if (it->first == curr->first) {
         curr->second += it->second;
@@ -668,22 +596,16 @@ TEST_P(Mxx2KmerTest, reduce)
       }
     }
     ++curr;  // very end, move to next entry.
-    TIMER_END(reduc, "gold_reduce", this->reduc_gold.size());
 
-    TIMER_START(reduc);
     this->reduc_gold.erase(curr, this->reduc_gold.end());
-    TIMER_END(reduc, "gold_erase", this->reduc_gold.size());
   }
 
-  TIMER_START(reduc);
   ::std::vector<int> gold_counts = ::mxx2::bucketing<int>(this->reduc_gold, [&](TypeParam const & x) { return h(x) % pp; }, pp);
-  TIMER_END(reduc, "gold_bucket", this->reduc_gold.size());
 
 
   {
   auto global_reduc = this->reduc_input;
 
-  TIMER_START(reduc);
   typename Mxx2KmerTest::Key key;
   int val;
   typename Mxx2KmerTest::Map map(global_reduc.size());
@@ -695,26 +617,18 @@ TEST_P(Mxx2KmerTest, reduce)
   }
   auto newend = ::std::copy(map.begin(), map.end(), global_reduc.begin());
   global_reduc.erase(newend, global_reduc.end());
-  TIMER_END(reduc, "global_reduce", global_reduc.size());
 
-  TIMER_START(reduc);
   ::std::vector<int> global_counts = ::mxx2::bucketing<int>(global_reduc, [&](TypeParam const & x) { return h(x) % pp; }, pp);
-  TIMER_END(reduc, "global_bucket", global_reduc.size());
   }
 
 
   this->reduc_test = this->reduc_input;
 
-  TIMER_START(reduc);
   std::vector<int> test_counts = ::mxx2::bucketing<int>(this->reduc_test, [&](TypeParam const & x) { return h(x) % pp; }, pp);
-  TIMER_END(reduc, "test_bucket", this->reduc_test.size());
-  TIMER_START(reduc);
   ::mxx2::bucket_reduce<typename Mxx2KmerTest::Map, ::std::plus<int> >(this->reduc_test, test_counts);
-  TIMER_END(reduc, "test_reduce", this->reduc_test.size());
 
-  printf("unique: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
+//  printf("unique: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
 
-  TIMER_REPORT(reduc, 0);
 
   bool same_counts = ::std::equal(gold_counts.begin(), gold_counts.end(), test_counts.begin());
   if (!same_counts)
@@ -770,20 +684,18 @@ TEST_P(Mxx2KmerTest, reduce)
 //INSTANTIATE_TEST_CASE_P(Bliss, Mxx2KmerTest, ::testing::Values(::std::make_pair(100, 16),
 //                                                           ::std::make_pair(100, 32)
 //                                                           ));
-INSTANTIATE_TEST_CASE_P(Bliss, Mxx2KmerTest, ::testing::Values(::std::make_pair(100000, 16),
-                                                               ::std::make_pair(100000, 32),
-                                                               ::std::make_pair(100000, 64),
-                                                               ::std::make_pair(100000, 128),
-                                                               ::std::make_pair(100000, 256),
-                                                               ::std::make_pair(100000, 512),
-                                                               ::std::make_pair(100000, 1024),
-                                                               ::std::make_pair(100000, 2048),
-                                                               ::std::make_pair(200000, 512),
-                                                               ::std::make_pair(400000, 512),
-                                                               ::std::make_pair(800000, 512),
-                                                               ::std::make_pair(1600000, 512),
-                                                               ::std::make_pair(3200000, 512),
-                                                               ::std::make_pair(6400000, 512)
+INSTANTIATE_TEST_CASE_P(Bliss, Mxx2KmerTest, ::testing::Values(::std::make_pair(10000, 16),
+                                                               ::std::make_pair(10000, 32),
+                                                               ::std::make_pair(10000, 64),
+                                                               ::std::make_pair(10000, 128),
+                                                               ::std::make_pair(10000, 256),
+                                                               ::std::make_pair(10000, 512),
+                                                               ::std::make_pair(10000, 1024),
+                                                               ::std::make_pair(10000, 2048),
+                                                               ::std::make_pair(20000, 512),
+                                                               ::std::make_pair(40000, 512),
+                                                               ::std::make_pair(80000, 512),
+                                                               ::std::make_pair(160000, 512)
                                                            ));
 
 
