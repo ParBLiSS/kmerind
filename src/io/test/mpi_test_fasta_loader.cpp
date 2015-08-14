@@ -42,7 +42,7 @@ class FASTALoaderTest : public ::testing::Test
     virtual void SetUp()
     {
       fileName.assign(PROJ_SRC_DIR);
-      fileName.append("/test/data/test.fasta");
+      fileName.append("/test/data/test2.fasta");
 
       // get file size
       struct stat filestat;
@@ -50,7 +50,12 @@ class FASTALoaderTest : public ::testing::Test
       fileSize = static_cast<size_t>(filestat.st_size);
 
 //      ASSERT_EQ(34526831, fileSize);
-      ASSERT_EQ(512, fileSize);
+      //ASSERT_EQ(512, fileSize);
+//      ASSERT_EQ(940, fileSize);
+
+//      ASSERT_EQ(14625, fileSize);
+      MPI_Barrier(MPI_COMM_WORLD);
+
     }
 
     static void readFilePOSIX(const std::string &fileName, const size_t& offset,
@@ -72,9 +77,96 @@ class FASTALoaderTest : public ::testing::Test
 // indicate this is a typed test
 TYPED_TEST_CASE_P(FASTALoaderTest);
 
+//
+//// normal test cases
+//TYPED_TEST_P(FASTALoaderTest, OpenWithRange)
+//{
+//  typedef FileLoader<TypeParam, false, false> FILELoaderType;
+//
+//  //Define Kmer type
+//  const int len = 35;
+//  typedef typename bliss::common::Kmer<len, bliss::common::DNA5, uint32_t> KmerType;
+//
+//  typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
+//  typedef typename FILELoaderType::RangeType RangeType;
+//
+//  int rank = 3;
+//  int nprocs = 7;
+//
+//  FILELoaderType loader(nprocs, rank, this->fileName);
+//
+//  RangeType r;
+//  typename FILELoaderType::L1BlockType d;
+//  d = loader.getNextL1Block();
+//  r = d.getRange();
+//
+//  typename FASTALoaderType::vectorType vectorReturned;
+//
+//  FASTALoaderType obj(MPI_COMM_WORLD);
+//  obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
+//
+//
+//
+//  for (auto e : vectorReturned) {
+//    std::cout << "Rank " << rank << "/" << nprocs << " element: " << e.first << ", " << e.second << std::endl;
+//  }
+//
+//
+//  std::cout << "Rank "  << rank << "/" << nprocs << " file range: " << loader.getFileRange() << ", range " << r << ", vector returned size " << vectorReturned.size() << std::endl;
+//
+//  ASSERT_LT(0 , vectorReturned.size());
+//
+//  MPI_Barrier(MPI_COMM_WORLD);
+//
+//}
+//
+//
+//// normal test cases
+//TYPED_TEST_P(FASTALoaderTest, OpenWithRange2)
+//{
+//  typedef FileLoader<TypeParam, false, false> FILELoaderType;
+//
+//  //Define Kmer type
+//  const int len = 35;
+//  typedef typename bliss::common::Kmer<len, bliss::common::DNA5, uint32_t> KmerType;
+//
+//  typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
+//  typedef typename FILELoaderType::RangeType RangeType;
+//
+//  int rank = 3;
+//  int nprocs = 7;
+//
+//  FILELoaderType loader(nprocs, rank, this->fileName);
+//
+//  RangeType r;
+//  typename FILELoaderType::L1BlockType d;
+//  d = loader.getNextL1Block();
+//  r = d.getRange();
+//
+//  typename FASTALoaderType::vectorType vectorReturned;
+//
+//  FASTALoaderType obj(MPI_COMM_WORLD);
+//  obj.countSequenceStarts2(d.begin(), loader.getFileRange() , r, vectorReturned);
+//
+//
+//
+//  for (auto e : vectorReturned) {
+//    std::cout << "Rank " << rank << "/" << nprocs << " element: " << e.first << ", " << e.second << std::endl;
+//  }
+//
+//
+//  std::cout << "Rank "  << rank << "/" << nprocs << " file range: " << loader.getFileRange() << ", range " << r << ", vector returned size " << vectorReturned.size() << std::endl;
+//
+//  ASSERT_LT(0 , vectorReturned.size());
+//
+//  MPI_Barrier(MPI_COMM_WORLD);
+//
+//}
+//
+
 
 // normal test cases
-TYPED_TEST_P(FASTALoaderTest, OpenWithRange)
+TYPED_TEST_P(FASTALoaderTest, MPIOpenWithRange)
 {
   typedef FileLoader<TypeParam, false, false> FILELoaderType;
 
@@ -85,8 +177,14 @@ TYPED_TEST_P(FASTALoaderTest, OpenWithRange)
   typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
   typedef typename FILELoaderType::RangeType RangeType;
 
-  int rank = 3;
-  int nprocs = 7;
+  int rank = 0;
+  int nprocs = 1;
+
+#if defined(USE_MPI)
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
+#endif
 
   FILELoaderType loader(nprocs, rank, this->fileName);
 
@@ -99,11 +197,74 @@ TYPED_TEST_P(FASTALoaderTest, OpenWithRange)
 
   FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
+
+
+
+  for (auto e : vectorReturned) {
+    std::cout << "Rank " << rank << "/" << nprocs << " element: " << e.first << ", " << e.second << std::endl;
+  }
+
+
+  std::cout << "Rank "  << rank << "/" << nprocs << " file range: " << loader.getFileRange() << ", range " << r << ", vector returned size " << vectorReturned.size() << std::endl;
+
   ASSERT_LT(0 , vectorReturned.size());
+
+  MPI_Barrier(MPI_COMM_WORLD);
+
 }
 
+
+
+// normal test cases
+TYPED_TEST_P(FASTALoaderTest, MPIOpenWithRange2)
+{
+  typedef FileLoader<TypeParam, false, false> FILELoaderType;
+
+  //Define Kmer type
+  const int len = 35;
+  typedef typename bliss::common::Kmer<len, bliss::common::DNA5, uint32_t> KmerType;
+
+  typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
+  typedef typename FILELoaderType::RangeType RangeType;
+
+  int rank = 0;
+  int nprocs = 1;
+
+#if defined(USE_MPI)
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
+#endif
+
+  FILELoaderType loader(nprocs, rank, this->fileName);
+
+  RangeType r;
+  typename FILELoaderType::L1BlockType d = loader.getNextL1Block();
+  r = d.getRange();
+
+  typename FASTALoaderType::vectorType vectorReturned;
+
+  FASTALoaderType obj(MPI_COMM_WORLD);
+  obj.countSequenceStarts2(d.begin(), loader.getFileRange() , r, vectorReturned);
+
+
+
+  for (auto e : vectorReturned) {
+    std::cout << "Rank " << rank << "/" << nprocs << " element: " << e.first << ", " << e.second << std::endl;
+  }
+
+
+  std::cout << "Rank "  << rank << "/" << nprocs << " file range: " << loader.getFileRange() << ", range " << r << ", vector returned size " << vectorReturned.size() << std::endl;
+
+  ASSERT_LT(0 , vectorReturned.size());
+
+  MPI_Barrier(MPI_COMM_WORLD);
+}
+
+
+
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(FASTALoaderTest, OpenWithRange);
+REGISTER_TYPED_TEST_CASE_P(FASTALoaderTest, MPIOpenWithRange, MPIOpenWithRange2);
 
 
 typedef ::testing::Types<unsigned char> FASTALoaderTestTypes;
