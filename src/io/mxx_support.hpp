@@ -954,7 +954,7 @@ namespace mxx2 {
     return w;
   }
 
-  struct scan_op {
+  namespace scan {
 
       /// MPI Scan
       template <typename T, typename Func = std::plus<T>, bool exclusive = false >
@@ -1181,7 +1181,7 @@ namespace mxx2 {
 
   };
 
-  struct reduce_op {
+  namespace reduce {
       template <typename T, typename Func = std::plus<T> >
       static T reduce(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
         MPI_Op op = mxx::create_user_op<T, Func >(f);
@@ -1224,7 +1224,7 @@ namespace mxx2 {
           result = std::accumulate(x.begin() + 1, x.end(), x.front(), f);
 
           // then do global reduce, directly to the root if possible.
-          result = reduce_op::reduce(result, f, in_comm, 0);
+          result = reduce::reduce(result, f, in_comm, 0);
 
           // assume rank 0 in in_comm is not root rank.
           MPI_Comm_rank(in_comm, &in_rank);
@@ -1400,7 +1400,7 @@ namespace mxx2 {
           result = std::accumulate(x.begin() + 1, x.end(), x.front(), f);
 
           // then do global reduce.
-          result = reduce_op::reduce(result, f, in_comm, 0);
+          result = reduce::reduce(result, f, in_comm, 0);
 
           // mark the root
           int rank;
@@ -1413,7 +1413,7 @@ namespace mxx2 {
 
         // let every one know the rank of the root.
         if (root == MPI_UNDEFINED) root = -1;  // reset all others to -1.  root has a rank so >= 0
-        root = reduce_op::allreduce(root, [](int & x, int & y){ return ::std::max(x, y); }, comm);
+        root = reduce::allreduce(root, [](int & x, int & y){ return ::std::max(x, y); }, comm);
 
         // broadcast the results
         mxx::datatype<T> dt;
@@ -1427,9 +1427,9 @@ namespace mxx2 {
 
 
 
-  template <typename T>
-  struct segment {
+  namespace segment {
 
+      template <typename T>
     static uint8_t is_start(T const & seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
       // right shift
       T prev = mxx::right_shift(seg_id, comm);
@@ -1440,6 +1440,7 @@ namespace mxx2 {
       return (rank == 0 || prev != seg_id) ? 1 : 0;
     }
 
+      template <typename T>
     static std::vector<uint8_t> is_start(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       // right shift
       std::vector<T> prev = mxx2::right_shift(seg_ids, comm);
@@ -1456,6 +1457,7 @@ namespace mxx2 {
     }
 
 
+      template <typename T>
     static std::vector<uint8_t> is_start_contiguous(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       // exclude empty procs
       MPI_Comm work_comm;
@@ -1487,6 +1489,7 @@ namespace mxx2 {
     }
 
 
+      template <typename T>
     static uint8_t is_end(T const & seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
       // (more complicated to use reverse communicator)
       // left shift
@@ -1500,6 +1503,7 @@ namespace mxx2 {
       return (rank == p - 1 || next != seg_id) ? 1 : 0;
     }
 
+      template <typename T>
     static std::vector<uint8_t> is_end(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       // right shift
       std::vector<T> next = mxx2::left_shift(seg_ids, comm);
@@ -1518,6 +1522,7 @@ namespace mxx2 {
     }
 
 
+      template <typename T>
     static std::vector<uint8_t> is_end_contiguous(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       // exclude empty procs
   	  MPI_Comm work_comm;
@@ -1551,24 +1556,27 @@ namespace mxx2 {
     }
 
 
+    template <typename T>
     static T to_unique_segment_id_from_start(uint8_t const & start, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0.
     	T seg_id = (start == non_start_value) ? 0 : 1;
 
       // scan
-    	return scan_op::scan(seg_id, std::plus<T>(), comm);
+    	return scan::scan(seg_id, std::plus<T>(), comm);
     }
 
+    template <typename T>
     static std::vector<T> to_unique_segment_id_from_start(std::vector<uint8_t> & starts, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0
       std::vector<T> seg_ids(starts.size());
       std::transform(starts.begin(), starts.end(), seg_ids.begin(), [&non_start_value](uint8_t & x){ return (x == non_start_value) ? 0 : 1; });
 
       // scan
-      return scan_op::scan(seg_ids, std::plus<T>(), comm);
+      return scan::scan(seg_ids, std::plus<T>(), comm);
     }
 
 
+    template <typename T>
     static std::vector<T> to_unique_segment_id_from_start_contiguous(std::vector<uint8_t> & starts, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0
       std::vector<T> seg_ids(starts.size());
@@ -1576,28 +1584,31 @@ namespace mxx2 {
         std::transform(starts.begin(), starts.end(), seg_ids.begin(), [&non_start_value](uint8_t & x){ return (x == non_start_value) ? 0 : 1; });
       
       // scan
-      return scan_op::scan_contiguous(seg_ids, std::plus<T>(), comm);
+      return scan::scan_contiguous(seg_ids, std::plus<T>(), comm);
     }
 
 
 
+    template <typename T>
     static T to_unique_segment_id_from_end(uint8_t const & end, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0.
     	T seg_id = (end == non_end_value) ? 0 : 1;
 
       // reverse scan
-    	return scan_op::rscan(seg_id, std::plus<T>(), comm);
+    	return scan::rscan(seg_id, std::plus<T>(), comm);
     }
 
+      template <typename T>
     static std::vector<T> to_unique_segment_id_from_end(std::vector<uint8_t> & ends, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0
       std::vector<T> results(ends.size());
       std::transform(ends.begin(), ends.end(), results.begin(), [&non_end_value](uint8_t & x) { return (x == non_end_value) ? 0 : 1; });
 
       // reverse scan
-      return scan_op::rscan(results, std::plus<T>(), comm);
+      return scan::rscan(results, std::plus<T>(), comm);
     }
 
+      template <typename T>
     static std::vector<T> to_unique_segment_id_from_end_contiguous(std::vector<uint8_t> & ends, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0
       std::vector<T> results(ends.size());
@@ -1605,22 +1616,25 @@ namespace mxx2 {
         std::transform(ends.begin(), ends.end(), results.begin(), [&non_end_value](uint8_t & x) { return (x == non_end_value) ? 0 : 1; });
       
       // reverse scan
-      return scan_op::rscan_contiguous(results, std::plus<T>(), comm);
+      return scan::rscan_contiguous(results, std::plus<T>(), comm);
     }
 
+      template <typename T>
     static T to_unique_segment_id(T const & non_unique_seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
       auto start = is_start(non_unique_seg_id, comm);
-      return to_unique_segment_id_from_start(start, 0, comm);
+      return to_unique_segment_id_from_start<T>(start, 0, comm);
     }
 
+      template <typename T>
     static std::vector<T> to_unique_segment_id(std::vector<T> & non_unique_seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       auto start = is_start(non_unique_seg_ids, comm);
-      return to_unique_segment_id_from_start(start, 0, comm);
+      return to_unique_segment_id_from_start<T>(start, 0, comm);
     }
 
+      template <typename T>
     static std::vector<T> to_unique_segment_id_contiguous(std::vector<T> & non_unique_seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       auto start = is_start_contiguous(non_unique_seg_ids, comm);
-      return to_unique_segment_id_from_start_contiguous(start, 0, comm);
+      return to_unique_segment_id_from_start_contiguous<T>(start, 0, comm);
     }
     
 
@@ -1629,7 +1643,7 @@ namespace mxx2 {
 
 
   /// segmented scan operations.  requires that the segments have unique ids and all elements in the same segment id
-    struct seg_scan {
+  namespace segmented_scan {
 
       /**
        * @brief segmented scan helper function - converts the user specified operation into a segmented scan operation
@@ -1660,7 +1674,7 @@ namespace mxx2 {
         MPI_Comm_split(comm, seg, rank, &seg_comm);
 
         // calling normal scan function.
-        T result = scan_op::scan<T, Func, exclusive>(x, f, seg_comm);
+        T result = scan::scan<T, Func, exclusive>(x, f, seg_comm);
 
         MPI_Comm_free(&seg_comm);
         return result;
@@ -1677,7 +1691,7 @@ namespace mxx2 {
         MPI_Comm_split(comm, seg, p - rank, &rev_seg_comm);
 
         // now call local scan
-        T result = scan_op::scan<T, Func, exclusive>(x, f, rev_seg_comm);
+        T result = scan::scan<T, Func, exclusive>(x, f, rev_seg_comm);
 
         MPI_Comm_free(&rev_seg_comm);
         return result;
@@ -1686,12 +1700,12 @@ namespace mxx2 {
       /// exclusive scan
       template <typename T, typename SegT, typename Func = std::plus<T> >
       static T exscan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::scan<T, SegT, Func, true>(x, seg, f, comm);
+        return segmented_scan::scan<T, SegT, Func, true>(x, seg, f, comm);
       }
 
       template <typename T, typename SegT, typename Func = std::plus<T> >
       static T rexscan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::rscan<T, SegT, Func, true>(x, seg, f, comm);
+        return segmented_scan::rscan<T, SegT, Func, true>(x, seg, f, comm);
       }
 
 
@@ -1717,7 +1731,7 @@ namespace mxx2 {
         // converted op.
         seg_scan_op<T, SegT, Func> func(f);
 
-        std::vector<std::pair<T, SegT> > out = scan_op::scan<std::pair<T, SegT>, seg_scan_op<T, SegT, Func>, exclusive>(marked, func, comm);
+        std::vector<std::pair<T, SegT> > out = scan::scan<std::pair<T, SegT>, seg_scan_op<T, SegT, Func>, exclusive>(marked, func, comm);
 
         // convert data back to original form
         std::vector<T> results(out.size());
@@ -1736,7 +1750,7 @@ namespace mxx2 {
         mxx::rev_comm(comm, rev_comm);
 
         // now call local scan
-        auto results = seg_scan::scan<T, SegT, Func, exclusive>(x, seg, f, rev_comm);
+        auto results = segmented_scan::scan<T, SegT, Func, exclusive>(x, seg, f, rev_comm);
 
         MPI_Comm_free(&rev_comm);
         return results;
@@ -1747,13 +1761,13 @@ namespace mxx2 {
       /// exclusive segmented scan.  first element of a segment is not valid.
       template <typename T, typename SegT, typename Func = std::plus<T> >
       static std::vector<T> exscan(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::scan<T, SegT, Func, true>(x, seg, f, comm);
+        return segmented_scan::scan<T, SegT, Func, true>(x, seg, f, comm);
       }
 
       /// exclusive segmented scan in reverse.  last element of a segment is not valid.
       template <typename T, typename SegT, typename Func = std::plus<T> >
       static std::vector<T> rexscan(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::rscan<T, SegT, Func, true>(x, seg, f, comm);
+        return segmented_scan::rscan<T, SegT, Func, true>(x, seg, f, comm);
       }
 
 
@@ -1786,9 +1800,9 @@ namespace mxx2 {
 
         std::vector<std::pair<T, SegT> > out;
         if (exclusive)
-          scan_op::exscan_contiguous(marked, func, comm).swap(out);
+          scan::exscan_contiguous(marked, func, comm).swap(out);
         else
-          scan_op::scan_contiguous(marked, func, comm).swap(out);
+          scan::scan_contiguous(marked, func, comm).swap(out);
 
         // convert data back to original form
         std::vector<T> results(out.size());
@@ -1819,9 +1833,9 @@ namespace mxx2 {
 
         std::vector<std::pair<T, SegT> > out;
         if (exclusive)
-          scan_op::rexscan_contiguous(marked, func, comm).swap(out);
+          scan::rexscan_contiguous(marked, func, comm).swap(out);
         else
-          scan_op::rscan_contiguous(marked, func, comm).swap(out);
+          scan::rscan_contiguous(marked, func, comm).swap(out);
 
         // convert data back to original form
         std::vector<T> results(out.size());
@@ -1835,12 +1849,12 @@ namespace mxx2 {
       // NOTE for segmented exclusive scan, the "first" element of a segment is NOT valid.
       template <typename T, typename SegT, typename Func = std::plus<T> >
       static std::vector<T> exscan_contiguous(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::scan_contiguous<T, SegT, Func, true>(x, seg, f, comm);
+        return segmented_scan::scan_contiguous<T, SegT, Func, true>(x, seg, f, comm);
       }
 
       template <typename T, typename SegT, typename Func = std::plus<T> >
       static std::vector<T> rexscan_contiguous(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
-        return seg_scan::rscan_contiguous<T, SegT, Func, true>(x, seg, f, comm);
+        return segmented_scan::rscan_contiguous<T, SegT, Func, true>(x, seg, f, comm);
 
       }
 
@@ -1849,7 +1863,7 @@ namespace mxx2 {
 
 
   /// perform segmented reduction.  results has same distribution as original data.  segment ids should be unique, with each segment marked with same id.
-  struct seg_reduce {
+  namespace segmented_reduce {
 
         /**
          * @brief segmented scan helper function - converts the user specified operation into a segmented scan operation
@@ -1915,15 +1929,15 @@ namespace mxx2 {
 
 
           // first do a forward segmented scan with the user function.
-          seg_scan::seg_scan_op<T, SegT, Func> func(f);
-          std::vector<std::pair<T, SegT> > out = scan_op::scan(marked, func, comm);
+          segmented_scan::seg_scan_op<T, SegT, Func> func(f);
+          std::vector<std::pair<T, SegT> > out = scan::scan(marked, func, comm);
 
 
           // then do a reverse segmented scan with a "replace" function
           MPI_Comm rev_comm;
           mxx::rev_comm(comm, rev_comm);
           replace_op<T, SegT> func2;
-          out = scan_op::rscan(out, func2, comm);
+          out = scan::rscan(out, func2, comm);
           MPI_Comm_free(&rev_comm);
 
           // convert data back to original form
@@ -1958,15 +1972,15 @@ namespace mxx2 {
 
 
           // first do a forward segmented scan with the user function.
-          seg_scan::seg_scan_op<T, SegT, Func> func(f);
-          std::vector<std::pair<T, SegT> > out = scan_op::scan_contiguous(marked, func, comm);
+          segmented_scan::seg_scan_op<T, SegT, Func> func(f);
+          std::vector<std::pair<T, SegT> > out = scan::scan_contiguous(marked, func, comm);
 
 
           // then do a reverse segmented scan with a "replace" function
           MPI_Comm rev_comm;
           mxx::rev_comm(comm, rev_comm);
           replace_op<T, SegT> func2;
-          out = scan_op::rscan_contiguous(out, func2, comm);
+          out = scan::rscan_contiguous(out, func2, comm);
           MPI_Comm_free(&rev_comm);
 
           // convert data back to original form

@@ -25,6 +25,9 @@
 template <typename T>
 class Mxx2MPITest : public ::testing::Test
 {
+  public:
+    ~Mxx2MPITest() {};
+
   protected:
     virtual void SetUp() {};
 
@@ -86,7 +89,7 @@ TYPED_TEST_P(Mxx2MPITest, reduce)
   int root = p-1;
 
   // create send count first
-  int result = mxx2::reduce_op::reduce(rank, [](int const& x, int const& y) { return x + y; }, comm, root);
+  int result = mxx2::reduce::reduce(rank, [](int const& x, int const& y) { return x + y; }, comm, root);
 
   if (rank == root)
     EXPECT_EQ(result, p * (p-1) / 2);
@@ -111,7 +114,7 @@ TYPED_TEST_P(Mxx2MPITest, reducen)
   }
 
   // create send count first
-  auto result = mxx2::reduce_op::reduce(src, [](int const& x, int const& y) { return x + y; }, comm, root);
+  auto result = mxx2::reduce::reduce(src, [](int const& x, int const& y) { return x + y; }, comm, root);
 
   if (rank == root) {
     for (int i = 0; i < p; ++i) {
@@ -139,7 +142,7 @@ TYPED_TEST_P(Mxx2MPITest, reduce_loc)
   }
 
   // create send count first
-  auto data = mxx2::reduce_op::reduce_loc(src, MPI_MINLOC, comm, root);
+  auto data = mxx2::reduce::reduce_loc(src, MPI_MINLOC, comm, root);
   if (rank == root) {
 
      for (int i = 0; i < p; ++i) {
@@ -384,17 +387,17 @@ TYPED_TEST_P(Mxx2MPITest, scan)
 
 
   // forward
-  TypeParam scanned = mxx2::scan_op::scan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  TypeParam scanned = mxx2::scan::scan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
   //printf("R %d scan, %lu, ", rank, scanned);
   EXPECT_EQ(scanned, rank + 1);
 
   // reverse
-  scanned = mxx2::scan_op::rscan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  scanned = mxx2::scan::rscan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
   //printf("R %d scan_rev, %lu, ", rank, scanned);
   EXPECT_EQ(scanned, p - rank);
 
   // exclusive
-  scanned = mxx2::scan_op::exscan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  scanned = mxx2::scan::exscan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
   if (rank > 0) {
     //printf("R %d exscan, %lu, ", rank, scanned);
     EXPECT_EQ(scanned, rank);
@@ -402,7 +405,7 @@ TYPED_TEST_P(Mxx2MPITest, scan)
 
 
   // exclusive reverse
-  scanned = mxx2::scan_op::rexscan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  scanned = mxx2::scan::rexscan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
   if (rank < (p-1)) {
     //printf("R %d exscan_rev, %lu, ", rank, scanned);
     EXPECT_EQ(scanned, p - rank - 1);
@@ -426,19 +429,19 @@ TYPED_TEST_P(Mxx2MPITest, scan_n)
 
 
   // forward
-  std::vector<TypeParam> scanned = mxx2::scan_op::scan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  std::vector<TypeParam> scanned = mxx2::scan::scan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
     //printf("R %d scan, %d = %lu \n", rank, i, scanned[i]);
     EXPECT_EQ(scanned[i], i * (rank + 1));
   }
   // reverse
-  scanned = mxx2::scan_op::rscan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  scanned = mxx2::scan::rscan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
     //printf("R %d scan_rev, %d = %lu \n", rank, i, scanned[i]);
     EXPECT_EQ(scanned[i], i * (p - rank));
   }
   // exclusive
-  scanned = mxx2::scan_op::exscan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  scanned = mxx2::scan::exscan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   if (rank > 0)
     for (int i = 0; i < p; ++i) {
       //printf("R %d exscan, %d = %lu \n", rank, i, scanned[i]);
@@ -446,7 +449,7 @@ TYPED_TEST_P(Mxx2MPITest, scan_n)
     }
 
   // exclusive reverse
-  scanned = mxx2::scan_op::rexscan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  scanned = mxx2::scan::rexscan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   if (rank < (p-1))
     for (int i = 0; i < p; ++i) {
       //printf("R %d exscan_rev, %d = %lu \n", rank, i, scanned[i]);
@@ -469,26 +472,26 @@ TYPED_TEST_P(Mxx2MPITest, scan_vec)
 
 
   // forward
-  std::vector<TypeParam> scanned = mxx2::scan_op::scan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  std::vector<TypeParam> scanned = mxx2::scan::scan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
     //printf("R %d scan, %d = %lu \n", rank, i, scanned[i]);
     EXPECT_EQ(scanned[i], p * rank + (i + 1));
   }
   // reverse
-  scanned = mxx2::scan_op::rscan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  scanned = mxx2::scan::rscan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
     //printf("R %d scan_rev, %d = %lu \n", rank, i, scanned[i]);
     EXPECT_EQ(scanned[i], p * (p - rank - 1) + (p - i));
   }
   // exclusive
-  scanned = mxx2::scan_op::exscan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  scanned = mxx2::scan::exscan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = (rank > 0) ? 0 : 1; i < p; ++i) {
     //printf("R %d exscan, %d = %lu \n", rank, i, scanned[i]);
     EXPECT_EQ(scanned[i], p * rank + i);
   }
 
   // exclusive reverse
-  scanned = mxx2::scan_op::rexscan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
+  scanned = mxx2::scan::rexscan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = 0; i < (rank < (p-1) ? p : p-1); ++i) {
     //printf("R %d exscan_rev, %d = %lu \n", rank, i, scanned[i]);
     EXPECT_EQ(scanned[i], p * (p - rank - 1) + (p - i - 1));
@@ -507,30 +510,30 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert)
   TypeParam seg = (rank / 2) % 2 ;  // non unique
 
   // convert to start
-  uint8_t start = mxx2::segment<TypeParam>::is_start(seg, MPI_COMM_WORLD);
+  uint8_t start = mxx2::segment::is_start(seg, MPI_COMM_WORLD);
   //printf("R %d seg start, %d\n ", rank, start);
   EXPECT_EQ((rank % 2 == 0 ? 1 : 0), start);
 
   // convert to end
-  uint8_t end = mxx2::segment<TypeParam>::is_end(seg, MPI_COMM_WORLD);
+  uint8_t end = mxx2::segment::is_end(seg, MPI_COMM_WORLD);
   //printf("R %d seg end, %d\n ", rank, end);
   EXPECT_EQ(rank % 2 == 1 ? 1 : (rank == p-1) ? 1 : 0, end);
 
 
   // convert to unique from start
-  TypeParam useg = mxx2::segment<TypeParam>::to_unique_segment_id_from_start(start, 0, MPI_COMM_WORLD);
+  TypeParam useg = mxx2::segment::to_unique_segment_id_from_start<TypeParam>(start, 0, MPI_COMM_WORLD);
   //printf("R %d uniq_seg, %d \n ", rank, useg);
   EXPECT_EQ((rank / 2 + 1), useg);
 
 
   // convert to unique from end
-  useg = mxx2::segment<TypeParam>::to_unique_segment_id_from_end(end, 0, MPI_COMM_WORLD);
+  useg = mxx2::segment::to_unique_segment_id_from_end<TypeParam>(end, 0, MPI_COMM_WORLD);
   //printf("R %d uniq_seg_rev, %d \n ", rank, useg);
   EXPECT_EQ((p + 1)/2 - rank/2, useg);
 
 
   // convert from non-unique to unique
-  useg = mxx2::segment<TypeParam>::to_unique_segment_id(seg, MPI_COMM_WORLD);
+  useg = mxx2::segment::to_unique_segment_id(seg, MPI_COMM_WORLD);
   //printf("R %d uniq_seg 2, %d \n ", rank, useg);
   EXPECT_EQ((rank / 2 + 1), useg);
 
@@ -554,34 +557,34 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert_n)
 //  }
 
   // convert to start
-  auto starts = mxx2::segment<TypeParam>::is_start(inputs, MPI_COMM_WORLD);
+  auto starts = mxx2::segment::is_start(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
         //printf("R %d seg start, %d = %lu \n", rank, i, starts[i]);
         EXPECT_EQ(((rank + i) % 2 == 0 ? 1 : (rank == 0) ? 1 : 0), starts[i]);
   }
   // convert to end
-  auto ends = mxx2::segment<TypeParam>::is_end(inputs, MPI_COMM_WORLD);
+  auto ends = mxx2::segment::is_end(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
           //printf("R %d seg end, %d = %lu \n", rank, i, ends[i]);
           EXPECT_EQ((rank+i) % 2 == 1 ? 1 : (rank == p-1) ? 1 : 0, ends[i]);
   }
 
   // convert to unique from start
-  auto useg = mxx2::segment<TypeParam>::to_unique_segment_id_from_start(starts, 0, MPI_COMM_WORLD);
+  auto useg = mxx2::segment::to_unique_segment_id_from_start<TypeParam>(starts, 0, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
         //printf("R %d useg, %d = %lu \n", rank, i, useg[i]);
         EXPECT_EQ(((rank + i % 2) / 2 + 1), useg[i]);
   }
 
   // convert to unique from end
-  useg = mxx2::segment<TypeParam>::to_unique_segment_id_from_end(ends, 0, MPI_COMM_WORLD);
+  useg = mxx2::segment::to_unique_segment_id_from_end<TypeParam>(ends, 0, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
       //  printf("R %d useg rev, %d = %lu \n", rank, i, useg[i]);
         EXPECT_EQ((p + 1 + i % 2) / 2 - (rank + i % 2)/2, useg[i]);
   }
 
   // convert from non-unique to unique
-  useg = mxx2::segment<TypeParam>::to_unique_segment_id(inputs, MPI_COMM_WORLD);
+  useg = mxx2::segment::to_unique_segment_id(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
     //printf("R %d uniq_seg 2, %d \n ", rank, useg[i]);
     EXPECT_EQ(((rank + i % 2) / 2 + 1), useg[i]);
@@ -611,14 +614,14 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert_vec)
 
 
   // convert to start
-  auto starts = mxx2::segment<TypeParam>::is_start_contiguous(inputs, MPI_COMM_WORLD);
+  auto starts = mxx2::segment::is_start_contiguous(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
 //    printf("R %d seg start, %d = %lu \n", rank, i, starts[i]);
     EXPECT_EQ(starts[i], (i == rank) ? 1 : 0);
   }
 
   // convert to end
-  auto ends = mxx2::segment<TypeParam>::is_end_contiguous(inputs, MPI_COMM_WORLD);
+  auto ends = mxx2::segment::is_end_contiguous(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
 //      printf("R %d seg end, %d = %lu \n", rank, i, ends[i]);
       EXPECT_EQ(ends[i], (i == (rank-1)) ? 1 : ((rank == p - 1) && (i == p-1 )) ? 1 : 0);
@@ -626,7 +629,7 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert_vec)
 
 
   // convert to unique from start
-  auto useg = mxx2::segment<TypeParam>::to_unique_segment_id_from_start_contiguous(starts, 0, MPI_COMM_WORLD);
+  auto useg = mxx2::segment::to_unique_segment_id_from_start_contiguous<TypeParam>(starts, 0, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
 //    printf("R %d useg, %d = %lu \n", rank, i, useg[i]);
     EXPECT_EQ(useg[i], (i < rank) ? rank : rank + 1);
@@ -634,7 +637,7 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert_vec)
 
 
   // convert to unique from end
-  useg = mxx2::segment<TypeParam>::to_unique_segment_id_from_end_contiguous(ends, 0, MPI_COMM_WORLD);
+  useg = mxx2::segment::to_unique_segment_id_from_end_contiguous<TypeParam>(ends, 0, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
 //    printf("R %d useg rev, %d = %lu \n", rank, i, useg[i]);
     EXPECT_EQ(useg[i], (i < rank) ? p - rank + 1 : p - rank);
@@ -642,7 +645,7 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert_vec)
 
 
   // convert from non-unique to unique
-  useg = mxx2::segment<TypeParam>::to_unique_segment_id_contiguous(inputs, MPI_COMM_WORLD);
+  useg = mxx2::segment::to_unique_segment_id_contiguous(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
 //    printf("R %d useg 2, %d = %lu \n", rank, i, useg[i]);
     EXPECT_EQ(useg[i], (i < rank) ? rank : rank + 1);
@@ -666,11 +669,11 @@ TYPED_TEST_P(Mxx2MPITest, reduce2)
 
 
   // forward
-  TypeParam scanned = mxx2::reduce_op::reduce(input, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
+  TypeParam scanned = mxx2::reduce::reduce(input, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
   if (rank == 0) EXPECT_EQ(scanned, p-1);
 
   // reverse
-  scanned = mxx2::reduce_op::allreduce(input, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
+  scanned = mxx2::reduce::allreduce(input, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
   EXPECT_EQ(scanned, p-1);
 
 }
@@ -691,13 +694,13 @@ TYPED_TEST_P(Mxx2MPITest, reduce_n)
 
 
   // forward
-  std::vector<TypeParam> scanned = mxx2::reduce_op::reduce(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
+  std::vector<TypeParam> scanned = mxx2::reduce::reduce(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
   if (rank == 0)
     for (int i = 0; i < p; ++i)
       EXPECT_EQ(scanned[i], p-1);
 
   // reverse
-  scanned = mxx2::reduce_op::allreduce(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
+  scanned = mxx2::reduce::allreduce(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i)
     EXPECT_EQ(scanned[i], p-1);
 
@@ -719,12 +722,12 @@ TYPED_TEST_P(Mxx2MPITest, reduce_vec)
 
 
   // forward
-  TypeParam scanned = mxx2::reduce_op::reduce_contiguous(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
+  TypeParam scanned = mxx2::reduce::reduce_contiguous(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
   if (rank == 0)
     EXPECT_EQ(scanned, p * p - 1);
 
   // reverse
-  scanned = mxx2::reduce_op::allreduce_contiguous(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
+  scanned = mxx2::reduce::allreduce_contiguous(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
   EXPECT_EQ(scanned, p * p - 1);
 
 }
@@ -744,7 +747,11 @@ INSTANTIATE_TYPED_TEST_CASE_P(Bliss, Mxx2MPITest, Mxx2MPITestTypes);
  */
 class Mxx2SegmentedMPITest : public ::testing::Test
 {
+  public:
+    ~Mxx2SegmentedMPITest() {};
+
   protected:
+
     virtual void SetUp() {};
 
     template <typename TT, typename ST, typename Func>
@@ -909,7 +916,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan)
   std::vector<int> gold;
   bool same;
 
-  int result = mxx2::seg_scan::scan(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  int result = mxx2::segmented_scan::scan(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -928,7 +935,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan)
   }
 
 
-  result = mxx2::seg_scan::exscan(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  result = mxx2::segmented_scan::exscan(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
   MPI_Barrier(MPI_COMM_WORLD);
   print = mxx2::gather(result, comm, 0);
   if (rank == 0) {
@@ -945,7 +952,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan)
   }
 
 
-  result = mxx2::seg_scan::rscan(rank, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  result = mxx2::segmented_scan::rscan(rank, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
   MPI_Barrier(MPI_COMM_WORLD);
   print = mxx2::gather(result, comm, 0);
   if (rank == 0) {
@@ -962,7 +969,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan)
   }
 
 
-  result = mxx2::seg_scan::rexscan(rank, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  result = mxx2::segmented_scan::rexscan(rank, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
   MPI_Barrier(MPI_COMM_WORLD);
   print = mxx2::gather(result, comm, 0);
   if (rank == 0) {
@@ -1000,7 +1007,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_n)
   std::vector<int> gold;
   bool same;
 
-  auto result = mxx2::seg_scan::scan(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  auto result = mxx2::segmented_scan::scan(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
   for ( int i = 0; i < 3; ++i) {
     auto allseg = mxx2::gather(seg[i], comm, 0);
     auto vals = mxx2::gather(inputs[i], comm, 0);
@@ -1027,7 +1034,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_n)
   }
   MPI_Barrier(MPI_COMM_WORLD);
 
-  result = mxx2::seg_scan::exscan(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  result = mxx2::segmented_scan::exscan(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
   for ( int i = 0; i < 3; ++i) {
     auto allseg = mxx2::gather(seg[i], comm, 0);
     auto vals = mxx2::gather(inputs[i], comm, 0);
@@ -1055,7 +1062,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_n)
   MPI_Barrier(MPI_COMM_WORLD);
 
 
-  result = mxx2::seg_scan::rscan(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  result = mxx2::segmented_scan::rscan(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
   for ( int i = 0; i < 3; ++i) {
     auto allseg = mxx2::gather(seg[i], comm, 0);
     auto vals = mxx2::gather(inputs[i], comm, 0);
@@ -1083,7 +1090,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_n)
   MPI_Barrier(MPI_COMM_WORLD);
 
 
-  result = mxx2::seg_scan::rexscan(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  result = mxx2::segmented_scan::rexscan(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
   for ( int i = 0; i < 3; ++i) {
     auto allseg = mxx2::gather(seg[i], comm, 0);
     auto vals = mxx2::gather(inputs[i], comm, 0);
@@ -1143,7 +1150,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_v)
   std::vector<int> gold;
   bool same;
 
-  auto result = mxx2::seg_scan::scan_contiguous(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  auto result = mxx2::segmented_scan::scan_contiguous(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
   auto print = mxx2::gathern(result, comm, 0);
@@ -1161,7 +1168,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_v)
   }
 
 
-  result = mxx2::seg_scan::exscan_contiguous(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  result = mxx2::segmented_scan::exscan_contiguous(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -1181,7 +1188,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_v)
   }
 
 
-  result = mxx2::seg_scan::rscan_contiguous(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  result = mxx2::segmented_scan::rscan_contiguous(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -1201,7 +1208,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_v)
     EXPECT_TRUE(same);
   }
 
-  result = mxx2::seg_scan::rexscan_contiguous(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
+  result = mxx2::segmented_scan::rexscan_contiguous(inputs, seg, [](int const &x, int const &y){ return std::max(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -1240,7 +1247,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce)
   auto vals = mxx2::gather(rank, comm, 0);
 
 
-  int result = mxx2::seg_reduce::allreduce(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  int result = mxx2::segmented_reduce::allreduce(rank, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
 
   auto outs = mxx2::gather(result, comm, 0);
 
@@ -1262,7 +1269,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce)
   }
 
 
-  result = mxx2::seg_reduce::allreduce(rank, seg, std::plus<int>(), comm);
+  result = mxx2::segmented_reduce::allreduce(rank, seg, std::plus<int>(), comm);
 
   outs = mxx2::gather(result, comm, 0);
 
@@ -1309,7 +1316,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_n)
 
   int gold, len;
   bool same;
-  auto result = mxx2::seg_reduce::allreduce(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  auto result = mxx2::segmented_reduce::allreduce(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
   for ( int i = 0; i < 3; ++i) {
     auto allseg = mxx2::gather(seg[i], comm, 0);
     auto vals = mxx2::gather(inputs[i], comm, 0);
@@ -1337,7 +1344,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_n)
   MPI_Barrier(MPI_COMM_WORLD);
 
 
-  result = mxx2::seg_reduce::allreduce(inputs, seg, std::plus<int>(), comm);
+  result = mxx2::segmented_reduce::allreduce(inputs, seg, std::plus<int>(), comm);
   for ( int i = 0; i < 3; ++i) {
     auto allseg = mxx2::gather(seg[i], comm, 0);
     auto vals = mxx2::gather(inputs[i], comm, 0);
@@ -1396,7 +1403,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_v)
   std::vector<int> gold;
   bool same;
 
-  auto result = mxx2::seg_reduce::allreduce_contiguous(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
+  auto result = mxx2::segmented_reduce::allreduce_contiguous(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
   auto print = mxx2::gathern(result, comm, 0);
@@ -1413,7 +1420,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_v)
     EXPECT_TRUE(same);
   }
 
-  result = mxx2::seg_reduce::allreduce_contiguous(inputs, seg, std::plus<int>(), comm);
+  result = mxx2::segmented_reduce::allreduce_contiguous(inputs, seg, std::plus<int>(), comm);
 
   MPI_Barrier(MPI_COMM_WORLD);
   print = mxx2::gathern(result, comm, 0);

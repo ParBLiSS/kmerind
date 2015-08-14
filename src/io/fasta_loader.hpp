@@ -532,14 +532,14 @@ namespace bliss
             // first define segments.  empty is 0, and non-empty is 1 (start of segment)
             uint8_t sstart = localStartLocStore.size() == 0 ? 0 : 1;
             // convert to unique segments
-            size_t segf = mxx2::segment<size_t>::to_unique_segment_id_from_start(sstart, 0, in_comm);
+            size_t segf = mxx2::segment::to_unique_segment_id_from_start<size_t>(sstart, 0, in_comm);
 
             // get the last entry.
             SL headerPos = SL();
             if (sstart) headerPos = localStartLocStore.back();
 
             // now do inclusive scan to spread the values forward
-            headerPos = mxx2::seg_scan::scan(headerPos, segf, [](SL & x, SL & y){ return (x.first > y.first ? x : y); }, in_comm);
+            headerPos = mxx2::segmented_scan::scan(headerPos, segf, [](SL & x, SL & y){ return (x.first > y.first ? x : y); }, in_comm);
 
             // then shift by 1
             headerPos = mxx::right_shift(headerPos, in_comm);
