@@ -27,6 +27,17 @@ class Mxx2MPITest : public ::testing::Test
 {
   protected:
     virtual void SetUp() {};
+
+    template <typename TT>
+    void printvec(::std::vector<TT> x, std::string const & name) {
+
+      printf("%s: ", name.c_str());
+      for (auto e : x) {
+        printf("%d, ", e);
+      }
+      printf("\n");
+
+    }
 };
 
 
@@ -315,6 +326,50 @@ TYPED_TEST_P(Mxx2MPITest, scatterv)
   MPI_Barrier(MPI_COMM_WORLD);
 
 }
+
+TYPED_TEST_P(Mxx2MPITest, unique)
+{
+  int rank;
+  int p;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &p);
+
+
+  std::vector<TypeParam> values(p);
+
+  for (int i = 0; i < rank; ++i) {
+    values[i] = (i / 3) % 3;
+  }
+  for (int i = rank; i < p; ++i) {
+    values[i] = (i / 3 + 1) % 3;
+  }
+  std::vector<TypeParam> allvals = mxx2::gathern(values, MPI_COMM_WORLD, 0);
+
+  auto end = mxx2::unique_contiguous(values, MPI_COMM_WORLD, [](TypeParam & x, TypeParam & y){ return x == y; });
+  values.erase(end, values.end());
+
+  std::vector<TypeParam> result = mxx::gather_vectors(values, MPI_COMM_WORLD);
+
+  if (rank == 0) {
+    auto gold = allvals;
+    auto end2 = std::unique(gold.begin(), gold.end(), [](TypeParam & x, TypeParam & y){ return x == y; });
+    gold.erase(end2, gold.end());
+
+
+    bool same = std::equal(result.begin(), result.end(), gold.begin());
+
+    if (!same) {
+
+      this->template printvec(allvals, "input");
+      this->template printvec(result, "unique");
+      this->template printvec(gold, "unique gold");
+    }
+    EXPECT_TRUE(same);
+  }
+}
+
+
+
 
 TYPED_TEST_P(Mxx2MPITest, scan)
 {
@@ -675,7 +730,7 @@ TYPED_TEST_P(Mxx2MPITest, reduce_vec)
 }
 
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(Mxx2MPITest, all2all, reduce, reducen, reduce_loc, gathern, scattern, gather, scatter, scatterv, scan, scan_n, scan_vec, reduce2, reduce_n, reduce_vec, seg_convert, seg_convert_n, seg_convert_vec);
+REGISTER_TYPED_TEST_CASE_P(Mxx2MPITest, all2all, reduce, reducen, reduce_loc, gathern, scattern, gather, scatter, scatterv, scan, scan_n, scan_vec, reduce2, reduce_n, reduce_vec, seg_convert, seg_convert_n, seg_convert_vec, unique);
 
 
 //////////////////// RUN the tests with different types.

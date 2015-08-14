@@ -168,7 +168,7 @@ TEST_P(Mxx2Test, unique)
   std::vector<int> test_counts = ::mxx2::bucketing<int>(this->test, [&pp](TypeParam const & x) { return x % pp; }, pp);
   TIMER_END(unique, "test_bucket", this->test.size());
   TIMER_START(unique);
-  ::mxx2::retain_unique<::std::unordered_set<TypeParam>, ::std::equal_to<TypeParam> >(this->test, test_counts);
+  ::mxx2::bucket_unique<::std::unordered_set<TypeParam>, ::std::equal_to<TypeParam> >(this->test, test_counts);
   TIMER_END(unique, "test_unique", this->test.size());
 
   printf("unique: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);
@@ -586,7 +586,7 @@ TEST_P(Mxx2KmerTest, unique)
   std::vector<int> test_counts = ::mxx2::bucketing<int>(this->test, [&](TypeParam const & x) { return h(x) % pp; }, pp);
   TIMER_END(unique, "test_bucket", this->test.size());
   TIMER_START(unique);
-  ::mxx2::retain_unique<typename Mxx2KmerTest::Set, typename Mxx2KmerTest::TransformedEqual >(this->test, test_counts);
+  ::mxx2::bucket_unique<typename Mxx2KmerTest::Set, typename Mxx2KmerTest::TransformedEqual >(this->test, test_counts);
   TIMER_END(unique, "test_unique", this->test.size());
 
   printf("unique: count %d, buckets %d\n", this->GetParam().first, this->GetParam().second);

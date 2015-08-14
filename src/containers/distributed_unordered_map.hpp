@@ -366,7 +366,7 @@ namespace dsc  // distributed std container
 
           TIMER_START(find);
           // distribute (communication part)
-          mxx2::retain_unique<::std::unordered_set<Key,
+          mxx2::bucket_unique<::std::unordered_set<Key,
                                                    TransformedHash,
                                                    typename Base::TransformedEqual >, typename Base::TransformedEqual >(keys, send_counts, sorted_input);
           TIMER_END(find, "unique", keys.size());
@@ -453,7 +453,7 @@ namespace dsc  // distributed std container
 
           TIMER_START(find);
           // distribute (communication part)
-          mxx2::retain_unique<::std::unordered_set<Key,
+          mxx2::bucket_unique<::std::unordered_set<Key,
                                                    TransformedHash,
                                                    typename Base::TransformedEqual >,
                               typename Base::TransformedEqual >(keys, send_counts, sorted_input);
@@ -734,7 +734,7 @@ namespace dsc  // distributed std container
 
           TIMER_START(count);
           // distribute (communication part)
-          mxx2::retain_unique<::std::unordered_set<Key,
+          mxx2::bucket_unique<::std::unordered_set<Key,
                                                    TransformedHash,
                                                    typename Base::TransformedEqual >, typename Base::TransformedEqual >(keys, send_counts, sorted_input);
           TIMER_END(count, "unique", keys.size());
@@ -831,7 +831,7 @@ namespace dsc  // distributed std container
           std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank, this->comm_size);
 
           // distribute (communication part)
-          mxx2::retain_unique<::std::unordered_set<::std::pair<Key, T>,
+          mxx2::bucket_unique<::std::unordered_set<::std::pair<Key, T>,
                                                    TransformedHash,
                                                    typename Base::TransformedEqual >,
                               typename Base::TransformedEqual >(keys, send_counts, si);
@@ -1008,7 +1008,7 @@ namespace dsc  // distributed std container
 
 //          TIMER_START(insert);
 //          // keep unique only.  may not be needed - comm speed may be faster than we can compute unique.
-//          mxx2::retain_unique<local_container_type, typename Base::TransformedEqual>(input, send_counts, sorted_input);
+//          mxx2::bucket_unique<local_container_type, typename Base::TransformedEqual>(input, send_counts, sorted_input);
 //          TIMER_END(insert, "uniq1", input.size());
 
           TIMER_COLLECTIVE_START(insert, "a2a", this->comm);

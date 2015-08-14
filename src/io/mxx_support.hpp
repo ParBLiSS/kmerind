@@ -66,6 +66,7 @@ std::ostream &operator<<(std::ostream &os, std::pair<T1, T2> const &t) {
 
 namespace mxx2 {
 
+  /// vector version of right shift.  (shift entire vector)
   template <typename T>
   std::vector<T> right_shift(std::vector<T> & t, MPI_Comm comm = MPI_COMM_WORLD)
   {
@@ -102,6 +103,7 @@ namespace mxx2 {
       return left_value;
   }
 
+  /// vector version of left shift  (shift entire vector)
   template <typename T>
   std::vector<T> left_shift(std::vector<T>& t, MPI_Comm comm = MPI_COMM_WORLD)
   {
@@ -418,10 +420,10 @@ namespace mxx2 {
     return send_counts;
   }
 
-  /// keep the unique entries.  complexity is b * O(N/b), where b is the bucket size, and O(N/b) is complexity of inserting into and copying from set.
+  /// keep the unique entries within each bucket.  complexity is b * O(N/b), where b is the bucket size, and O(N/b) is complexity of inserting into and copying from set.
   /// when used within bucket, scales with O(N/b), not with b.  this is as good as it gets wrt complexity.
   template<typename SET, typename EQUAL, typename T = typename SET::key_type, typename count_t = int>
-  void retain_unique(std::vector<T>& input, std::vector<count_t> &send_counts, bool sorted = false) {
+  void bucket_unique(std::vector<T>& input, std::vector<count_t> &send_counts, bool sorted = false) {
   
     auto newstart = input.begin();
     auto newend = newstart;
@@ -904,7 +906,53 @@ namespace mxx2 {
     return results;
   }
 
+  /// MPI version of unique.
+  template <typename TT, typename Equal = std::equal_to<TT> >
+  typename std::vector<TT>::iterator unique_contiguous(std::vector<TT> & x, MPI_Comm comm = MPI_COMM_WORLD, Equal eq = Equal()) {
 
+    // first determine which procs need to participate
+    MPI_Comm in_comm;
+    ::mxx2::split_communicator_by_function(comm, [&x](){ return ( x.size() == 0) ? MPI_UNDEFINED : 1; }, in_comm);
+
+    auto w = x.begin();
+    if (in_comm != MPI_COMM_NULL) {
+
+      int rank;
+      MPI_Comm_rank(in_comm, &rank);
+
+      // now shift last value right by 1
+      TT last = x.back();
+      TT prev = mxx::right_shift(last, in_comm);
+
+      MPI_Comm_free(&in_comm);
+
+      // now compute unique
+      auto r = x.begin();
+      TT curr = x.front();
+
+      // compute for first char
+      // if rank == 0 or prev != *first, then this is unique.  leave it alone by moving write forward 1.
+      if ((rank == 0) || !eq(prev, curr)) { // skip the first entry
+        ++w;
+        prev = curr;  // move prev forward 1 position.
+      }  // else same content, so just move forward read pointer by 1.
+      ++r;
+
+      // for the rest, compare prev with current.
+      while (r != x.end()) {
+        curr = *r;
+        if (!eq(prev, curr)) {
+          *w = curr;
+          ++w;
+          prev = curr;
+        }
+
+        ++r;
+      }
+
+    }
+    return w;
+  }
 
   struct scan_op {
 
@@ -1410,30 +1458,30 @@ namespace mxx2 {
 
     static std::vector<uint8_t> is_start_contiguous(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       // exclude empty procs
-	  MPI_Comm work_comm;
-	  mxx2::split_communicator_by_function(comm, [&seg_ids](){ return (seg_ids.size() == 0) ? MPI_UNDEFINED : 1; }, work_comm);
+      MPI_Comm work_comm;
+      mxx2::split_communicator_by_function(comm, [&seg_ids](){ return (seg_ids.size() == 0) ? MPI_UNDEFINED : 1; }, work_comm);
 
-	  // compute all except first
-	  std::vector<uint8_t> results(seg_ids.size());
+      // compute all except first
+      std::vector<uint8_t> results(seg_ids.size());
 
-	  if (seg_ids.size() > 0)
-	    std::transform(seg_ids.begin(), seg_ids.end() - 1, seg_ids.begin() + 1, results.begin() + 1,
-			  	  	  [](T const &x, T const &y) { return (x == y) ? 0 : 1; });
+      if (seg_ids.size() > 0)
+        std::transform(seg_ids.begin(), seg_ids.end() - 1, seg_ids.begin() + 1, results.begin() + 1,
+                  [](T const &x, T const &y) { return (x == y) ? 0 : 1; });
 
-	  // now compute the first.
+      // now compute the first.
 
-	  // right shift last
-	  if (work_comm != MPI_COMM_NULL) {  // also means non-zero vector
-		  T prev = mxx::right_shift(seg_ids.back(), work_comm);
+      // right shift last
+      if (work_comm != MPI_COMM_NULL) {  // also means non-zero vector
+        T prev = mxx::right_shift(seg_ids.back(), work_comm);
 
-		  // local compare equal first element
-      int rank;
-      MPI_Comm_rank(comm, &rank);
-		  results[0] = (rank == 0 || prev != seg_ids.front()) ? 1 : 0;
+        // local compare equal first element
+        int rank;
+        MPI_Comm_rank(comm, &rank);
+        results[0] = (rank == 0 || prev != seg_ids.front()) ? 1 : 0;
 
-      MPI_Comm_free(&work_comm);
+        MPI_Comm_free(&work_comm);
 
-	  }
+      }
 
       return results;
     }

@@ -94,7 +94,7 @@
 //
 //  ::std::vector<::std::tuple<T, T, T, T> > u(v.size());
 //  ::std::transform(v.begin(), v.end(), u.begin(), [](T const & x) { return ::std::make_tuple(x, x, x, x*x); });
-//  auto stats = ::mxx2::reduce(u, [](::std::tuple<T, T, T, T> const &x, ::std::tuple<T, T, T, T> const &y) {
+//  auto stats = ::mxx2::reduce_op::reduce(u, [](::std::tuple<T, T, T, T> const &x, ::std::tuple<T, T, T, T> const &y) {
 //    return ::std::make_tuple(::std::min(::std::get<0>(x), ::std::get<0>(y)),
 //                             ::std::max(::std::get<1>(x), ::std::get<1>(y)),
 //                             ::std::plus<T>(::std::get<2>(x), ::std::get<2>(y)),
@@ -114,17 +114,17 @@
           int p; \
           MPI_Comm_size(comm, &p); \
           \
-          auto dur_mins = ::mxx2::reduce_loc(timing##_durations, MPI_MINLOC, comm, 0); \
-          auto dur_maxs = ::mxx2::reduce_loc(timing##_durations, MPI_MAXLOC, comm, 0); \
-          auto dur_means = ::mxx2::reduce(timing##_durations, ::std::plus<double>(), comm, 0); \
+          auto dur_mins = ::mxx2::reduce_op::reduce_loc(timing##_durations, MPI_MINLOC, comm, 0); \
+          auto dur_maxs = ::mxx2::reduce_op::reduce_loc(timing##_durations, MPI_MAXLOC, comm, 0); \
+          auto dur_means = ::mxx2::reduce_op::reduce(timing##_durations, ::std::plus<double>(), comm, 0); \
           ::std::for_each(timing##_durations.begin(), timing##_durations.end(), [](double &x) { x = x*x; }); \
-          auto dur_stdevs = ::mxx2::reduce(timing##_durations, ::std::plus<double>(), comm, 0); \
+          auto dur_stdevs = ::mxx2::reduce_op::reduce(timing##_durations, ::std::plus<double>(), comm, 0); \
           \
-          auto cnt_mins = ::mxx2::reduce_loc(timing##_counts, MPI_MINLOC, comm, 0); \
-          auto cnt_maxs = ::mxx2::reduce_loc(timing##_counts, MPI_MAXLOC, comm, 0); \
-          auto cnt_means = ::mxx2::reduce(timing##_counts, ::std::plus<double>(), comm, 0); \
+          auto cnt_mins = ::mxx2::reduce_op::reduce_loc(timing##_counts, MPI_MINLOC, comm, 0); \
+          auto cnt_maxs = ::mxx2::reduce_op::reduce_loc(timing##_counts, MPI_MAXLOC, comm, 0); \
+          auto cnt_means = ::mxx2::reduce_op::reduce(timing##_counts, ::std::plus<double>(), comm, 0); \
           ::std::for_each(timing##_counts.begin(), timing##_counts.end(), [](double &x) { x = x*x; }); \
-          auto cnt_stdevs = ::mxx2::reduce(timing##_counts, ::std::plus<double>(), comm, 0); \
+          auto cnt_stdevs = ::mxx2::reduce_op::reduce(timing##_counts, ::std::plus<double>(), comm, 0); \
           \
           if (rank == 0) { \
             ::std::for_each(dur_means.begin(), dur_means.end(), [p](double & x) { x /= p; }); \
