@@ -485,7 +485,7 @@ TYPED_TEST_P(PartitionTest, badPartitionId){
 
   RangeType src, r;
 
-  // end is before start
+
   std::vector<TypeParam> starts =
   { std::numeric_limits<TypeParam>::min()+1, std::numeric_limits<TypeParam>::lowest()+1, 1, 2, std::numeric_limits<TypeParam>::max(), (std::numeric_limits<TypeParam>::max() / 2) + 1};
   size_t size = 1;
@@ -503,7 +503,7 @@ TYPED_TEST_P(PartitionTest, badPartitionId){
     {
       //INFOF("%ld, %ld\n", static_cast<int64_t>(start), i);
       PartitionerType part;
-      part.configure(src, 4);
+      part.configure(src, 4, 1, 0);
 
       try {
         part.getNext(i);

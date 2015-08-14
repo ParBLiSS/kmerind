@@ -47,6 +47,10 @@ class FASTQLoaderTest : public ::testing::Test
       fileSize = static_cast<size_t>(filestat.st_size);
 
       ASSERT_EQ(34111308, fileSize);
+      //ASSERT_EQ(29250, fileSize);
+#if defined(USE_MPI)
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
     }
 
@@ -73,6 +77,44 @@ TYPED_TEST_CASE_P(FASTQLoaderTest);
 
 
 // normal test cases
+TYPED_TEST_P(FASTQLoaderTest, MPIOpenWithRange)
+{
+  typedef FASTQLoader<TypeParam, false, false> FASTQLoaderType;
+
+  // get this->fileName
+  int rank = 0;
+  int nprocs = 1;
+
+#if defined(USE_MPI)
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
+#endif
+
+  FASTQLoaderType loader(nprocs, rank, this->fileName );
+
+  auto l1 = loader.getNextL1Block();
+  auto r = l1.getRange();
+
+
+//  printf("Rank %d/%d file range: %lu, %lu, range [%lu, %lu)\n", rank, nprocs, loader.getFileRange().start, loader.getFileRange().end, r.start, r.end);
+
+
+//  INFO( "range: " << r2 );
+  ASSERT_EQ('@', loader.getCurrentL1Block().begin()[0]);
+  if (rank == nprocs - 1)
+    ASSERT_EQ('\0', loader.getCurrentL1Block().end()[0]);
+  else
+    ASSERT_EQ('@', loader.getCurrentL1Block().end()[0]);
+//  INFO( " characters = '" << loader.getData().begin()[0]  << "'" );
+//  INFO( " characters = '" << loader.getData().end()[0]  << "'" );
+
+#if defined(USE_MPI)
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
+}
+
+// normal test cases
 TYPED_TEST_P(FASTQLoaderTest, OpenWithRange)
 {
   typedef FASTQLoader<TypeParam, false, false> FASTQLoaderType;
@@ -81,9 +123,12 @@ TYPED_TEST_P(FASTQLoaderTest, OpenWithRange)
   int rank = 3;
   int nprocs = 7;
 
+
+
   FASTQLoaderType loader(nprocs, rank, this->fileName );
 
   loader.getNextL1Block();
+
 
 
 //  INFO( "range: " << r2 );
@@ -91,6 +136,10 @@ TYPED_TEST_P(FASTQLoaderTest, OpenWithRange)
   ASSERT_EQ('@', loader.getCurrentL1Block().end()[0]);
 //  INFO( " characters = '" << loader.getData().begin()[0]  << "'" );
 //  INFO( " characters = '" << loader.getData().end()[0]  << "'" );
+#if defined(USE_MPI)
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
 }
 
 
@@ -126,11 +175,15 @@ TYPED_TEST_P(FASTQLoaderTest, OpenConsecutiveRanges)
       //  INFO( " characters = '" << loader.getData().end()[0]  << "'" );
     }
   }
+#if defined(USE_MPI)
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
 }
 
 
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(FASTQLoaderTest, OpenWithRange, OpenConsecutiveRanges);
+REGISTER_TYPED_TEST_CASE_P(FASTQLoaderTest, MPIOpenWithRange, OpenWithRange, OpenConsecutiveRanges);
 
 
 
@@ -155,6 +208,9 @@ class FASTQLoaderBufferTest : public ::testing::Test
       fileSize = static_cast<size_t>(filestat.st_size);
 
       ASSERT_EQ(34111308, fileSize);
+#if defined(USE_MPI)
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
     }
 
@@ -228,6 +284,9 @@ TYPED_TEST_P(FASTQLoaderBufferTest, BufferingChunks)
     len = r2.size();
 
   }
+#if defined(USE_MPI)
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
 }
 

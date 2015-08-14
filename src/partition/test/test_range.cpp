@@ -35,12 +35,12 @@ TYPED_TEST_CASE_P(RangeTest);
 
 // testing the equal function
 TYPED_TEST_P(RangeTest, equal){
-  range<TypeParam> r(0, 100, 3);
-  range<TypeParam> r2(0, 100, 0);
+  range<TypeParam> r(0, 100);
+  range<TypeParam> r2(0, 100);
   EXPECT_TRUE(r == r2);
 
-  range<TypeParam> r3(10, 100, 3);
-  range<TypeParam> r4(10, 100, 0);
+  range<TypeParam> r3(10, 100);
+  range<TypeParam> r4(10, 100);
   EXPECT_TRUE(r3 == r4);
 
   EXPECT_FALSE(r == r4);
@@ -48,12 +48,12 @@ TYPED_TEST_P(RangeTest, equal){
   // if signed type, then range can have negative start and end
   if (std::is_signed<TypeParam>::value)
   {
-    range<TypeParam> r(-10, 100, 3);
-    range<TypeParam> r2(-10, 100, 0);
+    range<TypeParam> r(-10, 100);
+    range<TypeParam> r2(-10, 100);
     EXPECT_TRUE(r == r2);
 
-    range<TypeParam> r3(-101, -100, 3);
-    range<TypeParam> r4(-101, -100, 0);
+    range<TypeParam> r3(-101, -100);
+    range<TypeParam> r4(-101, -100);
     EXPECT_TRUE(r3 == r4);
 
     EXPECT_FALSE(r == r4);
@@ -63,13 +63,13 @@ TYPED_TEST_P(RangeTest, equal){
 // testing the assignment operator
 TYPED_TEST_P(RangeTest, assignment){
   range<TypeParam> r;
-  range<TypeParam> r2(10, 100, 0);
+  range<TypeParam> r2(10, 100);
   r = r2;
   EXPECT_TRUE(r == r2);
 
   if (std::is_signed<TypeParam>::value)
   {
-    range<TypeParam> r3(-10, 100, 3);
+    range<TypeParam> r3(-10, 100);
     r = r3;
     EXPECT_TRUE(r == r3);
   }
@@ -79,13 +79,13 @@ TYPED_TEST_P(RangeTest, assignment){
 
 // testing the copy constructor
 TYPED_TEST_P(RangeTest, copyConstruct){
-  range<TypeParam> r2(10, 100, 0);
+  range<TypeParam> r2(10, 100);
   range<TypeParam> r(r2);
   EXPECT_TRUE(r == r2);
 
   if (std::is_signed<TypeParam>::value)
   {
-    range<TypeParam> r3(-10, 100, 3);
+    range<TypeParam> r3(-10, 100);
     range<TypeParam> r4(r3);
     EXPECT_TRUE(r3 == r4);
   }
@@ -133,14 +133,14 @@ TYPED_TEST_P(RangeTest, constructFails){
 
   // basically, if start is larger than end.
   try {
-    range<TypeParam>(std::numeric_limits<TypeParam>::max(), std::numeric_limits<TypeParam>::min(), 0);
+    range<TypeParam>(std::numeric_limits<TypeParam>::max(), std::numeric_limits<TypeParam>::min());
     ADD_FAILURE();
   } catch (const std::invalid_argument &e) {
     // did throw exception, so okay.
   }
 
   try {
-    range<TypeParam>(std::numeric_limits<TypeParam>::max(), std::numeric_limits<TypeParam>::lowest(), 0);
+    range<TypeParam>(std::numeric_limits<TypeParam>::max(), std::numeric_limits<TypeParam>::lowest());
     ADD_FAILURE();
   } catch (const std::invalid_argument &e) {
     // did throw exception, so okay.
