@@ -295,7 +295,10 @@ namespace bliss
          * @brief default destructor
          */
         virtual ~BlockPartitioner() {
-          if (done != nullptr) delete [] done;
+          if (done != nullptr) {
+            delete [] done;
+            done = nullptr;
+          }
         };
 
         /**
@@ -318,6 +321,7 @@ namespace bliss
           this->BaseClassType::configure(_src, _nPartitions, chunk_size, _overlap_size);
 
           //Array of booleans for each partition
+          if (done) delete [] done;
           done = new bool[this->nPartitions];
 
           // next figure out the remainder using non_overlap_size
@@ -340,7 +344,8 @@ namespace bliss
          * @return      range of the partition
          */
         template<typename R = Range>
-        typename std::enable_if<!std::is_floating_point<typename R::ValueType>::value, Range>::type getNextImpl(const size_t& partId) {
+        typename std::enable_if<!std::is_floating_point<typename R::ValueType>::value, Range>::type
+        getNextImpl(const size_t& partId) {
           // param validation already done.
 
           // if previously computed, then return end object, signalling no more chunks.
@@ -378,7 +383,8 @@ namespace bliss
          * @return      range of the partition
          */
         template<typename R = Range>
-        typename std::enable_if<std::is_floating_point<typename R::ValueType>::value, Range>::type getNextImpl(const size_t& partId) {
+        typename std::enable_if<std::is_floating_point<typename R::ValueType>::value, Range>::type
+        getNextImpl(const size_t& partId) {
           // param validation already done.
 
           // if previously computed, then return end object, signalling no more chunks.
@@ -400,10 +406,11 @@ namespace bliss
          * @brief reset size to full range, mark the done to false.
          */
         void resetImpl() {
-          for(int i=0 ; i< this->nPartitions; i++)
-          {
-            done[i] = false;
-          }
+          if (done)
+            for(int i=0 ; i < this->nPartitions; i++)
+            {
+              done[i] = false;
+            }
         }
 
     };
@@ -452,7 +459,10 @@ namespace bliss
          * @brief default destructor.  cleans up arrays for callers.
          */
         virtual ~CyclicPartitioner() {
-          if (n_strides) delete [] n_strides;
+          if (n_strides) {
+            delete [] n_strides;
+            n_strides = nullptr;
+          }
         }
 
         /**
@@ -468,6 +478,7 @@ namespace bliss
 
           this->BaseClassType::configure(_src, _nPartitions, _non_overlap_size, _overlap_size);
 
+          if (n_strides) delete [] n_strides;
           n_strides = new size_t[this->nPartitions];
 
           this->nChunks = this->computeNumberOfChunks();
@@ -508,9 +519,10 @@ namespace bliss
          */
         void resetImpl()
         {
-          for (size_t i = 0; i < this->nPartitions; ++i) {
-            n_strides[i] = 0;
-          }
+          if (n_strides)
+            for (size_t i = 0; i < this->nPartitions; ++i) {
+              n_strides[i] = 0;
+            }
         }
 
 
