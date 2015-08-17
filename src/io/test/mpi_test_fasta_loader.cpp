@@ -198,14 +198,11 @@ TYPED_TEST_P(FASTALoaderTest, MPIOpenWithRange)
   FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
 
-
-
   for (auto e : vectorReturned) {
     std::cout << "Rank " << rank << "/" << nprocs << " element: " << e.first << ", " << e.second << std::endl;
   }
 
-
-  std::cout << "Rank "  << rank << "/" << nprocs << " file range: " << loader.getFileRange() << ", range " << r << ", vector returned size " << vectorReturned.size() << std::endl;
+  std::cout << "Rank "  << rank << "/" << nprocs << " file range: " << loader.getFileRange() << ", range " << r << ", sequence counts " << vectorReturned.size() << std::endl;
 
   ASSERT_LT(0 , vectorReturned.size());
 
@@ -254,7 +251,7 @@ TYPED_TEST_P(FASTALoaderTest, MPIOpenWithRange2)
   }
 
 
-  std::cout << "Rank "  << rank << "/" << nprocs << " file range: " << loader.getFileRange() << ", range " << r << ", vector returned size " << vectorReturned.size() << std::endl;
+  std::cout << "Rank "  << rank << "/" << nprocs << " file range: " << loader.getFileRange() << ", range " << r << ", sequence counts " << vectorReturned.size() << std::endl;
 
   ASSERT_LT(0 , vectorReturned.size());
 

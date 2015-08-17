@@ -20,7 +20,9 @@
 
 #include "common/base_types.hpp"
 #include "io/file_loader.hpp"
-#include "boost/mpi/datatype.hpp"
+#include "mxx/datatypes.hpp"
+
+#include "mxx/datatypes.hpp"
 
 #include "io/mxx_support.hpp"
 
@@ -250,7 +252,8 @@ namespace bliss
             offSetType localMaximum = localStartLocStore.back().first;
             offSetType newFirstStartLocation;
 
-            MPI_Exscan(&localMaximum, &newFirstStartLocation, 1, boost::mpi::get_mpi_datatype(newFirstStartLocation), MPI_MAX, comm);
+            mxx::datatype<offSetType> dt;
+            MPI_Exscan(&localMaximum, &newFirstStartLocation, 1, dt.type(), MPI_MAX, comm);
 
             //Update the first starting location (first element in the pair)
             if (changeFirstStartLocation == true)
@@ -273,7 +276,7 @@ namespace bliss
 
             //2.3 Send the EOL index back to the neighbour        
             offSetType nextBlockEOLIndex;
-            MPICommBackward<offSetType>(&iCpy, &nextBlockEOLIndex, boost::mpi::get_mpi_datatype(nextBlockEOLIndex));
+            MPICommBackward<offSetType>(&iCpy, &nextBlockEOLIndex, dt.type());
 
             //2.4 Update the local vector
             if (lastBrokenHeader == true)
@@ -284,7 +287,7 @@ namespace bliss
 
             offSetType newFirstHeaderEndLocation;
 
-            MPI_Exscan(&localMaximum, &newFirstHeaderEndLocation, 1, boost::mpi::get_mpi_datatype(newFirstHeaderEndLocation), MPI_MAX, comm);
+            MPI_Exscan(&localMaximum, &newFirstHeaderEndLocation, 1, dt.type(), MPI_MAX, comm);
 
             //Update the first starting location (first element in the pair)
             if (changeFirstStartLocation == true)

@@ -193,7 +193,7 @@ namespace bliss
         }
 
         /// returns a pointer to tthe value held in iterator.
-        inline typename base_traits::pointer operator->() const
+        inline typename base_traits::pointer operator->()
         {
           return &(*_curr);
         }
@@ -201,11 +201,11 @@ namespace bliss
         // NO support for output iterator at this point, since modifying a value can prevent multipass requirement of forward iterator.
 
         // forward iterator required default constructor
-        template<
+        template<typename IterCat = iterator_category,
             typename = typename std::enable_if<
-                std::is_same<iterator_category, std::forward_iterator_tag>::value ||
-                std::is_same<iterator_category, std::bidirectional_iterator_tag>::value ||
-                std::is_same<iterator_category, std::random_access_iterator_tag>::value >::type >
+                std::is_same<IterCat, std::forward_iterator_tag>::value ||
+                std::is_same<IterCat, std::bidirectional_iterator_tag>::value ||
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
         explicit filter_iterator()
             : _curr(), _start(), _end(), _f(), before_start(false)
         {
@@ -216,10 +216,11 @@ namespace bliss
         /**
          * semantics of -- does not have a bound on the start side.
          */
-        typename std::enable_if<
-            std::is_same<iterator_category, std::bidirectional_iterator_tag>::value || std::is_same<
-                iterator_category, std::random_access_iterator_tag>::value, type>::type&
-        operator--()
+        template <typename IterCat = iterator_category,
+            typename = typename std::enable_if<
+              std::is_same<IterCat, std::bidirectional_iterator_tag>::value ||
+              std::is_same<IterCat, std::random_access_iterator_tag>::value, int>::type >
+        type& operator--()
         {
           if (_curr == _start)  // at beginning.  don't move it.
             before_start = true;
@@ -238,10 +239,11 @@ namespace bliss
         /**
          * make a copy, then move it back 1.
          */
-        typename std::enable_if<
-            std::is_same<iterator_category, std::bidirectional_iterator_tag>::value || std::is_same<
-                iterator_category, std::random_access_iterator_tag>::value, type>::type operator--(
-            int)
+        template <typename IterCat = iterator_category,
+            typename = typename std::enable_if<
+              std::is_same<IterCat, std::bidirectional_iterator_tag>::value ||
+              std::is_same<IterCat, std::random_access_iterator_tag>::value, int>::type >
+        type& operator--(int)
         {
           type output(*this);
 

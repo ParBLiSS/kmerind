@@ -1531,7 +1531,7 @@ namespace bliss
          * @param read
          * @param index
          */
-        virtual void buildForSequence(const SeqIterType &iter, MapType& index) = 0;
+        virtual void buildForSequence(SeqIterType &iter, MapType& index) = 0;
 
     };
 
@@ -1655,11 +1655,11 @@ namespace bliss
          * @param read
          * @param index
          */
-        virtual void buildForSequence(const SeqIterType &iter, MapType& index) {
+        virtual void buildForSequence(SeqIterType &iter, MapType& index) {
 
           //get kmer value from iterator
-          index.insert(boost::get<1>(*iter));
-          //std::cout << bliss::utils::KmerUtils::toASCIIString(boost::get<1>(*iter)) << "\n";
+          index.insert(std::get<1>(*iter));
+          //std::cout << bliss::utils::KmerUtils::toASCIIString(std::get<1>(*iter)) << "\n";
         }
     };
 

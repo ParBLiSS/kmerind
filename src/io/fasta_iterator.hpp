@@ -25,20 +25,21 @@
 #include <algorithm>
 #include <sstream>
 #include <type_traits>
+#include <tuple>
 
 // own includes
-#include <io/io_exception.hpp>
-#include <utils/logging.h>
-#include <partition/range.hpp>
-#include <common/kmer_iterators.hpp>
-#include <common/alphabets.hpp>
-#include <io/fasta_loader.hpp>
+#include "io/io_exception.hpp"
+#include "utils/logging.h"
+#include "partition/range.hpp"
+#include "common/kmer_iterators.hpp"
+#include "common/alphabets.hpp"
+#include "io/fasta_loader.hpp"
 
 // boost iterators used
-#include <boost/iterator/counting_iterator.hpp>
-#include <boost/iterator/transform_iterator.hpp>
-#include <boost/iterator/zip_iterator.hpp>
-#include <boost/iterator/filter_iterator.hpp>
+#include "iterators/counting_iterator.hpp"
+#include "iterators/transform_iterator.hpp"
+#include "iterators/zip_iterator.hpp"
+#include "iterators/filter_iterator.hpp"
 
 
 namespace bliss
@@ -72,27 +73,31 @@ namespace bliss
         typedef typename FASTALoader<Iterator,KmerType>::offSetType offSetType;
 
         //Counting iterator
-        typedef typename boost::counting_iterator<offSetType> 
+        typedef typename bliss::iterator::CountingIterator<offSetType>
           count_iterator;
 
         //Tranform iterator on top of Counting iterator
-        typedef boost::transform_iterator <std::function<offSetType(const offSetType&)> , count_iterator> 
+//        typedef boost::transform_iterator <std::function<offSetType(const offSetType&)> , count_iterator>
+//          offset_transform_iterator;
+        typedef bliss::iterator::transform_iterator <count_iterator, std::function<offSetType(const offSetType&)> >
           offset_transform_iterator;
 
         //Tranform iterator on top of sequence iterator
         typedef typename std::iterator_traits<Iterator>::value_type Iterator_valueType;
-        typedef boost::transform_iterator <std::function<Iterator_valueType(const Iterator_valueType&)> , Iterator> 
+//        typedef boost::transform_iterator <std::function<Iterator_valueType(const Iterator_valueType&)> , Iterator>
+//          transformed_seq_iterator;
+        typedef bliss::iterator::transform_iterator <Iterator, std::function<Iterator_valueType(const Iterator_valueType&)> >
           transformed_seq_iterator;
 
         //Converting raw character Iterator to Kmer Iterator (filtering later)
         typedef bliss::common::KmerGenerationIterator<transformed_seq_iterator, KmerType> KmerIncompleteIterator;
 
-        //Tuple of two iterators id and Kmer iterator over raw data
-        typedef boost::tuple<offset_transform_iterator, KmerIncompleteIterator> 
-          the_offset_rawkmer_tuple;
+//        //Tuple of two iterators id and Kmer iterator over raw data
+//        typedef boost::tuple<offset_transform_iterator, KmerIncompleteIterator>
+//          the_offset_rawkmer_tuple;
 
         //Zip iterator to zip the tuple of id and raw Kmers
-        typedef boost::zip_iterator<the_offset_rawkmer_tuple> 
+        typedef bliss::iterator::ZipIterator<offset_transform_iterator, KmerIncompleteIterator>
           the_offset_rawkmer_zip;
 
         //Filter iterator over the zip iterator 
@@ -100,7 +105,9 @@ namespace bliss
 
       public:
         //Corrected final zip iterator of Kmer and Offset value
-        typedef boost::filter_iterator <std::function <bool(the_offset_rawkmer_zip_valueType) >, the_offset_rawkmer_zip>
+//        typedef boost::filter_iterator <std::function <bool(the_offset_rawkmer_zip_valueType) >, the_offset_rawkmer_zip>
+//          corrected_offset_Kmer_zip;
+        typedef bliss::iterator::filter_iterator <std::function <bool(the_offset_rawkmer_zip_valueType) >, the_offset_rawkmer_zip>
           corrected_offset_Kmer_zip;
 
       protected:
@@ -150,7 +157,7 @@ namespace bliss
         typedef bool (*filterFunctorType)(the_offset_rawkmer_zip_valueType);
         
         filterFunctorType filterFunctor = [](the_offset_rawkmer_zip_valueType e) -> bool { 
-          bool b1 = boost::get<0>(e) < std::numeric_limits<offSetType>::max();
+          bool b1 = std::get<0>(e) < std::numeric_limits<offSetType>::max();
           //bool b2 = boost::get<1>(e) != eol;
           return b1;
         };
@@ -215,16 +222,19 @@ namespace bliss
           KmerIncompleteIterator kmer_raw_begin_iterator = KmerIncompleteIterator(trSequenceBegin, true);
           KmerIncompleteIterator kmer_raw_end_iterator = KmerIncompleteIterator(trSequenceEnd, true);
 
-          //Construct the tuple of ids and kmer iterators
-          the_offset_rawkmer_tuple idKmerStart = the_offset_rawkmer_tuple(idBeginCorrect, kmer_raw_begin_iterator);
-          the_offset_rawkmer_tuple idKmerEnd = the_offset_rawkmer_tuple(idEndCorrect, kmer_raw_end_iterator);
+//          //Construct the tuple of ids and kmer iterators
+//          the_offset_rawkmer_tuple idKmerStart = the_offset_rawkmer_tuple(idBeginCorrect, kmer_raw_begin_iterator);
+//          the_offset_rawkmer_tuple idKmerEnd = the_offset_rawkmer_tuple(idEndCorrect, kmer_raw_end_iterator);
+//
+//          //Zip the tuple
+//          the_offset_rawkmer_zip idKmerZipStart = the_offset_rawkmer_zip(idKmerStart);
+//          the_offset_rawkmer_zip idKmerZipEnd = the_offset_rawkmer_zip(idKmerEnd);
 
-          //Zip the tuple 
-          the_offset_rawkmer_zip idKmerZipStart = the_offset_rawkmer_zip(idKmerStart);
-          the_offset_rawkmer_zip idKmerZipEnd = the_offset_rawkmer_zip(idKmerEnd);
+          the_offset_rawkmer_zip idKmerZipStart(idBeginCorrect, kmer_raw_begin_iterator);
+          the_offset_rawkmer_zip idKmerZipEnd(idEndCorrect, kmer_raw_end_iterator);
 
           //Filter the zip iterator using filter iterator; need both start and end iterators for the constructor
-          corrected_offset_Kmer_zip idSeqZipStartCorrect = corrected_offset_Kmer_zip(filterFunctor, idKmerZipStart, idKmerZipEnd);
+          corrected_offset_Kmer_zip idSeqZipStartCorrect(filterFunctor, idKmerZipStart, idKmerZipEnd);
 
           return idSeqZipStartCorrect;
         }
@@ -254,11 +264,14 @@ namespace bliss
           //Initialise the begin and end of raw kmer iterator
           KmerIncompleteIterator kmer_raw_end_iterator = KmerIncompleteIterator(trSequenceEnd, true);
 
-          //Construct the tuple of ids and kmer iterators
-          the_offset_rawkmer_tuple idKmerEnd = the_offset_rawkmer_tuple(idEndCorrect, kmer_raw_end_iterator);
+//          //Construct the tuple of ids and kmer iterators
+//          the_offset_rawkmer_tuple idKmerEnd = the_offset_rawkmer_tuple(idEndCorrect, kmer_raw_end_iterator);
+//
+//          //Zip the tuple
+//          the_offset_rawkmer_zip idKmerZipEnd = the_offset_rawkmer_zip(idKmerEnd);
 
           //Zip the tuple 
-          the_offset_rawkmer_zip idKmerZipEnd = the_offset_rawkmer_zip(idKmerEnd);
+          the_offset_rawkmer_zip idKmerZipEnd = the_offset_rawkmer_zip(idEndCorrect, kmer_raw_end_iterator);
 
           //Filter the zip iterator using filter iterator; need both start and end iterators for the constructor
           corrected_offset_Kmer_zip idSeqZipEndCorrect = corrected_offset_Kmer_zip(filterFunctor, idKmerZipEnd, idKmerZipEnd);
@@ -266,14 +279,14 @@ namespace bliss
           return idSeqZipEndCorrect;
         }
 
-        offSetType getOffset(const corrected_offset_Kmer_zip &e)
+        offSetType getOffset(corrected_offset_Kmer_zip &e)
         {
-          return boost::get<0>(*e);
+          return std::get<0>(*e);
         }
 
-        KmerType getKmer(const corrected_offset_Kmer_zip &e)
+        KmerType getKmer(corrected_offset_Kmer_zip &e)
         {
-          return boost::get<1>(*e);
+          return std::get<1>(*e);
         }
 
       protected:
