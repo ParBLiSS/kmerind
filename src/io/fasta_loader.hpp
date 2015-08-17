@@ -192,9 +192,9 @@ namespace bliss
             MPI_Comm_size(comm, &noProcs);
             MPI_Comm_rank(comm, &myRank);
 
-            if (myRank == 1)
+
 #endif
-              printf("start i = %lu\n", i);
+
 
             // set iterator for the data
             Iterator data(_data);
@@ -225,10 +225,7 @@ namespace bliss
               //To avoid its contribution in the MPI parallel maximum computation, using 0 as temporary value
               localStartLocStore.push_back(std::make_pair(0, 0));   
             }
-#ifdef USE_MPI
-            if (myRank == 1)
-#endif
-              printf("a i = %lu\n", i);
+
 
             //Above code will parse through the '>' character so that redundant check is not made below
 
@@ -239,11 +236,6 @@ namespace bliss
                 bool EOLfound = findEOL(data, t.end, i);
                 //Push the position i 
                 localStartLocStore.push_back(std::make_pair(storeI,i));
-
-#ifdef USE_MPI
-            if (myRank == 1)
-#endif
-              printf("b i = %lu\n", i);
 
                 if (!EOLfound)
                   lastBrokenHeader = true;
@@ -307,10 +299,6 @@ namespace bliss
                 findEOL(data, extendedEnd , i);
                 //Push the position i 
                 localStartLocStore.push_back(std::make_pair(storeI,i));
-#ifdef USE_MPI
-            if (myRank == 1)
-#endif
-              printf("c i = %lu\n", i);
 
               }
               ++data;
@@ -521,7 +509,7 @@ namespace bliss
 
 
             for (auto x : localStartLocStore)
-              printf("R %d header range [%lu, %lu)\n", myRank, x.first, x.second);
+              DEBUGF("R %d header range [%lu, %lu)\n", myRank, x.first, x.second);
 
 
 #ifdef USE_MPI
