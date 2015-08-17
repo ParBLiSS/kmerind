@@ -363,7 +363,6 @@ namespace bliss
            //============== GET LAST CHAR FROM PREVIOUS PROCESSOR, to check if first char is at start of line.
 
            TT prev_char = '\n';  // default to EOL char.
-           int seg = 1;
 #ifdef USE_MPI
             // for the nonempty ones, shift right by 1.
            int in_p = 1, in_rank = 0;
@@ -509,8 +508,8 @@ namespace bliss
             //=====DONE===== CONVERT FROM LINE START POSITION TO RANGE FOR HEADERS
 
 
-            for (auto x : localStartLocStore)
-              DEBUGF("R %d header range [%lu, %lu)\n", myRank, x.first, x.second);
+//            for (auto x : localStartLocStore)
+//              DEBUGF("R %d header range [%lu, %lu)\n", myRank, x.first, x.second);
 
 
 #ifdef USE_MPI
@@ -518,7 +517,7 @@ namespace bliss
             using SL = std::pair<typename RangeType::ValueType, typename RangeType::ValueType>;
             //============== NOW SPREAD THE LAST ENTRY FORWARD.  empty range (r) does not participate
 
-            // first define segments.  empty is 0, and non-empty is 1 (start of segment)
+            //== first define segments.  empty is 0, and non-empty is 1 (start of segment)
             uint8_t sstart = localStartLocStore.size() == 0 ? 0 : 1;
             // convert to unique segments
             size_t segf = mxx2::segment::to_unique_segment_id_from_start<size_t>(sstart, 0, in_comm);
@@ -527,16 +526,20 @@ namespace bliss
             SL headerPos = SL();
             if (sstart) headerPos = localStartLocStore.back();
 
+            //== do scan then shift forward by 1.  this is not the same as exscan when we're doing segmented scan.
+
             // now do inclusive scan to spread the values forward
             headerPos = mxx2::segmented_scan::scan(headerPos, segf, [](SL & x, SL & y){ return (x.first > y.first ? x : y); }, in_comm);
 
             // then shift by 1
             headerPos = mxx::right_shift(headerPos, in_comm);
 
-            // and merge the results with next
+            //== and merge the results with next.  If there is no localStartLocStore content, then need to insert.
+            if (in_rank > 0) {
+              if ((localStartLocStore.size() == 0) || (localStartLocStore.front().first > (r.start + KmerType::size))) {
+                localStartLocStore.insert(localStartLocStore.begin(), headerPos);
+              }
 
-            if ((in_rank > 0) && (localStartLocStore.front().first > (r.start + KmerType::size))) {
-              localStartLocStore.insert(localStartLocStore.begin(), headerPos);
             }
             //=====DONE===== NOW SPREAD THE LAST ENTRY FORWARD.  empty range (r) does not participate
 
