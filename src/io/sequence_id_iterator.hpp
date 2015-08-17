@@ -130,7 +130,7 @@ namespace bliss
          */
         SequenceIdIterator<SequenceIdType> operator++(int) {
           SequenceIdIterator<SequenceIdType> out(*this);
-          ++out;
+          this->operator++();
           return out;
         }
 
@@ -176,7 +176,7 @@ namespace bliss
          */
         SequenceIdIterator<SequenceIdType> operator--(int) {
           SequenceIdIterator<SequenceIdType> out(*this);
-          --out;
+          this->operator--();
           return out;
         }
 

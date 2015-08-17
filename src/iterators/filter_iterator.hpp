@@ -108,7 +108,7 @@ namespace bliss
                         const Iterator& end)
             : _curr(curr), _start(curr), _end(end), _f(f), before_start(false)
         {
-          // find the first position that passes the predicate.
+          // find the first position that satisfies the predicate.
           while (_curr != _end && !_f(*_curr)) // need to check to make sure we are not pass the end of the base iterator.
             {
               ++_curr;
@@ -164,8 +164,8 @@ namespace bliss
         type operator++(int)
         {
           type output(*this);
-
-          return ++output;
+          this->operator++();
+          return output;
         }
 
         /// compare 2 filter iterators
@@ -246,8 +246,8 @@ namespace bliss
         type& operator--(int)
         {
           type output(*this);
-
-          return --output;
+          this->operator--();
+          return output;
         }
 
         // random access iterator requirements.

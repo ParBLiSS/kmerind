@@ -129,7 +129,7 @@ namespace bliss
          */
         CountingIterator<T> operator++(int) {
           CountingIterator<T> out(*this);
-          ++out;
+          this->operator++();
           return out;
         }
 
@@ -175,7 +175,7 @@ namespace bliss
          */
         CountingIterator<T> operator--(int) {
           CountingIterator<T> out(*this);
-          --out;
+          this->operator--();
           return out;
         }
 

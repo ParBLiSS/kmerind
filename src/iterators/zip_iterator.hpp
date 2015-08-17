@@ -139,7 +139,7 @@ namespace bliss
          */
         ZipIterator<FirstIter, SecondIter> operator++(int) {
           ZipIterator<FirstIter, SecondIter> out(*this);
-          ++out;
+          this->operator++();
           return out;
         }
 

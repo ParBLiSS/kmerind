@@ -211,7 +211,8 @@ namespace fsc {  // fast standard container
           type operator++(int)
 		      {
             type output(*this);
-            return ++output;
+            this->operator++();
+            return output;
 		      }
 
           //=== input iterator specific
@@ -790,7 +791,8 @@ namespace fsc {  // fast standard container
           type operator++(int)
           {
             type output(*this);
-            return ++output;
+            this->operator++();
+            return output;
           }
 
           //=== input iterator specific

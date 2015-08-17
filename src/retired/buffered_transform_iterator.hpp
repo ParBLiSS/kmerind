@@ -155,7 +155,8 @@ namespace bliss
         type operator++(int)
         {
           type output(*this);
-          return ++output;
+          this->operator++();
+          return output;
         }
 
         // accessor functions for internal state.
