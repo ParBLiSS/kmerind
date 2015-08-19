@@ -958,7 +958,7 @@ namespace mxx2 {
 
       /// MPI Scan
       template <typename T, typename Func = std::plus<T>, bool exclusive = false >
-      static T scan(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      T scan(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         MPI_Op op = mxx::create_user_op<T, Func >(f);
         mxx::datatype<T> dt;
         T result;
@@ -971,7 +971,7 @@ namespace mxx2 {
       }
 
       template <typename T, typename Func = std::plus<T>, bool exclusive = false  >
-      static T rscan(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      T rscan(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         MPI_Comm rev_comm;
         mxx::rev_comm(comm, rev_comm);
         auto result = scan<T, Func, exclusive>(x, f, rev_comm);
@@ -980,17 +980,17 @@ namespace mxx2 {
       }
 
       template <typename T, typename Func = std::plus<T> >
-      static T exscan(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      T exscan(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         return scan<T, Func, true>(x, f, comm);
       }
 
       template <typename T, typename Func = std::plus<T> >
-      static T rexscan(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      T rexscan(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         return rscan<T, Func, true>(x, f, comm);
       }
 
       template <typename T, typename Func = std::plus<T>, bool exclusive = false >
-      static std::vector<T> scan(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> scan(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         size_t s = x.size();
         s = mxx::allreduce(s, [](size_t &x , size_t & y){ return ::std::min(x, y); }, comm);
         if (s < x.size()) {
@@ -1011,7 +1011,7 @@ namespace mxx2 {
       }
 
       template <typename T, typename Func = std::plus<T>, bool exclusive = false >
-      static std::vector<T> rscan(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> rscan(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         MPI_Comm rev_comm;
         mxx::rev_comm(comm, rev_comm);
         auto results = scan<T, Func, exclusive>(x, f, rev_comm);
@@ -1020,18 +1020,18 @@ namespace mxx2 {
       }
 
       template <typename T, typename Func = std::plus<T> >
-      static std::vector<T> exscan(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> exscan(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         return scan<T, Func, true>(x, f, comm);
       }
 
       template <typename T, typename Func = std::plus<T> >
-      static std::vector<T> rexscan(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> rexscan(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         return rscan<T, Func, true>(x, f, comm);
       }
 
 
       template <typename T, typename Func = std::plus<T> >
-      static std::vector<T> scan_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> scan_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
 
         std::vector<T> results(x.size());
 
@@ -1065,7 +1065,7 @@ namespace mxx2 {
       }
 
       template <typename T, typename Func = std::plus<T> >
-      static std::vector<T> rscan_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> rscan_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         std::vector<T> results(x.size());
 
         // create subcommuinicator with processors that have non-zero values.  this avoids special cases.
@@ -1098,7 +1098,7 @@ namespace mxx2 {
 
 
       template <typename T, typename Func = std::plus<T> >
-      static std::vector<T> exscan_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> exscan_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         std::vector<T> results(x.size());
 
         // create subcommuinicator with processors that have non-zero values.  this avoids special cases.
@@ -1147,7 +1147,7 @@ namespace mxx2 {
       }
 
       template <typename T, typename Func = std::plus<T> >
-      static std::vector<T> rexscan_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> rexscan_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         std::vector<T> results(x.size());
 
         // create subcommuinicator with processors that have non-zero values.  this avoids special cases.
@@ -1183,7 +1183,7 @@ namespace mxx2 {
 
   namespace reduce {
       template <typename T, typename Func = std::plus<T> >
-      static T reduce(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+      T reduce(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
         MPI_Op op = mxx::create_user_op<T, Func >(f);
         mxx::datatype<T> dt;
         T result;
@@ -1192,7 +1192,7 @@ namespace mxx2 {
         return result;
       }
       template <typename T, typename Func = std::plus<T> >
-      static std::vector<T> reduce(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+      std::vector<T> reduce(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
         size_t s = x.size();
         s = mxx::allreduce(s, [](size_t &x , size_t & y){ return ::std::min(x, y); }, comm);
         if (s < x.size()) {
@@ -1209,7 +1209,7 @@ namespace mxx2 {
         return results;
       }
       template <typename T, typename Func = std::plus<T> >
-      static T reduce_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
+      T reduce_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD, int root = 0) {
 
         T result;
 
@@ -1261,7 +1261,7 @@ namespace mxx2 {
 
       /// reduce operation with minloc, elementwise
       template <typename T>
-      static ::std::pair<T, int > reduce_loc(T & v, MPI_Op op, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
+      ::std::pair<T, int > reduce_loc(T & v, MPI_Op op, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
       {
         if ((op != MPI_MINLOC) && (op != MPI_MAXLOC)) throw std::logic_error("reduce_loc only support MPI_MINLOC and MPI_MAXLOC");
 
@@ -1300,7 +1300,7 @@ namespace mxx2 {
 
       /// reduce operation with minloc, elementwise
       template <typename T>
-      static ::std::pair<::std::vector<T>, ::std::vector<int> > reduce_loc(::std::vector<T> & v, MPI_Op op, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
+      ::std::pair<::std::vector<T>, ::std::vector<int> > reduce_loc(::std::vector<T> & v, MPI_Op op, MPI_Comm comm = MPI_COMM_WORLD, int root = 0)
       {
         if ((op != MPI_MINLOC) && (op != MPI_MAXLOC)) throw std::logic_error("reduce_loc only support MPI_MINLOC and MPI_MAXLOC");
 
@@ -1359,7 +1359,7 @@ namespace mxx2 {
       }
 
       template <typename T, typename Func = std::plus<T> >
-      static T allreduce(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      T allreduce(T & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         MPI_Op op = mxx::create_user_op<T, Func >(f);
         mxx::datatype<T> dt;
         T result;
@@ -1368,7 +1368,7 @@ namespace mxx2 {
         return result;
       }
       template <typename T, typename Func = std::plus<T> >
-      static std::vector<T> allreduce(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> allreduce(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         size_t s = x.size();
         s = mxx::allreduce(s, [](size_t &x , size_t & y){ return ::std::min(x, y); }, comm);
         if (s < x.size()) {
@@ -1385,7 +1385,7 @@ namespace mxx2 {
         return results;
       }
       template <typename T, typename Func = std::plus<T> >
-      static T allreduce_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      T allreduce_contiguous(std::vector<T> & x, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
 
         T result;
 
@@ -1430,7 +1430,7 @@ namespace mxx2 {
   namespace segment {
 
       template <typename T>
-    static uint8_t is_start(T const & seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
+    uint8_t is_start(T const & seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
       // right shift
       T prev = mxx::right_shift(seg_id, comm);
 
@@ -1441,7 +1441,7 @@ namespace mxx2 {
     }
 
       template <typename T>
-    static std::vector<uint8_t> is_start(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+    std::vector<uint8_t> is_start(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       // right shift
       std::vector<T> prev = mxx2::right_shift(seg_ids, comm);
 
@@ -1458,7 +1458,7 @@ namespace mxx2 {
 
 
       template <typename T>
-    static std::vector<uint8_t> is_start_contiguous(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+    std::vector<uint8_t> is_start_contiguous(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       // exclude empty procs
       MPI_Comm work_comm;
       mxx2::split_communicator_by_function(comm, [&seg_ids](){ return (seg_ids.size() == 0) ? MPI_UNDEFINED : 1; }, work_comm);
@@ -1490,7 +1490,7 @@ namespace mxx2 {
 
 
       template <typename T>
-    static uint8_t is_end(T const & seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
+    uint8_t is_end(T const & seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
       // (more complicated to use reverse communicator)
       // left shift
       T next = mxx::left_shift(seg_id, comm);
@@ -1504,7 +1504,7 @@ namespace mxx2 {
     }
 
       template <typename T>
-    static std::vector<uint8_t> is_end(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+    std::vector<uint8_t> is_end(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       // right shift
       std::vector<T> next = mxx2::left_shift(seg_ids, comm);
 
@@ -1523,7 +1523,7 @@ namespace mxx2 {
 
 
       template <typename T>
-    static std::vector<uint8_t> is_end_contiguous(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+    std::vector<uint8_t> is_end_contiguous(std::vector<T> & seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       // exclude empty procs
   	  MPI_Comm work_comm;
   	  mxx2::split_communicator_by_function(comm, [&seg_ids](){ return (seg_ids.size() == 0) ? MPI_UNDEFINED : 1; }, work_comm);
@@ -1557,7 +1557,7 @@ namespace mxx2 {
 
 
     template <typename T>
-    static T to_unique_segment_id_from_start(uint8_t const & start, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+    T to_unique_segment_id_from_start(uint8_t const & start, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0.
     	T seg_id = (start == non_start_value) ? 0 : 1;
 
@@ -1566,7 +1566,7 @@ namespace mxx2 {
     }
 
     template <typename T>
-    static std::vector<T> to_unique_segment_id_from_start(std::vector<uint8_t> & starts, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+    std::vector<T> to_unique_segment_id_from_start(std::vector<uint8_t> & starts, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0
       std::vector<T> seg_ids(starts.size());
       std::transform(starts.begin(), starts.end(), seg_ids.begin(), [&non_start_value](uint8_t & x){ return (x == non_start_value) ? 0 : 1; });
@@ -1577,7 +1577,7 @@ namespace mxx2 {
 
 
     template <typename T>
-    static std::vector<T> to_unique_segment_id_from_start_contiguous(std::vector<uint8_t> & starts, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+    std::vector<T> to_unique_segment_id_from_start_contiguous(std::vector<uint8_t> & starts, uint8_t const & non_start_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0
       std::vector<T> seg_ids(starts.size());
       if (starts.size() > 0)
@@ -1590,7 +1590,7 @@ namespace mxx2 {
 
 
     template <typename T>
-    static T to_unique_segment_id_from_end(uint8_t const & end, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+    T to_unique_segment_id_from_end(uint8_t const & end, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0.
     	T seg_id = (end == non_end_value) ? 0 : 1;
 
@@ -1599,7 +1599,7 @@ namespace mxx2 {
     }
 
       template <typename T>
-    static std::vector<T> to_unique_segment_id_from_end(std::vector<uint8_t> & ends, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+    std::vector<T> to_unique_segment_id_from_end(std::vector<uint8_t> & ends, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0
       std::vector<T> results(ends.size());
       std::transform(ends.begin(), ends.end(), results.begin(), [&non_end_value](uint8_t & x) { return (x == non_end_value) ? 0 : 1; });
@@ -1609,7 +1609,7 @@ namespace mxx2 {
     }
 
       template <typename T>
-    static std::vector<T> to_unique_segment_id_from_end_contiguous(std::vector<uint8_t> & ends, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
+    std::vector<T> to_unique_segment_id_from_end_contiguous(std::vector<uint8_t> & ends, uint8_t const & non_end_value = 0, MPI_Comm comm = MPI_COMM_WORLD) {
       // convert to 1 and 0
       std::vector<T> results(ends.size());
       if (ends.size() > 0)
@@ -1620,19 +1620,19 @@ namespace mxx2 {
     }
 
       template <typename T>
-    static T to_unique_segment_id(T const & non_unique_seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
+    T to_unique_segment_id(T const & non_unique_seg_id, MPI_Comm comm = MPI_COMM_WORLD) {
       auto start = is_start(non_unique_seg_id, comm);
       return to_unique_segment_id_from_start<T>(start, 0, comm);
     }
 
       template <typename T>
-    static std::vector<T> to_unique_segment_id(std::vector<T> & non_unique_seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+    std::vector<T> to_unique_segment_id(std::vector<T> & non_unique_seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       auto start = is_start(non_unique_seg_ids, comm);
       return to_unique_segment_id_from_start<T>(start, 0, comm);
     }
 
       template <typename T>
-    static std::vector<T> to_unique_segment_id_contiguous(std::vector<T> & non_unique_seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
+    std::vector<T> to_unique_segment_id_contiguous(std::vector<T> & non_unique_seg_ids, MPI_Comm comm = MPI_COMM_WORLD) {
       auto start = is_start_contiguous(non_unique_seg_ids, comm);
       return to_unique_segment_id_from_start_contiguous<T>(start, 0, comm);
     }
@@ -1647,13 +1647,13 @@ namespace mxx2 {
 
       /**
        * @brief segmented scan helper function - converts the user specified operation into a segmented scan operation
+       * optimize out using lambda function
        */
       template <typename T, typename SegT, typename Func>
       struct seg_scan_op {
           Func f;
-          const uint8_t non_terminus_val;
 
-          seg_scan_op(Func _f, uint8_t middle_val = 0) : f(_f), non_terminus_val(middle_val) {}
+          seg_scan_op(Func _f) : f(_f) {}
 
           /// performs the reduction operator, using segment value as guide.  Note that there are no "segment start marker" version of this since we'd need a corresponding "segment end marker" version, whcih complicates things.
           std::pair<T, SegT> operator()(std::pair<T, SegT> const & x, std::pair<T, SegT> const & y) {
@@ -1666,7 +1666,7 @@ namespace mxx2 {
 
       /// MPI Scan  with uniquely marked segments.  we can then split the comm and do normal scan
       template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
-      static T scan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      T scan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         int rank;
         MPI_Comm_rank(comm, &rank);
 
@@ -1681,7 +1681,7 @@ namespace mxx2 {
       }
 
       template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
-      static T rscan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      T rscan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         // reverse the comm, then split it using the same coloring, results in individual reversed comms.
         int rank, p;
         MPI_Comm_rank(comm, &rank);
@@ -1699,12 +1699,12 @@ namespace mxx2 {
 
       /// exclusive scan
       template <typename T, typename SegT, typename Func = std::plus<T> >
-      static T exscan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      T exscan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         return segmented_scan::scan<T, SegT, Func, true>(x, seg, f, comm);
       }
 
       template <typename T, typename SegT, typename Func = std::plus<T> >
-      static T rexscan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      T rexscan(T & x, SegT seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         return segmented_scan::rscan<T, SegT, Func, true>(x, seg, f, comm);
       }
 
@@ -1712,7 +1712,7 @@ namespace mxx2 {
 
       /// scan of a vector, element-wise across all processors.
       template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
-      static std::vector<T> scan(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> scan(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         // can't do this via comm split because segments may not line up at different element positions.
 
         if (seg.size() != x.size())
@@ -1742,7 +1742,7 @@ namespace mxx2 {
       }
 
       template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false >
-      static std::vector<T> rscan(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> rscan(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         // since we cannot do this via comm splitting (segments at different position in vector may not line up
         // we can just call the scan function with a reverse comm.
 
@@ -1760,13 +1760,13 @@ namespace mxx2 {
 
       /// exclusive segmented scan.  first element of a segment is not valid.
       template <typename T, typename SegT, typename Func = std::plus<T> >
-      static std::vector<T> exscan(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> exscan(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         return segmented_scan::scan<T, SegT, Func, true>(x, seg, f, comm);
       }
 
       /// exclusive segmented scan in reverse.  last element of a segment is not valid.
       template <typename T, typename SegT, typename Func = std::plus<T> >
-      static std::vector<T> rexscan(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> rexscan(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         return segmented_scan::rscan<T, SegT, Func, true>(x, seg, f, comm);
       }
 
@@ -1779,7 +1779,7 @@ namespace mxx2 {
        *   simplest solution is to convert to Unique segment ids first.
        */
       template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
-      static std::vector<T> scan_contiguous(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> scan_contiguous(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         // convert make sure seg is converted to Unique first.
 
         // can't do this via comm split because segments may not line up at different element positions.
@@ -1815,7 +1815,7 @@ namespace mxx2 {
 
 
       template <typename T, typename SegT, typename Func = std::plus<T>, bool exclusive = false  >
-      static std::vector<T> rscan_contiguous(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> rscan_contiguous(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         // convert make sure seg is converted to Unique first.
 
         // can't do this via comm split because segments may not line up at different element positions.
@@ -1848,12 +1848,12 @@ namespace mxx2 {
 
       // NOTE for segmented exclusive scan, the "first" element of a segment is NOT valid.
       template <typename T, typename SegT, typename Func = std::plus<T> >
-      static std::vector<T> exscan_contiguous(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> exscan_contiguous(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         return segmented_scan::scan_contiguous<T, SegT, Func, true>(x, seg, f, comm);
       }
 
       template <typename T, typename SegT, typename Func = std::plus<T> >
-      static std::vector<T> rexscan_contiguous(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+      std::vector<T> rexscan_contiguous(std::vector<T> & x, std::vector<SegT> &seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
         return segmented_scan::rscan_contiguous<T, SegT, Func, true>(x, seg, f, comm);
 
       }
@@ -1867,13 +1867,10 @@ namespace mxx2 {
 
         /**
          * @brief segmented scan helper function - converts the user specified operation into a segmented scan operation
+         * optimize out this using lambda function
          */
         template <typename T, typename SegT>
         struct replace_op {
-            const uint8_t non_terminus_val;
-
-            replace_op(uint8_t middle_val = 0) : non_terminus_val(middle_val) {}
-
             std::pair<T, SegT> operator()(std::pair<T, SegT> const & x, std::pair<T, SegT> const & y) {
               return (x.second == y.second) ?
                 x : y;
@@ -1883,7 +1880,7 @@ namespace mxx2 {
 
 
         template <typename T, typename SegT, typename Func = std::plus<T> >
-        static T allreduce(T & x, SegT & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        T allreduce(T & x, SegT & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
 
           int rank;
           MPI_Comm_rank(comm, &rank);
@@ -1912,7 +1909,7 @@ namespace mxx2 {
 
 
         template <typename T, typename SegT, typename Func = std::plus<T> >
-        static std::vector<T> allreduce(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        std::vector<T> allreduce(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
 
           if (seg.size() != x.size())
             throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
@@ -1961,7 +1958,7 @@ namespace mxx2 {
          * @return
          */
         template <typename T, typename SegT, typename Func = std::plus<T> >
-        static std::vector<T> allreduce_contiguous(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
+        std::vector<T> allreduce_contiguous(std::vector<T> & x, std::vector<SegT> & seg, Func f, MPI_Comm comm = MPI_COMM_WORLD) {
           if (seg.size() != x.size())
             throw std::logic_error("ERROR: segmented scan input and segment label are not the same size");
 
