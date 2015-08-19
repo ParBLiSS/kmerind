@@ -714,10 +714,15 @@ namespace bliss
           s = findStart(this->L1Block.begin(), loaded, loaded, search);
 
           for (int i = 0; i < iterations; ++i) {
+        	  /*check end*/
+        	  if(s >= search.end){
+        		  break;
+        	  }
             search.start = s + 1;   // advance by 1, in order to search for next entry.
-            search.intersect(loaded);
             e = findStart(this->L1Block.begin(), loaded, loaded, search);
+
             ss = ::std::min(ss, (e - s));  // return smallest record size.
+            ::std::cerr << "e: " << e << " s: " << s << " ss: " << ss << ::std::endl;
             s = e;
           }
 
@@ -737,11 +742,9 @@ namespace bliss
 
           s = findStart(this->L1Block.begin(), loaded, loaded, search);
 
-
-
-          for (int i = 0; i < iterations; ++i) {
+          int i = 0;
+          while(i < iterations && s <search.end){
             search.start = s + 1;   // advance by 1, in order to search for next entry.
-            search.intersect(loaded);
             e = findStart(this->L1Block.begin(), loaded, loaded, search);
 
             // get the starting iterator
@@ -749,30 +752,40 @@ namespace bliss
             auto end = this->L1Block.begin() + (e - loaded.start);
 
             // advance past first eol
-            while ((start != end) && (*start != '\n')) ++start;
-            if ((start != end) && (*start == '\n')) ++start;
+            while ((start != end) && (*start != '\n' && *start != '\r')) ++start;
+            if ((start != end) && (*start == '\n' && *start != '\r')) ++start;
 
             // now start counting
-            while ((start != end) && (*start != '\n')) {
+            while ((start != end) && (*start != '\n' && *start != '\r')) {
               ++ss;
               ++start;
             }
 
             s = e;
+            ++i;
           }
 
-          return ss / iterations;
+          ::std::cerr << "ss: " << ss << " i: " << i << ::std::endl;
+
+          return i > 0 ? ss / i : 0;
         }
 
 
         /// estimate the count of kmers generated from this file
         size_t getKmerCountEstimateImpl(const int k) {
+        	size_t numChars, numRecords, kmersPerRecord;
           size_t recordSize = getRecordSizeImpl();
-          size_t numRecords = (this->getFileRange().size() + recordSize - 1) / recordSize;
-          size_t kmersPerRecord = getCharsPerRecordImpl() - k + 1;  // fastq has quality.
 
-         // printf("file range [%lu, %lu], recordSize = %lu, kmersPerRecord = %lu, numRecords = %lu\n",
-         //        this->getFileRange().start, this->getFileRange().end, recordSize, kmersPerRecord, numRecords);
+          printf("file range [%lu, %lu], recordSize = %lu\n",
+        		  this->getFileRange().start, this->getFileRange().end, recordSize);
+         numRecords = (this->getFileRange().size() + recordSize - 1) / recordSize;
+
+          numChars = getCharsPerRecordImpl();
+         kmersPerRecord = numChars > 0 ? numChars - k + 1 : 0;  // fastq has quality.
+
+
+          printf("file range [%lu, %lu], recordSize = %lu, kmersPerRecord = %lu, numRecords = %lu\n",
+                 this->getFileRange().start, this->getFileRange().end, recordSize, kmersPerRecord, numRecords);
 
           return numRecords * kmersPerRecord;
         }

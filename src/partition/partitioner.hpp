@@ -15,7 +15,7 @@
 
 #include <stdexcept>
 #include <atomic>
-#include <config.hpp>
+#include "bliss-config.hpp"
 #include <type_traits>
 #include "partition/range.hpp"
 
