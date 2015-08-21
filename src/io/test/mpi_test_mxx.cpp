@@ -34,12 +34,11 @@ class Mxx2MPITest : public ::testing::Test
     template <typename TT>
     void printvec(::std::vector<TT> x, std::string const & name) {
 
-      printf("%s: ", name.c_str());
+      std::cout << name.c_str() << ": ";
       for (auto e : x) {
-        printf("%d, ", e);
+        std::cout << e << ", ";
       }
-      printf("\n");
-
+      std::cout << std::endl;
     }
 };
 
@@ -1314,7 +1313,6 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_n)
   inputs[2] = rank;
 
 
-  int gold, len;
   bool same;
   auto result = mxx2::segmented_reduce::allreduce(inputs, seg, [](int const &x, int const &y){ return std::min(x, y); }, comm);
   for ( int i = 0; i < 3; ++i) {
