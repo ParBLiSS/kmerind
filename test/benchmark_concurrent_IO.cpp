@@ -187,7 +187,7 @@ struct readMMap {
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFileLoader {
 
-    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, bliss::io::FileParserBase, buffering, preloading> LoaderType;
 
     size_t page_size;
     typename LoaderType::L1BlockType data;
@@ -276,7 +276,7 @@ struct readFileLoader {
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFileLoaderAtomic {
 
-    typedef bliss::io::FileLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FileLoader<unsigned char, bliss::io::FileParserBase, buffering, preloading> LoaderType;
 
 
     size_t page_size;
@@ -361,7 +361,7 @@ struct readFileLoaderAtomic {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct readFASTQ {
-    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, true, buffering, preloading> LoaderType;
 
 
     size_t page_size;
@@ -446,7 +446,7 @@ struct readFASTQ {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct SequencesIterator {
-    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, true, buffering, preloading> LoaderType;
 
     size_t page_size;
 
@@ -457,11 +457,11 @@ struct SequencesIterator {
     typedef bliss::common::DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
 
-    typedef bliss::io::FASTQParser<BaseIterType, QualityType>  ParserType;
+    typedef bliss::io::FASTQParser<true>  ParserType;
 
-    typedef typename ParserType::SequenceType  SequenceType;
+    typedef bliss::io::SequencesIterator<BaseIterType, ParserType>           IteratorType;
 
-    typedef bliss::io::SequencesIterator<ParserType>           IteratorType;
+    typedef typename ::std::iterator_traits<IteratorType>::value_type  SequenceType;
 
     SequencesIterator(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(nprocs, rank, filename, nthreads, chunkSize)  {
@@ -568,7 +568,7 @@ struct SequencesIterator {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct SequencesIterator2 {
-    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, true, buffering, preloading> LoaderType;
 
     size_t page_size;
 
@@ -579,9 +579,11 @@ struct SequencesIterator2 {
     typedef bliss::common::DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
 
-    typedef bliss::io::FASTQParser<BaseIterType, QualityType>  ParserType;
-    typedef typename ParserType::SequenceType  SequenceType;
-    typedef bliss::io::SequencesIterator<ParserType>           IteratorType;
+    typedef bliss::io::FASTQParser<true>  ParserType;
+    typedef bliss::io::SequencesIterator<BaseIterType, ParserType>           IteratorType;
+
+    typedef typename ::std::iterator_traits<IteratorType>::value_type  SequenceType;
+
 
     SequencesIterator2(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(nprocs, rank, filename, nthreads, chunkSize)  {
@@ -679,7 +681,7 @@ struct SequencesIterator2 {
 
 template <typename OT, bool buffering = false, bool preloading = false>
 struct SequencesIteratorNoQual {
-    typedef bliss::io::FASTQLoader<unsigned char, buffering, preloading> LoaderType;
+    typedef bliss::io::FASTQLoader<unsigned char, true, buffering, preloading> LoaderType;
 
     size_t page_size;
 
@@ -690,9 +692,10 @@ struct SequencesIteratorNoQual {
     typedef bliss::common::DNA Alphabet;
     typedef typename LoaderType::L2BlockType::iterator BaseIterType;
 
-    typedef bliss::io::FASTQParser<BaseIterType, QualityType>  ParserType;
-    typedef typename ParserType::SequenceType  SequenceType;
-    typedef bliss::io::SequencesIterator<ParserType>           IteratorType;
+    typedef bliss::io::FASTQParser<true>  ParserType;
+    typedef bliss::io::SequencesIterator<BaseIterType, ParserType>           IteratorType;
+    typedef typename ::std::iterator_traits<IteratorType>::value_type  SequenceType;
+
 
     SequencesIteratorNoQual(std::string filename, int nprocs, int rank, int nthreads, int chunkSize) :
       loader(nprocs, rank, filename, nthreads, chunkSize)  {
@@ -854,7 +857,7 @@ int main(int argc, char* argv[])
 #endif
 
 #if defined(TEST_OP_FASTQIter)
-  typedef SequencesIterator<        double, true, false> OpType;
+  typedef ::SequencesIterator<        double, true, false> OpType;
 #endif
 
 #if defined(TEST_OP_FASTQIter2)

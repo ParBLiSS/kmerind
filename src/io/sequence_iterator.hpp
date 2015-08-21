@@ -75,47 +75,47 @@ namespace bliss
      *
      * @note this iterator is not a random access or bidirectional iterator, as traversing in reverse is not implemented.
      *
-     * @tparam Parser     Functoid type to supply specific logic for increment and dereference functionalities.
+     * @tparam Iterator	  Base iterator type to be parsed into sequences
+     * @tparam Parser     Functoid type to parse data pointed by Iterator into sequence objects..
+     * @tparam SequenceType  Sequence Type.  replaceable as long as it supports Quality if Parser requires it.
      */
-    template<typename Parser>
+    template<typename Iterator, typename Parser,
+    		 typename SequenceType = typename ::std::conditional<Parser::has_quality,
+    			::bliss::common::SequenceWithQuality<Iterator, typename Parser::SequenceIdType>,
+    			::bliss::common::Sequence<Iterator, typename Parser::SequenceIdType> >::type
+    		>
     class SequencesIterator :
-        public std::iterator<
-            typename std::conditional<
-                  std::is_same<typename std::iterator_traits<typename Parser::BaseIteratorType>::iterator_category, std::random_access_iterator_tag>::value ||
-                  std::is_same<typename std::iterator_traits<typename Parser::BaseIteratorType>::iterator_category, std::bidirectional_iterator_tag>::value,
-                  std::forward_iterator_tag,
-                  typename std::iterator_traits<typename Parser::BaseIteratorType>::iterator_category
-                >::type,
-            typename Parser::SequenceType,
-            typename std::iterator_traits<typename Parser::BaseIteratorType>::difference_type
+    	public ::std::iterator<
+            typename ::std::conditional<
+                  ::std::is_same<typename ::std::iterator_traits<Iterator>::iterator_category,
+                   	   	   	   	 ::std::input_iterator_tag>::value,
+                  ::std::input_iterator_tag,
+                  ::std::forward_iterator_tag>::type,
+            SequenceType,
+            typename std::iterator_traits<Iterator>::difference_type
           >
     {
       public:
 
         /// type of data elements in the input iterator
-        typedef typename std::iterator_traits<typename Parser::BaseIteratorType>::value_type BaseValueType;
-
-        /// type of data elements in the input iterator
-        typedef typename std::iterator_traits<SequencesIterator<Parser> >::value_type ValueType;
+        typedef typename std::iterator_traits<Iterator>::value_type BaseValueType;
 
       protected:
-        /// type of iterator
-        typedef typename Parser::BaseIteratorType BaseIteratorType;
 
         /// type of SequencesIterator class
-        typedef SequencesIterator<Parser> type;
+        typedef SequencesIterator<Iterator, Parser, SequenceType> type;
 
         /// cache of the current result.
-        ValueType seq;
+        SequenceType seq;
 
         /// iterator at the current starting point in the input data from where the current FASTQ record was parsed.
-        BaseIteratorType _curr;
+        Iterator _curr;
 
         /// iterator at the next starting point in the input data from where the next FASTQ record should be parsed.
-        BaseIteratorType _next;
+        Iterator _next;
 
         /// iterator pointing to the end of the input data, not to go beyond.
-        BaseIteratorType _end;
+        Iterator _end;
 
         /// instance of the parser functoid, used during record parsing.
         Parser parser;
@@ -139,8 +139,8 @@ namespace bliss
          * @param end     end of the data to be parsed.
          * @param _range  the Range associated with the start and end of the source data.  coordinates relative to the file being processed.
          */
-        SequencesIterator(const Parser & f, const BaseIteratorType& start,
-                       const BaseIteratorType& end, const size_t &_offset)
+        SequencesIterator(const Parser & f, const Iterator& start,
+                       const Iterator& end, const size_t &_offset)
             : seq(), _curr(start), _next(start), _end(end), parser(f), offset(_offset)
         {
           // parse the first entry, if start != end.
@@ -156,7 +156,7 @@ namespace bliss
          *          this instance therefore does not traverse and only serves as marker for comparing to the traversing SequencesIterator.
          * @param end     end of the data to be parsed.
          */
-        explicit SequencesIterator(const BaseIteratorType& end)
+        explicit SequencesIterator(const Iterator& end)
             : seq(), _curr(end), _next(end), _end(end), parser(), offset(std::numeric_limits<size_t>::max())
         {
         }
@@ -212,7 +212,7 @@ namespace bliss
               // advance to end
               _curr = _next;
               // and set output to empty.
-              seq = ValueType();
+              seq = SequenceType();
             }
           } else {
             //== else we can parse, so do it.
@@ -251,7 +251,7 @@ namespace bliss
          * @brief   accessor for the internal base iterator, pointing to the current position
          * @return  base iterator
          */
-        BaseIteratorType& getBaseIterator()
+        Iterator& getBaseIterator()
         {
           return _curr;
         }
@@ -259,7 +259,7 @@ namespace bliss
          * @brief   const accessor for the internal base iterator, pointing to the current position
          * @return  const base iterator
          */
-        const BaseIteratorType& getBaseIterator() const
+        const Iterator& getBaseIterator() const
         {
           return _curr;
         }
@@ -290,7 +290,7 @@ namespace bliss
          * @brief dereference operator
          * @return    a const reference to the cached sequence object
          */
-        const ValueType &operator *() const
+        const SequenceType &operator *() const
         {
           return seq;
         }
@@ -299,7 +299,7 @@ namespace bliss
          * @brief pointer dereference operator
          * @return    a const reference to the cached sequence object
          */
-        const ValueType *operator ->() const {
+        const SequenceType *operator ->() const {
           return &seq;
         }
 

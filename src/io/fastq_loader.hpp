@@ -42,14 +42,14 @@ namespace bliss
        *
        *            A separate FASTA version will have a different fields but keeps the same 64 bit total length.
        *
-       *            file size is at the moment limited to 1TB (40 bits) in number of bytes.
+       *            file size is at the moment limited to 1TB (40 bits) in number of bytes, and up to 256 files.
        */
       union SequenceId
       {
-          /// the concatenation of the id components as a single unsigned 64 bit field.  should use only 40 bits
+          /// MANDATORY FIELD.  the concatenation of the id components as a single unsigned 64 bit field.  should use only 40 bits.
           uint64_t file_pos;
 
-          /// the id field components.  anonymous struct
+          /// the id field components.  anonymous struct.  CUSTOMIZABLE
           struct
           {
               /// sequence's id, lower 32 of 40 bits (potentially as offset in the containing file)
@@ -61,6 +61,12 @@ namespace bliss
               /// offset within the read.  Default 0 refers to the whole sequence
               uint16_t pos;
           };
+
+          /**
+           * @brief sets the file position from the global position.
+           * @note  MANDATORY
+           */
+          void set_file_pos(uint64_t pos) { file_pos = pos; }
       };
 
     };
@@ -84,27 +90,32 @@ namespace bliss
      * @tparam Iterator   The underlying iterator to be traversed to generate a Sequence
      * @tparam Quality    data type for quality scores for each base.  defaults to void to mean No Quality Score.
      */
-    template<typename Iterator, typename Quality = void>
+    template<bool Quality = false>
     class FASTQParser
     {
 
       protected:
-        /// constant representing the EOL character
-        static const typename std::iterator_traits<Iterator>::value_type eol = '\n';
+    	/// static constant for end of line.  note this is same for unicode as well
+        static constexpr unsigned char eol = '\n';
+    	/// static constant for carriage return.  note this is same for unicode as well
+        static constexpr unsigned char cr = '\r';
 
-        /// alias for this type, for use inside this class.
-        using type = FASTQParser<Iterator, Quality>;
+
+        /**
+         * @typedef RangeType
+         * @brief   range object types
+         */
+        using RangeType = bliss::partition::range<size_t>;
+
+        // NOT defining BaseIteratorType because different methods can then have different baseIteratorTypes
+
+        // NOT defining SequenceType because different methods can then populate different sequence types.
+
 
       public:
-        /// base iterator type for the source data that this parser operates on.
-        typedef Iterator  BaseIteratorType;
 
-
-        /// Sequence type, conditionally set based on Quality template param to either normal Sequence or SequenceWithQuality.
-        typedef typename std::conditional<std::is_void<Quality>::value,
-              bliss::common::Sequence<Iterator, FASTQ::SequenceId>,
-              bliss::common::SequenceWithQuality<Iterator, FASTQ::SequenceId> >::type      SequenceType;
-
+        static constexpr bool has_quality = Quality;
+        using SequenceIdType = bliss::io::FASTQ::SequenceId;
 
         /// default constructor.
         FASTQParser() {};
@@ -121,8 +132,9 @@ namespace bliss
          * @param[in/out] offset  the global offset of the sequence record within the file.  used as record id.
          * @return        iterator at the new position, where the Non EOL char is found, or end.
          */
-        inline Iterator& findNonEOL(Iterator& iter, const Iterator& end, size_t &offset) {
-          while ((iter != end) && (*iter == type::eol)) {
+        template <typename Iterator>
+        inline Iterator findNonEOL(Iterator& iter, const Iterator& end, size_t &offset) const {
+          while ((iter != end) && ((*iter == eol) || (*iter == cr))) {
             ++iter;
             ++offset;
           }
@@ -137,8 +149,9 @@ namespace bliss
          * @param[in/out] offset  the global offset of the sequence record within the file.  used as record id.
          * @return        iterator at the new position, where the EOL char is found, or end.
          */
-        inline Iterator& findEOL(Iterator& iter, const Iterator& end, size_t &offset) {
-          while ((iter != end) && (*iter != type::eol) ) {
+        template <typename Iterator>
+        inline Iterator findEOL(Iterator& iter, const Iterator& end, size_t &offset) const {
+          while ((iter != end) && ((*iter != eol) && (*iter != cr) ) ) {
             ++iter;
             ++offset;
           }
@@ -152,8 +165,8 @@ namespace bliss
          * @param[in] end     end of the quality score character sequence.
          * @param[out] output  The output sequence record type to modify
          */
-        template <typename Q = Quality>
-        inline typename std::enable_if<!std::is_void<Q>::value>::type
+        template <typename Iterator, typename SequenceType, bool Q = Quality >
+        inline typename std::enable_if<Q && SequenceType::has_quality::value>::type
         setQualityIterators(const Iterator & start, const Iterator & end, SequenceType& output) {
           output.qualBegin = start;
           output.qualEnd = end;
@@ -165,8 +178,8 @@ namespace bliss
          * @param[in] end     end of the quality score character sequence.
          * @param[out] output  The output sequence record type to modify
          */
-        template <typename Q = Quality>
-        inline typename std::enable_if<std::is_void<Q>::value>::type
+        template <typename Iterator, typename SequenceType, bool Q = Quality >
+        inline typename std::enable_if<!Q>::type
         setQualityIterators(const Iterator & start, const Iterator & end, SequenceType& output) {}
 
         /**
@@ -174,8 +187,8 @@ namespace bliss
          * @param sequence
          * @return
          */
-        template <typename Q = Quality>
-        inline typename std::enable_if<!std::is_void<Q>::value, bool>::type
+        template <typename SequenceType, bool Q = Quality>
+        inline typename std::enable_if<Q && SequenceType::has_quality::value, bool>::type
         isQualityIteratorAtEnd(SequenceType& seq) {
           return seq.qualBegin == seq.qualEnd;
         }
@@ -184,9 +197,9 @@ namespace bliss
          * @brief check if quality iterator is at end.
          * @param[in] seq
          */
-        template <typename Q = Quality>
-        inline typename std::enable_if<std::is_void<Q>::value, bool>::type
-        isQualityIteratorAtEnd(SequenceType& seq) { return false; }
+        template <typename SequenceType, bool Q = Quality>
+        inline typename std::enable_if<!Q, bool>::type
+        isQualityIteratorAtEnd(SequenceType& seq) { return false; }  // return false, so that we don't change the seq iterator.
 
 
         /**
@@ -195,6 +208,7 @@ namespace bliss
          * @param[in] end     end of the sequence.
          * @param[out] output  The output sequence record type to modify
          */
+        template <typename Iterator, typename SequenceType>
         inline void setSequenceIterators(const Iterator & start, const Iterator & end, SequenceType& output) {
           output.seqBegin = start;
           output.seqEnd = end;
@@ -208,6 +222,7 @@ namespace bliss
          * @param startOffset offset for the beginning of the data in question
          * @param endOffset   offset for the end of the data in question
          */
+        template <typename Iterator>
         void handleError(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
           std::stringstream ss;
           ss << "ERROR: did not find "<< errType << " in " << startOffset << " to " << endOffset << std::endl;
@@ -216,7 +231,6 @@ namespace bliss
           std::copy(start, end, oit);
           ss << "\".";
           throw bliss::io::IOException(ss.str());
-
         }
 
         /**
@@ -227,6 +241,7 @@ namespace bliss
          * @param startOffset offset for the beginning of the data in question
          * @param endOffset   offset for the end of the data in question
          */
+        template <typename Iterator>
         void handleWarning(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
           WARNING("WARNING: " << "did not find "<< errType << " in " << startOffset << " to " << endOffset);
         }
@@ -252,6 +267,7 @@ namespace bliss
          * @param[in/out] output        updated sequence type, values updated.
          * @throw IOException           if parse failed, throw exception
          */
+        template <typename Iterator, typename SequenceType>
         void increment(Iterator &iter, const Iterator &end, size_t &offset, SequenceType& output) throw (bliss::io::IOException)
         {
           //== first make a copy of iter so we can later use the original in exception handling.
@@ -269,7 +285,7 @@ namespace bliss
           // find start of line, \nX or end.
           findNonEOL(iter, end, offset);
           // offset pointing to first start, save it as the id.  - either \n or end
-          output.id.file_pos = offset;
+          output.id.set_file_pos(offset);
           // then find the end of that line  - either \n or end.
           findEOL(iter, end, offset);
 
@@ -289,24 +305,25 @@ namespace bliss
           // then find the end of that line  - either \n or end.
           lend = findEOL(iter, end, offset);
           // don't even bother to call if Quality type is void - avoids copy operations.
-          if (!std::is_void<Quality>::value) setQualityIterators(lstart, lend, output);
+          setQualityIterators(lstart, lend, output);
 
-          // lend at this point is pointing to the last \n or at end.
-          if (iter != end) {  // if at \n, advance it by 1 position
-            ++iter;  ++offset;
-          }
+//          // lend at this point is pointing to the last \n or at end.
+//          if (iter != end) {  // if at \n, advance it by 1 position
+//            ++iter;
+//            ++offset;
+//          }
 
           //== now check for error conditions.
           // if either sequence or if required quality score were not found, then failed parsing
           if (output.seqBegin == output.seqEnd) {
             // if nothing is found, throw a warning.
 
-            handleWarning("sequence", orig_iter, iter, orig_offset, offset);
+            handleWarning("sequence", orig_iter, lend, orig_offset, offset);
           } else {
             // sequence parsing is fine.  now check quality parsing.  if quality is not parsed, then this is an error.
-            if (!std::is_void<Quality>::value && isQualityIteratorAtEnd(output)) {
+            if (isQualityIteratorAtEnd(output)) {  // if quality score is not specified, the code below is never called.
               output.seqBegin = output.seqEnd;  // force seq data not to be used.
-              handleError("required quality score", orig_iter, iter, orig_offset, offset);
+              handleError("required quality score", orig_iter, lend, orig_offset, offset);
             }
           }
           // leave iter and offset advanced.
@@ -314,74 +331,6 @@ namespace bliss
 
         }
 
-
-    };
-
-    /// template class' static variable definition (declared and initialized in class)
-    template<typename Iterator, typename Quality>
-    const typename std::iterator_traits<Iterator>::value_type bliss::io::FASTQParser<Iterator, Quality>::eol;
-
-
-    /**
-     * @class FASTQLoader
-     * @brief FileLoader subclass specialized for the FASTQ file format, uses CRTP to enforce interface consistency.
-     * @details   FASTQLoader understands the FASTQ file format, and enforces that the
-     *            L1 and L2 partition boundaries occur at FASTQ sequence record boundaries.
-     *
-     *            FASTQ files allow storage of per-base quality score and is typically used
-     *              to store a collection of short sequences.
-     *            Long sequences (such as complete genome) can be found in FASTA formatted files
-     *              these CAN be read using standard FileLoader, provided an appropriate overlap
-     *              is specified (e.g. for kmer reading, overlap should be k-1).
-     *
-     *          for reads, expected lengths are maybe up to 1K in length, and files contain >> 1 seq
-     *
-     *          Majority of the interface is inherited from FileLoader.
-     *          This class modifies the behaviors of GetNextL1Block and getNextL2Block,
-     *            as described in FileLoader's "Advanced Usage".  Specifically, the range is modified
-     *            for each block by calling "findStart" to align the start and end to FASTA sequence
-     *            record boundaries.
-     *
-     * @note    Processes 1 file at a time.  For paired end reads, a separate subclass is appropriate.
-     *          Sequences are identified by the following set of attributes:
-     *
-     *             file id.          (via filename to id map)
-     *             read id in file   (e.g. using the offset at whcih read occurs in the file as id)
-     *             position in read  (useful for kmer)
-     *
-     *          using the offset as id allows us to avoid parallel id assignment via prefix sum.
-     *
-     * @tparam  T                 type of each element read from file
-     * @tparam  L1Buffering       bool indicating if L1 partition blocks should be buffered.  default to false
-     * @tparam  L2Buffering       bool indicating if L2 partition blocks should be buffered.  default to true (to avoid contention between threads)
-     * @tparam  L1PartitionerT    Type of the Level 1 Partitioner to generate the range of the file to load from disk
-     * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
-     */
-    template<typename T,
-        bool L2Buffering = true,
-        bool L1Buffering = false,
-        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
-        typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >
-    class FASTQLoader : public FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
-                                          FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> >
-    {
-      protected:
-        /// base class type (FileLoader with the specific template parameters)
-        typedef FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
-            FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> >    SuperType;
-
-        friend class FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
-                                FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> >;
-
-      public:
-        //==== exposing types from base class
-        /// Type of iterator for traversing the input data.
-        typedef typename SuperType::InputIteratorType                   InputIteratorType;
-
-        /// Type of range object.
-        typedef typename SuperType::RangeType                            RangeType;
-
-      protected:
         /**
          * @brief search for first occurrence of @ from an arbitrary offset in data, thus getting the position of the beginning of a FASTA sequence record.
          * @details
@@ -431,7 +380,7 @@ namespace bliss
          *
          *
          *  Algorithm:
-         *          ignore all characters before teh first "\n" in the DataBlock
+         *          ignore all characters before the first "\n" in the DataBlock
          *          Read 4 lines starting from the first "\n" found and save the first characters.
          *            If the DataBlock is the first one in the parent DataBlock/Range,
          *            then treat the block as if it's prefixed with a "\n"
@@ -450,8 +399,8 @@ namespace bliss
          * @return            position of the start of next read sequence (@).  if there is no complete sequence within the parentRange, return end of parentRange.
          * @throws            if no start is found, and search range does not cover the parent's end, then the search range does not include a complete record, throws IOException
          */
-        template<typename Iterator>
-        const std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
+        template <typename Iterator>
+        std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
         throw (bliss::io::IOException) {
 
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
@@ -459,41 +408,19 @@ namespace bliss
           //== range checking
           if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
           RangeType t = RangeType::intersect(searchRange, inMemRange); // intersection to bound target to between parent's ends.
-          if (t.start == t.end) return t.start;
 
           //== set up the iterator for later
           // initialize the counter
           std::size_t i = t.start;
 
+          if (i == t.end) return t.end;
+
           // set iterator for the data
-          Iterator data(_data);
+          Iterator iter(_data);
+          Iterator end(_data);
+          std::advance(iter, t.start - inMemRange.start);
+          std::advance(end, t.end - inMemRange.start);
 
-          // create flag indicating that the last character visited was a EOL char.
-          bool wasEOL;
-
-          //== if at beginning of parent partition, treat as if previous line was EOL
-          if (t.start == parentRange.start) { // at beginning of parent range, treat specially, since there is no preceding \n for the @
-            // all other partitions will lose the part before the first "\n@" (will be caught by the previous partition)
-            // if this is called to generate L1Block, then parentRange is the whole file, with first part start with @ (implicit \n prior).
-            // if this is called to generate L2Block, then parentRange is the loaded L1 Block, already aligned to @, so previous is \n.
-            wasEOL = true;
-          } else {
-            std::advance(data, t.start - inMemRange.start);
-            wasEOL = false;
-          }
-          //== at this point, data points to start of the search range.
-
-
-          //=== remove leading newlines
-          while ((i < t.end) && (*data == '\n')) {
-            wasEOL = true;
-            ++data;
-            ++i;
-          }
-
-          //== if no more, end.
-          if (i == t.end)  // this part only contained \n
-            return t.end;
 
           //== now read 4 lines
           ValueType first[4] =
@@ -501,34 +428,35 @@ namespace bliss
           std::size_t offsets[4] =
           { t.end, t.end, t.end, t.end };   // units:  offset from beginning of file.
 
-          int currLineId = 0;        // current line id in the buffer
 
-          // read the rest of the lines.
-          ValueType c;
-          while ((i < t.end) && currLineId < 4)
-          {
-            c = *data;
+          //== if at beginning of parent partition, treat as if previous line was EOL
+          if ((t.start > parentRange.start) && ((*iter != eol) && (*iter !=cr))) { // at beginning of parent range, treat specially, since there is no preceding \n for the @
+            // all other partitions will lose the part before the first "\n@" (will be caught by the previous partition)
+            // if this is called to generate L1Block, then parentRange is the whole file, with first part start with @ (implicit \n prior).
+            // if this is called to generate L2Block, then parentRange is the loaded L1 Block, already aligned to @, so previous is \n.
 
-            // encountered a newline.  mark newline found.
-            if (c == '\n')
-            {
-              wasEOL = true;  // toggle on
-            }
-            else
-            {
-              if (wasEOL) // previous char was newline, so c is first char in line
-              {
-                // save the first char and the offset.
-                first[currLineId] = c;
-                offsets[currLineId] = i;
-                wasEOL = false;  // toggle off
-                ++currLineId;
-              }
-            }
-            //    else  // other characters in the line - don't care.
+            // not at beginning of parent, and not an eol character, so find the next eol
+            iter = findEOL(iter, end, i);
 
-            ++data;
-            ++i;
+            // else at beginning of parent == 1st,  or an eol character == 1st is next.
+          }
+          if (i == t.end) return t.end;
+
+          // now find the first non eol
+          iter = findNonEOL(iter, end, i);
+          if (i == t.end) return t.end;
+          // assign to first.
+          first[0] = *iter;
+          offsets[0] = i;
+
+          // lines 2 through 4
+          for (int j = 1; j < 4; ++j) {
+            iter = findEOL(iter, end, i);
+            if (i == t.end) return t.end;
+            iter = findNonEOL(iter, end, i);
+            if (i == t.end) return t.end;
+            first[j] = *iter;
+            offsets[j] = i;
           }
 
           //=== determine the position of a read by looking for @...+ or +...@
@@ -562,332 +490,58 @@ namespace bliss
         }
 
 
-
-        /**
-         * @brief get the next available range for the L1 partition block, given the L1 partition id
-         * @details   This method is the CTRP implementation called by the base class' getNextL1BlockRange method.
-         *            The method modifies the base range to align the boundary to record boundaries at both ends
-         *
-         *            This is accomplished by memmapping a Range and performing findStart to find the
-         *              start, and doing the same on the next L1Block to find the end.
-         *
-         * @param pid   The L1 partition id.
-         * @return      The range of the next L1 partition block.
-         */
-        RangeType getNextL1BlockRangeImpl(const size_t pid) {
-
-          // get basic range
-          RangeType hint = this->L1Partitioner.getNext(pid);
-
-          // get the right shifted range
-          size_t length = hint.size();
-
-          // output data structure
-          RangeType output(hint);
-
-          if (length > 0) {
-
-            RangeType next = RangeType::shiftRight(hint, length);
-            next.intersect(this->fileRange);
-
-            // get the combined ranges
-            RangeType loadRange = RangeType::merge(hint, next);
-
-            // memmap the content
-            auto block_start = RangeType::align_to_page(loadRange, this->pageSize);
-            auto mappedData = this->map(loadRange);  // this is page aligned.
-            auto searchData = mappedData + (loadRange.start - block_start);
-
-
-            // search for new start and end using findStart
-            try {
-              output.start = findStart(searchData, this->fileRange, loadRange, hint);
-              output.end = findStart(searchData, this->fileRange, loadRange, next);
-
-            } catch (IOException& ex) {
-              // either start or end are not found so return an empty range.
-
-              // TODO: need to handle this scenario better - should keep search until end.
-              WARNINGF("%s\n", ex.what());
-
-              WARNINGF("curr range: partition hint %lu-%lu, next %lu-%lu, file_range %lu-%lu\n",
-                     hint.start, hint.end, next.start, next.end, this->fileRange.start, this->fileRange.end);
-              WARNINGF("got an exception search for partition:  %s \n", ex.what());
-
-              output.start = hint.end;
-              output.end = hint.end;
-            }
-
-            // clean up and unmap
-            this->unmap(mappedData, loadRange);
-          }
-          return output;
-        }
-
-
-        /**
-         * @brief get the next L2 Partition Block given a thread id.
-         * @details  This is the CTRP implementation method called by FileLoader's getNextL2BlockRange method
-         *            This call needs to properly support concurrent range computation.
-         *
-         *            The method modifies the base range to align the boundary to record boundaries at both ends
-         *
-         *            This is accomplished by performing findStart to find the
-         *              start, and doing the same on the next L2Block to find the end.
-         *
-         * @param tid   Thread Id.  L2 Partition is between threads within a group
-         * @return  The range of the next L2 Partition Block.
-         */
-        RangeType getNextL2BlockRangeImpl(const size_t tid) {
-
-          // data has to be loaded
-          if (!this->loaded) throw std::logic_error("ERROR: getting L2Block range before file is loaded");
-
-
-          // get the parent range
-          RangeType parentRange = this->L1Block.getRange();
-
-          // now get the next, unmodified range.  this is atomic
-          RangeType hint = this->L2Partitioner.getNext(tid);
-
-          size_t length = hint.size();
-          RangeType output(hint);
-
-          if (length > 0) {
-            // get the RightShifted range for searching at the end.
-            RangeType next = RangeType::shiftRight(hint, length);
-            next.intersect(parentRange);
-
-
-            try {
-              // search for start and end
-              output.start = findStart(this->L1Block.begin(), parentRange, parentRange, hint);
-              output.end = findStart(this->L1Block.begin(), parentRange, parentRange, next);
-            } catch (IOException& ex) {
-              // either start or end are not found, so return nothing.
-
-              WARNING(ex.what());
-
-              ERRORF("curr range: chunk %lu, hint %lu-%lu, next %lu-%lu, srcData range %lu-%lu, mmap_range %lu-%lu\n",
-                     this->L2BlockSize, hint.start, hint.end, next.start, next.end, parentRange.start, parentRange.end, this->L1Block.getRange().start, this->L1Block.getRange().end);
-              ERRORF("got an exception search:  %s \n", ex.what());
-
-              output.start = hint.end;
-              output.end = hint.end;
-            }
-
-          }
-
-          return output;
-        }
-
-        /**
-         * @brief   compute the approximate size of a data record in the file by reading a few records.
-         * @details This is the CRTP implementation method that FileLoader baseclass's getRecordSize calls
-         *
-         *          This method provides an approximate size of a record, which is useful for caching
-         *          and determining size of a DataBlock.
-         *
-         *          note that this is just the max of several records, found using the findStart method.
-         *
-         *          this relies on the data being loaded, so L1Block can be used for this search
-         *
-         * @note    at most as many threadss as specified in the c'tor will call this function.
-         *          Also, each process calling this will be reading a different part of the file,
-         *          so record size may vary from process to process.  but since L2 Partitioning
-         *          affects each process independently, having different RecordSize, thus different
-         *          L2BlockSize, should not be a big problem.
-         *
-         * @param count    number of records to read to compute the approximation.  default = 3.
-         * @return  approximate size of a record.
-         */
-        size_t getRecordSizeImpl(int iterations = 10) {
-
-          if (!this->loaded) throw std::logic_error("ERROR: getting record's size before file is loaded");
-
-
-          std::size_t s, e;
-          std::size_t ss = ::std::numeric_limits<::std::size_t>::max();
-          RangeType loaded(this->L1Block.getRange());
-          RangeType search(this->L1Block.getRange());
-
-          s = findStart(this->L1Block.begin(), loaded, loaded, search);
-
-          for (int i = 0; i < iterations; ++i) {
-        	  /*check end*/
-        	  if(s >= search.end){
-        		  break;
-        	  }
-            search.start = s + 1;   // advance by 1, in order to search for next entry.
-            e = findStart(this->L1Block.begin(), loaded, loaded, search);
-
-            ss = ::std::min(ss, (e - s));  // return smallest record size.
-            ::std::cerr << "e: " << e << " s: " << s << " ss: " << ss << ::std::endl;
-            s = e;
-          }
-
-          return ss;
-        }
-
-        /// estimate number of kmers per record.
-        size_t getCharsPerRecordImpl(int iterations = 10) {
-
-          if (!this->loaded) throw std::logic_error("ERROR: getting record's size before file is loaded");
-
-
-          std::size_t s, e;
-          std::size_t ss = 0;
-          RangeType loaded(this->L1Block.getRange());
-          RangeType search(this->L1Block.getRange());
-
-          s = findStart(this->L1Block.begin(), loaded, loaded, search);
-
-          int i = 0;
-          while(i < iterations && s <search.end){
-            search.start = s + 1;   // advance by 1, in order to search for next entry.
-            e = findStart(this->L1Block.begin(), loaded, loaded, search);
-
-            // get the starting iterator
-            auto start = this->L1Block.begin() + (s - loaded.start);
-            auto end = this->L1Block.begin() + (e - loaded.start);
-
-            // advance past first eol
-            while ((start != end) && (*start != '\n' && *start != '\r')) ++start;
-            if ((start != end) && (*start == '\n' && *start != '\r')) ++start;
-
-            // now start counting
-            while ((start != end) && (*start != '\n' && *start != '\r')) {
-              ++ss;
-              ++start;
-            }
-
-            s = e;
-            ++i;
-          }
-
-          ::std::cerr << "ss: " << ss << " i: " << i << ::std::endl;
-
-          return i > 0 ? ss / i : 0;
-        }
-
-
-        /// estimate the count of kmers generated from this file
-        size_t getKmerCountEstimateImpl(const int k) {
-        	size_t numChars, numRecords, kmersPerRecord;
-          size_t recordSize = getRecordSizeImpl();
-
-          printf("file range [%lu, %lu], recordSize = %lu\n",
-        		  this->getFileRange().start, this->getFileRange().end, recordSize);
-         numRecords = (this->getFileRange().size() + recordSize - 1) / recordSize;
-
-          numChars = getCharsPerRecordImpl();
-         kmersPerRecord = numChars > 0 ? numChars - k + 1 : 0;  // fastq has quality.
-
-
-          printf("file range [%lu, %lu], recordSize = %lu, kmersPerRecord = %lu, numRecords = %lu\n",
-                 this->getFileRange().start, this->getFileRange().end, recordSize, kmersPerRecord, numRecords);
-
-          return numRecords * kmersPerRecord;
-        }
-
-
-      public:
-        //== public methods.
-
-#if defined(USE_MPI)
-        /**
-         * @brief MPI comm based constructor.  uses comm rank and size for initialization
-         * @details   MPI Comm object is used to set get the current process id to use as the loader id, thus the L1 partitions, and to broadcast file size
-         *
-         *            The constructor first opens the file,
-         *                then get the number of concurrent loaders and its loader id (comm_size, and comm_rank respectively)
-         *                then configures the L1 partitioner
-         *                and initializes the L2 block caching (per thread)
-         *            The file is opened, not yet mmap (load).  this sequence provides flexility for caller
-         *            and subclasses to customize the process.
-         *
-         * @note      Default behavior is to block-partition the file based on number of processors.
-         *
-         *            It is necessary to call "load" 1 time before using accessing the data.
-         *
-         *            Range is in units of T, overlap is included in range.end
-         *
-         * @param _filename       input file name
-         * @param _comm           MPI Communicator (defined only if CMake is configured with MPI).
-         *                        default is MPI_COMM_WORLD, which means all nodes participate.
-         * @param _nThreads       number of threads to consume L2 blocks
-         * @param _L2BlockSize    size of each L2Block.
-         *
-         * TODO: test on remotely mounted file system.
-         *
-         */
-        explicit FASTQLoader(const MPI_Comm& _comm, const std::string &_filename, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (IOException)
-                             : SuperType(_comm, _filename, _nThreads, _L2BlockSize)
-        {}
-#endif
-
-        /**
-         * @brief NON-MPI constructor.
-         * @details   The constructor first opens the file,
-         *                then configures the L1 partitioner with number of concurrent loaders (e.g. nthreads, or mpi comm_size)
-         *                and its loader id (e.g. thread id, or mpi rank).
-         *                and initializes the L2 block caching (per thread)
-         *            The file is opened, not yet mmap (load).  this is done to support flexible sequencing of events by caller
-         *            and subclasses.
-         *
-         * @note      Default behavior is to block-partition the file based on number of processors.
-         *
-         *            It is necessary to call "load" 1 time before using accessing the data.
-         *
-         *            Range is in units of T, overlap is included in range.end
-         *
-         * @param _filename       input file name
-         * @param _comm           MPI Communicator (defined only if CMake is configured with MPI).
-         *                        default is MPI_COMM_WORLD, which means all nodes participate.
-         * @param _nThreads       number of threads to consume L2 blocks
-         * @param _L2BlockSize    size of each L2Block.
-         *
-         * TODO: test on remotely mounted file system.
-         *
-         */
-        FASTQLoader(const size_t _nProcs, const int _rank, const std::string &_filename,
-                    const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (IOException)
-                            : SuperType(_nProcs, _rank, _filename, _nThreads, _L2BlockSize)
-        {};
-
-        /**
-         * @brief default destructor.  unloads the data and closes the file
-         */
-        virtual ~FASTQLoader() {};
-
-        /// Removed default copy constructor
-        FASTQLoader(const FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>& other) = delete;
-        /// Removed default copy assignment operator
-        FASTQLoader& operator=(const FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>& other) = delete;
-
-
-
-
-        /**
-         * @brief move constructor.  here to ensure that the DataBlock instances are moved.
-         * @param other FASTQLoader to move
-         */
-        FASTQLoader(FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>&& other) : SuperType(std::forward(other)) {};
-
-        /**
-         * @brief move assignment operator.  here to ensure that the DataBlock instances are moved.
-         *
-         * @param other   FASTQLoader to move
-         * @return        updated object with moved data
-         */
-        FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>& operator=(FASTQLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>&& other) {
-          if (this != &other) {
-            this->SuperType::operator =(other);
-          }
-          return *this;
-        }
-
     };
+
+    /// template class' static variable definition (declared and initialized in class)
+    template<bool Quality>
+    constexpr unsigned char bliss::io::FASTQParser<Quality>::eol;
+    template<bool Quality>
+    constexpr unsigned char bliss::io::FASTQParser<Quality>::cr;
+    template<bool Quality>
+    constexpr bool bliss::io::FASTQParser<Quality>::has_quality;
+
+
+    /**
+     * @class FASTQLoader
+     * @brief FileLoader subclass specialized for the FASTQ file format, uses CRTP to enforce interface consistency.
+     * @details   FASTQLoader understands the FASTQ file format, and enforces that the
+     *            L1 and L2 partition boundaries occur at FASTQ sequence record boundaries.
+     *
+     *            FASTQ files allow storage of per-base quality score and is typically used
+     *              to store a collection of short sequences.
+     *            Long sequences (such as complete genome) can be found in FASTA formatted files
+     *              these CAN be read using standard FileLoader, provided an appropriate overlap
+     *              is specified (e.g. for kmer reading, overlap should be k-1).
+     *
+     *          for reads, expected lengths are maybe up to 1K in length, and files contain >> 1 seq
+     *
+     *          Majority of the interface is inherited from FileLoader.
+     *          This class modifies the behaviors of GetNextL1Block and getNextL2Block,
+     *            as described in FileLoader's "Advanced Usage".  Specifically, the range is modified
+     *            for each block by calling "findStart" to align the start and end to FASTA sequence
+     *            record boundaries.
+     *
+     * @note    Processes 1 file at a time.  For paired end reads, a separate subclass is appropriate.
+     *          Sequences are identified by the following set of attributes:
+     *
+     *             file id.          (via filename to id map)
+     *             read id in file   (e.g. using the offset at whcih read occurs in the file as id)
+     *             position in read  (useful for kmer)
+     *
+     *          using the offset as id allows us to avoid d assignment via prefix sum.
+     *
+     * @tparam  T                 type of each element read from file
+     * @tparam  L1Buffering       bool indicating if L1 partition blocks should be buffered.  default to false
+     * @tparam  L2Buffering       bool indicating if L2 partition blocks should be buffered.  default to true (to avoid contention between threads)
+     * @tparam  L1PartitionerT    Type of the Level 1 Partitioner to generate the range of the file to load from disk
+     * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
+     */
+    template<typename T, bool Quality = false,
+        bool L2Buffering = true,
+        bool L1Buffering = false,
+        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
+        typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >
+    using FASTQLoader = FileLoader<T, FASTQParser<Quality>, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>;
 
   } /* namespace io */
 } /* namespace bliss */

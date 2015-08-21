@@ -50,6 +50,45 @@ namespace io
    template<typename FileType>
    struct PositionType;
 
+
+   class FileParserBase {
+     protected:
+       /**
+        * @typedef RangeType
+        * @brief   range object types
+        */
+       typedef bliss::partition::range<size_t>     RangeType;
+
+     public:
+
+       /// default constructor.
+       FileParserBase() {};
+
+       /// default destructor
+       virtual ~FileParserBase() {};
+
+       /// increment all the way to the end.
+       template <typename Iterator, typename SequenceType>
+       void increment(Iterator &iter, const Iterator &end, size_t &offset, SequenceType& output) throw (bliss::io::IOException)
+       {
+         output.start = iter;
+         output.end = end;
+         output.id = offset;
+         offset += std::distance(iter, end);
+         iter = end;
+       }
+
+       /// return the beginning of the input range.
+       template <typename Iterator>
+       const std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
+       throw (bliss::io::IOException) {
+         //== range checking
+         if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
+         // no op, other than to use intersect to make sure that the start is valid and within parent, and in memry ranges.
+         return RangeType::intersect(searchRange, inMemRange).start;
+       }
+   };
+
     /**
      * @class FileLoader
      * @brief Opens a file (or a portion of it) via memmap, and optionally copies(portion of) data into memory.
@@ -141,12 +180,11 @@ namespace io
      * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
      * @tparam  Derived           Derived (sub) class name.  For FileLoader, this is void.
      */
-    template <typename T,
+    template <typename T, class Parser = FileParserBase,
           bool L2Buffering = true,
           bool L1Buffering = false,
           typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
-          typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >,
-          typename Derived = void >
+          typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >
     class FileLoader
     {
       public:
@@ -178,7 +216,7 @@ namespace io
          */
         typedef typename std::conditional<L2Buffering,
                                           bliss::io::BufferedDataBlock<  typename L1BlockType::iterator, RangeType>,
-                                          bliss::io::UnbufferedDataBlock<typename L1BlockType::iterator, RangeType> >::type     L2BlockType;
+                                          bliss::io::UnbufferedDataBlock<typename L1BlockType::iterator, RangeType> >::type           L2BlockType;
 
       protected:
         /**
@@ -287,6 +325,9 @@ namespace io
          *          is done by only that thread.
          */
         L2BlockType *L2Blocks;
+
+
+        Parser parser;
 
 
       public:
@@ -399,16 +440,16 @@ namespace io
 
 
         /// Removed default copy constructor
-        FileLoader(const FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT, Derived>& other) = delete;
+        FileLoader(const FileLoader & other) = delete;
         /// Removed default copy assignment operator
-        FileLoader& operator=(const FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT, Derived>& other) = delete;
+        FileLoader& operator=(const FileLoader & other) = delete;
 
 
         /**
          * @brief move constructor.  here to ensure that the DataBlock instances are moved.
          * @param other FileLoader to move
          */
-        FileLoader(FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT, Derived>&& other) :
+        FileLoader(FileLoader && other) :
           pageSize(other.pageSize), recordSize(other.recordSize), loaded(other.loaded),
           fileHandle(other.fileHandle), fileRange(other.fileRange),
           loaderId(other.loaderId), L1Partitioner(other.L1Partitioner), mmapData(other.mmapData),
@@ -441,7 +482,7 @@ namespace io
          * @param other   FileLoader to move
          * @return        updated object with moved data
          */
-        FileLoader& operator=(FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT, Derived>&& other) {
+        FileLoader& operator=(FileLoader && other) {
           if (this != &other) {
             // remove the old
             if (L2Blocks != nullptr) delete [] L2Blocks;
@@ -547,7 +588,7 @@ namespace io
          */
         L1BlockType& getNextL1Block() {
           // first get the Range
-          RangeType r = getNextL1BlockRange<Derived>();
+          RangeType r = getNextL1BlockRange();
 
           return loadL1DataForRange(r);
         }
@@ -567,7 +608,7 @@ namespace io
          */
         L2BlockType& getNextL2Block(const size_t &tid) {
 
-          RangeType r = getNextL2BlockRange<Derived>(tid);
+          RangeType r = getNextL2BlockRange(tid);
 
           return getL2DataForRange(tid, r);
         }
@@ -591,32 +632,70 @@ namespace io
 
 
       protected:
+
+
         /**
          * @brief get the next available range for the L1 partition block, given the L1 partition id
-         * @details   This method uses CRTP to allow calling Derived class' implementation, which can further refine the partitioned range.
          * @note      If the default BlockPartitioner were used, then there is only 1 NextL1Block.  else there may be more than 1.
+         * @details   This method is the CTRP implementation called by the base class' getNextL1BlockRange method.
+         *            The method modifies the base range to align the boundary to record boundaries at both ends
          *
+         *            This is accomplished by memmapping a Range and performing findStart to find the
+         *              start, and doing the same on the next L1Block to find the end.
+         *         *
          * @param pid   The L1 partition id.
          * @return      The range of the next L1 partition block.
          */
-        template<typename D = Derived>
-        typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextL1BlockRange(const size_t pid) {
-          // just FileLoader calls this.
-          return L1Partitioner.getNext(pid);
+        RangeType getNextL1BlockRange(const size_t pid) {
+
+          // get basic range
+          RangeType hint = this->L1Partitioner.getNext(pid);
+
+          // get the right shifted range
+          size_t length = hint.size();
+
+          // output data structure
+          RangeType output(hint);
+
+          if (length > 0) {
+
+            RangeType next = RangeType::shiftRight(hint, length);
+            next.intersect(this->fileRange);
+
+            // get the combined ranges
+            RangeType loadRange = RangeType::merge(hint, next);
+
+            // memmap the content
+            auto block_start = RangeType::align_to_page(loadRange, this->pageSize);
+            auto mappedData = this->map(loadRange);  // this is page aligned.
+            auto searchData = mappedData + (loadRange.start - block_start);
+
+
+            // search for new start and end using findStart
+            try {
+              output.start = parser.findStart(searchData, this->fileRange, loadRange, hint);
+              output.end = parser.findStart(searchData, this->fileRange, loadRange, next);
+
+            } catch (IOException& ex) {
+              // either start or end are not found so return an empty range.
+
+              // TODO: need to handle this scenario better - should keep search until end.
+              WARNINGF("%s\n", ex.what());
+
+              WARNINGF("curr range: partition hint %lu-%lu, next %lu-%lu, file_range %lu-%lu\n",
+                     hint.start, hint.end, next.start, next.end, this->fileRange.start, this->fileRange.end);
+              WARNINGF("got an exception search for partition:  %s \n", ex.what());
+
+              output.start = hint.end;
+              output.end = hint.end;
+            }
+
+            // clean up and unmap
+            this->unmap(mappedData, loadRange);
+          }
+          return output;
         }
-        /**
-         * @brief get the next available range for the L1 partition block, given the L1 partition id
-         * @details   This method uses CRTP to allow calling Derived class' implementation, which can further refine the partitioned range.
-         * @note      If the default BlockPartitioner were used, then there is only 1 NextL1Block.  else there may be more than 1.
-         *
-         * @param pid   The L1 partition id.
-         * @return      The range of the next L1 partition block.
-         */
-        template<typename D = Derived>
-        typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextL1BlockRange(const size_t pid) {
-          // use the derived one.
-          return static_cast<Derived*>(this)->getNextL1BlockRangeImpl(pid);
-        }
+
         /**
          * @brief get the next available range for the L1 partition block, given the L1 partition id
          * @details   This method uses CRTP to allow calling Derived class' implementation, which can further refine the partitioned range.
@@ -625,23 +704,9 @@ namespace io
          *
          * @return      The range of the next L1 partition block.
          */
-        template<typename D = Derived>
-        typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextL1BlockRange() {
+        RangeType getNextL1BlockRange() {
           // just FileLoader calls this.
-          return L1Partitioner.getNext(loaderId);
-        }
-        /**
-         * @brief get the next available range for the L1 partition block, using the loaderID
-         * @details   This method uses CRTP to allow calling Derived class' implementation, which can further refine the partitioned range.
-         *            The loaderId is set at initialization, possibly as MPI comm rank.  (if the comm version of the constructor were called)
-         * @note      If the default BlockPartitioner were used, then there is only 1 NextL1Block.  else there may be more than 1.
-         *
-         * @return      The range of the next L1 partition block.
-         */
-        template<typename D = Derived>
-        typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextL1BlockRange() {
-          // use the derived one.
-          return static_cast<Derived*>(this)->getNextL1BlockRangeImpl(loaderId);
+          return getNextL1BlockRange(loaderId);
         }
 
         /**
@@ -736,31 +801,63 @@ namespace io
          * @brief get the next L2 Partition Block given a thread id.
          * @details  for derived File Loader classes, their implementation methods are called.
          *            This call needs to properly support concurrent range computation.
+         *
+         *            The method modifies the base range to align the boundary to record boundaries at both ends
+         *
+         *            This is accomplished by performing findStart to find the
+         *              start, and doing the same on the next L2Block to find the end.
+         *
+         *
          * @note  not providing a no-arg default impl because the threading is setup before these calls and after construction.,
          *        and we do not want to get the id in this method from the threading library.
          * @param tid   Thread Id.  L2 Partition is between threads within a group
          * @return  The range of the next L2 Partition Block.
          */
-        template <typename D = Derived>
-        typename std::enable_if<std::is_void<D>::value, RangeType>::type getNextL2BlockRange(const size_t tid) {
-          if (!loaded) throw std::logic_error("ERROR: getting L2Block range before file is loaded");
-          return L2Partitioner.getNext(tid);
+        RangeType getNextL2BlockRange(const size_t tid) {
+
+          // data has to be loaded
+          if (!this->loaded) throw std::logic_error("ERROR: getting L2Block range before file is loaded");
+
+
+          // get the parent range
+          RangeType parentRange = this->L1Block.getRange();
+
+          // now get the next, unmodified range.  this is atomic
+          RangeType hint = this->L2Partitioner.getNext(tid);
+
+          size_t length = hint.size();
+          RangeType output(hint);
+
+          if (length > 0) {
+            // get the RightShifted range for searching at the end.
+            RangeType next = RangeType::shiftRight(hint, length);
+            next.intersect(parentRange);
+
+
+            try {
+              // search for start and end
+              output.start = parser.findStart(this->L1Block.begin(), parentRange, parentRange, hint);
+              output.end = parser.findStart(this->L1Block.begin(), parentRange, parentRange, next);
+            } catch (IOException& ex) {
+              // either start or end are not found, so return nothing.
+
+              WARNING(ex.what());
+
+              ERRORF("curr range: chunk %lu, hint %lu-%lu, next %lu-%lu, srcData range %lu-%lu, mmap_range %lu-%lu\n",
+                     this->L2BlockSize, hint.start, hint.end, next.start, next.end, parentRange.start, parentRange.end, this->L1Block.getRange().start, this->L1Block.getRange().end);
+              ERRORF("got an exception search:  %s \n", ex.what());
+
+              output.start = hint.end;
+              output.end = hint.end;
+            }
+
+          }
+
+          return output;
+
         }
 
-        /**
-         * @brief get the next L2 Partition Block given a thread id.
-         * @details  for derived File Loader classes, their implementation methods are called.
-         *            This call needs to properly support concurrent range computation.
-         * @note  not providing a no-arg default impl because the threading is setup before these calls and after construction.,
-         *        and we do not want to get the id in this method from the threading library.
-         * @param tid   Thread Id.  L2 Partition is between threads within a group
-         * @return  The range of the next L2 Partition Block.
-         */
-        template <typename D = Derived>
-        typename std::enable_if<!std::is_void<D>::value, RangeType>::type getNextL2BlockRange(const size_t tid) {
-          if (!loaded) throw std::logic_error("ERROR: getting L2Block range before file is loaded");
-          return static_cast<Derived*>(this)->getNextL2BlockRangeImpl(tid);
-        }
+
 
 
         /**
@@ -828,7 +925,7 @@ namespace io
           //=====  adjust the L2BlockSize adaptively.
           // look through 3 records to see the approximate size of records.
           // update the chunkSize  to at least 2x record size, (passes back to called).
-          chunkSize = std::max(chunkSize, 2 * getRecordSize<Derived>(10));
+          chunkSize = std::max(chunkSize, 2 * getRecordSize(10));
 
           // then configure the partitinoer to use the right number of threads.
           partitioner.configure(L1Block.getRange(), nThreads, chunkSize);
@@ -850,40 +947,94 @@ namespace io
          * @param count    number of records to read to compute the approximation. default = 3
          * @return  approximate size of a record.
          */
-        template<typename D = Derived>
-        typename std::enable_if<std::is_void<D>::value, size_t>::type getRecordSize(const int count = 10) {
-          // this method is enabled if Derived is void, which indicates self.
-          return 1;
+        size_t getRecordSize(const int iterations = 10) {
+          if (!this->loaded) throw std::logic_error("ERROR: getting record's size before file is loaded");
+
+
+          std::size_t s, e;
+          std::size_t ss = ::std::numeric_limits<::std::size_t>::max();
+          RangeType inmem(this->L1Block.getRange());
+          RangeType search(this->L1Block.getRange());
+
+          s = parser.findStart(this->L1Block.begin(), inmem, inmem, search);
+
+          for (int i = 0; i < iterations; ++i) {
+            /*check end*/
+            if(s >= search.end){
+              break;
+            }
+            search.start = s + 1;   // advance by 1, in order to search for next entry.
+            e = parser.findStart(this->L1Block.begin(), inmem, inmem, search);
+
+            ss = ::std::min(ss, (e - s));  // return smallest record size.
+            s = e;
+          }
+
+          return ss;
         }
 
-      public:
+        /// estimate number of kmers per record.
+        size_t getCharsPerRecord(int iterations = 10) {
 
-        /**
-         * @brief   compute the approximate size of a data record in the file by reading a few records.
-         * @details For subclasses of FileLoader, this function delegates to the subclass' implementation,
-         *          as subclass will have knowledge of how to parse a record.
-         *          This method provides a hint of the size of a record, which is useful for caching
-         *          and determining size of a DataBlock.
-         * @note    at most as many threads as specified in the c'tor will call this function.
-         * @param count    number of records to read to compute the approximation.  default = 3.
-         * @return  approximate size of a record.
-         */
-        template<typename D = Derived>
-        typename std::enable_if<!std::is_void<D>::value, size_t>::type getRecordSize(const int count = 10) {
-          return static_cast<Derived*>(this)->getRecordSizeImpl(count);
+          if (!this->loaded) throw std::logic_error("ERROR: getting record's size before file is loaded");
+
+
+          std::size_t s, e;
+          std::size_t ss = 0;
+          RangeType inmem(this->L1Block.getRange());
+          RangeType search(this->L1Block.getRange());
+
+          s = parser.findStart(this->L1Block.begin(), inmem, inmem, search);
+
+          int i = 0;
+          while(i < iterations && s <search.end){
+            search.start = s + 1;   // advance by 1, in order to search for next entry.
+            e = parser.findStart(this->L1Block.begin(), inmem, inmem, search);
+
+            // get the starting iterator
+            auto start = this->L1Block.begin() + (s - inmem.start);
+            auto end = this->L1Block.begin() + (e - inmem.start);
+
+            // advance past first eol
+            while ((start != end) && (*start != '\n' && *start != '\r')) ++start;
+            if ((start != end) && (*start == '\n' && *start != '\r')) ++start;
+
+            // now start counting
+            while ((start != end) && (*start != '\n' && *start != '\r')) {
+              ++ss;
+              ++start;
+            }
+
+            s = e;
+            ++i;
+          }
+
+          ::std::cerr << "ss: " << ss << " i: " << i << ::std::endl;
+
+          return i > 0 ? ss / i : 0;
         }
+
 
         /// get number of estimated kmers, given k.
-        template<typename D = Derived>
-        typename std::enable_if<std::is_void<D>::value, size_t>::type getKmerCountEstimate(const int k) {
-          return this->getFileRange().size() - k + 1;
+        size_t getKmerCountEstimate(const int k) {
+          size_t numChars, numRecords, kmersPerRecord;
+          size_t recordSize = this->getRecordSize();
+
+          printf("file range [%lu, %lu], recordSize = %lu\n",
+              this->getFileRange().start, this->getFileRange().end, recordSize);
+         numRecords = (this->getFileRange().size() + recordSize - 1) / recordSize;
+
+          numChars = this->getCharsPerRecord();
+         kmersPerRecord = numChars > 0 ? numChars - k + 1 : 0;  // fastq has quality.
+
+
+          printf("file range [%lu, %lu], recordSize = %lu, kmersPerRecord = %lu, numRecords = %lu\n",
+                 this->getFileRange().start, this->getFileRange().end, recordSize, kmersPerRecord, numRecords);
+
+          return numRecords * kmersPerRecord;
         }
 
-        /// get number of estimated kmers, given k.
-        template<typename D = Derived>
-        typename std::enable_if<!std::is_void<D>::value, size_t>::type getKmerCountEstimate(const int k) {
-          return static_cast<Derived*>(this)->getKmerCountEstimateImpl(k);
-        }
+
 
       private:
         // these methods are not meant to be overridden by subclasses.

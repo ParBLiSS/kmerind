@@ -87,17 +87,13 @@ namespace bliss
         //==================== COMMON TYPES
 
         /// DEFINE file loader.  this only provides the L1 and L2 blocks, not reads.
-        using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
+        using FileLoaderType = bliss::io::FASTQLoader<CharType, std::is_void<Quality>::value, true, false>; // raw data type :  use CharType
 
         // from FileLoader type, get the block iter type and range type
         using FileBlockIterType = typename FileLoaderType::L2BlockType::iterator;
-      protected:
-        /// DEFINE the iterator parser to get fastq records.  this type determines both the file format and whether quality scoring is used or not.
-        using ParserType = bliss::io::FASTQParser<FileBlockIterType, Quality>;
 
-        /// DEFINE the basic sequence type, derived from ParserType.
-        using SeqType = typename ParserType::SequenceType;
-      public:
+        /// DEFINE the iterator parser to get fastq records.  this type determines both the file format and whether quality scoring is used or not.
+        using ParserType = bliss::io::FASTQParser<!::std::is_void<Quality>::value>;
 
         /// DEFINE Kmer type, extracted from LocalContainer's key type
         using KmerType = typename MapType::value_type::first_type;
@@ -105,7 +101,7 @@ namespace bliss
         using ValueType = typename MapType::value_type::second_type;
 
         /// DEFINE the transform iterator type for parsing the FASTQ file into sequence records.
-        using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+        using SeqIterType = bliss::io::SequencesIterator<FileBlockIterType, ParserType>;
 
         /// index instance to store data
         MapType index;
@@ -118,6 +114,9 @@ namespace bliss
 
         /// size of communicator
         int commSize;
+
+      protected:
+        using SeqType = typename ::std::iterator_traits<SeqIterType>::value_type;
 
       public:
         /**
@@ -1291,11 +1290,11 @@ namespace bliss
         //==================== COMMON TYPES
 
         /// DEFINE file loader.  this only provides the L1 and L2 blocks, not reads.
-        //using FileLoaderType = bliss::io::FASTQLoader<CharType, false, true>; // raw data type :  use CharType
+        //using FileLoaderType = bliss::io::FASTQLoader<CharType, std::is_void<Quality>::value, false, true>; // raw data type :  use CharType
         //Using block partioner for L1 level decomposition of the input file
 
         //Define file loader
-        typedef bliss::io::FileLoader<CharType, false, true> FileLoaderType;  
+        typedef bliss::io::FileLoader<CharType, bliss::io::FileParserBase, false, true> FileLoaderType;
 
         // from FileLoader type, get the block iter type and range type
         using FileBlockIterType = typename FileLoaderType::L2BlockType::iterator;

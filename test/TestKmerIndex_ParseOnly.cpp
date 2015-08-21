@@ -45,23 +45,40 @@ template <typename IndexType, typename KmerType = typename IndexType::KmerType>
 std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
 
   ::std::vector<KmerType> query;
-  IndexType::template read_file<KmerType, ::bliss::index::kmer::KmerParser>(filename, query, comm);
+
+  std::string extension = ::bliss::utils::file::get_file_extension(filename);
+  std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+  if (extension.compare("fastq") == 0) {
+    // default to including quality score iterators.
+    IndexType::template read_file<::bliss::io::FASTQParser<false>, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  } else {
+    throw std::invalid_argument("input filename extension is not supported.");
+  }
 
   return query;
 }
+
 
 template <typename IndexType, typename KmerType = typename IndexType::KmerType>
 std::vector<KmerType> readForQuery_subcomm(const std::string & filename, MPI_Comm comm) {
 
   ::std::vector<KmerType> query;
-  IndexType::template read_file_mpi_subcomm<KmerType, ::bliss::index::kmer::KmerParser>(filename, query, comm);
+
+  std::string extension = ::bliss::utils::file::get_file_extension(filename);
+  std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+  if (extension.compare("fastq") == 0) {
+    // default to including quality score iterators.
+    IndexType::template read_file_mpi_subcomm<::bliss::io::FASTQParser<false>, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  } else {
+    throw std::invalid_argument("input filename extension is not supported.");
+  }
 
   return query;
 }
 
 //template <typename KmerType>
 //std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
-//  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
+//  using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false, false>; // raw data type :  use CharType
 //
 //  //====  now process the file, one L1 block (block partition by MPI Rank) at a time
 //  // from FileLoader type, get the block iter type and range type

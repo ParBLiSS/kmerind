@@ -79,7 +79,7 @@ TYPED_TEST_CASE_P(FASTQLoaderTest);
 // normal test cases
 TYPED_TEST_P(FASTQLoaderTest, MPIOpenWithRange)
 {
-  typedef FASTQLoader<TypeParam, false, false> FASTQLoaderType;
+  typedef FASTQLoader<TypeParam, true, false, false> FASTQLoaderType;
 
   // get this->fileName
   int rank = 0;
@@ -94,7 +94,7 @@ TYPED_TEST_P(FASTQLoaderTest, MPIOpenWithRange)
   FASTQLoaderType loader(nprocs, rank, this->fileName );
 
   auto l1 = loader.getNextL1Block();
-  auto r = l1.getRange();
+  l1.getRange();
 
 
 //  printf("Rank %d/%d file range: %lu, %lu, range [%lu, %lu)\n", rank, nprocs, loader.getFileRange().start, loader.getFileRange().end, r.start, r.end);
@@ -117,7 +117,7 @@ TYPED_TEST_P(FASTQLoaderTest, MPIOpenWithRange)
 // normal test cases
 TYPED_TEST_P(FASTQLoaderTest, OpenWithRange)
 {
-  typedef FASTQLoader<TypeParam, false, false> FASTQLoaderType;
+  typedef FASTQLoader<TypeParam, true, false, false> FASTQLoaderType;
 
   // get this->fileName
   int rank = 3;
@@ -145,7 +145,7 @@ TYPED_TEST_P(FASTQLoaderTest, OpenWithRange)
 
 TYPED_TEST_P(FASTQLoaderTest, OpenConsecutiveRanges)
 {
-  typedef FASTQLoader<TypeParam, false, false> FASTQLoaderType;
+  typedef FASTQLoader<TypeParam, true, false, false> FASTQLoaderType;
   typedef typename FASTQLoaderType::RangeType RangeType;
 
   // get this->fileName
@@ -305,10 +305,15 @@ typedef ::testing::Types<unsigned char> FASTQLoaderTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FASTQLoaderTest, FASTQLoaderTestTypes);
 
 
-typedef ::testing::Types<bliss::io::FASTQLoader<unsigned char, false, false>,
-    bliss::io::FASTQLoader<unsigned char, false, true>,
-    bliss::io::FASTQLoader<unsigned char, true, false>,
-    bliss::io::FASTQLoader<unsigned char, true, true> >
+typedef ::testing::Types<
+    bliss::io::FASTQLoader<unsigned char, true, false, false>,
+    bliss::io::FASTQLoader<unsigned char, true, false, true>,
+    bliss::io::FASTQLoader<unsigned char, true, true, false>,
+    bliss::io::FASTQLoader<unsigned char, true, true, true>,
+    bliss::io::FASTQLoader<unsigned char, false, false, false>,
+    bliss::io::FASTQLoader<unsigned char, false, false, true>,
+    bliss::io::FASTQLoader<unsigned char, false, true, false>,
+    bliss::io::FASTQLoader<unsigned char, false, true, true> >
     FASTQLoaderBufferTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FASTQLoaderBufferTest, FASTQLoaderBufferTestTypes);
 

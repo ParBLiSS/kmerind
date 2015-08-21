@@ -40,15 +40,15 @@
 
 template <typename KmerType>
 std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
-  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
+  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false, false>; // raw data type :  use CharType
 
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   // from FileLoader type, get the block iter type and range type
   using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
 
-  using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
-  using SeqType = typename ParserType::SequenceType;
-  using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+  using ParserType = bliss::io::FASTQParser<false>;
+  using SeqIterType = bliss::io::SequencesIterator<FileBlockIterType, ParserType>;
+  using SeqType = typename ::std::iterator_traits<SeqIterType>::value_type;
 
   using Alphabet = typename KmerType::KmerAlphabet;
 
@@ -336,15 +336,15 @@ class PositionIndex {
     //            range = df.open(filename, communicator);  // memmap internally
     //            data = df.data();
 
-      using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
+      using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false, false>; // raw data type :  use CharType
 
       //====  now process the file, one L1 block (block partition by MPI Rank) at a time
       // from FileLoader type, get the block iter type and range type
       using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
 
-      using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
-      using SeqType = typename ParserType::SequenceType;
-      using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+      using ParserType = bliss::io::FASTQParser<false>;
+      using SeqIterType = bliss::io::SequencesIterator<FileBlockIterType, ParserType>;
+      using SeqType = typename ::std::iterator_traits<SeqIterType>::value_type;
 
 
       /// converter from ascii to alphabet values
@@ -490,7 +490,7 @@ class PositionQualityIndex {
 //            data = df.data();
 
 
-  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
+  using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false, false>; // raw data type :  use CharType
   using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
 
 
@@ -499,9 +499,9 @@ class PositionQualityIndex {
 
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
 
-  using ParserType = bliss::io::FASTQParser<FileBlockIterType, QualType>;
-  using SeqType = typename ParserType::SequenceType;
-  using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+  using ParserType = bliss::io::FASTQParser<!::std::is_void<QualType>::value>;
+  using SeqIterType = bliss::io::SequencesIterator<FileBlockIterType, ParserType>;
+  using SeqType = typename ::std::iterator_traits<SeqIterType>::value_type;
 
 
 
@@ -652,15 +652,15 @@ class CountIndex {
 //  using TupleType = std::pair<KmerType, IdType>;
   using Alphabet = typename KmerType::KmerAlphabet;
 
-  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false>; // raw data type :  use CharType
+  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, false, false>; // raw data type :  use CharType
 
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   // from FileLoader type, get the block iter type and range type
   using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
 
-  using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
-  using SeqType = typename ParserType::SequenceType;
-  using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+  using ParserType = bliss::io::FASTQParser<false>;
+  using SeqIterType = bliss::io::SequencesIterator<FileBlockIterType, ParserType>;
+  using SeqType = typename ::std::iterator_traits<SeqIterType>::value_type;
 
 
   /// converter from ascii to alphabet values

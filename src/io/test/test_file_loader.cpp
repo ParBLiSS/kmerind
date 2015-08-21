@@ -28,12 +28,10 @@ template <typename T,
   typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
   typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >
 class TestableFileLoader :
-    public bliss::io::FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
-    void > {
+    public bliss::io::FileLoader<T, bliss::io::FileParserBase, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT> {
       public:
         using MyType = TestableFileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>;
-        using SuperType = bliss::io::FileLoader<T, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT,
-            void >;
+        using SuperType = bliss::io::FileLoader<T, bliss::io::FileParserBase, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>;
 
 
         using L1BlockType = typename SuperType::L1BlockType;

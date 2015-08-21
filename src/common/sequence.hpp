@@ -32,8 +32,10 @@ namespace bliss
         typedef Iterator IteratorType;
         /// type for the id struct/union
         typedef Id IdType;
-        /// the desired quality score's type. hardcoded to void.
-        typedef void QualityType;
+
+        /// indicate if this has quality score iterators or not.
+        typedef std::false_type has_quality;
+
 
         /// begin iterator for the sequence
         Iterator seqBegin;
@@ -57,6 +59,9 @@ namespace bliss
         typedef Iterator IteratorType;
         /// type for the id struct/union
         typedef Id IdType;
+
+        /// indicate if this has quality score iterators or not.
+        typedef std::true_type has_quality;
 
         /// begin iterator for the quality scores
         Iterator qualBegin;
