@@ -86,8 +86,8 @@ TYPED_TEST_P(CountingIteratorTest, copy){
 
     ASSERT_EQ(3, *iter);
     ASSERT_EQ(6, *(++iter));   // dereference pre increment
-    ASSERT_EQ(9, *iter++);     // dereference post increment (creates a copy)
-    ASSERT_EQ(6, *iter);       // check original hasn't been incremented after the post increment dereference
+    ASSERT_EQ(6, *iter++);     // dereference post increment (creates a copy)
+    ASSERT_EQ(9, *iter);       // check original hasn't been incremented after the post increment dereference
     ASSERT_EQ(3, *iter2);      // check copy is still same.
   }
 
@@ -102,31 +102,29 @@ TYPED_TEST_P(CountingIteratorTest, increment){
   ++iter;
   ASSERT_EQ(6, *iter);  // pre increment
   iter++;
-  ASSERT_EQ(6, *iter);  // post increment but did not save
+  ASSERT_EQ(9, *iter);  // post increment but did not save
   ASSERT_EQ(9, *iter++);  // post increment and use data
-  ASSERT_EQ(6, *iter);  // check original still same before post increment.
+  ASSERT_EQ(12, *iter);  // check original has all the increments
 
 
   // decrement
-  ++iter;               // get it to 9.
-  ASSERT_EQ(9, *iter);  // pre increment
-
   --iter;
-  ASSERT_EQ(6, *iter);
+  ASSERT_EQ(9, *iter);
 
   iter--;
   ASSERT_EQ(6, *iter);  // post increment but did not save
-  ASSERT_EQ(3, *iter--);  // post increment and use data
-  ASSERT_EQ(6, *iter);  // check original still same before post increment.
+  ASSERT_EQ(6, *iter--);  // post increment and use data
+  ASSERT_EQ(3, *iter);  // check original still same before post increment.
 
   // arithmetic
   CountingIterator<TypeParam> iter2;
-  iter2 = iter;                // *iter = 6
+  iter2 = iter;                // *iter2 = 3
+  ++iter;                      // *iter = 6
 
   ASSERT_EQ(15, *(iter + 3));  // 6 + 3 *3
   ASSERT_EQ(0, *(iter - 2));   // 6 - 3 * 2
   ASSERT_EQ(15, *(3 + iter));  // 3*3 + 6
-  ASSERT_EQ(0, iter - iter2);  // 6 - 6
+  ASSERT_EQ(1, iter - iter2);  // (6 - 3) / 3
 
   // compound assignment
   iter -= 2;                   // 6 - 3 *2
@@ -135,7 +133,7 @@ TYPED_TEST_P(CountingIteratorTest, increment){
   iter += 3;                    // 0 + 3 * 3
   ASSERT_EQ(9, *iter);
 
-  ASSERT_EQ(1, iter - iter2);   // (9 - 6) / 3
+  ASSERT_EQ(2, iter - iter2);   // (9 - 3) / 3
 }
 
 // failed construction due to asserts
@@ -143,10 +141,10 @@ TYPED_TEST_P(CountingIteratorTest, dereference){
   CountingIterator<TypeParam> iter(4, 2);
   // *a
   ASSERT_EQ(4, *iter);
-  ++iter;
+  ++iter;  // 6
 
   // a[]
-  ASSERT_EQ(30, iter[12]);
+  ASSERT_EQ(30, iter[12]);  // 6 + 24
 }
 
 
