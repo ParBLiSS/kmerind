@@ -27,6 +27,9 @@
 #ifndef KMERINDEX_HPP_
 #define KMERINDEX_HPP_
 
+#include "bliss-config.hpp"
+
+
 #if defined(USE_MPI)
 #include "mpi.h"
 #endif
@@ -87,13 +90,13 @@ namespace bliss
         //==================== COMMON TYPES
 
         /// DEFINE file loader.  this only provides the L1 and L2 blocks, not reads.
-        using FileLoaderType = bliss::io::FASTQLoader<CharType, std::is_void<Quality>::value, true, false>; // raw data type :  use CharType
+        using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false>; // raw data type :  use CharType
 
         // from FileLoader type, get the block iter type and range type
         using FileBlockIterType = typename FileLoaderType::L2BlockType::iterator;
 
         /// DEFINE the iterator parser to get fastq records.  this type determines both the file format and whether quality scoring is used or not.
-        using ParserType = bliss::io::FASTQParser<!::std::is_void<Quality>::value>;
+        using ParserType = bliss::io::FASTQParser<FileBlockIterType>;
 
         /// DEFINE Kmer type, extracted from LocalContainer's key type
         using KmerType = typename MapType::value_type::first_type;
@@ -101,7 +104,7 @@ namespace bliss
         using ValueType = typename MapType::value_type::second_type;
 
         /// DEFINE the transform iterator type for parsing the FASTQ file into sequence records.
-        using SeqIterType = bliss::io::SequencesIterator<FileBlockIterType, ParserType>;
+        using SeqIterType = bliss::io::SequencesIterator<FileBlockIterType, bliss::io::FASTQParser>;
 
         /// index instance to store data
         MapType index;
@@ -187,7 +190,7 @@ namespace bliss
 
             t1 = std::chrono::high_resolution_clock::now();
             //==== create file Loader
-            FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire building process.
+            FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire building process.
             typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
             t2 = std::chrono::high_resolution_clock::now();
              time_span =
@@ -505,7 +508,7 @@ namespace bliss
      */
     template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, typename KmerType = bliss::common::Kmer<Kmer_Size, Alphabet> >
     class KmerPositionIndex : public KmerIndex<bliss::index::distributed_multimap<KmerType,
-        bliss::io::FASTQ::SequenceId,
+        bliss::common::ShortSequenceKmerId,
         bliss::io::CommunicationLayer<true>,
     bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
     bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
@@ -519,7 +522,7 @@ namespace bliss
         /// DEFINE the index storage type.  using an infix of kmer to map to threads,
         /// since prefix is used for distributing to processors.
         using MapType = bliss::index::distributed_multimap<KmerType,
-            bliss::io::FASTQ::SequenceId,
+            bliss::common::ShortSequenceKmerId,
             bliss::io::CommunicationLayer<true>,
             bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
             bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
@@ -651,7 +654,7 @@ namespace bliss
         : public KmerIndex<
             bliss::index::distributed_multimap<
               KmerType,
-              std::pair<bliss::io::FASTQ::SequenceId, float>,
+              std::pair<bliss::common::ShortSequenceKmerId, float>,
               bliss::io::CommunicationLayer<true>,
               bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
               bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
@@ -667,7 +670,7 @@ namespace bliss
         /// define the index storage type.  using an infix of kmer to map to threads
         /// since prefix is used for distributing to processors.
         using MapType = bliss::index::distributed_multimap<KmerType,
-            std::pair<bliss::io::FASTQ::SequenceId, float>,
+            std::pair<bliss::common::ShortSequenceKmerId, float>,
             bliss::io::CommunicationLayer<true>,
             bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner>,
             bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner, true>,
@@ -956,7 +959,7 @@ namespace bliss
        */
       template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, typename KmerType = bliss::common::Kmer<Kmer_Size, Alphabet> >
       class KmerPositionIndexOld : public KmerIndex<bliss::index::distributed_multimap<KmerType,
-      bliss::io::FASTQ::SequenceId,
+      bliss::common::ShortSequenceKmerId,
       bliss::io::CommunicationLayer<true>,
       bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner>,
       bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true>,
@@ -971,7 +974,7 @@ namespace bliss
           /// DEFINE the index storage type.  using an infix of kmer to map to threads,
                  /// since prefix is used for distributing to processors.
           using MapType = bliss::index::distributed_multimap<KmerType,
-              bliss::io::FASTQ::SequenceId,
+              bliss::common::ShortSequenceKmerId,
               bliss::io::CommunicationLayer<true>,
               bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner>,
               bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true>,
@@ -1110,7 +1113,7 @@ namespace bliss
        */
       template<unsigned int Kmer_Size, typename Alphabet, typename FileFormat = bliss::io::FASTQ, typename KmerType = bliss::common::Kmer<Kmer_Size, Alphabet> >
       class KmerPositionAndQualityIndexOld : public KmerIndex<bliss::index::distributed_multimap<KmerType,
-      std::pair<bliss::io::FASTQ::SequenceId, float>,
+      std::pair<bliss::common::ShortSequenceKmerId, float>,
       bliss::io::CommunicationLayer<true>,
       bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner>,
       bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true>,
@@ -1125,7 +1128,7 @@ namespace bliss
           /// define the index storage type.  using an infix of kmer to map to threads
           /// since prefix is used for distributing to processors.
           using MapType = bliss::index::distributed_multimap<KmerType,
-              std::pair<bliss::io::FASTQ::SequenceId, float>,
+              std::pair<bliss::common::ShortSequenceKmerId, float>,
               bliss::io::CommunicationLayer<true>,
               bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner>,
               bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::IdentityCombiner, true>,
@@ -1294,7 +1297,7 @@ namespace bliss
         //Using block partioner for L1 level decomposition of the input file
 
         //Define file loader
-        typedef bliss::io::FileLoader<CharType, bliss::io::FileParserBase, false, true> FileLoaderType;
+        typedef bliss::io::FileLoader<CharType, 0, bliss::io::BaseFileParser, false, true> FileLoaderType;
 
         // from FileLoader type, get the block iter type and range type
         using FileBlockIterType = typename FileLoaderType::L2BlockType::iterator;
@@ -1397,7 +1400,7 @@ namespace bliss
           // scoped so FileLoader is deleted after.
           {
             //==== create file Loader
-            FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire building process.
+            FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire building process.
 
             // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
             // index reserve internally sends a message to itself.

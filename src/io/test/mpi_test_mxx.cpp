@@ -17,7 +17,9 @@
 
 // include files to test
 #include "utils/logging.h"
+#include "bliss-config.hpp"
 
+#ifdef USE_MPI
 
 /*
  * test class holding some information.  Also, needed for the typed tests
@@ -1442,15 +1444,30 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_v)
 int main(int argc, char* argv[]) {
     int result = 0;
 
+    MPI_Init(&argc, &argv);
+
     ::testing::InitGoogleTest(&argc, argv);
 
-
-#if defined(USE_MPI)
-    MPI_Init(&argc, &argv);
-#endif
     result = RUN_ALL_TESTS();
-#if defined(USE_MPI)
+
     MPI_Finalize();
-#endif
+
     return result;
 }
+#else
+
+TEST(Mxx2MPITest, fail)
+{
+  ASSERT_TRUE(false) << "tests not compiled with USE_MPI";
+}
+
+int main(int argc, char* argv[]) {
+  int result = 0;
+
+  ::testing::InitGoogleTest(&argc, argv);
+
+  result = RUN_ALL_TESTS();
+
+  return result;
+}
+#endif

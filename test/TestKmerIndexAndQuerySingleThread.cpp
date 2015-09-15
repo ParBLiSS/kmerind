@@ -66,7 +66,7 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
 
   {
     //==== create file Loader
-    FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+    FileLoaderType loader(filename, comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
     typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
     size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + commSize - 1) / commSize;
 
@@ -368,7 +368,7 @@ class PositionIndex {
 
         TIMER_START(file);
         //==== create file Loader
-        FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+        FileLoaderType loader(filename, comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
         typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
         TIMER_END(file, "open", partition.getRange().size());
 
@@ -528,7 +528,7 @@ class PositionQualityIndex {
 
     TIMER_START(file);
     //==== create file Loader
-    FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+    FileLoaderType loader(filename, comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
     typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
     TIMER_END(file, "open", partition.getRange().size());
 
@@ -681,7 +681,7 @@ class CountIndex {
 
     TIMER_START(file);
     //==== create file Loader
-    FileLoaderType loader(comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+    FileLoaderType loader(filename, comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
     typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
     TIMER_END(file, "open", partition.getRange().size());
 
@@ -914,7 +914,7 @@ int main(int argc, char** argv) {
   using Alphabet = bliss::common::DNA;
   using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
 
-  using IdType = bliss::io::FASTQ::SequenceId;
+  using IdType = bliss::common::ShortSequenceKmerId;
   using MapType = std::unordered_multimap<KmerType, IdType, bliss::hash::kmer::hash<KmerType, bliss::hash::kmer::detail::farm::hash, bliss::hash::kmer::LexicographicLessCombiner> >;
   testIndex<PositionIndex<MapType> >(comm, filename, "single thread, position index.");
 

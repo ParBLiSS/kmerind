@@ -27,6 +27,8 @@
 #ifndef KMERINDEX2_HPP_
 #define KMERINDEX2_HPP_
 
+#include "bliss-config.hpp"
+
 #if defined(USE_MPI)
 #include "mpi.h"
 #endif
@@ -43,7 +45,7 @@
 #include <cctype>       // tolower.
 
 #include "io/fastq_loader.hpp"
-//#include "io/fasta_loader.hpp"
+#include "io/fasta_loader.hpp"
 //#include "io/fasta_iterator.hpp"
 
 #include "utils/logging.h"
@@ -54,8 +56,8 @@
 #include "utils/kmer_utils.hpp"
 
 #include "io/mxx_support.hpp"
-#include <containers/distributed_unordered_map.hpp>
-#include <containers/distributed_sorted_map.hpp>
+#include "containers/distributed_unordered_map.hpp"
+#include "containers/distributed_sorted_map.hpp"
 // way too slow.  also not updated.  #include <containers/distributed_map.hpp>
 
 #include "io/sequence_iterator.hpp"
@@ -63,12 +65,17 @@
 #include "iterators/transform_iterator.hpp"
 #include "common/kmer_iterators.hpp"
 #include "iterators/zip_iterator.hpp"
+#include "iterators/unzip_iterator.hpp"
 #include "iterators/constant_iterator.hpp"
 #include "index/quality_score_iterator.hpp"
 #include "wip/kmer_hash.hpp"
 
 #include "utils/timer.hpp"
-#include "utils/string_utils.hpp"
+#include "utils/file_utils.hpp"
+
+#include <fstream> // debug only
+#include <iostream>  // debug only
+#include <sstream>  // debug only
 
 namespace bliss
 {
@@ -110,19 +117,21 @@ public:
 
 	/**
 	 * @brief  generate kmers or kmer tuples for 1 block of raw data.
-	 *
-	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.
+	 * @note   requires that SeqParser be passed in and operates on the Block's Iterators.
+	 *          Mostly, this is because we need to broadcast the state of SeqParser to procs on the same node (L1 seq info) and recreate on child procs a new SeqParser (for L2)
+	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.  template template parameter, param is iterator
+   * @tparam KP           parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 * @tparam BlockType		input partition type, supports in memory (vector) vs memmapped.
 	 * @param partition
 	 * @param result        output vector.  should be pre allocated.
 	 */
-	template <typename SeqParserType, typename KP, typename BlockType>
-	static size_t read_block(BlockType & partition, std::vector<typename KP::value_type>& result) {
+	template <typename KP, template <typename> class SeqParser, typename BlockType>
+	static size_t read_block(BlockType & partition, SeqParser<typename BlockType::iterator> const &seq_parser, std::vector<typename KP::value_type>& result) {
 
 		// from FileLoader type, get the block iter type and range type
 		using BlockIterType = typename BlockType::iterator;
 
-		using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, SeqParserType>;
+		using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, SeqParser >;
 		using SeqType = typename ::std::iterator_traits<SeqIterType>::value_type;
 
 		//== sequence parser type
@@ -132,7 +141,7 @@ public:
 		SeqType read;
 
 		//==  and wrap the chunk inside an iterator that emits Reads.
-		SeqIterType seqs_start(SeqParserType(), partition.begin(), partition.end(), partition.getRange().start);
+		SeqIterType seqs_start(seq_parser, partition.begin(), partition.end(), partition.getRange().start);
 		SeqIterType seqs_end(partition.end());
 
     ::fsc::back_emplace_iterator<std::vector<typename KP::value_type> > emplace_iter(result);
@@ -142,7 +151,15 @@ public:
 		//== loop over the reads
 		for (; seqs_start != seqs_end; ++seqs_start)
 		{
+//		  std::cout << "** seq: " << (*seqs_start).id.id << ", ";
+//		  ostream_iterator<typename std::iterator_traits<typename SeqType::IteratorType>::value_type> osi(std::cout);
+//		  std::copy((*seqs_start).seqBegin, (*seqs_start).seqEnd, osi);
+//		  std::cout << std::endl;
+
 			emplace_iter = kmer_parser(*seqs_start, emplace_iter);
+
+//	    std::cout << "Last: pos - kmer " << result.back() << std::endl;
+
 		}
 
 		return result.size() - before;
@@ -151,18 +168,19 @@ public:
 
 
 	/**
-	 * @tparam KmerParser		parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
-	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.
-	 * @tparam T	data element type after reading from file.  May not be the same as Map's data type.
+	 * @brief read a file's content and generate kmers, place in a vector as return result.
+	 * @note  static so can be used wihtout instantiating a internal map.
+	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
+   * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 */
-	template <typename SeqParser, typename KP = KmerParser>
+	template <template <typename> class SeqParser, typename KP = KmerParser>
 	static size_t read_file(const std::string & filename, std::vector<typename KP::value_type>& result, MPI_Comm _comm) {
 
 		int p, rank;
 		MPI_Comm_size(_comm, &p);
 		MPI_Comm_rank(_comm, &rank);
 
-		using FileLoaderType = bliss::io::FileLoader<CharType, SeqParser, false, false>; // raw data type :  use CharType
+		using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, false>; // raw data type :  use CharType
 
 		//====  now process the file, one L1 block (block partition by MPI Rank) at a time
 
@@ -173,7 +191,7 @@ public:
 
 			TIMER_START(file);
 			//==== create file Loader
-			FileLoaderType loader(_comm, filename, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+			FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
 			typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 			TIMER_END(file, "open", partition.getRange().size());
 
@@ -187,17 +205,24 @@ public:
 			result.reserve(est_size);
 			TIMER_END(file, "reserve", est_size);
 
+      // not reusing the SeqParser in loader.  instead, reinitializing one.
+      TIMER_START(file);
+      auto l1parser = loader.getSeqParser();
+      l1parser.init_for_iterator(partition.begin(), loader.getFileRange(), partition.getRange(), partition.getRange(), _comm);
+      TIMER_END(file, "mark_seqs", est_size);
 
 			TIMER_START(file);
 			//=== copy into array
 			while (partition.getRange().size() > 0) {
 
-				read_block<SeqParser, KP>(partition, result);
+				read_block<KP>(partition, l1parser, result);
 
 				partition = loader.getNextL1Block();
 			}
 			TIMER_END(file, "read", result.size());
+      // std::cout << "Last: pos - kmer " << result.back() << std::endl;
 		}
+
 
 		TIMER_REPORT_MPI(file, rank, _comm);
 		return result.size() - before;
@@ -206,10 +231,9 @@ public:
 
 	/**
 	 * @tparam KmerParser		parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
-	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.
-	 * @tparam T	data element type after reading from file.  May not be the same as Map's data type.
+	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.  template template parameter, param is iterator
 	 */
-	template <typename SeqParser, typename KP = KmerParser>
+	template <template <typename> class SeqParser, typename KP = KmerParser>
 	static size_t read_file_mpi_subcomm(const std::string & filename, std::vector<typename KP::value_type>& result, MPI_Comm _comm) {
 
 		int p, rank;
@@ -233,12 +257,16 @@ public:
 		}
 
 		// raw data type :  use CharType.   block partition at L1 and L2.  no buffering at all, since we will be copying data to the group members anyways.
-		using FileLoaderType = bliss::io::FileLoader<CharType, SeqParser, false, false, bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >;
+		using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, false,
+		    bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >,  bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >>;
 
 		size_t before = result.size();
 
+		typename FileLoaderType::RangeType file_range;
+
 		TIMER_INIT(file);
 		{
+
 			typename FileLoaderType::L2BlockType block;
 			typename FileLoaderType::RangeType range;
 			::std::vector<CharType> data;
@@ -252,7 +280,7 @@ public:
 			size_t est_size = 1;
 			if (group_leaders != MPI_COMM_NULL) {  // ensure file loader is closed properly.
 				//==== create file Loader. this handle is alive through the entire building process.
-				FileLoaderType loader(group_leaders, filename, g_size);  // for member of group_leaders, each create g_size L2blocks.
+				FileLoaderType loader(filename, group_leaders, g_size);  // for member of group_leaders, each create g_size L2blocks.
 
 				// modifying the local index directly here causes a thread safety issue, since callback thread is already running.
 
@@ -274,24 +302,32 @@ public:
 				// scatter the data .  this call here relies on FileLoader still having the memory mapped.
 				data = ::mxx2::scatterv(partition.begin(), partition.end(), send_counts, group, 0);
 
-			} else {
-				// replicated here because the root's copy needs to be inside the if clause - requires FileLoader to be open for the sender.
+				// send the file range.
+				file_range = loader.getFileRange();
 
-				// scatter the data .  this call here relies on FileLoader still having the memory mapped.
+
+			} else {
+        // replicated here because the root's copy needs to be inside the if clause - requires FileLoader to be open for the sender.
+
+				// scatter the data.  this is the receiver end of the thing.
 				data = ::mxx2::scatterv(partition.begin(), partition.end(), send_counts, group, 0);
 
 			}
 
-
 			// scatter the ranges
-			range = ::mxx2::scatter(ranges, group, 0);
+			mxx::datatype<typename FileLoaderType::RangeType> range_dt;
+			MPI_Bcast(&file_range, 1, range_dt.type(), 0, group);
 
+			range = ::mxx2::scatter(ranges, group, 0);
 			// now create the L2Blocks from the data  (reuse block)
 			block.assign(&(data[0]), &(data[0]) + range.size(), range);
-
 			TIMER_END(file, "open", data.size());
 
-
+			// not reusing the SeqParser in loader.  instead, reinitializing one.
+      TIMER_START(file);
+			SeqParser<typename FileLoaderType::L2BlockType::iterator> l2parser;
+			l2parser.init_for_iterator(block.begin(), file_range, range, range, _comm);
+      TIMER_END(file, "mark_seqs", est_size);
 
 			//== reserve
 			TIMER_START(file);
@@ -304,11 +340,9 @@ public:
 
 			// == parse kmer/tuples iterator
 			TIMER_START(file);
-
-
-			read_block<SeqParser, KP>(block, result);
-
+			read_block<KP>(block, l2parser, result);
 			TIMER_END(file, "read", result.size());
+      std::cout << "Last: pos - kmer " << result.back() << std::endl;
 		}
 		TIMER_REPORT_MPI(file, rank, _comm);
 
@@ -383,7 +417,6 @@ public:
 		this->map.reserve(this->map.size() + temp.size());
 		TIMER_END(build, "reserve", temp.size());
 
-
 		// distribute
 		TIMER_START(build);
 		this->map.insert(temp);
@@ -403,42 +436,86 @@ public:
 	 //     since Kmer template parameter is not explicitly known, we can't hard code the return types of KmerParserType.
 
 	 /// convenience function for building index.
+	 template <template <typename> class SeqParser>
 	 void build(const std::string & filename, MPI_Comm comm) {
-
-	   ::std::vector<typename KmerParser::value_type> temp;
 
 	   // file extension determines SeqParserType
 	   std::string extension = ::bliss::utils::file::get_file_extension(filename);
 	   std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-	   if (extension.compare("fastq") == 0) {
-	     // default to including quality score iterators.
-	     this->read_file<::bliss::io::FASTQParser<true> >(filename, temp, comm);
-	   } else {
+	   if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
 	     throw std::invalid_argument("input filename extension is not supported.");
 	   }
 
-		 this->insert(temp);
+	   // check to make sure that the file parser will work
+	   if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
+	     throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
+	   } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser2<char*> >::value)) {
+       throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
+     }
+
+	   // proceed
+     ::std::vector<typename KmerParser::value_type> temp;
+     this->read_file<SeqParser >(filename, temp, comm);
+
+
+//        // dump the generated kmers to see if they look okay.
+//         std::stringstream ss;
+//         ss << "test." << commRank << ".log";
+//         std::ofstream ofs(ss.str());
+//         for (int i = 0; i < temp.size(); ++i) {
+//          ofs << "item: " << i << " value: " << temp[i] << std::endl;
+//         }
+//         ofs.close();
+
+     DEBUG("Last: pos - kmer " << temp.back());
+     this->insert(temp);
+
 	 }
 
 
+   template <template <typename> class SeqParser>
 	 void build_with_mpi_subcomm(const std::string & filename, MPI_Comm comm) {
-		 ::std::vector<typename KmerParser::value_type> temp;
 
-	    // file extension determines SeqParserType
-	     std::string extension = ::bliss::utils::file::get_file_extension(filename);
-	     std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-	     if (extension.compare("fastq") == 0) {
-	       // default to including quality score iterators.
-	       this->read_file_mpi_subcomm<::bliss::io::FASTQParser<true> >(filename, temp, comm);
-	     } else {
-	       throw std::invalid_argument("input filename extension is not supported.");
-	     }
+     // file extension determines SeqParserType
+     std::string extension = ::bliss::utils::file::get_file_extension(filename);
+     std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+     if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+       throw std::invalid_argument("input filename extension is not supported.");
+     }
 
-		 this->insert(temp);
+     // check to make sure that the file parser will work
+     if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
+       throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
+     } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser2<char*> >::value)) {
+       throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
+     }
+
+     // proceed
+     ::std::vector<typename KmerParser::value_type> temp;
+     this->read_file_mpi_subcomm<SeqParser >(filename, temp, comm);
+
+     DEBUG("Last: pos - kmer " << temp.back());
+     this->insert(temp);
+
 	 }
 
 };
 
+
+struct NotEOL {
+  template <typename CharType>
+  bool operator()(CharType const & x) {
+	return (x != '\n') && (x != '\r' );
+  }
+
+  template <typename CharType, typename MDType>
+  bool operator()(std::pair<CharType, MDType> const & x) {
+	  return (x.first != '\n') && (x.first != '\r');
+  }
+};
+
+template <typename Iter>
+using NonEOLIter = bliss::iterator::filter_iterator<NotEOL, Iter>;
 
 
 template <typename KmerType>
@@ -465,7 +542,7 @@ struct KmerParser {
 		using Alphabet = typename KmerType::KmerAlphabet;
 
 		/// converter from ascii to alphabet values
-		using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+		using BaseCharIterator = bliss::iterator::transform_iterator<NonEOLIter<typename SeqType::IteratorType>, bliss::common::ASCII2<Alphabet> >;
 
 		/// kmer generation iterator
 		using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
@@ -477,9 +554,16 @@ struct KmerParser {
 		// then compute and store into index (this will generate kmers and insert into index)
 		if (read.seqBegin == read.seqEnd) return output_iter;
 
+		//== filtering iterator
+		NotEOL neol;
+		NonEOLIter<typename SeqType::IteratorType> eolstart(neol, read.seqBegin, read.seqEnd);
+		NonEOLIter<typename SeqType::IteratorType> eolend(neol, read.seqEnd);
+
 		//== set up the kmer generating iterators.
-		KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-		KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+		KmerIterType start(BaseCharIterator(eolstart, bliss::common::ASCII2<Alphabet>()), true);
+		KmerIterType end(BaseCharIterator(eolend, bliss::common::ASCII2<Alphabet>()), false);
+
+//    printf("First: pos %lu kmer %s\n", read.id.id, bliss::utils::KmerUtils::toASCIIString(*start).c_str());
 
 		return ::std::copy(start, end, output_iter);
 
@@ -513,19 +597,27 @@ struct KmerPositionTupleParser {
 		using KmerType = typename std::tuple_element<0, TupleType>::type;
 		using Alphabet = typename KmerType::KmerAlphabet;
 
+		// filter out EOL characters
+		using CharIter = NonEOLIter<typename SeqType::IteratorType>;
+    // converter from ascii to alphabet values
+    using BaseCharIterator = bliss::iterator::transform_iterator<CharIter, bliss::common::ASCII2<Alphabet> >;
+    // kmer generation iterator
+    using KmerIter = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+
+		//== next figure out starting positions for the kmers, accounting for EOL char presenses.
 		using IdType = typename std::tuple_element<1, TupleType>::type;
-		static_assert(::std::is_same<typename SeqType::IdType, IdType>::value, "position type does not match for input and output iterators" );
-
-		/// converter from ascii to alphabet values
-		using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
-
-		/// kmer generation iterator
-		using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
-		/// kmer position iterator type
+		// kmer position iterator type
 		using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
 
-		/// combine kmer iterator and position iterator to create an index iterator type.
-		using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, IdIterType>;
+    // use zip iterator to tie together the iteration of sequence raw data and id.
+    using PairedIter = bliss::iterator::ZipIterator<typename SeqType::IteratorType, IdIterType>;
+    using CharPosIter = NonEOLIter<PairedIter>;
+		// now use 2 unzip iterators to access the values.  one of them advances.  all subsequent wrapping
+		// iterators trickle back to the zip iterator above, again, one of the 2 unzip iterator will call operator++ on the underlying zip iterator
+		using IdIter = bliss::iterator::AdvancingUnzipIterator<CharPosIter, 1>;
+
+		// rezip the results
+		using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIter, IdIter>;
 
 		static_assert(std::is_same<typename std::iterator_traits<KmerIndexIterType>::value_type,
 				TupleType>::value,
@@ -535,26 +627,46 @@ struct KmerPositionTupleParser {
 		// then compute and store into index (this will generate kmers and insert into index)
 		if (read.seqBegin == read.seqEnd) return output_iter;
 
-		//== set up the kmer generating iterators.
-		KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-		KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+    //== set up the kmer generating iterators.
+    NotEOL neol;
+    KmerIter start(BaseCharIterator(CharIter(neol, read.seqBegin, read.seqEnd), bliss::common::ASCII2<Alphabet>()), true);
+    KmerIter end(BaseCharIterator(CharIter(neol, read.seqEnd), bliss::common::ASCII2<Alphabet>()), false);
+
 
 		//== set up the position iterators
-		IdIterType id_start(read.id);
-		IdIterType id_end(read.id);
+		IdType seq_begin_id(read.id);
+		seq_begin_id += read.local_offset;  // change id to point to start of sequence (in file coord)
+		IdType seq_end_id(seq_begin_id);
+		seq_end_id += std::distance(read.seqBegin, read.seqEnd);
 
-		// ==== set up the zip iterators
-		KmerIndexIterType index_start(start, id_start);
-		KmerIndexIterType index_end(end, id_end);
+		// tie chars and id together
+		PairedIter pp_begin(read.seqBegin, IdIterType(seq_begin_id));
+		PairedIter pp_end(read.seqEnd, IdIterType(seq_end_id));
 
+    // filter eol
+		CharPosIter cp_begin(neol, pp_begin, pp_end);
+    CharPosIter cp_end(neol, pp_end);
+
+		// ==== extract new id and rezip iterators
+		KmerIndexIterType index_start(start, IdIter(cp_begin));
+		KmerIndexIterType index_end(end, IdIter(cp_end));
+
+
+//		for (; index_start != index_end; ++index_start) {
+//		  auto tp = *index_start;
+//
+//		  printf("TCP id = %lu, pos = %lu, kmer = %s\n", tp.second.get_id(), tp.second.get_pos(), bliss::utils::KmerUtils::toASCIIString(tp.first).c_str());
+//
+//		  *output_iter = tp;
+//
+//		}
 		return ::std::copy(index_start, index_end, output_iter);
 	}
 
 };
 
 
-
-template <typename TupleType>
+template <typename TupleType, template<typename> class QualityEncoder = bliss::index::Illumina18QualityScoreCodec>
 struct KmerPositionQualityTupleParser {
 
     /// type of element generated by this parser.  since kmer itself is parameterized, this is not hard coded.
@@ -572,7 +684,7 @@ struct KmerPositionQualityTupleParser {
 	OutputIt operator()(SeqType & read, OutputIt output_iter) {
 
 
-		static_assert(SeqType::has_quality::value, "Sequence Parser needs to support quality scores");
+		static_assert(SeqType::has_quality(), "Sequence Parser needs to support quality scores");
 
 		static_assert(std::is_same<TupleType, typename ::std::iterator_traits<OutputIt>::value_type>::value,
 				"output type and output container value type are not the same");
@@ -582,33 +694,45 @@ struct KmerPositionQualityTupleParser {
 		using KmerType = typename std::tuple_element<0, TupleType>::type;
 		using Alphabet = typename KmerType::KmerAlphabet;
 
-		using KmerInfoType = typename std::tuple_element<1, TupleType>::type;
-		static_assert(::std::tuple_size<KmerInfoType>::value == 2, "pos-qual index data type should be a pair");
-
-		using QualType = typename std::tuple_element<1, KmerInfoType>::type;
-		using IdType = typename std::tuple_element<0, KmerInfoType>::type;
-		static_assert(::std::is_same<typename SeqType::IdType, IdType>::value, "position type does not match for input and output iterators" );
+		static_assert(::std::tuple_size<typename std::tuple_element<1, TupleType>::type>::value == 2, "pos-qual index data type should be a pair");
 
 
-		/// converter from ascii to alphabet values
-		using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+    // filter out EOL characters
+    using CharIter = NonEOLIter<typename SeqType::IteratorType>;
+    // converter from ascii to alphabet values
+    using BaseCharIterator = bliss::iterator::transform_iterator<CharIter, bliss::common::ASCII2<Alphabet> >;
+    // kmer generation iterator
+    using KmerIter = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
 
-		/// kmer generation iterator
-		using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+    //== next figure out starting positions for the kmers, accounting for EOL char presenses.
+    using IdType = typename std::tuple_element<0, typename std::tuple_element<1, TupleType>::type >::type;
+    // kmer position iterator type
+    using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
 
-		/// kmer position iterator type
-		using IdIterType = bliss::iterator::SequenceIdIterator<IdType>;
+    // use zip iterator to tie together the iteration of sequence raw data and id.
+    using PairedIter = bliss::iterator::ZipIterator<typename SeqType::IteratorType, IdIterType>;
+    using CharPosIter = NonEOLIter<PairedIter>;
+    // now use 2 unzip iterators to access the values.  one of them advances.  all subsequent wrapping
+    // iterators trickle back to the zip iterator above, again, one of the 2 unzip iterator will call operator++ on the underlying zip iterator
+    using IdIter = bliss::iterator::AdvancingUnzipIterator<CharPosIter, 1>;
 
-		using QualIterType = bliss::index::QualityScoreGenerationIterator<typename SeqType::IteratorType, 21, bliss::index::Illumina18QualityScoreCodec<QualType> >;
+
+		using QualType = typename std::tuple_element<1, typename std::tuple_element<1, TupleType>::type>::type;
+		//static_assert(::std::is_same<typename SeqType::IdType, IdType>::value, "position type does not match for input and output iterators" );
+
+		// also remove eol from quality score
+		using QualIterType =
+				bliss::index::QualityScoreGenerationIterator<NonEOLIter<typename SeqType::IteratorType>, KmerType::size, QualityEncoder<QualType> >;
 
 		/// combine kmer iterator and position iterator to create an index iterator type.
-		using KmerInfoIterType = bliss::iterator::ZipIterator<IdIterType, QualIterType>;
+		using KmerInfoIterType = bliss::iterator::ZipIterator<IdIter, QualIterType>;
+
 		static_assert(std::is_same<typename std::iterator_traits<KmerInfoIterType>::value_type,
-				KmerInfoType>::value,
+				typename std::tuple_element<1, TupleType>::type >::value,
 				"kmer info input iterator and output iterator's value types differ");
 
 
-		using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIterType, KmerInfoIterType>;
+		using KmerIndexIterType = bliss::iterator::ZipIterator<KmerIter, KmerInfoIterType>;
 
 		static_assert(std::is_same<typename std::iterator_traits<KmerIndexIterType>::value_type,
 				TupleType>::value,
@@ -618,25 +742,41 @@ struct KmerPositionQualityTupleParser {
 		// then compute and store into index (this will generate kmers and insert into index)
 		if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) return output_iter;
 
-		//== set up the kmer generating iterators.
-		KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-		KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
 
-		//== set up the position iterators
-		IdIterType id_start(read.id);
-		IdIterType id_end(read.id);
+    //== set up the kmer generating iterators.
+    NotEOL neol;
+    KmerIter start(BaseCharIterator(CharIter(neol, read.seqBegin, read.seqEnd), bliss::common::ASCII2<Alphabet>()), true);
+    KmerIter end(BaseCharIterator(CharIter(neol, read.seqEnd), bliss::common::ASCII2<Alphabet>()), false);
 
-		QualIterType qual_start(read.qualBegin);
-		QualIterType qual_end(read.qualEnd);
 
-		KmerInfoIterType info_start(id_start, qual_start);
-		KmerInfoIterType info_end(id_end, qual_end);
+    //== set up the position iterators
+    IdType seq_begin_id(read.id);
+    seq_begin_id += read.local_offset;  // change id to point to start of sequence (in file coord)
+    IdType seq_end_id(seq_begin_id);
+    seq_end_id += std::distance(read.seqBegin, read.seqEnd);
+
+    // tie chars and id together
+    PairedIter pp_begin(read.seqBegin, IdIterType(seq_begin_id));
+    PairedIter pp_end(read.seqEnd, IdIterType(seq_end_id));
+
+    // filter eol
+    CharPosIter cp_begin(neol, pp_begin, pp_end);
+    CharPosIter cp_end(neol, pp_end);
+
+    // ==== quality scoring
+		// filter eol and generate quality scores
+		QualIterType qual_start(CharIter(neol, read.qualBegin, read.qualEnd));
+		QualIterType qual_end(CharIter(neol, read.qualEnd));
+
+		KmerInfoIterType info_start(IdIter(cp_begin), qual_start);
+		KmerInfoIterType info_end(IdIter(cp_end), qual_end);
 
 
 		// ==== set up the zip iterators
 		KmerIndexIterType index_start(start, info_start);
 		KmerIndexIterType index_end(end, info_end);
 
+		//    printf("First: pos %lu kmer %s\n", read.id.id, bliss::utils::KmerUtils::toASCIIString(*start).c_str());
 
 		return ::std::copy(index_start, index_end, output_iter);
 	}
@@ -672,7 +812,7 @@ struct KmerCountTupleParser {
 		using Alphabet = typename KmerType::KmerAlphabet;
 
 		/// converter from ascii to alphabet values
-		using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
+		using BaseCharIterator = bliss::iterator::transform_iterator<NonEOLIter<typename SeqType::IteratorType>, bliss::common::ASCII2<Alphabet> >;
 
 		/// kmer generation iterator
 		using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
@@ -693,11 +833,17 @@ struct KmerCountTupleParser {
 		if (read.seqBegin == read.seqEnd) return output_iter;
 
 		//== set up the kmer generating iterators.
-		KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-		KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+		NotEOL neol;
+		NonEOLIter<typename SeqType::IteratorType> eolstart(neol, read.seqBegin, read.seqEnd);
+		NonEOLIter<typename SeqType::IteratorType> eolend(neol, read.seqEnd);
+
+		KmerIterType start(BaseCharIterator(eolstart, bliss::common::ASCII2<Alphabet>()), true);
+		KmerIterType end(BaseCharIterator(eolend, bliss::common::ASCII2<Alphabet>()), false);
 
 		KmerIndexIterType istart(start, count_start);
 		KmerIndexIterType iend(end, count_start);
+
+		//    printf("First: pos %lu kmer %s\n", read.id.id, bliss::utils::KmerUtils::toASCIIString(*start).c_str());
 
 		return ::std::copy(istart, iend, output_iter);
 	}

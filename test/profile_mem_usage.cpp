@@ -38,9 +38,9 @@ typedef bliss::common::Kmer<21, bliss::common::DNA, uint64_t> KmerType;
 
 
 typedef KmerIndexElement<KmerType > KmerIndexType1;
-typedef KmerIndexElementWithId<KmerType, bliss::io::FASTQ::SequenceId > KmerIndexType2;
-typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::io::FASTQ::SequenceId, float > KmerIndexType3;
-typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::io::FASTQ::SequenceId, double > KmerIndexType4;
+typedef KmerIndexElementWithId<KmerType, bliss::common::ShortSequenceKmerId > KmerIndexType2;
+typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::common::ShortSequenceKmerId, float > KmerIndexType3;
+typedef KmerIndexElementWithIdAndQuality<KmerType, bliss::common::ShortSequenceKmerId, double > KmerIndexType4;
 
 
 void checkMemUsed(long long &phyMemUsed, long long &swapUsed, bool print) {
@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
       KmerIndexType2 kmer;
 //      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
       kmer.kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
-      kmer.id.file_pos = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.id = bliss::common::ShortSequenceKmerId(rand() % std::numeric_limits<uint64_t>::max());
 
       test.push_back(std::move(kmer));
     }
@@ -204,7 +204,7 @@ int main(int argc, char** argv) {
       KmerIndexType3 kmer;
 //      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
       kmer.kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
-      kmer.id.file_pos = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.id = bliss::common::ShortSequenceKmerId(rand() % std::numeric_limits<uint64_t>::max());
       kmer.qual = float(rand()) / float(RAND_MAX);
 
       test.push_back(std::move(kmer));
@@ -235,7 +235,7 @@ int main(int argc, char** argv) {
       KmerIndexType4 kmer;
 //      kmer.kmer = rand() % std::numeric_limits<uint64_t>::max();
       kmer.kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
-      kmer.id.file_pos = rand() % std::numeric_limits<uint64_t>::max();
+      kmer.id = bliss::common::ShortSequenceKmerId(rand() % std::numeric_limits<uint64_t>::max());
       kmer.qual = float(rand()) / float(RAND_MAX);
 
       test.push_back(std::move(kmer));

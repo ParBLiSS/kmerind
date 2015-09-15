@@ -79,11 +79,7 @@ namespace bliss
      * @tparam Parser     Functoid type to parse data pointed by Iterator into sequence objects..
      * @tparam SequenceType  Sequence Type.  replaceable as long as it supports Quality if Parser requires it.
      */
-    template<typename Iterator, typename Parser,
-    		 typename SequenceType = typename ::std::conditional<Parser::has_quality,
-    			::bliss::common::SequenceWithQuality<Iterator, typename Parser::SequenceIdType>,
-    			::bliss::common::Sequence<Iterator, typename Parser::SequenceIdType> >::type
-    		>
+    template<typename Iterator, template<typename> class Parser>
     class SequencesIterator :
     	public ::std::iterator<
             typename ::std::conditional<
@@ -91,7 +87,7 @@ namespace bliss
                    	   	   	   	 ::std::input_iterator_tag>::value,
                   ::std::input_iterator_tag,
                   ::std::forward_iterator_tag>::type,
-            SequenceType,
+            typename Parser<Iterator>::SequenceType,
             typename std::iterator_traits<Iterator>::difference_type
           >
     {
@@ -103,10 +99,10 @@ namespace bliss
       protected:
 
         /// type of SequencesIterator class
-        typedef SequencesIterator<Iterator, Parser, SequenceType> type;
+        typedef SequencesIterator<Iterator, Parser> type;
 
         /// cache of the current result.
-        SequenceType seq;
+        typename Parser<Iterator>::SequenceType seq;
 
         /// iterator at the current starting point in the input data from where the current FASTQ record was parsed.
         Iterator _curr;
@@ -118,14 +114,17 @@ namespace bliss
         Iterator _end;
 
         /// instance of the parser functoid, used during record parsing.
-        Parser parser;
+        Parser<Iterator> parser;
 
         /**
          * @brief  the offset from the start of the file.  This is used as sequenceId.
          * @details  for each file with file id (fid) between 0 and 255, the seq id starts at (fid << 40).
          *          if base iterator is pointer, then units are in bytes.
          */
-        size_t offset;
+        size_t file_offset;
+
+        ///  sequence index in any shared data vector.
+        size_t seq_offset;
 
 
       public:
@@ -139,15 +138,16 @@ namespace bliss
          * @param end     end of the data to be parsed.
          * @param _range  the Range associated with the start and end of the source data.  coordinates relative to the file being processed.
          */
-        SequencesIterator(const Parser & f, const Iterator& start,
+        SequencesIterator(const Parser<Iterator> & f, const Iterator& start,
                        const Iterator& end, const size_t &_offset)
-            : seq(), _curr(start), _next(start), _end(end), parser(f), offset(_offset)
+            : seq(), _curr(start), _next(start), _end(end), parser(f), file_offset(_offset), seq_offset(0)
         {
           // parse the first entry, if start != end.
           // effect: _next incremented to next parse start point.
-          //         offset updated to next start point,
+          //         file_offset updated to next start point,
           //         output updated with either empty (if _next at end)  or the new output
-          if (_next != _end) parser.increment(_next, _end, offset, seq);;
+          if (_next != _end)
+            seq_offset = parser.increment(_next, _end, file_offset, seq);  // first increment.
         }
 
         /**
@@ -157,7 +157,7 @@ namespace bliss
          * @param end     end of the data to be parsed.
          */
         explicit SequencesIterator(const Iterator& end)
-            : seq(), _curr(end), _next(end), _end(end), parser(), offset(std::numeric_limits<size_t>::max())
+            : seq(), _curr(end), _next(end), _end(end), parser(), file_offset(std::numeric_limits<size_t>::max()), seq_offset(std::numeric_limits<size_t>::max())
         {
         }
 
@@ -167,7 +167,7 @@ namespace bliss
          */
         explicit SequencesIterator(const type& Other)
             : seq(Other.seq), _curr(Other._curr), _next(Other._next), _end(Other._end),
-              parser(Other.parser),  offset(Other.offset)
+              parser(Other.parser),  file_offset(Other.file_offset), seq_offset(Other.seq_offset)
         {}
 
         /**
@@ -175,14 +175,41 @@ namespace bliss
          * @param Other   The SequencesIterator to copy from
          * @return  modified copy of self.
          */
-        type& operator =(const type& Other)
+        type& operator=(const type& Other)
         {
           seq = Other.seq;
           _curr = Other._curr;
           _next = Other._next;
           _end = Other._end;
           parser = Other.parser;
-          offset = Other.offset;
+          file_offset = Other.file_offset;
+          seq_offset = Other.seq_offset;
+          return *this;
+        }
+
+        /**
+         * @brief default copy constructor
+         * @param Other   The SequencesIterator to copy from
+         */
+        explicit SequencesIterator(type && Other)
+            : seq(std::move(Other.seq)), _curr(std::move(Other._curr)), _next(std::move(Other._next)), _end(std::move(Other._end)),
+              parser(std::move(Other.parser)),  file_offset(std::move(Other.file_offset)), seq_offset(std::move(Other.seq_offset))
+        {}
+
+        /**
+         * @brief  default copy assignment operator
+         * @param Other   The SequencesIterator to copy from
+         * @return  modified copy of self.
+         */
+        type& operator=(type && Other)
+        {
+          seq =   std::move(Other.seq);
+          _curr = std::move(Other._curr);
+          _next = std::move(Other._next);
+          _end =  std::move(Other._end);
+          parser = std::move(Other.parser);
+          file_offset = std::move(Other.file_offset);
+          seq_offset = std::move(Other.seq_offset);
           return *this;
         }
 
@@ -202,7 +229,7 @@ namespace bliss
          * @note    for end iterator, because _curr and _end are both pointing to the input's end, "increment" does not do anything.
          * @return  self, updated with internal position.
          */
-        type &operator ++()
+        type &operator++()
         {
           //== at end of the data block, can't parse any further, no movement.  (also true for end iterator)
           if (_next == _end)
@@ -212,7 +239,7 @@ namespace bliss
               // advance to end
               _curr = _next;
               // and set output to empty.
-              seq = SequenceType();
+              seq = typename Parser<Iterator>::SequenceType();
             }
           } else {
             //== else we can parse, so do it.
@@ -221,7 +248,7 @@ namespace bliss
             _curr = _next;
 
             //== then try parsing.  this advances _next and offset, ready for next ++ call, and updates output cache.
-            parser.increment(_next, _end, offset, seq);
+            parser.increment(_next, _end, file_offset, seq_offset, seq);
           }
 
           //== states updated.  return self.
@@ -241,7 +268,7 @@ namespace bliss
          * @param   unnamed
          * @return  copy of self incremented.
          */
-        type operator ++(int)
+        type operator++(int)
         {
           type output(*this);
           return ++output;
@@ -270,7 +297,7 @@ namespace bliss
          * @param rhs the SequenceIterator to compare to.
          * @return    true if this and rhs SequenceIterators match.
          */
-        bool operator ==(const type& rhs) const
+        bool operator==(const type& rhs) const
         {
           return _curr == rhs._curr;
         }
@@ -281,7 +308,7 @@ namespace bliss
          * @param rhs the SequenceIterator to compare to.
          * @return    true if this and rhs SequenceIterators do not match.
          */
-        bool operator !=(const type& rhs) const
+        bool operator!=(const type& rhs) const
         {
           return _curr != rhs._curr;
         }
@@ -290,7 +317,7 @@ namespace bliss
          * @brief dereference operator
          * @return    a const reference to the cached sequence object
          */
-        const SequenceType &operator *() const
+        const typename Parser<Iterator>::SequenceType &operator*() const
         {
           return seq;
         }
@@ -299,7 +326,7 @@ namespace bliss
          * @brief pointer dereference operator
          * @return    a const reference to the cached sequence object
          */
-        const SequenceType *operator ->() const {
+        const typename Parser<Iterator>::SequenceType *operator->() const {
           return &seq;
         }
 

@@ -50,7 +50,7 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
   std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
   if (extension.compare("fastq") == 0) {
     // default to including quality score iterators.
-    IndexType::template read_file<::bliss::io::FASTQParser<false>, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+    IndexType::template read_file<::bliss::io::FASTQParser, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
   } else {
     throw std::invalid_argument("input filename extension is not supported.");
   }
@@ -68,7 +68,7 @@ std::vector<KmerType> readForQuery_subcomm(const std::string & filename, MPI_Com
   std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
   if (extension.compare("fastq") == 0) {
     // default to including quality score iterators.
-    IndexType::template read_file_mpi_subcomm<::bliss::io::FASTQParser<false>, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+    IndexType::template read_file_mpi_subcomm<::bliss::io::FASTQParser, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
   } else {
     throw std::invalid_argument("input filename extension is not supported.");
   }
@@ -164,7 +164,7 @@ void sample(std::vector<KmerType> &query, size_t n, unsigned int seed) {
 
 
 
-template <typename IndexType>
+template <typename IndexType, template <typename> class SeqParser>
 void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
 
   int nprocs = 1;
@@ -179,7 +179,7 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
   if (rank == 0) INFOF("RANK %d / %d: Testing %s", rank, nprocs, test.c_str());
 
   TIMER_START(test);
-  idx.build(filename, comm);
+  idx.template build<SeqParser>(filename, comm);
   TIMER_END(test, "build", idx.local_size());
 
 
@@ -303,13 +303,13 @@ int main(int argc, char** argv) {
   static_assert(false, "MPI used although compilation is not set to use MPI");
 #endif
   
-  if (which != -1) std::cin.get();
+//  if (which != -1) std::cin.get();
 
 
   using Alphabet = bliss::common::DNA;
   using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
 
-  using IdType = bliss::io::FASTQ::SequenceId;
+  using IdType = bliss::common::ShortSequenceKmerId;
   using QualType = float;
   using KmerInfoType = std::pair<IdType, QualType>;
 
@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
       KmerType, uint32_t, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, hash, count index.");
+  testIndex<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser > (comm, filename, "ST, hash, count index.");
     MPI_Barrier(comm);
 }
 
@@ -330,7 +330,7 @@ int main(int argc, char** argv) {
       KmerType, IdType, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, hash, position index.");
+  testIndex<bliss::index::kmer::PositionIndex<MapType>, bliss::io::FASTQParser >(comm, filename, "ST, hash, position index.");
     MPI_Barrier(comm);
 }
   if (which == -1 || which == 7)
@@ -339,7 +339,7 @@ int main(int argc, char** argv) {
       KmerType, KmerInfoType, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, hash, pos+qual index");
+  testIndex<bliss::index::kmer::PositionQualityIndex<MapType>, bliss::io::FASTQParser >(comm, filename , "ST, hash, pos+qual index");
     MPI_Barrier(comm);
 }
 
@@ -349,7 +349,7 @@ int main(int argc, char** argv) {
       KmerType, IdType, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, hashvec, position index.");
+  testIndex<bliss::index::kmer::PositionIndex<MapType>, bliss::io::FASTQParser >(comm, filename, "ST, hashvec, position index.");
 
   MPI_Barrier(comm);
   }
@@ -360,7 +360,7 @@ int main(int argc, char** argv) {
       KmerType, KmerInfoType, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, hashvec, pos+qual index");
+  testIndex<bliss::index::kmer::PositionQualityIndex<MapType>, bliss::io::FASTQParser >(comm, filename , "ST, hashvec, pos+qual index");
     MPI_Barrier(comm);
 }
 
@@ -370,7 +370,7 @@ int main(int argc, char** argv) {
   using MapType = ::dsc::counting_sorted_map<
       KmerType, uint32_t, int,
       bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, sort, count index.");
+  testIndex<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser > (comm, filename, "ST, sort, count index.");
     MPI_Barrier(comm);
 }
 
@@ -379,7 +379,7 @@ int main(int argc, char** argv) {
   using MapType = ::dsc::sorted_multimap<
       KmerType, IdType, int,
       bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, sort, position index.");
+  testIndex<bliss::index::kmer::PositionIndex<MapType>, bliss::io::FASTQParser >(comm, filename, "ST, sort, position index.");
     MPI_Barrier(comm);
 }
 
@@ -388,7 +388,7 @@ int main(int argc, char** argv) {
   using MapType = ::dsc::sorted_multimap<
       KmerType, KmerInfoType, int,
       bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, sort, pos+qual index");
+  testIndex<bliss::index::kmer::PositionQualityIndex<MapType>, bliss::io::FASTQParser >(comm, filename , "ST, sort, pos+qual index");
     MPI_Barrier(comm);
 }
 
@@ -398,7 +398,7 @@ int main(int argc, char** argv) {
       KmerType, IdType, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, hashvec2, position index.");
+  testIndex<bliss::index::kmer::PositionIndex<MapType>, bliss::io::FASTQParser >(comm, filename, "ST, hashvec2, position index.");
 
   MPI_Barrier(comm);
   }
@@ -409,7 +409,7 @@ int main(int argc, char** argv) {
       KmerType, KmerInfoType, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, hashvec2, pos+qual index");
+  testIndex<bliss::index::kmer::PositionQualityIndex<MapType>, bliss::io::FASTQParser >(comm, filename , "ST, hashvec2, pos+qual index");
     MPI_Barrier(comm);
 }
 
@@ -422,7 +422,7 @@ int main(int argc, char** argv) {
 //      KmerType, uint32_t, int,
 //      bliss::kmer::transform::lex_less,
 //      bliss::kmer::hash::farm >;
-//  testIndex<bliss::index::kmer::CountIndex<MapType> > (comm, filename, "ST, map, count index.");
+//  testIndex<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser > (comm, filename, "ST, map, count index.");
 //    MPI_Barrier(comm);
 //}
 //
@@ -432,7 +432,7 @@ int main(int argc, char** argv) {
 //      KmerType, IdType, int,
 //      bliss::kmer::transform::lex_less,
 //      bliss::kmer::hash::farm >;
-//  testIndex<bliss::index::kmer::PositionIndex<MapType> >(comm, filename, "ST, map, position index.");
+//  testIndex<bliss::index::kmer::PositionIndex<MapType>, bliss::io::FASTQParser >(comm, filename, "ST, map, position index.");
 //    MPI_Barrier(comm);
 //}
 //
@@ -442,7 +442,7 @@ int main(int argc, char** argv) {
 //      KmerType, KmerInfoType, int,
 //      bliss::kmer::transform::lex_less,
 //      bliss::kmer::hash::farm >;
-//  testIndex<bliss::index::kmer::PositionQualityIndex<MapType> >(comm, filename , "ST, map, pos+qual index");
+//  testIndex<bliss::index::kmer::PositionQualityIndex<MapType>, bliss::io::FASTQParser >(comm, filename , "ST, map, pos+qual index");
 //    MPI_Barrier(comm);
 //}
 

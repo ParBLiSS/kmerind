@@ -41,53 +41,242 @@
 #include "io/data_block.hpp"
 #include "io/io_exception.hpp"
 #include "utils/logging.h"
-
+#include "common/sequence.hpp"
 
 namespace bliss
 {
 namespace io
 {
-   template<typename FileType>
-   struct PositionType;
+  struct BaseFile {
+
+  };
 
 
-   class FileParserBase {
+  /**
+   * @brief  Partitions input data into sequences, e.g. blocks or reads.
+   * @details  Iterator template parameter refers to the iterator type that is currently being traversed.
+   * 		 this applies to the sequence object, and the following methods:
+   * 		 increment, init_increment, and find_start.
+   * 		 
+   * 		 init method can potentially use a different iterator type. this is useful when
+   * 		   state information is extracted from perhaps a containing block (e.g. L1Block),
+   * 		   then used with a sub block (e.g. L2Block).  
+   * 		 	
+   * @note   there are 2 (non-interchangeable) scenarios when we may need to change the iterator type.
+   *    1. L1 at process level, L2 at thread level.  SeqParser state is calculated at L1.
+   *    2. L1 at a subset of process, L2 is broadcast to the "children" of these processes.  SeqParser state is calculated at L1.
+   *
+   *    to handle the first case: approaches are
+   *    1a. to allow a parser to operate on different iterator types when invoking findStart, increment.
+   *          additional template parameter for these functions.  SequenceType will need to change.  API in SequenceIterator, BaseFileParser, FASTQParser, FASTAParser all need to change
+   *    1b. convert the seq parser from L1 to L2, but copy the state of L1.
+   *          can be shared between threads.  additional api for convert only
+   *
+   *    to handle the second case.
+   *    2a. convert the seq parser from L1 to L2, communicate (and copy) the state of L1.
+   *          additional api for convert and broadcast. minimal api change. requires L1 to be block (or cyclic with synchronization).
+   *    2b. create seq parser for L2, and initialize using all processes.
+   *          no api change, but works only when L1 and L2 are block partitioned (or cyclic with synchronization).
+   *          potentially less communication, and Parser does not need to have a broadcast semantic.
+   *
+   *    1a is not general, potentially complicated, and a source of potential errors.
+   *    1b and 2a share common apis.
+   *    2b requires application to specifically call init at L2.  Also, already initialized L1 during data load.
+   *
+   *    choose 2b and 1b.  Sequence Iterator does not call init_for_iterator, mostly for flexibility and compatibility with case 1.
+   *         
+   * @tparam Iterator   The underlying iterator to be traversed to generate a Sequence
+   *
+   */
+  template <typename Iterator >
+   class BaseFileParser {
+      // let another BaseFileParser with some other iterator type be a friend so we can convert.
+      template <typename Iterator2> friend class BaseFileParser;
+
+     public:
+//      using SequenceIdType = SeqIdType;
+      using SequenceType = typename ::bliss::common::Sequence<Iterator>;
+      using SequenceIdType = typename SequenceType::IdType;
+
+      /// static constant for end of line.  note this is same for unicode as well
+      static constexpr unsigned char eol = '\n';
+      /// static constant for carriage return.  note this is same for unicode as well
+      static constexpr unsigned char cr = '\r';
+
      protected:
        /**
         * @typedef RangeType
         * @brief   range object types
         */
-       typedef bliss::partition::range<size_t>     RangeType;
+      using RangeType = bliss::partition::range<size_t>;
+
+
+       /**
+        * @brief  search for first non-EOL character in a iterator, returns the stopping position as an iterator.  also records offset.
+        * @details       iter can point to the previous EOL, or a nonEOL character.
+        * @param[in/out] iter    iterator to advance
+        * @param[in]     end     position to stop the traversal
+        * @param[in/out] offset  the global offset of the sequence record within the file.  used as record id.
+        * @return        iterator at the new position, where the Non EOL char is found, or end.
+        */
+       inline Iterator findNonEOL(Iterator& iter, const Iterator& end, size_t &offset) const {
+         while ((iter != end) && ((*iter == eol) || (*iter == cr))) {
+           ++iter;
+           ++offset;
+         }
+         return iter;
+       }
+
+       /**
+        * @brief  search for first EOL character in a iterator, returns the stopping position as an iterator.  also records offset.
+        * @details       iter can point to a nonEOL char, or an EOL char.
+        * @param[in/out] iter    iterator to advance
+        * @param[in]     end     position to stop the traversal
+        * @param[in/out] offset  the global offset of the sequence record within the file.  used as record id.
+        * @return        iterator at the new position, where the EOL char is found, or end.
+        */
+       inline Iterator findEOL(Iterator& iter, const Iterator& end, size_t &offset) const {
+         while ((iter != end) && ((*iter != eol) && (*iter != cr) ) ) {
+           ++iter;
+           ++offset;
+         }
+         return iter;
+       }
+
+
+       /**
+        * @brief constructs an IOException object with the relevant debug data.
+        * @param errType     string indicating the source of the error.  user choice
+        * @param start       iterator pointing to beginning of the data in question
+        * @param end         iterator pointing to end of the data in question
+        * @param startOffset offset for the beginning of the data in question
+        * @param endOffset   offset for the end of the data in question
+        */
+       void handleError(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
+         std::stringstream ss;
+         ss << "ERROR: did not find "<< errType << " in " << startOffset << " to " << endOffset << std::endl;
+         ss << "  offending string is \"" << std::endl;
+         std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
+         std::copy(start, end, oit);
+         ss << "\".";
+         throw bliss::io::IOException(ss.str());
+       }
+
+       /**
+        * @brief print out an Warning, for example when there is malformed partial data.
+        * @param errType     string indicating the source of the error.  user choice
+        * @param start       iterator pointing to beginning of the data in question
+        * @param end         iterator pointing to end of the data in question
+        * @param startOffset offset for the beginning of the data in question
+        * @param endOffset   offset for the end of the data in question
+        */
+       void handleWarning(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
+         WARNING("WARNING: " << "did not find "<< errType << " in " << startOffset << " to " << endOffset);
+       }
+
 
      public:
 
        /// default constructor.
-       FileParserBase() {};
+       BaseFileParser() {};
 
        /// default destructor
-       virtual ~FileParserBase() {};
+       ~BaseFileParser() {};
 
-       /// increment all the way to the end.
-       template <typename Iterator, typename SequenceType>
-       void increment(Iterator &iter, const Iterator &end, size_t &offset, SequenceType& output) throw (bliss::io::IOException)
-       {
-         output.start = iter;
-         output.end = end;
-         output.id = offset;
-         offset += std::distance(iter, end);
-         iter = end;
-       }
 
-       /// return the beginning of the input range.
-       template <typename Iterator>
+       /// converting constructor.
+       template <typename Iterator2>
+       BaseFileParser(BaseFileParser<Iterator2> const & other) {}
+       /// converting assignment operator that can transform the base iterator type.
+       template <typename Iterator2>
+       BaseFileParser<Iterator>& operator=(BaseFileParser<Iterator2> const & other) { return *this; }
+
+
+       /**
+        * @brief given a block, find the starting point that best aligns with the first sequence object (here, just the actual start)
+        * @note  not virtual for performance reason.
+        *
+        * @param _data
+        * @param parentRange
+        * @param inMemRange
+        * @param searchRange
+        * @return
+        */
        const std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
        throw (bliss::io::IOException) {
          //== range checking
          if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
+
          // no op, other than to use intersect to make sure that the start is valid and within parent, and in memry ranges.
          return RangeType::intersect(searchRange, inMemRange).start;
        }
+
+       // TODO: consolidate these.
+
+#ifdef USE_MPI
+       /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.
+       void init_for_iterator(const Iterator &_data, const RangeType &parentRange,
+                         const RangeType &inMemRange, const RangeType &searchRange, MPI_Comm comm)
+       throw (bliss::io::IOException)  {};
+#endif
+       /// initializes the parser.  only useful for FASTA parser for now.
+       void init_for_iterator(const Iterator &_data, const RangeType &parentRange,
+                         const RangeType &inMemRange, const RangeType &searchRange)
+       throw (bliss::io::IOException)  {};
+
+
+
+       /**
+        * @brief increment to get next sequence object
+        * @note   not virtual because SequenceType is different for each subclass, so the signatures are different.  We rely on compiler to enforce the correct one.
+        *         this is in general not an issue as we do not need polymorphic Sequence Parsers - they are specific too file types.
+        *         this is probably better for performance anyways.
+        *
+        * @param iter           start of a sequence object.  this is the beginning of a record, not just DNA sequence
+        * @param end            end of a sequence object.  this is the end of a record, not just DNA sequence
+        * @param offset         offset in the file for the start of the record.
+        * @param seq_offset     index in the local (shared) vector of sequence breaks, if there is one (e.g. FASTA).  used by FASTA to lookup the nearest complete sequence record info.
+        * @param output         updated sequence object.
+        * @return               next seq id offset.
+        */
+       size_t increment(Iterator &iter, const Iterator &end, size_t &offset, size_t & seq_offset, SequenceType& output) throw (bliss::io::IOException)
+       {
+         size_t dist = std::distance(iter, end);
+
+         output = SequenceType(SequenceIdType(offset), dist, 0, 0, iter, end);
+
+         offset += dist;
+         iter = end;
+
+         ++seq_offset;
+         return seq_offset;
+       }
+
+
+       /**
+        * @brief initializes the Parser object for sequencesIterator.  primarily to search for index within global array (e.g. FASTA)
+        * @note   not virtual because SequenceType is different for each subclass, so the signatures are different.  We rely on compiler to enforce the correct one.
+        *         this is in general not an issue as we do not need polymorphic Sequence Parsers - they are specific too file types.
+        *
+        * @param iter
+        * @param parentRange
+        * @param inMemRange
+        * @param searchRange
+        * @return   index in process-local (shared) sequence vector.
+        */
+       size_t increment(Iterator &iter, const Iterator &end, size_t &offset, SequenceType& output) throw (bliss::io::IOException) {
+         size_t result = 0;
+
+         return increment(iter, end, offset, result, output);
+       };
+
+
    };
+   /// template class' static variable definition (declared and initialized in class)
+  template <typename Iterator>
+   constexpr unsigned char bliss::io::BaseFileParser<Iterator >::eol;
+  template <typename Iterator>
+   constexpr unsigned char bliss::io::BaseFileParser<Iterator>::cr;
 
     /**
      * @class FileLoader
@@ -174,13 +363,14 @@ namespace io
      *            not the first element mapped.
      *
      * @tparam  T                 type of each element read from file
+     * @tparam  Overlap           Size of overlap between L1 or L2 blocks.
+     * @tparam  Parser            Sequence Parser for generating the the sequence objects.  NOTE: template template parameter, template being an Iterator with value type T.
      * @tparam  L1Buffering       bool indicating if L1 partition blocks should be buffered.  default to false
      * @tparam  L2Buffering       bool indicating if L2 partition blocks should be buffered.  default to true (to avoid contention between threads)
      * @tparam  L1PartitionerT    Type of the Level 1 Partitioner to generate the range of the file to load from disk
      * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
-     * @tparam  Derived           Derived (sub) class name.  For FileLoader, this is void.
      */
-    template <typename T, class Parser = FileParserBase,
+    template <typename T, size_t Overlap = 0, template <typename > class Parser = BaseFileParser,
           bool L2Buffering = true,
           bool L1Buffering = false,
           typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
@@ -218,6 +408,11 @@ namespace io
                                           bliss::io::BufferedDataBlock<  typename L1BlockType::iterator, RangeType>,
                                           bliss::io::UnbufferedDataBlock<typename L1BlockType::iterator, RangeType> >::type           L2BlockType;
 
+        /**
+         * return overlap size
+         */
+        static constexpr size_t get_overlap_size() { return Overlap; }
+
       protected:
         /**
          * @typedef InputIteratorType
@@ -240,6 +435,11 @@ namespace io
          * @note  conceptually a constant but needs to be set via a function call, so mutable.
          */
         mutable size_t recordSize;
+
+        /**
+         * @brief number of sequence characters in a sequence record
+         */
+        mutable size_t seqSizeInRecord;
 
         /// boolean indicating if file has been loaded
         bool loaded;
@@ -270,6 +470,12 @@ namespace io
          *          Id is assigned to a process running a FileLoader, and is constant for the lifetime of the FileLoader
          */
         mutable int loaderId;
+
+        /**
+         * @brief   The size of each L1 Blocks.  User tunable.  autocomputed when using BlockPartitioner.
+         * @note    Constant for the lifetime of the File Loader.
+         */
+        mutable size_t L1BlockSize;
 
         /**
          * @brief Level 1 Partitioner, produces L1 Block ranges that will be used to memmap the file.
@@ -305,6 +511,7 @@ namespace io
          */
         const size_t nConsumingThreads;
 
+
         /**
          * @brief   The size of each L2 Blocks.  User tunable.  Also autoadjust to at least 2x record size.
          * @note    Constant for the lifetime of the File Loader.
@@ -327,8 +534,7 @@ namespace io
         L2BlockType *L2Blocks;
 
 
-        Parser parser;
-
+        Parser<typename L1BlockType::iterator> L1parser;
 
       public:
         //================== Constructor and Destructor
@@ -350,42 +556,54 @@ namespace io
          *
          *            It is necessary to call "load" 1 time before using accessing the data.
          *
-         *            Range is in units of T, overlap is included in range.end
+         *            Range is in units of T, overlap is INCLUDED in range.end
          *
          * @param _filename       input file name
          * @param _comm           MPI Communicator (defined only if CMake is configured with MPI).
          *                        default is MPI_COMM_WORLD, which means all nodes participate.
          * @param _nThreads       number of threads to consume L2 blocks
          * @param _L2BlockSize    size of each L2Block.
+         * @param _L1BlockSize    size of each L1Block.  can default to 0 (PAGE_SIZE used instead)
          *
          * TODO: test on remotely mounted file system.
          *
          */
-        explicit FileLoader(const MPI_Comm& _comm, const std::string &_filename, const size_t _nThreads = 1, const size_t _L2BlockSize = 1) throw (bliss::io::IOException)
-            : pageSize(sysconf(_SC_PAGE_SIZE)), recordSize(1), loaded(false), fileHandle(-1), fileRange(), comm(_comm),
+        explicit FileLoader(const std::string &_filename, const MPI_Comm& _comm, const size_t _nThreads = 1,
+                            const size_t _L2BlockSize = 0, const size_t _L1BlockSize = 0) throw (bliss::io::IOException)
+            : pageSize(sysconf(_SC_PAGE_SIZE)), recordSize(0), seqSizeInRecord(0),
+              loaded(false), fileHandle(-1), fileRange(), comm(_comm),
               L1Partitioner(), mmapData(nullptr), L1Block(),
-              nConsumingThreads(_nThreads), L2BlockSize(_L2BlockSize), L2Partitioner(), L2Blocks(nullptr)
+              nConsumingThreads(_nThreads), L2Partitioner(), L2Blocks(nullptr)
         {
           if (_filename.length() <= 0) throw std::invalid_argument("ERROR: Filename Length is less than 1");
           if (_nThreads <= 0) throw std::invalid_argument("ERROR: Number of threads is less than 1");
-          if (_L2BlockSize <= 0) throw std::invalid_argument("ERROR: L2Blocksize is less than 1");
+
+          L1BlockSize = (_L1BlockSize == 0) ? pageSize : _L1BlockSize;
+          L2BlockSize = (_L2BlockSize == 0) ? L1BlockSize / _nThreads :
+                        std::min(_L2BlockSize, (L1BlockSize / _nThreads));
+
+          if (L1BlockSize == 0) throw std::invalid_argument("ERROR: L1Blocksize is 0");
+          if (L2BlockSize == 0) throw std::invalid_argument("ERROR: L2Blocksize is 0");
 
           // open the file
           fileHandle = openFile(_filename);
+
+          // get the file size.  all processes do this, since all have to open the file and read from it anyways.
+          // compute the full range of the file
+          fileRange = RangeType(0, getFileSize(fileHandle) / sizeof(T));   // range is in units of T
+
+          // open the first part of the file, and estimate the record sizes.
+          std::tie(recordSize, seqSizeInRecord) = getRecordSize(10);
+
 
           // get from the communicator the number of concurrent loaders, and the id of the current loader.
           int nConcurrentLoaders = 0;
           MPI_Comm_rank(comm, &loaderId);
           MPI_Comm_size(comm, &nConcurrentLoaders);
 
-          //====  every node can get the file size directly, so no need for MPI_Bcast.
-
-          // get the file size.  all processes do this, since all have to open the file and read from it anyways.
-          // compute the full range of the file
-          fileRange = RangeType(0, getFileSize(fileHandle) / sizeof(T));   // range is in units of T
 
           // configure the L1 partitioner
-          configL1Partitioner(L1Partitioner, fileRange, nConcurrentLoaders);
+          configL1Partitioner(L1Partitioner, fileRange, nConcurrentLoaders, L1BlockSize);
 
         }
 #endif
@@ -403,28 +621,40 @@ namespace io
          *
          *            It is necessary to call "load" 1 time before using accessing the data.
          *
-         *            Range is in units of T, overlap is included in range.end
+         *            Range is in units of T, overlap is INCLUDED in range.end
          *
          * @param _filename       input file name
-         * @param _comm           MPI Communicator (defined only if CMake is configured with MPI).
-         *                        default is MPI_COMM_WORLD, which means all nodes participate.
+         * @param _nConcurrentLoaders  number of concurrent file loaders operating on the file.
+         * @param _loaderId       id of each file loader instance.
          * @param _nThreads       number of threads to consume L2 blocks
          * @param _L2BlockSize    size of each L2Block.
+         * @param _L1BlockSize    size of each L1Block.  can default to 0 (PAGE_SIZE used instead)
          *
          * TODO: test on remotely mounted file system.
          *
          */
-        FileLoader(const size_t _nConcurrentLoaders, const int _loaderId, const std::string &_filename,
-                   const size_t _nThreads = 1, const size_t _L2BlockSize = 1 ) throw (bliss::io::IOException)
-            : pageSize(sysconf(_SC_PAGE_SIZE)), recordSize(1), loaded(false), fileHandle(-1), fileRange(),
+        FileLoader(const std::string &_filename, const size_t _nConcurrentLoaders, const int _loaderId, const size_t _nThreads = 1,
+                   const size_t _L2BlockSize = 0, const size_t _L1BlockSize = 0 ) throw (bliss::io::IOException)
+            : pageSize(sysconf(_SC_PAGE_SIZE)), recordSize(0), seqSizeInRecord(0),
+              loaded(false), fileHandle(-1), fileRange(),
+#ifdef USE_MPI
+              comm(MPI_COMM_SELF),   // still needs to initialize this.
+#endif
               loaderId(_loaderId), L1Partitioner(), mmapData(nullptr), L1Block(),
-              nConsumingThreads(_nThreads), L2BlockSize(_L2BlockSize), L2Partitioner(), L2Blocks(nullptr)
+              nConsumingThreads(_nThreads), L2Partitioner(), L2Blocks(nullptr)
         {
+
           if (_filename.length() <= 0) throw std::invalid_argument("ERROR: Filename Length is less than 1");
           if (_nThreads <= 0) throw std::invalid_argument("ERROR: Number of threads is less than 1");
-          if (_L2BlockSize <= 0) throw std::invalid_argument("ERROR: L2Blocksize is less than 1");
           if (_loaderId < 0) throw std::invalid_argument("ERROR: Loader ID is less than 0");
           if (_nConcurrentLoaders <= _loaderId) throw std::invalid_argument("ERROR: Loader ID is greater than number of loaders");
+
+          L1BlockSize = (_L1BlockSize == 0) ? pageSize : _L1BlockSize;
+          L2BlockSize = (_L2BlockSize == 0) ? L1BlockSize / _nThreads :
+                        std::min(_L2BlockSize, (L1BlockSize / _nThreads));
+          if (L1BlockSize == 0) throw std::invalid_argument("ERROR: L1Blocksize is 0");
+          if (L2BlockSize == 0) throw std::invalid_argument("ERROR: L2Blocksize is 0");
+
 
           // open the file
           fileHandle = openFile(_filename);
@@ -433,8 +663,12 @@ namespace io
           // compute the full range of the file
           fileRange = RangeType(0, getFileSize(fileHandle) / sizeof(T));   // range is in units of T
 
+          // open the first part of the file, and estimate the record sizes.
+          std::tie(recordSize, seqSizeInRecord) = getRecordSize(10);
+
+
           // configure the L1 partitioner
-          configL1Partitioner(L1Partitioner, fileRange, _nConcurrentLoaders);
+          configL1Partitioner(L1Partitioner, fileRange, _nConcurrentLoaders, L1BlockSize);
         }
 
 
@@ -450,25 +684,28 @@ namespace io
          * @param other FileLoader to move
          */
         FileLoader(FileLoader && other) :
-          pageSize(other.pageSize), recordSize(other.recordSize), loaded(other.loaded),
+          pageSize(other.pageSize), recordSize(other.recordSize), seqSizeInRecord(other.seqSizeInRecord), loaded(other.loaded),
           fileHandle(other.fileHandle), fileRange(other.fileRange),
-          loaderId(other.loaderId), L1Partitioner(other.L1Partitioner), mmapData(other.mmapData),
+          loaderId(other.loaderId), L1BlockSize(other.L1BlockSize), L1Partitioner(other.L1Partitioner), mmapData(other.mmapData),
           L1Block(std::move(other.L1Block)), nConsumingThreads(other.nConsumingThreads), L2BlockSize(other.L2BlockSize),
           L2Partitioner(other.L2Partitioner), L2Blocks(other.L2Blocks)
         {
           other.pageSize = 1;
           other.fileHandle = -1;
           other.fileRange = RangeType();
+
           other.mmapData = nullptr;
 
           other.loaded = false;
           other.nConsumingThreads = 1;
+          other.L1BlockSize = 1;
           other.L2BlockSize = 1;
           other.loaderId = 0;
           other.L2Blocks = nullptr;
           other.L1Partitioner = L1PartitionerT();
           other.L2Partitioner = L2PartitionerT();
-          other.recordSize = 1;
+          other.recordSize = 0;
+          other.seqSizeInRecord = 0;
 
 #if defined(USE_MPI)
           comm        = other.comm;
@@ -498,6 +735,7 @@ namespace io
             L1Block     = std::move(other.L1Block);
             loaded      = other.loaded;                            other.loaded = false;
             nConsumingThreads    = other.nConsumingThreads;                          other.nConsumingThreads = 1;
+            L1BlockSize   = other.L1BlockSize;                         other.L1BlockSize = 1;
             L2BlockSize   = other.L2BlockSize;                         other.L2BlockSize = 1;
             loaderId        = other.loaderId;                              other.loaderId = 0;
   #if defined(USE_MPI)
@@ -506,7 +744,8 @@ namespace io
             L2Blocks  = other.L2Blocks;                        other.L2Blocks = nullptr;
             L1Partitioner = other.L1Partitioner;                       other.L1Partitioner = bliss::partition::BlockPartitioner<RangeType>();
             L2Partitioner = other.L2Partitioner;             other.L2Partitioner = L2PartitionerT();
-            recordSize  = other.recordSize;                        other.recordSize = 1;
+            recordSize  = other.recordSize;                        other.recordSize = 0;
+            seqSizeInRecord  = other.seqSizeInRecord;                        other.seqSizeInRecord = 0;
           }
           return *this;
         }
@@ -524,12 +763,24 @@ namespace io
           closeFile(fileHandle);
         }
 
+        Parser<typename L1BlockType::iterator> getSeqParser() {
+          return L1parser;
+        }
+
         /**
          * @brief     Get the L2 partition Block Size.
          * @return    L2 block size
          */
         const size_t& getL2BlockSize() const {
           return L2BlockSize;
+        }
+
+        /**
+         * @brief     Get the L2 partition Block Size.
+         * @return    L2 block size
+         */
+        const size_t& getL1BlockSize() const {
+          return L1BlockSize;
         }
 
         /**
@@ -613,8 +864,6 @@ namespace io
           return getL2DataForRange(tid, r);
         }
 
-
-
         /**
          * @brief reset the L1 partitioner so it can be reused.
          */
@@ -642,39 +891,47 @@ namespace io
          *
          *            This is accomplished by memmapping a Range and performing findStart to find the
          *              start, and doing the same on the next L1Block to find the end.
-         *         *
+         *            Start and End may be at the same position.  since we use recordSize, there is some hope that we find a valid starting point.
          * @param pid   The L1 partition id.
          * @return      The range of the next L1 partition block.
          */
         RangeType getNextL1BlockRange(const size_t pid) {
+        	// NOTE: that we CANNOT use mpi to communicate since we are not always using block partitioner.
+        	// NOTE: when searching, need to extend by 1 record size - so that the search can succeed.  to be safe, since recordSize is an estimate, do 2
 
           // get basic range
           RangeType hint = this->L1Partitioner.getNext(pid);
 
-          // get the right shifted range
-          size_t length = hint.size();
 
           // output data structure
           RangeType output(hint);
 
-          if (length > 0) {
+          // find starting and ending positions.  do not search in overlap region.
+          if (hint.size() > 0) {
 
-            RangeType next = RangeType::shiftRight(hint, length);
-            next.intersect(this->fileRange);
+            // extend by 2 record
+            RangeType start_search_range(hint.start, hint.end + 2 * recordSize);
+            start_search_range.intersect(this->fileRange);
+            RangeType end_search_range(hint.end, hint.end + 2 * recordSize);
+            end_search_range.intersect(this->fileRange);
+
 
             // get the combined ranges
-            RangeType loadRange = RangeType::merge(hint, next);
+            RangeType loadRange = start_search_range;
 
             // memmap the content
             auto block_start = RangeType::align_to_page(loadRange, this->pageSize);
             auto mappedData = this->map(loadRange);  // this is page aligned.
             auto searchData = mappedData + (loadRange.start - block_start);
 
+            Parser<decltype(searchData)> parser;  // local parser, since iterator type may not be the same.
 
             // search for new start and end using findStart
             try {
-              output.start = parser.findStart(searchData, this->fileRange, loadRange, hint);
-              output.end = parser.findStart(searchData, this->fileRange, loadRange, next);
+              output.start = parser.findStart(searchData, this->fileRange, loadRange, start_search_range);
+              output.end = parser.findStart(searchData, this->fileRange, loadRange, end_search_range);
+
+              //std::cout << "start in " << hint << " end in " << end_search_range << " final " << output << std::endl;
 
             } catch (IOException& ex) {
               // either start or end are not found so return an empty range.
@@ -683,7 +940,7 @@ namespace io
               WARNINGF("%s\n", ex.what());
 
               WARNINGF("curr range: partition hint %lu-%lu, next %lu-%lu, file_range %lu-%lu\n",
-                     hint.start, hint.end, next.start, next.end, this->fileRange.start, this->fileRange.end);
+                     hint.start, hint.end, end_search_range.start, end_search_range.end, this->fileRange.start, this->fileRange.end);
               WARNINGF("got an exception search for partition:  %s \n", ex.what());
 
               output.start = hint.end;
@@ -714,6 +971,8 @@ namespace io
          * @details  Optionally buffers the data into memory
          *           The input range SHOULD come from the call to getNextL1BlockRange
          *
+         *
+         * @note     OVERLAP AWARE.  generated L1 block contains the overlap at the end.
          * @param r   range that will be mapped and loaded into memory (with buffering or without)
          * @return    loaded L1 DataBlock for the specified Range
          */
@@ -723,11 +982,41 @@ namespace io
           unloadL1Data();
 
           // don't do anything if range is empty.
-          if (range.size() == 0) return L1Block;
+          if (range.size() == 0) {
+            L1Block.assign(nullptr, nullptr, range);
+            return L1Block;
+          }
 
           // make sure the mmapRange is within the file range, and page align it.
-          RangeType mmapRange = RangeType::intersect(range, fileRange);
-          size_t block_start = RangeType::align_to_page(mmapRange.start, pageSize);
+          RangeType blockRange = RangeType::intersect(range, fileRange);
+
+          // search for overlap. naive search since we are not MPI aware here.
+          RangeType overlappedRange = blockRange;
+          overlappedRange.intersect(fileRange);
+          size_t mmap_start = RangeType::align_to_page(overlappedRange.start, pageSize);
+
+          if (Overlap > 0) {
+            // search for overlap starts at end of the requested block
+            RangeType olr(overlappedRange.end, fileRange.end);
+            size_t mmap_olr_start = RangeType::align_to_page(olr.start, pageSize);
+
+            // map
+            mmapData = map(olr);
+
+            // then advance Overlap characters, excluding eol characters.
+            auto e = mmapData + (olr.start - mmap_olr_start);
+            auto pos = olr.start;
+            for (int i = 0; (pos < olr.end) && (i < Overlap); ++e, ++pos) {
+              if ((*e != bliss::io::BaseFileParser<decltype(mmapData)>::cr) && (*e != bliss::io::BaseFileParser<decltype(mmapData)>::eol)) ++i;
+            }
+
+            // new end.
+            overlappedRange.end = pos;
+            overlappedRange.intersect(fileRange);
+
+            // clean up mapping
+            unmap(mmapData, olr);
+          }
 
           // check to see if there is enough memory for preloading.
           // if not, then we can't use Buffering even if L1Block chooses Buffering, so throw exception
@@ -737,10 +1026,10 @@ namespace io
             sysinfo (&memInfo);
 
             // linux freeram is limited to 10 to 15 % of physical, hence we just divide by 2, and that gives us 1/20 of the available memory
-            if ((mmapRange.size() * sizeof(T)) > (memInfo.freeram * memInfo.mem_unit / 2)) {
+            if ((overlappedRange.size() * sizeof(T)) > (memInfo.freeram * memInfo.mem_unit / 2)) {
               // not enough memory available
               std::stringstream ss;
-              ss << "ERROR in file buffering: requires " << (mmapRange.size() * sizeof(T)) <<
+              ss << "ERROR in file buffering: requires " << (overlappedRange.size() * sizeof(T)) <<
                   " bytes; but (1/20th) available: " << (memInfo.freeram * memInfo.mem_unit / 2) <<
                   " free: " << memInfo.freeram << " unit " << memInfo.mem_unit;
               throw IOException(ss.str());
@@ -748,23 +1037,35 @@ namespace io
           }
 
           // map the region of file to memory
-          mmapData = map(mmapRange);
+          mmapData = map(overlappedRange);
 
           // now assign the data to the L1Block object. (if buffering, will copy).
           // use "+" since mmapData is a pointer so it's a random access iterator.
-          L1Block.assign(mmapData + (mmapRange.start - block_start), mmapData + (mmapRange.end - block_start), mmapRange);
+          L1Block.assign(mmapData + (overlappedRange.start - mmap_start), mmapData + (overlappedRange.end - mmap_start), overlappedRange);
 
           // if we are buffering, then it's okay to unmap the data, as we already have a copy
           if (L1Buffering)
           {
-            unmap(mmapData, mmapRange);
+            unmap(mmapData, overlappedRange);
           }
 
           // mark data as loaded.
           loaded = true;
 
-          // now configure L2 partitioner to traverse this data.
-          configL2Partitioner(L2Partitioner, L2Blocks, mmapRange, nConsumingThreads, L2BlockSize);
+          // now configure L2 partitioner to traverse this data.  work with overlappedblocks because the last L2 block still needs to read the whole overlap region.
+          configL2Partitioner(L2Partitioner, L2Blocks, overlappedRange, nConsumingThreads, L2BlockSize);
+
+
+//          // now configurre the parser.  work with exclusive blocks.  DOES NOT BELONG HERE BECAUSE L1Partitioner may not be block or cyclic.
+//#ifdef USE_MPI
+//          if (this->comm == MPI_COMM_SELF)
+//            L1parser.init_for_iterator(L1Block.begin(), fileRange, RangeType(mmap_start, overlappedRange.end), blockRange);
+//          else
+//            L1parser.init_for_iterator(L1Block.begin(), fileRange, RangeType(mmap_start, overlappedRange.end), blockRange, this->comm);
+//#else
+//          L1parser.init_for_iterator(L1Block.begin(), fileRange, RangeType(mmap_start, overlappedRange.end), blockRange);
+//#endif
+
 
           return L1Block;
         }
@@ -810,13 +1111,17 @@ namespace io
          *
          * @note  not providing a no-arg default impl because the threading is setup before these calls and after construction.,
          *        and we do not want to get the id in this method from the threading library.
+         *        OVERLAP AGNOSTIC.  this generates exclusive ranges.
          * @param tid   Thread Id.  L2 Partition is between threads within a group
          * @return  The range of the next L2 Partition Block.
          */
         RangeType getNextL2BlockRange(const size_t tid) {
 
+          // NOTE: this is using block partitioner
+        	// NOTE: when searching, need to extend by 1 record size - so that the search can potentially succeed.
+
           // data has to be loaded
-          if (!this->loaded) throw std::logic_error("ERROR: getting L2Block range before file is loaded");
+          if (!this->loaded) throw std::logic_error("ERROR: getting L2Block range before L1Block is loaded");
 
 
           // get the parent range
@@ -825,26 +1130,31 @@ namespace io
           // now get the next, unmodified range.  this is atomic
           RangeType hint = this->L2Partitioner.getNext(tid);
 
-          size_t length = hint.size();
           RangeType output(hint);
 
-          if (length > 0) {
-            // get the RightShifted range for searching at the end.
-            RangeType next = RangeType::shiftRight(hint, length);
-            next.intersect(parentRange);
+          if (hint.size() > 0) {
+
+            // extend by 2 record
+            RangeType start_search_range(hint.start, hint.end + 2 * recordSize);
+            start_search_range.intersect(parentRange);
+            RangeType end_search_range(hint.end, hint.end + 2 * recordSize);
+            end_search_range.intersect(parentRange);
+
 
 
             try {
+
               // search for start and end
-              output.start = parser.findStart(this->L1Block.begin(), parentRange, parentRange, hint);
-              output.end = parser.findStart(this->L1Block.begin(), parentRange, parentRange, next);
+              output.start = L1parser.findStart(this->L1Block.begin(), parentRange, parentRange, start_search_range);
+              output.end = L1parser.findStart(this->L1Block.begin(), parentRange, parentRange, end_search_range);
             } catch (IOException& ex) {
               // either start or end are not found, so return nothing.
 
               WARNING(ex.what());
 
               ERRORF("curr range: chunk %lu, hint %lu-%lu, next %lu-%lu, srcData range %lu-%lu, mmap_range %lu-%lu\n",
-                     this->L2BlockSize, hint.start, hint.end, next.start, next.end, parentRange.start, parentRange.end, this->L1Block.getRange().start, this->L1Block.getRange().end);
+                     this->L2BlockSize, hint.start, hint.end, end_search_range.start, end_search_range.end,
+                     parentRange.start, parentRange.end, this->L1Block.getRange().start, this->L1Block.getRange().end);
               ERRORF("got an exception search:  %s \n", ex.what());
 
               output.start = hint.end;
@@ -863,6 +1173,7 @@ namespace io
         /**
          * @brief   get the DataBlock from L2 Partitioner for the given thread Id.
          * @note    Depending on data type of L2Block, the data may be buffered (copied to) memory.
+         *          OVERLAP AWARE.  generated L2 block contains the overlap.
          * @param tid         id of thread calling this function.
          * @param L2BlockRange   The range of the L2Block to retrieve. computed by getNextL2BlockRange.
          * @return    reference to loaded L2Block for the specified thread id and range.
@@ -871,13 +1182,24 @@ namespace io
           if (!loaded) throw std::logic_error("ERROR: getting L2Block data before file is loaded");
 
           // make sure the range is within the mmaped region.
-          RangeType r = RangeType::intersect(L2BlockRange, L1Block.getRange());
+          RangeType r = L2BlockRange;
+          r.intersect(L1Block.getRange());
 
           // now compute the start and end iterators of this range.  use std::advance in case the iterator is not a random access iterator.
           auto s = L1Block.begin();
           std::advance(s, (r.start - L1Block.getRange().start));
           auto e = s;
           std::advance(e, r.size());
+
+          // now handle overlap, excluding eol etc.
+          if (Overlap > 0) {
+            auto oe = e;
+            for (int i = 0; (oe != L1Block.end()) && (i < Overlap); ++oe) {
+              if ((*oe != bliss::io::BaseFileParser<typename L1BlockType::iterator>::cr) && (*oe != bliss::io::BaseFileParser<typename L1BlockType::iterator>::eol)) ++i;
+            }
+            r.end += std::distance(e, oe);
+            e = oe;
+          }
 
           // get (optionally buffer) the data into a L2Block, and cache it for repeated access
           L2Blocks[tid].assign(s, e, r);
@@ -895,15 +1217,20 @@ namespace io
          *            configure the L1Partitioner.
          *
          *          file_size is passed in because for the MPI version of c'tor, the file_size was broadcast first
+         * @note      AGNOSTIC OF OVERLAP.  Partitioner always generate exclusive partitions.  results not aligned to record boundaries.
          * @param[in/out] partitioner L1 Partitioner to configure
          * @param[in] fileRange   portion of file to be partitioned by partitioner (0 to file size by defautl).
          * @param[in] nPartitions  number of partitions to create.
          * @param[in] chunkSize   the size of each partitioned chunk (== L1Block size).  default to 0, which means computed.
          */
-        void configL1Partitioner(L1PartitionerT& partitioner, const RangeType& fileRange, const size_t& nPartitions, const size_t& chunkSize = 0) {
+        void configL1Partitioner(L1PartitionerT& partitioner, const RangeType& fileRange, const size_t& nPartitions, size_t& chunkSize) {
+          // Set up the partitioner to partition the full file range with nPartitions.  Overlap is set to 0.  FileLoader handles overlap itself.
 
-          // Set up the partitioner to partition the full file range with nPartitions.  Overlap is 0.
-          partitioner.configure(fileRange, nPartitions, chunkSize);
+          // update the chunkSize  to at least 2x record size, (passes back to called).
+          chunkSize = std::max(chunkSize, 2 * recordSize);
+
+          // then configure the partitinoer to use the right number of threads.  Overlap is set to 0.  FileLoader handles overlap itself.
+          chunkSize = partitioner.configure(fileRange, nPartitions, chunkSize, 0);
         }
 
 
@@ -915,6 +1242,7 @@ namespace io
          *            get the approximate record size and update the chunkSize for the L2Partitioner
          *            configure L2 partitioner for the memmapped range, number of threads, and L2Block Size.
          *            initialize the L2Block cache, one per thread.
+         * @note      AGNOSTIC OF OVERLAP.  Partitioner always generate exclusive partitions.  results not aligned to record boundaries.
          * @param[in/out] partitioner L2 Partitioner to configure
          * @param[in/out] cache   L2 Block cache, 1 per thread.
          * @param[in] mmapRange   memory mapped region's range, to be partitioned by partitioner.
@@ -922,17 +1250,21 @@ namespace io
          * @param[in/out] chunkSize   the size of each partitioned chunk (== L1Block size).
          */
         void configL2Partitioner(L2PartitionerT& partitioner, L2BlockType* &cache, const RangeType& mmapRange, const size_t& nThreads, size_t& chunkSize) {
-          //=====  adjust the L2BlockSize adaptively.
-          // look through 3 records to see the approximate size of records.
-          // update the chunkSize  to at least 2x record size, (passes back to called).
-          chunkSize = std::max(chunkSize, 2 * getRecordSize(10));
 
-          // then configure the partitinoer to use the right number of threads.
-          partitioner.configure(L1Block.getRange(), nThreads, chunkSize);
+          //=====  adjust the L2BlockSize adaptively.
+          // update the chunkSize  to at least 2x record size, (passes back to called).
+          chunkSize = std::max(chunkSize, 2 * recordSize);
+
+          // then configure the partitinoer to use the right number of threads.  Overlap is set to 0.  FileLoader handles overlap itself.
+          chunkSize = partitioner.configure(L1Block.getRange(), nThreads, chunkSize, 0);
 
           // also configure the cache.
-          if (cache != nullptr) delete [] cache;
-          cache = new L2BlockType[nThreads];
+          if (cache == nullptr)
+            cache = new L2BlockType[nThreads];
+          else
+            for (int i = 0; i < nThreads; ++i) {
+              cache[i].clear();
+            }
         }
 
       public:
@@ -945,90 +1277,97 @@ namespace io
          *          and determining size of a DataBlock.
          *
          * @param count    number of records to read to compute the approximation. default = 3
-         * @return  approximate size of a record.
+         * @return  pair of values, first is estimated record size, second is estimated sequence length in the recored
          */
-        size_t getRecordSize(const int iterations = 10) {
-          if (!this->loaded) throw std::logic_error("ERROR: getting record's size before file is loaded");
+        std::pair<size_t, size_t> getRecordSize(const int iterations = 10) {
+          std::size_t counts[2] = {0, 0};  // do average.
 
+          int rank = 0;
+#ifdef USE_MPI
+          MPI_Comm_rank(this->comm, &rank);
+          if (rank == 0) {
+#endif
 
-          std::size_t s, e;
-          std::size_t ss = ::std::numeric_limits<::std::size_t>::max();
-          RangeType inmem(this->L1Block.getRange());
-          RangeType search(this->L1Block.getRange());
+        	//  map file directly on proc 1, determine Record size, then broadcast.
 
-          s = parser.findStart(this->L1Block.begin(), inmem, inmem, search);
+            // try mapping the first 9 page size worth  (typical, 4KB each, so 36KB.  chosen so that we can see if sequence length is greater than 32K (16 bit))
+            auto search_range = this->getFileRange();
+            search_range.end = std::min(9 * pageSize, search_range.end);
 
-          for (int i = 0; i < iterations; ++i) {
-            /*check end*/
-            if(s >= search.end){
-              break;
+            // map the region.  (no need to align.)
+            auto search_data = map(search_range);  // no alignment issue because we're at beginning of file.
+            auto sstart = search_data;
+            auto send = search_data + search_range.size();
+
+            RangeType inmem(search_range);
+
+            // create a L1 Parser local instance
+            Parser<decltype(sstart)> local_parser;
+
+            // For FASTAParser, this computes the sequence demarcation vector.  For FASTQ, this does nothing.
+            local_parser.init_for_iterator(sstart, this->getFileRange(), inmem, search_range);  // in the case of FASTAParser, this creates the sequence demarcation vector.
+            // then find start, and adjust search range.  NOT NEEDED HERE since we are at beginning of file.
+
+            // now initialize the search.  no need to call the first increment separately since we know that we have to start from seq id 0.
+            typename Parser<decltype(sstart)>::SequenceType seq;
+            size_t next_seq_id = 0;
+            size_t offset = 0;
+            size_t seq_data_len = 0;
+
+            int i = 0;
+            while ((i < iterations) && (sstart != send)) {
+              // repeat for iterations or until no more sequences (empty sequence is returned).
+
+              // get the next sequence
+              next_seq_id = local_parser.increment(sstart, send, offset, next_seq_id, seq);
+
+              // get the char count in a record
+              seq_data_len = std::distance(seq.seqBegin, seq.seqEnd);
+
+              if (seq_data_len >= (1 << 16))  {// larger than 16 bit DNA length  so stop and just return this.
+                i = 1;
+                break;
+              }
+              // else sum up.
+              counts[0] += seq.length;
+              counts[1] += seq_data_len;
+              ++i;
+
             }
-            search.start = s + 1;   // advance by 1, in order to search for next entry.
-            e = parser.findStart(this->L1Block.begin(), inmem, inmem, search);
+            if (i == 0) throw std::logic_error("ERROR: no record found");
 
-            ss = ::std::min(ss, (e - s));  // return smallest record size.
-            s = e;
+            counts[0] /= i;
+            counts[1] /= i;
+
+            if (counts[0] == 0) throw std::logic_error("ERROR: estimated sequence data size is 0");
+            if (counts[1] == 0) throw std::logic_error("ERROR: estimated record size is 0");
+
+            // release the data.
+            unmap(search_data, search_range);
+
+#ifdef USE_MPI
           }
+          int p;
+          MPI_Comm_size(this->comm, &p);
 
-          return ss;
-        }
+          if (p > 1) MPI_Bcast(counts, 2, MPI_UNSIGNED_LONG, 0, this->comm);
+#endif
 
-        /// estimate number of kmers per record.
-        size_t getCharsPerRecord(int iterations = 10) {
-
-          if (!this->loaded) throw std::logic_error("ERROR: getting record's size before file is loaded");
-
-
-          std::size_t s, e;
-          std::size_t ss = 0;
-          RangeType inmem(this->L1Block.getRange());
-          RangeType search(this->L1Block.getRange());
-
-          s = parser.findStart(this->L1Block.begin(), inmem, inmem, search);
-
-          int i = 0;
-          while(i < iterations && s <search.end){
-            search.start = s + 1;   // advance by 1, in order to search for next entry.
-            e = parser.findStart(this->L1Block.begin(), inmem, inmem, search);
-
-            // get the starting iterator
-            auto start = this->L1Block.begin() + (s - inmem.start);
-            auto end = this->L1Block.begin() + (e - inmem.start);
-
-            // advance past first eol
-            while ((start != end) && (*start != '\n' && *start != '\r')) ++start;
-            if ((start != end) && (*start == '\n' && *start != '\r')) ++start;
-
-            // now start counting
-            while ((start != end) && (*start != '\n' && *start != '\r')) {
-              ++ss;
-              ++start;
-            }
-
-            s = e;
-            ++i;
-          }
-
-          ::std::cerr << "ss: " << ss << " i: " << i << ::std::endl;
-
-          return i > 0 ? ss / i : 0;
+          return std::make_pair(counts[0], counts[1]);
         }
 
 
         /// get number of estimated kmers, given k.
         size_t getKmerCountEstimate(const int k) {
-          size_t numChars, numRecords, kmersPerRecord;
-          size_t recordSize = this->getRecordSize();
 
-          printf("file range [%lu, %lu], recordSize = %lu\n",
-              this->getFileRange().start, this->getFileRange().end, recordSize);
-         numRecords = (this->getFileRange().size() + recordSize - 1) / recordSize;
+          if (recordSize == 0 || seqSizeInRecord == 0) std::tie(recordSize, seqSizeInRecord) = this->getRecordSize(10);
 
-          numChars = this->getCharsPerRecord();
-         kmersPerRecord = numChars > 0 ? numChars - k + 1 : 0;  // fastq has quality.
+         size_t numRecords = (this->getFileRange().size() + recordSize - 1) / recordSize;
+
+         size_t kmersPerRecord = seqSizeInRecord == 0 ? seqSizeInRecord - k + 1 : 0;  // fastq has quality.
 
 
-          printf("file range [%lu, %lu], recordSize = %lu, kmersPerRecord = %lu, numRecords = %lu\n",
+          DEBUGF("file range [%lu, %lu], recordSize = %lu, kmersPerRecord = %lu, numRecords = %lu",
                  this->getFileRange().start, this->getFileRange().end, recordSize, kmersPerRecord, numRecords);
 
           return numRecords * kmersPerRecord;
@@ -1077,18 +1416,38 @@ namespace io
          * @return      size in bytes, data type size_t.
          */
         size_t getFileSize(const int& fd) throw (bliss::io::IOException) {
+
+          size_t file_size = 0;
+
+          int rank = 0;
+#ifdef USE_MPI
+          MPI_Comm_rank(comm, &rank);
+          if (rank == 0) {
+#endif
+
           struct stat64 filestat;
 
-          // get the file state
-          int ret = fstat64(fd, &filestat);
+            // get the file state
+            int ret = fstat64(fd, &filestat);
 
-          // handle any error
-          if (ret < 0) {
-            throw IOException("ERROR in file size detection");
+            // handle any error
+            if (ret < 0) {
+              throw IOException("ERROR in file size detection");
+            }
+
+            file_size = static_cast<size_t>(filestat.st_size);
+
+#ifdef USE_MPI
           }
 
+          int p;
+          MPI_Comm_size(this->comm, &p);
+
+          if (p > 1) MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG, 0, comm);
+#endif
+
           // return file size.
-          return static_cast<size_t>(filestat.st_size);
+            return file_size;
         }
 
 
@@ -1096,7 +1455,8 @@ namespace io
 
         /**
          * @brief     map the specified portion of the file to memory.
-         * @param r   range specifying the portion of the file to map
+         * @note      AGNOSTIC of overlaps
+         * @param r   range specifying the portion of the file to map.
          * @return    memory address (pointer) to where the data is mapped.
          */
         PointerType map(const RangeType &r) throw (IOException) {
@@ -1132,6 +1492,7 @@ namespace io
 
         /**
          * @brief unmaps a file region from memory
+         * @note      AGNOSTIC of overlaps
          * @param d   The pointer to the memory address
          * @param r   The range that was mapped.
          */

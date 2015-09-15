@@ -25,13 +25,20 @@ namespace bliss
 
     /**
      * @class    bliss::iterator::SequenceIdIterator
-     * @brief    iterator that returns a set of ids, matching to a char sequence such as DNA
+     * @brief    Iterator that takes an input sequenceId and increment the positions.
      * @details  sequence_id iterator counts from the start to the end in regular steps.
      *           this is useful to establish index values for some other array.
      *
      * @note     this is similar to a counting iterator, except that the data type is more complex.
      *            a sequence Id may have multiple parts to represent file/read/position inside read, etc.
      *
+     *           for short sequences, id is the position in file, and the position field should be incremented from 0.
+     *           for long sequences, the position field is the poisiton in file, so it should be incremented from that.
+     *
+     *           Note that we use standard arithmetic and logical operators on the SequenceIdType, so any types that have those operators would works as SequenceIdType.
+     *           Also, this means that LongSequenceKmerId and ShortSequenceKmerId need to have these operators defined.
+     *
+     *           The constructor requires that the parameter be of type SequenceIdType.  If the input type is convertible to SequenceIdType, that should be okay as well.
      *
      * @tparam SequenceIdType the type of data to over.
      */
@@ -44,7 +51,7 @@ namespace bliss
         using D = std::ptrdiff_t;
 
         /// position type
-        using T = decltype(std::declval<SequenceIdType>().pos);
+        using T = size_t;
 
         /// the stride for each iteration.
         mutable T stride;
@@ -54,18 +61,15 @@ namespace bliss
 
       public:
 
+
+
         /**
          * constructor
          * @param _start      first value
          * @param _stride     the distance traversed during each call to the increment/decrement method.
          */
-        SequenceIdIterator(const SequenceIdType& _start, const T &_stride) : stride(_stride), val(_start) {};
+        SequenceIdIterator(const SequenceIdType& _start, const T &_stride = 1) : stride(_stride), val(_start) {};
 
-        /**
-         * constructor, with stride defaults to 1.
-         * @param _start    first value
-         */
-        SequenceIdIterator(const SequenceIdType& _start) : stride(1), val(_start) {};
 
         /**
          * default constructor, sets start to 0, stride to 1
@@ -119,7 +123,8 @@ namespace bliss
          * @return  reference to incremented iterator
          */
         SequenceIdIterator<SequenceIdType>& operator++() {
-          val.pos += stride;
+            //printf("INCREMENT id: pos %lu, id %lu, file %u\n", val.get_pos(), val.get_id(), val.get_file_id());
+          val += stride;
           return *this;
         }
 
@@ -165,7 +170,7 @@ namespace bliss
          * @return  reference to decremented iterator
          */
         SequenceIdIterator<SequenceIdType>& operator--() {
-          val.pos -= stride;
+          val -= stride;
           return *this;
         }
 
@@ -209,7 +214,7 @@ namespace bliss
          * @return              distance between the iterators
          */
         D operator-(const SequenceIdIterator<SequenceIdType>& other) {
-          return (val.pos - other.val.pos) / stride;
+          return (val - (*other)) / stride;
         }
 
 
@@ -237,7 +242,7 @@ namespace bliss
          * @return  bool, true if greater than or equal to, false otherwise.
          */
         bool operator>=(const SequenceIdIterator<SequenceIdType>& other) {
-          return val >= other.val;
+          return ! (val < other.val);
         }
 
         /**
@@ -246,7 +251,7 @@ namespace bliss
          * @return  bool, true if less than or equal to, false otherwise.
          */
         bool operator<=(const SequenceIdIterator<SequenceIdType>& other) {
-          return val <= other.val;
+          return ! (val > other.val);
         }
 
         /**
@@ -255,7 +260,7 @@ namespace bliss
          * @return  reference to incremented iterator
          */
         SequenceIdIterator<SequenceIdType>& operator+=(const D& diff) {
-          val.pos += diff * stride;
+          val += diff * stride;
           return *this;
         }
 
@@ -265,7 +270,7 @@ namespace bliss
          * @return  reference to decremented iterator
          */
         SequenceIdIterator<SequenceIdType>& operator-=(const D& diff) {
-          val.pos -= diff * stride;
+          val -= diff * stride;
           return *this;
         }
 
@@ -275,10 +280,13 @@ namespace bliss
          * @return  value for ith offset
          */
         SequenceIdType operator[](const D& i) {
-          return val.pos + stride * i;
+          SequenceIdType v = val;
+          v += stride * i;
+          return v;
         }
 
     };
+
 
     /**
      * @brief increment operator, with first operand being a number and second being an iterator  n + iter;

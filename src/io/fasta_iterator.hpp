@@ -327,8 +327,8 @@ namespace bliss
             //if FASTA sequence header lies before the offset
             while(rightIndex < rawOffset && localStartLocStoreIter != localStartLocStoreEndIter)
             {
-              leftIndex = (*localStartLocStoreIter).first;
-              rightIndex = (*localStartLocStoreIter).second;
+              leftIndex = std::get<0>(*localStartLocStoreIter);
+              rightIndex = std::get<1>(*localStartLocStoreIter);
               localStartLocStoreIter ++;
 
               //A sanity check (important in multithreaded version because here we might have headers ahead that we should ignore)

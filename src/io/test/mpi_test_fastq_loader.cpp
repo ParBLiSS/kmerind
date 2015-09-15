@@ -16,321 +16,259 @@
 #include <gtest/gtest.h>
 #include <cstdint> // for uint64_t, etc.
 #include <string>
+#include <limits>
+
+#include "common/sequence.hpp"
+#include "io/sequence_iterator.hpp"
 
 #include "io/fastq_loader.hpp"
+#include "io/file_loader.hpp"
+#include "mxx/reduction.hpp"
+
+#include "io/test/file_loader_test_fixtures.hpp"
 
 using namespace bliss::io;
 
 
-template<typename Iter1, typename Iter2>
-bool equal(const Iter1 &i1, const Iter2 &i2, size_t len) {
-  Iter1 ii1(i1);
-  Iter2 ii2(i2);
-  for (size_t i = 0; i < len; ++i, ++ii1, ++ii2) {
-    if (*ii1 != *ii2) return false;
-  }
-  return true;
-}
+typedef FASTQLoader<unsigned char> FASTQLoaderType;
 
-template <typename T>
-class FASTQLoaderTest : public ::testing::Test
+
+class FASTQParserTest : public FileParserTest<FASTQLoaderType >
+{};
+
+
+
+TEST_P(FASTQParserTest, parse)
 {
-  protected:
-    virtual void SetUp()
-    {
-      fileName.assign(PROJ_SRC_DIR);
-      fileName.append("/test/data/test.fastq");
+	  this->elemCount = 0;
 
-      // get file size
-      struct stat filestat;
-      stat(fileName.c_str(), &filestat);
-      fileSize = static_cast<size_t>(filestat.st_size);
-
-      ASSERT_EQ(34111308, fileSize);
-      //ASSERT_EQ(29250, fileSize);
-#if defined(USE_MPI)
-  MPI_Barrier(MPI_COMM_WORLD);
+#ifdef USE_MPI
+	int rank = 0;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	if (rank == 0) {
 #endif
 
-    }
+  // from FileLoader type, get the block iter type and range type
+  using BlockIterType = typename FASTQLoaderType::L1BlockType::iterator;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTQParser >;
 
-    static void readFilePOSIX(const std::string &fileName, const size_t& offset,
-                              const size_t& length, T* result)
-    {
-      FILE *fp = fopen(fileName.c_str(), "r");
-      fseek(fp, offset * sizeof(T), SEEK_SET);
-      size_t read = fread_unlocked(result, sizeof(T), length, fp);
-      fclose(fp);
-
-      ASSERT_GT(read, 0);
-    }
-
-    std::string fileName;
-    size_t fileSize;      // in units of T.
-
-};
-
-// indicate this is a typed test
-TYPED_TEST_CASE_P(FASTQLoaderTest);
-
-
-
-
-// normal test cases
-TYPED_TEST_P(FASTQLoaderTest, MPIOpenWithRange)
-{
-  typedef FASTQLoader<TypeParam, true, false, false> FASTQLoaderType;
-
-  // get this->fileName
-  int rank = 0;
-  int nprocs = 1;
-
-#if defined(USE_MPI)
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
-
-#endif
-
-  FASTQLoaderType loader(nprocs, rank, this->fileName );
+  FASTQLoaderType loader(this->fileName, 1, 0, 1, 2048, 2048 );
 
   auto l1 = loader.getNextL1Block();
-  l1.getRange();
 
+  while (l1.getRange().size() > 0) {
 
-//  printf("Rank %d/%d file range: %lu, %lu, range [%lu, %lu)\n", rank, nprocs, loader.getFileRange().start, loader.getFileRange().end, r.start, r.end);
+    //==  and wrap the chunk inside an iterator that emits Reads.
+    SeqIterType seqs_start(bliss::io::FASTQParser<BlockIterType>(), l1.begin(), l1.end(), l1.getRange().start);
+    SeqIterType seqs_end(l1.end());
 
-
-//  INFO( "range: " << r2 );
-  ASSERT_EQ('@', loader.getCurrentL1Block().begin()[0]);
-  if (rank == nprocs - 1)
-    ASSERT_EQ('\0', loader.getCurrentL1Block().end()[0]);
-  else
-    ASSERT_EQ('@', loader.getCurrentL1Block().end()[0]);
-//  INFO( " characters = '" << loader.getData().begin()[0]  << "'" );
-//  INFO( " characters = '" << loader.getData().end()[0]  << "'" );
-
-#if defined(USE_MPI)
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-}
-
-// normal test cases
-TYPED_TEST_P(FASTQLoaderTest, OpenWithRange)
-{
-  typedef FASTQLoader<TypeParam, true, false, false> FASTQLoaderType;
-
-  // get this->fileName
-  int rank = 3;
-  int nprocs = 7;
-
-
-
-  FASTQLoaderType loader(nprocs, rank, this->fileName );
-
-  loader.getNextL1Block();
-
-
-
-//  INFO( "range: " << r2 );
-  ASSERT_EQ('@', loader.getCurrentL1Block().begin()[0]);
-  ASSERT_EQ('@', loader.getCurrentL1Block().end()[0]);
-//  INFO( " characters = '" << loader.getData().begin()[0]  << "'" );
-//  INFO( " characters = '" << loader.getData().end()[0]  << "'" );
-#if defined(USE_MPI)
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-
-}
-
-
-TYPED_TEST_P(FASTQLoaderTest, OpenConsecutiveRanges)
-{
-  typedef FASTQLoader<TypeParam, true, false, false> FASTQLoaderType;
-  typedef typename FASTQLoaderType::RangeType RangeType;
-
-  // get this->fileName
-  int nprocs = 7;
-  typename RangeType::ValueType lastEnd = 0;
-
-  RangeType r;
-  typename FASTQLoaderType::L1BlockType d;
-
-  for (int rank = 0; rank < nprocs; ++rank) {
+    //== loop over the reads
+    for (; seqs_start != seqs_end; ++seqs_start, ++(this->elemCount))
     {
-      FASTQLoaderType loader(nprocs, rank, this->fileName);
-
-      d = loader.getNextL1Block();
-      r = d.getRange();
-
-      ASSERT_EQ(lastEnd, r.start);
-      lastEnd = r.end;
-
-      //  INFO( "range: " << r2 );
-        ASSERT_EQ('@', d.begin()[0]);
-        if (r.end == loader.getFileRange().end)
-          ASSERT_EQ(0, d.end()[0]);
-        else
-          ASSERT_EQ('@', d.end()[0]);
-      //  INFO( " characters = '" << loader.getData().begin()[0]  << "'" );
-      //  INFO( " characters = '" << loader.getData().end()[0]  << "'" );
+      //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
     }
+
+    l1 = loader.getNextL1Block();
   }
-#if defined(USE_MPI)
-  MPI_Barrier(MPI_COMM_WORLD);
+
+#ifdef USE_MPI
+	}
 #endif
 
 }
 
 
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(FASTQLoaderTest, MPIOpenWithRange, OpenWithRange, OpenConsecutiveRanges);
-
-
-
-
-
-template <typename Loader>
-class FASTQLoaderBufferTest : public ::testing::Test
+#ifdef USE_OPENMP
+TEST_P(FASTQParserTest, parse_omp)
 {
-  protected:
-    typedef typename Loader::InputIteratorType InputIterType;
-    typedef typename std::iterator_traits<InputIterType>::value_type ValueType;
-
-
-    virtual void SetUp()
-    {
-      fileName.assign(PROJ_SRC_DIR);
-      fileName.append("/test/data/test.fastq");
-
-      // get file size
-      struct stat filestat;
-      stat(fileName.c_str(), &filestat);
-      fileSize = static_cast<size_t>(filestat.st_size);
-
-      ASSERT_EQ(34111308, fileSize);
-#if defined(USE_MPI)
-  MPI_Barrier(MPI_COMM_WORLD);
+	  this->elemCount = 0;
+#ifdef USE_MPI
+	int rank = 0;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	if (rank == 0) {
 #endif
 
-    }
-
-    static void readFilePOSIX(const std::string &fileName, const size_t& offset,
-                              const size_t& length, ValueType* result)
-    {
-      FILE *fp = fopen(fileName.c_str(), "r");
-      fseek(fp, offset * sizeof(ValueType), SEEK_SET);
-      size_t read = fread_unlocked(result, sizeof(ValueType), length, fp);
-      fclose(fp);
-
-      ASSERT_GT(read, 0);
-    }
-
-    std::string fileName;
-    size_t fileSize;      // in units of T.
-
-};
-
-// indicate this is a typed test
-TYPED_TEST_CASE_P(FASTQLoaderBufferTest);
+  using BlockIterType = typename FASTQLoaderType::L1BlockType::iterator;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTQParser >;
 
 
-// normal test cases
-TYPED_TEST_P(FASTQLoaderBufferTest, BufferingChunks)
+  int nthreads = 4;
+
+  FASTQLoaderType loader(this->fileName, 1, 0, nthreads, 2048, 2048 * nthreads * 2 );
+
+  auto l1 = loader.getNextL1Block();
+  size_t localKmerCount = 0;
+
+  while (l1.getRange().size() > 0) {
+
+    localKmerCount = 0;
+#pragma omp parallel num_threads(nthreads) shared(loader) reduction(+:localKmerCount)
+   {
+
+      int tid = omp_get_thread_num();
+
+      auto l2 = loader.getNextL2Block(tid);
+
+      while (l2.getRange().size() > 0) {
+
+        // from FileLoader type, get the block iter type and range type
+
+
+        //==  and wrap the chunk inside an iterator that emits Reads.
+        SeqIterType seqs_start(bliss::io::FASTQParser<BlockIterType>(), l2.begin(), l2.end(), l2.getRange().start);
+        SeqIterType seqs_end(l2.end());
+
+        //== loop over the reads
+        for (; seqs_start != seqs_end; ++seqs_start, ++localKmerCount)
+        {
+          //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+        }
+
+        l2 = loader.getNextL2Block(tid);
+      }
+    }  // end omp parallel region.
+
+   this->elemCount += localKmerCount;
+
+   l1 = loader.getNextL1Block();
+  }  // end l1 while.
+
+#ifdef USE_MPI
+	}
+#endif
+}
+#endif
+
+
+
+#ifdef USE_MPI
+TEST_P(FASTQParserTest, parse_mpi)
 {
-  typedef TypeParam FASTQLoaderType;
-  typedef typename FASTQLoaderType::InputIteratorType InputIterType;
-  typedef typename std::iterator_traits<InputIterType>::value_type ValueType;
+  this->elemCount = 0;
 
-  typedef typename FASTQLoaderType::RangeType RangeType;
-  typedef typename FASTQLoaderType::L2BlockType blockType;
+  // from FileLoader type, get the block iter type and range type
+  using BlockIterType = typename FASTQLoaderType::L1BlockType::iterator;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTQParser >;
 
-  // get this->fileName
-  int rank = 3;
-  int nprocs = 7;
+  int nthreads = 1;
 
-  int nThreads = 2;
+  FASTQLoaderType loader(this->fileName, MPI_COMM_WORLD, nthreads, 2048, 2048 * nthreads * 2);
 
+  auto l1 = loader.getNextL1Block();
 
-  FASTQLoaderType loader(nprocs, rank, this->fileName, nThreads, 2048);
-
-  typename FASTQLoaderType::L1BlockType d = loader.getNextL1Block();
-
-  typename RangeType::ValueType lastEnd = d.getRange().start;
+  while (l1.getRange().size() > 0) {
 
 
-  ValueType* gold;
-  int i = 0;
+    //==  and wrap the chunk inside an iterator that emits Reads.
+    SeqIterType seqs_start(bliss::io::FASTQParser<BlockIterType>(), l1.begin(), l1.end(), l1.getRange().start);
+    SeqIterType seqs_end(l1.end());
 
-  blockType data = loader.getNextL2Block(0);
-  RangeType r2 = data.getRange();
-  size_t len = r2.size();
+    //== loop over the reads
+    for (; seqs_start != seqs_end; ++seqs_start, ++this->elemCount)
+    {
+      //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+    }
 
-  while (len  > 0) {
-
-
-    ASSERT_EQ(lastEnd, r2.start);
-    lastEnd = r2.end;
-
-
-    gold = new ValueType[len + 1];
-    FASTQLoaderBufferTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, len, gold);
-
-    ASSERT_TRUE(equal(gold, data.begin(), len));
-    delete [] gold;
-
-    i ^= 1;
-    data = loader.getNextL2Block(i);
-    r2 = data.getRange();
-    len = r2.size();
-
+    l1 = loader.getNextL1Block();
   }
+}
+#endif
+
+
+#ifdef USE_MPI
+#ifdef USE_OPENMP
+TEST_P(FASTQParserTest, parse_mpi_omp)
+{
+  this->elemCount = 0;
+
+  using BlockIterType = typename FASTQLoaderType::L1BlockType::iterator;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTQParser >;
+
+
+  int nthreads = 4;
+
+  FASTQLoaderType loader(this->fileName, MPI_COMM_WORLD, nthreads, 2048, 2048 * nthreads * 2);
+
+  auto l1 = loader.getNextL1Block();
+  size_t localKmerCount = 0;
+
+  while (l1.getRange().size() > 0) {
+
+    localKmerCount = 0;
+
+    //std::cout << "L1 block " << l1.getRange() << std::endl;
+
+#pragma omp parallel num_threads(nthreads) shared(loader) reduction(+:localKmerCount)
+   {
+
+      int tid = omp_get_thread_num();
+
+      auto l2 = loader.getNextL2Block(tid);
+
+      while (l2.getRange().size() > 0) {
+
+        // from FileLoader type, get the block iter type and range type
+	//	std::cout << "thread " << tid << " L1 block " << l1.getRange() << " L2 block " << l2.getRange() << std::endl;
+
+
+        //==  and wrap the chunk inside an iterator that emits Reads.
+        SeqIterType seqs_start(bliss::io::FASTQParser<BlockIterType>(), l2.begin(), l2.end(), l2.getRange().start);
+        SeqIterType seqs_end(l2.end());
+
+        //== loop over the reads
+        for (; seqs_start != seqs_end; ++seqs_start, ++localKmerCount)
+        {
+          //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+        }
+
+        l2 = loader.getNextL2Block(tid);
+      }
+    }  // end omp parallel region.
+
+   this->elemCount += localKmerCount;
+
+   l1 = loader.getNextL1Block();
+  }  // end l1 while.
+
+}
+#endif
+#endif
+
+
+INSTANTIATE_TEST_CASE_P(Bliss, FASTQParserTest, ::testing::Values(
+    TestFileInfo(250, 29250, std::string("/test/data/natural.fastq")),
+    TestFileInfo(140, 18761, std::string("/test/data/test.medium.fastq")),
+    TestFileInfo(7, 939, std::string("/test/data/test.small.fastq")),
+    TestFileInfo(254562, 34111308, std::string("/test/data/test.fastq"))
+));
+
+int main(int argc, char* argv[])
+{
+  int result = 0;
+
+  ::testing::InitGoogleTest(&argc, argv);
+
+#if defined(USE_MPI)
+  MPI_Init(&argc, &argv);
+#endif
+
+  result = RUN_ALL_TESTS();
+
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Finalize();
 #endif
 
+  return result;
 }
 
 
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(FASTQLoaderBufferTest, BufferingChunks);
 
-
-
-
-
-
-
-
-typedef ::testing::Types<unsigned char> FASTQLoaderTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FASTQLoaderTest, FASTQLoaderTestTypes);
-
-
-typedef ::testing::Types<
-    bliss::io::FASTQLoader<unsigned char, true, false, false>,
-    bliss::io::FASTQLoader<unsigned char, true, false, true>,
-    bliss::io::FASTQLoader<unsigned char, true, true, false>,
-    bliss::io::FASTQLoader<unsigned char, true, true, true>,
-    bliss::io::FASTQLoader<unsigned char, false, false, false>,
-    bliss::io::FASTQLoader<unsigned char, false, false, true>,
-    bliss::io::FASTQLoader<unsigned char, false, true, false>,
-    bliss::io::FASTQLoader<unsigned char, false, true, true> >
-    FASTQLoaderBufferTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FASTQLoaderBufferTest, FASTQLoaderBufferTestTypes);
-
-
-
-int main(int argc, char* argv[]) {
-    int result = 0;
-
-    ::testing::InitGoogleTest(&argc, argv);
-
-
-#if defined(USE_MPI)
-    MPI_Init(&argc, &argv);
-#endif
-    result = RUN_ALL_TESTS();
-#if defined(USE_MPI)
-    MPI_Finalize();
-#endif
-    return result;
-}

@@ -242,7 +242,7 @@ typedef bliss::io::fastq_loader<DNA, float> FileLoaderType;
 typedef bliss::index::KmerSize<21> KmerSize;
 typedef uint64_t KmerType;
 typedef float QualityType;
-typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss::io::FASTQ::SequenceId, QualityType> KmerIndexType;
+typedef bliss::index::KmerIndexElementWithIdAndQuality<KmerSize, KmerType, bliss::common::ShortSequenceKmerId, QualityType> KmerIndexType;
 
 typedef CharType* BaseIterType;
 
@@ -345,7 +345,7 @@ int main(int argc, char* argv[])
     for (; fastq_start != fastq_end; ++fastq_start)
     {
 
-      id ^= (*fastq_start).id.file_pos;
+      id ^= (*fastq_start).id;
       ++readCount;
     }
     t2 = std::chrono::high_resolution_clock::now();

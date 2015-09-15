@@ -46,7 +46,7 @@ void testQueryOld(MPI_Comm comm, const std::string & filename, const int nthread
 
     t1 = std::chrono::high_resolution_clock::now();
 
-    typename KmerIndexType::FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
+    typename KmerIndexType::FileLoaderType loader(filename,comm,  nthreads, chunkSize);  // this handle is alive through the entire execution.
 
     t2 = std::chrono::high_resolution_clock::now();
     time_span =
@@ -153,7 +153,7 @@ void testQuery(MPI_Comm comm, const std::string & filename, const int nthreads, 
     std::chrono::duration<double> time_span;
 
     t1 = std::chrono::high_resolution_clock::now();
-    typename KmerIndexType::FileLoaderType loader(comm, filename, nthreads, chunkSize);  // this handle is alive through the entire execution.
+    typename KmerIndexType::FileLoaderType loader(filename, comm, nthreads, chunkSize);  // this handle is alive through the entire execution.
     t2 = std::chrono::high_resolution_clock::now();
      time_span =
          std::chrono::duration_cast<std::chrono::duration<double> >(

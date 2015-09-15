@@ -17,7 +17,6 @@
 #include "mxx/shift.hpp"
 
 #include "common/kmer.hpp"
-#include "io/fastq_loader.hpp"
 
 #include "utils/logging.h"
 
@@ -29,6 +28,8 @@
 
 #include "utils/container_traits.hpp"
 #include "containers/container_utils.hpp"
+#include "common/sequence.hpp"
+#include "partition/range.hpp"
 
 namespace mxx {
 
@@ -43,8 +44,20 @@ namespace mxx {
       bliss::common::Kmer<size, A, WT>::nWords> {};
 
   template<>
-  class datatype<bliss::io::FASTQ::SequenceId > :
-    public datatype<decltype(bliss::io::FASTQ::SequenceId::file_pos)> {};
+  class datatype<bliss::common::LongSequenceKmerId > :
+    public datatype<decltype(bliss::common::LongSequenceKmerId::id)> {};
+  template<>
+  class datatype<const bliss::common::LongSequenceKmerId > :
+    public datatype<decltype(bliss::common::LongSequenceKmerId::id)> {};
+
+  template<>
+  class datatype<bliss::common::ShortSequenceKmerId > :
+    public datatype<decltype(bliss::common::ShortSequenceKmerId::id)> {};
+
+  template<>
+  class datatype<const bliss::common::ShortSequenceKmerId > :
+    public datatype<decltype(bliss::common::ShortSequenceKmerId::id)> {};
+
 
   template <typename T>
   class datatype<bliss::partition::range<T> > :
@@ -57,11 +70,17 @@ namespace mxx {
 
 }
 
-template <typename T1, typename T2>
-std::ostream &operator<<(std::ostream &os, std::pair<T1, T2> const &t) {
-    return os << t.first << ":" << static_cast<uint64_t>(t.second);
+std::ostream &operator<<(std::ostream &os, uint8_t const &t) {
+  return os << static_cast<uint32_t>(t);
+}
+std::ostream &operator<<(std::ostream &os, int8_t const &t) {
+  return os << static_cast<int32_t>(t);
 }
 
+template <typename T1, typename T2>
+std::ostream &operator<<(std::ostream &os, std::pair<T1, T2> const &t) {
+    return os << t.first << ":" << t.second;
+}
 
 
 namespace mxx2 {
@@ -503,7 +522,7 @@ namespace mxx2 {
 
   /// modified version of mxx all2all, to replace content of buffer, and to return the recv counts.
   /// also, determine whether to use the large data version of mxx all2all at runtime.
-  template<typename T, typename count_t = int>
+  template<typename T, typename count_t>
   std::vector<count_t> all2all_nocast(std::vector<T>& buffer, const std::vector<count_t>& send_counts, MPI_Comm comm = MPI_COMM_WORLD)
   {
       // get counts and displacements
@@ -526,7 +545,7 @@ namespace mxx2 {
 
   /// modified version of mxx all2all, to replace content of buffer, and to return the recv counts.
   /// also, determine whether to use the large data version of mxx all2all at runtime.
-  template<typename internal_count_t, typename T, typename count_t = int>
+  template<typename internal_count_t, typename T, typename count_t>
   std::vector<count_t> all2all_cast(std::vector<T>& buffer, const std::vector<count_t>& send_counts, MPI_Comm comm = MPI_COMM_WORLD)
   {
       std::vector<internal_count_t> sc(send_counts.size());
