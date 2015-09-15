@@ -153,7 +153,6 @@ namespace bliss
          * @param[in] start_offset  offset to add to the start position
          * @param[in] chunkId       the chunkId of the current range.
          * @param[in] non_overlap_size    the size of the chunk excluding the overlapped portion        (precomputed or user specified)
-         * @param[in] overlap_size    the size of the overlap region (user specified)
          */
         Range computeRangeForChunkId(const Range & pr, const SizeType& start_offset, const size_t& chunkId) {
 
@@ -188,9 +187,10 @@ namespace bliss
          * @param _src          range object to be partitioned.
          * @param _nPartitions the number of partitions to divide this range into
          * @param _non_overlap_size   the size of each partition.  default is 0 (in subclasses), computed later.
-         * @param _overlap_size   the size of the overlap overlap region.
+         * @param _overlap_size   the size of the overlap region.
+         * @return updated non_overlap_size.
          */
-        void configure(const Range &_src, const size_t &_nPartitions, const SizeType &_non_overlap_size, const SizeType &_overlap_size) {
+        SizeType configure(const Range &_src, const size_t &_nPartitions, const SizeType &_non_overlap_size, const SizeType &_overlap_size) {
 
 //          if (_src.size() == 0)
 //            throw std::invalid_argument("ERROR: partitioner c'tor: src range size is 0");
@@ -215,7 +215,7 @@ namespace bliss
 //          std::cout << "partitioner configured for range " << this->src << " with " << nPartitions <<
 //              " parts, size " << non_overlap_size << " + " << overlap_size << std::endl;
 
-
+          return this->non_overlap_size;
         }
 
         /**
@@ -306,10 +306,11 @@ namespace bliss
          * @param _src          range object to be partitioned.
          * @param _nPartitions the number of partitions to divide this range into
          * @param _non_overlap_size  size of each chunk.  here it should be 0 so they will be auto computed.
-         * @param _overlap_size   the size of the overlap overlap region.
+         * @param _overlap_size   the size of the overlap region.
+         * @return updated non_overlap_size.
          *
          */
-        void configure(const Range &_src, const size_t &_nPartitions,
+        SizeType configure(const Range &_src, const size_t &_nPartitions,
                        const SizeType &_non_overlap_size = 1, const SizeType &_overlap_size = 0) {
           if (_nPartitions == 0)
             throw std::invalid_argument("ERROR: partitioner: number of partitions is 0");
@@ -328,9 +329,11 @@ namespace bliss
           // not using modulus since we SizeType may be float.
           this->rem = _src.size() - this->non_overlap_size * static_cast<SizeType>(this->nPartitions);
 
-          this->nChunks = (chunk_size == 0) ? this->rem : _nPartitions;
+          this->nChunks = (chunk_size == 0 && !std::is_floating_point<SizeType>::value) ? this->rem : _nPartitions;
 
           resetImpl();
+
+          return this->non_overlap_size;
         }
 
       protected:
@@ -348,7 +351,7 @@ namespace bliss
         getNextImpl(const size_t& partId) {
           // param validation already done.
 
-          // if previously computed, then return end object, signalling no more chunks.
+          // if previously computed, then return end object, signaling no more chunks.
           if (done[partId]) return this->end;  // can only call this once.
 
           done[partId] = true;
@@ -470,9 +473,11 @@ namespace bliss
          * @param _src          range object to be partitioned.
          * @param _nPartitions the number of partitions to divide this range into
          * @param _non_overlap_size    Size of the chunks
+         * @param _overlap_size   the size of the overlap region.
+         * @return updated non_overlap_size.
          *
          */
-        void configure(const Range &_src, const size_t &_nPartitions, const SizeType &_non_overlap_size, const SizeType &_overlap_size = 0) {
+        SizeType configure(const Range &_src, const size_t &_nPartitions, const SizeType &_non_overlap_size, const SizeType &_overlap_size = 0) {
           if (_non_overlap_size <= 0)
             throw std::invalid_argument("ERROR: partitioner c'tor: non_overlap_size is <= 0");
 
@@ -484,6 +489,8 @@ namespace bliss
           this->nChunks = this->computeNumberOfChunks();
 
           resetImpl();
+
+          return this->non_overlap_size;
         }
 
       protected:
@@ -589,9 +596,10 @@ namespace bliss
          * @param _src          range object to be partitioned.
          * @param _nPartitions  the number of partitions to divide this range into
          * @param _non_overlap_size  size of each chunk for the partitioning.
+         * @return updated non_overlap_size.
          *
          */
-        void configure(const Range &_src, const size_t &_nPartitions, const SizeType &_non_overlap_size, const SizeType &_overlap_size = 0) {
+        SizeType configure(const Range &_src, const size_t &_nPartitions, const SizeType &_non_overlap_size, const SizeType &_overlap_size = 0) {
           if (_non_overlap_size <= 0)
             throw std::invalid_argument("ERROR: partitioner c'tor: non_overlap_size is <= 0");
 
@@ -600,6 +608,8 @@ namespace bliss
           this->nChunks = this->computeNumberOfChunks();
 
           resetImpl();
+
+          return this->non_overlap_size;
         };
 
 

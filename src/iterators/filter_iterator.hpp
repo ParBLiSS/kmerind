@@ -119,17 +119,13 @@ namespace bliss
         /// constructor, for creating end iterator
         filter_iterator(const Filter & f, const Iterator& curr) // for end iterator.
             : _curr(curr), _start(curr), _end(curr), _f(f), before_start(false)
-        {
-        }
-        ;
+        {};
 
         /// copy constructor
         filter_iterator(const type& Other)
             : _curr(Other._curr), _start(Other._start), _end(Other._end),
               _f(Other._f), before_start(Other.before_start)
-        {
-        }
-        ;
+        {};
 
 
         /// copy assignment iterator
@@ -142,6 +138,25 @@ namespace bliss
           before_start = Other.before_start;
           return *this;
         }
+
+        /// move constructor
+        filter_iterator(type&& Other)
+            : _curr(std::move(Other._curr)), _start(std::move(Other._start)), _end(std::move(Other._end)),
+              _f(std::move(Other._f)), before_start(std::move(Other.before_start))
+        {};
+
+
+        /// move assignment iterator
+        type& operator=(type&& Other)
+        {
+          _curr = std::move(Other._curr);
+          _start = std::move(Other._start);
+          _end = std::move(Other._end);
+          _f = std::move(Other._f);
+          before_start = std::move(Other.before_start);
+          return *this;
+        }
+
 
         /// increment to next matching element in base iterator
         type& operator++()
@@ -169,13 +184,13 @@ namespace bliss
         }
 
         /// compare 2 filter iterators
-        inline bool operator==(const type& rhs)
+        inline bool operator==(const type& rhs) const
         {
           return _curr == rhs._curr;
         }
 
         /// compare 2 filter iterators
-        inline bool operator!=(const type& rhs)
+        inline bool operator!=(const type& rhs) const
         {
           return _curr != rhs._curr;
         }
@@ -192,11 +207,11 @@ namespace bliss
           return _curr;
         }
 
-        /// returns a pointer to tthe value held in iterator.
-        inline typename base_traits::pointer operator->()
-        {
-          return &(*_curr);
-        }
+//        /// returns a pointer to tthe value held in iterator.
+//        inline typename base_traits::pointer operator->()
+//        {
+//          return &(*_curr);
+//        }
 
         // NO support for output iterator at this point, since modifying a value can prevent multipass requirement of forward iterator.
 

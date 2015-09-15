@@ -3,6 +3,8 @@
  * Test range class
  *  Created on: Feb 18, 2014
  *      Author: Tony Pan <tpan7@gatech.edu>
+ *
+ * NOTE: no corresponding MPI test.  the logic is same as openmp.
  */
 
 #include "bliss-config.hpp"
@@ -269,6 +271,7 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
   }
 }
 
+#ifdef USE_OPENMP
 //test the cyclic partitioning operation. (With openmp threads)
 TYPED_TEST_P(PartitionTest, cyclicPartition_openmp){
   typedef bliss::partition::range<TypeParam> RangeType;
@@ -327,6 +330,7 @@ TYPED_TEST_P(PartitionTest, cyclicPartition_openmp){
     }
   }
 }
+#endif
 
 TYPED_TEST_P(PartitionTest, demandPartition){
   typedef bliss::partition::range<TypeParam> RangeType;
@@ -405,6 +409,7 @@ TYPED_TEST_P(PartitionTest, demandPartition){
   }
 }
 
+#ifdef USE_OPENMP
 //test the demand partitioning operation. (With openmp threads)
 TYPED_TEST_P(PartitionTest, demandPartition_openmp){
   typedef bliss::partition::range<TypeParam> RangeType;
@@ -476,6 +481,7 @@ TYPED_TEST_P(PartitionTest, demandPartition_openmp){
     }
   }
 }
+#endif
 
 // failed partitions due to asserts.
 TYPED_TEST_P(PartitionTest, badPartitionId){
@@ -520,8 +526,11 @@ TYPED_TEST_P(PartitionTest, badPartitionId){
 
 
 // now register the test cases
+#ifdef USE_OPENMP
 REGISTER_TYPED_TEST_CASE_P(PartitionTest, badPartitionId, blockPartition, blockPartition_openmp, cyclicPartition, cyclicPartition_openmp, demandPartition, demandPartition_openmp);
-
+#else
+REGISTER_TYPED_TEST_CASE_P(PartitionTest, badPartitionId, blockPartition, cyclicPartition, demandPartition);
+#endif
 
 
 
