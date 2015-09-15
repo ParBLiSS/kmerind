@@ -42,6 +42,7 @@
 
 #include <cstdint>  // for uint8, etc.
 
+
 #include "mxx/collective.hpp"
 #include "mxx/reduction.hpp"
 #include "mxx/sort.hpp"
@@ -1577,17 +1578,20 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           // first balance
 
+          // TODO: stable_block_decompose uses all2all internally.  is it better to move the deltas ourselves?
           if (!this->balanced) {
             TIMER_START(rehash);
-            this->c = std::move(::mxx::stable_block_decompose(this->c, this->comm));
+            ::mxx::stable_block_decompose(this->c, this->comm).swap(this->c);
 
             TIMER_END(rehash, "block1", this->c.size());
           }
 
           // sort if needed
-          TIMER_START(rehash);
-          if (!this->globally_sorted) ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm, false);
-          TIMER_END(rehash, "mxxsort", this->c.size());
+          if (!this->globally_sorted) {
+            TIMER_START(rehash);
+            ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm, false);
+            TIMER_END(rehash, "mxxsort", this->c.size());
+          }
 
           // get new pivots
           TIMER_START(rehash);
@@ -1596,11 +1600,22 @@ namespace dsc  // distributed std container
             // only send for the first p-1 proc, and only if they have a kmer to split with.
             this->key_to_rank.map.emplace_back(this->c.front().first, this->comm_rank - 1);
           }
+
+          // using gatherv because some processes may not be sending anything.
           this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+
+          assert(this->key_to_rank.map.size() > 0);
+
           // note that key_to_rank.map needs to be unique.
           auto map_end = std::unique(this->key_to_rank.map.begin(), this->key_to_rank.map.end(),
                                      Base::Base::equal);
           this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
+
+          if (this->comm_rank == 0)
+            for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
+              DEBUGF("R %d unique key_to_rank.map[%d] = (%s->%d)", this->comm_rank, i, bliss::utils::KmerUtils::toASCIIString(this->key_to_rank.map[i].first).c_str() , this->key_to_rank.map[i].second );
+            }
+          assert(this->key_to_rank.map.size() > 0);
 
 
 //          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
@@ -1617,7 +1632,15 @@ namespace dsc  // distributed std container
           ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(this->c, this->key_to_rank.map, Base::Base::less);
           TIMER_END(rehash, "bucket", this->c.size());
 
+          // this should always be true.
+          assert(send_counts.size() == this->comm_size);
+
+          for (int i = 0; i < send_counts.size(); ++i) {
+            DEBUGF("R %d send_counts[%d] = %lu", this->comm_rank, i, send_counts[i]);
+          }
+
           TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
+          // TODO: readjust boundaries using all2all.  is it better to move the deltas ourselves?
           mxx2::all2all(this->c, send_counts, this->comm);
           TIMER_END(rehash, "a2a", this->c.size());
 

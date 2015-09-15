@@ -408,15 +408,13 @@ namespace bliss
          * @param _range    the corresponding range (offset values)
          */
         void assign(const Iterator &_start, const Iterator &_end, const Range &_range) {
-          if (_start == _end || _range.size() == 0) {
-            clear();
-          } else {
-            empty = false;
-            range = _range;
+          if (std::distance(_start, _end) != _range.size()) throw std::invalid_argument("ERROR: Data block assign was passed range and start-end iterators that have different sizes");
 
-            startIter = _start;
-            endIter = _end;
-          }
+          empty = (_range.size() == 0) || (_start == _end);
+          range = _range;
+
+          startIter = _start;
+          endIter = _end;
         }
 
         /**

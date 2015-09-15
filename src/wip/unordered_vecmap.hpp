@@ -586,10 +586,10 @@ namespace fsc {  // fast standard container
       }
 
       void report() {
-        printf("compact vecmap bucket count: %lu\n", map.bucket_count());
-        printf("compact vecmap load factor: %f\n", map.load_factor());
-        printf("compact vecmap unique entries: %lu\n", map.size());
-        printf("compact vecmap total size: %lu\n", s);
+        INFOF("compact vecmap bucket count: %lu", map.bucket_count());
+        INFOF("compact vecmap load factor: %f", map.load_factor());
+        INFOF("compact vecmap unique entries: %lu", map.size());
+        INFOF("compact vecmap total entries: %lu", this->s);
       }
 
 
