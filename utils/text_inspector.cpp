@@ -63,21 +63,21 @@ int main(int argc, char** argv) {
 
 
 
-  std::cout << "please enter start and end positions.  enter a negative number to exit." << std::endl;
+  std::cout << "please enter start and end positions (separated by space).  negative numbers to exit exit." << std::endl;
   ///
   int pos = 0;
   int endpos = 0;
   do {
-    pos = 0;
-    endpos = 0;
-    std::cin >> pos >> endpos;
-    if (pos >= 0) {
+	pos = -1;
+	endpos = -1;
+	scanf("%d %d", &pos, &endpos);
+    if (pos >= 0 && endpos >= 0) {
       std::cout << "char at pos " << pos << " - " << endpos << std::endl;
       std::ostream_iterator<unsigned char> oit(std::cout);
       std::copy(data + pos, data + endpos, oit);
       std::cout << std::endl;
     }
-  } while (pos >= 0);
+  } while (pos >= 0 && endpos >= 0);
 
   ///
   munmap(data, file_size);
