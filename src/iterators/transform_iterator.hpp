@@ -134,7 +134,7 @@ protected:
   /**************************************************
    *  Private constructor (no direct construction)  *
    **************************************************/
-  _shared_transforming_iterator() {}
+  _shared_transforming_iterator() = delete;
 
   /******************
    *  Constructors  *
@@ -222,6 +222,9 @@ public:
       : base_class_type(base_iter, f)
   {
   }
+
+   _transforming_iterator_dir() = delete;
+
 
   virtual ~_transforming_iterator_dir() {}
 
@@ -358,6 +361,9 @@ public:
       : base_class_type(base_iter, f)
   {
   }
+
+
+  _transforming_iterator_ra() = delete;
 
   virtual ~_transforming_iterator_ra() {}
 
@@ -593,14 +599,14 @@ public:
   {
   }
 
-  /**
-   * @brief     Default contructor.
-   */
-  // specific to at least fwd iterators: default contructable
-  transform_iterator()
-      : base_class_type()
-  {
-  }
+//  /**
+//   * @brief     Default contructor.  disabled because it does not make sense to create one without a base iterator or transformer.
+//   */
+//  // specific to at least fwd iterators: default contructable
+  transform_iterator() = delete;
+//      : base_class_type()
+//  {
+//  }
 
   /// default destructor
   virtual ~transform_iterator() {}
