@@ -14,6 +14,7 @@
 
 // own includes:
 #include "common/base_types.hpp"
+#include "utils/constexpr_array.hpp"
 
 // TODO add the following alphabets:
 // D/RNA
@@ -58,6 +59,37 @@ namespace bliss
 
       };
     
+      ///  ASCII alphabet.  note that TO_ASCII and FROM_ASCII do not do anything.  TO_COMPLEMENT more importantly does nothing.
+      // dummy template parameter to take advantage of exemption for templated class - allowing definition of std::arrays to exist in header.  (declaration and initialization can be in header anyways)
+      template <typename DUMMY = void>
+      struct ASCII_T : BaseAlphabetChar
+      {
+        // This should make char and DNA useable interchangebly
+        ASCII_T& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
+        ASCII_T(const CharType& c) : BaseAlphabetChar(c) {}
+        ASCII_T() : BaseAlphabetChar() {}
+
+        /// alphabet size
+        static constexpr AlphabetSizeType SIZE = 256;
+
+        /// ascii to alphabet lookup table
+        static constexpr std::array<uint8_t, 256> FROM_ASCII = bliss::utils::make_array<uint8_t, 256>();
+
+        /// alphabet to ascii lookup table
+        static constexpr std::array<char, SIZE> TO_ASCII = bliss::utils::make_array<char, 256>();
+
+        /// complement lookup table
+        static constexpr std::array<uint8_t, SIZE> TO_COMPLEMENT = bliss::utils::make_array<uint8_t, 256>();
+      };
+
+      template <typename DUMMY>
+      constexpr std::array<uint8_t, 256> ASCII_T<DUMMY>::FROM_ASCII;
+      template <typename DUMMY>
+      constexpr std::array<char, ASCII_T<DUMMY>::SIZE> ASCII_T<DUMMY>::TO_ASCII;
+      template <typename DUMMY>
+      constexpr std::array<uint8_t, ASCII_T<DUMMY>::SIZE> ASCII_T<DUMMY>::TO_COMPLEMENT;
+
+
       ///  DNA alphabet: A T C G.  NOTE: DNA is configured so that negation is complement!
       // dummy template parameter to take advantage of exemption for templated class - allowing definition of std::arrays to exist in header.  (declaration and initialization can be in header anyways)
       template <typename DUMMY = void>
@@ -528,6 +560,7 @@ namespace bliss
 
     } // namespace alphabet
 
+      using ASCII = ::bliss::common::alphabet::ASCII_T<>;
       using DNA = ::bliss::common::alphabet::DNA_T<>;
       using DNA5 = ::bliss::common::alphabet::DNA5_T<>;
       using RNA = ::bliss::common::alphabet::RNA_T<>;

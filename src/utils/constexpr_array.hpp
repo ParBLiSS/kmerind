@@ -45,6 +45,24 @@ namespace bliss {
         return {{ f(Indices)... }};
       }
 
+
+      /**
+       * @brief  Expands the index value sequence parameter pack (index_sequence) and apply function to transform them.
+       * @tparam Function   function type for transforming from index value to output value
+       * @tparam Indices    index values.
+       * @param f           function to transform from index value to output value
+       * @param             index value sequence parameter pack - for deducing the Indices template parameters only.
+       * @return
+       */
+      template<typename T, std::size_t ... Indices>
+      constexpr auto make_array_helper(bliss::utils::index_sequence<Indices...>)
+          -> std::array<T, sizeof...(Indices)>
+      {
+          // double curl braces aggregate initializes the stdarray.
+          // ... does a variadic expansion.
+        return {{ static_cast<T>(Indices)... }};
+      }
+
     }  // namespace detail
 
 
@@ -61,6 +79,21 @@ namespace bliss {
     {
         // expands N into a index sequence [0, .., N), then transform each via f.
       return detail::make_array_helper(f, bliss::utils::make_index_sequence<N>{});
+    }
+
+    /**
+     * @brief             construct and initialize a const_expr array.
+     * @tparam N          number of values in array
+     * @tparam Functor    constexpr functor type to transform an index (integer) value to a output value.
+     * @param f           constexpr functor to transform an index (integer) value to a output value.
+     * @return            std::array with the computed constexpr values
+     */
+    template<typename T, size_t N>
+    constexpr auto make_array()
+    -> std::array<T, N>
+    {
+        // expands N into a index sequence [0, .., N), then transform each via f.
+      return detail::make_array_helper<T>(bliss::utils::make_index_sequence<N>{});
     }
 
   } // namespace utils
