@@ -122,6 +122,10 @@ void testDeBruijnGraph(MPI_Comm comm, const std::string & filename, const std::s
 	auto results3 = idx.find(query1);
 	TIMER_END(test, "query 1", results3.size());
 
+	for (auto result : results3) {
+	  std::cout << result << std::endl;
+	}
+
 	query1 = query_orig;
 	query1.resize(1);
 
@@ -132,6 +136,11 @@ void testDeBruijnGraph(MPI_Comm comm, const std::string & filename, const std::s
 	TIMER_START(test);
 	auto results = idx.find(query);
 	TIMER_END(test, "query 1%", results.size());
+
+  for (auto result : results) {
+    std::cout << result << std::endl;
+  }
+
 
 	query = query_orig;
 
@@ -191,20 +200,37 @@ int main(int argc, char** argv) {
 	using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
 
 	using Uint16NodeMapType = bliss::de_bruijn::de_bruijn_nodes_distributed<
-			KmerType, bliss::de_bruijn::node::node_trait<Alphabet, int32_t>, int,
+			KmerType, bliss::de_bruijn::node::edge_counts<Alphabet, int32_t>, int,
 			bliss::kmer::transform::lex_less,
 			bliss::kmer::hash::farm>;
 
 	using Uint8NodeMapType = bliss::de_bruijn::de_bruijn_nodes_distributed<
-			KmerType, bliss::de_bruijn::node::node_trait<Alphabet, int32_t>, int,
+			KmerType, bliss::de_bruijn::node::edge_counts<Alphabet, int32_t>, int,
 			bliss::kmer::transform::lex_less,
 			bliss::kmer::hash::farm>;
 
 	::std::cerr<<"Using uint16_t to present each edge" << ::std::endl;
-	testDeBruijnGraph< bliss::de_bruijn::de_bruijn_engine<Uint16NodeMapType>, bliss::io::FASTQParser >(comm, filename, ::std::string("ST, hash, dbg construction."));
+	testDeBruijnGraph< bliss::de_bruijn::de_bruijn_engine<Uint16NodeMapType>, bliss::io::FASTQParser >(comm, filename, ::std::string("ST, hash, dbg construction, count."));
 
 	::std::cerr<<"Using uint8_t to represent each edge" << ::std::endl;
-	testDeBruijnGraph< bliss::de_bruijn::de_bruijn_engine<Uint8NodeMapType>,  bliss::io::FASTQParser >(comm, filename, ::std::string("ST, hash, dbg construction."));
+	testDeBruijnGraph< bliss::de_bruijn::de_bruijn_engine<Uint8NodeMapType>,  bliss::io::FASTQParser >(comm, filename, ::std::string("ST, hash, dbg construction, count."));
+
+
+  using Uint16NodeMapType2 = bliss::de_bruijn::de_bruijn_nodes_distributed<
+      KmerType, bliss::de_bruijn::node::edge_exists<Alphabet>, int,
+      bliss::kmer::transform::lex_less,
+      bliss::kmer::hash::farm>;
+
+  using Uint8NodeMapType2 = bliss::de_bruijn::de_bruijn_nodes_distributed<
+      KmerType, bliss::de_bruijn::node::edge_exists<Alphabet>, int,
+      bliss::kmer::transform::lex_less,
+      bliss::kmer::hash::farm>;
+
+  ::std::cerr<<"Using 1bit to present each edge" << ::std::endl;
+  testDeBruijnGraph< bliss::de_bruijn::de_bruijn_engine<Uint16NodeMapType2>, bliss::io::FASTQParser >(comm, filename, ::std::string("ST, hash, dbg construction, existence."));
+
+  ::std::cerr<<"Using 1bit to represent each edge" << ::std::endl;
+  testDeBruijnGraph< bliss::de_bruijn::de_bruijn_engine<Uint8NodeMapType2>,  bliss::io::FASTQParser >(comm, filename, ::std::string("ST, hash, dbg construction, existence."));
 
 	/*synchronization*/
 	MPI_Barrier(comm);

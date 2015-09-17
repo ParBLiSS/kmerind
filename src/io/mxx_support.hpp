@@ -70,12 +70,20 @@ namespace mxx {
 
 
   template <typename A, typename T>
-  class datatype<bliss::de_bruijn::node::node_trait<A, T> > :
-    public datatype<decltype(bliss::de_bruijn::node::node_trait<A, T>::counts)> {};
+  class datatype<bliss::de_bruijn::node::edge_counts<A, T> > :
+    public datatype<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts)> {};
 
   template <typename A, typename T>
-  class datatype<const bliss::de_bruijn::node::node_trait<A, T> > :
-    public datatype<decltype(bliss::de_bruijn::node::node_trait<A, T>::counts)> {};
+  class datatype<const bliss::de_bruijn::node::edge_counts<A, T> > :
+    public datatype<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts)> {};
+
+  template <typename A>
+  class datatype<bliss::de_bruijn::node::edge_exists<A> > :
+    public datatype<decltype(bliss::de_bruijn::node::edge_exists<A>::counts)> {};
+
+  template <typename A>
+  class datatype<const bliss::de_bruijn::node::edge_exists<A> > :
+    public datatype<decltype(bliss::de_bruijn::node::edge_exists<A>::counts)> {};
 
 }
 

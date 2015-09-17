@@ -38,17 +38,29 @@ namespace bliss
 
 			/*node trait class*/
 			template<typename Alphabet, typename CountType = uint32_t>
-			class node_trait{
+			class edge_counts{
 			  public:
+
+	        friend std::ostream& operator<<(std::ostream& ost, const edge_counts<Alphabet, CountType> & node)
+	        {
+	          // friend keyword signals that this overrides an externally declared function
+	          ost << " dBGr node: counts self = " << node.counts[node.counts.size() - 1] << " in = [";
+	          for (int i = 4; i < 8; ++i) ost << node.counts[i] << ",";
+	          ost << "], out = [";
+	          for (int i = 0; i < 4; ++i) ost << node.counts[i] << ",";
+	          ost << "]";
+	          return ost;
+	        }
+
 
 			    /// array of counts.  format:  [out A C G T; in A C G T; kmer count], ordered for the canonical strand, not necessarily same as for the input kmer..
 			    std::array<CountType, 9> counts;
 
 				/*constructor*/
-				node_trait() : counts({{0, 0, 0, 0, 0, 0, 0, 0, 0}}) {};
+				edge_counts() : counts({{0, 0, 0, 0, 0, 0, 0, 0, 0}}) {};
 
 				/*destructor.  not virtual, so that we don't have virtual lookup table pointer in the structure as well.*/
-				~node_trait() {}
+				~edge_counts() {}
 
 				/**
 				 *
@@ -91,6 +103,67 @@ namespace bliss
 				}
 
 			};
+
+
+      /*node trait class*/
+      template<typename Alphabet>
+      class edge_exists{
+        public:
+
+          friend std::ostream& operator<<(std::ostream& ost, const edge_exists<Alphabet> & node)
+          {
+            // friend keyword signals that this overrides an externally declared function
+            ost << " dBGr node: in = [";
+            for (int i = 4; i < 8; ++i) ost << (((node.counts >> i) & 0x1) == 1 ? 1 : 0) << ",";
+            ost << "], out = [";
+            for (int i = 0; i < 4; ++i) ost << (((node.counts >> i) & 0x1) == 1 ? 1 : 0) << ",";
+            ost << "]";
+            return ost;
+          }
+
+
+          /// array of counts.  format:  [out A C G T; in A C G T; kmer count], ordered for the canonical strand, not necessarily same as for the input kmer..
+          uint8_t counts;
+
+        /*constructor*/
+        edge_exists() : counts(0) {};
+
+        /*destructor.  not virtual, so that we don't have virtual lookup table pointer in the structure as well.*/
+        ~edge_exists() {}
+
+        /**
+         *
+         * @param relative_strand
+         * @param exts            2 4bits in 1 uchar.  ordered as [out, in], lower bits being out.  ordered for the input kmer (not necessarily canonical)
+         */
+        void update(uint8_t relative_strand, uint8_t exts)
+        {
+          // shuffle if antisense
+          if (relative_strand == ANTI_SENSE) {  // swap upper and lower 4 bits
+            exts = (exts << 4) | (exts >> 4);
+          }
+
+          counts |= exts;
+        }
+
+        /**
+         *
+         *
+         * @param relative_strand
+         * @param exts              2 byte chars, in [out, in] lower byte being out.  order for the input kmer (not necessarily same as for the canonical)
+         */
+        void update(uint8_t relative_strand, uint16_t exts)
+        {
+
+          // construct a 2x4bit char.  no reordering.
+          uint8_t temp = bliss::common::DNA16::FROM_ASCII[exts & 0xFF] |
+                (bliss::common::DNA16::FROM_ASCII[exts >> 8] << 4);
+
+          // now increment the counts - delegate to other update() function.
+          update(relative_strand, temp);
+        }
+
+      };
 
 
 
