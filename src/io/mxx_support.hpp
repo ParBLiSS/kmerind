@@ -30,6 +30,7 @@
 #include "containers/container_utils.hpp"
 #include "common/sequence.hpp"
 #include "partition/range.hpp"
+#include "wip/de_bruijn_node_trait.hpp"
 
 namespace mxx {
 
@@ -67,6 +68,14 @@ namespace mxx {
   class datatype<const bliss::partition::range<T> > :
     public datatype_contiguous<T, sizeof(bliss::partition::range<T>) / sizeof(T)> {};
 
+
+  template <typename A, typename T>
+  class datatype<bliss::de_bruijn::node::node_trait<A, T> > :
+    public datatype<decltype(bliss::de_bruijn::node::node_trait<A, T>::counts)> {};
+
+  template <typename A, typename T>
+  class datatype<const bliss::de_bruijn::node::node_trait<A, T> > :
+    public datatype<decltype(bliss::de_bruijn::node::node_trait<A, T>::counts)> {};
 
 }
 

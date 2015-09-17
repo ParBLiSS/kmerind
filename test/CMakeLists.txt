@@ -144,8 +144,11 @@ target_link_libraries(testKmerCountCorrectness ${EXTRA_LIBS})
 add_executable(testKmerCountCorrectnessInFasta TestKmerCountCorrectnessInFasta.cpp)
 target_link_libraries(testKmerCountCorrectnessInFasta ${EXTRA_LIBS})
 
+add_executable(test_de_brujin_graph_construction test_de_brujin_graph_construction.cpp)
+target_link_libraries(test_de_brujin_graph_construction ${EXTRA_LIBS})
+
 ## EXECUTABLES
-add_executable(profile_mem_usage profile_mem_usage.cpp)
+add_executable(profile_mem_usage profile_mem_usage.cpp) 
 target_link_libraries(profile_mem_usage ${EXTRA_LIBS})
 cotire(profile_mem_usage )
 
