@@ -100,8 +100,8 @@ protected:
 
 public:
 	using KmerType = typename MapType::key_type;
-	using IdType   = typename MapType::mapped_type;
-	using TupleType =      std::pair<KmerType, IdType>;
+	using ValueType   = typename MapType::mapped_type;
+	using TupleType =      std::pair<KmerType, ValueType>;
 	using Alphabet = typename KmerType::KmerAlphabet;
 
 	Index(MPI_Comm _comm, int _comm_size) : map(_comm, _comm_size), comm(_comm) {
@@ -342,7 +342,7 @@ public:
 			TIMER_START(file);
 			read_block<KP>(block, l2parser, result);
 			TIMER_END(file, "read", result.size());
-      std::cout << "Last: pos - kmer " << result.back() << std::endl;
+      INFO("Last: pos - kmer " << result.back());
 		}
 		TIMER_REPORT_MPI(file, rank, _comm);
 
@@ -518,6 +518,10 @@ template <typename Iter>
 using NonEOLIter = bliss::iterator::filter_iterator<NotEOL, Iter>;
 
 
+
+/**
+ * @tparam KmerType       output value type of this parser.  not necessarily the same as the map's final storage type.
+ */
 template <typename KmerType>
 struct KmerParser {
 
@@ -571,7 +575,9 @@ struct KmerParser {
 };
 
 
-
+/**
+ * @tparam TupleType       output value type of this parser.  not necessarily the same as the map's final storage type.
+ */
 template <typename TupleType>
 struct KmerPositionTupleParser {
 
@@ -666,6 +672,9 @@ struct KmerPositionTupleParser {
 };
 
 
+/**
+ * @tparam TupleType       output value type of this parser.  not necessarily the same as the map's final storage type.
+ */
 template <typename TupleType, template<typename> class QualityEncoder = bliss::index::Illumina18QualityScoreCodec>
 struct KmerPositionQualityTupleParser {
 
@@ -784,7 +793,9 @@ struct KmerPositionQualityTupleParser {
 
 
 
-
+/**
+ * @tparam TupleType       output value type of this parser.  not necessarily the same as the map's final storage type.
+ */
 template <typename TupleType>
 struct KmerCountTupleParser {
 
@@ -850,9 +861,9 @@ struct KmerCountTupleParser {
 
 };
 
-// version that computes the
-//template <typename MapType>
-//using KmerIndex = Index<MapType, KmerParser<typename MapType::key_type> >;
+// TODO: the types of Map that is used should be restricted.  (perhaps via map traits)
+template <typename MapType>
+using KmerIndex = Index<MapType, KmerParser<typename MapType::key_type> >;
 
 template <typename MapType>
 using PositionIndex = Index<MapType, KmerPositionTupleParser<std::pair<typename MapType::key_type, typename MapType::mapped_type> > >;
@@ -862,6 +873,8 @@ using PositionQualityIndex = Index<MapType, KmerPositionQualityTupleParser<std::
 
 template <typename MapType>
 using CountIndex = Index<MapType, KmerCountTupleParser<std::pair<typename MapType::key_type, typename MapType::mapped_type> > >;
+template <typename MapType>
+using CountIndex2 = Index<MapType, KmerParser<typename MapType::key_type> >;
 
 
 } /* namespace kmer */
