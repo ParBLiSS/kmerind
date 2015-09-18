@@ -499,6 +499,15 @@ public:
 
 	 }
 
+
+   typename MapType::const_iterator cbegin() const
+   {
+     return map.cbegin();
+   }
+
+   typename MapType::const_iterator cend() const {
+     return map.cend();
+   }
 };
 
 

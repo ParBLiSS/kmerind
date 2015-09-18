@@ -207,6 +207,15 @@ namespace dsc  // distributed std container
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
+      const_iterator cbegin() const
+      {
+        return c.cbegin();
+      }
+
+      const_iterator cend() const {
+        return c.cend();
+      }
+
     protected:
       local_container_type c;
 
