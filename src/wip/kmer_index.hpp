@@ -424,7 +424,7 @@ public:
 
 
 		TIMER_START(build);
-		size_t m = this->map.update_multiplicity();
+		//size_t m = this->map.update_multiplicity();
 		TIMER_END(build, "multiplicity", m);
 
 		TIMER_REPORT_MPI(build, this->commRank, this->comm);
