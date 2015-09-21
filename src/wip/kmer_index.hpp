@@ -424,7 +424,8 @@ public:
 
 
 		TIMER_START(build);
-		size_t m = this->map.update_multiplicity();
+		size_t m = 0;
+    m = this->map.update_multiplicity();
 		TIMER_END(build, "multiplicity", m);
 
 		TIMER_REPORT_MPI(build, this->commRank, this->comm);
@@ -498,6 +499,17 @@ public:
      this->insert(temp);
 
 	 }
+
+
+   typename MapType::const_iterator cbegin() const
+   {
+     return map.cbegin();
+   }
+
+   typename MapType::const_iterator cend() const {
+     return map.cend();
+   }
+
 
 };
 

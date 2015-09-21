@@ -797,6 +797,15 @@ namespace dsc  // distributed std container
       /// returns the local storage.  please use sparingly.
       local_container_type& get_local_container() { return c; }
 
+      const_iterator cbegin() const
+      {
+        return c.cbegin();
+      }
+
+      const_iterator cend() const {
+        return c.cend();
+      }
+
       /// update the multiplicity.  only multimap needs to do this.
       virtual size_t update_multiplicity() {
         this->rehash();
