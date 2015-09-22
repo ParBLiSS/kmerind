@@ -22,7 +22,7 @@ class UnorderedCompactVecMapTest : public ::testing::Test
     ::std::unordered_multimap<T, T> gold;
     ::fsc::unordered_compact_vecmap<T, T> test;
 
-    int iters = 10000;
+    size_t iters = 10000;
 
     virtual void SetUp()
     { // generate some inputs
@@ -32,7 +32,7 @@ class UnorderedCompactVecMapTest : public ::testing::Test
       std::uniform_int_distribution<T> distribution(0,99);
 
 
-      for (int i=0; i< iters; ++i) {
+      for (size_t i=0; i< iters; ++i) {
         T key = distribution(generator);
         T val = distribution(generator);
         test.emplace(::std::move(key), ::std::move(val));
@@ -216,22 +216,22 @@ TYPED_TEST_P(UnorderedCompactVecMapTest, rand_iterator)
   auto e = this->test.end();
 
   auto dist = e - b;
-  EXPECT_EQ( dist, this->iters);
+  EXPECT_EQ( dist, static_cast<ptrdiff_t>(this->iters));
 
   auto dist2 = ::std::distance(b, e);
-  EXPECT_EQ( dist2, this->iters);
+  EXPECT_EQ( dist2, static_cast<ptrdiff_t>(this->iters));
 
   b += dist;
   dist = e - b;
-  EXPECT_EQ( dist, 0);
+  EXPECT_EQ( dist, static_cast<ptrdiff_t>(0));
 
   b = this->test.begin();
-  for (int i = 0; i < this->iters / 2; ++i) {
+  for (size_t i = 0; i < this->iters / 2; ++i) {
     ++b;
   }
 
   dist = b - this->test.begin();
-  EXPECT_EQ( dist, this->iters / 2);
+  EXPECT_EQ( dist, static_cast<ptrdiff_t>(this->iters / 2));
 
   auto c = this->test.begin();
   auto v = c[this->iters / 2];
@@ -313,7 +313,7 @@ class UnorderedVecMapTest : public ::testing::Test
     ::std::unordered_multimap<T, T> gold;
     ::fsc::unordered_vecmap<T, T> test;
 
-    int iters = 10000;
+    size_t iters = 10000;
 
     virtual void SetUp()
     { // generate some inputs
@@ -323,7 +323,7 @@ class UnorderedVecMapTest : public ::testing::Test
       std::uniform_int_distribution<T> distribution(0,99);
 
 
-      for (int i=0; i< iters; ++i) {
+      for (size_t i=0; i< iters; ++i) {
         T key = distribution(generator);
         T val = distribution(generator);
         test.emplace(::std::move(key), ::std::move(val));
@@ -357,7 +357,7 @@ TYPED_TEST_P(UnorderedVecMapTest, insert)
       same = ::std::equal(test_vals.begin(), test_vals.end(), gold_vals.begin());
 //
 //      if (!same) {
-//        for (int i = 0; i < this->iters; ++i) {
+//        for (size_t i = 0; i < this->iters; ++i) {
 //          printf("%ld->%ld\t%ld->%ld\n", test_vals[i].first, test_vals[i].second, gold_vals[i].first, gold_vals[i].second);
 //        }
 //      }
@@ -470,22 +470,22 @@ TYPED_TEST_P(UnorderedVecMapTest, rand_iterator)
   auto e = this->test.end();
 
   auto dist = e - b;
-  EXPECT_EQ( dist, this->iters);
+  EXPECT_EQ( dist, static_cast<ptrdiff_t>(this->iters));
 
   auto dist2 = ::std::distance(b, e);
-  EXPECT_EQ( dist2, this->iters);
+  EXPECT_EQ( dist2, static_cast<ptrdiff_t>(this->iters));
 
   b += dist;
   dist = e - b;
-  EXPECT_EQ( dist, 0);
+  EXPECT_EQ( dist, static_cast<ptrdiff_t>(0));
 
   b = this->test.begin();
-  for (int i = 0; i < this->iters / 2; ++i) {
+  for (size_t i = 0; i < this->iters / 2; ++i) {
     ++b;
   }
 
   dist = b - this->test.begin();
-  EXPECT_EQ( dist, this->iters / 2);
+  EXPECT_EQ( dist, static_cast<ptrdiff_t>(this->iters / 2));
 
   auto c = this->test.begin();
   auto v = c[this->iters / 2];

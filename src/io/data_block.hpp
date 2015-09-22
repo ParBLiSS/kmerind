@@ -67,6 +67,7 @@
 #include <vector>
 #include <algorithm>
 #include <utility>
+#include <cstdlib>
 
 #include "utils/container_traits.hpp"
 #include "partition/range.hpp"
@@ -408,7 +409,9 @@ namespace bliss
          * @param _range    the corresponding range (offset values)
          */
         void assign(const Iterator &_start, const Iterator &_end, const Range &_range) {
-          if (std::distance(_start, _end) != _range.size()) throw std::invalid_argument("ERROR: Data block assign was passed range and start-end iterators that have different sizes");
+          auto dist = std::distance(_start, _end);
+          if (dist < 0) throw std::invalid_argument("ERROR: Data block assign was passed start-end iterators that are in reverse order");
+          if (static_cast<size_t>(dist) != _range.size()) throw std::invalid_argument("ERROR: Data block assign was passed range and start-end iterators that have different sizes");
 
           empty = (_range.size() == 0) || (_start == _end);
           range = _range;

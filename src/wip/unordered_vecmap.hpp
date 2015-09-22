@@ -169,7 +169,7 @@ namespace fsc {  // fast standard container
           };
 
           /// constructor for start concatenating iterator.  general version with checking that _pos belongs to _iter subcontainer via distance check.
-          concat_iter(superiterator_type _iter, superiterator_type _end, subiterator_type _pos, size_t distance_check) :
+          concat_iter(superiterator_type _iter, superiterator_type _end, subiterator_type _pos, difference_type distance_check) :
             concat_iter<V>(_iter, _end, _pos) {
             if (!at_max && (distance_check != ::std::distance(_iter->second.begin(), _pos) ) )
               throw std::logic_error("unordered_compact_vecmap constructor failing distance check, suggesting that _pos is not from same subcontainer as what _iter points to");
@@ -283,7 +283,7 @@ namespace fsc {  // fast standard container
             auto orig_iter = curr_iter;
 
             // dereferenceable right now
-            size_t curr_dist = ::std::distance(curr_pos, curr_iter->second.end());
+            auto curr_dist = ::std::distance(curr_pos, curr_iter->second.end());
             while (n >= curr_dist) {
               // not at end, and n is larger than curr dist, so go to next subcontainer.
               n -= curr_dist;  // consume some entries
@@ -854,7 +854,7 @@ namespace fsc {  // fast standard container
             if (n < 0) throw ::std::logic_error("::fsc::unordered_vecmap::iterator does not support decrement.");
             if (n == 0) return *this;  // nothing to add.
 
-            size_t curr_dist;
+            difference_type curr_dist;
             while ((!at_end()) && (n > 0)) {
               curr_dist = ::std::distance(curr_pos, curr_iter->second.end());
               if (curr_dist > n) {

@@ -633,7 +633,7 @@ namespace io
          * TODO: test on remotely mounted file system.
          *
          */
-        FileLoader(const std::string &_filename, const size_t _nConcurrentLoaders, const int _loaderId, const size_t _nThreads = 1,
+        FileLoader(const std::string &_filename, const size_t _nConcurrentLoaders, const size_t _loaderId, const size_t _nThreads = 1,
                    const size_t _L2BlockSize = 0, const size_t _L1BlockSize = 0 ) throw (bliss::io::IOException)
             : pageSize(sysconf(_SC_PAGE_SIZE)), recordSize(0), seqSizeInRecord(0),
               loaded(false), fileHandle(-1), fileRange(),
@@ -1006,7 +1006,7 @@ namespace io
             // then advance Overlap characters, excluding eol characters.
             auto e = mmapData + (olr.start - mmap_olr_start);
             auto pos = olr.start;
-            for (int i = 0; (pos < olr.end) && (i < Overlap); ++e, ++pos) {
+            for (size_t i = 0; (pos < olr.end) && (i < Overlap); ++e, ++pos) {
               if ((*e != bliss::io::BaseFileParser<decltype(mmapData)>::cr) && (*e != bliss::io::BaseFileParser<decltype(mmapData)>::eol)) ++i;
             }
 
@@ -1194,7 +1194,7 @@ namespace io
           // now handle overlap, excluding eol etc.
           if (Overlap > 0) {
             auto oe = e;
-            for (int i = 0; (oe != L1Block.end()) && (i < Overlap); ++oe) {
+            for (size_t i = 0; (oe != L1Block.end()) && (i < Overlap); ++oe) {
               if ((*oe != bliss::io::BaseFileParser<typename L1BlockType::iterator>::cr) && (*oe != bliss::io::BaseFileParser<typename L1BlockType::iterator>::eol)) ++i;
             }
             r.end += std::distance(e, oe);
@@ -1262,7 +1262,7 @@ namespace io
           if (cache == nullptr)
             cache = new L2BlockType[nThreads];
           else
-            for (int i = 0; i < nThreads; ++i) {
+            for (size_t i = 0; i < nThreads; ++i) {
               cache[i].clear();
             }
         }

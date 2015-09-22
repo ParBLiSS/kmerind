@@ -296,7 +296,7 @@ public:
       int bitPos = bitstream::nBits - bitsPerChar;
   
       // add to lsb iteratively, one packed word at a time
-      for (int i = 0; i < KMER_SIZE; ++i, bitPos -= bitsPerChar)
+      for (size_t i = 0; i < KMER_SIZE; ++i, bitPos -= bitsPerChar)
       {
         setBitsAtPos(*begin >> offset, bitPos, bitsPerChar);
   
@@ -431,7 +431,7 @@ public:
       // directly put the char where it needs to go.
   
       int bitPos = bitstream::nBits - bitsPerChar;
-      for (int i = 0; i < KMER_SIZE; ++i, bitPos -= bitsPerChar) {
+      for (size_t i = 0; i < KMER_SIZE; ++i, bitPos -= bitsPerChar) {
   
         setBitsAtPos(*begin, bitPos, bitsPerChar);
   
@@ -686,7 +686,7 @@ public:
       auto first = this->data;
       auto second = rhs.data;
 
-      for (int i = 0; i < nWords; ++i, ++first, ++second) {
+      for (size_t i = 0; i < nWords; ++i, ++first, ++second) {
         if (*first != *second) return (*first < *second);  // if equal, keep comparing. else decide.
       }
       return false;  // all equal
@@ -716,7 +716,7 @@ public:
       auto first = this->data;
       auto second = rhs.data;
 
-      for (int i = 0; i < nWords; ++i, ++first, ++second) {
+      for (unsigned int i = 0; i < nWords; ++i, ++first, ++second) {
         if (*first != *second) return (*first < *second);  // if equal, keep comparing. else decide.
       }
       return true;  // all equal
@@ -1147,13 +1147,13 @@ public:
   protected:
   
     template<typename WType>
-    INLINE void setBitsAtPos(WType w, int bitPos, int numBits) {
+    INLINE void setBitsAtPos(WType w, int bitPos, unsigned int numBits) {
       // get the value masked.
       WORD_TYPE charVal = static_cast<WORD_TYPE>(w) & getLeastSignificantBitsMask<WORD_TYPE>(numBits);
   
       // determine which word in kmer it needs to go to
-      int wordId = bitPos / bitstream::bitsPerWord;
-      int offsetInWord = bitPos % bitstream::bitsPerWord;  // offset is where the LSB of the char will sit, in bit coordinate.
+      unsigned int wordId = bitPos / bitstream::bitsPerWord;
+      unsigned int offsetInWord = bitPos % bitstream::bitsPerWord;  // offset is where the LSB of the char will sit, in bit coordinate.
   
       if (offsetInWord >= (bitstream::bitsPerWord - numBits)) {
         // if split between words, deal with it.
@@ -1594,89 +1594,185 @@ public:
 
 #endif
 
-    /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.  8 to 100 times faster.
-    template <typename A = ALPHABET>
-    INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                     ::std::is_same<A, RNA>::value, WORD_TYPE>::type word_reverse(WORD_TYPE const & b) const {
-      WORD_TYPE v = b;
-      WORD_TYPE mask = ~0;
-      mask ^= (mask << (sizeof(WORD_TYPE) * 4));
+    /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits. 
+    /// 8 to 100 times faster when using DNA/RNA, and 8 to 50 times faster than sequentially reverse the bits when DNA16.
+    template <typename A = ALPHABET, typename W = WORD_TYPE>
+    INLINE typename ::std::enable_if<(::std::is_same<A, DNA>::value ||
+                                     ::std::is_same<A, RNA>::value ||
+                                     ::std::is_same<A, DNA16>::value) &&
+                                      (sizeof(W) == 8), W>::type word_reverse(W const & b) const {
+      W v = b;
+      W mask = (static_cast<W>(~0) >> 32);
 
       // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-      switch (sizeof(WORD_TYPE) * 8)
-      {
-        // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
-        case 64 :  v =  (v >> 32)         |  (v         << 32);  mask ^= (mask << 16);
-        case 32 :  v = ((v >> 16) & mask) | ((v & mask) << 16);  mask ^= (mask << 8);
-        case 16 :  v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);
-        case 8  :  v = ((v >>  4) & mask) | ((v & mask) <<  4);  mask ^= (mask << 2);
-                   v = ((v >>  2) & mask) | ((v & mask) <<  2);
-        default :  break;
+      // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
+      v =  (v >> 32)         |  (v         << 32);  mask ^= (mask << 16); // swap 32 bit. can use BSWAP_64 here
+      v = ((v >> 16) & mask) | ((v & mask) << 16);  mask ^= (mask << 8);  // swap 16 bit. can use BSWAP here.
+      v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);  // sqap bytes. can use XCHG here
+      v = ((v >>  4) & mask) | ((v & mask) <<  4);                        // swap nibbles.
+      if (!::std::is_same<A, DNA16>::value) {                             // if not DNA16, then swap 2 bits
+        mask ^= (mask << 2);
+        v = ((v >>  2) & mask) | ((v & mask) <<  2);
       }
 
       return v;
     }
+    template <typename A = ALPHABET, typename W = WORD_TYPE>
+    INLINE typename ::std::enable_if<(::std::is_same<A, DNA>::value ||
+                                     ::std::is_same<A, RNA>::value ||
+                                     ::std::is_same<A, DNA16>::value) &&
+                                      (sizeof(W) == 4), W>::type word_reverse(W const & b) const {
+      W v = b;
+      W mask = (static_cast<W>(~0) >> 16);
+
+      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
+      // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
+      v =  (v >> 16)         |  (v         << 16);  mask ^= (mask << 8);  // swap 16 bit. can use BSWAP here.
+      v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);  // sqap bytes. can use XCHG here
+      v = ((v >>  4) & mask) | ((v & mask) <<  4);                        // swap nibbles.
+      if (!::std::is_same<A, DNA16>::value) {                             // if not DNA16, then swap 2 bits
+        mask ^= (mask << 2);
+        v = ((v >>  2) & mask) | ((v & mask) <<  2);
+      }
+
+      return v;
+    }
+    template <typename A = ALPHABET, typename W = WORD_TYPE>
+    INLINE typename ::std::enable_if<(::std::is_same<A, DNA>::value ||
+                                     ::std::is_same<A, RNA>::value ||
+                                     ::std::is_same<A, DNA16>::value) &&
+                                      (sizeof(W) == 2), W>::type word_reverse(W const & b) const {
+      W v = b;
+      W mask = (static_cast<W>(~0) >> 8);
+
+      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
+      // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
+      v =  (v >>  8)         |  (v         <<  8);  mask ^= (mask << 4);  // sqap bytes. can use XCHG here
+      v = ((v >>  4) & mask) | ((v & mask) <<  4);                        // swap nibbles.
+      if (!::std::is_same<A, DNA16>::value) {                             // if not DNA16, then swap 2 bits
+        mask ^= (mask << 2);
+        v = ((v >>  2) & mask) | ((v & mask) <<  2);
+      }
+
+      return v;
+    }
+    template <typename A = ALPHABET, typename W = WORD_TYPE>
+    INLINE typename ::std::enable_if<(::std::is_same<A, DNA>::value ||
+                                     ::std::is_same<A, RNA>::value ||
+                                     ::std::is_same<A, DNA16>::value) &&
+                                      (sizeof(W) == 1), W>::type word_reverse(W const & b) const {
+      W v = b;
+      W mask = (static_cast<W>(~0) >> 4);
+
+      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
+      // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
+      v =  (v >>  4)         |  (v         <<  4);                        // swap nibbles.
+      if (!::std::is_same<A, DNA16>::value) {                             // if not DNA16, then swap 2 bits
+        mask ^= (mask << 2);
+        v = ((v >>  2) & mask) | ((v & mask) <<  2);
+      }
+
+      return v;
+    }
+    
     /// do reverse complement.  8 to 100 times faster than serially reversing the bits.
     template <typename A = ALPHABET>
         INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
                                          ::std::is_same<A, RNA>::value, WORD_TYPE>::type word_reverse_complement(WORD_TYPE const & b) const {
       // DNA type, requires that alphabet be setup so that negation produces the complement.
-      return ~(word_reverse<A>(b));
+      return ~(word_reverse<A, WORD_TYPE>(b));
     }
 
-    // reverse via bit swapping in 4 bit increment.  this complement table is then used for lookup.
-    /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.
-    /// 8 to 50 times faster than sequentially reverse the bits.
-    template <typename A = ALPHABET>
-        INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value, WORD_TYPE>::type  word_reverse(WORD_TYPE const & b) const {
-      WORD_TYPE v = b;
-      WORD_TYPE mask = ~0;
-      mask ^= (mask << (sizeof(WORD_TYPE) * 4));
 
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-      switch (sizeof(WORD_TYPE) * 8)
-      {
-        // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
-        case 64 :  v =  (v >> 32)         |  (v         << 32);  mask ^= (mask << 16); // can use BSWAP_64 here
-        case 32 :  v = ((v >> 16) & mask) | ((v & mask) << 16);  mask ^= (mask << 8);  // can use BSWAP here.
-        case 16 :  v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);  // can use XCHG here
-        case 8  :  v = ((v >>  4) & mask) | ((v & mask) <<  4);
-        default :  break;
-      }
-
-      return v;
-    }
     /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
-    template <typename A = ALPHABET>
-            INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value, WORD_TYPE>::type word_reverse_complement(WORD_TYPE const & b) const {
+    template <typename A = ALPHABET, typename W = WORD_TYPE>
+    INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value &&
+            (sizeof(W) == 8), W>::type word_reverse_complement(W const & b) const {
       // DNA type:
-      WORD_TYPE v = b;
-      WORD_TYPE mask = ~0;
-      mask ^= (mask << (sizeof(WORD_TYPE) * 4));
+      W v = b;
+      W mask = (static_cast<W>(~0) >> 32);
 
       // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
 
       // REQUIRES that alphabet where complement is bit reversal of the original character.
       // since for DNA16, complement is bit reversal in a nibble, we do 2 extra iterations.
-      switch (sizeof(WORD_TYPE) * 8)
-      {
-        // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
-        case 64 :  v =  (v >> 32)         |  (v         << 32);  mask ^= (mask << 16);
-        case 32 :  v = ((v >> 16) & mask) | ((v & mask) << 16);  mask ^= (mask << 8);
-        case 16 :  v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);
-        case 8  :  v = ((v >>  4) & mask) | ((v & mask) <<  4);  mask ^= (mask << 2);  // reverse nibbles within a byte
-                   v = ((v >>  2) & mask) | ((v & mask) <<  2);  mask ^= (mask << 1);  // last 2 steps create the complement
-                   v = ((v >>  1) & mask) | ((v & mask) <<  1);
-        default :  break;
-      }
+      v =  (v >> 32)         |  (v         << 32);  mask ^= (mask << 16);
+      v = ((v >> 16) & mask) | ((v & mask) << 16);  mask ^= (mask << 8);
+      v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);
+      v = ((v >>  4) & mask) | ((v & mask) <<  4);  mask ^= (mask << 2);  // reverse nibbles within a byte
+      v = ((v >>  2) & mask) | ((v & mask) <<  2);  mask ^= (mask << 1);  // last 2 steps create the complement
+      v = ((v >>  1) & mask) | ((v & mask) <<  1);
 
       // if we were to walk through the data byte by byte, and do complement and swap the low and high 4 bits,
       // the code would be as SLOW as do_reverse_complement.
 
       return v;
     }
+    template <typename A = ALPHABET, typename W = WORD_TYPE>
+    INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value &&
+            (sizeof(W) == 4), W>::type word_reverse_complement(W const & b) const {
+      // DNA type:
+      W v = b;
+      W mask = (static_cast<W>(~0) >> 16);
 
+      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
 
+      // REQUIRES that alphabet where complement is bit reversal of the original character.
+      // since for DNA16, complement is bit reversal in a nibble, we do 2 extra iterations.
+      v =  (v >> 16)         |  (v         << 16);  mask ^= (mask << 8);
+      v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);
+      v = ((v >>  4) & mask) | ((v & mask) <<  4);  mask ^= (mask << 2);  // reverse nibbles within a byte
+      v = ((v >>  2) & mask) | ((v & mask) <<  2);  mask ^= (mask << 1);  // last 2 steps create the complement
+      v = ((v >>  1) & mask) | ((v & mask) <<  1);
+
+      // if we were to walk through the data byte by byte, and do complement and swap the low and high 4 bits,
+      // the code would be as SLOW as do_reverse_complement.
+
+      return v;
+    }
+    /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
+    template <typename A = ALPHABET, typename W = WORD_TYPE>
+    INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value &&
+            (sizeof(W) == 2), W>::type word_reverse_complement(W const & b) const {
+      // DNA type:
+      W v = b;
+      W mask = (static_cast<W>(~0) >> 8);
+
+      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
+
+      // REQUIRES that alphabet where complement is bit reversal of the original character.
+      // since for DNA16, complement is bit reversal in a nibble, we do 2 extra iterations.
+      v =  (v >>  8)         |  (v         <<  8);  mask ^= (mask << 4);
+      v = ((v >>  4) & mask) | ((v & mask) <<  4);  mask ^= (mask << 2);  // reverse nibbles within a byte
+      v = ((v >>  2) & mask) | ((v & mask) <<  2);  mask ^= (mask << 1);  // last 2 steps create the complement
+      v = ((v >>  1) & mask) | ((v & mask) <<  1);
+
+      // if we were to walk through the data byte by byte, and do complement and swap the low and high 4 bits,
+      // the code would be as SLOW as do_reverse_complement.
+
+      return v;
+    }
+    /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
+    template <typename A = ALPHABET, typename W = WORD_TYPE>
+    INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value &&
+            (sizeof(W) == 1), W>::type word_reverse_complement(W const & b) const {
+      // DNA type:
+      W v = b;
+      W mask = (static_cast<W>(~0) >> 4);
+
+      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
+
+      // REQUIRES that alphabet where complement is bit reversal of the original character.
+      // since for DNA16, complement is bit reversal in a nibble, we do 2 extra iterations.
+      v =  (v >>  4)         |  (v         <<  4);  mask ^= (mask << 2);  // reverse nibbles within a byte
+      v = ((v >>  2) & mask) | ((v & mask) <<  2);  mask ^= (mask << 1);  // last 2 steps create the complement
+      v = ((v >>  1) & mask) | ((v & mask) <<  1);
+
+      // if we were to walk through the data byte by byte, and do complement and swap the low and high 4 bits,
+      // the code would be as SLOW as do_reverse_complement.
+
+      return v;
+    }
     /**
      * @brief Reverses this k-mer.
      *
@@ -1694,7 +1790,7 @@ public:
 
       // swap the word order.  also swap the packed chars in the word at the same time.
       for (int i = 0, j = nWords - 1, max = nWords; i < max; ++i, --j)
-        result.data[j] = word_reverse<A>(src.data[i]);
+        result.data[j] = word_reverse<A, WORD_TYPE>(src.data[i]);
 
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);

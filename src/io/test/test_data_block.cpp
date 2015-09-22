@@ -33,7 +33,7 @@ class DataBlockTest : public ::testing::Test
       slen = (std::numeric_limits<T>::max() < 1000000) ? std::numeric_limits<T>::max() : 1000000;
 
       src.reserve(slen);
-      for (T i = 0; i < slen; ++i) {
+      for (size_t i = 0; i < slen; ++i) {
         src.push_back(i);
       }
 
@@ -73,7 +73,7 @@ TYPED_TEST_P(DataBlockTest, BufferList){
   DB_Type db;
   db.assign(this->src.begin() + r.start, this->src.begin() + r.end, r);
 
-  int i = r.start;
+  auto i = r.start;
   for (auto it = db.begin(); it != db.end(); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }
@@ -107,7 +107,7 @@ TYPED_TEST_P(DataBlockTest, BufferVector){
   DB_Type db;
   db.assign(this->src.begin() + r.start, this->src.begin() + r.end, r);
 
-  int i = r.start;
+  auto i = r.start;
   for (auto it = db.begin(); it != db.end(); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }
@@ -156,7 +156,7 @@ class DataBlockPtrTest : public ::testing::Test
       slen = (std::numeric_limits<T>::max() < 1000000) ? std::numeric_limits<T>::max() : 1000000;
 
       src = new T[slen];
-      for (T i = 0; i < slen; ++i) {
+      for (size_t i = 0; i < slen; ++i) {
         src[i] = i;
       }
 
@@ -211,7 +211,7 @@ TYPED_TEST_P(DataBlockPtrTest, BufferVector){
   DB_Type db;
   db.assign(this->src + r.start, this->src + r.end, r);
 
-  int i = r.start;
+  auto i = r.start;
   for (auto it = db.begin(); it != db.end(); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }
@@ -246,7 +246,7 @@ TYPED_TEST_P(DataBlockPtrTest, BufferList){
   DB_Type db;
   db.assign(this->src + r.start, this->src + r.end, r);
 
-  int i = r.start;
+  auto i = r.start;
   for (auto it = db.begin(); it != db.end(); ++it, ++i) {
     EXPECT_EQ(this->src[i], *it) << "Vectors x and y differ at index " << i;
   }

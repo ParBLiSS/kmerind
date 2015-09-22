@@ -97,7 +97,7 @@ class FASTAIteratorTest2 : public ::testing::TestWithParam<TestFileInfo>
       unsigned char c;
       unsigned char* curr = result;
       int read = 0;
-      int total_read = 0;
+      size_t total_read = 0;
       for (size_t i = 0; i < length;) {
         read = fread_unlocked(&c, sizeof(unsigned char), 1, fp);
         total_read += read;
@@ -110,7 +110,7 @@ class FASTAIteratorTest2 : public ::testing::TestWithParam<TestFileInfo>
         }
       }
       fclose(fp);
-      EXPECT_GT(total_read, 0);
+      EXPECT_GT(0UL, total_read);
 
     }
 
@@ -161,7 +161,7 @@ TEST_P(FASTAIteratorTest2, read)
   //Get the vector of fasta headers from FASTA Loader
   FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
-  EXPECT_LT(0 , vectorReturned.size());
+  EXPECT_LT(0UL , vectorReturned.size());
 
 
   //Begin iteration
@@ -228,7 +228,7 @@ TEST_P(FASTAIteratorTest2, read_mpi)
   //Get the vector of fasta headers from FASTA Loader
   FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
-  EXPECT_LT(0 , vectorReturned.size());
+  EXPECT_LT(0UL, vectorReturned.size());
 
   //Begin iteration
   FASTAParser<typename FILELoaderType::L1BlockType::iterator, KmerType> FASTAIterObj(d.begin(), d.end(), r, loader.getFileRange(), vectorReturned);
@@ -300,7 +300,7 @@ TEST_P(FASTAIteratorTest2, read_omp_demand)
   FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
 
-  EXPECT_LT(0 , vectorReturned.size());
+  EXPECT_LT(0UL, vectorReturned.size());
 
   size_t localKmerCount = 0;
   bool localcomp[4];
@@ -358,7 +358,7 @@ TEST_P(FASTAIteratorTest2, read_omp_demand)
   this->kmerCount = localKmerCount;
 
   //Total kmers discovered should match with #kmers found in sequential test
-  EXPECT_EQ(comp, true);
+  EXPECT_EQ(true, comp);
 
 #ifdef USE_MPI
 	}
@@ -407,7 +407,7 @@ TEST_P(FASTAIteratorTest2, read_omp_block)
   FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
 
-  EXPECT_LT(0 , vectorReturned.size());
+  EXPECT_LT(0UL , vectorReturned.size());
 
   size_t localKmerCount = 0;
   bool localcomp[4];
@@ -466,7 +466,7 @@ TEST_P(FASTAIteratorTest2, read_omp_block)
   this->kmerCount = localKmerCount;
 
   //Total kmers discovered should match with #kmers found in sequential test
-  EXPECT_EQ(comp, true);
+  EXPECT_EQ(true, comp);
 #ifdef USE_MPI
 	}
 #endif
@@ -510,7 +510,7 @@ TEST_P(FASTAIteratorTest2, read_omp_mpi)
   FASTALoaderType obj(MPI_COMM_WORLD);
   obj.countSequenceStarts(d.begin(), loader.getFileRange() , r, vectorReturned);
 
-  EXPECT_LT(0 , vectorReturned.size());
+  EXPECT_LT(0UL, vectorReturned.size());
 
   size_t localKmerCount = 0;
   bool localcomp[4];
@@ -569,7 +569,7 @@ TEST_P(FASTAIteratorTest2, read_omp_mpi)
   this->kmerCount = localKmerCount;
 
   //Total kmers discovered should match with #kmers found in sequential test
-  EXPECT_EQ(comp, true);
+  EXPECT_EQ(true, comp);
 
 }
 #endif

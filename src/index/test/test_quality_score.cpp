@@ -95,7 +95,7 @@ typename std::enable_if<std::is_floating_point<T>::value, bool>::type compare_ve
   )) return true;
   else {
     ERROR( "Vectors not the same" );
-    for (int i = 0; i < first.size(); ++i) {
+    for (size_t i = 0; i < first.size(); ++i) {
       std::cout << (first[i] - second[i])  << ",";
     }
     std::cout << std::endl;
@@ -112,7 +112,7 @@ typename std::enable_if<!std::is_floating_point<T>::value, bool>::type compare_v
   else {
 
     ERROR( "Vectors not the same" );
-    for (int i = 0; i < first.size(); ++i) {
+    for (size_t i = 0; i < first.size(); ++i) {
       std::cout<< first[i] - second[i] <<",";
     }
     std::cout << std::endl;

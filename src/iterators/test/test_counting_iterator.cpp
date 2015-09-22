@@ -36,22 +36,22 @@ TYPED_TEST_P(CountingIteratorTest, construct){
   {
     CountingIterator<TypeParam> iter;
 
-    ASSERT_EQ(0, *iter);
+    ASSERT_EQ(static_cast<TypeParam>(0), *iter);
   }
   // construct
   {
     CountingIterator<TypeParam> iter(static_cast<TypeParam>(2));
-    ASSERT_EQ(2, *iter);
+    ASSERT_EQ(static_cast<TypeParam>(2), *iter);
     ++iter;
-    ASSERT_EQ(3, *iter);
+    ASSERT_EQ(static_cast<TypeParam>(3), *iter);
   }
 
   // construct
   {
     CountingIterator<TypeParam> iter(static_cast<TypeParam>(3), 2);
-    ASSERT_EQ(3, *iter);
+    ASSERT_EQ(static_cast<TypeParam>(3), *iter);
     ++iter;
-    ASSERT_EQ(5, *iter);
+    ASSERT_EQ(static_cast<TypeParam>(5), *iter);
   }
 
 }
@@ -66,7 +66,7 @@ TYPED_TEST_P(CountingIteratorTest, copy){
     CountingIterator<TypeParam> iter(3, 3);
     CountingIterator<TypeParam> iter2(iter);
 
-    ASSERT_EQ(3, *iter2);
+    ASSERT_EQ(static_cast<TypeParam>(3), *iter2);
   }
 
   // assignment
@@ -75,7 +75,7 @@ TYPED_TEST_P(CountingIteratorTest, copy){
     CountingIterator<TypeParam> iter2;
     iter2 = iter;
 
-    ASSERT_EQ(2, *iter2);
+    ASSERT_EQ(static_cast<TypeParam>(2), *iter2);
   }
 
   // multipass
@@ -84,11 +84,11 @@ TYPED_TEST_P(CountingIteratorTest, copy){
     CountingIterator<TypeParam> iter2;
     iter2 = iter;
 
-    ASSERT_EQ(3, *iter);
-    ASSERT_EQ(6, *(++iter));   // dereference pre increment
-    ASSERT_EQ(6, *iter++);     // dereference post increment (creates a copy)
-    ASSERT_EQ(9, *iter);       // check original hasn't been incremented after the post increment dereference
-    ASSERT_EQ(3, *iter2);      // check copy is still same.
+    ASSERT_EQ(static_cast<TypeParam>(3), *iter);
+    ASSERT_EQ(static_cast<TypeParam>(6), *(++iter));   // dereference pre increment
+    ASSERT_EQ(static_cast<TypeParam>(6), *iter++);     // dereference post increment (creates a copy)
+    ASSERT_EQ(static_cast<TypeParam>(9), *iter);       // check original hasn't been incremented after the post increment dereference
+    ASSERT_EQ(static_cast<TypeParam>(3), *iter2);      // check copy is still same.
   }
 
 }
@@ -100,51 +100,51 @@ TYPED_TEST_P(CountingIteratorTest, increment){
 
   // increment
   ++iter;
-  ASSERT_EQ(6, *iter);  // pre increment
+  ASSERT_EQ(static_cast<TypeParam>(6), *iter);  // pre increment
   iter++;
-  ASSERT_EQ(9, *iter);  // post increment but did not save
-  ASSERT_EQ(9, *iter++);  // post increment and use data
-  ASSERT_EQ(12, *iter);  // check original has all the increments
+  ASSERT_EQ(static_cast<TypeParam>(9), *iter);  // post increment but did not save
+  ASSERT_EQ(static_cast<TypeParam>(9), *iter++);  // post increment and use data
+  ASSERT_EQ(static_cast<TypeParam>(12), *iter);  // check original has all the increments
 
 
   // decrement
   --iter;
-  ASSERT_EQ(9, *iter);
+  ASSERT_EQ(static_cast<TypeParam>(9), *iter);
 
   iter--;
-  ASSERT_EQ(6, *iter);  // post increment but did not save
-  ASSERT_EQ(6, *iter--);  // post increment and use data
-  ASSERT_EQ(3, *iter);  // check original still same before post increment.
+  ASSERT_EQ(static_cast<TypeParam>(6), *iter);  // post increment but did not save
+  ASSERT_EQ(static_cast<TypeParam>(6), *iter--);  // post increment and use data
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter);  // check original still same before post increment.
 
   // arithmetic
   CountingIterator<TypeParam> iter2;
   iter2 = iter;                // *iter2 = 3
   ++iter;                      // *iter = 6
 
-  ASSERT_EQ(15, *(iter + 3));  // 6 + 3 *3
-  ASSERT_EQ(0, *(iter - 2));   // 6 - 3 * 2
-  ASSERT_EQ(15, *(3 + iter));  // 3*3 + 6
-  ASSERT_EQ(1, iter - iter2);  // (6 - 3) / 3
+  ASSERT_EQ(static_cast<TypeParam>(15), *(iter + 3));  // 6 + 3 *3
+  ASSERT_EQ(static_cast<TypeParam>(0), *(iter - 2));   // 6 - 3 * 2
+  ASSERT_EQ(static_cast<TypeParam>(15), *(3 + iter));  // 3*3 + 6
+  ASSERT_EQ(static_cast<ptrdiff_t>(1), iter - iter2);  // (6 - 3) / 3
 
   // compound assignment
   iter -= 2;                   // 6 - 3 *2
-  ASSERT_EQ(0, *iter);
+  ASSERT_EQ(static_cast<TypeParam>(0), *iter);
 
   iter += 3;                    // 0 + 3 * 3
-  ASSERT_EQ(9, *iter);
+  ASSERT_EQ(static_cast<TypeParam>(9), *iter);
 
-  ASSERT_EQ(2, iter - iter2);   // (9 - 3) / 3
+  ASSERT_EQ(static_cast<ptrdiff_t>(2), iter - iter2);   // (9 - 3) / 3
 }
 
 // failed construction due to asserts
 TYPED_TEST_P(CountingIteratorTest, dereference){
   CountingIterator<TypeParam> iter(4, 2);
   // *a
-  ASSERT_EQ(4, *iter);
+  ASSERT_EQ(static_cast<TypeParam>(4), *iter);
   ++iter;  // 6
 
   // a[]
-  ASSERT_EQ(30, iter[12]);  // 6 + 24
+  ASSERT_EQ(static_cast<TypeParam>(30), iter[12]);  // 6 + 24
 }
 
 

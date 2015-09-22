@@ -43,8 +43,8 @@ TYPED_TEST_P(ZipIteratorTest, copy){
   {
     decltype(this->iter1) iter(this->iter1);
 
-    ASSERT_EQ(4, iter->first);
-    ASSERT_EQ(3, iter->second);
+    ASSERT_EQ(static_cast<TypeParam>(4), iter->first);
+    ASSERT_EQ(static_cast<TypeParam>(3), iter->second);
   }
 
   // assignment
@@ -52,8 +52,8 @@ TYPED_TEST_P(ZipIteratorTest, copy){
     decltype(this->iter1) iter;
     iter = this->iter1;
 
-    ASSERT_EQ(4, iter->first);
-    ASSERT_EQ(3, iter->second);
+    ASSERT_EQ(static_cast<TypeParam>(4), iter->first);
+    ASSERT_EQ(static_cast<TypeParam>(3), iter->second);
   }
 
   // multipass
@@ -63,12 +63,12 @@ TYPED_TEST_P(ZipIteratorTest, copy){
     decltype(this->iter1) iter3;
     iter3 = iter;
 
-    ASSERT_EQ(6, (++iter3)->first);   // dereference pre increment
-    ASSERT_EQ(4, iter->first);
-    ASSERT_EQ(6, (++iter)->first);   // dereference pre increment
-    ASSERT_EQ(6, (iter++)->first);     // dereference post increment (creates a copy)
-    ASSERT_EQ(6, iter3->first);       // check original hasn't been incremented after the post increment dereference
-    ASSERT_EQ(8, iter->first);      // check copy is still same.
+    ASSERT_EQ(static_cast<TypeParam>(6), (++iter3)->first);   // dereference pre increment
+    ASSERT_EQ(static_cast<TypeParam>(4), iter->first);
+    ASSERT_EQ(static_cast<TypeParam>(6), (++iter)->first);   // dereference pre increment
+    ASSERT_EQ(static_cast<TypeParam>(6), (iter++)->first);     // dereference post increment (creates a copy)
+    ASSERT_EQ(static_cast<TypeParam>(6), iter3->first);       // check original hasn't been incremented after the post increment dereference
+    ASSERT_EQ(static_cast<TypeParam>(8), iter->first);      // check copy is still same.
   }
 
 }
@@ -80,11 +80,11 @@ TYPED_TEST_P(ZipIteratorTest, increment){
   decltype(this->iter2) iter(this->iter2);
   // increment
   ++iter;
-  ASSERT_EQ(6, (*iter).first);  // pre increment
+  ASSERT_EQ(static_cast<TypeParam>(6), (*iter).first);  // pre increment
   iter++;
-  ASSERT_EQ(8, (*iter).first);  // post increment but did not save
-  ASSERT_EQ(8, (*(iter++)).first);  // post increment and use data
-  ASSERT_EQ(10, (*iter).first);  // check original still same before post increment.
+  ASSERT_EQ(static_cast<TypeParam>(8), (*iter).first);  // post increment but did not save
+  ASSERT_EQ(static_cast<TypeParam>(8), (*(iter++)).first);  // post increment and use data
+  ASSERT_EQ(static_cast<TypeParam>(10), (*iter).first);  // check original still same before post increment.
 }
 
 // failed construction due to asserts
@@ -92,11 +92,11 @@ TYPED_TEST_P(ZipIteratorTest, dereference){
   decltype(this->iter2) iter(this->iter2);
 
   // *a
-  ASSERT_EQ(4, (*iter).first);
+  ASSERT_EQ(static_cast<TypeParam>(4), (*iter).first);
   ++iter;
 
   // a->
-  ASSERT_EQ(6, iter->first);
+  ASSERT_EQ(static_cast<TypeParam>(6), iter->first);
 
 }
 

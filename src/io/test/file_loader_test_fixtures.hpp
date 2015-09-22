@@ -111,7 +111,7 @@ class FileParserTest : public ::testing::TestWithParam<TestFileInfo>
       size_t read = fread_unlocked(result, sizeof(ValueType), length, fp);
       fclose(fp);
 
-      ASSERT_GT(read, 0);
+      ASSERT_GT(read, 0UL);
     }
 
     std::string fileName;
@@ -139,12 +139,12 @@ class KmerReaderTest : public FileParserTest<Loader>
       ValueType c;
       ValueType* curr = result;
       int read = 0;
-      int total_read = 0;
+      size_t total_read = 0;
       for (size_t i = 0; i < length;) {
         // each time we read, the position moves forward 1.
         read = fread_unlocked(&c, sizeof(ValueType), 1, fp);
-        total_read += read;
         if (read > 0) {  // only if read something.
+          total_read += read;
           if ((c >= 64 && c <= 90) || (c >= 97 && c <=122)) {
             // but only if we read a alphabetic character.
             *curr = std::toupper(c);
@@ -154,7 +154,7 @@ class KmerReaderTest : public FileParserTest<Loader>
         }
       }
       fclose(fp);
-      EXPECT_GT(total_read, 0);
+      EXPECT_GT(total_read, 0UL);
 
     }
 
@@ -185,7 +185,7 @@ class FileLoaderTest : public ::testing::Test
       stat(fileName.c_str(), &filestat);
       size_t fileSize = static_cast<size_t>(filestat.st_size);
 
-      ASSERT_EQ(34111308, fileSize);
+      ASSERT_EQ(34111308UL, fileSize);
 
     }
 
@@ -197,7 +197,7 @@ class FileLoaderTest : public ::testing::Test
       size_t read = fread_unlocked(result, sizeof(ValueType), length, fp);
       fclose(fp);
 
-      ASSERT_GT(read, 0);
+      ASSERT_GT(read, 0UL);
     }
 
     std::string fileName;

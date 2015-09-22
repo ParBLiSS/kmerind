@@ -95,7 +95,7 @@ typename std::enable_if<std::is_same<T, double>::value, bool>::type compare_vect
   )) return true;
   else {
     ERROR( "Vectors not the same" );
-    for (int i = 0; i < first.size(); ++i) {
+    for (size_t i = 0; i < first.size(); ++i) {
       std::cout<< (first[i] - second[i]) << ",";
     }
     std::cout << std::endl;
@@ -118,7 +118,7 @@ typename std::enable_if<std::is_same<T, float>::value, bool>::type compare_vecto
   )) return true;
   else {
     ERROR( "Vectors not the same" );
-    for (int i = 0; i < first.size(); ++i) {
+    for (size_t i = 0; i < first.size(); ++i) {
       std::cout << (first[i] - second[i]) << ",";
     }
     std::cout << std::endl;
@@ -183,7 +183,7 @@ void codec_decode(const std::vector<unsigned char> & data, // quality score valu
 
   int invalid = 0;
   OT sum = 0.0;
-  for (int i = 0; i < K; ++i) {
+  for (unsigned int i = 0; i < K; ++i) {
     auto tmp = decoder.decode(data[i]);
 
     if (tmp >= CODEC::min_log_prob)
@@ -194,7 +194,7 @@ void codec_decode(const std::vector<unsigned char> & data, // quality score valu
   if (invalid > 0) output.push_back(0);
   else output.push_back(std::exp2(sum));
 
-  for (int i = K; i < data.size(); ++i) {
+  for (unsigned int i = K; i < data.size(); ++i) {
     auto tmp = decoder.decode(data[i-K]);
     if (tmp >= CODEC::min_log_prob)
       sum -= tmp;
@@ -224,7 +224,7 @@ void direct_decode(const std::vector<unsigned char> & data,
 
   OT sum = 0;
   int invalid= 0;
-  for (int i = 0; i < K; ++i) {
+  for (unsigned int i = 0; i < K; ++i) {
     auto tmp = data[i] - MinInput + MinScore;
 
     if (tmp > 0)
@@ -235,7 +235,7 @@ void direct_decode(const std::vector<unsigned char> & data,
   if (invalid > 0) output.push_back(0);
   else output.push_back(std::exp2(sum));
 
-  for (int i = K; i < data.size(); ++i) {
+  for (unsigned int i = K; i < data.size(); ++i) {
     auto tmp = data[i-K] - MinInput + MinScore;
     if (tmp > 0)
       sum -= std::log2(1.0 - std::exp2(static_cast<OT>(tmp) * log2(10.0) / -10.0));

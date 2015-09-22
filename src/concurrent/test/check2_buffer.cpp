@@ -30,14 +30,14 @@
 
 template<bliss::concurrent::LockType TS, size_t CAP, size_t MDSize>
 void append(const int nthreads, bliss::io::Buffer<TS, CAP, MDSize>& buf,
-            const unsigned int start, const unsigned int end, int& success,
-            int& failure, int& swap, std::vector<std::vector<int> >& gold)
+            const unsigned int start, const unsigned int end, size_t& success,
+            size_t& failure, size_t& swap, std::vector<std::vector<int> >& gold)
 {
 
   unsigned int i;
-  int lsuccess = 0;
-  int lfailure = 0;
-  int lswap = 0;
+  size_t lsuccess = 0;
+  size_t lfailure = 0;
+  size_t lswap = 0;
 #pragma omp parallel for num_threads(nthreads) default(none) private(i) shared(buf, gold, stdout) reduction(+: lsuccess, lfailure, lswap)
   for (i = start; i < end; ++i)
   {
@@ -92,9 +92,9 @@ void appendTest()
   size_t nelems = CAP / sizeof(int);
   size_t remainder = CAP % sizeof(int);
 
-  int success = 0;
-  int failure = 0;
-  int swap = 0;
+  size_t success = 0;
+  size_t failure = 0;
+  size_t swap = 0;
   std::vector<std::vector<int> > gold(NumThreads);
   std::vector<int> ggold;
 
@@ -110,17 +110,17 @@ void appendTest()
   if (success == 0 || (success != nelems / 2) || failure != 0 || swap != 0)
   {
     ERRORF(
-        "FAIL: (actual,added/expected) success (%d,%d/%lu), failure (%d,%d/%d), swap(%d,%d/%d)",
+        "FAIL: (actual,added/expected) success (%lu,%lu/%lu), failure (%lu,%lu/%d), swap(%lu,%lu/%d)",
         success, success, nelems/2, failure, failure, 0, swap, swap, 0);
   }
   else
   {
     // compare unordered buffer content.
-    INFOF("success : %d, gold size %lu", success, ggold.size());
+    INFOF("success : %lu, gold size %lu", success, ggold.size());
 
     if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
     {
-      INFOF("PASS success %d failure %d swap %d", success, failure, swap);
+      INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
     else
     {
@@ -128,9 +128,9 @@ void appendTest()
     }
   }
 
-  int success2 = 0;
-  int failure2 = 0;
-  int swap2 = 0;
+  size_t success2 = 0;
+  size_t failure2 = 0;
+  size_t swap2 = 0;
   INFOF("TEST insert over capacity: ");
 
   append(NumThreads, b1, nelems / 2, nelems * 2, success2, failure2, swap2,
@@ -151,18 +151,18 @@ void appendTest()
   if (success == 0 || (success != nelems) || failure != nelems || swap != 1)
   {
     ERRORF(
-        "FAIL: (actual,added/expected) success (%d,%d/%lu), failure (%d,%d/%lu), swap(%d,%d/%d)",
+        "FAIL: (actual,added/expected) success (%lu,%lu/%lu), failure (%lu,%lu/%lu), swap(%lu,%lu/%d)",
         success, success2, nelems, failure, failure2, nelems, swap, swap2, 1);
   }
   else
   {
-    INFOF("success : %d, gold size %lu", success, ggold.size());
+    INFOF("success : %lu, gold size %lu", success, ggold.size());
 
 
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
     {
-      INFOF("PASS success %d failure %d swap %d", success, failure, swap);
+      INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
     else
     {
@@ -191,7 +191,7 @@ void appendTest()
 
   append(NumThreads, b1, 0, nelems, success, failure, swap, gold);
 
-  int swap_exp = (remainder > 0 ? 0 : 1);
+  size_t swap_exp = (remainder > 0 ? 0 : 1);
 
   for (int i = 0; i < NumThreads; ++i)
   {
@@ -202,7 +202,7 @@ void appendTest()
   if (success == 0 || (success != nelems) || failure != 0 || swap != swap_exp)
   {
     ERRORF(
-        "FAIL: (actual/expected) success (%d/%lu), failure (%d/%d), swap(%d/%d)",
+        "FAIL: (actual/expected) success (%lu/%lu), failure (%lu/%d), swap(%lu/%lu)",
         success, nelems, failure, 0, swap, swap_exp);
   }
   else
@@ -211,7 +211,7 @@ void appendTest()
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
     {
-      INFOF("PASS success %d failure %d swap %d", success, failure, swap);
+      INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
     else
     {
@@ -242,7 +242,7 @@ void appendTest()
   if (success == 0 || (success != nelems) || failure != NumThreads || swap != 1)
   {
     ERRORF(
-        "FAIL: (actual/expected) success (%d/%lu), failure (%d/%d), swap(%d/%d)",
+        "FAIL: (actual/expected) success (%lu/%lu), failure (%lu/%d), swap(%lu/%d)",
         success, nelems, failure, NumThreads, swap, 1);
   }
   else
@@ -251,7 +251,7 @@ void appendTest()
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
     {
-      INFOF("PASS success %d failure %d swap %d", success, failure, swap);
+      INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
     else
     {
@@ -283,7 +283,7 @@ void appendTest()
   if ((success != 0) || failure != nelems || swap != 0)
   {
     ERRORF(
-        "FAIL: (actual/expected) success (%d/%d), failure (%d/%lu), swap(%d/%d)",
+        "FAIL: (actual/expected) success (%lu/%d), failure (%lu/%lu), swap(%lu/%d)",
         success, 0, failure, nelems, swap, 0);
   }
   else
@@ -291,7 +291,7 @@ void appendTest()
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
     {
-      INFOF("PASS success %d failure %d swap %d", success, failure, swap);
+      INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
     else
     {
@@ -323,7 +323,7 @@ void appendTest()
   if (success == 0 || (success != nelems) || failure != 0 || swap != swap_exp)
   {
     ERRORF(
-        "FAIL: (actual/expected) success (%d/%lu), failure (%d/%d), swap(%d/%d)",
+        "FAIL: (actual/expected) success (%lu/%lu), failure (%lu/%d), swap(%lu/%lu)",
         success, nelems, failure, 0, swap, swap_exp);
   }
   else
@@ -331,7 +331,7 @@ void appendTest()
     // compare unordered buffer content.
     if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
     {
-      INFOF("PASS success %d failure %d swap %d", success, failure, swap);
+      INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
     else
     {
@@ -343,7 +343,7 @@ void appendTest()
 
 template<bliss::concurrent::LockType TS, size_t CAP, size_t MDSize,
     int NumThreads>
-void testAppendMultipleBuffersAtomicPtrs(const int total_count)
+void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 {
 
   INFOF(
@@ -351,7 +351,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
       NumThreads, static_cast<int>(TS), CAP, total_count);
 
   constexpr int elSize = sizeof(int);
-  constexpr int capInEl = CAP / sizeof(int);
+  constexpr size_t capInEl = CAP / sizeof(int);
 
   INFOF("TEST: save full buffers and process at end: ");
   std::vector<std::vector<std::unique_ptr<bliss::io::Buffer<TS, CAP, MDSize> > > > full(NumThreads);
@@ -361,16 +361,16 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
   std::vector<int> stored;
   std::vector<int> ggold;
 
-  int success = 0;
-  int failure = 0;
-  int swap = 0;
+  size_t success = 0;
+  size_t failure = 0;
+  size_t swap = 0;
 
   std::atomic<bliss::io::Buffer<TS, CAP, MDSize>*> ptr(
       new bliss::io::Buffer<TS, CAP, MDSize>());             // ensure atomicity
   ptr.load(std::memory_order_relaxed)->unblock_writes();
 
 #pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, full, gold, stderr, stdout, std::cout) reduction(+:success, failure, swap)
-  for (int i = 0; i < total_count; ++i)
+  for (size_t i = 0; i < total_count; ++i)
   {
 
     int data = static_cast<int>(i);
@@ -418,11 +418,11 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
       // save the old buffer
 
       // this is showing a possible spurious wakeup...
-      int oldsize = old_ptr->getSize() / elSize;
+      size_t oldsize = old_ptr->getSize() / elSize;
       if (oldsize != capInEl)
       {
         ERRORF(
-            "FAIL 1 atomic DID NOT GET %d elements in cap %lu bytes. got %d in %lu bytes. local swap = %d, i = %d",
+            "FAIL 1 atomic DID NOT GET %lu elements in cap %lu bytes. got %lu in %lu bytes. local swap = %lu, i = %lu",
             capInEl, old_ptr->getCapacity(), oldsize, old_ptr->getSize(), swap,
             i);
         INFO(
@@ -439,7 +439,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
   //INFOF("LAST BUFFER 1");
 
   ptr.load(std::memory_order_relaxed)->block_and_flush();
-  int last = ptr.load(std::memory_order_relaxed)->getSize();
+  auto last = ptr.load(std::memory_order_relaxed)->getSize();
   if (last == (capInEl))
   {
     ++swap;
@@ -449,19 +449,19 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
   full[0].push_back(
       std::move(std::unique_ptr<bliss::io::Buffer<TS, CAP, MDSize> >(b)));
 
-//  INFOF("DEBUG: atomic 1 success %d, failure %d, swap %d, total %d, full count %ld", success, failure, swap, total_count, full.size());
+//  INFOF("DEBUG: atomic 1 success %lu, failure %lu, swap %lu, total %lu, full count %ld", success, failure, swap, total_count, full.size());
 //  INFO( " buffer: " << *(ptr.load()) );
   size_t fullsize = 0;
-  for (int i = 0; i < full.size(); ++i)
+  for (size_t i = 0; i < full.size(); ++i)
   {
     fullsize += full[i].size();
-    for (int j = 0; j < full[i].size(); ++j)
+    for (size_t j = 0; j < full[i].size(); ++j)
     {
       stored.insert(stored.end(), full[i][j]->operator int*(),
                     reinterpret_cast<int*>(full[i][j]->end()));
     }
   }
-  int stored_count = stored.size();
+  auto stored_count = stored.size();
 
   for (int i = 0; i < NumThreads; ++i)
   {
@@ -472,7 +472,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
       || success != stored_count)
   {
     ERRORF(
-        "FAIL atomic: (actual/expected)  success (%d/%d), failure (%d/?), last %d, swap(%d,%lu/%d), last buf size %d, content match? %s.",
+        "FAIL atomic: (actual/expected)  success (%lu/%lu), failure (%lu/?), last %lu, swap(%lu,%lu/%lu), last buf size %lu, content match? %s.",
         stored_count,
         success,
         failure,
@@ -488,13 +488,13 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
 
     if (compareUnorderedSequences(stored.begin(), ggold.begin(), stored_count))
     {
-      INFOF("PASS: atomic success %d, failure %d, swap %d, total %d", success,
+      INFOF("PASS: atomic success %lu, failure %lu, swap %lu, total %lu", success,
             failure, swap, total_count);
     }
     else
     {
       FATALF(
-          "FAIL: atomic success %d, failure %d, swap %d, total %d, content not matching",
+          "FAIL: atomic success %lu, failure %lu, swap %lu, total %lu, content not matching",
           success, failure, swap, total_count);
     }
   }
@@ -513,13 +513,13 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
   failure = 0;
   swap = 0;
 
-  int success2 = 0;
+  size_t success2 = 0;
 
   b = ptr.exchange(new bliss::io::Buffer<TS, CAP, MDSize>(), std::memory_order_acq_rel); // old pointer was managed by unique ptr.
   ptr.load(std::memory_order_relaxed)->unblock_writes();
 
 #pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, gold, lstored, stderr, stdout, std::cout) reduction(+:success, failure, swap, success2)
-  for (int i = 0; i < total_count; ++i)
+  for (size_t i = 0; i < total_count; ++i)
   {
 
     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -554,7 +554,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
 //    	// this is a theory.
 //
 //      if (!(buf->is_read_only())) {
-//        FATALF("FAIL atomic incremental proc: at this point the buffer should be in read state.  res= %d", res);
+//        FATALF("FAIL atomic incremental proc: at this point the buffer should be in read state.  res= %lu", res);
 //        fflush(stdout);
 //        INFO( "buffer: " << *(buf) );
 //      }
@@ -574,12 +574,12 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
       if (old_ptr != nullptr)
       {
         ++swap;
-        int oldsize = old_ptr->getSize() / elSize;
+        size_t oldsize = old_ptr->getSize() / elSize;
         //        int newsize = buf_ptr.load()->getSize() / elSize;
         if (oldsize != capInEl || !(old_ptr->is_read_only()))
         {
           ERRORF(
-              "FAIL 2 atomic DID NOT GET %d elements. actual %d (%lu). local swap = %d, i = %d",
+              "FAIL 2 atomic DID NOT GET %lu elements. actual %lu (%lu). local swap = %lu, i = %lu",
               capInEl, oldsize, old_ptr->getSize(), swap, i);
           INFO("   old buf: " << *(old_ptr));
         }
@@ -605,7 +605,7 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
     ++swap;
   }
 
-  //INFOF("DEBUG: atomic before last buffer (actual/expected)  success (%d,%d/%d), failure (%d/?), swap(%d/%ld). content match? %s", stored_count, success2, success, failure, swap, success / (capInEl), compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
+  //INFOF("DEBUG: atomic before last buffer (actual/expected)  success (%lu,%lu/%lu), failure (%lu/?), swap(%lu/%ld). content match? %s", stored_count, success2, success, failure, swap, success / (capInEl), compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
 
   for (int i = 0; i < NumThreads; ++i)
   {
@@ -620,12 +620,12 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
   stored_count = stored.size();
   success2 += ptr.load(std::memory_order_relaxed)->getSize() / elSize;
 
-  //INFOF("DEBUG: atomic after last buffer (actual/expected)  success (%d,%d/%d), failure (%d/?), swap(%d/%ld), final buf size %d, content match? %s", stored_count, success2, success, failure, swap, success / (capInEl), last, compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
+  //INFOF("DEBUG: atomic after last buffer (actual/expected)  success (%lu,%lu/%lu), failure (%lu/?), swap(%lu/%ld), final buf size %lu, content match? %s", stored_count, success2, success, failure, swap, success / (capInEl), last, compareUnorderedSequences(stored.begin(), gold.begin(), stored_count) ? "same" : "diff");
 
   if (success == 0 || swap != success / (capInEl) || success != stored_count)
   {
     ERRORF(
-        "FAIL atomic: (actual/expected)  success (%d,%d/%d), failure (%d/?), last %d, swap(%d/%d). content match? %s",
+        "FAIL atomic: (actual/expected)  success (%lu,%lu/%lu), failure (%lu/?), last %lu, swap(%lu/%lu). content match? %s",
         stored_count,
         success2,
         success,
@@ -639,13 +639,13 @@ void testAppendMultipleBuffersAtomicPtrs(const int total_count)
   {
     if (compareUnorderedSequences(stored.begin(), ggold.begin(), stored_count))
     {
-      INFOF("PASS: atomic success %d, failure %d, swap %d, total %d", success,
+      INFOF("PASS: atomic success %lu, failure %lu, swap %lu, total %lu", success,
             failure, swap, total_count);
     }
     else
     {
       FATALF(
-          "FAIL: atomic success %d, failure %d, swap %d, total %d, content not matching",
+          "FAIL: atomic success %lu, failure %lu, swap %lu, total %lu, content not matching",
           success, failure, swap, total_count);
     }
   }
@@ -661,17 +661,17 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 {
 
   INFOF(
-      "TESTING atomic_ptrs: stress %d threads, locktype %d append with %ld bufferSize and %lu total counts",
+      "TESTING atomic_ptrs: stress %lu threads, locktype %d append with %ld bufferSize and %lu total counts",
       NumThreads, static_cast<int>(TS), CAP, total_count);
 
   constexpr size_t elSize = sizeof(size_t);
   constexpr size_t capInEl = CAP / elSize;
 
-  int success = 0;
-  int failure = 0;
-  int failure2 = 0;
-  int failure3 = 0;
-  int swap = 0;
+  size_t success = 0;
+  size_t failure = 0;
+  size_t failure2 = 0;
+  size_t failure3 = 0;
+  size_t swap = 0;
   size_t i = 0;
 
   std::atomic<bliss::io::Buffer<TS, CAP, MDSize>*> ptr(
@@ -746,7 +746,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
         if (oldsize != capInEl)
         {
           ERRORF(
-              "FAIL 3 thread %d/%d atomic DID NOT GET %lu elements, actual %lu. local swap = %d, i = %lu. oldbuf %p, newbuf %p",
+              "FAIL 3 thread %d/%d atomic DID NOT GET %lu elements, actual %lu. local swap = %lu, i = %lu. oldbuf %p, newbuf %p",
               omp_get_thread_num(), omp_get_num_threads(), capInEl, oldsize,
               swap, i, old_ptr, ptr.load(std::memory_order_relaxed));
         }
@@ -787,18 +787,18 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
   if (failure2 > 0 || failure3 > 0)
   {
     ERRORF(
-        "FAIL: bad inserts present: count of nullptr returned %d, count of bad value %d",
+        "FAIL: bad inserts present: count of nullptr returned %lu, count of bad value %lu",
         failure2, failure3);
   }
 
   if (success == 0 || swap != success / (capInEl))
   {
     ERRORF(
-        "FAIL atomic: success (%d), failure (%d/%d/%d), swap(%d/%ld), last buf size %lu.",
+        "FAIL atomic: success (%lu), failure (%lu/%lu/%lu), swap(%lu/%ld), last buf size %lu.",
         success, failure, failure2, failure3, swap, success / (capInEl), last);
   }
   else
-    INFOF("PASS: atomic success %d, failure %d/%d/%d, swap %d, total %lu",
+    INFOF("PASS: atomic success %lu, failure %lu/%lu/%lu, swap %lu, total %lu",
           success, failure, failure2, failure3, swap, total_count);
 
 }

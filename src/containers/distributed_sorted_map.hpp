@@ -1621,8 +1621,8 @@ namespace dsc  // distributed std container
           this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
 
           if (this->comm_rank == 0)
-            for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
-              DEBUGF("R %d unique key_to_rank.map[%d] = (%s->%d)", this->comm_rank, i, bliss::utils::KmerUtils::toASCIIString(this->key_to_rank.map[i].first).c_str() , this->key_to_rank.map[i].second );
+            for (size_t i = 0; i < this->key_to_rank.map.size(); ++i) {
+              DEBUGF("R %d unique key_to_rank.map[%lu] = (%s->%d)", this->comm_rank, i, bliss::utils::KmerUtils::toASCIIString(this->key_to_rank.map[i].first).c_str() , this->key_to_rank.map[i].second );
             }
           assert(this->key_to_rank.map.size() > 0);
 
@@ -1642,10 +1642,10 @@ namespace dsc  // distributed std container
           TIMER_END(rehash, "bucket", this->c.size());
 
           // this should always be true.
-          assert(send_counts.size() == this->comm_size);
+          assert(send_counts.size() == static_cast<size_t>(this->comm_size));
 
-          for (int i = 0; i < send_counts.size(); ++i) {
-            DEBUGF("R %d send_counts[%d] = %lu", this->comm_rank, i, send_counts[i]);
+          for (size_t i = 0; i < send_counts.size(); ++i) {
+            DEBUGF("R %d send_counts[%lu] = %lu", this->comm_rank, i, send_counts[i]);
           }
 
           TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);

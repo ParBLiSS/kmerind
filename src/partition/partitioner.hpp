@@ -158,14 +158,14 @@ namespace bliss
 
           Range r(pr.start + start_offset, pr.end);
           // compute start
-          if (pr.end - r.start > static_cast<SizeType>(chunkId) * this->non_overlap_size) {
+          if (static_cast<SizeType>(pr.end - r.start) > static_cast<SizeType>(chunkId) * this->non_overlap_size) {
             r.start += static_cast<SizeType>(chunkId) * this->non_overlap_size;
           } else {
             r.start = pr.end;
           }
 
           // compute end
-          if (pr.end - r.start > (this->non_overlap_size + this->overlap_size)) {
+          if (static_cast<SizeType>(pr.end - r.start) > (this->non_overlap_size + this->overlap_size)) {
             // enough room
             r.end = r.start + this->non_overlap_size + this->overlap_size;
           } else {
@@ -410,7 +410,7 @@ namespace bliss
          */
         void resetImpl() {
           if (done)
-            for(int i=0 ; i < this->nPartitions; i++)
+            for(size_t i=0 ; i < this->nPartitions; i++)
             {
               done[i] = false;
             }

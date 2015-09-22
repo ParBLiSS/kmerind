@@ -436,7 +436,7 @@ namespace bliss
           {
 
             // if near lowest possible value, then we can't align further.  assert this situation.
-            if ((block_start - std::numeric_limits<TT>::lowest()) < page_size)
+            if (static_cast<size_t>(block_start - std::numeric_limits<TT>::lowest()) < page_size)
               throw std::range_error("ERROR: range align_to_page: start is within a single page size of a signed data type minimum. cannot align page.");
 
             // deal with negative start position.

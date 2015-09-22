@@ -292,7 +292,7 @@ public:
 				//====  now compute the send counts and ranges to be scattered.
 				ranges.resize(g_size);
 				send_counts.resize(g_size);
-				for (size_t i = 0; i < g_size; ++i) {
+				for (int i = 0; i < g_size; ++i) {
 					block = loader.getNextL2Block(i);
 
 					ranges[i] = block.getRange();

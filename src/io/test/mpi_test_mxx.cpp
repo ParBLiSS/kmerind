@@ -64,10 +64,10 @@ TYPED_TEST_P(Mxx2MPITest, all2all)
 
   // create send count first
   auto recv_counts = mxx2::all2all(src, send_counts, comm);
-  int k = 0;
+  size_t k = 0;
   for (int i = 0; i < p; ++i) {
-    EXPECT_EQ(recv_counts[i], (p + rank - i) % p);
-    for (int j = 0; j < recv_counts[i]; ++j) {
+    EXPECT_EQ(recv_counts[i], static_cast<TypeParam>((p + rank - i) % p));
+    for (TypeParam j = 0; j < recv_counts[i]; ++j) {
       src[k++] = i;
     }
   }
@@ -147,8 +147,8 @@ TYPED_TEST_P(Mxx2MPITest, reduce_loc)
   if (rank == root) {
 
      for (int i = 0; i < p; ++i) {
-       EXPECT_EQ(data.first[i], 0);
-       EXPECT_EQ(data.second[i], i);
+       EXPECT_EQ(data.first[i], static_cast<int>(0));
+       EXPECT_EQ(data.second[i], static_cast<int>(i));
      }
   }
   MPI_Barrier(MPI_COMM_WORLD);
@@ -308,24 +308,24 @@ TYPED_TEST_P(Mxx2MPITest, scatterv)
   MPI_Scatter(&(send_counts[0]), 1, count_dt.type(), &count, 1, count_dt.type(), root, comm);
 
   // count should be the same
-  EXPECT_EQ(count, results.size());
+  EXPECT_EQ(static_cast<size_t>(count), results.size());
 
   // compare to expected values
   TypeParam incorrect = results.size();
-  for (int i = 0; i < results.size(); ++i) {
+  for (size_t i = 0; i < results.size(); ++i) {
     EXPECT_EQ(results[i], rank);
     if (results[i] == rank) --incorrect;
   }
 
 //  printf("size = %lu, incorrect = %lu\n", results.size(), incorrect);
 
-  EXPECT_EQ(incorrect, 0);
+  EXPECT_EQ(incorrect, static_cast<TypeParam>(0));
 
   TypeParam all_incorrect = 0;
   MPI_Reduce(&incorrect, &all_incorrect, 1, count_dt.type(), MPI_SUM, root, comm);
 
   if (rank == root)
-    EXPECT_EQ(all_incorrect, 0);
+    EXPECT_EQ(all_incorrect, static_cast<TypeParam>(0));
 
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -390,18 +390,18 @@ TYPED_TEST_P(Mxx2MPITest, scan)
   // forward
   TypeParam scanned = mxx2::scan::scan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
   //printf("R %d scan, %lu, ", rank, scanned);
-  EXPECT_EQ(scanned, rank + 1);
+  EXPECT_EQ(scanned, static_cast<TypeParam>(rank + 1));
 
   // reverse
   scanned = mxx2::scan::rscan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
   //printf("R %d scan_rev, %lu, ", rank, scanned);
-  EXPECT_EQ(scanned, p - rank);
+  EXPECT_EQ(scanned, static_cast<TypeParam>(p - rank));
 
   // exclusive
   scanned = mxx2::scan::exscan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
   if (rank > 0) {
     //printf("R %d exscan, %lu, ", rank, scanned);
-    EXPECT_EQ(scanned, rank);
+    EXPECT_EQ(scanned, static_cast<TypeParam>(rank));
   }
 
 
@@ -409,7 +409,7 @@ TYPED_TEST_P(Mxx2MPITest, scan)
   scanned = mxx2::scan::rexscan(input, std::plus<TypeParam>(), MPI_COMM_WORLD);
   if (rank < (p-1)) {
     //printf("R %d exscan_rev, %lu, ", rank, scanned);
-    EXPECT_EQ(scanned, p - rank - 1);
+    EXPECT_EQ(scanned, static_cast<TypeParam>(p - rank - 1));
   }
 
 }
@@ -433,20 +433,20 @@ TYPED_TEST_P(Mxx2MPITest, scan_n)
   std::vector<TypeParam> scanned = mxx2::scan::scan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
     //printf("R %d scan, %d = %lu \n", rank, i, scanned[i]);
-    EXPECT_EQ(scanned[i], i * (rank + 1));
+    EXPECT_EQ(scanned[i], static_cast<TypeParam>(i * (rank + 1)));
   }
   // reverse
   scanned = mxx2::scan::rscan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
     //printf("R %d scan_rev, %d = %lu \n", rank, i, scanned[i]);
-    EXPECT_EQ(scanned[i], i * (p - rank));
+    EXPECT_EQ(scanned[i], static_cast<TypeParam>(i * (p - rank)));
   }
   // exclusive
   scanned = mxx2::scan::exscan(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   if (rank > 0)
     for (int i = 0; i < p; ++i) {
       //printf("R %d exscan, %d = %lu \n", rank, i, scanned[i]);
-      EXPECT_EQ(scanned[i], i * rank);
+      EXPECT_EQ(scanned[i], static_cast<TypeParam>(i * rank));
     }
 
   // exclusive reverse
@@ -454,7 +454,7 @@ TYPED_TEST_P(Mxx2MPITest, scan_n)
   if (rank < (p-1))
     for (int i = 0; i < p; ++i) {
       //printf("R %d exscan_rev, %d = %lu \n", rank, i, scanned[i]);
-      EXPECT_EQ(scanned[i], i * (p - rank - 1));
+      EXPECT_EQ(scanned[i], static_cast<TypeParam>(i * (p - rank - 1)));
     }
 }
 
@@ -476,26 +476,26 @@ TYPED_TEST_P(Mxx2MPITest, scan_vec)
   std::vector<TypeParam> scanned = mxx2::scan::scan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
     //printf("R %d scan, %d = %lu \n", rank, i, scanned[i]);
-    EXPECT_EQ(scanned[i], p * rank + (i + 1));
+    EXPECT_EQ(scanned[i], static_cast<TypeParam>(p * rank + (i + 1)));
   }
   // reverse
   scanned = mxx2::scan::rscan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
     //printf("R %d scan_rev, %d = %lu \n", rank, i, scanned[i]);
-    EXPECT_EQ(scanned[i], p * (p - rank - 1) + (p - i));
+    EXPECT_EQ(scanned[i], static_cast<TypeParam>(p * (p - rank - 1) + (p - i)));
   }
   // exclusive
   scanned = mxx2::scan::exscan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = (rank > 0) ? 0 : 1; i < p; ++i) {
     //printf("R %d exscan, %d = %lu \n", rank, i, scanned[i]);
-    EXPECT_EQ(scanned[i], p * rank + i);
+    EXPECT_EQ(scanned[i], static_cast<TypeParam>(p * rank + i));
   }
 
   // exclusive reverse
   scanned = mxx2::scan::rexscan_contiguous(inputs, std::plus<TypeParam>(), MPI_COMM_WORLD);
   for (int i = 0; i < (rank < (p-1) ? p : p-1); ++i) {
     //printf("R %d exscan_rev, %d = %lu \n", rank, i, scanned[i]);
-    EXPECT_EQ(scanned[i], p * (p - rank - 1) + (p - i - 1));
+    EXPECT_EQ(scanned[i], static_cast<TypeParam>(p * (p - rank - 1) + (p - i - 1)));
   }
 }
 
@@ -513,30 +513,30 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert)
   // convert to start
   uint8_t start = mxx2::segment::is_start(seg, MPI_COMM_WORLD);
   //printf("R %d seg start, %d\n ", rank, start);
-  EXPECT_EQ((rank % 2 == 0 ? 1 : 0), start);
+  EXPECT_EQ(static_cast<uint8_t>(rank % 2 == 0 ? 1 : 0), start);
 
   // convert to end
   uint8_t end = mxx2::segment::is_end(seg, MPI_COMM_WORLD);
   //printf("R %d seg end, %d\n ", rank, end);
-  EXPECT_EQ(rank % 2 == 1 ? 1 : (rank == p-1) ? 1 : 0, end);
+  EXPECT_EQ(static_cast<uint8_t>(rank % 2 == 1 ? 1 : (rank == p-1) ? 1 : 0), end);
 
 
   // convert to unique from start
   TypeParam useg = mxx2::segment::to_unique_segment_id_from_start<TypeParam>(start, 0, MPI_COMM_WORLD);
   //printf("R %d uniq_seg, %d \n ", rank, useg);
-  EXPECT_EQ((rank / 2 + 1), useg);
+  EXPECT_EQ(static_cast<TypeParam>(rank / 2 + 1), useg);
 
 
   // convert to unique from end
   useg = mxx2::segment::to_unique_segment_id_from_end<TypeParam>(end, 0, MPI_COMM_WORLD);
   //printf("R %d uniq_seg_rev, %d \n ", rank, useg);
-  EXPECT_EQ((p + 1)/2 - rank/2, useg);
+  EXPECT_EQ(static_cast<TypeParam>((p + 1)/2 - rank/2), useg);
 
 
   // convert from non-unique to unique
   useg = mxx2::segment::to_unique_segment_id(seg, MPI_COMM_WORLD);
   //printf("R %d uniq_seg 2, %d \n ", rank, useg);
-  EXPECT_EQ((rank / 2 + 1), useg);
+  EXPECT_EQ(static_cast<TypeParam>(rank / 2 + 1), useg);
 
 
 }
@@ -561,34 +561,34 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert_n)
   auto starts = mxx2::segment::is_start(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
         //printf("R %d seg start, %d = %lu \n", rank, i, starts[i]);
-        EXPECT_EQ(((rank + i) % 2 == 0 ? 1 : (rank == 0) ? 1 : 0), starts[i]);
+        EXPECT_EQ(static_cast<TypeParam>((rank + i) % 2 == 0 ? 1 : (rank == 0) ? 1 : 0), starts[i]);
   }
   // convert to end
   auto ends = mxx2::segment::is_end(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
           //printf("R %d seg end, %d = %lu \n", rank, i, ends[i]);
-          EXPECT_EQ((rank+i) % 2 == 1 ? 1 : (rank == p-1) ? 1 : 0, ends[i]);
+          EXPECT_EQ(static_cast<TypeParam>((rank+i) % 2 == 1 ? 1 : (rank == p-1) ? 1 : 0), ends[i]);
   }
 
   // convert to unique from start
   auto useg = mxx2::segment::to_unique_segment_id_from_start<TypeParam>(starts, 0, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
         //printf("R %d useg, %d = %lu \n", rank, i, useg[i]);
-        EXPECT_EQ(((rank + i % 2) / 2 + 1), useg[i]);
+        EXPECT_EQ(static_cast<TypeParam>((rank + i % 2) / 2 + 1), useg[i]);
   }
 
   // convert to unique from end
   useg = mxx2::segment::to_unique_segment_id_from_end<TypeParam>(ends, 0, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
       //  printf("R %d useg rev, %d = %lu \n", rank, i, useg[i]);
-        EXPECT_EQ((p + 1 + i % 2) / 2 - (rank + i % 2)/2, useg[i]);
+        EXPECT_EQ(static_cast<TypeParam>((p + 1 + i % 2) / 2 - (rank + i % 2)/2), useg[i]);
   }
 
   // convert from non-unique to unique
   useg = mxx2::segment::to_unique_segment_id(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
     //printf("R %d uniq_seg 2, %d \n ", rank, useg[i]);
-    EXPECT_EQ(((rank + i % 2) / 2 + 1), useg[i]);
+    EXPECT_EQ(static_cast<TypeParam>((rank + i % 2) / 2 + 1), useg[i]);
   }
 
 }
@@ -618,14 +618,14 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert_vec)
   auto starts = mxx2::segment::is_start_contiguous(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
 //    printf("R %d seg start, %d = %lu \n", rank, i, starts[i]);
-    EXPECT_EQ(starts[i], (i == rank) ? 1 : 0);
+    EXPECT_EQ(starts[i], static_cast<TypeParam>((i == rank) ? 1 : 0));
   }
 
   // convert to end
   auto ends = mxx2::segment::is_end_contiguous(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
 //      printf("R %d seg end, %d = %lu \n", rank, i, ends[i]);
-      EXPECT_EQ(ends[i], (i == (rank-1)) ? 1 : ((rank == p - 1) && (i == p-1 )) ? 1 : 0);
+      EXPECT_EQ(ends[i], static_cast<TypeParam>((i == (rank-1)) ? 1 : ((rank == p - 1) && (i == p-1 )) ? 1 : 0));
   }
 
 
@@ -633,7 +633,7 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert_vec)
   auto useg = mxx2::segment::to_unique_segment_id_from_start_contiguous<TypeParam>(starts, 0, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
 //    printf("R %d useg, %d = %lu \n", rank, i, useg[i]);
-    EXPECT_EQ(useg[i], (i < rank) ? rank : rank + 1);
+    EXPECT_EQ(useg[i], static_cast<TypeParam>(i < rank ? rank : rank + 1));
   }
 
 
@@ -641,7 +641,7 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert_vec)
   useg = mxx2::segment::to_unique_segment_id_from_end_contiguous<TypeParam>(ends, 0, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
 //    printf("R %d useg rev, %d = %lu \n", rank, i, useg[i]);
-    EXPECT_EQ(useg[i], (i < rank) ? p - rank + 1 : p - rank);
+    EXPECT_EQ(useg[i], static_cast<TypeParam>((i < rank) ? p - rank + 1 : p - rank));
   }
 
 
@@ -649,10 +649,8 @@ TYPED_TEST_P(Mxx2MPITest, seg_convert_vec)
   useg = mxx2::segment::to_unique_segment_id_contiguous(inputs, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i) {
 //    printf("R %d useg 2, %d = %lu \n", rank, i, useg[i]);
-    EXPECT_EQ(useg[i], (i < rank) ? rank : rank + 1);
+    EXPECT_EQ(useg[i], static_cast<TypeParam>((i < rank) ? rank : rank + 1));
   }
-
-
 }
 
 
@@ -671,11 +669,11 @@ TYPED_TEST_P(Mxx2MPITest, reduce2)
 
   // forward
   TypeParam scanned = mxx2::reduce::reduce(input, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
-  if (rank == 0) EXPECT_EQ(scanned, p-1);
+  if (rank == 0) EXPECT_EQ(scanned, static_cast<TypeParam>(p-1));
 
   // reverse
   scanned = mxx2::reduce::allreduce(input, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
-  EXPECT_EQ(scanned, p-1);
+  EXPECT_EQ(scanned, static_cast<TypeParam>(p-1));
 
 }
 
@@ -698,12 +696,12 @@ TYPED_TEST_P(Mxx2MPITest, reduce_n)
   std::vector<TypeParam> scanned = mxx2::reduce::reduce(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
   if (rank == 0)
     for (int i = 0; i < p; ++i)
-      EXPECT_EQ(scanned[i], p-1);
+      EXPECT_EQ(scanned[i], static_cast<TypeParam>(p-1));
 
   // reverse
   scanned = mxx2::reduce::allreduce(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
   for (int i = 0; i < p; ++i)
-    EXPECT_EQ(scanned[i], p-1);
+    EXPECT_EQ(scanned[i], static_cast<TypeParam>(p-1));
 
 }
 
@@ -725,11 +723,11 @@ TYPED_TEST_P(Mxx2MPITest, reduce_vec)
   // forward
   TypeParam scanned = mxx2::reduce::reduce_contiguous(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
   if (rank == 0)
-    EXPECT_EQ(scanned, p * p - 1);
+    EXPECT_EQ(scanned, static_cast<TypeParam>(p * p - 1));
 
   // reverse
   scanned = mxx2::reduce::allreduce_contiguous(inputs, [](TypeParam & x, TypeParam & y) { return x > y ? x : y; }, MPI_COMM_WORLD);
-  EXPECT_EQ(scanned, p * p - 1);
+  EXPECT_EQ(scanned, static_cast<TypeParam>(p * p - 1));
 
 }
 
@@ -763,7 +761,7 @@ class Mxx2SegmentedMPITest : public ::testing::Test
 
       // forward.
       result[0] = x[0];
-      for (int i = 1; i < x.size(); ++i) {
+      for (size_t i = 1; i < x.size(); ++i) {
         if (seg[i-1] == seg[i]) {
           result[i] = f(result[i-1], x[i]);
         }
@@ -787,7 +785,7 @@ class Mxx2SegmentedMPITest : public ::testing::Test
       if (x.size() < 1) return result;
 
       result[0] = x[0];
-      for (int i = 1; i < x.size(); ++i) {
+      for (size_t i = 1; i < x.size(); ++i) {
         if (seg[i-1] == seg[i]) {
           result[i] = f(result[i-1], x[i]);
         }
@@ -805,7 +803,7 @@ class Mxx2SegmentedMPITest : public ::testing::Test
 
       result[0] = TT();
       TT temp = x[0];
-      for (int i = 1; i < x.size(); ++i) {
+      for (size_t i = 1; i < x.size(); ++i) {
         if (seg[i-1] == seg[i]) {
           result[i] = temp;
           temp = f(temp, x[i]);
@@ -878,7 +876,7 @@ class Mxx2SegmentedMPITest : public ::testing::Test
 
       bool same = true;
 
-      for (int i = 0; i < test.size() && i < gold.size(); ++i) {
+      for (size_t i = 0; i < test.size() && i < gold.size(); ++i) {
         if (starts[i] == 0) same &= (test[i] == gold[i]);
       }
       return same;

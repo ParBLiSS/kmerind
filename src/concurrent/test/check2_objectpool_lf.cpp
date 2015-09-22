@@ -29,7 +29,7 @@
 
 
 template<typename PoolType>
-void testAppendMultipleBuffers(const int NumThreads, const int total_count, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, const int64_t buffer_cap) {
+void testAppendMultipleBuffers(const int NumThreads, const size_t total_count, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, const size_t buffer_cap) {
   omp_lock_t writelock;
   omp_init_lock(&writelock);
   omp_lock_t writelock2;
@@ -39,7 +39,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 
 
 
-  INFOF("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %d total counts from unlimited pool",
+  INFOF("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %lu total counts from unlimited pool",
          NumThreads, poollt, bufferlt, buffer_cap, total_count);
 
 
@@ -51,10 +51,10 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
   int data = 0;
   unsigned int result = 0;
 
-  int success = 0;
-  int failure = 0;
-  int swap = 0;
-  int i = 0;
+  size_t success = 0;
+  size_t failure = 0;
+  size_t swap = 0;
+  size_t i = 0;
 
 
 
@@ -131,13 +131,13 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
     stored.insert(stored.end(), sptr->operator int*(), sptr->operator int*() + sptr->getSize() / sizeof(int));
   }
   pool.releaseObject(buf_ptr);
-  int stored_count = stored.size();
+  auto stored_count = stored.size();
 
 
   if ( swap != success / (buffer_cap / sizeof(int)) || success != stored_count)
-      FATALF("FAIL: (actual/expected)  success (%d/%d), failure (%d/?), swap(%ld/%d).", success, stored_count, failure, success / (buffer_cap / sizeof(int)), swap);
+      FATALF("FAIL: (actual/expected)  success (%lu/%lu), failure (%lu/?), swap(%lu/%lu).", success, stored_count, failure, success / (buffer_cap / sizeof(int)), swap);
   else {
-    INFOF("INFO: success %d, failure %d, swap %d, total %d", success, failure, swap, total_count);
+    INFOF("INFO: success %lu, failure %lu, swap %lu, total %lu", success, failure, swap, total_count);
 
     if (compareUnorderedSequences(stored.begin(), gold.begin(), stored_count)) {
       INFOF("PASS");
@@ -158,10 +158,10 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   INFOF("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d", poollt, bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
 
   INFOF("TEST acquire: ");
-  int expected;
-  int i = 0;
-  int count = 0;
-  int mx = pool.isUnlimited() ? 100 : pool.getCapacity();
+  size_t expected;
+  size_t i = 0;
+  size_t count = 0;
+  size_t mx = pool.isUnlimited() ? 100 : pool.getCapacity();
 #pragma omp parallel for num_threads(pool_threads) default(none) private(i) shared(pool, mx) reduction(+ : count)
   for (i = 0; i < mx; ++i) {
 	  auto ptr = pool.tryAcquireObject();
@@ -171,7 +171,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     }
   }
   expected = 0;
-  if (count != expected) FATALF("FAIL: number of failed attempt to acquire buffer should be %d, actual %d.  pool capacity %lu, remaining: %lu ", expected, count, pool.getCapacity(), pool.getAvailableCount());
+  if (count != expected) FATALF("FAIL: number of failed attempt to acquire buffer should be %lu, actual %lu.  pool capacity %lu, remaining: %lu ", expected, count, pool.getCapacity(), pool.getAvailableCount());
   else INFOF("PASSED.");
   pool.reset();
 
@@ -188,7 +188,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 	    }
   }
   expected = pool.isUnlimited() ? 0 : 1;
-  if (count != expected) FATALF("FAIL: number of failed attempt to acquire buffer should be %d, actual %d.  pool remaining: %ld/%ld ", expected, count, pool.getAvailableCount(), pool.getCapacity());
+  if (count != expected) FATALF("FAIL: number of failed attempt to acquire buffer should be %lu, actual %lu.  pool remaining: %ld/%ld ", expected, count, pool.getAvailableCount(), pool.getCapacity());
   else INFOF("PASSED.");
   pool.reset();
 
@@ -222,7 +222,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     }
   }
   expected = mx;  // unlimited or not, can only push back in as much as taken out.
-  if (count != expected) FATALF("FAIL: number of failed attempt to release buffer should be %d, actual %d. started with %ld, pool remaining: %ld/%ld ", expected, count, orig, pool.getAvailableCount(), pool.getCapacity());
+  if (count != expected) FATALF("FAIL: number of failed attempt to release buffer should be %lu, actual %lu. started with %ld, pool remaining: %ld/%ld ", expected, count, orig, pool.getAvailableCount(), pool.getCapacity());
   else INFOF("PASSED.");
   pool.reset();
   temp.clear();
@@ -233,8 +233,8 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   INFOF("TEST access by multiple threads, each a separate buffer: ");
 
   count = 0;
-  int count1 = 0;
-  int count2 = 0;
+  size_t count1 = 0;
+  size_t count2 = 0;
 #pragma omp parallel num_threads(pool_threads) default(none) shared(pool, std::cout) reduction(+ : count, count1, count2)
   {
     int v = omp_get_thread_num() + 5;
@@ -308,7 +308,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 
       // access
       iter = rand() % 100;
-      int count = 0;
+      size_t count = 0;
 #pragma omp parallel for num_threads(buffer_threads) default(none) shared(buf, iter) private(j) reduction(+:count)
       for (j = 0; j < iter; ++j) {
         bool res = buf->append(&j, 1);
@@ -329,7 +329,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 //      INFOF("count = %d", count);
 
       if (buf->getSize() != sizeof(int) * iter  || count != 0)
-        FATALF("FAIL: thread %d/%d buffer size is %ld, expected %lu", omp_get_thread_num() + 1, pool_threads, buf->getSize(), sizeof(int) * iter);
+        FATALF("FAIL: thread %d/%d buffer size is %lu, expected %lu", omp_get_thread_num() + 1, pool_threads, buf->getSize(), sizeof(int) * iter);
  // else INFOF("PASSED.");
 
       //release

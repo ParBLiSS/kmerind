@@ -63,7 +63,7 @@ TYPED_TEST_CASE_P(FilterIteratorTest);
 // testing the copy constructor
 TYPED_TEST_P(FilterIteratorTest, increment){
 
-  int i = 0;
+  TypeParam i = 0;
   auto it = this->even_filter_begin;
   for (; it != this->even_filter_end; ++it, i += 2) {
     ASSERT_TRUE(*it % 2 == 0);

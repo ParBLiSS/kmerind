@@ -40,7 +40,7 @@ void benchmark_reverse() {
 
 
   srand(0);
-  for (int i = 0; i < KMER_SIZE; ++i) {
+  for (size_t i = 0; i < KMER_SIZE; ++i) {
     kmer.nextFromChar(rand() % ALPHABET::SIZE);
   }
   kmers.reserve(iterations);
@@ -127,7 +127,7 @@ void test_reverse() {
   printf("testing kmer with k=%d, nbits = %d, word bits =%lu. stride %d, iters %d, remainder %d, simd_stride %d, simd_iters %d, simd_remainder %d\n", KMER_SIZE, KMER::nBits, sizeof(WORD_TYPE) * 8, KMER::stride, KMER::iters, KMER::rem, KMER::simd_stride, KMER::simd_iters, KMER::simd_rem);
 
   srand(0);
-  for (int i = 0; i < KMER_SIZE; ++i) {
+  for (unsigned int i = 0; i < KMER_SIZE; ++i) {
     kmer.nextFromChar(rand() % ALPHABET::SIZE);
   }
 

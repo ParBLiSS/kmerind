@@ -36,12 +36,12 @@ TYPED_TEST_P(ConstantIteratorTest, construct){
   {
     ConstantIterator<TypeParam> iter;
 
-    ASSERT_EQ(0, *iter);
+    ASSERT_EQ(static_cast<TypeParam>(0), *iter);
   }
   // construct
   {
     ConstantIterator<TypeParam> iter(static_cast<TypeParam>(2));
-    ASSERT_EQ(2, *iter);
+    ASSERT_EQ(static_cast<TypeParam>(2), *iter);
   }
 
 }
@@ -56,7 +56,7 @@ TYPED_TEST_P(ConstantIteratorTest, copy){
     ConstantIterator<TypeParam> iter(3);
     ConstantIterator<TypeParam> iter2(iter);
 
-    ASSERT_EQ(3, *iter2);
+    ASSERT_EQ(static_cast<TypeParam>(3), *iter2);
   }
 
   // assignment
@@ -65,7 +65,7 @@ TYPED_TEST_P(ConstantIteratorTest, copy){
     ConstantIterator<TypeParam> iter2;
     iter2 = iter;
 
-    ASSERT_EQ(2, *iter2);
+    ASSERT_EQ(static_cast<TypeParam>(2), *iter2);
   }
 
   // multipass
@@ -74,11 +74,11 @@ TYPED_TEST_P(ConstantIteratorTest, copy){
     ConstantIterator<TypeParam> iter2;
     iter2 = iter;
 
-    ASSERT_EQ(3, *iter);
-    ASSERT_EQ(3, *(++iter));   // dereference pre increment
-    ASSERT_EQ(3, *iter++);     // dereference post increment (creates a copy)
-    ASSERT_EQ(3, *iter);       // check original hasn't been incremented after the post increment dereference
-    ASSERT_EQ(3, *iter2);      // check copy is still same.
+    ASSERT_EQ(static_cast<TypeParam>(3), *iter);
+    ASSERT_EQ(static_cast<TypeParam>(3), *(++iter));   // dereference pre increment
+    ASSERT_EQ(static_cast<TypeParam>(3), *iter++);     // dereference post increment (creates a copy)
+    ASSERT_EQ(static_cast<TypeParam>(3), *iter);       // check original hasn't been incremented after the post increment dereference
+    ASSERT_EQ(static_cast<TypeParam>(3), *iter2);      // check copy is still same.
   }
 
 }
@@ -90,58 +90,58 @@ TYPED_TEST_P(ConstantIteratorTest, increment){
 
   // increment
   ++iter;
-  ASSERT_EQ(3, *iter);  // pre increment
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter);  // pre increment
   iter++;
-  ASSERT_EQ(3, *iter);  // post increment but did not save
-  ASSERT_EQ(3, *iter++);  // post increment and use data
-  ASSERT_EQ(3, *iter);  // check original still same before post increment.
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter);  // post increment but did not save
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter++);  // post increment and use data
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter);  // check original still same before post increment.
 
 
   // decrement
   ++iter;
-  ASSERT_EQ(3, *iter);  // pre increment
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter);  // pre increment
 
   --iter;
-  ASSERT_EQ(3, *iter);
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter);
 
   iter--;
-  ASSERT_EQ(3, *iter);  // post increment but did not save
-  ASSERT_EQ(3, *iter--);  // post increment and use data
-  ASSERT_EQ(3, *iter);  // check original still same before post increment.
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter);  // post increment but did not save
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter--);  // post increment and use data
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter);  // check original still same before post increment.
 
   // arithmetic
   ConstantIterator<TypeParam> iter2;
   iter2 = iter;                // *iter = 3
 
-  ASSERT_EQ(3, *(iter + 3));  // 6 + 3 *3
-  ASSERT_EQ(3, *(iter - 2));   // 6 - 3 * 2
-  ASSERT_EQ(3, *(3 + iter));  // 3*3 + 6
-  ASSERT_EQ(0, iter - iter2);  // 6 - 6
+  ASSERT_EQ(static_cast<TypeParam>(3), *(iter + 3));  // 6 + 3 *3
+  ASSERT_EQ(static_cast<TypeParam>(3), *(iter - 2));   // 6 - 3 * 2
+  ASSERT_EQ(static_cast<TypeParam>(3), *(3 + iter));  // 3*3 + 6
+  ASSERT_EQ(static_cast<ptrdiff_t>(0), iter - iter2);  // 6 - 6
 
   ConstantIterator<TypeParam> iter3(5);
-  ASSERT_EQ(2, iter3 - iter2);  // 6 - 6
+  ASSERT_EQ(static_cast<ptrdiff_t>(2), iter3 - iter2);  // 6 - 6
 
 
 
   // compound assignment
   iter -= 2;                   // 6 - 3 *2
-  ASSERT_EQ(3, *iter);
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter);
 
   iter += 3;                    // 0 + 3 * 3
-  ASSERT_EQ(3, *iter);
+  ASSERT_EQ(static_cast<TypeParam>(3), *iter);
 
-  ASSERT_EQ(0, iter - iter2);   // (9 - 6) / 3
+  ASSERT_EQ(static_cast<ptrdiff_t>(0), iter - iter2);   // (9 - 6) / 3
 }
 
 // failed construction due to asserts
 TYPED_TEST_P(ConstantIteratorTest, dereference){
   ConstantIterator<TypeParam> iter(4);
   // *a
-  ASSERT_EQ(4, *iter);
+  ASSERT_EQ(static_cast<TypeParam>(4), *iter);
   ++iter;
 
   // a[]
-  ASSERT_EQ(4, iter[12]);
+  ASSERT_EQ(static_cast<TypeParam>(4), iter[12]);
 }
 
 

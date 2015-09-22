@@ -115,7 +115,7 @@ TYPED_TEST_P(RangeTest, align){
     for (auto p : pageSizes)
     {
       // don't test cases where alignment would push us lower than the lowest possible value for the type.
-      if (s - std::numeric_limits<TypeParam>::lowest() < p)
+      if (static_cast<size_t>(s - std::numeric_limits<TypeParam>::lowest()) < p)
         continue;
 
       //INFOF("1 %ld %ld\n", static_cast<int64_t>(s), static_cast<int64_t>(p));

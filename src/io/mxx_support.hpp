@@ -324,13 +324,13 @@ namespace mxx2 {
     bool linear = (map.size() * std::log(buffer.size()) ) > buffer.size();
 
     if (linear)
-      for (int i = 0; i < map.size(); ++i) {
+      for (size_t i = 0; i < map.size(); ++i) {
         e = ::fsc::lower_bound<true>(b, buffer.end(), map[i].first, comp);
         send_counts[i] = ::std::distance(b, e);
         b = e;
       }
     else
-      for (int i = 0; i < map.size(); ++i) {
+      for (size_t i = 0; i < map.size(); ++i) {
         e = ::fsc::lower_bound<false>(b, buffer.end(), map[i].first, comp);
         send_counts[i] = ::std::distance(b, e);
         b = e;
@@ -512,7 +512,7 @@ namespace mxx2 {
     KEY key;
     T val;
   
-    for (int i = 0; i < send_counts.size(); ++i) {
+    for (size_t i = 0; i < send_counts.size(); ++i) {
       end = start + send_counts[i];
   
       map.clear();
@@ -546,7 +546,7 @@ namespace mxx2 {
       std::vector<count_t> recv_counts = mxx::all2all(send_counts, 1, comm);
       // get total size
       std::size_t recv_size = 0;
-      for (int i = 0; i < recv_counts.size(); ++i) {
+      for (size_t i = 0; i < recv_counts.size(); ++i) {
         recv_size += recv_counts[i];
       }
       std::vector<T> recv_buffer(recv_size);
@@ -589,7 +589,7 @@ namespace mxx2 {
     count_t max_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
     int p;
     MPI_Comm_size(comm, &p);
-    bool smaller = (max_count < (::std::numeric_limits<int>::max() / p));
+    bool smaller = (max_count < static_cast<count_t>(::std::numeric_limits<int>::max() / p));
     smaller = mxx::test_all(smaller, comm);
 
     if (smaller && ::std::is_same<count_t, size_t>::value)
@@ -693,7 +693,7 @@ namespace mxx2 {
     if (count > min_s) {
       WARNINGF("WARNING: gathern process %d trying to send %lu, more than min of %lu.", rank, count, min_s);
     }
-    if (min_s > (::std::numeric_limits<int>::max() / p)) {
+    if (min_s > static_cast<size_t>(::std::numeric_limits<int>::max() / p)) {
       WARNINGF("WARNING: gathern process %d trying to send min of %lu, more than max_int/p.", rank, min_s);
     }
 
@@ -772,7 +772,7 @@ namespace mxx2 {
     MPI_Comm_size(comm, &p);
     MPI_Comm_rank(comm, &rank);
 
-    if (rank == root && v.size() < p)
+    if ((rank == root) && (v.size() < static_cast<size_t>(p)))
       WARNINGF("ERROR: mxx2::scatter called with %lu elements, less than p (%d)", v.size(), p);
 
     T results;
@@ -1373,7 +1373,7 @@ namespace mxx2 {
 
         // set up the data structure
         ::std::vector< vi > temp(s);
-        for (int i = 0; i < s; ++i) {
+        for (size_t i = 0; i < s; ++i) {
           temp[i].val = v[i];
           temp[i].rank = rank;
         }
@@ -1385,7 +1385,7 @@ namespace mxx2 {
         // now extract the results
         ::std::vector<T> outVal(s);
         ::std::vector<int> outIdx(s);
-        for (int i = 0; i < s; ++i) {
+        for (size_t i = 0; i < s; ++i) {
           outVal[i] = temp2[i].val;
           outIdx[i] = temp2[i].rank;
         }

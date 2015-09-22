@@ -1037,7 +1037,7 @@ protected:
   {
     // deserialize
     std::pair<K, T>* elements = reinterpret_cast<std::pair<K, T>*>(msg);
-    int element_count = count / sizeof(std::pair<K, T>);
+    size_t element_count = count / sizeof(std::pair<K, T>);
 
     //====  now use parallel for to compute the hash,
     int nt = this->nThreads;
@@ -1069,7 +1069,7 @@ protected:
      t1 = std::chrono::high_resolution_clock::now();
     // compute threadhash and store in vector in parallel, (perfectly parallelizable, compute heavy)
 #pragma omp parallel for num_threads(nt) shared(element_count, elements) default(none)
-    for (int i = 0; i < element_count; ++i) {
+    for (size_t i = 0; i < element_count; ++i) {
       this->threadKeys[i] = this->getTargetThread(elements[i].first);  // insert hash value
     }
 
@@ -1091,7 +1091,7 @@ protected:
 #pragma omp parallel num_threads(nt) shared(element_count, elements) default(none)
     {
       int tid = omp_get_thread_num();
-      for (int i = 0; i < element_count; ++i) {
+      for (size_t i = 0; i < element_count; ++i) {
         // insert value if hash matches thread id
         if (this->threadKeys[i] == tid) this->local_map[tid].insert(elements[i]);
       }

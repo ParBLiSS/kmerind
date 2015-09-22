@@ -334,7 +334,7 @@ namespace bliss
 
               // insert first entry into sequences
               typename RangeType::ValueType pos, pos2, pos3;
-              int k = 0;
+              size_t k = 0;
 
               if (line_starts[k].second == 0 ) // not starting with a header.  move to next
                 ++k;
@@ -1246,7 +1246,7 @@ namespace bliss
 
               // insert first entry into localStartLocStore
               typename RangeType::ValueType pos, pos2, pos3;
-              int k = 0;
+              size_t k = 0;
 
               if (line_starts[k].second == 0 ) // not starting with a header.  move to next
                 ++k;
