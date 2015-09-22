@@ -515,7 +515,7 @@ if (ENABLE_TESTING)
     message(STATUS ${ARGN})
     add_executable(${test_target_name} ${ARGN})
     # add the googletest dependency
-    add_dependencies(${test_target_name} googletest)
+    # commented out because there is no googletest dependency    add_dependencies(${test_target_name} googletest)
     # set binary output path for tests
     set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
     # link test with gtest_main
@@ -550,7 +550,7 @@ if (ENABLE_TESTING)
     message(STATUS ${ARGN})
     add_executable(${test_target_name} ${ARGN})
     # add the googletest dependency
-    add_dependencies(${test_target_name} googletest)
+    # commented out because there is no googletest dependency    add_dependencies(${test_target_name} googletest)
     # set binary output path for tests
     set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
     # link test with gtest_main
@@ -589,7 +589,7 @@ if (ENABLE_TESTING)
       # add all give files
       add_executable(${test_target_name} ${CPP_FILE})
       # add the googletest dependency
-      add_dependencies(${test_target_name} googletest)
+      # commented out because there is no googletest dependency    add_dependencies(${test_target_name} googletest)
       # set binary output path for tests
       set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
       # link test with gtest (no main, since it provides it's own main function)
