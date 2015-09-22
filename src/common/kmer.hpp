@@ -616,6 +616,31 @@ public:
       // clean up
       do_sanitize();
     }
+
+    /**
+     * @brief Creates the preceeding k-mer by shifting and adding the given character.
+     *
+     * Creates the next k-mer by the sliding window. This first right shifts the
+     * current k-mer and then adds the given character to the most significant
+     * bits of this k-mer.
+     *
+     * @note  input iterator has values that are valid for the alphabet.
+     * Note: this is changing this k-mer in-place.
+     *
+     * @param c The character to be added to the k-mer.
+     */
+    void previousFromChar(unsigned char c)
+    {
+      // shift the kmer by the size of one character
+      // TODO: replace this by a call that does exactly bitsPerChar right shift
+      // (better compiler optimization)
+  
+      nextReverseFromWordInternal(c, bitsPerChar);
+  
+      // clean up
+      do_sanitize();
+    }
+
   
     // TODO: generating the reverse .
   
