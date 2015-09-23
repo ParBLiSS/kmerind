@@ -79,7 +79,7 @@ TYPED_TEST_P(PartitionTest, blockPartition){
     for (auto len : lens)
     {
 //      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= len) ? start + len : std::numeric_limits<TypeParam>::max());
-      src = RangeType(start, (static_cast<size_t>(std::numeric_limits<TypeParam>::max() - start) > len) ? start + static_cast<TypeParam>(len) : std::numeric_limits<TypeParam>::max());
+      src = RangeType(start, (static_cast<SizeType>(std::numeric_limits<TypeParam>::max() - start) > len) ? start + static_cast<TypeParam>(len) : std::numeric_limits<TypeParam>::max());
       for (auto p : partitionCount)
       {
 //        if (len < i)
@@ -159,7 +159,7 @@ TYPED_TEST_P(PartitionTest, blockPartition_openmp){
   {
     for (auto len : lens)
     {
-      src = RangeType(start, (static_cast<size_t>(std::numeric_limits<TypeParam>::max() - start) >= len) ? start + len : std::numeric_limits<TypeParam>::max());
+      src = RangeType(start, (static_cast<SizeType>(std::numeric_limits<TypeParam>::max() - start) >= len) ? start + len : std::numeric_limits<TypeParam>::max());
 
       part.configure(src, omp_get_max_threads());
       #pragma omp parallel
