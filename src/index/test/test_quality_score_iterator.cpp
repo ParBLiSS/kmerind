@@ -186,7 +186,7 @@ void codec_decode(const std::vector<unsigned char> & data, // quality score valu
   for (unsigned int i = 0; i < K; ++i) {
     auto tmp = decoder.decode(data[i]);
 
-    if (tmp >= CODEC::min_log_prob)
+    if (tmp > CODEC::DecodeLUT[0] && tmp < CODEC::DecodeLUT[95])
       sum += tmp;
     else
       ++invalid;
@@ -196,13 +196,13 @@ void codec_decode(const std::vector<unsigned char> & data, // quality score valu
 
   for (unsigned int i = K; i < data.size(); ++i) {
     auto tmp = decoder.decode(data[i-K]);
-    if (tmp >= CODEC::min_log_prob)
+    if (tmp > CODEC::DecodeLUT[0] && tmp < CODEC::DecodeLUT[95])
       sum -= tmp;
     else
       --invalid;
 
     tmp = decoder.decode(data[i]);
-    if (tmp >= CODEC::min_log_prob)
+    if (tmp > CODEC::DecodeLUT[0] && tmp < CODEC::DecodeLUT[95])
       sum += tmp;
     else
       ++invalid;
@@ -222,43 +222,61 @@ void direct_decode(const std::vector<unsigned char> & data,
 
   output.clear();
 
-  OT sum = 0;
+  double sum = 0;
+  double val = 0;
   int invalid= 0;
   for (unsigned int i = 0; i < K; ++i) {
-    auto tmp = data[i] - MinInput + MinScore;
+    auto tmp = data[i] - MinInput;
 
-    if (tmp > 0)
-      sum += std::log2(1.0 - std::exp2(static_cast<OT>(tmp) * log2(10.0) / -10.0));
-    else
+    if (tmp == 0 || tmp < MinScore)
       ++invalid;
+    else {
+      val = std::log2(1.0L - std::exp2(static_cast<long double>(tmp) * log2(10.0L) / -10.0L));
+      sum += val;
+    }
+
   }
   if (invalid > 0) output.push_back(0);
   else output.push_back(std::exp2(sum));
 
   for (unsigned int i = K; i < data.size(); ++i) {
-    auto tmp = data[i-K] - MinInput + MinScore;
-    if (tmp > 0)
-      sum -= std::log2(1.0 - std::exp2(static_cast<OT>(tmp) * log2(10.0) / -10.0));
-    else
+    auto tmp = data[i-K] - MinInput;
+
+    if (tmp == 0 || tmp < MinScore)
       --invalid;
+    else {
+      val = std::log2(1.0L - std::exp2(static_cast<long double>(tmp) * log2(10.0L) / -10.0L));
+      sum -= val;
 
-    tmp = data[i] - MinInput + MinScore;
-    if (tmp > 0)
-      sum += std::log2(1.0 - std::exp2(static_cast<OT>(tmp) * log2(10.0) / -10.0));
-    else
+    }
+
+    tmp = data[i] - MinInput;
+    if (tmp == 0 || tmp < MinScore)
       ++invalid;
-
+    else {
+      val = std::log2(1.0L - std::exp2(static_cast<long double>(tmp) * log2(10.0L) / -10.0L));
+      sum += val;
+    }
     if (invalid > 0) output.push_back(0);
     else output.push_back(std::exp2(sum));
   }
+
 }
 
 
+template <unsigned char MinInput, char MinScore>
+std::vector<unsigned char> convertForGold(const std::string &strdata) {
+	std::vector<unsigned char> res(strdata.begin(), strdata.end());
+	for (size_t i = 0; i < res.size(); ++i) {
+		if ((res[i] - MinInput) < MinScore) res[i] = MinInput + MinScore - 1;
+	}
+	return res;
+}
 
 template<typename OT, unsigned char MinInput, unsigned char MaxInput, char MinScore, unsigned int K>
 void testQualityIterator(const std::string & strdata) {
 
-  std::vector<unsigned char> gold(strdata.begin(), strdata.end());
+  std::vector<unsigned char> gold = convertForGold<MinInput, MinScore>(strdata);
 
   using Encoder = bliss::index::QualityScoreCodec<OT, MinInput, MaxInput, MinScore>;
 
@@ -275,12 +293,14 @@ void testQualityIterator(const std::string & strdata) {
   bool same = compare_vectors<OT>(codecDecoded, goldDecoded);
 
   if (!same) {
-    ERROR( "codec decode: result not same" );
+    ERROR( "codec decode: result not same" << std::endl );
 
-    INFO( std::endl<< "GOLD decoded: size: " << goldDecoded.size() );
+    ERROR( "GOLD decoded: size: " << goldDecoded.size());
     std::copy(goldDecoded.begin() , goldDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
-    INFO( std::endl<< "codec decoded: size: " << codecDecoded.size() );
+    std::cout << std::endl;
+    ERROR( "codec decoded: size: " << codecDecoded.size());
     std::copy(codecDecoded.begin() , codecDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
+    std::cout << std::endl;
   }
 
   EXPECT_TRUE(same);
@@ -291,12 +311,14 @@ void testQualityIterator(const std::string & strdata) {
   same = compare_vectors<OT>(iterDecoded, goldDecoded);
 
   if (!same) {
-    ERROR( "iter decode: result not same" );
+    ERROR( "iter decode: result not same" << std::endl );
 
-    INFO( std::endl<< "GOLD decoded: size: " << goldDecoded.size() );
+    ERROR( "GOLD decoded: size: " << goldDecoded.size() );
     std::copy(goldDecoded.begin() , goldDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
-    INFO( std::endl<< "iter decoded: size: " << iterDecoded.size() );
+    std::cout << std::endl;
+    ERROR( "iter decoded: size: " << iterDecoded.size());
     std::copy(iterDecoded.begin() , iterDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
+    std::cout << std::endl;
   }
 
   EXPECT_TRUE(same);
@@ -346,10 +368,10 @@ TEST(QualityScoreGenerationIteratorTest, TestIllunima15QualityScoreDouble)
   // test sequence: !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
   std::string strdata = "CDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
 
-  testQualityIterator<double, 67, 126, 3, 3 >(strdata);
-  testQualityIterator<double, 67, 126, 3, 7 >(strdata);
-  testQualityIterator<double, 67, 126, 3, 15>(strdata);
-  testQualityIterator<double, 67, 126, 3, 31>(strdata);
+  testQualityIterator<double, 64, 126, 3, 3 >(strdata);
+  testQualityIterator<double, 64, 126, 3, 7 >(strdata);
+  testQualityIterator<double, 64, 126, 3, 15>(strdata);
+  testQualityIterator<double, 64, 126, 3, 31>(strdata);
 
 }
 
@@ -397,10 +419,10 @@ TEST(QualityScoreGenerationIteratorTest, TestIllunima18QualityScoreFloat)
 //  // test sequence: !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
 //  std::string strdata = "CDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
 //
-//  testQualityIterator<float, 67, 126, 3, 3 >(strdata);
-//  testQualityIterator<float, 67, 126, 3, 7 >(strdata);
-//  testQualityIterator<float, 67, 126, 3, 15>(strdata);
-//  testQualityIterator<float, 67, 126, 3, 31>(strdata);
+//  testQualityIterator<float, 64, 126, 3, 3 >(strdata);
+//  testQualityIterator<float, 64, 126, 3, 7 >(strdata);
+//  testQualityIterator<float, 64, 126, 3, 15>(strdata);
+//  testQualityIterator<float, 64, 126, 3, 31>(strdata);
 //
 //}
 //

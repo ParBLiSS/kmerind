@@ -50,7 +50,7 @@ namespace index
  *                      (probabilities in log space).
  */
 template <typename BaseIterator, unsigned int KMER_SIZE,
-          typename Encoder = bliss::index::Illumina18QualityScoreCodec<float> >
+          typename Encoder = bliss::index::Illumina18QualityScoreCodec<double> >
 class QualityScoreSlidingWindow
 {
   public:
@@ -81,7 +81,7 @@ public:
    * @brief Initializes the sliding window.  at end of initialization, it is set to last position read.
    *
    * @param it[in|out]  The current base iterator position. This will be set to
-   *                    the last read position (and NOT the next one)
+   *                    the LAST READ position (and NOT the next one)
    */
   inline void init(BaseIterator& it)
   {
@@ -92,13 +92,12 @@ public:
       QualityType newval = Encoder::decode(*it);
       window_values[i] = newval;
 
-      if (newval < Encoder::min_log_prob)
-      {
-        ++n_incorrect_bases;
-      } else {
+      if ((newval > Encoder::DecodeLUT[0]) && (newval < Encoder::DecodeLUT[95])) {
         current_sum += newval;
+      } else {
+        ++n_incorrect_bases;
       }
-      if (++i < KMER_SIZE) ++it;
+      if (++i < KMER_SIZE) ++it;  // set to LAST READ position
     }
     window_pos = 0;
   }
@@ -123,23 +122,23 @@ public:
     window_pos = (window_pos+1) % KMER_SIZE;
 
     // remove old value from either the sum or the incorrect count
-    if (oldval < Encoder::min_log_prob)
-    {
-      --n_incorrect_bases;
-    }
-    else
+    if ((oldval > Encoder::DecodeLUT[0]) && (oldval < Encoder::DecodeLUT[95]))
     {
       current_sum -= oldval;
     }
+    else
+    {
+      --n_incorrect_bases;
+    }
 
     // add the new value to either the sum or the incorrect count
-    if (newval < Encoder::min_log_prob)
+    if ((newval > Encoder::DecodeLUT[0]) && (newval < Encoder::DecodeLUT[95]))
     {
-      ++n_incorrect_bases;
+      current_sum += newval;
     }
     else
     {
-      current_sum += newval;
+      ++n_incorrect_bases;
     }
     ++it;
   }
@@ -223,7 +222,7 @@ public:
  *                          bliss::Kmer.
  */
 template <typename BaseIterator, unsigned int KMER_SIZE,
-          typename Encoder = bliss::index::Illumina18QualityScoreCodec<float> >
+          typename Encoder = bliss::index::Illumina18QualityScoreCodec<double> >
 class QualityScoreGenerationIterator
 : public iterator::sliding_window_iterator<BaseIterator,
                                            QualityScoreSlidingWindow<BaseIterator, KMER_SIZE, Encoder > >
@@ -274,7 +273,7 @@ protected:
   /*****************************
    *  non public constructors  *
    *****************************/
-  // handleing of the `window` object instances is strictly hidden
+  // handling of the `window` object instances is strictly hidden
 
   /**
    * @brief   Constructor for the kmer generation iterator using the underlying

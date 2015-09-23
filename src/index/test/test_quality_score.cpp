@@ -128,9 +128,9 @@ void codec_decode(const std::vector<unsigned char> & data, // quality score valu
 
   CODEC decoder;
 
-//  INFO( "decoder LUT SIZE: " << (int)CODEC::size );
+//  WARNING( "decoder LUT SIZE: " << (int)CODEC::size );
 //  for (int i = 0; i < CODEC::size; ++i) {
-//    std::cout << CODEC::lut[i] << ", ";
+//    std::cout << CODEC::DecodeLUT[i] << ", ";
 //  }
 //  std::cout << std::endl;
 
@@ -150,9 +150,9 @@ void codec_encode(std::vector<typename CODEC::value_type> data, // quality score
   CODEC decoder;
 
 
-//  INFO( "encoder LUT SIZE: " << (int)CODEC::size );
+//  WARNING( "encoder LUT SIZE: " << (int)CODEC::size );
 //  for (int i = 0; i < CODEC::size; ++i) {
-//    std::cout << CODEC::lut[i] << ", ";
+//    std::cout << CODEC::EncodeLUT[i] << ", ";
 //  }
 //  std::cout << std::endl;
 
@@ -171,11 +171,11 @@ void direct_decode(const std::vector<unsigned char> & data,
 
   OT result;
   for (auto v : data) {
-    auto tmp = v - MinInput + MinScore;
+    auto tmp = v - MinInput;
 
-    if (tmp == 0) result = std::numeric_limits<OT>::lowest();
+    if (tmp == 0 || tmp < MinScore) result = std::numeric_limits<OT>::lowest();
     else
-      result = std::log2(1.0 - std::exp2(static_cast<OT>(tmp) * log2(10.0) / -10.0));
+      result = std::log2(1.0L - std::exp2(static_cast<long double>(tmp) * log2(10.0L) / -10.0L));
     output.push_back(result);
   }
 }
@@ -187,28 +187,35 @@ void direct_encode(const std::vector<OT> & data,
 
   output.clear();
 
-  OT max_log_prob = std::log2(1.0L - std::exp2((static_cast<double>(MaxInput - MinInput + MinScore) - 0.5L) * log2(10.0L) / -10.0L));
-  OT min_log_prob = std::log2(1.0L - std::exp2(0.5L * log2(10.0L) / -10.0L));
-
 
   unsigned char result;
   for (auto v : data) {
-    if (std::isnan(v)) result = MinInput;
-    else if (v > max_log_prob) result = MaxInput;
-    else if ( v < min_log_prob ) result = MinInput;
+    if (std::isnan(v)) throw std::invalid_argument("decoded log2(p_correct) should not be NaN.");
+    else if (v == std::numeric_limits<OT>::max() ) result = MaxInput;
+    else if ( v == std::numeric_limits<OT>::lowest() ) result = (MinScore == 0 ? MinInput : (MinInput + MinScore -1));
     else {
-      double tmp = log2(1.0L - exp2(static_cast<double>(v))) * -10.0L / log2(10.0L);
-      result = std::round(tmp) + (MinInput - MinScore);
+      double tmp = log2(1.0L - exp2(static_cast<long double>(v))) * -10.0L / log2(10.0L);
+      result = std::round(tmp) + MinInput;
     }
     output.push_back(result);
   }
 }
 
 
+template <unsigned char MinInput, char MinScore>
+std::vector<unsigned char> convertForGold(const std::string &strdata) {
+	std::vector<unsigned char> res(strdata.begin(), strdata.end());
+	for (size_t i = 0; i < res.size(); ++i) {
+		if ((res[i] - MinInput) < MinScore) res[i] = MinInput + MinScore - 1;
+	}
+	return res;
+}
+
 template<typename OT, unsigned char MinInput, unsigned char MaxInput, char MinScore>
 void testCodec(const std::string & strdata) {
 
-  std::vector<unsigned char> gold(strdata.begin(), strdata.end());
+
+  std::vector<unsigned char> gold = convertForGold<MinInput, MinScore>(strdata);
 
   // test process.
   std::vector<OT> goldDecoded;
@@ -221,12 +228,15 @@ void testCodec(const std::string & strdata) {
   if (!same) {
     ERROR( "direct encode/decode: result not same" );
 
-    INFO( std::endl<< "GOLD input: " );
+    ERROR("GOLD input: " );
     std::copy(gold.begin() , gold.end(), std::ostream_iterator<unsigned char>(std::cout, " "));
-    INFO( std::endl<< "GOLD re-encoded: " );
+    std::cout << std::endl;
+    ERROR("GOLD re-encoded: " );
     std::copy(goldDecoded.begin() , goldDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
-    INFO( std::endl<< "GOLD re-encoded: " );
+    std::cout << std::endl;
+    ERROR("GOLD re-encoded: " );
     std::copy(goldEncoded.begin() , goldEncoded.end(), std::ostream_iterator<unsigned char>(std::cout, " "));
+    std::cout << std::endl;
 
   }
   EXPECT_TRUE(same);
@@ -240,10 +250,12 @@ void testCodec(const std::string & strdata) {
   if (!same) {
     ERROR( "codec decode: result not same" );
 
-    INFO( std::endl<< "GOLD decoded: " );
+    ERROR("GOLD decoded: " );
     std::copy(goldDecoded.begin() , goldDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
-    INFO( std::endl<< "codec decoded: " );
+    std::cout << std::endl;
+    ERROR("codec decoded: " );
     std::copy(codecDecoded.begin() , codecDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
+    std::cout << std::endl;
   }
 
   EXPECT_TRUE(same);
@@ -255,10 +267,12 @@ void testCodec(const std::string & strdata) {
   if (!same) {
     ERROR( "codec encode from goldDecoded : result not same" );
 
-    INFO( std::endl<< "GOLD input: " );
+    ERROR("GOLD input: " );
     std::copy(gold.begin() , gold.end(), std::ostream_iterator<unsigned char>(std::cout, " "));
-    INFO( std::endl<< "codec encode from goldDecoded: " );
+    std::cout << std::endl;
+    ERROR("codec encode from goldDecoded: " );
     std::copy(codecEncodedFromGold.begin() , codecEncodedFromGold.end(), std::ostream_iterator<unsigned char>(std::cout, " "));
+    std::cout << std::endl;
 
   }
   EXPECT_TRUE(same);
@@ -270,10 +284,12 @@ void testCodec(const std::string & strdata) {
   if (!same) {
     ERROR( "codec encode from codecDecoded : result not same" );
 
-    INFO( std::endl<< "GOLD input: " );
+    ERROR("GOLD input: " );
     std::copy(gold.begin() , gold.end(), std::ostream_iterator<unsigned char>(std::cout, ""));
-    INFO( std::endl<< "codec encode from goldDecoded: " );
+    std::cout << std::endl;
+    ERROR("codec encode from goldDecoded: " );
     std::copy(codecEncodedFromCodecDecoded.begin() , codecEncodedFromCodecDecoded.end(), std::ostream_iterator<unsigned char>(std::cout, " "));
+    std::cout << std::endl;
 
   }
   EXPECT_TRUE(same);
@@ -294,11 +310,11 @@ void testCodec(const std::string & strdata) {
   std::vector<unsigned char> pathResults;
 //  direct_encode<OT, MinInput, MaxInput, MinScore>(pathologicalValues, pathResults);
   codec_encode<bliss::index::QualityScoreCodec<OT, MinInput, MaxInput, MinScore> >(pathologicalValues, pathResults);
-  std::vector<unsigned char> goldPathResults {
-    MinInput,
-    MinInput,
-    MinInput,
-    MinInput,
+  std::vector<unsigned char> goldPathResults({{
+    (MinScore > 0) ? MinInput + MinScore - 1 : MinInput,
+    (MinScore > 0) ? MinInput + MinScore - 1 : MinInput,
+    (MinScore > 0) ? MinInput + MinScore - 1 : MinInput,
+    (MinScore > 0) ? MinInput + MinScore - 1 : MinInput,
     MaxInput,
     MaxInput,
     MaxInput,
@@ -306,16 +322,18 @@ void testCodec(const std::string & strdata) {
     MaxInput,
     MaxInput,
     MaxInput
-  };
+  }});
   same = compare_vectors<unsigned char>(pathResults, goldPathResults);
 
   if (!same) {
-    INFO( "encode with pathological inputs" );
+    ERROR( "encode with pathological inputs" );
 
-    INFO( std::endl<< "pathological gold input: " );
+    ERROR("pathological gold input: " );
     std::copy(goldPathResults.begin() , goldPathResults.end(), std::ostream_iterator<OT>(std::cout, ","));
-    INFO( std::endl<< "codec encode pathological input: " );
+    std::cout << std::endl;
+    ERROR("codec encode pathological input: " );
     std::copy(pathResults.begin() , pathResults.end(), std::ostream_iterator<OT>(std::cout, ","));
+    std::cout << std::endl;
 
   }
   EXPECT_TRUE(same);
@@ -358,7 +376,7 @@ TEST(QualityScoreGeneration, TestIllunima15QualityScoreDouble)
   // test sequence: !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
   std::string strdata = "CDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
 
-  testCodec<double, 67, 126, 3>(strdata);
+  testCodec<double, 64, 126, 3>(strdata);
 
 }
 
@@ -400,7 +418,7 @@ TEST(QualityScoreGeneration, TestIllunima15QualityScoreFloat)
   // test sequence: !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
   std::string strdata = "CDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
 
-  testCodec<float, 67, 126, 3>(strdata);
+  testCodec<float, 64, 126, 3>(strdata);
 
 }
 

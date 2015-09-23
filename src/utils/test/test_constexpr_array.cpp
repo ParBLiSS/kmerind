@@ -89,5 +89,5 @@ REGISTER_TYPED_TEST_CASE_P(ConstexprArrayTest, compute);
 
 //////////////////// RUN the tests with different types.
 
-typedef ::testing::Types<square_fn, inverse_fn, log_fn, sqrt_fn> ConstexprArrayTestTypes;
+typedef ::testing::Types<square_fn, inverse_fn> ConstexprArrayTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, ConstexprArrayTest, ConstexprArrayTestTypes);
