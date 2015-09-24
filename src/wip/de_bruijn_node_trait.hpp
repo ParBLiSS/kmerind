@@ -65,6 +65,36 @@ namespace bliss
             }
           }
 
+          // construct a new kmer from a known edge, if that edge's count is non-zero
+          static void get_out_neighbors(Kmer const & kmer, EdgeType const & edge, std::vector<std::pair<Kmer, typename EdgeType::CountType> > & neighbors) {
+            neighbors.clear();
+
+            typename EdgeType::CountType count;
+            for (int i = 0; i < 4; ++i) {
+              count = edge.get_edge_frequency(i);
+              if (count > 0) {
+                neighbors.emplace_back(kmer, count);
+                neighbors.back().first.nextFromChar(i);
+              }
+            }
+          }
+
+          // construct a new kmer from a known edge, if that edge's count is non-zero
+          static void get_in_neighbors(Kmer const & kmer, EdgeType const & edge, std::vector<std::pair<Kmer, typename EdgeType::CountType> > & neighbors) {
+            neighbors.clear();
+
+            typename EdgeType::CountType count;
+
+            for (int i = 0; i < 4; ++i) {
+              count = edge.get_edge_frequency(i + 4);
+              if (count > 0) {
+                neighbors.emplace_back(kmer, count);
+                neighbors.back().first.nextReverseFromChar(i);
+              }
+            }
+          }
+
+
       };
 
 
@@ -89,30 +119,30 @@ namespace bliss
 			 *        the out and in edges are relative to the kmer's orientation.
 			 *
 			 */
-			template<typename ALPHA, typename CountType = uint32_t>
+			template<typename ALPHA, typename COUNT = uint32_t>
 			class edge_counts {
 
 			  protected:
 			    // 32 bit and 64 bit do not clamp.
-			    template <typename C = CountType, typename std::enable_if<sizeof(C) < 4, int>::type = 0 >
+			    template <typename C = COUNT, typename std::enable_if<sizeof(C) < 4, int>::type = 0 >
 			    void clamped_add_1(C &target) {
 			      if (target < std::numeric_limits<C>::max()) {
 			        ++target;
 			      }
 			    }
 
-          template <typename C = CountType, typename std::enable_if<sizeof(C) >= 4, int>::type = 0  >
+          template <typename C = COUNT, typename std::enable_if<sizeof(C) >= 4, int>::type = 0  >
           void clamped_add_1(C &target) {
             ++target;
           }
           // 32 bit and 64 bit do not clamp.
-          template <typename C = CountType, typename std::enable_if<sizeof(C) < 4, int>::type = 0 >
+          template <typename C = COUNT, typename std::enable_if<sizeof(C) < 4, int>::type = 0 >
           void clamped_add_1(C &target, uint8_t flag) {
             if ((target < std::numeric_limits<C>::max()) && (flag > 0)) {
               ++target;
             }
           }
-          template <typename C = CountType, typename std::enable_if<sizeof(C) >= 4, int>::type = 0  >
+          template <typename C = COUNT, typename std::enable_if<sizeof(C) >= 4, int>::type = 0  >
           void clamped_add_1(C &target, uint8_t flag) {
             if (flag > 0) ++target;
           }
@@ -121,8 +151,9 @@ namespace bliss
 			  public:
 
           using Alphabet = ALPHA;
+          using CountType = COUNT;
 
-	        friend std::ostream& operator<<(std::ostream& ost, const edge_counts<ALPHA, CountType> & node)
+	        friend std::ostream& operator<<(std::ostream& ost, const edge_counts<ALPHA, COUNT> & node)
 	        {
 	          // friend keyword signals that this overrides an externally declared function
 	          ost << " dBGr node: counts self = " << node.counts[node.counts.size() - 1] << " in = [";
@@ -135,7 +166,7 @@ namespace bliss
 
 
 			    /// array of counts.  format:  [out A C G T; in A C G T; kmer count], ordered for the canonical strand, not necessarily same as for the input kmer..
-			    std::array<CountType, 9> counts;
+			    std::array<COUNT, 9> counts;
 
 				/*constructor*/
 				edge_counts() : counts({{0, 0, 0, 0, 0, 0, 0, 0, 0}}) {};
@@ -208,7 +239,7 @@ namespace bliss
           }
 				}
 
-				CountType get_edge_frequency(uint8_t idx) {
+				COUNT get_edge_frequency(uint8_t idx) {
 				  if (idx >= 8) return 0;
 
 				  return counts[idx];
@@ -223,6 +254,7 @@ namespace bliss
         public:
 
           using Alphabet = ALPHA;
+          using CountType = uint8_t;
 
           friend std::ostream& operator<<(std::ostream& ost, const edge_exists<ALPHA> & node)
           {
