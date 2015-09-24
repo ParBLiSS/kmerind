@@ -198,11 +198,11 @@ namespace bliss
 
 				    if (std::is_same<ALPHA, bliss::common::DNA5>::value || std::is_same<ALPHA, bliss::common::RNA5>::value) {
 	            if ((exts & 0x0C) == 0) clamped_add_1(counts[exts & 0x3]);  // right edge (out).  increment if it's not marked as unknown.
-	            if ((exts & 0xC0) == 0) clamped_add_1(counts[(exts >> 4) & 0x3]);  // left edge (in).  increment if it's not marked as unknown.
+	            if ((exts & 0xC0) == 0) clamped_add_1(counts[((exts >> 4) & 0x3) + 4]);  // left edge (in).  increment if it's not marked as unknown.
 				    } else {
 				      // no clipping necessary.
 				      clamped_add_1(counts[exts & 0x3]);  // right edge (out)
-				      clamped_add_1(counts[(exts >> 4) & 0x3]);  // left edge (in)
+				      clamped_add_1(counts[((exts >> 4) & 0x3) + 4]);  // left edge (in)
 				    }
 
 				  } else {
@@ -239,7 +239,7 @@ namespace bliss
           }
 				}
 
-				COUNT get_edge_frequency(uint8_t idx) {
+				COUNT get_edge_frequency(uint8_t idx) const {
 				  if (idx >= 8) return 0;
 
 				  return counts[idx];
@@ -308,7 +308,7 @@ namespace bliss
           counts |= exts;
         }
 
-        uint8_t get_edge_frequency(uint8_t idx) {
+        uint8_t get_edge_frequency(uint8_t idx) const {
           if (idx >= 8) return 0;
 
           return (counts >> idx) & 1;
