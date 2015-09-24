@@ -79,10 +79,18 @@ namespace bliss{
 				  /*reserve space*/
 				  this->c.reserve(before + ::std::distance(first, last));
 
+				  // allocate a node
+          auto node = this->c.find(first->first);
+
+          using EdgeType = decltype(node->second);
+          using Alphabet = typename EdgeType::Alphabet;
+
 				  /*iterate each input tuple*/
 				  for (auto it = first; it != last; ++it) {
-					  auto node = this->c.find(it->first);
-					  /*tranform from <key, int> to <node, node_info>*/
+
+				    node = this->c.find(it->first);
+
+				    /*tranform from <key, int> to <node, node_info>*/
 					  if(node == this->c.end()){
 						  /*create a new node*/
 						  auto ret = this->c.emplace(::std::make_pair(it->first, T()));
@@ -90,27 +98,40 @@ namespace bliss{
 							  cerr << "Insertion failed at line " << __LINE__ << " in file " << __FILE__ << endl;
 							  exit(-1);
 						  }
+
 #if 0
-						  ::std::cerr << "Not exist in the hash table" << ::std::endl;
-						  ::std::cerr << bliss::utils::KmerUtils::toASCIIString(ret.first->first)  << ::std::endl;
-						  ::std::cerr << "0x" << std::hex << it->second << ::std::endl;
-						  ::std::cerr << bliss::utils::KmerUtils::toASCIIString(it->first) << ::std::endl << ::std::endl;
+              ::std::cerr << "Not exist in the hash table" << ::std::endl;
+              ::std::cerr << bliss::utils::KmerUtils::toASCIIString(ret.first->first)  << ::std::endl;
+              ::std::cerr << "0x" << std::hex << it->second << ::std::endl;
+              ::std::cerr << bliss::utils::KmerUtils::toASCIIString(it->first) << ::std::endl << ::std::endl;
+#endif
+						  node = ret.first;  // now use it.
+
+	            // determine if the node in the graph has the same orientation as the one being inserted.
+						  relative_strand = bliss::de_bruijn::node::SENSE;
+					  } else {
+#if 0
+             /*update the node*/
+              ::std::cerr << "Exist in the hash table" << ::std::endl;
+              ::std::cerr << bliss::utils::KmerUtils::toASCIIString(node->first)  << ::std::endl;
+              ::std::cerr << "0x" << std::hex << it->second << ::std::endl;
+              ::std::cerr << bliss::utils::KmerUtils::toASCIIString(it->first) << ::std::endl << ::std::endl;
 #endif
 
-						  /*update the node*/
-						  relative_strand = ret.first->first == it->first ? bliss::de_bruijn::node::SENSE : bliss::de_bruijn::node::ANTI_SENSE;
-						  ret.first->second.update(relative_strand, it->second);
-					  }else{
-#if 0
-						 /*update the node*/
-						  ::std::cerr << "Exist in the hash table" << ::std::endl;
-						  ::std::cerr << bliss::utils::KmerUtils::toASCIIString(node->first)  << ::std::endl;
-						  ::std::cerr << "0x" << std::hex << it->second << ::std::endl;
-						  ::std::cerr << bliss::utils::KmerUtils::toASCIIString(it->first) << ::std::endl << ::std::endl;
-#endif
-						  relative_strand = node->first == it->first ? bliss::de_bruijn::node::SENSE : bliss::de_bruijn::node::ANTI_SENSE;
-						  node->second.update(relative_strand, it->second);
+              // determine if the node in the graph has the same orientation as the one being inserted.
+              relative_strand = (node->first == it->first) ? bliss::de_bruijn::node::SENSE : bliss::de_bruijn::node::ANTI_SENSE;
+
 					  }
+
+
+					  // if different, swap and reverse complement the edges.  else, use as is.
+					  if (relative_strand == bliss::de_bruijn::node::ANTI_SENSE) {
+              node->second.update(bliss::de_bruijn::node::input_edge_utils::reverse_complement_edges<Alphabet>(it->second));
+
+					  } else {
+              node->second.update(it->second);
+					  }
+
 				  }
 				  return this->c.size() - before;
 			  }
@@ -126,10 +147,16 @@ namespace bliss{
 				  size_t before = this->c.size();
 
 				  this->c.reserve(before + ::std::distance(first, last));
+				  auto node = this->c.find(first->first);
+
+          using EdgeType = decltype(node->second);
+          using Alphabet = typename EdgeType::Alphabet;
 
 				  for (auto it = first; it != last; ++it) {
 					if (pred(*it)) {
-					  auto node = this->c.find(it->first);
+
+					  node = this->c.find(it->first);
+
 					  /*tranform from <key, int> to <node, node_info*/
 					  if(node == this->c.end()){
 						  /*create a new node*/
@@ -138,14 +165,25 @@ namespace bliss{
 							  cerr << "Insertion failed at line " << __LINE__ << " in file " << __FILE__ << endl;
 							  exit(-1);
 						  }
+
+						  node = ret.first;  // now use it.
+
 						  /*update the node*/
-						  relative_strand = ret.first->first == it->first ? bliss::de_bruijn::node::SENSE : bliss::de_bruijn::node::ANTI_SENSE;
-						  ret.first->second.update(relative_strand, it->second);
+						  relative_strand = bliss::de_bruijn::node::SENSE;
 					  }else{
 						 /*update the node*/
-						  relative_strand = node->first == it->first ? bliss::de_bruijn::node::SENSE : bliss::de_bruijn::node::ANTI_SENSE;
-						  node->second.update(relative_strand, it->second);
+						  relative_strand = (node->first == it->first) ? bliss::de_bruijn::node::SENSE : bliss::de_bruijn::node::ANTI_SENSE;
 					  }
+
+            // if different, swap and reverse complement the edges.  else, use as is.
+            if (relative_strand == bliss::de_bruijn::node::ANTI_SENSE) {
+              node->second.update(bliss::de_bruijn::node::input_edge_utils::reverse_complement_edges<Alphabet>(it->second));
+
+            } else {
+              node->second.update(it->second);
+            }
+
+
 					}
 				  }
 				  return this->c.size() - before;

@@ -24,14 +24,17 @@ namespace bliss
     //   then enable_if evaluates using the proxy.
     //  e.g. template< class c = C; typename std::enable_if<std::is_same<c, std::string>::value, int>::type x = 0>
 
-
     /**
      * @class   edge_iterator
      * @brief   given a k-mer position, retrieve its left and right bases, including the dummy bases at both ends
-     * @details
+     * @details specializations of this class uses a byte to manage the edge info.
+     *          upper 4 bits holds the left base (encoded), lower 4 bits holds the right base (encoded)
      *
+     *          no reverse complement or reordering is applied.
+     *
+     *          edge iterator should be valid for std::distance(_data_end - _data_start - k + 1) iterations.
      */
-  	template<typename IT, typename Alphabet = bliss::common::DNA16>
+  	template<typename IT, typename ALPHA = bliss::common::DNA16>
   	class edge_iterator : public ::std::iterator<::std::forward_iterator_tag, uint8_t>
   	{
       protected:
@@ -39,7 +42,7 @@ namespace bliss
           // curr position
           IT _curr;
           //previous position
-          IT _prev;
+          IT _left;
           //a position of distance k from the _curr on the right
           IT _right;
 
@@ -48,7 +51,9 @@ namespace bliss
           const IT _data_end;
 
         public:
-          typedef edge_iterator<IT, Alphabet> self_type; /*define edge iterator type*/
+
+          typedef ALPHA    Alphabet;
+          typedef edge_iterator<IT, ALPHA> self_type; /*define edge iterator type*/
           typedef uint8_t edge_type; //type to represent an edge
 
           // accessors
@@ -59,19 +64,21 @@ namespace bliss
 
           //constructor
           edge_iterator(IT data_start, IT data_end, const uint32_t k)
-            : _curr (data_start), _prev(data_end), _right(data_start), _data_start(data_start), _data_end(data_end)
+            : _curr (data_start), _left(data_end), _right(data_start), _data_start(data_start), _data_end(data_end)
           {
             /*compute the offset*/
-            ::std::advance(_right, k);
+            ::std::advance(_curr, k - 1);
+            _right = _curr;
+            ::std::advance(_right, 1);
           }
           edge_iterator(IT data_end)
-            : _curr(data_end), _prev(data_end), _right(data_end), _data_start(data_end), _data_end(data_end)
+            : _curr(data_end), _left(data_end), _right(data_end), _data_start(data_end), _data_end(data_end)
           {
 
           }
           /// copy constructor
           edge_iterator(const self_type& Other)
-            : _curr (Other._curr), _prev(Other._prev), _right(Other._right),
+            : _curr (Other._curr), _left(Other._left), _right(Other._right),
               _data_start(Other._data_start), _data_end(Other._data_end)
           {
             /*do nothing*/
@@ -82,7 +89,7 @@ namespace bliss
           self_type& operator=(const self_type& Other)
           {
             _curr = Other._curr;
-            _prev = Other._prev;
+            _left = Other._left;
             _right = Other._right;
             _data_start = Other._data_start;
             _data_end = Other._data_end;
@@ -99,7 +106,7 @@ namespace bliss
             }
 
             /*save the previous position*/
-            _prev = _curr;
+            _left = _curr;
 
             /*move forward by 1*/
             ++_curr;
@@ -137,16 +144,16 @@ namespace bliss
           inline edge_type operator*()
           {
             /*using four bits to represent an edge*/
-            if(_prev != _data_end && _right != _data_end){
+            if(_left != _data_end && _right != _data_end){
                 /*internal k-mer node*/
-                return (Alphabet::FROM_ASCII[*_prev] << 4) | Alphabet::FROM_ASCII[*_right];
-            }else if(_prev == _data_end && _right != _data_end){  /*the left-most k-mer node*/
-              return  Alphabet::FROM_ASCII[*_right];
-            }else if(_prev != _data_end && _right == _data_end){  /*the rigth-most k-mer node*/
-              return Alphabet::FROM_ASCII[*_prev] << 4;
+                return (ALPHA::FROM_ASCII[*_left] << 4) | ALPHA::FROM_ASCII[*_right];
+            }else if(_left == _data_end && _right != _data_end){  /*the left-most k-mer node*/
+              return  ALPHA::FROM_ASCII[*_right];
+            }else if(_left != _data_end && _right == _data_end){  /*the rigth-most k-mer node*/
+              return ALPHA::FROM_ASCII[*_left] << 4;
             }
 
-            /*if(_prev == _end && _right == _end)*/
+            /*if(_left == _end && _right == _end)*/
             return 0;
           }
       };
@@ -155,12 +162,14 @@ namespace bliss
   	using DNA16_edge_iterator = edge_iterator<IT, bliss::common::DNA16>;
     template<typename IT>
     using DNA_IUPAC_edge_iterator = edge_iterator<IT, bliss::common::DNA_IUPAC>;
-    template<typename IT>
-    using DNA_edge_iterator = edge_iterator<IT, bliss::common::DNA>;
+    // not suitable for edge iterator since there is no value to unknown char.
+//    template<typename IT>
+//    using DNA_edge_iterator = edge_iterator<IT, bliss::common::DNA>;
     template<typename IT>
     using DNA5_edge_iterator = edge_iterator<IT, bliss::common::DNA5>;
-    template<typename IT>
-    using RNA_edge_iterator = edge_iterator<IT, bliss::common::RNA>;
+    // not suitable for edge iterator since there is no value to unknown char.
+//    template<typename IT>
+//    using RNA_edge_iterator = edge_iterator<IT, bliss::common::RNA>;
     template<typename IT>
     using RNA5_edge_iterator = edge_iterator<IT, bliss::common::RNA5>;
 
@@ -174,7 +183,7 @@ namespace bliss
         // curr position
         IT _curr;
         //previous position
-        IT _prev;
+        IT _left;
         //a position of distance k from the _curr on the right
         IT _right;
 
@@ -183,6 +192,8 @@ namespace bliss
         const IT _data_end;
 
       public:
+        typedef bliss::common::ASCII    Alphabet;
+
         typedef edge_iterator<IT, bliss::common::ASCII> self_type;	/*define edge iterator type*/
         typedef uint16_t edge_type;	//type to represent an edge
 
@@ -194,20 +205,22 @@ namespace bliss
 
         //constructor
         edge_iterator(IT data_start, IT data_end, const uint32_t k)
-        	: _curr (data_start), _prev(data_end), _right(data_start), _data_start(data_start), _data_end(data_end)
+        	: _curr (data_start), _left(data_end), _right(data_start), _data_start(data_start), _data_end(data_end)
         {
         	/*compute the offset*/
-        	::std::advance(_right, k);
+          ::std::advance(_curr, k-1);
+          _right = _curr;
+        	::std::advance(_right, 1);
         }
         edge_iterator(IT data_end)
-        	: _curr(data_end), _prev(data_end), _right(data_end), _data_start(data_end), _data_end(data_end)
+        	: _curr(data_end), _left(data_end), _right(data_end), _data_start(data_end), _data_end(data_end)
         {
 
         }
 
         /// copy constructor
         edge_iterator(const self_type& Other)
-        	: _curr (Other._curr), _prev(Other._prev), _right(Other._right),
+        	: _curr (Other._curr), _left(Other._left), _right(Other._right),
         	  _data_start(Other._data_start), _data_end(Other._data_end)
         {
         	/*do nothing*/
@@ -218,7 +231,7 @@ namespace bliss
         self_type& operator=(const self_type& Other)
         {
           _curr = Other._curr;
-          _prev = Other._prev;
+          _left = Other._left;
           _right = Other._right;
           _data_start = Other._data_start;
           _data_end = Other._data_end;
@@ -235,7 +248,7 @@ namespace bliss
           }
 
           /*save the previous position*/
-          _prev = _curr;
+          _left = _curr;
 
           /*move forward by 1*/
           ++_curr;
@@ -273,16 +286,16 @@ namespace bliss
         inline edge_type operator*()
         {
         	/*using 8 bits to represent an edge*/
-        	if(_prev != _data_end && _right != _data_end){
+        	if(_left != _data_end && _right != _data_end){
             	/*internal k-mer node*/
-            	return (*_prev << 8) | *_right;
-        	}else if(_prev == _data_end && _right != _data_end){	/*the left-most k-mer node*/
+            	return (*_left << 8) | *_right;
+        	}else if(_left == _data_end && _right != _data_end){	/*the left-most k-mer node*/
         		return *_right & 0x0ff;
-        	}else if(_prev != _data_end && _right == _data_end){	/*the rigth-most k-mer node*/
-        		return *_prev << 8;
+        	}else if(_left != _data_end && _right == _data_end){	/*the rigth-most k-mer node*/
+        		return *_left << 8;
         	}
 
-        	/*if(_prev == _end && _right == _end)*/
+        	/*if(_left == _end && _right == _end)*/
         	return 0;
         }
     };

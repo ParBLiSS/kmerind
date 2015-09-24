@@ -36,12 +36,93 @@ namespace bliss
       static constexpr unsigned char SENSE = 0;
       static constexpr unsigned char ANTI_SENSE = 1;
 
-			/*node trait class*/
-			template<typename Alphabet, typename CountType = uint32_t>
-			class edge_counts{
+      // utilities operating on nodes
+      template <typename Kmer, typename EdgeType>
+      class node_utils {
+        public:
+
+          // construct a new kmer from a known edge, if that edge's count is non-zero
+          static void get_out_neighbors(Kmer const & kmer, EdgeType const & edge, std::vector<Kmer> & neighbors) {
+            neighbors.clear();
+
+            for (int i = 0; i < 4; ++i) {
+              if (edge.get_edge_frequency(i) > 0) {
+                neighbors.emplace_back(kmer);
+                neighbors.back().nextFromChar(i);
+              }
+            }
+          }
+
+          // construct a new kmer from a known edge, if that edge's count is non-zero
+          static void get_in_neighbors(Kmer const & kmer, EdgeType const & edge, std::vector<Kmer> & neighbors) {
+            neighbors.clear();
+
+            for (int i = 0; i < 4; ++i) {
+              if (edge.get_edge_frequency(i + 4) > 0) {
+                neighbors.emplace_back(kmer);
+                neighbors.back().nextReverseFromChar(i);
+              }
+            }
+          }
+
+      };
+
+
+      // utilities operating on input edge type
+      class input_edge_utils {
+        public:
+          template <typename Alphabet>
+          static uint8_t reverse_complement_edges(uint8_t const & exts) {
+            return (Alphabet::TO_COMPLEMENT[exts & 0xF] << 4) | Alphabet::TO_COMPLEMENT[exts >> 4];
+          }
+
+          template <typename Alphabet>
+          static uint16_t reverse_complement_edges(uint16_t const & exts) {
+            return (bliss::common::DNA16::TO_ASCII[bliss::common::DNA16::TO_COMPLEMENT[bliss::common::DNA16::FROM_ASCII[exts & 0xFF]]] << 8) |
+                bliss::common::DNA16::TO_ASCII[bliss::common::DNA16::TO_COMPLEMENT[bliss::common::DNA16::FROM_ASCII[exts >> 8]]];
+          }
+      };
+
+			/**
+			 * @brief kmer metadata holding the incoming and outgoing edge counts in a de bruijn graph.
+			 * @details lower 4 integers are out edge counts, upper 4 integers are in edge counts.
+			 *        the out and in edges are relative to the kmer's orientation.
+			 *
+			 */
+			template<typename ALPHA, typename CountType = uint32_t>
+			class edge_counts {
+
+			  protected:
+			    // 32 bit and 64 bit do not clamp.
+			    template <typename C = CountType, typename std::enable_if<sizeof(C) < 4, int>::type = 0 >
+			    void clamped_add_1(C &target) {
+			      if (target < std::numeric_limits<C>::max()) {
+			        ++target;
+			      }
+			    }
+
+          template <typename C = CountType, typename std::enable_if<sizeof(C) >= 4, int>::type = 0  >
+          void clamped_add_1(C &target) {
+            ++target;
+          }
+          // 32 bit and 64 bit do not clamp.
+          template <typename C = CountType, typename std::enable_if<sizeof(C) < 4, int>::type = 0 >
+          void clamped_add_1(C &target, uint8_t flag) {
+            if ((target < std::numeric_limits<C>::max()) && (flag > 0)) {
+              ++target;
+            }
+          }
+          template <typename C = CountType, typename std::enable_if<sizeof(C) >= 4, int>::type = 0  >
+          void clamped_add_1(C &target, uint8_t flag) {
+            if (flag > 0) ++target;
+          }
+
+
 			  public:
 
-	        friend std::ostream& operator<<(std::ostream& ost, const edge_counts<Alphabet, CountType> & node)
+          using Alphabet = ALPHA;
+
+	        friend std::ostream& operator<<(std::ostream& ost, const edge_counts<ALPHA, CountType> & node)
 	        {
 	          // friend keyword signals that this overrides an externally declared function
 	          ost << " dBGr node: counts self = " << node.counts[node.counts.size() - 1] << " in = [";
@@ -63,54 +144,87 @@ namespace bliss
 				~edge_counts() {}
 
 				/**
-				 *
+				 * @brief update the current count from the input left and right chars (encoded in exts).
 				 * @param relative_strand
-				 * @param exts            2 4bits in 1 uchar.  ordered as [out, in], lower bits being out.  ordered for the input kmer (not necessarily canonical)
+				 * @param exts            2 4bits in 1 uchar.  ordered as [out, in], lower bits being out.  the exts should be consistent
+				 *                        with the associated kmer's orientation.
 				 */
-				void update(uint8_t relative_strand, uint8_t exts)
+				void update(uint8_t exts)
 				{
-				  ++counts[8];   // increment self count.
+				  clamped_add_1(counts[8]);   // increment self count.
 
+//        // REQUIRE THAT EXTS has same orientation as associated kmer.
+//				  // shuffle if antisense
+//				  if (relative_strand == ANTI_SENSE) {  // swap upper and lower 4 bits
+//				    exts = (exts << 4) | (exts >> 4);
+//				  }
 
-				  // shuffle if antisense
-				  if (relative_strand == ANTI_SENSE) {  // swap upper and lower 4 bits
-				    exts = (exts << 4) | (exts >> 4);
-				  }
+				  if (std::is_same<ALPHA, bliss::common::DNA>::value ||
+				      std::is_same<ALPHA, bliss::common::DNA5>::value ||
+				      std::is_same<ALPHA, bliss::common::RNA>::value ||
+				      std::is_same<ALPHA, bliss::common::RNA5>::value) {
+				    // value encodes only 1 possible character.  assume values are 0 1 2 3 for ACGT
 
-          // now increment the counts.  Follows 4 bit bit ordering of DNA16, i.e. ACGT from lowest to highest.
-				  uint8_t mask = 1;
-				  for (int i = 0; i < 8; ++i) {
-				    counts[i] += (exts >> i) & mask;
+				    if (std::is_same<ALPHA, bliss::common::DNA5>::value || std::is_same<ALPHA, bliss::common::RNA5>::value) {
+	            if ((exts & 0x0C) == 0) clamped_add_1(counts[exts & 0x3]);  // right edge (out).  increment if it's not marked as unknown.
+	            if ((exts & 0xC0) == 0) clamped_add_1(counts[(exts >> 4) & 0x3]);  // left edge (in).  increment if it's not marked as unknown.
+				    } else {
+				      // no clipping necessary.
+				      clamped_add_1(counts[exts & 0x3]);  // right edge (out)
+				      clamped_add_1(counts[(exts >> 4) & 0x3]);  // left edge (in)
+				    }
+
+				  } else {
+				    // value encodes 0 or more possible characters.  bit position are ACGT from low to high
+
+				    // if not DNA 16, convert to DNA16
+				    if (!std::is_same<ALPHA, bliss::common::DNA16>::value) {
+				      exts = (bliss::common::DNA16::FROM_ASCII[ALPHA::TO_ASCII[exts >> 4]] << 4) | bliss::common::DNA16::FROM_ASCII[ALPHA::TO_ASCII[exts & 0xF]];
+				    }
+
+            // now increment the counts.  Follows 4 bit bit ordering of DNA16, i.e. ACGT from lowest to highest.
+            for (int i = 0; i < 8; ++i) {
+              clamped_add_1(counts[i], (exts >> i) & 1);
+            }
 				  }
 
 				}
 
 				/**
-				 *
+				 * @brief update the current count from the input left and right chars (not encoded in exts).
 				 *
 				 * @param relative_strand
 				 * @param exts              2 byte chars, in [out, in] lower byte being out.  order for the input kmer (not necessarily same as for the canonical)
 				 */
-				void update(uint8_t relative_strand, uint16_t exts)
+				void update(uint16_t exts)
 				{
+          clamped_add_1(counts[8]);   // increment self count.
 
-				  // construct a 2x4bit char.  no reordering.
-				  uint8_t temp = bliss::common::DNA16::FROM_ASCII[exts & 0xFF] |
-				        (bliss::common::DNA16::FROM_ASCII[exts >> 8] << 4);
+          uint8_t temp = (bliss::common::DNA16::FROM_ASCII[exts >> 8] << 4) | bliss::common::DNA16::FROM_ASCII[exts & 0xFF];
 
-				  // now increment the counts - delegate to other update() function.
-				  update(relative_strand, temp);
+          // now increment the counts.  Follows 4 bit bit ordering of DNA16, i.e. ACGT from lowest to highest.
+          for (int i = 0; i < 8; ++i) {
+            clamped_add_1(counts[i], (temp >> i) & 1);
+          }
+				}
+
+				CountType get_edge_frequency(uint8_t idx) {
+				  if (idx >= 8) return 0;
+
+				  return counts[idx];
 				}
 
 			};
 
 
       /*node trait class*/
-      template<typename Alphabet>
-      class edge_exists{
+      template<typename ALPHA>
+      class edge_exists {
         public:
 
-          friend std::ostream& operator<<(std::ostream& ost, const edge_exists<Alphabet> & node)
+          using Alphabet = ALPHA;
+
+          friend std::ostream& operator<<(std::ostream& ost, const edge_exists<ALPHA> & node)
           {
             // friend keyword signals that this overrides an externally declared function
             ost << " dBGr node: in = [";
@@ -122,7 +236,7 @@ namespace bliss
           }
 
 
-          /// array of counts.  format:  [out A C G T; in A C G T; kmer count], ordered for the canonical strand, not necessarily same as for the input kmer..
+          /// array of flags.  bit set to 1 if edge exists.  order from low to high bit:  Out A C G T; In A C G T. DNA 16 encoding.
           uint8_t counts;
 
         /*constructor*/
@@ -136,11 +250,11 @@ namespace bliss
          * @param relative_strand
          * @param exts            2 4bits in 1 uchar.  ordered as [out, in], lower bits being out.  ordered for the input kmer (not necessarily canonical)
          */
-        void update(uint8_t relative_strand, uint8_t exts)
+        void update(uint8_t exts)
         {
-          // shuffle if antisense
-          if (relative_strand == ANTI_SENSE) {  // swap upper and lower 4 bits
-            exts = (exts << 4) | (exts >> 4);
+          // convert to DNA16 first
+          if (!std::is_same<ALPHA, bliss::common::DNA16>::value) {
+            exts = (bliss::common::DNA16::FROM_ASCII[ALPHA::TO_ASCII[exts >> 4]] << 4) | bliss::common::DNA16::FROM_ASCII[ALPHA::TO_ASCII[exts & 0xF]];
           }
 
           counts |= exts;
@@ -152,16 +266,22 @@ namespace bliss
          * @param relative_strand
          * @param exts              2 byte chars, in [out, in] lower byte being out.  order for the input kmer (not necessarily same as for the canonical)
          */
-        void update(uint8_t relative_strand, uint16_t exts)
+        void update(uint16_t exts)
         {
 
           // construct a 2x4bit char.  no reordering.
-          uint8_t temp = bliss::common::DNA16::FROM_ASCII[exts & 0xFF] |
-                (bliss::common::DNA16::FROM_ASCII[exts >> 8] << 4);
+          uint8_t temp = (bliss::common::DNA16::FROM_ASCII[exts >> 8] << 4) | bliss::common::DNA16::FROM_ASCII[exts & 0xFF];
 
-          // now increment the counts - delegate to other update() function.
-          update(relative_strand, temp);
+          // update counts.
+          counts |= exts;
         }
+
+        uint8_t get_edge_frequency(uint8_t idx) {
+          if (idx >= 8) return 0;
+
+          return (counts >> idx) & 1;
+        }
+
 
       };
 
