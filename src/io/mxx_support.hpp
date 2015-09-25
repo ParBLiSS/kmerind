@@ -1260,7 +1260,8 @@ namespace mxx2 {
           result = std::accumulate(x.begin() + 1, x.end(), x.front(), f);
 
           // then do global reduce, directly to the root if possible.
-          result = reduce::reduce(result, f, in_comm, 0);
+          T r2 = result;
+          result = reduce::reduce(r2, f, in_comm, 0);
 
           // assume rank 0 in in_comm is not root rank.
           MPI_Comm_rank(in_comm, &in_rank);
@@ -1436,7 +1437,8 @@ namespace mxx2 {
           result = std::accumulate(x.begin() + 1, x.end(), x.front(), f);
 
           // then do global reduce.
-          result = reduce::reduce(result, f, in_comm, 0);
+          T r2 = result;
+          result = reduce::reduce(r2, f, in_comm, 0);
 
           // mark the root
           int rank;
