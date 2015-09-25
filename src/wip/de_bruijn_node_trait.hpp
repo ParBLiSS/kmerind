@@ -197,8 +197,8 @@ namespace bliss
 				    // value encodes only 1 possible character.  assume values are 0 1 2 3 for ACGT
 
 				    if (std::is_same<ALPHA, bliss::common::DNA5>::value || std::is_same<ALPHA, bliss::common::RNA5>::value) {
-	            if ((exts & 0x0C) == 0) clamped_add_1(counts[exts & 0x3]);  // right edge (out).  increment if it's not marked as unknown.
-	            if ((exts & 0xC0) == 0) clamped_add_1(counts[((exts >> 4) & 0x3) + 4]);  // left edge (in).  increment if it's not marked as unknown.
+				    	if ((exts & 0x0C) == 0) clamped_add_1(counts[exts & 0x3]);  // right edge (out).  increment if it's not marked as unknown.
+				    	if ((exts & 0xC0) == 0) clamped_add_1(counts[((exts >> 4) & 0x3) + 4]);  // left edge (in).  increment if it's not marked as unknown.
 				    } else {
 				      // no clipping necessary.
 				      clamped_add_1(counts[exts & 0x3]);  // right edge (out)
@@ -284,11 +284,12 @@ namespace bliss
          */
         void update(uint8_t exts)
         {
+//            printf("ext value before:  %x\n", exts);
           // convert to DNA16 first
           if (!std::is_same<ALPHA, bliss::common::DNA16>::value) {
-            exts = (bliss::common::DNA16::FROM_ASCII[ALPHA::TO_ASCII[exts >> 4]] << 4) | bliss::common::DNA16::FROM_ASCII[ALPHA::TO_ASCII[exts & 0xF]];
+            exts = (bliss::common::DNA16::FROM_ASCII[ALPHA::TO_ASCII[exts >> 4]] << 4) | bliss::common::DNA16::FROM_ASCII[ALPHA::TO_ASCII[exts & 0x0F]];
           }
-
+//          printf("ext value converted:  %x\n", exts);
           counts |= exts;
         }
 
@@ -311,7 +312,7 @@ namespace bliss
         uint8_t get_edge_frequency(uint8_t idx) const {
           if (idx >= 8) return 0;
 
-          return (counts >> idx) & 1;
+          return (counts >> idx) & 0x1;
         }
 
 

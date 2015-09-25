@@ -162,14 +162,14 @@ namespace bliss
   	using DNA16_edge_iterator = edge_iterator<IT, bliss::common::DNA16>;
     template<typename IT>
     using DNA_IUPAC_edge_iterator = edge_iterator<IT, bliss::common::DNA_IUPAC>;
-    // not suitable for edge iterator since there is no value to unknown char.
-//    template<typename IT>
-//    using DNA_edge_iterator = edge_iterator<IT, bliss::common::DNA>;
+    // not suitable for edge iterator since there is no value for unknown char.
+    template<typename IT>
+    using DNA_edge_iterator = edge_iterator<IT, bliss::common::DNA>;
     template<typename IT>
     using DNA5_edge_iterator = edge_iterator<IT, bliss::common::DNA5>;
-    // not suitable for edge iterator since there is no value to unknown char.
-//    template<typename IT>
-//    using RNA_edge_iterator = edge_iterator<IT, bliss::common::RNA>;
+    // not suitable for edge iterator since there is no value for unknown char.
+    template<typename IT>
+    using RNA_edge_iterator = edge_iterator<IT, bliss::common::RNA>;
     template<typename IT>
     using RNA5_edge_iterator = edge_iterator<IT, bliss::common::RNA5>;
 
