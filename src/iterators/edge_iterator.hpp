@@ -106,7 +106,8 @@ namespace bliss
             }
 
             /*save the previous position*/
-            _left = _curr;
+            if (_left == _data_end) _left = _data_start;
+            else ++_left;
 
             /*move forward by 1*/
             ++_curr;
@@ -248,7 +249,8 @@ namespace bliss
           }
 
           /*save the previous position*/
-          _left = _curr;
+          if (_left == _data_end) _left = _data_start;
+          else ++_left;
 
           /*move forward by 1*/
           ++_curr;
