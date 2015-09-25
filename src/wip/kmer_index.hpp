@@ -510,6 +510,10 @@ public:
      return map.cend();
    }
 
+   size_t size() const {
+     return map.size();
+   }
+
 
 };
 
