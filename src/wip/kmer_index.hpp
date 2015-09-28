@@ -515,6 +515,10 @@ public:
    }
 
 
+   size_t local_size() const {
+     return map.local_size();
+   }
+
 };
 
 
