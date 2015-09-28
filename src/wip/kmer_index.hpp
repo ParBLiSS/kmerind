@@ -510,6 +510,13 @@ public:
      return map.cend();
    }
 
+   size_t size() const {
+     return map.size();
+   }
+
+   size_t local_size() const {
+     return map.local_size();
+   }
 
 };
 
