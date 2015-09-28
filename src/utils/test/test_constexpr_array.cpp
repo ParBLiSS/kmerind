@@ -38,26 +38,26 @@
 
 // set of functions
 struct square_fn {
-    constexpr double operator()(size_t x) {
+    constexpr double operator()(size_t x) const {
       return static_cast<double>(x) * static_cast<double>(x);
     }
 };
-struct sqrt_fn {
-    constexpr double operator()(size_t x) {
-      return sqrt(static_cast<double>(x));
-    }
-};
+//struct sqrt_fn {
+//    constexpr double operator()(size_t x) const {
+//      return sqrt(static_cast<double>(x));
+//    }
+//};
 
 struct inverse_fn {
-    constexpr double operator()(size_t x) {
+    constexpr double operator()(size_t x) const {
       return 1.0/static_cast<double>(x + 1);
     }
 };
-struct log_fn {
-    constexpr double operator()(size_t x) {
-      return x == 0 ? std::numeric_limits<double>::lowest() : log(static_cast<double>(x));
-    }
-};
+//struct log_fn {
+//    constexpr double operator()(size_t x) {
+//      return x == 0 ? std::numeric_limits<double>::lowest() : log(static_cast<double>(x));
+//    }
+//};
 
 
 

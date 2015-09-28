@@ -163,29 +163,28 @@ public:
   
 
     static constexpr uint8_t simd_mask_b[16] __attribute__((aligned(16))) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
-    static constexpr __m128i const *simd_mask = reinterpret_cast<const __m128i*>(simd_mask_b);
-
+    //static constexpr __m128i const *simd_mask = reinterpret_cast<const __m128i*>(simd_mask_b);
 
     // mask for reversing the order of items
     static constexpr uint8_t simd_rev_mask_b[16] __attribute__((aligned(16))) = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
-    static constexpr __m128i const *simd_rev_mask = reinterpret_cast<const __m128i*>(simd_rev_mask_b);
+    //static constexpr __m128i const *simd_rev_mask = reinterpret_cast<const __m128i*>(simd_rev_mask_b);
 
     // lookup table for reversing bits in a byte in groups of 1
     static constexpr uint8_t simd_lut1_lo_b[16] __attribute__((aligned(16))) = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
-    static constexpr __m128i const *simd_lut1_lo = reinterpret_cast<const __m128i*>(simd_lut1_lo_b);
+    //static constexpr __m128i const *simd_lut1_lo = reinterpret_cast<const __m128i*>(simd_lut1_lo_b);
     static constexpr uint8_t simd_lut1_hi_b[16] __attribute__((aligned(16))) = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
-    static constexpr __m128i const *simd_lut1_hi = reinterpret_cast<const __m128i*>(simd_lut1_hi_b);
+    //static constexpr __m128i const *simd_lut1_hi = reinterpret_cast<const __m128i*>(simd_lut1_hi_b);
     // lookup table for reversing bits in a byte in groups of 2
     static constexpr uint8_t simd_lut2_lo_b[16] __attribute__((aligned(16))) = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
-    static constexpr __m128i const *simd_lut2_lo = reinterpret_cast<const __m128i*>(simd_lut2_lo_b);
+    //static constexpr __m128i const *simd_lut2_lo = reinterpret_cast<const __m128i*>(simd_lut2_lo_b);
     static constexpr uint8_t simd_lut2_hi_b[16] __attribute__((aligned(16))) = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
-    static constexpr __m128i const *simd_lut2_hi = reinterpret_cast<const __m128i*>(simd_lut2_hi_b);
+    //static constexpr __m128i const *simd_lut2_hi = reinterpret_cast<const __m128i*>(simd_lut2_hi_b);
     // lookup table for reversing bits in a byte in groups of 4 - no need, just use the simd_mask.
 
     // compare to self sets  register to all 1's.
     static constexpr uint8_t simd_true_mask_b[32] __attribute__((aligned(16))) = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
                                                                                   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-    static constexpr __m128i const *simd_true_mask = reinterpret_cast<const __m128i*>(simd_true_mask_b);
+    //static constexpr __m128i const *simd_true_mask = reinterpret_cast<const __m128i*>(simd_true_mask_b);
 
 
   public:
@@ -1389,16 +1388,17 @@ public:
     static INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
     ::std::is_same<A, RNA>::value, __m128i>::type word_reverse_simd(__m128i const & b) {
       //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, *simd_rev_mask);                                    // SSSE3
+      __m128i r = _mm_shuffle_epi8(b, *(reinterpret_cast<const __m128i*>(simd_rev_mask_b)));                                    // SSSE3
 
       //== get the lut indices.
       // lower 4 bits
-      __m128i lo = _mm_and_si128(*simd_mask, r);                                          // SSE2
+      __m128i lo = _mm_and_si128(*(reinterpret_cast<const __m128i*>(simd_mask_b)), r);                                          // SSE2
       // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
-      __m128i hi = _mm_srli_epi16(_mm_andnot_si128(*simd_mask, r), 4);                    // SSE2
+      __m128i hi = _mm_srli_epi16(_mm_andnot_si128(*(reinterpret_cast<const __m128i*>(simd_mask_b)), r), 4);                    // SSE2
 
       //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
-      return _mm_or_si128(_mm_shuffle_epi8(*simd_lut2_hi, lo), _mm_shuffle_epi8(*simd_lut2_lo, hi));  // SSSE3, SSE2
+      return _mm_or_si128(_mm_shuffle_epi8(*(reinterpret_cast<const __m128i*>(simd_lut2_hi_b)), lo),
+    		  _mm_shuffle_epi8(*(reinterpret_cast<const __m128i*>(simd_lut2_lo_b)), hi));  // SSSE3, SSE2
 
     }
     /// do reverse complement.  8 to 100 times faster than serially reversing the bits.
@@ -1406,7 +1406,7 @@ public:
     static INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
         ::std::is_same<A, RNA>::value, __m128i>::type word_reverse_complement_simd(__m128i const & b) {
       // DNA type, requires that alphabet be setup so that negation produces the complement.
-      return _mm_xor_si128(word_reverse_simd<A>(b), *simd_true_mask);  // sse does not have negation.   // SSE2
+      return _mm_xor_si128(word_reverse_simd<A>(b), *(reinterpret_cast<const __m128i*>(simd_true_mask_b)));  // sse does not have negation.   // SSE2
     }
 
     // reverse via bit swapping in 4 bit increment.  this complement table is then used for lookup.
@@ -1416,12 +1416,12 @@ public:
     template <typename A = ALPHABET>
     static INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value, __m128i>::type word_reverse_simd(__m128i const & b) {
       //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, *simd_rev_mask);
+      __m128i r = _mm_shuffle_epi8(b, *(reinterpret_cast<const __m128i*>(simd_rev_mask_b)));
 
       // lower 4 bits shift to upper
-      __m128i lo = _mm_slli_epi32(_mm_and_si128(*simd_mask, r), 4);
+      __m128i lo = _mm_slli_epi32(_mm_and_si128(*(reinterpret_cast<const __m128i*>(simd_mask_b)), r), 4);
       // upper 4 bits shift to lower.
-      __m128i hi = _mm_srli_epi32(_mm_andnot_si128(*simd_mask, r), 4);
+      __m128i hi = _mm_srli_epi32(_mm_andnot_si128(*(reinterpret_cast<const __m128i*>(simd_mask_b)), r), 4);
 
       // swap bits in groups of 4 bits, so after this point, just or.
 
@@ -1432,16 +1432,17 @@ public:
     template <typename A = ALPHABET>
     static INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value, __m128i>::type word_reverse_complement_simd(__m128i const & b) {
       //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, *simd_rev_mask);
+      __m128i r = _mm_shuffle_epi8(b, *(reinterpret_cast<const __m128i*>(simd_rev_mask_b)));
 
       //== get the lut indices.
       // lower 4 bits
-      __m128i lo = _mm_and_si128(*simd_mask, r);
+      __m128i lo = _mm_and_si128(*(reinterpret_cast<const __m128i*>(simd_mask_b)), r);
       // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
-      __m128i hi = _mm_srli_epi32(_mm_andnot_si128(*simd_mask, r), 4);
+      __m128i hi = _mm_srli_epi32(_mm_andnot_si128(*(reinterpret_cast<const __m128i*>(simd_mask_b)), r), 4);
 
       //== now use shuffle to look up the reversed bytes.  hi and lo are now indices. and lut2_lo/hi are lookup tables. remember that lo and hi need to be swapped.
-      return _mm_or_si128(_mm_shuffle_epi8(*simd_lut1_hi, lo), _mm_shuffle_epi8(*simd_lut1_lo, hi));
+      return _mm_or_si128(_mm_shuffle_epi8(*(reinterpret_cast<const __m128i*>(simd_lut1_hi_b)), lo),
+    		  _mm_shuffle_epi8(*(reinterpret_cast<const __m128i*>(simd_lut1_lo_b)), hi));
 
     }
 //

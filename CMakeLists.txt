@@ -69,10 +69,18 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   
   
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-    message(FATAL_ERROR "${PROJECT_NAME} currently does not support clang due to include path issues")
-#  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-#  set(_CMAKE_TOOLCHAIN_PREFIX "llvm-")
-#  include_directories("/usr/local/lib/clang/3.4/include")
+  execute_process(
+    COMMAND llvm-config --version OUTPUT_VARIABLE CLANG_VERSION)
+  if (NOT (CLANG_VERSION VERSION_GREATER 3.7 OR CLANG_VERSION VERSION_EQUAL 3.7))
+    message(FATAL_ERROR "${PROJECT_NAME} requires clang 3.7 or greater.")
+  endif ()
+    # message(FATAL_ERROR "${PROJECT_NAME} currently does not support clang due to include path issues")
+  #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")   # do not use libc++ - may not be there . libstdc++ (from gnu) is a safer bet.
+  #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -v -E")		      # for debugging to see how clang finds header files.
+  #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp=libomp")  # not sure if needed for openmp. 
+  set(_CMAKE_TOOLCHAIN_PREFIX "llvm-")
+  include_directories("/usr/lib/llvm-3.7/lib/clang/3.7.0/include")		      # this is here for SSE headers.
+	# clang uses gcc headers, and can find most by itself.
   SET(SUPPORTS_SANITIZER ON CACHE INTERNAL "compiler supports sanitizer?")
   SET(SUPPORTS_COVERAGE ON CACHE INTERNAL "compiler supports coverage?")
 
@@ -319,6 +327,21 @@ include(FindOpenMP)
 
 if (OPENMP_FOUND)
     message(STATUS "Found OpenMP")
+else(OPENMP_FOUND)
+	message(STATUS "NO OpenMP.  check compiler version now.")
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    execute_process(
+    COMMAND llvm-config --version OUTPUT_VARIABLE CLANG_VERSION)
+  
+   	if (CLANG_VERSION VERSION_GREATER 3.7 OR CLANG_VERSION VERSION_EQUAL 3.7)
+	  	message(STATUS "Found OpenMP for CLANG ${CLANG_VERSION}")
+	  	set(OPENMP_FOUND 1)
+	  	set(OpenMP_C_FLAGS "-fopenmp")
+	  	set(OpenMP_CXX_FLAGS "-fopenmp")
+	  	include_directories(/home/tpan/Downloads/OpenMP-3.7.0-x86_64-unknown-linux-gnu/include)  # clang uses gcc headers, but can't find all gcc headers by itself.  this is for omp.h
+	  	link_directories(/home/tpan/Downloads/OpenMP-3.7.0-x86_64-unknown-linux-gnu/lib)
+  	endif(CLANG_VERSION VERSION_GREATER 3.7 OR CLANG_VERSION VERSION_EQUAL 3.7)
+  endif(CMAKE_CXX_COMPILER_ID MATCHES "Clang") 
 endif(OPENMP_FOUND)
 
 CMAKE_DEPENDENT_OPTION(USE_OPENMP "Build with OpenMP support" ON

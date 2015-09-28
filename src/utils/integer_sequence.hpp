@@ -3,17 +3,12 @@
  * @ingroup utils
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   templates to support generating a integer/index sequence
- * @details adapted from http://coliru.stacked-crooked.com/a/663dee82db2aef0a
+ * @details adapted from http://stackoverflow.com/questions/13072359/c11-compile-time-array-with-logarithmic-evaluation-depth/13073076#13073076
+ *          this is logarithmic depth recursive metatemplate instantiation algorithm for creating an integer sequence.
  *
+ *          useful because Clang only supports 256 levels of recursion.
  *
-  // Copyright Jonathan Wakely 2012-2013
-  // Distributed under the Boost Software License, Version 1.0.
-  // (See accompanying file LICENSE_1_0.txt or copy at
-  // http://www.boost.org/LICENSE_1_0.txt)
-  // https://gitorious.org/redistd/integer_seq/raw/fdce85d18df4ea99240524c626d5452a0f7c3faf:integer_seq.h
-
-  // A C++11 implementation of std::integer_sequence from C++14
- *
+ *          generalized to use arbitrary primitive type, and therefore also using variadic template types.
  */
 #ifndef INTEGER_SEQUENCE_HPP_
 #define INTEGER_SEQUENCE_HPP_
@@ -25,6 +20,32 @@ namespace bliss
   namespace utils
   {
 
+    // using aliases for cleaner syntax
+    template<class T> using Invoke = typename T::type;
+
+    template<typename T, T...> struct seq{ using type = seq; };    // TCP: "variable" holding a sequence of values. values may not be used.
+
+    template<class S1, class S2> struct concat;                    // TCP: generic concat template
+
+    template<typename T, T... I1, T... I2>                         // TCP: template specialization of concat that does some real work
+    struct concat<seq<T, I1...>, seq<T, I2...> >
+      : seq<T, I1..., (sizeof...(I1) + I2)...>{};                  // TCP: note that the values in I2 are offset by size of I1.
+
+    template<class S1, class S2>
+    using Concat = Invoke<concat<S1, S2> >;                        // TCP: alias for convenience - function like.
+
+    template<typename T, T N> struct gen_seq;                      // TCP: forward declare
+    template<typename T, T N> using GenSeq = Invoke<gen_seq<T, N> >;
+
+    template<typename T, T N>                                      // TCP: actual recursive template instance.
+    struct gen_seq : Concat<GenSeq<T, N/2>, GenSeq<T, N - N/2> >{};
+
+    template<typename T>
+    struct gen_seq<T, 0> : seq<T>{};                               // TCP: specializations to handle recursion termination.
+    template<typename T>
+    struct gen_seq<T, 1> : seq<T, 0>{};
+
+
     /**
      * @class integer_sequence
      * @brief     A type that represents a parameter pack of zero or more integer values, each of type T.
@@ -35,7 +56,7 @@ namespace bliss
       struct integer_sequence
       {
         // T can only be integral
-        static_assert( std::is_integral<T>::value, "Integral type" );
+        static_assert( std::is_integral<T>::value, "Integral type only" );
 
         /**
          * @typedef type
@@ -46,6 +67,7 @@ namespace bliss
         /**
          * @var   size
          * @brief number of values in the parameter pack.
+         * @note can only support non-negative integral values.
          */
         static constexpr T size = sizeof...(I);
 
@@ -141,7 +163,7 @@ namespace bliss
      * @typedef index_sequence_for
      * @brief   create a integer index version of a sequence of types.
      * @details index_sequence_for<A, B, C> is an alias for index_sequence<0, 1, 2>
-     * @tparams Args  variadic list of  type template arguments
+     * @tparam Args  variadic list of  type template arguments
      */
     template<typename... Args>
       using index_sequence_for = make_index_sequence<sizeof...(Args)>;

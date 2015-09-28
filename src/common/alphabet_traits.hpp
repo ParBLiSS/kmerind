@@ -32,7 +32,7 @@ namespace bliss
     /// Functor to convert from ascii to values in the alphabet
     template<typename Alphabet, typename I = unsigned char>
     struct ASCII2 {
-        const uint8_t operator()(I ascii) {
+        uint8_t operator()(I ascii) const {
           return Alphabet::FROM_ASCII[static_cast<size_t>(ascii)];
         }
     };
@@ -40,7 +40,7 @@ namespace bliss
     /// Functor to convert from values in the alphabet to is complement.
     template<typename Alphabet>
     struct ToComplement {
-        const uint8_t operator()(uint8_t in) {
+        uint8_t operator()(uint8_t in) const {
           return Alphabet::TO_COMPlEMENT[static_cast<size_t>(in)];
         }
     };

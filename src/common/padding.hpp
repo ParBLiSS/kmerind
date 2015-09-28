@@ -38,7 +38,7 @@ namespace bliss
       /// parameter)
       static constexpr unsigned int bits_per_char = BITS_PER_CHAR;
       /// The number of data bits (bits per word minus padding bits) per storage word
-      static constexpr unsigned int data_bits = roundDownToMultiple<unsigned int>(bits_per_word, bits_per_char);
+      static constexpr unsigned int data_bits = roundDownToMultiple(bits_per_word, bits_per_char);
       /// The number of bits used as padding at the end of each data word.
       static constexpr unsigned int padding_bits = bits_per_word - data_bits;
       /// The number of characters inside of each storage/data word
@@ -58,13 +58,13 @@ namespace bliss
       /// The number of total bits in the stream
       static constexpr unsigned int nBits = NUM_TOTAL_BITS;
       /// The number of bytes needed to hold `nBits` bits
-      static constexpr unsigned int nBytes = intCeil<unsigned int>(nBits, 8);
+      static constexpr unsigned int nBytes = intCeil(nBits, 8);
       /// The number of bits for each word of type `T`
       static constexpr unsigned int bitsPerWord = std::numeric_limits<T>::digits;
       /// The number of bytes in each word of type `T`
       static constexpr unsigned int bytesPerWord = sizeof(T);
       /// The number of words of type `T` needed to hold `nBits` bits
-      static constexpr unsigned int nWords = intCeil<unsigned int>(nBytes, bytesPerWord);
+      static constexpr unsigned int nWords = intCeil(nBytes, bytesPerWord);
       /// The number of padding bits at the end of the stream
       static constexpr unsigned int padBits = nWords*bitsPerWord - nBits;
       /// The number of data bits in the last word of the stream
@@ -121,7 +121,7 @@ namespace bliss
       // the number of non padding bits per input word:
       const unsigned int bitsPerWord = sizeof(base_type)*8 - padBits;
       // the number of input words that have to be read to reach `nBits` bits
-      unsigned int baseWordsToRead = intCeil<unsigned int>(nBits, bitsPerWord);
+      unsigned int baseWordsToRead = intCeil(nBits, bitsPerWord);
       // the number of bits left to read
       unsigned int bitsToRead = nBits;
     
@@ -207,8 +207,8 @@ namespace bliss
       {
         const unsigned int baseBitsPerWord = sizeof(base_type)*8 - padBits;
         // the number of bits that can be read by the base type
-        unsigned int baseBitsToRead = roundDownToMultiple<unsigned int>(nBits, sizeof(base_type)*8);
-        baseBitsToRead = roundDownToMultiple<unsigned int>(baseBitsToRead, baseBitsPerWord);
+        unsigned int baseBitsToRead = roundDownToMultiple(nBits, sizeof(base_type)*8);
+        baseBitsToRead = roundDownToMultiple(baseBitsToRead, baseBitsPerWord);
     
     
         // TODO: do i need these?

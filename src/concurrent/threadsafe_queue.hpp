@@ -152,7 +152,7 @@ namespace bliss
          * get the capacity of the thread safe queue
          * @return    capacity of the queue
          */
-        inline const size_t getCapacity() const {
+        inline size_t getCapacity() const {
           return capacity;
         }
 
@@ -182,7 +182,7 @@ namespace bliss
          * get the current size of the queue
          * @return    the current size of the queue
          */
-        inline const size_t getSize() const
+        inline size_t getSize() const
         {
           return getRawSize<LT>() & MAX_SIZE;   // size is atomic, so don't need strong memory ordering itself.
         }

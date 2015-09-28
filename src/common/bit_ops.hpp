@@ -91,20 +91,24 @@ void copyBitsFixed(T& to, const T& from)
   to = ((~mask) & to) | (mask & from);
 }
 
+
+//#define roundDownToMultiple(value, base) value - (value % base);
 template <typename T>
 constexpr T roundDownToMultiple(const T& value, const T& base)
 {
   return value - (value % base);
 }
 
+//#define roundUpToMultiple(value, base) (value - 1) - ((value - 1) % base) + base;
 template <typename T>
 constexpr T roundUpToMultiple(const T& value, const T& base)
 {
   return roundDownToMultiple(value - 1, base) + base;
 }
 
+//#define intCeil(divident, divisor)   (divident == 0) ? 0 : ((divident - 1) / divisor) + 1;
 template <typename T>
-constexpr T intCeil(const T& divident, const T& divisor)
+inline constexpr T intCeil(const T& divident, const T& divisor)
 {
   return (divident == 0) ? 0 : ((divident - 1) / divisor) + 1;
 }
