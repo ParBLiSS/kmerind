@@ -212,7 +212,8 @@ namespace dsc  // distributed std container
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_reserve( size_t n) {
-        c.reserve(n);
+        if (static_cast<float>(c.bucket_count()) < (static_cast<float>(n) / c.max_load_factor()) )
+          c.reserve(n);
       }
 
       /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
@@ -293,7 +294,7 @@ namespace dsc  // distributed std container
           if (first == last) return 0;
 
           size_t before = c.size();
-          this->c.reserve(before + ::std::distance(first, last));
+          this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             c.emplace(*it);
@@ -312,7 +313,7 @@ namespace dsc  // distributed std container
           if (first == last) return 0;
 
           size_t before = c.size();
-          this->c.reserve(before + ::std::distance(first, last));
+          this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) c.emplace(*it);
@@ -1380,7 +1381,7 @@ namespace dsc  // distributed std container
       size_t local_insert(InputIterator first, InputIterator last) {
           size_t before = this->c.size();
 
-          this->c.reserve(before + ::std::distance(first, last));
+          this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             if (this->c.find(it->first) == this->c.end()) this->c.emplace(*it);
@@ -1399,7 +1400,7 @@ namespace dsc  // distributed std container
       size_t local_insert(InputIterator first, InputIterator last, Predicate const & pred) {
           size_t before = this->c.size();
 
-          this->c.reserve(before + ::std::distance(first, last));
+          this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) {

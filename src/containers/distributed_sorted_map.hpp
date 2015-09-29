@@ -273,6 +273,7 @@ namespace dsc  // distributed std container
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_reserve( size_t n) {
+        // vector's reserve will only do something if n > capacity.
         c.reserve(n);
       }
 
@@ -1028,12 +1029,12 @@ namespace dsc  // distributed std container
             if (c.size() == 0)   // container is empty, so swap it in.
               c.swap(input);
             else {
-            	c.reserve(before + input.size());
+            	this->local_reserve(before + input.size());
                 ::std::move(input.begin(), input.end(), emplace_iter);    // else move it in.
             }
           }
           else {
-        	  c.reserve(before + input.size());
+        	  this->local_reserve(before + input.size());
         	  ::std::copy_if(::std::make_move_iterator(input.begin()),
                       ::std::make_move_iterator(input.end()), emplace_iter, pred);  // predicate needed.  move it though.
           }

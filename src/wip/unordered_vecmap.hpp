@@ -515,7 +515,9 @@ namespace fsc {  // fast standard container
 
       /// reserve for new count.  iterators may be invalidated.
       void reserve(size_type count) {
-        map.reserve((count + multiplicity - 1) / multiplicity);
+        size_type cc = (count + multiplicity - 1) / multiplicity;
+        if (static_cast<float>(map.bucket_count()) < (static_cast<float>(cc) / map.max_load_factor()) )
+          map.reserve(cc);
       }
 
       iterator insert(const value_type & value) {
@@ -1027,7 +1029,9 @@ namespace fsc {  // fast standard container
 
       /// reserve for new count.  iterators may be invalidated.
       void reserve(size_type count) {
-        map.reserve((count + multiplicity - 1) / multiplicity);
+        size_type cc = (count + multiplicity - 1) / multiplicity;
+        if (static_cast<float>(map.bucket_count()) < (static_cast<float>(cc) / map.max_load_factor()) )
+          map.reserve(cc);
       }
 
       iterator insert(const value_type & value) {
