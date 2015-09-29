@@ -212,12 +212,12 @@ namespace dsc  // distributed std container
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_reserve( size_t n) {
-        if (static_cast<float>(c.bucket_count()) < (static_cast<float>(n) / c.max_load_factor()) )
-          c.reserve(n);
+        local_rehash(std::ceil(static_cast<float>(n) / c.max_load_factor()) );
       }
 
       /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_rehash( size_type n) {
+        if (this->c.bucket_count() < n) this->c.rehash(n);
       }
 
       struct LocalCount {
