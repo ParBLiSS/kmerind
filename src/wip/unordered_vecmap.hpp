@@ -18,6 +18,7 @@
 #include <tuple>   // pair
 #include <scoped_allocator>
 #include <algorithm>
+#include <cmath>   // ceil
 
 
 namespace fsc {  // fast standard container
@@ -506,16 +507,35 @@ namespace fsc {  // fast standard container
         map.clear();
       }
 
-      /// rehash for new count.  iterators are invalidated.
+      /// rehash for new count number of BUCKETS.  iterators are invalidated.  side effect is multiplicity is updated.
       void rehash(size_type count) {
+        // compute current average number of entries per vector.  this is side effect.
         multiplicity = (s + map.size() - 1) / map.size();
 
-        map.rehash(::std::max(map.size(), (count + multiplicity - 1) / multiplicity));
+        // only rehash if new bucket count is greater than old bucket count
+        if (count > map.bucket_count())
+          map.rehash(count);
       }
 
-      /// reserve for new count.  iterators may be invalidated.
+      /// bucket count.  same as underlying buckets
+      size_type bucket_count() { return map.bucket_count(); }
+
+      /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
+      float max_load_factor() {
+        // compute current average number of entries per vector.  this is side effect.
+        multiplicity = (s + map.size() - 1) / map.size();
+
+        return map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
+      }
+
+
+      /// reserve for new count of elements.  iterators may be invalidated.
       void reserve(size_type count) {
-        map.reserve((count + multiplicity - 1) / multiplicity);
+        // compute current average number of entries per vector.  this is side effect
+        multiplicity = (s + map.size() - 1) / map.size();
+
+        // compute number of buckets required.
+        this->rehash(std::ceil(static_cast<float>(count) / this->max_load_factor()));
       }
 
       iterator insert(const value_type & value) {
@@ -1018,16 +1038,35 @@ namespace fsc {  // fast standard container
         map.clear();
       }
 
-      /// rehash for new count.  iterators are invalidated.
+      /// rehash for new count number of BUCKETS.  iterators are invalidated.  side effect is multiplicity is updated.
       void rehash(size_type count) {
+        // compute current average number of entries per vector.  this is side effect.
         multiplicity = (s + map.size() - 1) / map.size();
 
-        map.rehash(::std::max(map.size(), (count + multiplicity - 1) / multiplicity));
+        // only rehash if new bucket count is greater than old bucket count
+        if (count > map.bucket_count())
+          map.rehash(count);
       }
 
-      /// reserve for new count.  iterators may be invalidated.
+      /// bucket count.  same as underlying buckets
+      size_type bucket_count() { return map.bucket_count(); }
+
+      /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
+      float max_load_factor() {
+        // compute current average number of entries per vector.  this is side effect.
+        multiplicity = (s + map.size() - 1) / map.size();
+
+        return map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
+      }
+
+
+      /// reserve for new count of elements.  iterators may be invalidated.
       void reserve(size_type count) {
-        map.reserve((count + multiplicity - 1) / multiplicity);
+        // compute current average number of entries per vector.  this is side effect
+        multiplicity = (s + map.size() - 1) / map.size();
+
+        // compute number of buckets required.
+        this->rehash(std::ceil(static_cast<float>(count) / this->max_load_factor()));
       }
 
       iterator insert(const value_type & value) {

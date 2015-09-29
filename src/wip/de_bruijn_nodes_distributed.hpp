@@ -77,7 +77,7 @@ namespace bliss{
 				  size_t before = this->c.size();
 
 				  /*reserve space*/
-				  this->c.reserve(before + ::std::distance(first, last));
+				  this->local_reserve(before + ::std::distance(first, last));
 
 				  // allocate a node
           auto node = this->c.find(first->first);
@@ -146,7 +146,7 @@ namespace bliss{
 				  int32_t relative_strand;
 				  size_t before = this->c.size();
 
-				  this->c.reserve(before + ::std::distance(first, last));
+				  this->local_reserve(before + ::std::distance(first, last));
 				  auto node = this->c.find(first->first);
 
           using EdgeType = decltype(node->second);

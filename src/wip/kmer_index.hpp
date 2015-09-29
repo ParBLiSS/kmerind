@@ -413,9 +413,10 @@ public:
 	void insert(std::vector<T> &temp) {
 		TIMER_INIT(build);
 
-		TIMER_START(build);
-		this->map.reserve(this->map.size() + temp.size());
-		TIMER_END(build, "reserve", temp.size());
+		// do not reserve until insertion - less transient memory used.
+//		TIMER_START(build);
+//		this->map.reserve(this->map.size() + temp.size());
+//		TIMER_END(build, "reserve", temp.size());
 
 		// distribute
 		TIMER_START(build);
