@@ -161,7 +161,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
         if (updating) INFOF("  FULLBUFFER1: size %ld updating? %s, blocked? %s", ptr->getSize(), (updating ? "Y" : "N"), (ptr->is_read_only() ? "Y" : "N"));
 
         bytes3 += ptr->getSize();
-        chars3 += strlen(ptr->operator char*());
+        chars3 += strlen(ptr->template begin<char>());
         buffers.releaseBuffer(std::move(ptr));
       }
     } else {
@@ -179,7 +179,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
         if (updating) INFOF("  FULLBUFFER: size %ld blocked? %s", ptr->getSize(), (ptr->is_read_only() ? "Y" : "N"));
 
         bytes3 += ptr->getSize();
-        chars3 += strlen(ptr->operator char*());
+        chars3 += strlen(ptr->template begin<char>());
 
         buffers.releaseBuffer(std::move(ptr));
       }

@@ -171,7 +171,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
         if (updating) INFOF("  FULLBUFFER1: size %ld updating? %s, blocked? %s", ptr->getSize(), (updating ? "Y" : "N"), (ptr->is_read_only() ? "Y" : "N"));
 
         bytes3 += ptr->getSize();
-        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), ptr->operator int*(), ptr->operator int*() + ptr->getSize() / sizeof(int));
+        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), ptr->template begin<int>(), ptr->template end<int>());
         buffers.releaseBuffer(std::move(ptr));
       }
     } else {
@@ -187,7 +187,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
         bytes3 += ptr->getSize();
 
-        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), ptr->operator int*(), ptr->operator int*() + ptr->getSize() / sizeof(int));
+        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), ptr->template begin<int>(), ptr->template end<int>());
         buffers.releaseBuffer(std::move(ptr));
       }
     }
@@ -211,7 +211,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   for (auto final : finals) {
     gbytes += (final == nullptr) ? 0 : final->getSize();
     if (final) {
-      allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize() / sizeof(int));
+      allstored.insert(allstored.end(), final->template begin<int>(),  final->template end<int>());
       buffers.releaseBuffer(std::move(final));
     }
     //if (count7 != count/sizeof(int)) ERRORF("FAIL: append count = %d, actual data inserted is %ld", count7, count/sizeof(int) );
@@ -227,7 +227,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   unsigned int gbytes2 = 0;
   for (auto final : finals) {
     gbytes2 += (final == nullptr) ? 0 : final->getSize();
-      allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize() / sizeof(int));
+      allstored.insert(allstored.end(), final->template begin<int>(),  final->template end<int>());
     buffers.releaseBuffer(std::move(final));
   }
   finals.clear();

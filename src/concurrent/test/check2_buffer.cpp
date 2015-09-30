@@ -118,7 +118,7 @@ void appendTest()
     // compare unordered buffer content.
     INFOF("success : %lu, gold size %lu", success, ggold.size());
 
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -160,7 +160,7 @@ void appendTest()
 
 
     // compare unordered buffer content.
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -209,7 +209,7 @@ void appendTest()
   {
 
     // compare unordered buffer content.
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -249,7 +249,7 @@ void appendTest()
   {
 
     // compare unordered buffer content.
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -289,7 +289,7 @@ void appendTest()
   else
   {
     // compare unordered buffer content.
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -329,7 +329,7 @@ void appendTest()
   else
   {
     // compare unordered buffer content.
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -457,8 +457,8 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
     fullsize += full[i].size();
     for (size_t j = 0; j < full[i].size(); ++j)
     {
-      stored.insert(stored.end(), full[i][j]->operator int*(),
-                    reinterpret_cast<int*>(full[i][j]->end()));
+      stored.insert(stored.end(), full[i][j]->template begin<int>(),
+                    full[i][j]->template end<int>());
     }
   }
   auto stored_count = stored.size();
@@ -585,7 +585,7 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
         }
         success2 += oldsize;
 
-        int* d = old_ptr->operator int*();
+        int* d = old_ptr->template begin<int>();
 
         lstored[omp_get_thread_num()].insert(
             lstored[omp_get_thread_num()].end(), d,
@@ -614,8 +614,8 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
   }
 
   // compare unordered buffer content.
-  stored.insert(stored.end(), ptr.load(std::memory_order_relaxed)->operator int*(),
-                reinterpret_cast<int*>(ptr.load(std::memory_order_relaxed)->end()));
+  stored.insert(stored.end(), ptr.load(std::memory_order_relaxed)->template begin<int>(),
+                ptr.load(std::memory_order_relaxed)->template end<int>());
 
   stored_count = stored.size();
   success2 += ptr.load(std::memory_order_relaxed)->getSize() / elSize;
@@ -687,7 +687,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
     size_t data = i;
     void* out = nullptr;
     auto localptr = ptr.load(std::memory_order_consume);
-    auto dataptr = localptr->operator char*();
+    auto dataptr = localptr->template begin<char>();
     unsigned int result = localptr->append(&data, 1, &out);
 
     if ((result & 0x1) > 0)
@@ -708,8 +708,8 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
           FATALF(
               "ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. insert buf %p, curr buffer %p, insert dataptr %p, data ptr %p, curr data ptr %p, returned %p, offset %ld",
               omp_get_thread_num(), data, od, localptr, ptr.load(std::memory_order_relaxed), dataptr,
-              localptr->operator char*(), ptr.load(std::memory_order_relaxed)->operator char*(),
-              (char*)out, (char*)out - (localptr->operator char*()));
+              localptr->template begin<char>(), ptr.load(std::memory_order_relaxed)->template begin<char>(),
+              (char*)out, (char*)out - (localptr->template begin<char>()));
           fflush(stdout);
           ++failure3;
         }
@@ -864,7 +864,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 //        size_t od = *((size_t*)out);
 //        if (od != data) {
 //          FATALF("ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. buffer %p data ptr %p, result ptr %p, offset %ld",
-//                 omp_get_thread_num(), data, od, ptr.get(), ptr->operator char*(), (char*) out, (char*)out - ptr->operator char*());
+//                 omp_get_thread_num(), data, od, ptr.get(), ptr->template begin<char>(), (char*) out, (char*)out - ptr->template begin<char>());
 //          fflush(stdout);
 //          ++failure3;
 //        }

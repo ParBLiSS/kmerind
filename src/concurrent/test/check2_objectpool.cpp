@@ -109,7 +109,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 //      while (writelock3.test_and_set());
       //sptr = new_buf_ptr;
       omp_set_lock(&writelock3);
-      if (sptr) stored.insert(stored.end(), sptr->operator int*(), sptr->operator int*() + sptr->getSize() / sizeof(int));
+      if (sptr) stored.insert(stored.end(), sptr->template begin<int>(), sptr->template end<int>());
       omp_unset_lock(&writelock3);
 //      writelock3.clear();
 
@@ -125,7 +125,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
   if (sptr) {sptr->block_and_flush();
 
     // compare unordered buffer content.
-    stored.insert(stored.end(), sptr->operator int*(), sptr->operator int*() + sptr->getSize() / sizeof(int));
+    stored.insert(stored.end(), sptr->template begin<int>(), sptr->template end<int>());
   }
   pool.releaseObject(buf_ptr);
   int stored_count = stored.size();
@@ -196,7 +196,7 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
         size_t od = *(reinterpret_cast<size_t*>(out));
         if (od != data) {
           FATALF("ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. buffer %p data ptr %p, offset %ld",
-                 omp_get_thread_num(), data, od, sptr, sptr->operator char*(), (char*)out - sptr->operator char*());
+                 omp_get_thread_num(), data, od, sptr, sptr->template begin<char>(), (char*)out - sptr->template begin<char>());
           fflush(stdout);
           ++failure3;
         }
@@ -348,7 +348,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
         ++count;
       }
 
-      int u = ptr->operator int*()[0];
+      int u = ptr->template begin<int>()[0];
       if (v != u) {
         ++count1;
       }
@@ -377,7 +377,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 
   bool same = true;
   for (int i = 0; i < buffer_threads ; ++i) {
-    same &= ptr->operator int*()[i] == 7;
+    same &= ptr->template begin<int>()[i] == 7;
   }
   if (!same) FATALF("FAIL: inserted not same");
   else INFOF("PASSED.");

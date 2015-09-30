@@ -112,7 +112,7 @@ void testAppendMultipleBuffers(const int NumThreads, const size_t total_count, b
       //sptr = new_buf_ptr;
       omp_set_lock(&writelock3);
       if (sptr)
-      stored.insert(stored.end(), sptr->operator int*(), sptr->operator int*() + sptr->getSize() / sizeof(int));
+      stored.insert(stored.end(), sptr->template begin<int>(), sptr->template end<int>());
       omp_unset_lock(&writelock3);
 //      writelock3.clear();
 
@@ -128,7 +128,7 @@ void testAppendMultipleBuffers(const int NumThreads, const size_t total_count, b
   if (sptr) {sptr->block_and_flush();
 
     // compare unordered buffer content.
-    stored.insert(stored.end(), sptr->operator int*(), sptr->operator int*() + sptr->getSize() / sizeof(int));
+    stored.insert(stored.end(), sptr->template begin<int>(), sptr->template end<int>());
   }
   pool.releaseObject(buf_ptr);
   auto stored_count = stored.size();
@@ -251,7 +251,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
         ++count;
       }
 
-      int u = ptr->operator int*()[0];
+      int u = ptr->template begin<int>()[0];
       if (v != u) {
         ++count1;
       }
@@ -278,7 +278,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 
   bool same = true;
   for (int i = 0; i < buffer_threads ; ++i) {
-    same &= ptr->operator int*()[i] == 7;
+    same &= ptr->template begin<int>()[i] == 7;
   }
   if (!same) FATALF("FAIL: inserted not same");
   else INFOF("PASSED.");
