@@ -57,7 +57,7 @@ class SequentialRunner : public Runner
       size_t proc = 0;
       while (q.canPop())
       {
-        auto v = std::move(q.waitAndPop());
+        auto v = q.waitAndPop();
         if (v.first) {
           (v.second)->operator()();
           ++proc;

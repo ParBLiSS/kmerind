@@ -140,7 +140,7 @@ class Sender : public bliss::concurrent::Task
       //INFOF("%dS ", omp_get_thread_num());
       _mm_pause();
 //      INFOF("tid %d: %s add recv %d to comm runner size %lu, disabled %s ", omp_get_thread_num(), content.c_str(), id, comm_r->getTaskCount(), (comm_r->isAddDisabled() ? "y" : "n"));
-      comm_r->addTask(std::move(std::shared_ptr<Runnable>(new Receiver("recv", comm_r, work_r, id))));
+      comm_r->addTask(std::shared_ptr<Runnable>(new Receiver("recv", comm_r, work_r, id)));
 
     }
 
@@ -177,7 +177,7 @@ class Node : public bliss::concurrent::Task
 //      _mm_pause();
 
 //      INFOF("tid %d: %s add send %d to comm runner size %lu, disabled %s ", omp_get_thread_num(), content.c_str(), id, comm_r->getTaskCount(), (comm_r->isAddDisabled() ? "y" : "n"));
-      comm_r->addTask(std::move(std::shared_ptr<Runnable>(new SENDER("node", comm_r, work_r, id))));
+      comm_r->addTask(std::shared_ptr<Runnable>(new SENDER("node", comm_r, work_r, id)));
 
     }
 
@@ -213,7 +213,7 @@ class Source : public bliss::concurrent::Task
 
 //        INFOF("tid %d: %s add send %d to comm runner size %lu, disabled %s ", omp_get_thread_num(), content.c_str(), id, comm_r->getTaskCount(), (comm_r->isAddDisabled() ? "y" : "n"));
 //        INFOF("tid %d: %s add self %d to work runner size %lu, disabled %s ", omp_get_thread_num(), content.c_str(), id, work_r->getTaskCount(), (work_r->isAddDisabled() ? "y" : "n"));
-        comm_r->addTask(std::move(std::shared_ptr<Runnable>(new SENDER("sender", comm_r, work_r, id))));
+        comm_r->addTask(std::shared_ptr<Runnable>(new SENDER("sender", comm_r, work_r, id)));
 
         work_r->addTask(this->shared_from_this());
       } else {
@@ -302,7 +302,7 @@ class Receiver : public bliss::concurrent::Task
 
 //        INFOF("tid %d: %s add write %d to work runner size %lu, disabled %s ", omp_get_thread_num(), content.c_str(), id, work_r->getTaskCount(), (work_r->isAddDisabled() ? "y" : "n"));
 
-        work_r->addTask(std::move(std::shared_ptr<Runnable>(new WRITER("write", comm_r, work_r, id))));
+        work_r->addTask(std::shared_ptr<Runnable>(new WRITER("write", comm_r, work_r, id)));
 
     }
 
@@ -322,10 +322,10 @@ int main(int argc, char** argv) {
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::SequentialRunner());
     //// test sequential.
     INFOF("\nserial runner");
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 1"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 2"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 3"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 4"))));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 1")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 2")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 3")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 4")));
     sr->disableAdd();
 
     t2 = std::chrono::high_resolution_clock::now();
@@ -356,7 +356,7 @@ int main(int argc, char** argv) {
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::SequentialRunner());
     //// test sequential.
     INFOF("\nserial runner");
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 1", sr))));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 1", sr)));
 
 
     t2 = std::chrono::high_resolution_clock::now();
@@ -386,10 +386,10 @@ int main(int argc, char** argv) {
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::PersonalizedOMPRunner(3));
     //// test sequential.
     INFOF("\npersonalized OMP runner");
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 1"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 2"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 3"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 4"))));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 1")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 2")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 3")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 4")));
     sr->disableAdd();
 
     t2 = std::chrono::high_resolution_clock::now();
@@ -420,10 +420,10 @@ int main(int argc, char** argv) {
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::PersonalizedOMPRunner(4));
     //// test sequential.
     INFOF("\npersonalized OMP runner");
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 1", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 2", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 3", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 4", sr))));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 1", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 2", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 3", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 4", sr)));
 
     t2 = std::chrono::high_resolution_clock::now();
     time_span =
@@ -452,10 +452,10 @@ int main(int argc, char** argv) {
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::UniformOMPRunner(3));
     //// test sequential.
     INFOF("\nuniform OMP runner");
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 1"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 2"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 3"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 4"))));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 1")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 2")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 3")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 4")));
     sr->disableAdd();
 
     t2 = std::chrono::high_resolution_clock::now();
@@ -485,10 +485,10 @@ int main(int argc, char** argv) {
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::UniformOMPRunner(4));
     //// test sequential.
     INFOF("\nuniform OMP runner");
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 1", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 2", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 3", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 4", sr))));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 1", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 2", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 3", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 4", sr)));
 
     t2 = std::chrono::high_resolution_clock::now();
     time_span =
@@ -515,10 +515,10 @@ int main(int argc, char** argv) {
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::DynamicOMPRunner(3));
     //// test sequential.
     INFOF("\ndynamic OMP runner");
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 1"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 2"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 3"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 4"))));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 1")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 2")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 3")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 4")));
     sr->disableAdd();
 
     t2 = std::chrono::high_resolution_clock::now();
@@ -548,10 +548,10 @@ int main(int argc, char** argv) {
 
     //// test sequential.
     INFOF("\ndynamic OMP runner ");
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 1", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 2", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 3", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 4", sr))));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 1", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 2", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 3", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new FixedIterationDisablingTask("task 4", sr)));
 
     t2 = std::chrono::high_resolution_clock::now();
     time_span =
@@ -578,10 +578,10 @@ int main(int argc, char** argv) {
 
     //// test sequential.
     INFOF("\ndynamic OMP runner with self-adding tasks and blocked queue");
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 1", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 2", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 3", sr))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 4", sr))));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 1", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 2", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 3", sr)));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 4", sr)));
     sr->disableAdd();
 
     t2 = std::chrono::high_resolution_clock::now();
@@ -609,16 +609,16 @@ int main(int argc, char** argv) {
 
       std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::SequentialRunner());
 
-      sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 1", sr))));
-      sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 2", sr))));
-      sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 3", sr))));
-      sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 4", sr))));
-      sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 5", sr))));
+      sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 1", sr)));
+      sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 2", sr)));
+      sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 3", sr)));
+      sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 4", sr)));
+      sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 5", sr)));
 
 
       std::shared_ptr<bliss::concurrent::Runner> sr2(new bliss::concurrent::DynamicOMPRunner(2));
-      sr2->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new DelayedDisableTask("control", sr))));
-      sr2->addTask(std::move(sr->shared_from_this()));
+      sr2->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new DelayedDisableTask("control", sr)));
+      sr2->addTask(sr->shared_from_this());
       sr2->disableAdd();
 
       t2 = std::chrono::high_resolution_clock::now();
@@ -645,15 +645,15 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::DynamicOMPRunner(3));
 
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 1"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 2"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 3"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 4"))));
-    sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 5"))));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 1")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 2")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 3")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 4")));
+    sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new BasicTask("task 5")));
 
     std::shared_ptr<bliss::concurrent::Runner> sr2(new bliss::concurrent::DynamicOMPRunner(2));
-    sr2->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new DelayedDisableTask("control", sr))));
-    sr2->addTask(std::move(sr->shared_from_this()));
+    sr2->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new DelayedDisableTask("control", sr)));
+    sr2->addTask(sr->shared_from_this());
     sr2->disableAdd();
 
 
@@ -682,17 +682,17 @@ int main(int argc, char** argv) {
 
       std::shared_ptr<bliss::concurrent::Runner> sr(new bliss::concurrent::DynamicOMPRunner(3));
 
-      sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 1", sr))));
-      sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 2", sr))));
-      sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 3", sr))));
-      sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 4", sr))));
-      sr->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 5", sr))));
+      sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 1", sr)));
+      sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 2", sr)));
+      sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 3", sr)));
+      sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 4", sr)));
+      sr->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new SelfAddingTask("task 5", sr)));
 
 
       std::shared_ptr<bliss::concurrent::Runner> sr2(new bliss::concurrent::DynamicOMPRunner(2));
 
-      sr2->addTask(std::move(std::shared_ptr<bliss::concurrent::Runnable>(new DelayedDisableTask("control", sr))));
-      sr2->addTask(std::move(sr->shared_from_this()));
+      sr2->addTask(std::shared_ptr<bliss::concurrent::Runnable>(new DelayedDisableTask("control", sr)));
+      sr2->addTask(sr->shared_from_this());
       sr2->disableAdd();
 
       t2 = std::chrono::high_resolution_clock::now();
@@ -724,15 +724,15 @@ int main(int argc, char** argv) {
       std::shared_ptr<bliss::concurrent::Runner> workRunner(new bliss::concurrent::DynamicOMPRunner(3));
 
       // initially put as many senders as there are threads.  hook them to receivers
-      workRunner->addTask(std::move(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Sink> > >("reader 1", commRunner, workRunner))));
-      workRunner->addTask(std::move(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Sink> > >("reader 2", commRunner, workRunner))));
-      workRunner->addTask(std::move(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Sink> > >("reader 3", commRunner, workRunner))));
+      workRunner->addTask(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Sink> > >("reader 1", commRunner, workRunner)));
+      workRunner->addTask(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Sink> > >("reader 2", commRunner, workRunner)));
+      workRunner->addTask(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Sink> > >("reader 3", commRunner, workRunner)));
 
 
 
       bliss::concurrent::PersonalizedOMPRunner appRunner(2);
-      appRunner.addTask(std::move(commRunner->shared_from_this()));
-      appRunner.addTask(std::move(workRunner->shared_from_this()));
+      appRunner.addTask(commRunner->shared_from_this());
+      appRunner.addTask(workRunner->shared_from_this());
       appRunner.disableAdd();
 
 
@@ -766,16 +766,16 @@ int main(int argc, char** argv) {
 
 
       // initially put as many senders as there are threads.  hook them to receivers
-      workRunner->addTask(std::move(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Node<Sender<Receiver<Sink> > > > > >("query 1", commRunner, workRunner))));
-      workRunner->addTask(std::move(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Node<Sender<Receiver<Sink> > > > > >("query 2", commRunner, workRunner))));
-      workRunner->addTask(std::move(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Node<Sender<Receiver<Sink> > > > > >("query 3", commRunner, workRunner))));
+      workRunner->addTask(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Node<Sender<Receiver<Sink> > > > > >("query 1", commRunner, workRunner)));
+      workRunner->addTask(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Node<Sender<Receiver<Sink> > > > > >("query 2", commRunner, workRunner)));
+      workRunner->addTask(std::shared_ptr<bliss::concurrent::Task>(new Source<Sender<Receiver<Node<Sender<Receiver<Sink> > > > > >("query 3", commRunner, workRunner)));
       
       
 
       bliss::concurrent::PersonalizedOMPRunner appRunner(2);
 
-      appRunner.addTask(std::move(commRunner->shared_from_this()));
-      appRunner.addTask(std::move(workRunner->shared_from_this()));
+      appRunner.addTask(commRunner->shared_from_this());
+      appRunner.addTask(workRunner->shared_from_this());
       appRunner.disableAdd();
 
 

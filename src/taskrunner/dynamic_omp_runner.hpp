@@ -76,7 +76,7 @@ class DynamicOMPRunner : public Runner
               ++gen;
 #pragma omp task default(none) shared(proc)
               {
-                auto v = std::move(q.waitAndPop());
+                auto v = q.waitAndPop();
                 if (v.first) {
                 	// run the actual task.
                   (v.second)->operator()();

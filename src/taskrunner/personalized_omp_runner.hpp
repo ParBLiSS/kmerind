@@ -80,7 +80,7 @@ class PersonalizedOMPRunner : public Runner
 #pragma omp parallel for num_threads(nThreads) default(none) schedule(dynamic) shared(count) reduction(+: proc)
       for (size_t i = 0; i < count; ++i)
       {
-        auto v = std::move(q.tryPop());
+        auto v = q.tryPop();
         if (v.first) {
         	// run the task
           (v.second)->operator()();
