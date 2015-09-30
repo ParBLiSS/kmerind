@@ -21,6 +21,7 @@
 
 #ifdef USE_MPI
 
+#if 0
 /*
  * test class holding some information.  Also, needed for the typed tests
  */
@@ -1438,6 +1439,7 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_v)
   }
 
 }
+#endif
 
 int main(int argc, char* argv[]) {
     int result = 0;

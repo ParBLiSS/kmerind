@@ -47,6 +47,7 @@ namespace bliss
   namespace io
   {
 
+#if 0
      /**
      * @class     bliss::io::FASTAParser
      * @brief     The purpose of this class is to expose an iterator to parse 
@@ -377,6 +378,7 @@ namespace bliss
           }
         };
     };
+#endif
   }
 }
 #endif

@@ -21,9 +21,11 @@
 #include "common/sequence.hpp"
 #include "common/base_types.hpp"
 #include "io/file_loader.hpp"
-#include "mxx/datatypes.hpp"
 
 #include "io/mxx_support.hpp"
+#include <mxx/datatypes.hpp>
+#include <mxx/sort.hpp> // for mxx::unique
+
 #include "iterators/filter_iterator.hpp"
 
 
@@ -153,7 +155,7 @@ namespace bliss
          * @param[out]  sequences  vector of positions of the fasta sequence headers.
          *              Each pair in the vector represents the position of '>' and '\n' in the fasta record header
          */
-        void init_for_iterator(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, MPI_Comm comm)
+        void init_for_iterator(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm)
           throw (bliss::io::IOException) {
 
           // now populate sequences
@@ -166,15 +168,10 @@ namespace bliss
           // make sure searchRange is inside parent Range.
           RangeType r = RangeType::intersect(searchRange, parentRange);
 
-
-          int p = 1, myRank = 0;
-          MPI_Comm_size(comm, &p);
-          MPI_Comm_rank(comm, &myRank);
-
           // construct the search Range so they do not overlap.  This is necessary so that the sequences tuples are computed correctly.
-          if (myRank == (p-1))
+          if (comm.rank() == (comm.size()-1))
             mxx::left_shift(r.start, comm);
-          else 
+          else
             r.end = mxx::left_shift(r.start, comm);
 
           // clear the starting position storage.
@@ -189,23 +186,18 @@ namespace bliss
           // if first char of proc i is ">", and rank is 0, can assume this is a starting point.  else, if prev char is "\n", then this is a start.
 
 
-          DEBUGF("Rank %d search range [%lu, %lu)\n", myRank, r.start, r.end);
+          DEBUGF("Rank %d search range [%lu, %lu)\n", comm.rank(), r.start, r.end);
 
 
           // ===== get the previous character from the next smaller, non-empty rank.
           // do by excluding the empty procs
-          MPI_Comm in_comm;
-          mxx2::split_communicator_by_function(comm, [&r](){ return (r.size() == 0) ? MPI_UNDEFINED : 1; }, in_comm);
+          mxx::comm in_comm = comm.split(r.size() == 0);
 
           // if no data, then in_comm is null, and does not participate further.
-          if (in_comm == MPI_COMM_NULL) return;
+          if (r.size() == 0) return;
 
           //============== GET LAST CHAR FROM PREVIOUS PROCESSOR, to check if first char is at start of line.
             // for the nonempty ones, shift right by 1.
-           int in_p = 1, in_rank = 0;
-           MPI_Comm_size(in_comm, &in_p);
-           MPI_Comm_rank(in_comm, &in_rank);
-
 
             // get the current last character.
             TT last_char = 0;  // default for empty.  note that the real last char from the last non-empty proc is shifted to the right place.
@@ -219,7 +211,7 @@ namespace bliss
             // right shift using the non-empty procs.
             prev_char = mxx::right_shift(last_char, in_comm);
 
-            if (in_rank == 0) prev_char = '\n';
+            if (in_comm.rank() == 0) prev_char = '\n';
             //=====DONE===== GET LAST CHAR FROM PREVIOUS PROCESSOR, to check if first char is at start of line.
 
 
@@ -255,7 +247,7 @@ namespace bliss
               ++it2;
               ++i;
             }
-            if (in_rank == (in_p - 1)) {
+            if (in_comm.rank() == (in_comm.size() - 1)) {
               // add a eof entry.
               line_starts.emplace_back(parentRange.end, 1);
             }
@@ -265,10 +257,9 @@ namespace bliss
             //============== KEEP JUST THE FIRST POSITION OF CONSECUTIVE HEADER OR SEQUENCE LINES  (== unique)
             auto new_end = line_starts.end();
             // filter out duplicates locally - i.e. consecutive lines with > or ; (true), and consecutive lines with standard alphabet (false).
-            new_end = mxx2::unique_contiguous(line_starts, in_comm, [](LL const & x, LL const & y) {
-              return x.second == y.second;
-            });
-            
+            auto second_eq = [](LL const & x, LL const & y) { return x.second == y.second; };
+            new_end = mxx::unique(line_starts.begin(), line_starts.end(), second_eq, in_comm);
+
             line_starts.erase(new_end, line_starts.end());
 
             //=====DONE===== KEEP JUST THE FIRST POSITION OF CONSECUTIVE HEADER OR SEQUENCE LINES
@@ -278,59 +269,45 @@ namespace bliss
 
 
             //============== CONVERT FROM LINE START POSITION TO SEQUENCE OBJECTS
-            int in_rank2 = in_rank;
-            int in_p2 = in_p;
 
             // split comm again for non-empty line start vectors
-            MPI_Comm in_comm2;
-            mxx2::split_communicator_by_function(in_comm, [&line_starts](){ return line_starts.size() == 0 ? MPI_UNDEFINED : 1; }, in_comm2);
-
-            // get first from next proc (
-            if (in_comm2 != MPI_COMM_NULL) {
-              MPI_Comm_rank(in_comm2, &in_rank2);
-              MPI_Comm_size(in_comm2, &in_p2);
-
+            in_comm.with_subset(line_starts.size() != 0, [&](const mxx::comm& subcomm) {
               // do a shift
               LL temp = line_starts.front();
-              LL next = mxx::left_shift(temp, in_comm2);
+              LL next = mxx::left_shift(temp, subcomm);
 
-              // insert into array.
-              if (in_rank2 < (in_p2 - 1)) {
+              // insert into array if not last proc
+              if (subcomm.rank() < (subcomm.size() - 1)) {
                 line_starts.emplace_back(next);
               }
-
-              MPI_Comm_free(&in_comm2);
-            }
+            });
 
             // get the second from next proc (so we can construct elements with header start, seq start, and seq end.)
             // each proc should have at least 2, except for the last proc may have 1.
             // split comm again for non-empty line start vectors
-            mxx2::split_communicator_by_function(in_comm, [&line_starts](){ return line_starts.size() <= 1 ? MPI_UNDEFINED : 1; }, in_comm2);
 
             // get first from next proc (
 
-            if (in_comm2 != MPI_COMM_NULL) {
-              MPI_Comm_rank(in_comm2, &in_rank2);
-              MPI_Comm_size(in_comm2, &in_p2);
-
+            in_comm.with_subset(line_starts.size() > 1, [&](const mxx::comm& subcomm) {
               // do a shift
               LL temp = line_starts[1];
-              LL next = mxx::left_shift(temp, in_comm2);
+              LL next = mxx::left_shift(temp, subcomm);
 
               // insert into array.
-              if (in_rank2 < (in_p2 - 1)) {
+              if (subcomm.rank() < (subcomm.size() - 1)) {
                 line_starts.emplace_back(next);
               }
+            });
 
-              MPI_Comm_free(&in_comm2);
-            }
+
+            //mxx2::split_communicator_by_function(in_comm, [&line_starts](){ return line_starts.size() < ((line_starts.size() > 0 && line_starts.front().second == 0) ? 4 : 3) ? MPI_UNDEFINED : 1; }, in_comm2);
+
+
+            //if (in_comm2 != MPI_COMM_NULL) {
 
             // now only work with procs with at least 1 complete entry (header start, seq start, seq end
-            mxx2::split_communicator_by_function(in_comm, [&line_starts](){ return line_starts.size() < ((line_starts.size() > 0 && line_starts.front().second == 0) ? 4 : 3) ? MPI_UNDEFINED : 1; }, in_comm2);
-
-
-            if (in_comm2 != MPI_COMM_NULL) {
-
+            bool has_complete = line_starts.size() < ((line_starts.size() > 0 && line_starts.front().second == 0) ? 4 : 3);
+            in_comm.with_subset(has_complete, [&](const mxx::comm& subcomm) {
 
               // insert first entry into sequences
               typename RangeType::ValueType pos, pos2, pos3;
@@ -356,19 +333,13 @@ namespace bliss
 
               // get prefix sum of entries.
               size_t entries = sequences.size();
-              entries = mxx2::scan::exscan(entries, std::plus<size_t>(), in_comm2);
-              int in_rank2 = 0;
-              MPI_Comm_rank(in_comm2, &in_rank2);
-              MPI_Comm_free(&in_comm2);
-              if (in_rank2 > 0) {
+              entries = mxx::exscan(entries, std::plus<size_t>(), subcomm);
+              if (subcomm.rank() > 0) {
                   for (size_t ii = 0; ii < sequences.size(); ++ii) {
                     std::get<3>(sequences[ii]) += entries;
                   }
               }
-
-
-
-            }
+            });
             //=====DONE===== CONVERT FROM LINE START POSITION TO SEQUENCE OBJECTS
 
 
@@ -379,28 +350,33 @@ namespace bliss
             using SL = SequenceOffsetsType;
             //============== NOW SPREAD THE LAST ENTRY FORWARD (right).  empty range (r) does not participate
 
-            //== first define segments.  empty is 0, and non-empty is 1 (start of segment)
-            uint8_t sstart = sequences.size() == 0 ? 0 : 1;
-            // convert to unique segments
-            size_t segf = mxx2::segment::to_unique_segment_id_from_start<size_t>(sstart, 0, in_comm);
-
             // get the last entry.
-            SL headerPos = SL();
-            if (sstart) headerPos = sequences.back();
+            //SL headerPos = SL();
+            //if (sequences.size() > 0) headerPos = sequences.back();
+            std::pair<int, SL> lastentry = (sequences.size() > 0) ? std::make_pair(in_comm.rank(), sequences.back()) : std::make_pair(-1, SL());
 
             //== do seg scan (to fill in empty procs).
-
             // now do inclusive scan to spread the values forward
-            headerPos = mxx2::segmented_scan::scan(headerPos, segf, [](SL & x, SL & y){ return (std::get<0>(x) > std::get<0>(y) ? x : y); }, in_comm);
+            auto maxpair = [](const std::pair<int, SL>& x, const std::pair<int, SL>& y) { return x.first >= y.first ? x : y; };
+            lastentry = mxx::scan(lastentry, maxpair, in_comm);
+
+
+            //== first define segments.  empty is 0, and non-empty is 1 (start of segment)
+            //uint8_t sstart = sequences.size() == 0 ? 0 : 1;
+            // convert to unique segments
+            //size_t segf = mxx2::segment::to_unique_segment_id_from_start<size_t>(sstart, 0, in_comm);
+
+
+            //headerPos = mxx2::segmented_scan::scan(headerPos, segf, [](SL & x, SL & y){ return (std::get<0>(x) > std::get<0>(y) ? x : y); }, in_comm);
 
             // then shift by 1
-            headerPos = mxx::right_shift(headerPos, in_comm);
+            SL headerPos = mxx::right_shift(lastentry.second, in_comm);
 
             // seg scan to fill empty then shift is NOT the same as seg exscan
 
 
             //== and merge the results with next.  If there is no sequences content, then need to insert.
-            if (in_rank > 0) {
+            if (in_comm.rank() > 0) {
               // no special case for overlap.  downstream processing should be aware of the overlap.
               if ((sequences.size() == 0) || (std::get<0>(sequences.front()) > r.start)) {
                 sequences.insert(sequences.begin(), headerPos);
@@ -409,7 +385,7 @@ namespace bliss
             }
             //=====DONE===== NOW SPREAD THE LAST ENTRY FORWARD.  empty range (r) does not participate
 
-            if (in_comm != MPI_COMM_NULL) MPI_Comm_free(&in_comm);
+            //if (in_comm != MPI_COMM_NULL) MPI_Comm_free(&in_comm);
 
 
 //            for (auto x : sequences)
@@ -777,7 +753,7 @@ namespace bliss
 
 
 
-
+#if 0
 
     /**
      * @class FASTALoader
@@ -805,12 +781,12 @@ namespace bliss
         typedef std::vector <std::tuple<offSetType, offSetType, offSetType> >   vectorType;
 
         /// MPI communicator used by fasta loader.
-        MPI_Comm comm;
+        const mxx::comm& comm;
 
         /**
          * @brief   Constructor of this class
          */
-        FASTALoader(const MPI_Comm& _comm)
+        FASTALoader(const mxx::comm& _comm)
           : comm(_comm)
         {}
 
@@ -1073,6 +1049,8 @@ namespace bliss
           // make sure searchRange is inside parent Range.
           RangeType r = RangeType::intersect(searchRange, parentRange);
 
+          // TODO: this whole code looks like a duplication of the function init_for_...
+          // TODO: ask Tony what to do...
           int p = 1, myRank = 0;
           int in_p = 1, in_rank = 0;
 
@@ -1311,6 +1289,7 @@ namespace bliss
 #endif
         }
     };
+#endif
   }
 }
 

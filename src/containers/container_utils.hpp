@@ -181,6 +181,82 @@ namespace fsc {
     input.erase(end, input.end());
   }
 
+  // finds splitter positions for the given splitters (`map`)
+  // in the sorted buffer, sorted according to the `comp` comparator.
+  template<typename T, typename Key, typename Comp>
+  std::vector<size_t> get_bucket_sizes(std::vector<T>& buffer, ::std::vector<::std::pair<Key, int> > map, Comp comp) {
+    //== track the send count
+    std::vector<size_t> send_counts(map.size() + 1, 0);
+
+    if (buffer.size() == 0) return send_counts;
+
+    //== since both sorted, search map entry in buffer - mlog(n).  the otherway around is nlog(m).
+    // note that map contains splitters.  range defined as [map[i], map[i+1]), so when searching in buffer using entry in map, search via lower_bound
+    auto b = buffer.begin();
+    auto e = b;
+
+    // if mlog(n) is larger than n, then linear would be faster
+    bool linear = (map.size() * std::log(buffer.size()) ) > buffer.size();
+
+    if (linear)
+      for (size_t i = 0; i < map.size(); ++i) {
+        e = ::fsc::lower_bound<true>(b, buffer.end(), map[i].first, comp);
+        send_counts[i] = ::std::distance(b, e);
+        b = e;
+      }
+    else
+      for (size_t i = 0; i < map.size(); ++i) {
+        e = ::fsc::lower_bound<false>(b, buffer.end(), map[i].first, comp);
+        send_counts[i] = ::std::distance(b, e);
+        b = e;
+      }
+
+    // last 1
+    send_counts[map.size()] = ::std::distance(b, buffer.end());
+
+    return send_counts;
+  }
+
+  /// keep the unique entries within each bucket.  complexity is b * O(N/b), where b is the bucket size, and O(N/b) is complexity of inserting into and copying from set.
+  /// when used within bucket, scales with O(N/b), not with b.  this is as good as it gets wrt complexity.
+  template<typename SET, typename EQUAL, typename T = typename SET::key_type, typename count_t = int>
+  void bucket_unique(std::vector<T>& input, std::vector<count_t> &send_counts, bool sorted = false) {
+  
+    auto newstart = input.begin();
+    auto newend = newstart;
+    auto start = input.begin();
+    auto end = start;
+    
+    count_t max = *(::std::max_element(send_counts.begin(), send_counts.end()));
+    SET set(max);
+
+    for (size_t i = 0; i < send_counts.size(); ++i) {
+      end = start + send_counts[i];
+        
+      if (sorted) {  // already sorted, then just get the unique stuff and remove rest.
+        if (i == 0)
+          newend = ::std::unique(start, end, EQUAL());
+        else 
+          newend = ::std::unique_copy(start, end,
+                                      newstart, EQUAL());
+      } else {  // not sorted, so use an unordered_set to keep the first occurence.
+
+        // sorting is SLOW and not scalable.  use unordered set instead.
+        // unordered_set for large data is memory intensive.  depending on use, bucket per processor first.
+        set.clear();
+        set.insert(start, end);
+        newend = ::std::copy(set.begin(), set.end(), newstart);
+      }
+      
+      send_counts[i] = ::std::distance(newstart, newend);  
+
+      start = end;
+      newstart = newend;
+    }
+
+    // compact.
+    input.erase(newend, input.end());
+  }
 }
 
 

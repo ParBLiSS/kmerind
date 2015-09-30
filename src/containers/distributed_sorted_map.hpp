@@ -486,11 +486,12 @@ namespace dsc  // distributed std container
 
             TIMER_START(find);
             // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank.map, Base::less);  // keys are sorted
+            ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(keys, this->key_to_rank.map, Base::less);  // keys are sorted
             TIMER_END(find, "bucket", keys.size());
 
             TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
-            auto recv_counts = mxx2::all2all(keys, send_counts, this->comm);
+            std::vector<size_t> recv_counts = mxx::all2all(send_counts, this->comm);
+            keys = mxx::all2allv(keys, send_counts, this->comm);
             TIMER_END(find, "a2a1", keys.size());
 
 //            for (int j = 0; j < keys.size(); ++j) {
@@ -528,7 +529,7 @@ namespace dsc  // distributed std container
 
             // send back using the constructed recv count
             TIMER_COLLECTIVE_START(find, "a2a2", this->comm);
-            mxx2::all2all(results, send_counts, this->comm);
+            results = mxx::all2allv(results, send_counts, this->comm);
             TIMER_END(find, "a2a2", results.size());
 
 //            for (int j = 0; j < results.size(); ++j) {
@@ -592,17 +593,14 @@ namespace dsc  // distributed std container
 
             TIMER_START(find);
             // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank.map, Base::less);
+            ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(keys, this->key_to_rank.map, Base::less);
             TIMER_END(find, "bucket", keys.size());
 
             TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
-            auto recv_counts = mxx2::all2all(keys, send_counts, this->comm);
+            std::vector<size_t> recv_counts = mxx::all2all(send_counts, this->comm);
+            keys = mxx::all2allv(keys, send_counts, this->comm);
             TIMER_END(find, "a2a1", keys.size());
 
-
-//            for (int j = 0; j < keys.size(); ++j) {
-//              printf("rank %d after a2a key is %s\n", this->comm_rank, keys[j].toAlphabetString().c_str());
-//            }
 
             // local count to determine amount of memory to allocate at destination.
             TIMER_START(find);
@@ -645,7 +643,7 @@ namespace dsc  // distributed std container
 
 
             TIMER_START(find);
-            auto resp_displs = mxx::get_displacements(resp_counts);  // compute response displacements.
+            auto resp_displs = mxx::impl::get_displacements(resp_counts);  // compute response displacements.
 
             auto resp_total = resp_displs[this->comm_size - 1] + resp_counts[this->comm_size - 1];
             auto max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
@@ -654,7 +652,7 @@ namespace dsc  // distributed std container
             TIMER_END(find, "reserve", resp_total);
 
             TIMER_START(find);
-            auto recv_displs = mxx::get_displacements(recv_counts);  // compute response displacements.
+            auto recv_displs = mxx::impl::get_displacements(recv_counts);  // compute response displacements.
             int recv_from, send_to;
             size_t found;
             total = 0;
@@ -901,11 +899,12 @@ namespace dsc  // distributed std container
 
           TIMER_START(count);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank.map, Base::less);
+          ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(keys, this->key_to_rank.map, Base::less);
           TIMER_END(count, "bucket", keys.size());
 
           TIMER_COLLECTIVE_START(count, "a2a1", this->comm);
-          auto recv_counts = mxx2::all2all(keys, send_counts, this->comm);
+          std::vector<size_t> recv_counts = mxx::all2all(send_counts, this->comm);
+          keys = mxx::all2allv(keys, send_counts, this->comm);
           TIMER_END(count, "a2a1", keys.size());
 
 
@@ -939,7 +938,7 @@ namespace dsc  // distributed std container
           TIMER_COLLECTIVE_START(count, "a2a2", this->comm);
 
           // send back using the constructed recv count
-          mxx2::all2all(results, recv_counts, this->comm);
+          results = mxx::all2allv(results, recv_counts, this->comm);
           TIMER_END(count, "a2a2", results.size());
 
 
@@ -1063,9 +1062,9 @@ namespace dsc  // distributed std container
           retain_unique(keys, si);
 
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(keys, this->key_to_rank.map, Base::less);
+          ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(keys, this->key_to_rank.map, Base::less);
 
-          mxx2::all2all(keys, send_counts, this->comm);
+          keys = mxx::all2allv(keys, send_counts, this->comm);
 
           si = false;
         }
@@ -1638,7 +1637,7 @@ namespace dsc  // distributed std container
 
           // redistribute.  in trouble if we have a value that takes up a large part of the partition.
           TIMER_START(rehash);
-          ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(this->c, this->key_to_rank.map, Base::Base::less);
+          ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(this->c, this->key_to_rank.map, Base::Base::less);
           TIMER_END(rehash, "bucket", this->c.size());
 
           // this should always be true.
@@ -1650,7 +1649,7 @@ namespace dsc  // distributed std container
 
           TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
           // TODO: readjust boundaries using all2all.  is it better to move the deltas ourselves?
-          mxx2::all2all(this->c, send_counts, this->comm);
+          this->c = mxx::all2allv(this->c, send_counts, this->comm);
           TIMER_END(rehash, "a2a", this->c.size());
 
         } else {

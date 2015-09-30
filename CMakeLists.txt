@@ -775,6 +775,7 @@ configure_file(
 include_directories("${CMAKE_BINARY_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/src")
 include_directories("${EXT_PROJECTS_DIR}")
+include_directories("${EXT_PROJECTS_DIR}/mxx/include")
 include_directories("${EXT_PROJECTS_DIR}/farmhash/src")
 
 

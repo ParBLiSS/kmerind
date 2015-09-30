@@ -95,7 +95,7 @@ class FileParserTest : public ::testing::TestWithParam<TestFileInfo>
 
 #ifdef USE_MPI
         MPI_Barrier(MPI_COMM_WORLD);
-        size_t totalElemCount = mxx::allreduce(elemCount, MPI_COMM_WORLD);
+        size_t totalElemCount = mxx::allreduce(elemCount);
 #else
         size_t totalElemCount = elemCount;
 #endif

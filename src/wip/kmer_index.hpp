@@ -234,27 +234,32 @@ public:
 	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.  template template parameter, param is iterator
 	 */
 	template <template <typename> class SeqParser, typename KP = KmerParser>
-	static size_t read_file_mpi_subcomm(const std::string & filename, std::vector<typename KP::value_type>& result, MPI_Comm _comm) {
+	static size_t read_file_mpi_subcomm(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm& comm) {
 
+	  /*
 		int p, rank;
 		MPI_Comm_size(_comm, &p);
 		MPI_Comm_rank(_comm, &rank);
+		*/
 
 		// split the communcator so 1 proc from each host does the read, then redistribute.
-		MPI_Comm group_leaders;
-		MPI_Comm group;
-		::std::tie(group_leaders, group) = ::mxx2::split_communicator_by_host(_comm);
+		mxx::comm group = comm.split_shared();
+		mxx::comm group_leaders = comm.split(group.rank() == 0);
 
+		/*
 		int g_size, g_rank;
 		MPI_Comm_rank(group, &g_rank);
 		MPI_Comm_size(group, &g_size);
+		*/
 
+		/*
 		int gl_size = MPI_UNDEFINED;
 		int gl_rank = MPI_UNDEFINED;
 		if (group_leaders != MPI_COMM_NULL) {
 			MPI_Comm_rank(group_leaders, &gl_rank);
 			MPI_Comm_size(group_leaders, &gl_size);
 		}
+		*/
 
 		// raw data type :  use CharType.   block partition at L1 and L2.  no buffering at all, since we will be copying data to the group members anyways.
 		using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, false,
@@ -278,29 +283,29 @@ public:
 			// first load the file using the group loader's communicator.
 			TIMER_START(file);
 			size_t est_size = 1;
-			if (group_leaders != MPI_COMM_NULL) {  // ensure file loader is closed properly.
+			if (group.rank() == 0) {  // ensure file loader is closed properly.
 				//==== create file Loader. this handle is alive through the entire building process.
-				FileLoaderType loader(filename, group_leaders, g_size);  // for member of group_leaders, each create g_size L2blocks.
+				FileLoaderType loader(filename, group_leaders, group.size());  // for member of group_leaders, each create g_size L2blocks.
 
 				// modifying the local index directly here causes a thread safety issue, since callback thread is already running.
 
 				partition = loader.getNextL1Block();
 
 				// call after getting first L1Block to ensure that file is loaded.
-				est_size = (loader.getKmerCountEstimate(KmerType::size) + p - 1) / p;
+				est_size = (loader.getKmerCountEstimate(KmerType::size) + comm.size() - 1) / comm.size();
 
 				//====  now compute the send counts and ranges to be scattered.
-				ranges.resize(g_size);
-				send_counts.resize(g_size);
-				for (int i = 0; i < g_size; ++i) {
+				ranges.resize(group.size());
+				send_counts.resize(group.size());
+				for (int i = 0; i < group.size(); ++i) {
 					block = loader.getNextL2Block(i);
-
 					ranges[i] = block.getRange();
 					send_counts[i] = ranges[i].size();
 				}
 
 				// scatter the data .  this call here relies on FileLoader still having the memory mapped.
-				data = ::mxx2::scatterv(partition.begin(), partition.end(), send_counts, group, 0);
+				// TODO; use iterators!
+				data = mxx::scatterv(&(*partition.begin()), send_counts, 0, group);
 
 				// send the file range.
 				file_range = loader.getFileRange();
@@ -310,15 +315,16 @@ public:
         // replicated here because the root's copy needs to be inside the if clause - requires FileLoader to be open for the sender.
 
 				// scatter the data.  this is the receiver end of the thing.
-				data = ::mxx2::scatterv(partition.begin(), partition.end(), send_counts, group, 0);
+				data = mxx::scatterv(&(*partition.begin()), send_counts, 0, group);
 
 			}
 
 			// scatter the ranges
+			// TODO: mxx::bcast function
 			mxx::datatype<typename FileLoaderType::RangeType> range_dt;
 			MPI_Bcast(&file_range, 1, range_dt.type(), 0, group);
 
-			range = ::mxx2::scatter(ranges, group, 0);
+			range = mxx::scatter(ranges, 0, group);
 			// now create the L2Blocks from the data  (reuse block)
 			block.assign(&(data[0]), &(data[0]) + range.size(), range);
 			TIMER_END(file, "open", data.size());
@@ -326,7 +332,7 @@ public:
 			// not reusing the SeqParser in loader.  instead, reinitializing one.
       TIMER_START(file);
 			SeqParser<typename FileLoaderType::L2BlockType::iterator> l2parser;
-			l2parser.init_for_iterator(block.begin(), file_range, range, range, _comm);
+			l2parser.init_for_iterator(block.begin(), file_range, range, range, comm);
       TIMER_END(file, "mark_seqs", est_size);
 
 			//== reserve
@@ -344,15 +350,7 @@ public:
 			TIMER_END(file, "read", result.size());
       INFO("Last: pos - kmer " << result.back());
 		}
-		TIMER_REPORT_MPI(file, rank, _comm);
-
-
-
-		INFOF("freeing group communicator");
-		MPI_Comm_free(&group);
-		INFOF("freeing group_leader communicator");
-		if (group_leaders != MPI_COMM_NULL) MPI_Comm_free(&group_leaders);
-		INFOF("DONE WITH communicator release");
+		TIMER_REPORT_MPI(file, rank, comm);
 
 
 		return result.size() - before;

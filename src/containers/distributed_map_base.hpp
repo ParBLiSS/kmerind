@@ -120,15 +120,11 @@ namespace dsc
       mutable size_t key_multiplicity;
 
       // communication stuff...
-      MPI_Comm comm;
+      const mxx::comm& comm;
       int comm_size;
-      int comm_rank;
-
 
       // defined Communicator as a friend
       friend Comm;
-
-
 
       template <class Iter>
       static void sort_ascending(Iter b, Iter e) {
@@ -143,9 +139,8 @@ namespace dsc
       virtual size_t local_size() const noexcept = 0;
 
 
-      map_base(MPI_Comm _comm, int _comm_size) :
-          key_multiplicity(1), comm(_comm), comm_size(_comm_size) {
-        MPI_Comm_rank(comm, &comm_rank);
+      map_base(const mxx::comm& _comm) :
+          key_multiplicity(1), comm(_comm), comm_size(comm.size()) {
       }
 
     public:
@@ -162,7 +157,7 @@ namespace dsc
         if (comm_size == 1)
           return this->local_empty();
         else // all reduce
-          return mxx::test_all(this->local_empty(), comm);
+          return mxx::all_of(this->local_empty(), comm);
       }
 
       /// get size of distributed container
@@ -179,7 +174,8 @@ namespace dsc
       void clear() noexcept {
         // clear + barrier.
         this->local_clear();
-        if (comm_size > 1) MPI_Barrier(comm);
+        if (comm_size > 1)
+          comm.barrier();
       }
 
   };

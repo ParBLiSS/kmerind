@@ -12,9 +12,9 @@
 #ifndef SRC_IO_MXX_SUPPORT_HPP_
 #define SRC_IO_MXX_SUPPORT_HPP_
 
-#include "mxx/collective.hpp"
-#include "mxx/reduction.hpp"
-#include "mxx/shift.hpp"
+#include <mxx/collective.hpp>
+#include <mxx/reduction.hpp>
+#include <mxx/shift.hpp>
 
 #include "common/kmer.hpp"
 
@@ -99,7 +99,7 @@ std::ostream &operator<<(std::ostream &os, std::pair<T1, T2> const &t) {
     return os << t.first << ":" << t.second;
 }
 
-
+#if 0
 namespace mxx2 {
 
   /// vector version of right shift.  (shift entire vector)
@@ -305,42 +305,6 @@ namespace mxx2 {
   }
 
 
-  /// in place bucketing.  expect buffer and map both to be sorted by key.
-  /// (in fact, no need to rebucket. just compute the send_counts.)
-  template<typename count_t, typename T, typename Key, typename Comp>
-  std::vector<count_t> bucketing(std::vector<T>& buffer, ::std::vector<::std::pair<Key, int> > map, Comp const & comp) {
-
-    //== track the send count
-    std::vector<count_t> send_counts(map.size() + 1, 0);
-
-    if (buffer.size() == 0) return send_counts;
-
-    //== since both sorted, search map entry in buffer - mlog(n).  the otherway around is nlog(m).
-    // note that map contains splitters.  range defined as [map[i], map[i+1]), so when searching in buffer using entry in map, search via lower_bound
-    auto b = buffer.begin();
-    auto e = b;
-
-    // if mlog(n) is larger than n, then linear would be faster
-    bool linear = (map.size() * std::log(buffer.size()) ) > buffer.size();
-
-    if (linear)
-      for (size_t i = 0; i < map.size(); ++i) {
-        e = ::fsc::lower_bound<true>(b, buffer.end(), map[i].first, comp);
-        send_counts[i] = ::std::distance(b, e);
-        b = e;
-      }
-    else
-      for (size_t i = 0; i < map.size(); ++i) {
-        e = ::fsc::lower_bound<false>(b, buffer.end(), map[i].first, comp);
-        send_counts[i] = ::std::distance(b, e);
-        b = e;
-      }
-
-    // last 1
-    send_counts[map.size()] = ::std::distance(b, buffer.end());
-
-    return send_counts;
-  }
 
 
   /// in place bucketing.  uses an extra vector of same size as msgs.  hops around msgs vector until no movement is possible.
@@ -400,10 +364,7 @@ namespace mxx2 {
 
         while (tar_rank > -1) {  // if -1 or -2, then either visited or beginning of chain.
           tar_pos = offset[tar_rank]++;  // compute new position.  earlier offset values for the same pid are should have final values already.
-
           tar_rank = pids[tar_pos];
-
-//          if (tar_rank == -1) throw ::std::logic_error("target position target rank indicates that it's been visited already.");
 
           // save the info at tar_pos;
           ::std::swap(val, buffer[tar_pos]);  // put what's in src into buffer at tar_pos, and save what's at buffer[tar_pos]
@@ -412,11 +373,6 @@ namespace mxx2 {
         }  // else already visited, so done.
       }
     }
-
-    // clean up
-    std::vector<int>().swap(pids);  // clear pids reallocating.
-    std::vector<count_t>().swap(offset);
-    std::vector<count_t>().swap(maxes);
 
     return send_counts;
   }
@@ -2028,5 +1984,6 @@ namespace mxx2 {
 
   };
 }
+#endif
 
 #endif /* SRC_IO_MXX_SUPPORT_HPP_ */

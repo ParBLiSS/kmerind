@@ -17,6 +17,7 @@
 // include files to test
 #include "utils/logging.h"
 
+#if 0
 /*
  * test class holding some information.  Also, needed for the typed tests
  */
@@ -697,5 +698,5 @@ INSTANTIATE_TEST_CASE_P(Bliss, Mxx2KmerTest, ::testing::Values(::std::make_pair(
                                                                ::std::make_pair(80000, 512),
                                                                ::std::make_pair(160000, 512)
                                                            ));
-
+#endif
 
