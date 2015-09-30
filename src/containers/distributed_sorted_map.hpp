@@ -129,6 +129,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >  class sorted_map_base : public ::dsc::map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc> {
 
+      // TODO: this should not be public but clang complains.
     protected:
       using Base = ::dsc::map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>;
 
@@ -1135,6 +1136,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
   class sorted_map : public sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc> {
+    protected:
       using Base = sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc>;
 
 
@@ -1502,6 +1504,8 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
   class sorted_multimap : public sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc> {
+
+    protected:
       using Base = sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc>;
 
 
@@ -1797,9 +1801,11 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
   class reduction_sorted_map : public sorted_map<Key, T, Comm, KeyTransform, Less, Equal, Alloc> {
+      static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
+
+    protected:
       using Base = sorted_map<Key, T, Comm, KeyTransform, Less, Equal, Alloc>;
 
-      static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -1937,9 +1943,10 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
   class counting_sorted_map : public reduction_sorted_map<Key, T, Comm, KeyTransform, Less, ::std::plus<T>, Equal,Alloc> {
-      using Base = reduction_sorted_map<Key, T, Comm, KeyTransform, Less, ::std::plus<T>, Equal, Alloc>;
-
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
+
+    protected:
+      using Base = reduction_sorted_map<Key, T, Comm, KeyTransform, Less, ::std::plus<T>, Equal, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;

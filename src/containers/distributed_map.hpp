@@ -679,6 +679,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class map : public distributed_map_base<Key, T, ::std::map, Comm, KeyTransform, Hash, Less, Alloc> {
+    protected:
       using Base = distributed_map_base<Key, T, ::std::map, Comm, KeyTransform, Hash, Less, Alloc>;
 
 
@@ -838,6 +839,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class multimap : public distributed_map_base<Key, T, ::std::multimap, Comm, KeyTransform, Hash, Less, Alloc> {
+    protected:
       using Base = distributed_map_base<Key, T, ::std::multimap, Comm, KeyTransform, Hash, Less, Alloc>;
 
 
@@ -1124,9 +1126,11 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class reduction_map : public map<Key, T, Comm, KeyTransform, Hash, Less, Alloc> {
+      static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
+
+    protected:
       using Base = map<Key, T, Comm, KeyTransform, Hash, Less, Alloc>;
 
-      static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -1298,9 +1302,10 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class counting_map : public reduction_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Less,Alloc> {
-      using Base = reduction_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Less, Alloc>;
-
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
+
+    protected:
+      using Base = reduction_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Less, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;

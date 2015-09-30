@@ -212,7 +212,7 @@ namespace dsc  // distributed std container
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_reserve( size_t n) {
-        local_rehash(std::ceil(static_cast<float>(n) / c.max_load_factor()) );
+        local_rehash(std::ceil(static_cast<float>(n) / this->c.max_load_factor()) );
       }
 
       /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
@@ -912,6 +912,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class unordered_map : public unordered_map_base<Key, T, ::std::unordered_map, Comm, KeyTransform, Hash, Equal, Alloc> {
+    protected:
       using Base = unordered_map_base<Key, T, ::std::unordered_map, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 
@@ -1083,6 +1084,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class unordered_multimap : public unordered_map_base<Key, T, ::std::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc> {
+    protected:
       using Base = unordered_map_base<Key, T, ::std::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 
@@ -1343,9 +1345,10 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class reduction_unordered_map : public unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc> {
-      using Base = unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc>;
-
       static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
+
+    protected:
+      using Base = unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -1545,9 +1548,10 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class counting_unordered_map : public reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal,Alloc> {
-      using Base = reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal, Alloc>;
-
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
+
+    protected:
+      using Base = reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -1668,6 +1672,8 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class unordered_multimap_vec : public unordered_map_base<Key, T, ::fsc::unordered_vecmap, Comm, KeyTransform, Hash, Equal, Alloc> {
+
+    protected:
       using Base = unordered_map_base<Key, T, ::fsc::unordered_vecmap, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 
@@ -1897,6 +1903,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class unordered_multimap_compact_vec : public unordered_map_base<Key, T, ::fsc::unordered_compact_vecmap, Comm, KeyTransform, Hash, Equal, Alloc> {
+    protected:
       using Base = unordered_map_base<Key, T, ::fsc::unordered_compact_vecmap, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 
