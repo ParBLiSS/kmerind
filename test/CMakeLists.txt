@@ -116,9 +116,10 @@ SET_TARGET_PROPERTIES(testKmerIndex_read PROPERTIES COMPILE_FLAGS -DKMERINDEX)
 target_link_libraries(testKmerIndex_read ${EXTRA_LIBS})
 #cotire(testKmerIndex_ST2 )
 
-add_executable(testKmerIndex_read_fasta TestKmerIndex_FASTAParseOnly.cpp)
-SET_TARGET_PROPERTIES(testKmerIndex_read_fasta PROPERTIES COMPILE_FLAGS -DKMERINDEX)
-target_link_libraries(testKmerIndex_read_fasta ${EXTRA_LIBS})
+
+#add_executable(testKmerIndex_read_fasta TestKmerIndex_FASTAParseOnly.cpp)
+#SET_TARGET_PROPERTIES(testKmerIndex_read_fasta PROPERTIES COMPILE_FLAGS -DKMERINDEX)
+#target_link_libraries(testKmerIndex_read_fasta ${EXTRA_LIBS})
 #cotire(testKmerIndex_ST2 )
 
 
@@ -141,8 +142,8 @@ target_link_libraries(testKmerIndex_read_fasta ${EXTRA_LIBS})
 add_executable(testKmerCountCorrectness TestKmerCountCorrectness.cpp)
 target_link_libraries(testKmerCountCorrectness ${EXTRA_LIBS})
 
-add_executable(testKmerCountCorrectnessInFasta TestKmerCountCorrectnessInFasta.cpp)
-target_link_libraries(testKmerCountCorrectnessInFasta ${EXTRA_LIBS})
+#add_executable(testKmerCountCorrectnessInFasta TestKmerCountCorrectnessInFasta.cpp)
+#target_link_libraries(testKmerCountCorrectnessInFasta ${EXTRA_LIBS})
 
 add_executable(test_de_brujin_graph_construction test_de_brujin_graph_construction.cpp)
 target_link_libraries(test_de_brujin_graph_construction ${EXTRA_LIBS})

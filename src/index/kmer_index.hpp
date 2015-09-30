@@ -45,8 +45,8 @@
 #include "common/base_types.hpp"
 #include "common/alphabet_traits.hpp"
 #include "io/fastq_loader.hpp"
-#include "io/fasta_loader.hpp"
-#include "io/fasta_iterator.hpp"
+//#include "io/fasta_loader.hpp"
+//#include "io/fasta_iterator.hpp"
 #include "io/file_loader.hpp"
 #include "io/communication_layer.hpp"
 #include "index/distributed_map.hpp"
@@ -1277,7 +1277,7 @@ namespace bliss
 
 
     } /* namespace retired */
-
+#if 0
     /**
      * @class    bliss::index::KmerIndex
      * @brief    base type for All Kmer Index
@@ -1537,7 +1537,6 @@ namespace bliss
 
     };
 
-
     /**
      * @class    bliss::index::KmerCountIndex
      * @brief    Index for counting Kmers.
@@ -1665,7 +1664,7 @@ namespace bliss
         }
     };
 
-
+#endif
 
   } /* namespace index */
 } /* namespace bliss */

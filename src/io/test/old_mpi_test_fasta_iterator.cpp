@@ -41,7 +41,6 @@ using namespace bliss::io;
 //        3. fasta_iterator is processing then filtering. so it's wasting time on headers
 //        4. fasta_iterator is not handling the EOL characters.
 
-#if 0
 
 template<typename Iter1, typename Iter2>
 bool equal(const Iter1 &i1, const Iter2 &i2, size_t len) {
@@ -86,7 +85,7 @@ class FASTAIteratorTest2 : public ::testing::TestWithParam<TestFileInfo>
     virtual void TearDown() {
       TestFileInfo const & p = GetParam();
 
-      size_t totalKmerCount = mxx::allreduce(kmerCount, std::plus<size_t>());
+      size_t totalKmerCount = mxx2::reduce::reduce(kmerCount, std::plus<size_t>(), MPI_COMM_WORLD, 0);
       EXPECT_EQ(p.totalKmerCount, totalKmerCount);
     }
 
@@ -582,7 +581,6 @@ INSTANTIATE_TEST_CASE_P(Bliss, FASTAIteratorTest2, ::testing::Values(
     TestFileInfo(335000, 1092580, std::string("/test/data/test.medium.fasta")),
     TestFileInfo(64, 512, std::string("/test/data/test.fasta"))
 ));
-#endif
 
 int main(int argc, char* argv[]) 
 {
