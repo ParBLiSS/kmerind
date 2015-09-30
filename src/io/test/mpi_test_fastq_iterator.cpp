@@ -33,7 +33,7 @@ using namespace bliss::io;
 
 
 static constexpr size_t kmer_size = 35;
-typedef FASTQLoader<unsigned char, kmer_size - 1> FASTQLoaderType;
+typedef FASTQLoader<unsigned char> FASTQLoaderType;
 
 class FASTQIteratorTest : public KmerReaderTest<FASTQLoaderType > {};
 
