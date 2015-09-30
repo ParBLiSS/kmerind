@@ -92,7 +92,8 @@ TYPED_TEST_P(DataBlockTest, BufferList){
   }
 
   i = r2.start;
-  for (auto it = db.begin(), it2 = result1.begin(); it != db.end() && i < r2.end; ++it, ++i, ++it2) {
+  auto it2 =  result1.begin();
+  for (auto it = db.begin(); it != db.end() && i < r2.end; ++it, ++i, ++it2) {
     EXPECT_NE(*it2, *it) << "Vectors x and y same at index " << i;
   }
 
