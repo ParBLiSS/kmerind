@@ -10,6 +10,8 @@
  * TODO add License
  */
 
+#include "bliss-config.hpp"
+
 #include "concurrent/buffer.hpp"
 
 #include "omp.h"
@@ -38,7 +40,8 @@ void append(const int nthreads, bliss::io::Buffer<TS, CAP, MDSize>& buf,
   size_t lsuccess = 0;
   size_t lfailure = 0;
   size_t lswap = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i) shared(buf, gold, stdout) reduction(+: lsuccess, lfailure, lswap)
+  // TODO: OMP default(none) should be compatible with shared, but clang complains.
+#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nthreads) shared(buf, gold, stdout) private(i) reduction(+: lsuccess, lfailure, lswap)
   for (i = start; i < end; ++i)
   {
     int data = static_cast<int>(i);
@@ -369,7 +372,7 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
       new bliss::io::Buffer<TS, CAP, MDSize>());             // ensure atomicity
   ptr.load(std::memory_order_relaxed)->unblock_writes();
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, full, gold, stderr, stdout, std::cout) reduction(+:success, failure, swap)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(ptr, full, gold, stderr, stdout, std::cout) reduction(+:success, failure, swap)
   for (size_t i = 0; i < total_count; ++i)
   {
 
@@ -518,7 +521,7 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
   b = ptr.exchange(new bliss::io::Buffer<TS, CAP, MDSize>(), std::memory_order_acq_rel); // old pointer was managed by unique ptr.
   ptr.load(std::memory_order_relaxed)->unblock_writes();
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, gold, lstored, stderr, stdout, std::cout) reduction(+:success, failure, swap, success2)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(ptr, gold, lstored, stderr, stdout, std::cout) reduction(+:success, failure, swap, success2)
   for (size_t i = 0; i < total_count; ++i)
   {
 
@@ -680,7 +683,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 
   std::deque<bliss::io::Buffer<TS, CAP, MDSize>*> full;
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, stdout, full) private(i) reduction(+:success, failure, swap, failure2, failure3)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(ptr, stdout, full) private(i) reduction(+:success, failure, swap, failure2, failure3)
   for (i = 0; i < total_count; ++i)
   {
 
@@ -843,7 +846,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 //    pool.acquireBuffer();
 //  }
 //
-//#pragma omp parallel for num_threads(NumThreads) default(none) shared(pool, stdout) private(i) reduction(+:success, failure, swap, failure2, failure3)
+//#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(pool, stdout) private(i) reduction(+:success, failure, swap, failure2, failure3)
 //  for (i = 0; i < total_count; ++i) {
 //
 //    std::shared_ptr<bliss::io::Buffer<TS, CAP, MDSize>> ptr = pool.getBuffer();

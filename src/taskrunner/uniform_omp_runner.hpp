@@ -79,7 +79,7 @@ class UniformOMPRunner : public Runner
      */
     void operator()() {
       size_t proc = 0;
-#pragma omp parallel num_threads(nThreads) default(none) reduction(+: proc)
+#pragma omp parallel num_threads(nThreads) OMP_SHARE_DEFAULT reduction(+: proc)
       {
         // iterator for list is valid during append (no insertion in middle, no deletion).
         // no deletion since this is shared.

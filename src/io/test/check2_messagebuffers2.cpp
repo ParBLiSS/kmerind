@@ -56,7 +56,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   unsigned int fswap = 0;
 
 
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, fullBuffers, nelems, bufferSize) reduction(+ : success, failure, sswap, fswap)
+#pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(i, op_suc, ptr) firstprivate(id) shared(buffers, fullBuffers, nelems, bufferSize) reduction(+ : success, failure, sswap, fswap)
   for (i = 0; i < nelems; ++i) {
     //INFOF("insert %lu chars into %d", data.length(), id);
     //INFOF("insert %lu chars into %d", sizeof(int), id);
@@ -110,7 +110,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 //  INFOF("releasing: ");
 
   unsigned int iterations = (sswap + fswap) + 10;
-#pragma omp parallel for num_threads(nthreads) default(none) private(id, op_suc, ptr) shared(buffers, fullBuffers, bufferSize, iterations) reduction(+ : sswap2, fswap2, error, over)
+#pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(id, op_suc, ptr) shared(buffers, fullBuffers, bufferSize, iterations) reduction(+ : sswap2, fswap2, error, over)
   for (id = 0; id < iterations; ++id) {
     try {
       std::tie(op_suc, ptr) = fullBuffers.tryPop();
@@ -152,7 +152,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
 
   id = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(stored, appended, buffers, nelems, bufferSize) reduction(+ : success3, failure3, sswap3, fswap3, bytes3)
+#pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(i, op_suc, ptr) firstprivate(id) shared(stored, appended, buffers, nelems, bufferSize) reduction(+ : success3, failure3, sswap3, fswap3, bytes3)
   for (i = 0; i < nelems; ++i) {
     int data = i;
     int * data_remain = nullptr;
@@ -313,7 +313,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   //INFOF("full buffer: ");
   id = 0;
   unsigned int attempts = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, nelems, bufferSize) reduction(+ : swap, bytes, attempts)
+#pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(i, op_suc, ptr) firstprivate(id) shared(buffers, nelems, bufferSize) reduction(+ : swap, bytes, attempts)
   for (i = 0; i < nelems; ++i) {
 
     do {

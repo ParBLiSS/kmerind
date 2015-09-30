@@ -963,7 +963,7 @@ int main(int argc, char* argv[])
   for (int i = 0; i < iter; ++i) {
     v = 0;
     count = 0;
-#pragma omp parallel default(none) shared(nthreads, step, filename) num_threads(nthreads) reduction(+:v, count)
+#pragma omp parallel OMP_SHARE_DEFAULT shared(nthreads, step, filename) num_threads(nthreads) reduction(+:v, count)
     {
       OpType op2(filename, nthreads, omp_get_thread_num(), 1, step);
       op2.reset();

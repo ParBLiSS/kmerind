@@ -10,7 +10,7 @@
  * TODO add License
  */
 
-
+#include "bliss-config.hpp"
 #include "concurrent/buffer.hpp"
 
 
@@ -52,7 +52,7 @@ void appendTimed(const int iterations) {
       failure = 0;
 
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf, count) private(i) reduction(+:success, failure)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(buf, count) private(i) reduction(+:success, failure)
       for (i = 0; i < count + NumThreads; ++i) {
         int data = static_cast<int>(i);
         int result = buf.append(&data, 1);

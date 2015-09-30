@@ -63,18 +63,18 @@ class DynamicOMPRunner : public Runner
     void operator()()
     {
       size_t *proc = new size_t[nThreads];
-#pragma omp parallel num_threads(nThreads) default(none) shared(proc)
+#pragma omp parallel num_threads(nThreads) OMP_SHARE_DEFAULT shared(proc)
       {
         proc[omp_get_thread_num()] = 0;
 #pragma omp single nowait
         {  // one thread to do this
-//#pragma omp task untied default(none)                     // this slows it down by ORDERS OF MAGNITUDE.  DO NOT USE
+//#pragma omp task untied OMP_SHARE_DEFAULT                     // this slows it down by ORDERS OF MAGNITUDE.  DO NOT USE
 //          {  // untied so can move to different threads
             size_t gen = 0;
             while (q.canPop())  // flush the queue now.
             {
               ++gen;
-#pragma omp task default(none) shared(proc)
+#pragma omp task OMP_SHARE_DEFAULT shared(proc)
               {
                 auto v = q.waitAndPop();
                 if (v.first) {

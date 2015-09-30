@@ -11,6 +11,7 @@
  */
 
 ///#include <unistd.h>  // for usleep
+#include "bliss-config.hpp"
 
 #include "omp.h"
 #include <cassert>
@@ -48,7 +49,7 @@ void timeAppendMultipleBuffers(const int NumThreads, const int total_count, blis
   auto buf_ptr = pool.tryAcquireObject();
   buf_ptr->clear_and_unblock_writes();
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, pool) private(i, data, result)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(buf_ptr, gold, stored, pool) private(i, data, result)
   for (i = 0; i < total_count; ++i) {
 
     auto sptr = buf_ptr;

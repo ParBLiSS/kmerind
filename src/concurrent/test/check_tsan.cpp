@@ -10,7 +10,7 @@
  *
  * TODO add License
  */
-
+#include "bliss-config.hpp"
 #include <omp.h>
 
 #include <vector>
@@ -28,7 +28,7 @@ void testVectorBad() {
 
   std::vector<int> data(4);
 
-#pragma omp parallel for default(none) num_threads(4) shared(data)
+#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(4) shared(data)
   for (int i = 0; i < 1000000; ++i) {
     ++data[omp_get_thread_num()];
   }
@@ -51,7 +51,7 @@ void testMapBad() {
   }
 
 
-#pragma omp parallel for default(none) num_threads(4) shared(data)
+#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(4) shared(data)
   for (int i = 0; i < 1000000; ++i) {
     ++data[omp_get_thread_num()];
   }
@@ -73,7 +73,7 @@ void testMapBad() {
 //  int count1, count2;
 //
 //
-//#pragma omp parallel sections default(none) num_threads(4) shared(done, count1, count2)
+//#pragma omp parallel sections OMP_SHARE_DEFAULT num_threads(4) shared(done, count1, count2)
 //  {
 //#pragma omp section
 //    {
@@ -103,7 +103,7 @@ void testNotificationRace() {
   int count1 = 0, count2 = 0;
 
 
-#pragma omp parallel sections default(none) num_threads(2) shared(done, count1, count2)
+#pragma omp parallel sections OMP_SHARE_DEFAULT num_threads(2) shared(done, count1, count2)
   {
 #pragma omp section
     {
@@ -135,7 +135,7 @@ void testNotificationGood() {
   int count1 = 0, count2 = 0;
 
 
-#pragma omp parallel sections default(none) num_threads(2) shared(done, count1, count2)
+#pragma omp parallel sections OMP_SHARE_DEFAULT num_threads(2) shared(done, count1, count2)
   {
 #pragma omp section
     {
@@ -165,7 +165,7 @@ void testPublishBad() {
   std::pair<int, int>* obj = nullptr;
 
 
-#pragma omp parallel sections default(none) num_threads(2) shared(obj)
+#pragma omp parallel sections OMP_SHARE_DEFAULT num_threads(2) shared(obj)
   {
 #pragma omp section
     {
@@ -185,7 +185,7 @@ void testPublishGood() {
   std::atomic<std::pair<int, int>* > obj(nullptr);
 
 
-#pragma omp parallel sections default(none) num_threads(2) shared(obj)
+#pragma omp parallel sections OMP_SHARE_DEFAULT num_threads(2) shared(obj)
   {
 #pragma omp section
     {
@@ -207,7 +207,7 @@ void testBitFieldBad() {
       int a:4, b:4;
   } x;
 
-#pragma omp parallel sections default(none) num_threads(2) shared(x)
+#pragma omp parallel sections OMP_SHARE_DEFAULT num_threads(2) shared(x)
   {
 #pragma omp section
     {
@@ -229,7 +229,7 @@ void testDoubleCheckedLockingBad() {
   int x = 0;
   std::mutex mu;
 
-#pragma omp parallel default(none) num_threads(2) shared(inited, mu, x)
+#pragma omp parallel OMP_SHARE_DEFAULT num_threads(2) shared(inited, mu, x)
   {
     // May be called by multiple threads.
     if (!inited) {
@@ -250,7 +250,7 @@ void testSpinlockBad() {
   std::atomic_flag lock = ATOMIC_FLAG_INIT;
   int x = 0;
 
-#pragma omp parallel default(none) num_threads(128) shared(lock, x)
+#pragma omp parallel OMP_SHARE_DEFAULT num_threads(128) shared(lock, x)
   {
     _mm_pause();
     while (lock.test_and_set(std::memory_order_acquire));

@@ -351,7 +351,7 @@ public:
 
     int nt = this->nThreads;
 
-#pragma omp parallel default(none) num_threads(nt)
+#pragma omp parallel OMP_SHARE_DEFAULT num_threads(nt)
     {
     // iterate through all keys
       int tid = omp_get_thread_num();
@@ -412,7 +412,7 @@ public:
     // first determine the maximum count
     uint64_t local_max_count = 0; // use uint64_t for all systems!
     int nt = this->nThreads;
-#pragma omp parallel default(none) num_threads(nt) reduction(max: local_max_count)
+#pragma omp parallel OMP_SHARE_DEFAULT num_threads(nt) reduction(max: local_max_count)
     {
       int tid = omp_get_thread_num();
       for (auto iter=this->local_map[tid].begin(); iter!=this->local_map[tid].end();
@@ -701,7 +701,7 @@ protected:
     t1 = std::chrono::high_resolution_clock::now();
 
     // NOT FASTER compared to below.
-//#pragma omp parallel default(none) num_threads(nt)
+//#pragma omp parallel OMP_SHARE_DEFAULT num_threads(nt)
 //    {
 //      responses[omp_get_thread_num()].clear();
 //    }
@@ -715,7 +715,7 @@ protected:
 //     t1 = std::chrono::high_resolution_clock::now();
 //
 //    // for all received requests, send the value from the lookup
-//#pragma omp parallel for default(none) num_threads(nt) shared(key_count, keys)
+//#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nt) shared(key_count, keys)
 //    for (int i = 0; i < key_count; ++i)
 //    {
 //      int tid = omp_get_thread_num();
@@ -732,14 +732,14 @@ protected:
 //    t1 = std::chrono::high_resolution_clock::now();
 //
 //    // now batch insert.
-//#pragma omp parallel default(none) num_threads(nt) shared(fromRank)
+//#pragma omp parallel OMP_SHARE_DEFAULT num_threads(nt) shared(fromRank)
 //    {
 //      int tid = omp_get_thread_num();
 //      this->commLayer.sendMessage(responses[tid].data(), responses[tid].size(), fromRank, LOOKUP_ANSWER_MPI_TAG);
 //    }
 
 
-#pragma omp parallel for default(none) num_threads(nt) shared(key_count, keys, fromRank)
+#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nt) shared(key_count, keys, fromRank)
     for (int i = 0; i < key_count; ++i)
     {
       // check if exists and then send
@@ -1053,7 +1053,7 @@ protected:
     if (this->threadKeys.capacity() < element_count) this->threadKeys.reserve(element_count);
 
     // not faster.
-//#pragma omp parallel num_threads(nt) shared(nt, element_count, elements) default(none)
+//#pragma omp parallel num_threads(nt) shared(nt, element_count, elements) OMP_SHARE_DEFAULT
 //{
 //  int tid = omp_get_thread_num();
 //  for (int i = 0; i < nt; ++i) {
@@ -1068,13 +1068,13 @@ protected:
 
      t1 = std::chrono::high_resolution_clock::now();
     // compute threadhash and store in vector in parallel, (perfectly parallelizable, compute heavy)
-#pragma omp parallel for num_threads(nt) shared(element_count, elements) default(none)
+#pragma omp parallel for num_threads(nt) shared(element_count, elements) OMP_SHARE_DEFAULT
     for (size_t i = 0; i < element_count; ++i) {
       this->threadKeys[i] = this->getTargetThread(elements[i].first);  // insert hash value
     }
 
     // not faster
-//#pragma omp parallel for num_threads(nt) shared(element_count, elements) default(none)
+//#pragma omp parallel for num_threads(nt) shared(element_count, elements) OMP_SHARE_DEFAULT
 //for (int i = 0; i < element_count; ++i) {
 //  int tid = omp_get_thread_num();
 //  this->tempInsertStorage[tid][this->getTargetThread(elements[i].first)].push_back(elements[i]);
@@ -1088,7 +1088,7 @@ protected:
      t1 = std::chrono::high_resolution_clock::now();
 
     // in parallel, each thread walks through entire vector (read only) and if hash matches insert into per thread map  (read vec is not compute heavy.)
-#pragma omp parallel num_threads(nt) shared(element_count, elements) default(none)
+#pragma omp parallel num_threads(nt) shared(element_count, elements) OMP_SHARE_DEFAULT
     {
       int tid = omp_get_thread_num();
       for (size_t i = 0; i < element_count; ++i) {
@@ -1098,7 +1098,7 @@ protected:
     }
 
     // not faster
-//#pragma omp parallel num_threads(nt) shared(nt, element_count, elements) default(none)
+//#pragma omp parallel num_threads(nt) shared(nt, element_count, elements) OMP_SHARE_DEFAULT
 //{
 //  int tid = omp_get_thread_num();
 //  for (int i = 0; i < nt; ++i) {
@@ -1314,7 +1314,7 @@ protected:
      t1 = std::chrono::high_resolution_clock::now();
 
     // compute threadhash and store in vector in parallel, (perfectly parallelizable, compute heavy)
-#pragma omp parallel for num_threads(nt) shared(key_count, keys) default(none)
+#pragma omp parallel for num_threads(nt) shared(key_count, keys) OMP_SHARE_DEFAULT
     for (size_t i = 0; i < key_count; ++i) {
       this->threadKeys[i] = this->getTargetThread(keys[i]);  // insert hash value
     }
@@ -1329,7 +1329,7 @@ protected:
 
      t1 = std::chrono::high_resolution_clock::now();
     // in parallel, each thread walks through entire vector (read only) and if hash matches insert into per thread map  (read vec is not compute heavy.)
-#pragma omp parallel num_threads(nt) shared(key_count, keys) default(none)
+#pragma omp parallel num_threads(nt) shared(key_count, keys) OMP_SHARE_DEFAULT
     {
       int tid = omp_get_thread_num();
       for (size_t i = 0; i < key_count; ++i) {

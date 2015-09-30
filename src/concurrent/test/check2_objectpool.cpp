@@ -10,6 +10,7 @@
  * TODO add License
  */
 
+#include "bliss-config.hpp"
 //#include <unistd.h>  // for usleep
 
 #include "omp.h"
@@ -62,7 +63,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
   if (buf_ptr) buf_ptr->clear_and_unblock_writes();
 
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, writelock, writelock3, pool) private(i, data, result) reduction(+:success, failure, swap)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(buf_ptr, gold, stored, writelock, writelock3, pool) private(i, data, result) reduction(+:success, failure, swap)
   for (i = 0; i < total_count; ++i) {
 
 //    while (writelock2.test_and_set());
@@ -172,7 +173,7 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
   if (buf_ptr) buf_ptr->clear_and_unblock_writes();
 
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, stdout, pool, capInEl) reduction(+:success, failure, failure2,failure3,swap)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(buf_ptr, stdout, pool, capInEl) reduction(+:success, failure, failure2,failure3,swap)
   for (i = 0; i < total_count; ++i) {
 
     size_t data = i;
@@ -268,7 +269,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   int i = 0;
   int count = 0;
   int mx = pool.isUnlimited() ? 100 : pool.getCapacity();
-#pragma omp parallel for num_threads(pool_threads) default(none) private(i) shared(pool, mx) reduction(+ : count)
+#pragma omp parallel for num_threads(pool_threads) OMP_SHARE_DEFAULT private(i) shared(pool, mx) reduction(+ : count)
   for (i = 0; i < mx; ++i) {
 	  auto ptr = pool.tryAcquireObject();
     if (! ptr) {
@@ -284,7 +285,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   i = 0;
   count = 0;
   mx = pool.isUnlimited() ? 100 : pool.getCapacity();
-#pragma omp parallel for num_threads(pool_threads) default(none) private(i) shared(pool, mx) reduction(+ : count)
+#pragma omp parallel for num_threads(pool_threads) OMP_SHARE_DEFAULT private(i) shared(pool, mx) reduction(+ : count)
   for (i = 0; i <= mx; ++i) {  // <= so we get 1 extra
 		auto ptr = pool.tryAcquireObject();
 	    if (! ptr) {
@@ -309,7 +310,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     temp.push_back(ptr);
     temp.push_back(ptr);
   }
-#pragma omp parallel for num_threads(pool_threads) default(none) shared(pool, mx, temp) private(i) reduction(+ : count)
+#pragma omp parallel for num_threads(pool_threads) OMP_SHARE_DEFAULT shared(pool, mx, temp) private(i) reduction(+ : count)
   for (i = 0; i < mx * 2; ++i) {
 
     typename PoolType::ObjectPtrType ptr = temp[i];
@@ -332,7 +333,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   count = 0;
   int count1 = 0;
   int count2 = 0;
-#pragma omp parallel num_threads(pool_threads) default(none) shared(pool, std::cout) reduction(+ : count, count1, count2)
+#pragma omp parallel num_threads(pool_threads) OMP_SHARE_DEFAULT shared(pool, std::cout) reduction(+ : count, count1, count2)
   {
     int v = omp_get_thread_num() + 5;
     auto ptr = pool.tryAcquireObject();
@@ -369,7 +370,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   auto ptr = pool.tryAcquireObject();
   ptr->clear_and_unblock_writes();
 
-#pragma omp parallel num_threads(buffer_threads) default(none) shared(pool, ptr)
+#pragma omp parallel num_threads(buffer_threads) OMP_SHARE_DEFAULT shared(pool, ptr)
   {
     int v = 7;
     ptr->append(&v, 1);
@@ -388,7 +389,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   omp_set_nested(1);
 
   INFOF("TEST all operations together: ");
-#pragma omp parallel num_threads(pool_threads) default(none) shared(pool, pool_threads, buffer_threads, std::cout)
+#pragma omp parallel num_threads(pool_threads) OMP_SHARE_DEFAULT shared(pool, pool_threads, buffer_threads, std::cout)
   {
     // Id range is 0 to 100
     int iter;
@@ -408,7 +409,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
       // access
       iter = rand() % 100;
       int count = 0;
-#pragma omp parallel for num_threads(buffer_threads) default(none) shared(buf, iter) private(j) reduction(+:count)
+#pragma omp parallel for num_threads(buffer_threads) OMP_SHARE_DEFAULT shared(buf, iter) private(j) reduction(+:count)
       for (j = 0; j < iter; ++j) {
         bool res = buf->append(&j, 1);
         if (! (res & 0x1)) {

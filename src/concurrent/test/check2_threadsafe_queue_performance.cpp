@@ -9,7 +9,7 @@
  *
  * TODO add License
  */
-
+#include "bliss-config.hpp"
 
 #include <iostream>
 #include <unistd.h>
@@ -183,7 +183,7 @@ void timeTSQueueThreaded(const std::string &message, bliss::concurrent::ThreadSa
 #pragma omp section
     {
       // push
-#pragma omp parallel for default(none) num_threads(nProducer) shared(q) reduction(+:count)
+#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nProducer) shared(q) reduction(+:count)
       for (int i = 0; i < entries-1; ++i) {
         q.tryPush(std::move(T(i)));
         ++count;
@@ -198,7 +198,7 @@ void timeTSQueueThreaded(const std::string &message, bliss::concurrent::ThreadSa
     {
       T results[nConsumer];
       // pop
-#pragma omp parallel num_threads(nConsumer) default(none) shared(q, results) reduction(+: count2)
+#pragma omp parallel num_threads(nConsumer) OMP_SHARE_DEFAULT shared(q, results) reduction(+: count2)
       {
         results[omp_get_thread_num()] = 0;
 
@@ -213,7 +213,7 @@ void timeTSQueueThreaded(const std::string &message, bliss::concurrent::ThreadSa
       }
 
 
-    #pragma omp parallel for default(none) num_threads(nConsumer) shared(results) reduction(^:result)
+    #pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nConsumer) shared(results) reduction(^:result)
       for (int i = 0; i < nConsumer; ++i) {
           result = results[omp_get_thread_num()];
       }

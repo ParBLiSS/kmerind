@@ -449,7 +449,7 @@ namespace bliss
           size_t entries = 0;
           KmerType key;
           CountType val;
-        #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
+        #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(key, val) shared(answers, answer_count) reduction(+: entries)
           for (size_t i = 0; i < answer_count; ++i) {
             std::tie(key, val) = answers[i];
 
@@ -588,7 +588,7 @@ namespace bliss
           size_t entries = 0;
           KmerType key;
           IdType val;
-        #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
+        #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(key, val) shared(answers, answer_count) reduction(+: entries)
           for (size_t i = 0; i < answer_count; ++i) {
             std::tie(key, val) = answers[i];
 
@@ -749,7 +749,7 @@ namespace bliss
 
           KmerType key;
           KmerInfoType val;
-        #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
+        #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(key, val) shared(answers, answer_count) reduction(+: entries)
           for (size_t i = 0; i < answer_count; ++i) {
             std::tie(key, val) = answers[i];
 
@@ -897,7 +897,7 @@ namespace bliss
 
             KmerType key;
             CountType val;
-          #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
+          #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(key, val) shared(answers, answer_count) reduction(+: entries)
             for (size_t i = 0; i < answer_count; ++i) {
               std::tie(key, val) = answers[i];
 
@@ -1042,7 +1042,7 @@ namespace bliss
             KmerType key;
             IdType val;
 
-         #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
+         #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(key, val) shared(answers, answer_count) reduction(+: entries)
             for (size_t i = 0; i < answer_count; ++i) {
               std::tie(key, val) = answers[i];
 
@@ -1208,7 +1208,7 @@ namespace bliss
             KmerType key;
             KmerInfoType val;
 
-          #pragma omp parallel for num_threads(nthreads) default(none) private(key, val) shared(answers, answer_count) reduction(+: entries)
+          #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(key, val) shared(answers, answer_count) reduction(+: entries)
             for (size_t i = 0; i < answer_count; ++i) {
 
               std::tie(key, val) = answers[i];
@@ -1625,7 +1625,7 @@ namespace bliss
 
 
           size_t entries = 0;
-        #pragma omp parallel for num_threads(nthreads) default(none) shared(answers, answer_count) reduction(+: entries)
+        #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
           for (size_t i = 0; i < answer_count; ++i) {
             KmerType key;
             CountType val;

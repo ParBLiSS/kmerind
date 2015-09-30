@@ -167,7 +167,7 @@ struct Tester
 	msgs.clear();
 
         // start sending one message to each:
-  #pragma omp parallel for default(none) num_threads(nthreads) shared(msgs, els, my_rank, it, stdout)
+  #pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nthreads) shared(msgs, els, my_rank, it, stdout)
         for (int i = 0; i < els; ++i)
         {
           size_t idx;
@@ -215,7 +215,7 @@ struct Tester
       for (; it < iters; ++it) {
 	msgs.clear();
         // sending one message to each:
-    #pragma omp parallel for default(none) num_threads(nthreads) shared(msgs, els, my_rank, it, after, stdout)
+    #pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nthreads) shared(msgs, els, my_rank, it, after, stdout)
         for (int i = 0; i < els; ++i)
         {
           size_t idx;

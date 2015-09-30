@@ -88,7 +88,7 @@ struct Tester
       // L: recv message cont
     	DEBUGF("M R %d,\tT  ,\tI %d,\tD  ,\tt %d,\ti %d,\tM ,\tL%d PRESEND", my_rank, it, FIRST_TAG, els, msgs_received.load());
       // start sending one message to each:
-#pragma omp parallel for default(none) num_threads(nthreads) shared(msgs, els, my_rank, it, stdout)
+#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nthreads) shared(msgs, els, my_rank, it, stdout)
       for (int i = 0; i < els; ++i)
       {
         size_t idx;
