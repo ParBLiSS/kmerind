@@ -58,7 +58,7 @@ namespace bliss
       /// The number of total bits in the stream
       static constexpr unsigned int nBits = NUM_TOTAL_BITS;
       /// The number of bytes needed to hold `nBits` bits
-      static constexpr unsigned int nBytes = intCeil(nBits, 8);
+      static constexpr unsigned int nBytes = intCeil(nBits, static_cast<unsigned int>(8));
       /// The number of bits for each word of type `T`
       static constexpr unsigned int bitsPerWord = std::numeric_limits<T>::digits;
       /// The number of bytes in each word of type `T`
@@ -207,7 +207,7 @@ namespace bliss
       {
         const unsigned int baseBitsPerWord = sizeof(base_type)*8 - padBits;
         // the number of bits that can be read by the base type
-        unsigned int baseBitsToRead = roundDownToMultiple(nBits, sizeof(base_type)*8);
+        unsigned int baseBitsToRead = roundDownToMultiple(nBits, static_cast<unsigned int>(sizeof(base_type)*8));
         baseBitsToRead = roundDownToMultiple(baseBitsToRead, baseBitsPerWord);
     
     
