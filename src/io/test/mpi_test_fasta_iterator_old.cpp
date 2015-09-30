@@ -117,7 +117,7 @@ class FASTAIteratorTest2 : public ::testing::TestWithParam<TestFileInfo>
 
     std::string fileName;
     size_t kmerCount;
-    static const int kmerSize = 35;
+    static constexpr int kmerSize = 35;
 
 };
 
@@ -134,12 +134,12 @@ TEST_P(FASTAIteratorTest2, read)
 #endif
 
 
-  typedef FileLoader<unsigned char, this->kmerSize, bliss::io::BaseFileParser, false, false> FILELoaderType;
+  typedef FileLoader<unsigned char, FASTAIteratorTest2::kmerSize, bliss::io::BaseFileParser, false, false> FILELoaderType;
   typedef typename FILELoaderType::InputIteratorType InputIterType;
   typedef typename std::iterator_traits<InputIterType>::value_type ValueType;
 
   //Define Kmer type
-  typedef bliss::common::Kmer<this->kmerSize, bliss::common::DNA5, uint32_t> KmerType;
+  typedef bliss::common::Kmer<FASTAIteratorTest2::kmerSize, bliss::common::DNA5, uint32_t> KmerType;
 
   //Define type for FASTALoader 
   typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
@@ -166,7 +166,7 @@ TEST_P(FASTAIteratorTest2, read)
 
   //Begin iteration
   FASTAParser<typename FILELoaderType::L1BlockType::iterator, KmerType> FASTAIterObj(d.begin(), d.end(), r, loader.getFileRange(), vectorReturned);
-  ValueType* gold = new ValueType[this->kmerSize];
+  ValueType* gold = new ValueType[FASTAIteratorTest2::kmerSize];
 
   //For crosschecking the contents
   for(auto iter=FASTAIterObj.begin(); iter != FASTAIterObj.end(); iter++)
@@ -176,10 +176,10 @@ TEST_P(FASTAIteratorTest2, read)
     auto offset = FASTAIterObj.getOffset(iter);
 
     //Fetch Kmer using simple file reading 
-    this->readFilePOSIX(this->fileName, offset, this->kmerSize, gold);
+    this->readFilePOSIX(this->fileName, offset, FASTAIteratorTest2::kmerSize, gold);
 
     //Compare the contents, by constructing a new kmer and equating
-    std::string directFromFile((char *)gold, this->kmerSize);
+    std::string directFromFile((char *)gold, FASTAIteratorTest2::kmerSize);
     //std::cout << "Should match with " << " :  " << directFromFile << std::endl; 
     this->kmerCount++;
 
@@ -202,12 +202,12 @@ TEST_P(FASTAIteratorTest2, read)
 // Single thread, multiple processes
 TEST_P(FASTAIteratorTest2, read_mpi)
 {
-  typedef FileLoader<unsigned char, this->kmerSize, bliss::io::BaseFileParser, false, false> FILELoaderType;
+  typedef FileLoader<unsigned char, FASTAIteratorTest2::kmerSize, bliss::io::BaseFileParser, false, false> FILELoaderType;
   typedef typename FILELoaderType::InputIteratorType InputIterType;
   typedef typename std::iterator_traits<InputIterType>::value_type ValueType;
 
   //Define Kmer type
-  typedef bliss::common::Kmer<this->kmerSize, bliss::common::DNA5, uint32_t> KmerType;
+  typedef bliss::common::Kmer<FASTAIteratorTest2::kmerSize, bliss::common::DNA5, uint32_t> KmerType;
 
   typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
   typename FASTALoaderType::vectorType vectorReturned;
@@ -233,7 +233,7 @@ TEST_P(FASTAIteratorTest2, read_mpi)
   //Begin iteration
   FASTAParser<typename FILELoaderType::L1BlockType::iterator, KmerType> FASTAIterObj(d.begin(), d.end(), r, loader.getFileRange(), vectorReturned);
   ValueType* gold;
-  gold = new ValueType[this->kmerSize];
+  gold = new ValueType[FASTAIteratorTest2::kmerSize];
 
   //For crosschecking the contents
   for(auto iter=FASTAIterObj.begin(); iter != FASTAIterObj.end(); iter++)
@@ -243,10 +243,10 @@ TEST_P(FASTAIteratorTest2, read_mpi)
     auto offset = FASTAIterObj.getOffset(iter);
 
     //Fetch Kmer using simple file reading 
-    this->readFilePOSIX(this->fileName, offset, this->kmerSize, gold);
+    this->readFilePOSIX(this->fileName, offset, FASTAIteratorTest2::kmerSize, gold);
 
     //Compare the contents, by constructing a new kmer and equating
-    std::string directFromFile((char *)gold, this->kmerSize);
+    std::string directFromFile((char *)gold, FASTAIteratorTest2::kmerSize);
     //std::cout << "Should match with " << " :  " << directFromFile << std::endl; 
     this->kmerCount++;
 
@@ -273,12 +273,12 @@ TEST_P(FASTAIteratorTest2, read_omp_demand)
 
   //Define L2 partitioner type to be block partition
   //TODO: Make L2BlockPartitioner threadsafe
-  typedef FileLoader<unsigned char, this->kmerSize, bliss::io::BaseFileParser, false, false> FILELoaderType;
+  typedef FileLoader<unsigned char, FASTAIteratorTest2::kmerSize, bliss::io::BaseFileParser, false, false> FILELoaderType;
   typedef typename FILELoaderType::InputIteratorType InputIterType;
   typedef typename std::iterator_traits<InputIterType>::value_type ValueType;
 
   //Define Kmer type
-  typedef bliss::common::Kmer<this->kmerSize, bliss::common::DNA5, uint32_t> KmerType;
+  typedef bliss::common::Kmer<FASTAIteratorTest2::kmerSize, bliss::common::DNA5, uint32_t> KmerType;
 
   typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
   typename FASTALoaderType::vectorType vectorReturned;
@@ -316,7 +316,7 @@ TEST_P(FASTAIteratorTest2, read_omp_demand)
     typename FILELoaderType::L2BlockType d2 = loader.getNextL2Block(tid);
 
     RangeType r2 = d2.getRange();
-    ValueType* gold = new ValueType[this->kmerSize];
+    ValueType* gold = new ValueType[FASTAIteratorTest2::kmerSize];
     while(r2.end - r2.start > 0)
     {
       //std::cout << "Thread# " << omp_get_thread_num() << ", range: " << r2.start << "," << r2.end << std::endl;
@@ -332,10 +332,10 @@ TEST_P(FASTAIteratorTest2, read_omp_demand)
         auto offset = FASTAIterObj.getOffset(iter);
 
         //Fetch Kmer using simple file reading 
-        this->readFilePOSIX(this->fileName, offset, this->kmerSize, gold);
+        this->readFilePOSIX(this->fileName, offset, FASTAIteratorTest2::kmerSize, gold);
 
         //Compare the contents, by constructing a new kmer and equating
-        std::string directFromFile((char *)gold, this->kmerSize);
+        std::string directFromFile((char *)gold, FASTAIteratorTest2::kmerSize);
         //std::cout << "Should match with " << " :  " << directFromFile<< std::endl; 
 
         ++localKmerCount;
@@ -380,12 +380,12 @@ TEST_P(FASTAIteratorTest2, read_omp_block)
 
   //Define L2 partitioner type to be block partition
   typedef bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > L2BlockPartitionType;
-  typedef FileLoader<unsigned char, this->kmerSize, bliss::io::BaseFileParser, false, false, L2BlockPartitionType> FILELoaderType;
+  typedef FileLoader<unsigned char, FASTAIteratorTest2::kmerSize, bliss::io::BaseFileParser, false, false, L2BlockPartitionType> FILELoaderType;
   typedef typename FILELoaderType::InputIteratorType InputIterType;
   typedef typename std::iterator_traits<InputIterType>::value_type ValueType;
 
   //Define Kmer type
-  typedef bliss::common::Kmer<this->kmerSize, bliss::common::DNA5, uint32_t> KmerType;
+  typedef bliss::common::Kmer<FASTAIteratorTest2::kmerSize, bliss::common::DNA5, uint32_t> KmerType;
 
   typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
   typename FASTALoaderType::vectorType vectorReturned;
@@ -424,7 +424,7 @@ TEST_P(FASTAIteratorTest2, read_omp_block)
     typename FILELoaderType::L2BlockType d2 = loader.getNextL2Block(tid);
 
     RangeType r2 = d2.getRange();
-    ValueType* gold = new ValueType[this->kmerSize];
+    ValueType* gold = new ValueType[FASTAIteratorTest2::kmerSize];
     while(r2.end - r2.start > 0)
     {
       //std::cout << "Thread# " << omp_get_thread_num() << ", range: " << r2.start << "," << r2.end << std::endl;
@@ -440,10 +440,10 @@ TEST_P(FASTAIteratorTest2, read_omp_block)
         auto offset = FASTAIterObj.getOffset(iter);
 
         //Fetch Kmer using simple file reading
-        this->readFilePOSIX(this->fileName, offset, this->kmerSize, gold);
+        this->readFilePOSIX(this->fileName, offset, FASTAIteratorTest2::kmerSize, gold);
 
         //Compare the contents, by constructing a new kmer and equating
-        std::string directFromFile((char *)gold, this->kmerSize);
+        std::string directFromFile((char *)gold, FASTAIteratorTest2::kmerSize);
         //std::cout << "Should match with " << " :  " << directFromFile<< std::endl;
 
         ++localKmerCount;
@@ -481,12 +481,12 @@ TEST_P(FASTAIteratorTest2, read_omp_block)
 TEST_P(FASTAIteratorTest2, read_omp_mpi)
 {
   //Define L2 partitioner type to be block partition
-  typedef FileLoader<unsigned char, this->kmerSize, bliss::io::BaseFileParser, false, false> FILELoaderType;
+  typedef FileLoader<unsigned char, FASTAIteratorTest2::kmerSize, bliss::io::BaseFileParser, false, false> FILELoaderType;
   typedef typename FILELoaderType::InputIteratorType InputIterType;
   typedef typename std::iterator_traits<InputIterType>::value_type ValueType;
 
   //Define Kmer type
-  typedef bliss::common::Kmer<this->kmerSize, bliss::common::DNA5, uint32_t> KmerType;
+  typedef bliss::common::Kmer<FASTAIteratorTest2::kmerSize, bliss::common::DNA5, uint32_t> KmerType;
 
   typedef FASTALoader<typename FILELoaderType::InputIteratorType, KmerType> FASTALoaderType;
   typename FASTALoaderType::vectorType vectorReturned;
@@ -527,7 +527,7 @@ TEST_P(FASTAIteratorTest2, read_omp_mpi)
     typename FILELoaderType::L2BlockType d2 = loader.getNextL2Block(tid);
 
     RangeType r2 = d2.getRange();
-    ValueType* gold = new ValueType[this->kmerSize];
+    ValueType* gold = new ValueType[FASTAIteratorTest2::kmerSize];
     while(r2.end - r2.start > 0)
     {
       //std::cout << "Thread# " << omp_get_thread_num() << ", range: " << r2.start << "," << r2.end << std::endl;
@@ -543,10 +543,10 @@ TEST_P(FASTAIteratorTest2, read_omp_mpi)
         auto offset = FASTAIterObj.getOffset(iter);
 
         //Fetch Kmer using simple file reading
-        this->readFilePOSIX(this->fileName, offset, this->kmerSize, gold);
+        this->readFilePOSIX(this->fileName, offset, FASTAIteratorTest2::kmerSize, gold);
 
         //Compare the contents, by constructing a new kmer and equating
-        std::string directFromFile((char *)gold, this->kmerSize);
+        std::string directFromFile((char *)gold, FASTAIteratorTest2::kmerSize);
         //std::cout << "Should match with " << " :  " << directFromFile<< std::endl;
 
         ++localKmerCount;
