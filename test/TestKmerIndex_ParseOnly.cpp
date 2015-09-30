@@ -165,18 +165,13 @@ void sample(std::vector<KmerType> &query, size_t n, unsigned int seed) {
 
 
 template <typename IndexType, template <typename> class SeqParser>
-void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
+void testIndex(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
-  int nprocs = 1;
-  int rank = 0;
-  MPI_Comm_size(comm, &nprocs);
-  MPI_Comm_rank(comm, &rank);
-
-  IndexType idx(comm, nprocs);
+  IndexType idx(comm);
 
   TIMER_INIT(test);
 
-  if (rank == 0) INFOF("RANK %d / %d: Testing %s", rank, nprocs, test.c_str());
+  if (comm.rank() == 0) INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
   TIMER_START(test);
   idx.template build<SeqParser>(filename, comm);
@@ -191,28 +186,23 @@ void testIndex(MPI_Comm comm, const std::string & filename, std::string test ) {
 
   // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
   TIMER_START(test);
-  unsigned seed = rank * 23;
+  unsigned seed = comm.rank() * 23;
   sample(query, query.size() / 100, seed);
   TIMER_END(test, "select 1%", query.size());
 
-  TIMER_REPORT_MPI(test, rank, comm);
+  TIMER_REPORT_MPI(test, comm.rank(), comm);
 
 }
 
 
 template <typename IndexType, template <typename> class SeqParser>
-void testIndex2(MPI_Comm comm, const std::string & filename, std::string test ) {
+void testIndex2(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
-  int nprocs = 1;
-  int rank = 0;
-  MPI_Comm_size(comm, &nprocs);
-  MPI_Comm_rank(comm, &rank);
-
-  IndexType idx(comm, nprocs);
+  IndexType idx(comm);
 
   TIMER_INIT(test);
 
-  if (rank == 0) INFOF("RANK %d / %d: Testing %s", rank, nprocs, test.c_str());
+  if (comm.rank() == 0) INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
   TIMER_START(test);
   idx.template build_with_mpi_subcomm<SeqParser>(filename, comm);
@@ -227,11 +217,11 @@ void testIndex2(MPI_Comm comm, const std::string & filename, std::string test ) 
 
   // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
   TIMER_START(test);
-  unsigned seed = rank * 23;
+  unsigned seed = comm.rank() * 23;
   sample(query, query.size() / 100, seed);
   TIMER_END(test, "select 1%", query.size());
 
-  TIMER_REPORT_MPI(test, rank, comm);
+  TIMER_REPORT_MPI(test, comm.rank(), comm);
 
 }
 

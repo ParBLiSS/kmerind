@@ -94,9 +94,7 @@ protected:
 
 	MapType map;
 
-	MPI_Comm comm;
-	int commSize;
-	int commRank;
+	const mxx::comm& comm;
 
 public:
 	using KmerType = typename MapType::key_type;
@@ -104,9 +102,7 @@ public:
 	using TupleType =      std::pair<KmerType, ValueType>;
 	using Alphabet = typename KmerType::KmerAlphabet;
 
-	Index(MPI_Comm _comm, int _comm_size) : map(_comm, _comm_size), comm(_comm) {
-		MPI_Comm_size(_comm, &commSize);
-		MPI_Comm_rank(_comm, &commRank);
+	Index(const mxx::comm& _comm) : map(_comm), comm(_comm) {
 	}
 
 	virtual ~Index() {};
@@ -324,7 +320,7 @@ public:
 			mxx::datatype<typename FileLoaderType::RangeType> range_dt;
 			MPI_Bcast(&file_range, 1, range_dt.type(), 0, group);
 
-			range = mxx::scatter(ranges, 0, group);
+			range = mxx::scatter_one(ranges, 0, group);
 			// now create the L2Blocks from the data  (reuse block)
 			block.assign(&(data[0]), &(data[0]) + range.size(), range);
 			TIMER_END(file, "open", data.size());
@@ -426,7 +422,7 @@ public:
     m = this->map.update_multiplicity();
 		TIMER_END(build, "multiplicity", m);
 
-		TIMER_REPORT_MPI(build, this->commRank, this->comm);
+		TIMER_REPORT_MPI(build, this->comm.rank(), this->comm);
 
 	 }
 

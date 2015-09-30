@@ -153,7 +153,7 @@ namespace bliss{
 			  }
 
 			public:
-			  de_bruijn_nodes_distributed(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {/*do nothing*/}
+			  de_bruijn_nodes_distributed(const mxx::comm& _comm) : Base(_comm) {/*do nothing*/}
 
 			  virtual ~de_bruijn_nodes_distributed() {/*do nothing*/};
 
@@ -177,7 +177,7 @@ namespace bliss{
 				 if (this->comm_size > 1) {
 				   TIMER_START(insert);
 				   // get mapping to proc
-				   ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(input, this->key_to_rank, this->comm_size);
+				   ::std::vector<size_t> send_counts = mxx::bucketing(input, this->key_to_rank, this->comm_size);
 				   TIMER_END(insert, "bucket", input.size());
 
 		 //          TIMER_START(insert);
@@ -186,7 +186,7 @@ namespace bliss{
 		 //          TIMER_END(insert, "uniq1", input.size());
 
 				   TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
-				   mxx2::all2all(input, send_counts, this->comm);
+				   input = mxx::all2allv(input, send_counts, this->comm);
 				   TIMER_END(insert, "a2a", input.size());
 				 }
 

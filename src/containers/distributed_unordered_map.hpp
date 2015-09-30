@@ -397,7 +397,7 @@ namespace dsc  // distributed std container
 
             // work on query from process i.
             send_counts[i] = QueryProcessor::process(c, start, end, emplace_iter, find_element, true, pred);
-           // if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+           // if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
             start = end;
           }
@@ -425,7 +425,7 @@ namespace dsc  // distributed std container
           TIMER_END(find, "local_find", results.size());
         }
 
-        TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(find, this->comm.rank(), this->comm);
 
         return results;
 
@@ -466,7 +466,8 @@ namespace dsc  // distributed std container
 
           TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
           // distribute (communication part)
-          std::vector<size_t> recv_counts = mxx::all2all(keys, send_counts, this->comm);
+          std::vector<size_t> recv_counts = mxx::all2all(send_counts, this->comm);
+          keys = mxx::all2allv(keys, send_counts, this->comm);
           TIMER_END(find, "a2a1", keys.size());
 
           // local count to determine amount of memory to allocate at destination.
@@ -495,14 +496,14 @@ namespace dsc  // distributed std container
 //            }
             total += send_counts[i];
             start = end;
-            //printf("Rank %d local count for src rank %d:  recv %d send %d\n", this->comm_rank, i, recv_counts[i], send_counts[i]);
+            //printf("Rank %d local count for src rank %d:  recv %d send %d\n", this->comm.rank(), i, recv_counts[i], send_counts[i]);
           }
           ::std::vector<::std::pair<Key, size_t> >().swap(count_results);
           TIMER_END(find, "local_count", total);
 
 
           TIMER_COLLECTIVE_START(find, "a2a_count", this->comm);
-          auto resp_counts = mxx::all2all(send_counts, 1, this->comm);  // compute counts of response to receive
+          std::vector<size_t> resp_counts = mxx::all2all(send_counts, this->comm);  // compute counts of response to receive
           TIMER_END(find, "a2a_count", keys.size());
 
           TIMER_START(find);
@@ -522,7 +523,7 @@ namespace dsc  // distributed std container
           total = 0;
           std::vector<MPI_Request> reqs(2 * this->comm_size);
           for (int i = 0; i < this->comm_size; ++i) {
-            recv_from = (this->comm_rank + (this->comm_size - i)) % this->comm_size; // rank to recv data from
+            recv_from = (this->comm.rank() + (this->comm_size - i)) % this->comm_size; // rank to recv data from
 
             // set up receive.
             mxx::datatype<::std::pair<Key, T> > dt;
@@ -530,7 +531,7 @@ namespace dsc  // distributed std container
                       recv_from, i, this->comm, &reqs[2 * i]);
 
 
-            send_to = (this->comm_rank + i) % this->comm_size;    // rank to send data to
+            send_to = (this->comm.rank() + i) % this->comm_size;    // rank to send data to
 
             //== get data for the dest rank
             start = keys.begin();                                   // keys for the query for the dest rank
@@ -541,7 +542,7 @@ namespace dsc  // distributed std container
             local_results.clear();
             // work on query from process i.
             found = QueryProcessor::process(c, start, end, local_emplace_iter, find_element, true, pred);
-           // if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+           // if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
             total += found;
             //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
 
@@ -555,9 +556,9 @@ namespace dsc  // distributed std container
             // verify correct? done by comparing to previous code.
 
 
-            //printf("Rank %d local find send to %d:  query %d result sent %d (%d).  recv from %d received %d\n", this->comm_rank, send_to, recv_counts[send_to], found, send_counts[send_to], recv_from, resp_counts[recv_from]);
+            //printf("Rank %d local find send to %d:  query %d result sent %d (%d).  recv from %d received %d\n", this->comm.rank(), send_to, recv_counts[send_to], found, send_counts[send_to], recv_from, resp_counts[recv_from]);
           }
-          //printf("Rank %d total find %lu\n", this->comm_rank, total);
+          //printf("Rank %d total find %lu\n", this->comm.rank(), total);
           TIMER_END(find, "find_send", results.size());
 
 //          TIMER_COLLECTIVE_START(find, "a2a2", this->comm);
@@ -599,7 +600,7 @@ namespace dsc  // distributed std container
           TIMER_END(find, "local_find", results.size());
         }
 
-        TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(find, this->comm.rank(), this->comm);
 
         return results;
 
@@ -632,8 +633,8 @@ namespace dsc  // distributed std container
       }
 
 
-      unordered_map_base(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size),
-          key_to_rank(_comm_size) {}
+      unordered_map_base(const mxx::comm& _comm) : Base(_comm),
+          key_to_rank(_comm.size()) {}
 
 
     public:
@@ -777,7 +778,7 @@ namespace dsc  // distributed std container
             // within start-end, values are unique, so don't need to set unique to true.
             QueryProcessor::process(c, start, end, emplace_iter, count_element, true, pred);
 
-            if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+            if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
             start = end;
           }
@@ -807,7 +808,7 @@ namespace dsc  // distributed std container
           TIMER_END(count, "local_count", results.size());
         }
 
-        TIMER_REPORT_MPI(count, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(count, this->comm.rank(), this->comm);
 
         return results;
 
@@ -985,7 +986,7 @@ namespace dsc  // distributed std container
 
     public:
 
-      unordered_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
+      unordered_map(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~unordered_map() {};
 
@@ -1042,7 +1043,7 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input.begin(), input.end());
         TIMER_END(insert, "insert", this->c.size());
 
-        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
 
         return count;
       }
@@ -1158,7 +1159,7 @@ namespace dsc  // distributed std container
     public:
 
 
-      unordered_multimap(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {
+      unordered_multimap(const mxx::comm& _comm) : Base(_comm) {
         this->key_multiplicity = 50;
       }
 
@@ -1276,7 +1277,7 @@ namespace dsc  // distributed std container
         TIMER_INIT(insert);
 
 
-        //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm_rank, sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
+        //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm.rank(), sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
         //        count_unique(input);
         //        count_unique(bucketing(input, this->key_to_rank, this->comm));
 
@@ -1303,7 +1304,7 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input.begin(), input.end());
         TIMER_END(insert, "insert", this->c.size());
 
-        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
         return count;
       }
 
@@ -1448,14 +1449,14 @@ namespace dsc  // distributed std container
 
         //local_container_type().swap(temp);   // doing the swap to clear helps?
 
-        TIMER_REPORT_MPI(reduce_tuple, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(reduce_tuple, this->comm.rank(), this->comm);
       }
 
 
     public:
 
 
-      reduction_unordered_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
+      reduction_unordered_map(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~reduction_unordered_map() {};
 
@@ -1504,7 +1505,7 @@ namespace dsc  // distributed std container
           count = this->local_insert(input.begin(), input.end());
         TIMER_END(insert, "local_insert", this->local_size());
 
-        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
 
         return count;
       }
@@ -1580,7 +1581,7 @@ namespace dsc  // distributed std container
 
 
     public:
-      counting_unordered_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
+      counting_unordered_map(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~counting_unordered_map() {};
 
@@ -1612,7 +1613,7 @@ namespace dsc  // distributed std container
 
 
         // distribute
-        TIMER_REPORT_MPI(count_insert, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
 
         return count;
 
@@ -1629,7 +1630,7 @@ namespace dsc  // distributed std container
 
 
         // distribute
-        TIMER_REPORT_MPI(count_insert, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
 
         return count;
       }
@@ -1744,7 +1745,7 @@ namespace dsc  // distributed std container
     public:
 
 
-      unordered_multimap_vec(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {
+      unordered_multimap_vec(const mxx::comm& _comm) : Base(_comm) {
         //this->key_multiplicity = 10;
       }
 
@@ -1830,7 +1831,7 @@ namespace dsc  // distributed std container
         TIMER_START(insert);
         TIMER_END(insert, "begin", input.size());
 
-        //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm_rank, sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
+        //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm.rank(), sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
         //        count_unique(input);
         //        count_unique(bucketing(input, this->key_to_rank, this->comm));
 
@@ -1858,7 +1859,7 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input.begin(), input.end());
         TIMER_END(insert, "insert", this->c.size());
 
-        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
         return count;
 
       }
@@ -1973,7 +1974,7 @@ namespace dsc  // distributed std container
     public:
 
 
-      unordered_multimap_compact_vec(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {
+      unordered_multimap_compact_vec(const mxx::comm& _comm) : Base(_comm) {
         //this->key_multiplicity = 10;
       }
 
@@ -2059,7 +2060,7 @@ namespace dsc  // distributed std container
         TIMER_START(insert);
         TIMER_END(insert, "begin", input.size());
 
-        //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm_rank, sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
+        //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm.rank(), sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
         //        count_unique(input);
         //        count_unique(bucketing(input, this->key_to_rank, this->comm));
 
@@ -2087,7 +2088,7 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input.begin(), input.end());
         TIMER_END(insert, "insert", this->c.size());
 
-        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
         return count;
 
       }

@@ -466,7 +466,7 @@ namespace dsc  // distributed std container
           TIMER_INIT(find);
 
 //          for (int j = 0; j < keys.size(); ++j) {
-//            printf("fa2a rank %d originally has key %s\n", this->comm_rank, keys[j].toAlphabetString().c_str());
+//            printf("fa2a rank %d originally has key %s\n", this->comm.rank(), keys[j].toAlphabetString().c_str());
 //          }
 
           TIMER_START(find);
@@ -495,7 +495,7 @@ namespace dsc  // distributed std container
             TIMER_END(find, "a2a1", keys.size());
 
 //            for (int j = 0; j < keys.size(); ++j) {
-//              printf("fa2a rank %d after a2a has key %s\n", this->comm_rank, keys[j].toAlphabetString().c_str());
+//              printf("fa2a rank %d after a2a has key %s\n", this->comm.rank(), keys[j].toAlphabetString().c_str());
 //            }
 
             // local find. memory utilization a potential problem.
@@ -517,14 +517,14 @@ namespace dsc  // distributed std container
               // within start-end, values are unique, so don't need to set unique to true.
               send_counts[i] = Intersect<false>::process(overlap.first, overlap.second, start, end, emplace_iter, local_find, true, pred);
 
-//              if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+//              if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
               start = end;
             }
             TIMER_END(find, "local_find", results.size());
 
 //            for (int j = 0; j < results.size(); ++j) {
-//              printf("rank %d found %s\n", this->comm_rank, results[j].first.toAlphabetString().c_str());
+//              printf("rank %d found %s\n", this->comm.rank(), results[j].first.toAlphabetString().c_str());
 //            }
 
             // send back using the constructed recv count
@@ -533,7 +533,7 @@ namespace dsc  // distributed std container
             TIMER_END(find, "a2a2", results.size());
 
 //            for (int j = 0; j < results.size(); ++j) {
-//              printf("rank %d moved results %s\n", this->comm_rank, results[j].first.toAlphabetString().c_str());
+//              printf("rank %d moved results %s\n", this->comm.rank(), results[j].first.toAlphabetString().c_str());
 //            }
 
           } else {
@@ -553,7 +553,7 @@ namespace dsc  // distributed std container
 
           }
 
-          TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
+          TIMER_REPORT_MPI(find, this->comm.rank(), this->comm);
 
           return results;
       }
@@ -570,7 +570,7 @@ namespace dsc  // distributed std container
           TIMER_INIT(find);
 //
 //          for (int j = 0; j < keys.size(); ++j) {
-//            printf("rank %d originally has key %s\n", this->comm_rank, keys[j].toAlphabetString().c_str());
+//            printf("rank %d originally has key %s\n", this->comm.rank(), keys[j].toAlphabetString().c_str());
 //          }
 
           TIMER_START(find);
@@ -630,14 +630,14 @@ namespace dsc  // distributed std container
               total += send_counts[i];
 
               start = end;
-              //printf("Rank %d local count for src rank %d:  recv %d send %d\n", this->comm_rank, i, recv_counts[i], send_counts[i]);
+              //printf("Rank %d local count for src rank %d:  recv %d send %d\n", this->comm.rank(), i, recv_counts[i], send_counts[i]);
             }
             ::std::vector<::std::pair<Key, size_t> >().swap(count_results);
             TIMER_END(find, "local_count", total);
 
 
             TIMER_COLLECTIVE_START(find, "a2a_count", this->comm);
-            auto resp_counts = mxx::all2all(send_counts, 1, this->comm);  // compute counts of response to receive
+            std::vector<size_t> resp_counts = mxx::all2all(send_counts, this->comm);  // compute counts of response to receive
             TIMER_END(find, "a2a_count", keys.size());
 
 
@@ -660,14 +660,14 @@ namespace dsc  // distributed std container
 
             mxx::datatype<::std::pair<Key, T> > dt;
             for (int i = 0; i < this->comm_size; ++i) {
-              recv_from = (this->comm_rank + (this->comm_size - i)) % this->comm_size; // rank to recv data from
+              recv_from = (this->comm.rank() + (this->comm_size - i)) % this->comm_size; // rank to recv data from
 
               // set up receive.
               MPI_Irecv(&results[resp_displs[recv_from]], resp_counts[recv_from], dt.type(),
                         recv_from, i, this->comm, &reqs[2 * i]);
 
 
-              send_to = (this->comm_rank + i) % this->comm_size;    // rank to send data to
+              send_to = (this->comm.rank() + i) % this->comm_size;    // rank to send data to
 
               //== get data for the dest rank
               start = keys.begin();                                   // keys for the query for the dest rank
@@ -679,12 +679,12 @@ namespace dsc  // distributed std container
               // work on query from process i.
               auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), start, end, true);
               found = Intersect<false>::process(overlap.first, overlap.second, start, end, local_emplace_iter, local_find, true, pred);
-             // if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+             // if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
               total += found;
               //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
 
 //              for (int j = 0; j < local_results.size(); ++j) {
-//                printf("rank %d -> %d sent %s\n", this->comm_rank, send_to, local_results[j].first.toAlphabetString().c_str());
+//                printf("rank %d -> %d sent %s\n", this->comm.rank(), send_to, local_results[j].first.toAlphabetString().c_str());
 //              }
 
               MPI_Isend(&(local_results[0]), found, dt.type(), send_to,
@@ -694,7 +694,7 @@ namespace dsc  // distributed std container
               MPI_Waitall(2, &reqs[2 * i], MPI_STATUSES_IGNORE);
 
 //              for (int j = 0; j < resp_counts[recv_from]; ++j) {
-//                printf("rank %d -> %d recv %s\n", recv_from, this->comm_rank, results[resp_displs[recv_from] + j].first.toAlphabetString().c_str());
+//                printf("rank %d -> %d recv %s\n", recv_from, this->comm.rank(), results[resp_displs[recv_from] + j].first.toAlphabetString().c_str());
 //              }
 
               // within start-end, values are unique, so don't need to set unique to true.
@@ -743,7 +743,7 @@ namespace dsc  // distributed std container
 
           }
 
-          TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
+          TIMER_REPORT_MPI(find, this->comm.rank(), this->comm);
 
           return results;
       }
@@ -785,8 +785,8 @@ namespace dsc  // distributed std container
 
 
 
-      sorted_map_base(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size),
-          key_to_rank(_comm_size), sorted(false), balanced(false), globally_sorted(false) {}
+      sorted_map_base(const mxx::comm& _comm) : Base(_comm),
+          key_to_rank(_comm.size()), sorted(false), balanced(false), globally_sorted(false) {}
 
     public:
 
@@ -929,7 +929,7 @@ namespace dsc  // distributed std container
             // within start-end, values are unique, so don't need to set unique to true.
             Intersect<false>::process(overlap.first, overlap.second, start, end, emplace_iter, count_element, true, pred);
 
-            if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+            if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
             start = end;
           }
@@ -958,7 +958,7 @@ namespace dsc  // distributed std container
           TIMER_END(count, "local_count", results.size());
 
         }
-        TIMER_REPORT_MPI(count, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(count, this->comm.rank(), this->comm);
 
         return results;
 
@@ -1003,7 +1003,7 @@ namespace dsc  // distributed std container
 //          TIMER_END(insert, "insert", count);
 //
 //
-//          TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+//          TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
 //
 //          return count;
 //      }
@@ -1041,7 +1041,7 @@ namespace dsc  // distributed std container
           TIMER_END(insert, "insert", count);
 
 
-          TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+          TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
 
           return count;
       }
@@ -1249,7 +1249,7 @@ namespace dsc  // distributed std container
 
     public:
 
-      sorted_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
+      sorted_map(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~sorted_map() {};
 
@@ -1314,11 +1314,11 @@ namespace dsc  // distributed std container
             ::std::vector<int > boundary_ids;
             if (this->c.size() > 1) {  // insert left if we have more than 1 entry.  (if 0, no insert.  if 1, will be inserted as right)
               boundary_values.emplace_back(this->c.front());
-              boundary_ids.emplace_back(this->comm_rank);
+              boundary_ids.emplace_back(this->comm.rank());
             }
             if (this->c.size() > 0) {  // insert right if we have at least 1 entry
               boundary_values.emplace_back(this->c.back());
-              boundary_ids.emplace_back(this->comm_rank);
+              boundary_ids.emplace_back(this->comm.rank());
             }
             // allgather the boundary entries and ranks.
             boundary_values = ::mxx::allgatherv(boundary_values, this->comm);
@@ -1332,7 +1332,7 @@ namespace dsc  // distributed std container
               if (dist > 1) {  // if > 1, then value crossed boundary and need to reduce.
 
                 size_t offset = ::std::distance(boundary_values.begin(), range.second);
-                if (boundary_ids[offset - 1] == this->comm_rank) { // this processor owns this value
+                if (boundary_ids[offset - 1] == this->comm.rank()) { // this processor owns this value
                   // copy and reduce this range.
                   ::std::vector<value_type > reduced(range.first, range.second);
                   this->local_reduction(reduced, true);  //
@@ -1347,7 +1347,7 @@ namespace dsc  // distributed std container
               if (dist > 1) {  // if > 1, the value crossed boundary and we have extra entries to remove.
 
                 size_t offset = ::std::distance(boundary_values.begin(), range.second);
-                if (boundary_ids[offset - 1] < this->comm_rank) {  // not an owner, so need to remove this element
+                if (boundary_ids[offset - 1] < this->comm.rank()) {  // not an owner, so need to remove this element
                   // now remove this element.  there is only 1, since it's unique.  also c is at least 1 in size before.
                   this->c.pop_back();
 
@@ -1382,7 +1382,7 @@ namespace dsc  // distributed std container
 // //            this->key_to_rank.map = ::mxx::impl::sample_arbit_decomp(this->c.begin(), this->c.end(), Base::Base::less, this->comm_size - 1, this->comm, mpi_dt);
 // //            for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
 // //              // modify the splitters destinations
-// //              //printf("R %d splitters %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
+// //              //printf("R %d splitters %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
 // //              this->key_to_rank.map[i].second = i;
 // //            }
 // //            TIMER_END(rehash, "splitter1", this->key_to_rank.map.size());
@@ -1390,9 +1390,9 @@ namespace dsc  // distributed std container
 //            // get pivots using the last elements.
 //            TIMER_START(rehash);
 //            this->key_to_rank.map.clear();
-//            if ((this->comm_rank > 0) && (this->c.size() > 0)) {  // splitters need to be the first entry of the next partition.
+//            if ((this->comm.rank() > 0) && (this->c.size() > 0)) {  // splitters need to be the first entry of the next partition.
 //              // only send for the first p-1 proc, and only if they have a kmer to split with.
-//              this->key_to_rank.map.emplace_back(this->c.front().first, this->comm_rank - 1);
+//              this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
 //            }
 //            this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
 //            TIMER_END(rehash, "splitter1", this->c.size());
@@ -1431,9 +1431,9 @@ namespace dsc  // distributed std container
           // get new pivots
           // next compute the splitters.
           this->key_to_rank.map.clear();
-          if ((this->comm_rank > 0) && (this->c.size() > 0)) {
+          if ((this->comm.rank() > 0) && (this->c.size() > 0)) {
             // only send for the first p-1 proc, and only if they have a kmer to split with.
-            this->key_to_rank.map.emplace_back(this->c.front().first, this->comm_rank - 1);
+            this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
           }
           this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
           // note that key_to_rank.map needs to be unique.
@@ -1442,7 +1442,7 @@ namespace dsc  // distributed std container
 
 
 //          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
-//            printf("R %d key to rank %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
+//            printf("R %d key to rank %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
 //          }
           TIMER_END(rehash, "splitter2", this->c.size());
           // no need to redistribute - each entry is unique so nothing is going to span processor boundaries.
@@ -1457,7 +1457,7 @@ namespace dsc  // distributed std container
         this->sorted = true; this->balanced = true; this->globally_sorted = true;
         //printf("c size after: %lu\n", this->c.size());
 
-        TIMER_REPORT_MPI(rehash, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(rehash, this->comm.rank(), this->comm);
 
       }
   };
@@ -1571,7 +1571,7 @@ namespace dsc  // distributed std container
     public:
 
 
-      sorted_multimap(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {
+      sorted_multimap(const mxx::comm& _comm) : Base(_comm) {
         this->key_multiplicity = 50;
       }
 
@@ -1604,9 +1604,9 @@ namespace dsc  // distributed std container
           // get new pivots
           TIMER_START(rehash);
           this->key_to_rank.map.clear();
-          if ((this->comm_rank > 0) && (this->c.size() > 0)) {
+          if ((this->comm.rank() > 0) && (this->c.size() > 0)) {
             // only send for the first p-1 proc, and only if they have a kmer to split with.
-            this->key_to_rank.map.emplace_back(this->c.front().first, this->comm_rank - 1);
+            this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
           }
 
           // using gatherv because some processes may not be sending anything.
@@ -1619,15 +1619,15 @@ namespace dsc  // distributed std container
                                      Base::Base::equal);
           this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
 
-          if (this->comm_rank == 0)
+          if (this->comm.rank() == 0)
             for (size_t i = 0; i < this->key_to_rank.map.size(); ++i) {
-              DEBUGF("R %d unique key_to_rank.map[%lu] = (%s->%d)", this->comm_rank, i, bliss::utils::KmerUtils::toASCIIString(this->key_to_rank.map[i].first).c_str() , this->key_to_rank.map[i].second );
+              DEBUGF("R %d unique key_to_rank.map[%lu] = (%s->%d)", this->comm.rank(), i, bliss::utils::KmerUtils::toASCIIString(this->key_to_rank.map[i].first).c_str() , this->key_to_rank.map[i].second );
             }
           assert(this->key_to_rank.map.size() > 0);
 
 
 //          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
-//            printf("R %d key to rank %s -> %d\n", this->comm_rank, this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
+//            printf("R %d key to rank %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
 //          }
           TIMER_END(rehash, "splitter1", this->key_to_rank.map.size());
 
@@ -1644,7 +1644,7 @@ namespace dsc  // distributed std container
           assert(send_counts.size() == static_cast<size_t>(this->comm_size));
 
           for (size_t i = 0; i < send_counts.size(); ++i) {
-            DEBUGF("R %d send_counts[%lu] = %lu", this->comm_rank, i, send_counts[i]);
+            DEBUGF("R %d send_counts[%lu] = %lu", this->comm.rank(), i, send_counts[i]);
           }
 
           TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
@@ -1659,7 +1659,7 @@ namespace dsc  // distributed std container
         }
         this->sorted = true; this->balanced = true; this->globally_sorted = true;
 
-        TIMER_REPORT_MPI(rehash, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(rehash, this->comm.rank(), this->comm);
 
       }
 
@@ -1733,11 +1733,11 @@ namespace dsc  // distributed std container
 
           for (int i = 0; i < result_a2a.size(); ++i) {
             if (!this->equal(result[i], result_a2a[i])) {
-              printf("rank %d failing at %d:  result: %s, result_a2a: %s\n", this->comm_rank, i, result[i].first.toAlphabetString().c_str(), result_a2a[i].first.toAlphabetString().c_str());
+              printf("rank %d failing at %d:  result: %s, result_a2a: %s\n", this->comm.rank(), i, result[i].first.toAlphabetString().c_str(), result_a2a[i].first.toAlphabetString().c_str());
               if ( i > 0)
-                printf("rank %d   before   %d:  result: %s, result_a2a: %s\n", this->comm_rank, i-1, result[i-1].first.toAlphabetString().c_str(), result_a2a[i-1].first.toAlphabetString().c_str());
+                printf("rank %d   before   %d:  result: %s, result_a2a: %s\n", this->comm.rank(), i-1, result[i-1].first.toAlphabetString().c_str(), result_a2a[i-1].first.toAlphabetString().c_str());
               if (i < result_a2a.size() - 1)
-                printf("rank %d   after    %d:  result: %s, result_a2a: %s\n", this->comm_rank, i+1, result[i+1].first.toAlphabetString().c_str(), result_a2a[i+1].first.toAlphabetString().c_str());
+                printf("rank %d   after    %d:  result: %s, result_a2a: %s\n", this->comm.rank(), i+1, result[i+1].first.toAlphabetString().c_str(), result_a2a[i+1].first.toAlphabetString().c_str());
               throw ::std::logic_error("ERROR: not same.");
             }
           }
@@ -1893,7 +1893,7 @@ namespace dsc  // distributed std container
     public:
 
 
-      reduction_sorted_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
+      reduction_sorted_map(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~reduction_sorted_map() {};
 
@@ -1959,7 +1959,7 @@ namespace dsc  // distributed std container
 
 
     public:
-      counting_sorted_map(MPI_Comm _comm, int _comm_size) : Base(_comm, _comm_size) {}
+      counting_sorted_map(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~counting_sorted_map() {};
 
@@ -1991,7 +1991,7 @@ namespace dsc  // distributed std container
         TIMER_END(count_insert, "insert", this->c.size());
 
         // distribute
-        TIMER_REPORT_MPI(count_insert, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
         return count;
       }
 
@@ -2014,7 +2014,7 @@ namespace dsc  // distributed std container
         TIMER_END(count_insert, "insert", this->c.size());
 
         // distribute
-        TIMER_REPORT_MPI(count_insert, this->comm_rank, this->comm);
+        TIMER_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
         return count;
       }
 
