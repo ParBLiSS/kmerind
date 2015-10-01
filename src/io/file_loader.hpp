@@ -646,7 +646,7 @@ namespace io
 
           if (_filename.length() <= 0) throw std::invalid_argument("ERROR: Filename Length is less than 1");
           if (_nThreads <= 0) throw std::invalid_argument("ERROR: Number of threads is less than 1");
-          if (_loaderId < 0) throw std::invalid_argument("ERROR: Loader ID is less than 0");
+          //if (_loaderId < 0) throw std::invalid_argument("ERROR: Loader ID is less than 0");
           if (_nConcurrentLoaders <= _loaderId) throw std::invalid_argument("ERROR: Loader ID is greater than number of loaders");
 
           L1BlockSize = (_L1BlockSize == 0) ? pageSize : _L1BlockSize;

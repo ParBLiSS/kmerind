@@ -29,7 +29,6 @@
 
 using namespace bliss::io;
 
-static constexpr size_t kmer_size = 35;
 static constexpr size_t block_size = 32768;
 
 // for these tests, we are counting sequences, not kmers, so no overlap.

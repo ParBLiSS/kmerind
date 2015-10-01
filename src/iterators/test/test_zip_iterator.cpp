@@ -127,8 +127,6 @@ TYPED_TEST_P(ZipIteratorTest, compare){
 
 TYPED_TEST_P(ZipIteratorTest, traits) {
 
-  TypeParam x;
-
   bool same_type = std::is_same<typename std::iterator_traits<ZipIterator<CountingIterator<TypeParam>, ConstantIterator<TypeParam> > >::value_type,
       std::pair<TypeParam, TypeParam> >::value;
 

@@ -132,13 +132,12 @@ public:
 		using BlockIterType = typename BlockType::iterator;
 
 		using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, SeqParser >;
-		using SeqType = typename ::std::iterator_traits<SeqIterType>::value_type;
+//		using SeqType = typename ::std::iterator_traits<SeqIterType>::value_type;
 
 		//== sequence parser type
 		KP kmer_parser;
 
 		//== process the chunk of data
-		SeqType read;
 
 		//==  and wrap the chunk inside an iterator that emits Reads.
 		SeqIterType seqs_start(seq_parser, partition.begin(), partition.end(), partition.getRange().start);
