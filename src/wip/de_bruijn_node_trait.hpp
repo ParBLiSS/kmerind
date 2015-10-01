@@ -306,7 +306,7 @@ namespace bliss
           uint8_t temp = (bliss::common::DNA16::FROM_ASCII[exts >> 8] << 4) | bliss::common::DNA16::FROM_ASCII[exts & 0xFF];
 
           // update counts.
-          counts |= exts;
+          counts |= temp;
         }
 
         uint8_t get_edge_frequency(uint8_t idx) const {
