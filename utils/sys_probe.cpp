@@ -95,19 +95,19 @@ void cpu_features()
   eax = 1; // cpu features
 
   cpuid(1, &eax, &ebx, &ecx, &edx);  // get cpu features
-  bool mmx = edx && (1 << 23);
-  bool sse = edx && (1 << 25);
-  bool sse2 = edx && (1 << 26);
-  bool sse3 = ecx && (1);
-  bool ssse3 = ecx && (1 << 9);
-  bool sse41 = ecx && (1 << 19);
-  bool sse42 = ecx && (1 << 20);
-  bool avx = ecx && (1 << 28);
-  bool ia64 = edx && (1 << 30);
-  bool hyperthread = edx && (1 << 28);
-  bool fma = ecx && (1 << 12);
-  bool cx16 = ecx && (1 << 13);
-  bool popcnt = ecx && (1 << 23);
+  bool mmx =         (edx & (1 << 23)) != 0;
+  bool sse =         (edx & (1 << 25)) != 0;
+  bool sse2 =        (edx & (1 << 26)) != 0;
+  bool sse3 =        (ecx & (1)      ) != 0;
+  bool ssse3 =       (ecx & (1 << 9) ) != 0;
+  bool sse41 =       (ecx & (1 << 19)) != 0;
+  bool sse42 =       (ecx & (1 << 20)) != 0;
+  bool avx =         (ecx & (1 << 28)) != 0;
+  bool ia64 =        (edx & (1 << 30)) != 0;
+  bool hyperthread = (edx & (1 << 28)) != 0;
+  bool fma =         (ecx & (1 << 12)) != 0;
+  bool cx16 =        (ecx & (1 << 13)) != 0;
+  bool popcnt =      (ecx & (1 << 23)) != 0;
 
   INFOF("mmx: %s\n", (mmx ? "true" : "false"));
   INFOF("sse: %s\n", (sse ? "true" : "false"));
