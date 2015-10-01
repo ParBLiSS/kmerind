@@ -192,9 +192,7 @@ int main(int argc, char** argv) {
   //for(auto const& e : overallHistogram) std::cout << e << "; "; std::cout << "\n";
 
   assert(ourOwnHistogram.size() == overallHistogram.size());
-  bool is_equal = std::equal(overallHistogram.begin(), overallHistogram.end(), ourOwnHistogram.begin());
-  
-  assert(is_equal == true);
+  assert(std::equal(overallHistogram.begin(), overallHistogram.end(), ourOwnHistogram.begin()) == true);
 
   MPI_Barrier(comm);
 
