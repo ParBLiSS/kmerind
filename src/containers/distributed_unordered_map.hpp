@@ -858,7 +858,7 @@ namespace dsc  // distributed std container
         retain_unique(keys, si);
 
         // then call local remove.
-        size_t count = QueryProcessor::process(c, keys.begin(), keys.end(), keys.end(), erase_element, true, pred);
+        QueryProcessor::process(c, keys.begin(), keys.end(), keys.end(), erase_element, true, pred);
 
         return before - this->c.size();
       }
@@ -974,7 +974,7 @@ namespace dsc  // distributed std container
       } find_element;
 
 
-      virtual void local_reduction(std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
         this->Base::retain_unique(input, sorted_input);
       }
 
@@ -1174,7 +1174,7 @@ namespace dsc  // distributed std container
 
 /*
       /// update the multiplicity.  only multimap needs to do this.
-      virtual size_t update_multiplicity() const {
+      virtual size_t update_multiplicity() {
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
         // problem with this approach is that for unordered map, to get the count for a key is essentially O(count), so we get quadratic time.
@@ -1255,7 +1255,7 @@ namespace dsc  // distributed std container
         return this->key_multiplicity;
       }
 */
-      virtual size_t update_multiplicity() const {
+      virtual size_t update_multiplicity() {
         printf("unordered map bucket count: %lu\n", this->c.bucket_count());
         printf("unordered map load factor: %f\n", this->c.load_factor());
         printf("unordered map unique entries: %lu\n", this->c.size());
@@ -1418,7 +1418,7 @@ namespace dsc  // distributed std container
 
       /// local reduction via a copy of local container type (i.e. unordered_map).
       /// this takes quite a bit of memory due to use of unordered_map, but is significantly faster than sorting.
-      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input, bool sorted_input = false) {
 
         if (input.size() == 0) return;
 

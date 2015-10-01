@@ -1247,7 +1247,7 @@ namespace dsc  // distributed std container
       //          }
       //      }
 
-      virtual void local_reduction(std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
         this->Base::retain_unique(input, sorted_input);
       }
 

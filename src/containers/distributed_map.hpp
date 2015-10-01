@@ -734,7 +734,7 @@ namespace dsc  // distributed std container
       } find_element;
 
 
-      virtual void local_reduction(std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
         this->Base::retain_unique(input, sorted_input);
       }
 
@@ -923,7 +923,7 @@ namespace dsc  // distributed std container
 
 
       /// update the multiplicity.  only multimap needs to do this.
-      virtual size_t update_multiplicity() const {
+      virtual size_t update_multiplicity() {
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
         // problem with this approach is that for unordered map, to get the count for a key is essentially O(count), so we get quadratic time.
@@ -1180,7 +1180,7 @@ namespace dsc  // distributed std container
 
       }
 
-      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input, bool sorted_input = false) {
 
         if (input.size() == 0) return;
 
