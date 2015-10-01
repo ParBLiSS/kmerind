@@ -462,32 +462,32 @@ int main(int argc, char** argv) {
   /// thread unsafe.  test in single thread way.
 
 
-  testPool(std::move(bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192>, bliss::concurrent::LockType::NONE >()), bliss::concurrent::LockType::NONE,bliss::concurrent::LockType::NONE, 1, 1);
-  testPool(std::move(bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192>, bliss::concurrent::LockType::NONE >(16)), bliss::concurrent::LockType::NONE,bliss::concurrent::LockType::NONE, 1, 1);
+  testPool(bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192>, bliss::concurrent::LockType::NONE >(), bliss::concurrent::LockType::NONE,bliss::concurrent::LockType::NONE, 1, 1);
+  testPool(bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192>, bliss::concurrent::LockType::NONE >(16), bliss::concurrent::LockType::NONE,bliss::concurrent::LockType::NONE, 1, 1);
 
   for (int i = 1; i <= 8; ++i) {
 	if (i == 5 || i == 6 || i == 7) continue;
 
     // okay to test.  in real life, pools would not be single threaded.
-    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , bliss::concurrent::LockType::NONE >()),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
-//    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE >()), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
-    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, bliss::concurrent::LockType::NONE >()), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
+    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , bliss::concurrent::LockType::NONE >(),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
+//    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE >(), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
+    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, bliss::concurrent::LockType::NONE >(), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
 
     // okay to test.  in real life, pools would not be single threaded.
-    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , bliss::concurrent::LockType::NONE  >(16)),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
-//    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE  >(16)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
-    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, bliss::concurrent::LockType::NONE  >(16)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
+    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , bliss::concurrent::LockType::NONE  >(16),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
+//    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE  >(16), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
+    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, bliss::concurrent::LockType::NONE  >(16), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
 
 
     for (int j = 1; j <= 4; ++j) {
 	if (i * j > 16) continue;
-      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , lt>()),    lt, bliss::concurrent::LockType::MUTEX, j, i);
-//      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt>()), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
-      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt>()), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
+      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , lt>(),    lt, bliss::concurrent::LockType::MUTEX, j, i);
+//      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt>(), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
+      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt>(), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
 
-      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , lt>(16)),    lt, bliss::concurrent::LockType::MUTEX, j, i);
-//      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt>(16)), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
-      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt>(16)), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
+      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , lt>(16),    lt, bliss::concurrent::LockType::MUTEX, j, i);
+//      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt>(16), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
+      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt>(16), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
 
     }
 
@@ -501,8 +501,8 @@ int main(int argc, char** argv) {
 //    stresstestAppendMultipleBuffers<bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 2048> > >(i, 1000000000, lt, bliss::concurrent::LockType::LOCKFREE, 2048);
 
     // no multithread pool single thread buffer test right now.
-    //testPool(std::move(bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >()), lt, bliss::concurrent::LockType::NONE, i, 1);
-    //testPool(std::move(bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >(16)), lt, bliss::concurrent::LockType::NONE, i, 1);
+    //testPool(bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >(), lt, bliss::concurrent::LockType::NONE, i, 1);
+    //testPool(bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >(16), lt, bliss::concurrent::LockType::NONE, i, 1);
   }
 
 

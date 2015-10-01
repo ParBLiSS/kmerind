@@ -409,12 +409,12 @@ int main(int argc, char** argv) {
   bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 > pool;
 
   for (int i = 1; i <= 8; ++i) {  // num targets
-    //testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i,1)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
+    //testPool(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i,1), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
 
     for (int j = 1; j <= 8; ++j) {  // num threads
-      testBuffers(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 >>(pool, i, j)), lt, lt2, j);
+      testBuffers(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 > >(pool, i, j), lt, lt2, j);
 
-      testBuffersWaitForInsert(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 >>(pool, i, j)), lt, lt2, j);
+      testBuffersWaitForInsert(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 > >(pool, i, j), lt, lt2, j);
 
     }
   }

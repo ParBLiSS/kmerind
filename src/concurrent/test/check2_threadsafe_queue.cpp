@@ -391,8 +391,6 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
 int main(int argc, char** argv) {
 
-  std::chrono::high_resolution_clock::time_point t1, t2;
-  std::chrono::duration<double> time_span;
 
   omp_set_nested(1);
   omp_set_dynamic(0);
@@ -407,27 +405,27 @@ int main(int argc, char** argv) {
 
   typedef bliss::concurrent::ThreadSafeQueue<int, lt> QueueType;
 
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 4, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 2);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 3);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 4);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 2);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 3);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 2);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 1, 1);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 2, 1);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 3, 1);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 4, 1);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 1, 2);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 1, 3);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 1, 4);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 2, 2);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 2, 3);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 3, 2);
 
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 1);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 1);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 3, 1);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 4, 1);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 2);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 3);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 4);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 2);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 3);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 3, 2);
+  testTSQueue("TSQ nthread growable", QueueType(), 1, 1);
+  testTSQueue("TSQ nthread growable", QueueType(), 2, 1);
+  testTSQueue("TSQ nthread growable", QueueType(), 3, 1);
+  testTSQueue("TSQ nthread growable", QueueType(), 4, 1);
+  testTSQueue("TSQ nthread growable", QueueType(), 1, 2);
+  testTSQueue("TSQ nthread growable", QueueType(), 1, 3);
+  testTSQueue("TSQ nthread growable", QueueType(), 1, 4);
+  testTSQueue("TSQ nthread growable", QueueType(), 2, 2);
+  testTSQueue("TSQ nthread growable", QueueType(), 2, 3);
+  testTSQueue("TSQ nthread growable", QueueType(), 3, 2);
 
 
 
