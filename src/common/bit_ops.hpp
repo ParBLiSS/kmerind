@@ -23,13 +23,13 @@ constexpr T getLeastSignificantBitsMask(const BitSizeType nBits)
   // unsigned integer type:  fine.
   // max for signed integer has sign bit (msb) == 0, but digits does not count sign bit.
   // this does not make sense for floating or any other type, so assert.
-  static_assert(std::is_integral<T>::value, "getBitMask only accepts primitive, integral type.");
+  static_assert(std::is_integral<T>::value && !std::is_signed<T>::value, "getBitMask only accepts primitive, unsigned integral type.");
 
-  // if T is signed, we'd have a leading 0.
+  // if T is signed, digits would not include the sign bit, so shift is 1 less than required.
   //return static_cast<T>(std::numeric_limits<T>::max() >> (std::numeric_limits<T>::digits - nBits));
 
-  // no problem with T being signed, if nBits > 1.  may be ever so slightly faster?
-  return static_cast<T>(~(std::numeric_limits<T>::max() << nBits));
+  // no problem with T being signed, if nBits > 1.  may be ever so slightly faster?  conditional because clang optimized seems to have trouble with bitshifting entire word.
+  return (nBits == sizeof(T) * 8) ? std::numeric_limits<T>::max() : ~(std::numeric_limits<T>::max() << nBits);
   //return static_cast<T>((static_cast<T>(0x1) << nBits) - static_cast<T>(1));
 }
 
@@ -39,8 +39,10 @@ constexpr T getMostSignificantBitsMask(const BitSizeType nBits)
   // unsigned integer type:  fine.
   // max for signed integer has sign bit (msb) == 0, but digits does not count sign bit.
   // this does not make sense for floating or any other type, so assert.
-  static_assert(std::is_integral<T>::value, "getBitMask only accepts primitive, integral type.");
-  return static_cast<T>(std::numeric_limits<T>::max() << (std::numeric_limits<T>::digits - nBits));
+  static_assert(std::is_integral<T>::value && !std::is_signed<T>::value, "getBitMask only accepts primitive, unsigned integral type.");
+
+  //conditional because clang optimized seems to have trouble with bitshifting entire word.
+  return (nBits == sizeof(T) * 8) ? std::numeric_limits<T>::max() : (std::numeric_limits<T>::max() << (std::numeric_limits<T>::digits - nBits));
   //return static_cast<T>((static_cast<T>(0x1) << nBits) - static_cast<T>(1));
 }
 
