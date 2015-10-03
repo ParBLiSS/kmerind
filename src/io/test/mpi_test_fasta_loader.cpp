@@ -275,16 +275,16 @@ TEST_P(FASTAParserTest, parse_mpi_omp)
 #endif
 
 
-//INSTANTIATE_TEST_CASE_P(Bliss, FASTAParserTest, ::testing::Values(
-//    TestFileInfo(250, 14625, std::string("/test/data/natural.fasta")),
-//	TestFileInfo(4, 512, std::string("/test/data/test.fasta")),
-//    TestFileInfo(5000, 1092580, std::string("/test/data/test.medium.fasta")),
-//    TestFileInfo(6, 940, std::string("/test/data/test2.fasta"))
-//));
-
 INSTANTIATE_TEST_CASE_P(Bliss, FASTAParserTest, ::testing::Values(
-		TestFileInfo(250, 14625, std::string("/test/data/natural.fasta"))
-		));
+    TestFileInfo(250, 14625, std::string("/test/data/natural.fasta")),
+    TestFileInfo(4, 512, std::string("/test/data/test.fasta")),
+    TestFileInfo(5000, 1092580, std::string("/test/data/test.medium.fasta")),
+    TestFileInfo(6, 940, std::string("/test/data/test2.fasta"))
+));
+
+//INSTANTIATE_TEST_CASE_P(Bliss, FASTAParserTest, ::testing::Values(
+//		TestFileInfo(250, 14625, std::string("/test/data/natural.fasta"))
+//		));
 
 int main(int argc, char* argv[])
 {
