@@ -515,11 +515,12 @@ if (ENABLE_TESTING)
       set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
     endif()
 
-#  if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-#    #clang compile with gtest have trouble with pthreads.
-#    add_definitions(-DGTEST_HAS_PTHREAD=0)    
-#  endif()
-#
+  # GTEST use of pthreads does not appear to mix well with openmp code.
+  if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    #clang compile with gtest have trouble with pthreads.
+    add_definitions(-DGTEST_HAS_PTHREAD=0)    
+  endif()
+
   message(STATUS "Testing enabled")
   # include/load the Google Test framework
 #  set_property(DIRECTORY ${EXT_PROJECTS_DIR}/gtest APPEND PROPERTY CMAKE_CXX_FLAGS -fPIC)
