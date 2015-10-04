@@ -476,7 +476,8 @@ namespace dsc  // distributed std container
 
         ::std::unordered_set<Key, TransformedHash, typename Base::TransformedEqual > temp;
         temp.reserve(c.size());
-        for (auto it = c.begin(), end = c.end(); it != end; ++it) {
+        auto end = c.end();
+        for (auto it = c.begin(); it != end; ++it) {
           temp.emplace(it->first);
         }
         result.assign(temp.begin(), temp.end());
@@ -965,7 +966,8 @@ namespace dsc  // distributed std container
         //        printf("%lu elements, %lu buckets, %lu unique\n", this->c.size(), this->c.bucket_count(), uniq_count);
         // alternative approach to get number of unique keys is to use an set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
         ::std::unordered_set<Key, typename Base::TransformedHash, typename Base::Base::TransformedEqual > unique_set(this->c.size());
-        for (auto it = this->c.begin(), max = this->c.end(); it != max; ++it) {
+        auto max = this->c.end();
+        for (auto it = this->c.begin(); it != max; ++it) {
           unique_set.emplace(it->first);
         }
         uniq_count = unique_set.size();
@@ -1192,7 +1194,8 @@ namespace dsc  // distributed std container
         TIMER_END(reduce_tuple, "reserve", input.size());
 
         TIMER_START(reduce_tuple);
-        for (auto it = input.begin(), end = input.end(); it != end; ++it) {
+        auto end = input.end();
+        for (auto it = input.begin(); it != end; ++it) {
           if (temp.count(it->first) == 0) temp[it->first] = it->second;  // don't rely on initialization to set T to 0.
           else temp[it->first] = r(temp[it->first], it->second);
         }

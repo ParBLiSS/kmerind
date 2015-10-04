@@ -350,7 +350,7 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 {
 
   INFOF(
-      "TESTING atomic_ptrs: %d threads, locktype %d append with %ld bufferSize and %d total counts",
+      "TESTING atomic_ptrs: %d threads, locktype %d append with %ld bufferSize and %lu total counts",
       NumThreads, static_cast<int>(TS), CAP, total_count);
 
   constexpr int elSize = sizeof(int);
@@ -664,7 +664,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 {
 
   INFOF(
-      "TESTING atomic_ptrs: stress %lu threads, locktype %d append with %ld bufferSize and %lu total counts",
+      "TESTING atomic_ptrs: stress %d threads, locktype %d append with %ld bufferSize and %lu total counts",
       NumThreads, static_cast<int>(TS), CAP, total_count);
 
   constexpr size_t elSize = sizeof(size_t);
@@ -690,7 +690,6 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
     size_t data = i;
     void* out = nullptr;
     auto localptr = ptr.load(std::memory_order_consume);
-    auto dataptr = localptr->template begin<char>();
     unsigned int result = localptr->append(&data, 1, &out);
 
     if ((result & 0x1) > 0)
@@ -710,7 +709,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
         {
           FATALF(
               "ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. insert buf %p, curr buffer %p, insert dataptr %p, data ptr %p, curr data ptr %p, returned %p, offset %ld",
-              omp_get_thread_num(), data, od, localptr, ptr.load(std::memory_order_relaxed), dataptr,
+              omp_get_thread_num(), data, od, localptr, ptr.load(std::memory_order_relaxed), localptr->template begin<char>(),
               localptr->template begin<char>(), ptr.load(std::memory_order_relaxed)->template begin<char>(),
               (char*)out, (char*)out - (localptr->template begin<char>()));
           fflush(stdout);

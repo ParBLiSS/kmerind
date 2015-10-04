@@ -211,7 +211,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
   size_t entries = (!queue.isFixedSize()) ? 10000 : queue.getCapacity();
 
-  INFOF("=== TEST %s: %d producers, %d consumers, capacity %lu, entries %d", message.c_str(), nProducer, nConsumer, queue.getCapacity(), entries);
+  INFOF("=== TEST %s: %d producers, %d consumers, capacity %lu, entries %lu", message.c_str(), nProducer, nConsumer, queue.getCapacity(), entries);
 
 
   size_t i = 0;

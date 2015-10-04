@@ -683,7 +683,8 @@ namespace dsc  // distributed std container
 
         ::std::unordered_set<Key, TransformedHash, typename Base::TransformedEqual > temp;
         temp.reserve(c.size());
-        for (auto it = c.begin(), end = c.end(); it != end; ++it) {
+        auto end = c.end();
+        for (auto it = c.begin(); it != end; ++it) {
           temp.emplace((*it).first);
         }
         result.assign(temp.begin(), temp.end());
@@ -772,7 +773,8 @@ namespace dsc  // distributed std container
             // within start-end, values are unique, so don't need to set unique to true.
             QueryProcessor::process(c, start, end, emplace_iter, count_element, true, pred);
 
-            if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+            if (this->comm_rank == 0)
+            	DEBUGF("R %d added %lu results for %lu queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
 
             start = end;
           }
@@ -1432,7 +1434,8 @@ namespace dsc  // distributed std container
         TIMER_START(reduce_tuple);
         Key k;
         T v;
-        for (auto it = input.begin(), end = input.end(); it != end; ++it) {
+        auto end = input.end();
+        for (auto it = input.begin(); it != end; ++it) {
           k = it->first;
           v = it->second;
           if (temp.find(k) == temp.end()) temp.emplace(k, v);  // don't rely on initialization to set T to 0.
