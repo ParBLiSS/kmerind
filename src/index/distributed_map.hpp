@@ -201,7 +201,7 @@ public:
    * @brief   Returns the local map's size.  primarily for debugging.
    * @return  size of the local map.
    */
-  const size_t local_size() const
+  size_t local_size() const
   {
     size_t result = 0;
     for (int i = 0; i < nThreads; ++i) {

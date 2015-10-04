@@ -337,14 +337,14 @@ namespace bliss
          * @brief   get the capacity of the buffer.
          * @return  maximum capacity of buffer.
          */
-        static const size_t getCapacity()
+        static size_t getCapacity()
         {
           return Capacity;
         }
 
 
       	/// get the metadata size
-      	static const size_t getMetadataSize()
+      	static size_t getMetadataSize()
        	{
       	  return MetadataSize;
        	}

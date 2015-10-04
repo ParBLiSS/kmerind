@@ -165,7 +165,7 @@ namespace bliss
          * @brief     Current capacity of the ObjectPool
          * @return    capacity
          */
-        inline const int64_t getCapacity() const {
+        inline int64_t getCapacity() const {
           return capacity;
         }
 

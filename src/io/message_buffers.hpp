@@ -90,7 +90,7 @@ namespace bliss
          * Gets the capacity of the Buffer instances.
          * @return    capacity of each buffer.
          */
-        const size_t getBufferCapacity() const {
+        size_t getBufferCapacity() const {
           return BufferCapacity;
         }
 
@@ -833,10 +833,10 @@ namespace bliss
          * @brief get the number of buffers.  should be same as number of targets for messages
          * @return    number of buffers
          */
-        const size_t getNumDests() const {
+        size_t getNumDests() const {
           return nDests;
         }
-        const size_t getNumThreads() const {
+        size_t getNumThreads() const {
           return buffers[0].size();
         }
 
@@ -884,7 +884,7 @@ namespace bliss
               if (ptr) {
                 ptr->block_and_flush();
 
-                DEBUGF("Reset release tid %d target %d ptr %p->%p", tid, i, ptr, nullptr);
+                DEBUGF("Reset release tid %d target %d ptr %p->nullptr", tid, i, ptr);
                 this->pool.releaseObject(ptr);
                 VAR(buffers.at(i).at(tid)) = nullptr;
               }
