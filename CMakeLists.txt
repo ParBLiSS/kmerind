@@ -18,13 +18,13 @@ add_definitions(-Wall -std=c++11 -fPIC)
 
 set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
-
+#set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_dIR}/cmake ${CMAKE_MODULE_PATH}) 
 
 ### tool to speed up compilation
 if(CMAKE_VERSION VERSION_GREATER 2.8.3)
     OPTION(ENABLE_COTIRE "Enable using cotire to reduce compilation time (possibly)" OFF)
     if (ENABLE_COTIRE)
-        set (CMAKE_MODULE_PATH "${EXT_PROJECTS_DIR}/cotire/CMake")
+        set (CMAKE_MODULE_PATH ${EXT_PROJECTS_DIR}/cotire/CMake ${CMAKE_MODULE_PATH})
         include(cotire)
     ELSE()
         function(cotire module_names)
@@ -331,16 +331,20 @@ else(OPENMP_FOUND)
 	message(STATUS "NO OpenMP.  check compiler version now.")
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     execute_process(
-    COMMAND llvm-config --version OUTPUT_VARIABLE CLANG_VERSION)
+     COMMAND llvm-config --version OUTPUT_VARIABLE CLANG_VERSION)
   
    	if (CLANG_VERSION VERSION_GREATER 3.7 OR CLANG_VERSION VERSION_EQUAL 3.7)
 	  	message(STATUS "Found OpenMP for CLANG ${CLANG_VERSION}")
 	  	set(OPENMP_FOUND 1)
 	  	set(OpenMP_C_FLAGS "-fopenmp")
 	  	set(OpenMP_CXX_FLAGS "-fopenmp")
-	  	include_directories(/home/tpan/Downloads/OpenMP-3.7.0-x86_64-unknown-linux-gnu/include)  # clang uses gcc headers, but can't find all gcc headers by itself.  this is for omp.h
-	  	link_directories(/home/tpan/Downloads/OpenMP-3.7.0-x86_64-unknown-linux-gnu/lib)
-  	endif(CLANG_VERSION VERSION_GREATER 3.7 OR CLANG_VERSION VERSION_EQUAL 3.7)
+	  	
+	  	set(CLANG_OPENMP_HOME "" CACHE PATH "Path to Clang OpenMP root directory.")
+	  	include_directories(${CLANG_OPENMP_HOME}/include)  # clang uses gcc headers, but can't find all gcc headers by itself.  this is for omp.h
+	  	link_directories(${CLANG_OPENMP_HOME}/lib)
+	  else()
+	    message(FATAL_ERROR "${PROJECT_NAME} requires clang 3.7 or greater for OpenMP support.")
+  	endif()
   endif(CMAKE_CXX_COMPILER_ID MATCHES "Clang") 
 endif(OPENMP_FOUND)
 
@@ -444,7 +448,7 @@ ENDIF()
 #            endif()
 #            
 #        else()
-#              set(ENABLE_COVERAGE OFF CACHE INTERNAL "DISABLE Code Coverage Reporting because we are using Intel Compiler - don't know profiling options." FORCE) 
+#              set(ENABLE_COVERAGE OFF CACHE INTERNAL "DISABLE Code Coverage Reporting as testing is turned off." FORCE) 
 #              set(ENABLE_SANITIZER OFF CACHE INTERNAL "Disabled Sanitizer as testing is turned off." FORCE)
 #        endif()
 #
@@ -511,8 +515,11 @@ if (ENABLE_TESTING)
       set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
     endif()
 
-
-
+#  if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+#    #clang compile with gtest have trouble with pthreads.
+#    add_definitions(-DGTEST_HAS_PTHREAD=0)    
+#  endif()
+#
   message(STATUS "Testing enabled")
   # include/load the Google Test framework
 #  set_property(DIRECTORY ${EXT_PROJECTS_DIR}/gtest APPEND PROPERTY CMAKE_CXX_FLAGS -fPIC)
@@ -634,7 +641,21 @@ if (ENABLE_TESTING)
 
       # generate google test XML results, to be parsed by Jenkins
       # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
+      
+      set (mpi_params_1 -np 1 ${TEST_BINARY_OUTPUT_DIR}/${test_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}_1.xml)
+      set (mpi_params_2 -np 2 ${TEST_BINARY_OUTPUT_DIR}/${test_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}_2.xml)
+      set (mpi_params_3 -np 3 ${TEST_BINARY_OUTPUT_DIR}/${test_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}_3.xml)
+      set (mpi_params_4 -np 4 ${TEST_BINARY_OUTPUT_DIR}/${test_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}_4.xml)
+      set (mpi_params_7 -np 7 ${TEST_BINARY_OUTPUT_DIR}/${test_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}_7.xml)
+      set (mpi_params_8 -np 8 ${TEST_BINARY_OUTPUT_DIR}/${test_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}_8.xml)
+            
       add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
+      add_test(NAME ${test_target_name}_1 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_1}  )
+      add_test(NAME ${test_target_name}_2 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_2}  )
+      add_test(NAME ${test_target_name}_3 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_3}  )
+      add_test(NAME ${test_target_name}_4 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_4}  )
+      add_test(NAME ${test_target_name}_7 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_7}  )
+      add_test(NAME ${test_target_name}_8 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_8}  )
     endforeach()
   endfunction(bliss_add_mpi_test)
 
