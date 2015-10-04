@@ -364,9 +364,9 @@ TYPED_TEST_P(Mxx2MPITest, unique)
 
     if (!same) {
 
-      this->template printvec(allvals, "input");
-      this->template printvec(result, "unique");
-      this->template printvec(gold, "unique gold");
+      this->printvec(allvals, "input");
+      this->printvec(result, "unique");
+      this->printvec(gold, "unique gold");
     }
     EXPECT_TRUE(same);
   }
@@ -921,14 +921,14 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan)
 
   auto print = mxx2::gather(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_scan(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
+    gold = this->seq_seg_scan(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
 
-    same = this->template equal<false, false>(print, gold, allseg);
+    same = this->equal<false, false>(print, gold, allseg);
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(allinputs, "input");
-      this->template printvec(print, "scan");
-      this->template printvec(gold, "scan gold");
+      this->printvec(allseg, "seg");
+      this->printvec(allinputs, "input");
+      this->printvec(print, "scan");
+      this->printvec(gold, "scan gold");
     }
     EXPECT_TRUE(same);
   }
@@ -938,14 +938,14 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan)
   MPI_Barrier(MPI_COMM_WORLD);
   print = mxx2::gather(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_exscan(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
+    gold = this->seq_seg_exscan(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
 
-    same = this->template equal<false, true>(print, gold, allseg);
+    same = this->equal<false, true>(print, gold, allseg);
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(allinputs, "input");
-      this->template printvec(print, "exscan");
-      this->template printvec(gold, "exscan gold");
+      this->printvec(allseg, "seg");
+      this->printvec(allinputs, "input");
+      this->printvec(print, "exscan");
+      this->printvec(gold, "exscan gold");
     }
     EXPECT_TRUE(same);
   }
@@ -955,14 +955,14 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan)
   MPI_Barrier(MPI_COMM_WORLD);
   print = mxx2::gather(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_rscan(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
+    gold = this->seq_seg_rscan(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
 
-    same = this->template equal<true, false>(print, gold, allseg);
+    same = this->equal<true, false>(print, gold, allseg);
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(allinputs, "input");
-      this->template printvec(print, "rscan");
-      this->template printvec(gold, "rscan gold");
+      this->printvec(allseg, "seg");
+      this->printvec(allinputs, "input");
+      this->printvec(print, "rscan");
+      this->printvec(gold, "rscan gold");
     }
     EXPECT_TRUE(same);
   }
@@ -972,14 +972,14 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan)
   MPI_Barrier(MPI_COMM_WORLD);
   print = mxx2::gather(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_rexscan(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
+    gold = this->seq_seg_rexscan(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
 
-    same = this->template equal<true, true>(print, gold, allseg);
+    same = this->equal<true, true>(print, gold, allseg);
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(allinputs, "input");
-      this->template printvec(print, "rexscan");
-      this->template printvec(gold, "rexscan gold");
+      this->printvec(allseg, "seg");
+      this->printvec(allinputs, "input");
+      this->printvec(print, "rexscan");
+      this->printvec(gold, "rexscan gold");
     }
     EXPECT_TRUE(same);
   }
@@ -1014,15 +1014,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_n)
 
     if (rank == 0) {
 
-      auto golds = this->template seq_seg_scan(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
+      auto golds = this->seq_seg_scan(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
 
-      same = this->template equal<false, false>(outs, golds, allseg);
+      same = this->equal<false, false>(outs, golds, allseg);
 
       if (!same) {
-        this->template printvec(allseg, "seg");
-        this->template printvec(vals, "input");
-        this->template printvec(outs, "scann");
-        this->template printvec(golds, "scann gold");
+        this->printvec(allseg, "seg");
+        this->printvec(vals, "input");
+        this->printvec(outs, "scann");
+        this->printvec(golds, "scann gold");
       }
 
 
@@ -1041,15 +1041,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_n)
 
     if (rank == 0) {
 
-      auto golds = this->template seq_seg_exscan(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
+      auto golds = this->seq_seg_exscan(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
 
-      same = this->template equal<false, true>(outs, golds, allseg);
+      same = this->equal<false, true>(outs, golds, allseg);
 
       if (!same) {
-        this->template printvec(allseg, "seg");
-        this->template printvec(vals, "input");
-        this->template printvec(outs, "exscann");
-        this->template printvec(golds, "exscann gold");
+        this->printvec(allseg, "seg");
+        this->printvec(vals, "input");
+        this->printvec(outs, "exscann");
+        this->printvec(golds, "exscann gold");
       }
 
 
@@ -1069,15 +1069,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_n)
 
     if (rank == 0) {
 
-      auto golds = this->template seq_seg_rscan(vals, allseg, [](int const &x, int const &y){ return std::max(x, y); } );
+      auto golds = this->seq_seg_rscan(vals, allseg, [](int const &x, int const &y){ return std::max(x, y); } );
 
-      same = this->template equal<true, false>(outs, golds, allseg);
+      same = this->equal<true, false>(outs, golds, allseg);
 
       if (!same) {
-        this->template printvec(allseg, "seg");
-        this->template printvec(vals, "input");
-        this->template printvec(outs, "rscann");
-        this->template printvec(golds, "rscann gold");
+        this->printvec(allseg, "seg");
+        this->printvec(vals, "input");
+        this->printvec(outs, "rscann");
+        this->printvec(golds, "rscann gold");
       }
 
 
@@ -1097,15 +1097,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_n)
 
     if (rank == 0) {
 
-      auto golds = this->template seq_seg_rexscan(vals, allseg, [](int const &x, int const &y){ return std::max(x, y); } );
+      auto golds = this->seq_seg_rexscan(vals, allseg, [](int const &x, int const &y){ return std::max(x, y); } );
 
-      same = this->template equal<true, true>(outs, golds, allseg);
+      same = this->equal<true, true>(outs, golds, allseg);
 
       if (!same) {
-        this->template printvec(allseg, "seg");
-        this->template printvec(vals, "input");
-        this->template printvec(outs, "rexscann");
-        this->template printvec(golds, "rexscann gold");
+        this->printvec(allseg, "seg");
+        this->printvec(vals, "input");
+        this->printvec(outs, "rexscann");
+        this->printvec(golds, "rexscann gold");
       }
 
 
@@ -1154,14 +1154,14 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_v)
   MPI_Barrier(MPI_COMM_WORLD);
   auto print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_scan(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
+    gold = this->seq_seg_scan(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
 
-    same = this->template equal<false, false>(print, gold, allseg);
+    same = this->equal<false, false>(print, gold, allseg);
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(allinputs, "input");
-      this->template printvec(print, "scanv");
-      this->template printvec(gold, "scanv gold");
+      this->printvec(allseg, "seg");
+      this->printvec(allinputs, "input");
+      this->printvec(print, "scanv");
+      this->printvec(gold, "scanv gold");
     }
     EXPECT_TRUE(same);
   }
@@ -1173,15 +1173,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_v)
 
   print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_exscan(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
+    gold = this->seq_seg_exscan(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
 
 
-    same = this->template equal<false, true>(print, gold, allseg);
+    same = this->equal<false, true>(print, gold, allseg);
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(allinputs, "input");
-      this->template printvec(print, "exscanv");
-      this->template printvec(gold, "exscanv gold");
+      this->printvec(allseg, "seg");
+      this->printvec(allinputs, "input");
+      this->printvec(print, "exscanv");
+      this->printvec(gold, "exscanv gold");
     }
     EXPECT_TRUE(same);
   }
@@ -1193,15 +1193,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_v)
 
   print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_rscan(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
+    gold = this->seq_seg_rscan(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
 
-    same = this->template equal<true, false>(print, gold, allseg);
+    same = this->equal<true, false>(print, gold, allseg);
 
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(allinputs, "input");
-      this->template printvec(print, "rscanv");
-      this->template printvec(gold, "rscanv gold");
+      this->printvec(allseg, "seg");
+      this->printvec(allinputs, "input");
+      this->printvec(print, "rscanv");
+      this->printvec(gold, "rscanv gold");
     }
 
     EXPECT_TRUE(same);
@@ -1214,16 +1214,16 @@ TEST_F(Mxx2SegmentedMPITest, seg_scan_v)
   print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
 
-    gold = this->template seq_seg_rexscan(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
+    gold = this->seq_seg_rexscan(allinputs, allseg, [](int const &x, int const &y){ return std::max(x, y); });
 
 
-    same = this->template equal<true, true>(print, gold, allseg);
+    same = this->equal<true, true>(print, gold, allseg);
 
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(allinputs, "input");
-      this->template printvec(print, "rexscanv");
-      this->template printvec(gold, "rexscanv gold");
+      this->printvec(allseg, "seg");
+      this->printvec(allinputs, "input");
+      this->printvec(print, "rexscanv");
+      this->printvec(gold, "rexscanv gold");
     }
 
     EXPECT_TRUE(same);
@@ -1252,15 +1252,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce)
 
   if (rank == 0) {
 
-    auto golds = this->template seq_seg_reduce(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
+    auto golds = this->seq_seg_reduce(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
 
-    bool same = this->template equal<false, false>(outs, golds, allseg);
+    bool same = this->equal<false, false>(outs, golds, allseg);
 
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(vals, "input");
-      this->template printvec(outs, "reduce");
-      this->template printvec(golds, "reduce gold");
+      this->printvec(allseg, "seg");
+      this->printvec(vals, "input");
+      this->printvec(outs, "reduce");
+      this->printvec(golds, "reduce gold");
     }
 
     EXPECT_TRUE(same);
@@ -1274,15 +1274,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce)
 
   if (rank == 0) {
 
-    auto golds = this->template seq_seg_reduce(vals, allseg, std::plus<int>() );
+    auto golds = this->seq_seg_reduce(vals, allseg, std::plus<int>() );
 
-    bool same = this->template equal<false, false>(outs, golds, allseg);
+    bool same = this->equal<false, false>(outs, golds, allseg);
 
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(vals, "input");
-      this->template printvec(outs, "reduce+");
-      this->template printvec(golds, "reduce+ gold");
+      this->printvec(allseg, "seg");
+      this->printvec(vals, "input");
+      this->printvec(outs, "reduce+");
+      this->printvec(golds, "reduce+ gold");
     }
 
 
@@ -1322,15 +1322,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_n)
 
     if (rank == 0) {
 
-      auto golds = this->template seq_seg_reduce(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
+      auto golds = this->seq_seg_reduce(vals, allseg, [](int const &x, int const &y){ return std::min(x, y); } );
 
-      same = this->template equal<false, false>(outs, golds, allseg);
+      same = this->equal<false, false>(outs, golds, allseg);
 
       if (!same) {
-        this->template printvec(allseg, "seg");
-        this->template printvec(vals, "input");
-        this->template printvec(outs, "reducen");
-        this->template printvec(golds, "reducen gold");
+        this->printvec(allseg, "seg");
+        this->printvec(vals, "input");
+        this->printvec(outs, "reducen");
+        this->printvec(golds, "reducen gold");
       }
 
 
@@ -1349,15 +1349,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_n)
     auto outs = mxx2::gather(result[i], comm, 0);
 
     if (rank == 0) {
-      auto golds = this->template seq_seg_reduce(vals, allseg, std::plus<int>() );
+      auto golds = this->seq_seg_reduce(vals, allseg, std::plus<int>() );
 
-      same = this->template equal<false, false>(outs, golds, allseg);
+      same = this->equal<false, false>(outs, golds, allseg);
 
       if (!same) {
-        this->template printvec(allseg, "seg");
-        this->template printvec(vals, "input");
-        this->template printvec(outs, "reducen+");
-        this->template printvec(golds, "reducen+ gold");
+        this->printvec(allseg, "seg");
+        this->printvec(vals, "input");
+        this->printvec(outs, "reducen+");
+        this->printvec(golds, "reducen+ gold");
       }
 
       EXPECT_TRUE(same);
@@ -1406,14 +1406,14 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_v)
   MPI_Barrier(MPI_COMM_WORLD);
   auto print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_reduce(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
+    gold = this->seq_seg_reduce(allinputs, allseg, [](int const &x, int const &y){ return std::min(x, y); });
 
-    same = this->template equal<false, false>(print, gold, allseg);
+    same = this->equal<false, false>(print, gold, allseg);
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(allinputs, "input");
-      this->template printvec(print, "reducev");
-      this->template printvec(gold, "reducev gold");
+      this->printvec(allseg, "seg");
+      this->printvec(allinputs, "input");
+      this->printvec(print, "reducev");
+      this->printvec(gold, "reducev gold");
     }
     EXPECT_TRUE(same);
   }
@@ -1423,15 +1423,15 @@ TEST_F(Mxx2SegmentedMPITest, seg_reduce_v)
   MPI_Barrier(MPI_COMM_WORLD);
   print = mxx2::gathern(result, comm, 0);
   if (rank == 0) {
-    gold = this->template seq_seg_reduce(allinputs, allseg, std::plus<int>());
+    gold = this->seq_seg_reduce(allinputs, allseg, std::plus<int>());
 
-    same = this->template equal<false, false>(print, gold, allseg);
+    same = this->equal<false, false>(print, gold, allseg);
 
     if (!same) {
-      this->template printvec(allseg, "seg");
-      this->template printvec(allinputs, "input");
-      this->template printvec(print, "reducev+");
-      this->template printvec(gold, "reducev+ gold");
+      this->printvec(allseg, "seg");
+      this->printvec(allinputs, "input");
+      this->printvec(print, "reducev+");
+      this->printvec(gold, "reducev+ gold");
     }
 
     EXPECT_TRUE(same);
