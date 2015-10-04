@@ -448,17 +448,20 @@ namespace bliss
 
           size_t entries = 0;
 
+#pragma omp parallel num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
+          {
+          KmerType key;
+          CountType val;
 
-        #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
+#pragma omp for
           for (size_t i = 0; i < answer_count; ++i) {
-        	  KmerType key = answers[i].first;
-        	  CountType val = answers[i].second;
+        	  std::tie(key, val) = answers[i];
 
             ++entries;
             if ((entries % 1000000) == 0)
             	INFOF("count result:  %s <=> %d", key.toString().c_str(), val);
           }
-
+          }
           total_entries += entries;
 
           t2 = std::chrono::high_resolution_clock::now();
@@ -588,19 +591,21 @@ namespace bliss
           t1 = std::chrono::high_resolution_clock::now();
 
           size_t entries = 0;
-//          KmerType key;
-//          IdType val;
 
-#pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
-          for (size_t i = 0; i < answer_count; ++i) {
-            KmerType key = answers[i].first;
-            IdType val = answers[i].second;
+#pragma omp parallel num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
+          {
+          KmerType key;
+          IdType val;
 
-//            std::tie(key, val) = answers[i];
+#pragma omp for
+			  for (size_t i = 0; i < answer_count; ++i) {
 
-            ++entries;
-            if ((entries % 1000000) == 0)
-            	INFOF("position result:  %s <=> [%d %lu %lu]", key.toString().c_str(), val.get_file_id(), val.get_id(), val.get_pos());
+				std::tie(key, val) = answers[i];
+
+				++entries;
+				if ((entries % 1000000) == 0)
+					INFOF("position result:  %s <=> [%d %lu %lu]", key.toString().c_str(), val.get_file_id(), val.get_id(), val.get_pos());
+			  }
           }
 
           total_entries += entries;
@@ -754,10 +759,13 @@ namespace bliss
 
           size_t entries = 0;
 
-        #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
-          for (size_t i = 0; i < answer_count; ++i) {
+#pragma omp parallel num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
+          {
               KmerType key;
               KmerInfoType val;
+
+#pragma omp for
+          for (size_t i = 0; i < answer_count; ++i) {
 
               std::tie(key, val) = answers[i];
 
@@ -765,7 +773,7 @@ namespace bliss
             if ((entries % 1000000) == 0)
             	INFOF("position + quality result: %s <=> [%d %lu %lu] %f", key.toString().c_str(), val.first.get_file_id(), val.first.get_id(), val.first.get_pos(), val.second);
           }
-
+          }
           total_entries += entries;
 
           t2 = std::chrono::high_resolution_clock::now();
@@ -904,17 +912,20 @@ namespace bliss
 
             size_t entries = 0;
 
-          #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
-            for (size_t i = 0; i < answer_count; ++i) {
+#pragma omp parallel num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
+          {
                 KmerType key;
                 CountType val;
+
+#pragma omp for
+            for (size_t i = 0; i < answer_count; ++i) {
 
                 std::tie(key, val) = answers[i];
 
               ++entries;
               if ((entries % 1000000) == 0) INFOF("count result:  %s <=> %d", key.toString().c_str(), val);
             }
-
+          }
             total_entries += entries;
 
             t2 = std::chrono::high_resolution_clock::now();
@@ -1050,16 +1061,19 @@ namespace bliss
 
             size_t entries = 0;
 
-         #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
-            for (size_t i = 0; i < answer_count; ++i) {
-            	KmerType key = answers[i].first;
-                IdType val = answers[i].second;
+#pragma omp parallel num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
+          {
+                KmerType key;
+                IdType val;
 
+#pragma omp for
+            for (size_t i = 0; i < answer_count; ++i) {
+            	std::tie(key,val) = answers[i];
               ++entries;
               if ((entries % 1000000) == 0)
             	  INFOF("position result:  %s <=> [%d %lu %lu]", key.toString().c_str(), val.get_file_id(), val.get_id(), val.get_pos());
             }
-
+          }
             total_entries += entries;
 
             t2 = std::chrono::high_resolution_clock::now();
@@ -1216,16 +1230,20 @@ namespace bliss
 
             size_t entries = 0;
 
-          #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
+#pragma omp parallel num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
+          {
+                KmerType key;
+                KmerInfoType val;
+
+#pragma omp for
             for (size_t i = 0; i < answer_count; ++i) {
-                KmerType key = answers[i].first;
-                KmerInfoType val = answers[i].second;
+                std::tie(key, val) = answers[i];
 
               ++entries;
               if ((entries % 1000000) == 0)
             	  INFOF("position + quality result: %s <=> [%d %lu %lu] %f", key.toString().c_str(), val.first.get_file_id(), val.first.get_id(), val.first.get_pos(), val.second);
             }
-
+          }
             total_entries += entries;
 
             t2 = std::chrono::high_resolution_clock::now();
@@ -1634,16 +1652,20 @@ namespace bliss
 
 
           size_t entries = 0;
-        #pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
+
+#pragma omp parallel num_threads(nthreads) OMP_SHARE_DEFAULT shared(answers, answer_count) reduction(+: entries)
+          {
+                KmerType key;
+                CountType val;
+
+#pragma omp for
           for (size_t i = 0; i < answer_count; ++i) {
-            KmerType key;
-            CountType val;
             std::tie(key, val) = answers[i];
 
             ++entries;
             if ((entries % 1000000) == 0) INFOF("count result:  %s <=> %d", key.toString().c_str(), val);
           }
-
+          }
           total_entries += entries;
 
 
