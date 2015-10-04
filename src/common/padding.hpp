@@ -57,14 +57,14 @@ namespace bliss
     public:
       /// The number of total bits in the stream
       static constexpr unsigned int nBits = NUM_TOTAL_BITS;
-      /// The number of bytes needed to hold `nBits` bits
-      static constexpr unsigned int nBytes = intCeil(nBits, static_cast<unsigned int>(8));
-      /// The number of bits for each word of type `T`
-      static constexpr unsigned int bitsPerWord = std::numeric_limits<T>::digits;
       /// The number of bytes in each word of type `T`
       static constexpr unsigned int bytesPerWord = sizeof(T);
+      /// The number of bits for each word of type `T`
+      static constexpr unsigned int bitsPerWord = std::numeric_limits<T>::digits;
+      /// The number of bytes needed to hold `nBits` bits
+      static constexpr unsigned int nBytes = intCeil<unsigned int>(nBits, 8);
       /// The number of words of type `T` needed to hold `nBits` bits
-      static constexpr unsigned int nWords = intCeil(nBytes, bytesPerWord);
+      static constexpr unsigned int nWords = intCeil<unsigned int>(nBytes, bytesPerWord);
       /// The number of padding bits at the end of the stream
       static constexpr unsigned int padBits = nWords*bitsPerWord - nBits;
       /// The number of data bits in the last word of the stream
