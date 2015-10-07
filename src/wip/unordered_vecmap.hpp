@@ -510,7 +510,7 @@ namespace fsc {  // fast standard container
       /// rehash for new count number of BUCKETS.  iterators are invalidated.  side effect is multiplicity is updated.
       void rehash(size_type count) {
         // compute current average number of entries per vector.  this is side effect.
-        multiplicity = (s + map.size() - 1) / map.size();
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
         // only rehash if new bucket count is greater than old bucket count
         if (count > map.bucket_count())
@@ -523,16 +523,16 @@ namespace fsc {  // fast standard container
       /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
       float max_load_factor() {
         // compute current average number of entries per vector.  this is side effect.
-        multiplicity = (s + map.size() - 1) / map.size();
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
-        return map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
+        return (map.size() == 0) ? map.max_load_factor() : map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
       }
 
 
       /// reserve for new count of elements.  iterators may be invalidated.
       void reserve(size_type count) {
         // compute current average number of entries per vector.  this is side effect
-        multiplicity = (s + map.size() - 1) / map.size();
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
         // compute number of buckets required.
         this->rehash(std::ceil(static_cast<float>(count) / this->max_load_factor()));
@@ -597,7 +597,7 @@ namespace fsc {  // fast standard container
 
       void shrink_to_fit() {
         // update multiplicity.
-        this->multiplicity = (s + map.size() - 1) / map.size();
+        this->multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
         // for each vector, shrink it.
         auto max = map.end();
@@ -1045,7 +1045,7 @@ namespace fsc {  // fast standard container
       /// rehash for new count number of BUCKETS.  iterators are invalidated.  side effect is multiplicity is updated.
       void rehash(size_type count) {
         // compute current average number of entries per vector.  this is side effect.
-        multiplicity = (s + map.size() - 1) / map.size();
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
         // only rehash if new bucket count is greater than old bucket count
         if (count > map.bucket_count())
@@ -1058,16 +1058,16 @@ namespace fsc {  // fast standard container
       /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
       float max_load_factor() {
         // compute current average number of entries per vector.  this is side effect.
-        multiplicity = (s + map.size() - 1) / map.size();
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
-        return map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
+        return (map.size() == 0) ? map.max_load_factor() : map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
       }
 
 
       /// reserve for new count of elements.  iterators may be invalidated.
       void reserve(size_type count) {
         // compute current average number of entries per vector.  this is side effect
-        multiplicity = (s + map.size() - 1) / map.size();
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
         // compute number of buckets required.
         this->rehash(std::ceil(static_cast<float>(count) / this->max_load_factor()));
@@ -1131,7 +1131,7 @@ namespace fsc {  // fast standard container
 
       void shrink_to_fit() {
         // update multiplicity.
-        this->multiplicity = (s + map.size() - 1) / map.size();
+        this->multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
         // for each vector, shrink it.
         auto max = map.end();
