@@ -1293,7 +1293,7 @@ namespace dsc  // distributed std container
 //
           // sort if needed
           TIMER_START(rehash);
-          if (!this->globally_sorted) ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm, false);
+          if (!this->globally_sorted) ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm);
           TIMER_END(rehash, "mxxsort", this->c.size());
 
 
@@ -1597,7 +1597,7 @@ namespace dsc  // distributed std container
           // sort if needed
           if (!this->globally_sorted) {
             TIMER_START(rehash);
-            ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm, false);
+            ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm);
             TIMER_END(rehash, "mxxsort", this->c.size());
           }
 

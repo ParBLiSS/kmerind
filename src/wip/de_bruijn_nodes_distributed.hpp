@@ -199,7 +199,7 @@ namespace bliss{
 				   count = this->local_insert(input.begin(), input.end());
 				 TIMER_END(insert, "insert", this->c.size());
 
-				 TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+				 TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
 
 				 return count;
 			   }

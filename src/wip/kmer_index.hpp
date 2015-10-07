@@ -346,7 +346,7 @@ public:
 			TIMER_END(file, "read", result.size());
       INFO("Last: pos - kmer " << result.back());
 		}
-		TIMER_REPORT_MPI(file, rank, comm);
+		TIMER_REPORT_MPI(file, comm.rank(), comm);
 
 
 		return result.size() - before;
