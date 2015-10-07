@@ -24,14 +24,16 @@
 #include "common/alphabets.hpp"
 #include "io/sequence_iterator.hpp"
 
-template <typename OT, bool buffering = false, bool preloading = false>
+template <typename OT, bool buffering = false, bool preloading = false, bool populate = false, bool huge = false, bool advise = false>
 struct readMMap {
 
     RangeType r;
     unsigned char* data;
-    unsigned char* mapped_data;
+    void *mapped_data;
+    void *mapped;
 
     int file_handle;
+    size_t file_size;
     size_t page_size;
 
     size_t start;
@@ -46,7 +48,7 @@ struct readMMap {
         ERROR( "ERROR in file open to get size." );
         exit(-1);
       }
-      size_t file_size = static_cast<size_t>(filestat.st_size);
+      file_size = static_cast<size_t>(filestat.st_size);
 
 
       /// open the file and get a handle.
@@ -58,7 +60,10 @@ struct readMMap {
       }
 
       /// get the block size
-      page_size = sysconf(_SC_PAGE_SIZE);
+      if (huge)
+        page_size = 2 * 1024 * 1024;
+      else
+        page_size = sysconf(_SC_PAGE_SIZE);
 
 
 
@@ -67,36 +72,62 @@ struct readMMap {
       RangeType _r(0, file_size);
       part.configure(_r, nprocs);
 
+      // configure mmap
+      int advice =  MADV_SEQUENTIAL | MADV_WILLNEED;
+      int flags = MAP_PRIVATE;
+      if (populate) flags |= MAP_POPULATE;
+      if (huge) {
+        // ONLY OWKRS FOR PRIVATE, ANONYMOUS mappinig (not backed by file).
+        flags |= MAP_HUGETLB;
+        advice |= MADV_HUGEPAGE;
+      }
 
       // mmap
       r = part.getNext(rank);
       typename RangeType::ValueType block_start = RangeType::align_to_page(r, page_size);
-      mapped_data = (unsigned char*)mmap(nullptr, r.end - block_start,
+      typename RangeType::ValueType block_end = block_start + ((r.end - block_start + page_size - 1) / page_size) * page_size;
+      block_end = std::min(file_size, block_end);
+
+      mapped_data = mmap64(nullptr, block_end - block_start,
                                            PROT_READ,
-                                           MAP_PRIVATE, file_handle,
+                                           flags,
+                                           file_handle,
                                            block_start);
-      data = mapped_data + (r.start - block_start);
+      if (mapped_data == MAP_FAILED) {
+        int myerr = errno;
+        FATAL("ERROR in map: ["  << filename << "] error " << myerr << ": " << strerror(myerr) << "length " << block_end - block_start << " offset " << block_start);
+        exit(1);
+      }
+
+      data = reinterpret_cast<unsigned char*>(mapped_data) + (r.start - block_start);
+      if (advise) madvise(mapped_data, block_end - block_start, advice);
+
 
       if (preloading)
       {
-        data = new unsigned char[r.size()];
-        memcpy(data, mapped_data + (r.start - block_start), r.size());
+        posix_memalign(&mapped, page_size, block_end - block_start);
+        memcpy(mapped, mapped_data, block_end - block_start);  // copy some extra because of alignment issue.
+        data = reinterpret_cast<unsigned char*>(mapped) + (r.start - block_start);
 
-        munmap(mapped_data, r.end - block_start);
-        mapped_data = data;
+        munmap(mapped_data, block_end - block_start);
+        mapped_data = mapped;
       }
 
       start = r.start;
     }
 
     ~readMMap() {
-      typename RangeType::ValueType block_start = RangeType::align_to_page(r, page_size);
 
       // unmap
       if (preloading) {
-        delete [] data;
+        free(mapped);
       } else {
-        munmap(mapped_data, r.end - block_start);
+
+        typename RangeType::ValueType block_start = RangeType::align_to_page(r, page_size);
+        typename RangeType::ValueType block_end = block_start + ((r.end - block_start + page_size - 1) / page_size) * page_size;
+        block_end = std::min(file_size, block_end);
+
+        munmap(mapped_data, block_end - block_start);
       }
 
       // close the file handle
@@ -131,20 +162,32 @@ struct readMMap {
         start += chunkSize;
       }
 
+      typename RangeType::ValueType block_start = RangeType::align_to_page(r, page_size);
+      typename RangeType::ValueType block_end = block_start + ((r.end - block_start + page_size - 1) / page_size) * page_size;
+      block_end = std::min(file_size, block_end);
+
       RangeType r1(s, s+chunkSize);
       RangeType r2(s, s+2*chunkSize);
       r1.intersect(r);
       r2.intersect(r);
+
 
       if (r1.size() == 0) {
         //INFOF("%d empty at %lu - %lu, in range %lu - %lu! chunkSize %lu\n", tid, r2.start, r2.end, r.start, r.end, chunkSize);
         return true;
       }
 
-      unsigned char * ld = data  + (r1.start - r.start);
+      typename RangeType::ValueType aligned_s = RangeType::align_to_page(r2, page_size);
+      typename RangeType::ValueType aligned_t = aligned_s + ((r2.end - aligned_s + page_size - 1) / page_size) * page_size;
+      aligned_t = std::min(aligned_t, block_end);
+
+
+      unsigned char * ld = data  + (r2.start - r.start);
+      void *p;
       if (buffering) {
-        ld = new unsigned char[r2.size()];   // TODO: can preallocate.
-        memcpy(ld, data + (r1.start - r.start), r2.size());
+        posix_memalign(&p, page_size, aligned_t - aligned_s);   // TODO: can preallocate.
+        memcpy(p, mapped_data + (aligned_s - block_start), aligned_t - aligned_s);
+        ld = reinterpret_cast<unsigned char*>(p) + (r2.start - aligned_s);
       }
 
       // simulate multiple traversals.
@@ -174,7 +217,7 @@ struct readMMap {
       }
 
       if (buffering)
-        delete [] ld;
+        free(p);
 
       count += lcount;
 
@@ -182,6 +225,7 @@ struct readMMap {
       return false;
     }
 };
+
 
 
 template <typename OT, bool buffering = false, bool preloading = false>
@@ -821,7 +865,7 @@ int main(int argc, char* argv[])
   if (argc > 1)
     nthreads = atoi(argv[1]);
 
-  size_t step = 4096;
+  size_t step = 2 * 1024 * 1024;
   if (argc > 2)
     step = atoi(argv[2]);
 
@@ -841,8 +885,39 @@ int main(int argc, char* argv[])
 
 
 #if defined(TEST_OP_MMAP)
-  typedef readMMap<             double, true, false> OpType;
+  typedef readMMap<             double, true, false, false, false, false> OpType;
 #endif
+
+#if defined(TEST_OP_MMAP_ADVISE)
+  typedef readMMap<             double, true, false, false, false, true> OpType;
+#endif
+
+
+#if defined(TEST_OP_MMAP_POPULATE)
+  typedef readMMap<             double, true, false, true, false, false> OpType;
+#endif
+
+#if defined(TEST_OP_MMAP_POPULATE_ADVISE)
+  typedef readMMap<             double, true, false, true, false, true> OpType;
+#endif
+
+// HUGETLB does not work with files.
+//#if defined(TEST_OP_MMAP_HUGEPAGE)
+//  typedef readMMap<             double, true, false, false, true, false> OpType;
+//#endif
+//
+//#if defined(TEST_OP_MMAP_HUGEPAGE_ADVISE)
+//  typedef readMMap<             double, true, false, false, true, true> OpType;
+//#endif
+//
+//#if defined(TEST_OP_MMAP_POPULATE_HUGEPAGE)
+//  typedef readMMap<             double, true, false, true, true, false> OpType;
+//#endif
+//
+//#if defined(TEST_OP_MMAP_POPULATE_HUGEPAGE_ADVISE)
+//  typedef readMMap<             double, true, false, true, true, true> OpType;
+//#endif
+
 
 #if defined(TEST_OP_FILELOADER)
   typedef readFileLoader<       double, true, false> OpType;

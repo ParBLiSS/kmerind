@@ -56,9 +56,9 @@ int main(int argc, char** argv) {
 
 
   // mmap
-  unsigned char* data = (unsigned char*)mmap(nullptr, file_size,
+  unsigned char* data = (unsigned char*)mmap64(nullptr, file_size,
                                        PROT_READ,
-                                       MAP_PRIVATE, file_handle,
+                                       MAP_PRIVATE | MAP_POPULATE, file_handle,
                                        0);
 
 
