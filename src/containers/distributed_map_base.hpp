@@ -103,19 +103,19 @@ namespace dsc
       };
 
 
-      struct Greater {
-          Less lt;
-          inline bool operator()(Key const &x, Key const &y) const {
-            return lt(y, x);
-          }
-      };
+//      struct Greater {
+//          Less lt;
+//          inline bool operator()(Key const &x, Key const &y) const {
+//            return lt(y, x);
+//          }
+//      };
 
       using TransformedEqual = TransformedComp<Equal>;
       using TransformedLess = TransformedComp<Less>;
-      using TransformedGreater = TransformedComp<Greater>;
+//      using TransformedGreater = TransformedComp<Greater>;
       static TransformedEqual equal;
       static TransformedLess less;
-      static TransformedGreater greater;
+//      static TransformedGreater greater;
 
       mutable size_t key_multiplicity;
 
@@ -212,14 +212,14 @@ namespace dsc
   typename map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::TransformedEqual
       map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::equal;
 
-  template<typename Key, typename T,
-      class Comm,
-      template <typename> class KeyTransform,
-      class Less,
-      class Equal,
-      class Alloc>
-  typename map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::TransformedGreater
-      map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::greater;
+//  template<typename Key, typename T,
+//      class Comm,
+//      template <typename> class KeyTransform,
+//      class Less,
+//      class Equal,
+//      class Alloc>
+//  typename map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::TransformedGreater
+//      map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::greater;
 
 }
 
