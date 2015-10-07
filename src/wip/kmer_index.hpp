@@ -128,13 +128,12 @@ public:
 		using BlockIterType = typename BlockType::iterator;
 
 		using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, SeqParser >;
-		using SeqType = typename ::std::iterator_traits<SeqIterType>::value_type;
+//		using SeqType = typename ::std::iterator_traits<SeqIterType>::value_type;
 
 		//== sequence parser type
 		KP kmer_parser;
 
 		//== process the chunk of data
-		SeqType read;
 
 		//==  and wrap the chunk inside an iterator that emits Reads.
 		SeqIterType seqs_start(seq_parser, partition.begin(), partition.end(), partition.getRange().start);
@@ -169,7 +168,7 @@ public:
 	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
    * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 */
-	template <template <typename> class SeqParser, typename KP = KmerParser>
+	template <template <typename> class SeqParser, typename KP = KmerParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
 	static size_t read_file(const std::string & filename, std::vector<typename KP::value_type>& result, MPI_Comm _comm) {
 
 		int p, rank;
@@ -219,6 +218,14 @@ public:
       // std::cout << "Last: pos - kmer " << result.back() << std::endl;
 		}
 
+		if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
+      TIMER_START(file);
+
+      ::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
+      ::std::for_each(result.begin(), result.end(), tuple_trans);
+
+      TIMER_END(file, "canonicalize", result.size());
+		}
 
 		TIMER_REPORT_MPI(file, rank, _comm);
 		return result.size() - before;
@@ -229,7 +236,7 @@ public:
 	 * @tparam KmerParser		parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.  template template parameter, param is iterator
 	 */
-	template <template <typename> class SeqParser, typename KP = KmerParser>
+	template <template <typename> class SeqParser, typename KP = KmerParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
 	static size_t read_file_mpi_subcomm(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm& comm) {
 
 	  /*
@@ -346,7 +353,25 @@ public:
 			TIMER_END(file, "read", result.size());
       INFO("Last: pos - kmer " << result.back());
 		}
-		TIMER_REPORT_MPI(file, comm.rank(), comm);
+
+    if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
+      TIMER_START(file);
+
+      ::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
+      ::std::for_each(result.begin(), result.end(), tuple_trans);
+
+      TIMER_END(file, "canonicalize", result.size());
+    }
+
+    TIMER_REPORT_MPI(file, comm.rank(), comm);
+
+
+
+		INFOF("freeing group communicator");
+		MPI_Comm_free(&group);
+		INFOF("freeing group_leader communicator");
+		if (group_leaders != MPI_COMM_NULL) MPI_Comm_free(&group_leaders);
+		INFOF("DONE WITH communicator release");
 
 
 		return result.size() - before;
@@ -407,9 +432,10 @@ public:
 	void insert(std::vector<T> &temp) {
 		TIMER_INIT(build);
 
-		TIMER_START(build);
-		this->map.reserve(this->map.size() + temp.size());
-		TIMER_END(build, "reserve", temp.size());
+		// do not reserve until insertion - less transient memory used.
+//		TIMER_START(build);
+//		this->map.reserve(this->map.size() + temp.size());
+//		TIMER_END(build, "reserve", temp.size());
 
 		// distribute
 		TIMER_START(build);
@@ -431,7 +457,7 @@ public:
 	 //     since Kmer template parameter is not explicitly known, we can't hard code the return types of KmerParserType.
 
 	 /// convenience function for building index.
-	 template <template <typename> class SeqParser>
+	 template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
 	 void build(const std::string & filename, MPI_Comm comm) {
 
 	   // file extension determines SeqParserType
@@ -450,7 +476,7 @@ public:
 
 	   // proceed
      ::std::vector<typename KmerParser::value_type> temp;
-     this->read_file<SeqParser >(filename, temp, comm);
+     this->read_file<SeqParser, KmerParser, PreCanonicalizer >(filename, temp, comm);
 
 
 //        // dump the generated kmers to see if they look okay.
@@ -468,7 +494,7 @@ public:
 	 }
 
 
-   template <template <typename> class SeqParser>
+   template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
 	 void build_with_mpi_subcomm(const std::string & filename, MPI_Comm comm) {
 
      // file extension determines SeqParserType
@@ -487,7 +513,7 @@ public:
 
      // proceed
      ::std::vector<typename KmerParser::value_type> temp;
-     this->read_file_mpi_subcomm<SeqParser >(filename, temp, comm);
+     this->read_file_mpi_subcomm<SeqParser, KmerParser, PreCanonicalizer  >(filename, temp, comm);
 
      DEBUG("Last: pos - kmer " << temp.back());
      this->insert(temp);
@@ -504,6 +530,13 @@ public:
      return map.cend();
    }
 
+   size_t size() const {
+     return map.size();
+   }
+
+   size_t local_size() const {
+     return map.local_size();
+   }
 
 };
 

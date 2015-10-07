@@ -10,6 +10,8 @@
  * TODO add License
  */
 
+#include "bliss-config.hpp"
+
 #include "concurrent/buffer.hpp"
 
 #include "omp.h"
@@ -38,7 +40,8 @@ void append(const int nthreads, bliss::io::Buffer<TS, CAP, MDSize>& buf,
   size_t lsuccess = 0;
   size_t lfailure = 0;
   size_t lswap = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i) shared(buf, gold, stdout) reduction(+: lsuccess, lfailure, lswap)
+  // TODO: OMP default(none) should be compatible with shared, but clang complains.
+#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nthreads) shared(buf, gold, stdout) private(i) reduction(+: lsuccess, lfailure, lswap)
   for (i = start; i < end; ++i)
   {
     int data = static_cast<int>(i);
@@ -118,7 +121,7 @@ void appendTest()
     // compare unordered buffer content.
     INFOF("success : %lu, gold size %lu", success, ggold.size());
 
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -160,7 +163,7 @@ void appendTest()
 
 
     // compare unordered buffer content.
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -209,7 +212,7 @@ void appendTest()
   {
 
     // compare unordered buffer content.
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -249,7 +252,7 @@ void appendTest()
   {
 
     // compare unordered buffer content.
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -289,7 +292,7 @@ void appendTest()
   else
   {
     // compare unordered buffer content.
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -329,7 +332,7 @@ void appendTest()
   else
   {
     // compare unordered buffer content.
-    if (compareUnorderedSequences(b1.operator int*(), ggold.begin(), success))
+    if (compareUnorderedSequences(b1.template begin<int>(), ggold.begin(), success))
     {
       INFOF("PASS success %lu failure %lu swap %lu", success, failure, swap);
     }
@@ -347,7 +350,7 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 {
 
   INFOF(
-      "TESTING atomic_ptrs: %d threads, locktype %d append with %ld bufferSize and %d total counts",
+      "TESTING atomic_ptrs: %d threads, locktype %d append with %ld bufferSize and %lu total counts",
       NumThreads, static_cast<int>(TS), CAP, total_count);
 
   constexpr int elSize = sizeof(int);
@@ -369,7 +372,7 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
       new bliss::io::Buffer<TS, CAP, MDSize>());             // ensure atomicity
   ptr.load(std::memory_order_relaxed)->unblock_writes();
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, full, gold, stderr, stdout, std::cout) reduction(+:success, failure, swap)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(ptr, full, gold, stderr, stdout, std::cout) reduction(+:success, failure, swap)
   for (size_t i = 0; i < total_count; ++i)
   {
 
@@ -457,8 +460,8 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
     fullsize += full[i].size();
     for (size_t j = 0; j < full[i].size(); ++j)
     {
-      stored.insert(stored.end(), full[i][j]->operator int*(),
-                    reinterpret_cast<int*>(full[i][j]->end()));
+      stored.insert(stored.end(), full[i][j]->template begin<int>(),
+                    full[i][j]->template end<int>());
     }
   }
   auto stored_count = stored.size();
@@ -518,7 +521,7 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
   b = ptr.exchange(new bliss::io::Buffer<TS, CAP, MDSize>(), std::memory_order_acq_rel); // old pointer was managed by unique ptr.
   ptr.load(std::memory_order_relaxed)->unblock_writes();
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, gold, lstored, stderr, stdout, std::cout) reduction(+:success, failure, swap, success2)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(ptr, gold, lstored, stderr, stdout, std::cout) reduction(+:success, failure, swap, success2)
   for (size_t i = 0; i < total_count; ++i)
   {
 
@@ -585,7 +588,7 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
         }
         success2 += oldsize;
 
-        int* d = old_ptr->operator int*();
+        int* d = old_ptr->template begin<int>();
 
         lstored[omp_get_thread_num()].insert(
             lstored[omp_get_thread_num()].end(), d,
@@ -614,8 +617,8 @@ void testAppendMultipleBuffersAtomicPtrs(const size_t total_count)
   }
 
   // compare unordered buffer content.
-  stored.insert(stored.end(), ptr.load(std::memory_order_relaxed)->operator int*(),
-                reinterpret_cast<int*>(ptr.load(std::memory_order_relaxed)->end()));
+  stored.insert(stored.end(), ptr.load(std::memory_order_relaxed)->template begin<int>(),
+                ptr.load(std::memory_order_relaxed)->template end<int>());
 
   stored_count = stored.size();
   success2 += ptr.load(std::memory_order_relaxed)->getSize() / elSize;
@@ -661,7 +664,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 {
 
   INFOF(
-      "TESTING atomic_ptrs: stress %lu threads, locktype %d append with %ld bufferSize and %lu total counts",
+      "TESTING atomic_ptrs: stress %d threads, locktype %d append with %ld bufferSize and %lu total counts",
       NumThreads, static_cast<int>(TS), CAP, total_count);
 
   constexpr size_t elSize = sizeof(size_t);
@@ -680,14 +683,13 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 
   std::deque<bliss::io::Buffer<TS, CAP, MDSize>*> full;
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(ptr, stdout, full) private(i) reduction(+:success, failure, swap, failure2, failure3)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(ptr, stdout, full) private(i) reduction(+:success, failure, swap, failure2, failure3)
   for (i = 0; i < total_count; ++i)
   {
 
     size_t data = i;
     void* out = nullptr;
     auto localptr = ptr.load(std::memory_order_consume);
-    auto dataptr = localptr->operator char*();
     unsigned int result = localptr->append(&data, 1, &out);
 
     if ((result & 0x1) > 0)
@@ -707,9 +709,9 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
         {
           FATALF(
               "ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. insert buf %p, curr buffer %p, insert dataptr %p, data ptr %p, curr data ptr %p, returned %p, offset %ld",
-              omp_get_thread_num(), data, od, localptr, ptr.load(std::memory_order_relaxed), dataptr,
-              localptr->operator char*(), ptr.load(std::memory_order_relaxed)->operator char*(),
-              (char*)out, (char*)out - (localptr->operator char*()));
+              omp_get_thread_num(), data, od, localptr, ptr.load(std::memory_order_relaxed), localptr->template begin<char>(),
+              localptr->template begin<char>(), ptr.load(std::memory_order_relaxed)->template begin<char>(),
+              (char*)out, (char*)out - (localptr->template begin<char>()));
           fflush(stdout);
           ++failure3;
         }
@@ -843,7 +845,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 //    pool.acquireBuffer();
 //  }
 //
-//#pragma omp parallel for num_threads(NumThreads) default(none) shared(pool, stdout) private(i) reduction(+:success, failure, swap, failure2, failure3)
+//#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(pool, stdout) private(i) reduction(+:success, failure, swap, failure2, failure3)
 //  for (i = 0; i < total_count; ++i) {
 //
 //    std::shared_ptr<bliss::io::Buffer<TS, CAP, MDSize>> ptr = pool.getBuffer();
@@ -864,7 +866,7 @@ void stressTestAppendMultipleBuffersAtomicPtrs(const size_t total_count)
 //        size_t od = *((size_t*)out);
 //        if (od != data) {
 //          FATALF("ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. buffer %p data ptr %p, result ptr %p, offset %ld",
-//                 omp_get_thread_num(), data, od, ptr.get(), ptr->operator char*(), (char*) out, (char*)out - ptr->operator char*());
+//                 omp_get_thread_num(), data, od, ptr.get(), ptr->template begin<char>(), (char*) out, (char*)out - ptr->template begin<char>());
 //          fflush(stdout);
 //          ++failure3;
 //        }

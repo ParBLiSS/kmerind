@@ -129,6 +129,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >  class sorted_map_base : public ::dsc::map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc> {
 
+      // TODO: this should not be public but clang complains.
     protected:
       using Base = ::dsc::map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>;
 
@@ -273,6 +274,7 @@ namespace dsc  // distributed std container
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_reserve( size_t n) {
+        // vector's reserve will only do something if n > capacity.
         c.reserve(n);
       }
 
@@ -837,7 +839,8 @@ namespace dsc  // distributed std container
         if (c.empty()) return;
 
         // copy the keys
-        for (auto it = c.begin(), end = c.end(); it != end; ++it) {
+        auto end = c.end();
+        for (auto it = c.begin(); it != end; ++it) {
           result.emplace_back(it->first);
         }
 
@@ -930,6 +933,7 @@ namespace dsc  // distributed std container
             Intersect<false>::process(overlap.first, overlap.second, start, end, emplace_iter, count_element, true, pred);
 
             if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+
 
             start = end;
           }
@@ -1027,12 +1031,12 @@ namespace dsc  // distributed std container
             if (c.size() == 0)   // container is empty, so swap it in.
               c.swap(input);
             else {
-            	c.reserve(before + input.size());
+            	this->local_reserve(before + input.size());
                 ::std::move(input.begin(), input.end(), emplace_iter);    // else move it in.
             }
           }
           else {
-        	  c.reserve(before + input.size());
+        	  this->local_reserve(before + input.size());
         	  ::std::copy_if(::std::make_move_iterator(input.begin()),
                       ::std::make_move_iterator(input.end()), emplace_iter, pred);  // predicate needed.  move it though.
           }
@@ -1133,6 +1137,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
   class sorted_map : public sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc> {
+    protected:
       using Base = sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc>;
 
 
@@ -1243,7 +1248,7 @@ namespace dsc  // distributed std container
       //          }
       //      }
 
-      virtual void local_reduction(std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
         this->Base::retain_unique(input, sorted_input);
       }
 
@@ -1500,6 +1505,8 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
   class sorted_multimap : public sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc> {
+
+    protected:
       using Base = sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc>;
 
 
@@ -1795,9 +1802,11 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
   class reduction_sorted_map : public sorted_map<Key, T, Comm, KeyTransform, Less, Equal, Alloc> {
+      static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
+
+    protected:
       using Base = sorted_map<Key, T, Comm, KeyTransform, Less, Equal, Alloc>;
 
-      static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -1935,9 +1944,10 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
   class counting_sorted_map : public reduction_sorted_map<Key, T, Comm, KeyTransform, Less, ::std::plus<T>, Equal,Alloc> {
-      using Base = reduction_sorted_map<Key, T, Comm, KeyTransform, Less, ::std::plus<T>, Equal, Alloc>;
-
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
+
+    protected:
+      using Base = reduction_sorted_map<Key, T, Comm, KeyTransform, Less, ::std::plus<T>, Equal, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;

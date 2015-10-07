@@ -123,12 +123,25 @@ void test_reverse() {
   KMER rev3, revcomp3;
   KMER rev4, revcomp4;
   int iterations = 10000001;
+  //int iterations = 3;
 
   printf("testing kmer with k=%d, nbits = %d, word bits =%lu. stride %d, iters %d, remainder %d, simd_stride %d, simd_iters %d, simd_remainder %d\n", KMER_SIZE, KMER::nBits, sizeof(WORD_TYPE) * 8, KMER::stride, KMER::iters, KMER::rem, KMER::simd_stride, KMER::simd_iters, KMER::simd_rem);
 
+
+//  std::cout << "bit per word = " << std::dec << KMER::bitstream::bitsPerWord << " pad bits= " << KMER::bitstream::padBits << " inv Pad Bits = " << KMER::bitstream::invPadBits << std::endl;
+//  std::cout << " inv pad mask :     64 bits = " << std::hex << getLeastSignificantBitsMask<WORD_TYPE>(KMER::bitstream::invPadBits) << std::endl;
+
   srand(0);
   for (unsigned int i = 0; i < KMER_SIZE; ++i) {
+
+//    kmer.nextFromWordInternal(rand() % ALPHABET::SIZE, KMER::bitsPerChar);
+//    std::cout << " internal : " << kmer << std::endl;
+//    // clean up
+//    kmer.do_sanitize();
+
     kmer.nextFromChar(rand() % ALPHABET::SIZE);
+//    std::cout << "building: " << kmer << std::endl;
+
   }
 
   for (int i = 0; i  < iterations; ++i) {
@@ -169,6 +182,11 @@ void test_reverse() {
     rev4 ^= kmer.reverse_simd();
     revcomp4 ^= kmer.reverse_complement_simd();
 
+//    if (i == 0) {
+//      KMER kk = kmer.reverse_simd();
+//      std::cout << "before: " << kmer << std::endl;
+//      std::cout << "after: " << kk << std::endl;
+//    }
 
     if (rev != rev4) {
       printf("Input kmer %s iter %d\n", kmer.toAlphabetString().c_str(),i);
@@ -406,17 +424,17 @@ if (choice == 1) {
   test_reverse< 10, bliss::common::DNA, uint8_t>();  // 3 words, not full
   test_reverse< 12, bliss::common::DNA, uint8_t>();  // 3 words, full
 
-//  test_reverse< 21, bliss::common::DNA5, uint64_t>();  // 1 word, not full
-//  test_reverse< 22, bliss::common::DNA5, uint64_t>();  // 2 word, not full
-//  test_reverse< 42, bliss::common::DNA5, uint64_t>();  // 2 words, not full
-//  test_reverse< 43, bliss::common::DNA5, uint64_t>();  // 3 words, not full
-//  test_reverse< 64, bliss::common::DNA5, uint64_t>();  // 3 words, full
-//
-//  test_reverse< 2,  bliss::common::DNA5, uint8_t>();  // 1 word, not full
-//  test_reverse< 3,  bliss::common::DNA5, uint8_t>();  // 2 word, not full
-//  test_reverse< 5,  bliss::common::DNA5, uint8_t>();  // 2 words, not full
-//  test_reverse< 6,  bliss::common::DNA5, uint8_t>();  // 3 words, not full
-//  test_reverse< 8,  bliss::common::DNA5, uint8_t>();  // 3 words, full
+  test_reverse< 21, bliss::common::DNA5, uint64_t>();  // 1 word, not full
+  test_reverse< 22, bliss::common::DNA5, uint64_t>();  // 2 word, not full
+  test_reverse< 42, bliss::common::DNA5, uint64_t>();  // 2 words, not full
+  test_reverse< 43, bliss::common::DNA5, uint64_t>();  // 3 words, not full
+  test_reverse< 64, bliss::common::DNA5, uint64_t>();  // 3 words, full
+
+  test_reverse< 2,  bliss::common::DNA5, uint8_t>();  // 1 word, not full
+  test_reverse< 3,  bliss::common::DNA5, uint8_t>();  // 2 word, not full
+  test_reverse< 5,  bliss::common::DNA5, uint8_t>();  // 2 words, not full
+  test_reverse< 6,  bliss::common::DNA5, uint8_t>();  // 3 words, not full
+  test_reverse< 8,  bliss::common::DNA5, uint8_t>();  // 3 words, full
 
   test_reverse< 15, bliss::common::DNA16, uint64_t>();  // 1 word, not full
   test_reverse< 16, bliss::common::DNA16, uint64_t>();  // 1 word, full
@@ -479,17 +497,17 @@ if (choice == 1) {
   benchmark_reverse< 10, bliss::common::DNA, uint8_t>();  // 3 words, not full
   benchmark_reverse< 12, bliss::common::DNA, uint8_t>();  // 3 words, full
 
-//  benchmark_reverse< 21, bliss::common::DNA5, uint64_t>();  // 1 word, not full
-//  benchmark_reverse< 22, bliss::common::DNA5, uint64_t>();  // 2 word, not full
-//  benchmark_reverse< 42, bliss::common::DNA5, uint64_t>();  // 2 words, not full
-//  benchmark_reverse< 43, bliss::common::DNA5, uint64_t>();  // 3 words, not full
-//  benchmark_reverse< 64, bliss::common::DNA5, uint64_t>();  // 3 words, full
-//
-//  benchmark_reverse< 2,  bliss::common::DNA5, uint8_t>();  // 1 word, not full
-//  benchmark_reverse< 3,  bliss::common::DNA5, uint8_t>();  // 2 word, not full
-//  benchmark_reverse< 5,  bliss::common::DNA5, uint8_t>();  // 2 words, not full
-//  benchmark_reverse< 6,  bliss::common::DNA5, uint8_t>();  // 3 words, not full
-//  benchmark_reverse< 8,  bliss::common::DNA5, uint8_t>();  // 3 words, full
+  benchmark_reverse< 21, bliss::common::DNA5, uint64_t>();  // 1 word, not full
+  benchmark_reverse< 22, bliss::common::DNA5, uint64_t>();  // 2 word, not full
+  benchmark_reverse< 42, bliss::common::DNA5, uint64_t>();  // 2 words, not full
+  benchmark_reverse< 43, bliss::common::DNA5, uint64_t>();  // 3 words, not full
+  benchmark_reverse< 64, bliss::common::DNA5, uint64_t>();  // 3 words, full
+
+  benchmark_reverse< 2,  bliss::common::DNA5, uint8_t>();  // 1 word, not full
+  benchmark_reverse< 3,  bliss::common::DNA5, uint8_t>();  // 2 word, not full
+  benchmark_reverse< 5,  bliss::common::DNA5, uint8_t>();  // 2 words, not full
+  benchmark_reverse< 6,  bliss::common::DNA5, uint8_t>();  // 3 words, not full
+  benchmark_reverse< 8,  bliss::common::DNA5, uint8_t>();  // 3 words, full
 
   benchmark_reverse< 15, bliss::common::DNA16, uint64_t>();  // 1 word, not full
   benchmark_reverse< 16, bliss::common::DNA16, uint64_t>();  // 1 word, full

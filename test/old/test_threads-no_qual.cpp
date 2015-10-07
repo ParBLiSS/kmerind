@@ -253,7 +253,7 @@ void compute_MPI_OMP_WithMaster(FileLoaderType &loader, PartitionHelperType &ph,
 
 int buffer_size = 8192*1024;
 
-#pragma omp parallel sections num_threads(2) shared(index, comm, nprocs, rank, buffer_size, senders, nthreads, loader, parser, ph) default(none)
+#pragma omp parallel sections num_threads(2) shared(index, comm, nprocs, rank, buffer_size, senders, nthreads, loader, parser, ph) OMP_SHARE_DEFAULT
   {
 
 #pragma omp section
@@ -303,7 +303,7 @@ int buffer_size = 8192*1024;
       }
 
 
-#pragma omp parallel num_threads(nthreads) firstprivate(t1, t2, time_span) shared(parser, loader, ph, i, counts, buffers, nprocs, rank, nthreads) default(none)
+#pragma omp parallel num_threads(nthreads) firstprivate(t1, t2, time_span) shared(parser, loader, ph, i, counts, buffers, nprocs, rank, nthreads) OMP_SHARE_DEFAULT
       {
         int tid = omp_get_thread_num();
         INFO("Level 1: compute: thread id = " << tid);
@@ -328,7 +328,7 @@ int buffer_size = 8192*1024;
               li = i;
               ++i;
 
-  #pragma omp task firstprivate(read, li, begin, end, chunkRead, copying) shared(op, rank, parser, buffers, counts) default(none)
+  #pragma omp task firstprivate(read, li, begin, end, chunkRead, copying) shared(op, rank, parser, buffers, counts) OMP_SHARE_DEFAULT
               {
 
                 IteratorType fastq_start(parser, begin, end);
@@ -383,7 +383,7 @@ int buffer_size = 8192*1024;
 
       auto t3 = std::chrono::high_resolution_clock::now();
       // send the last part out.
-#pragma omp parallel for default(none) shared(nprocs, nthreads, rank, buffers, buf_size)
+#pragma omp parallel for OMP_SHARE_DEFAULT shared(nprocs, nthreads, rank, buffers, buf_size)
       for (int j = 0; j < buf_size; ++j)
       {
         buffers[(j + rank) % buf_size].flush();
@@ -436,7 +436,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
 #endif
 //    INFOF("senders = %d\n", senders);
 
-#pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, senders, index, nthreads, loader, parser, ph) default(none)
+#pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, senders, index, nthreads, loader, parser, ph) OMP_SHARE_DEFAULT
     {
 
 
@@ -489,7 +489,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(loader, parser, ph, i, buffers, counts, nprocs, nthreads, rank) default(none)
+#pragma omp parallel num_threads(nthreads) shared(loader, parser, ph, i, buffers, counts, nprocs, nthreads, rank) OMP_SHARE_DEFAULT
       {
         Compute op(nprocs, rank, nthreads);
 
@@ -598,7 +598,7 @@ void compute_MPI_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
 
 
       // send the last part out.
-#pragma omp parallel for default(none) shared(nprocs, nthreads, rank, buffers)
+#pragma omp parallel for OMP_SHARE_DEFAULT shared(nprocs, nthreads, rank, buffers)
       for (int i = 0; i < nprocs * nthreads; ++i) {
         buffers[(i+ rank) % (nprocs * nthreads)].flush();
       }
@@ -646,7 +646,7 @@ void compute_MPI_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
 #endif
 //    INFOF("senders = %d\n", senders);
 
-#pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, senders, index, nthreads, loader, parser, ph) default(none)
+#pragma omp parallel sections num_threads(2) shared(comm, nprocs, rank, senders, index, nthreads, loader, parser, ph) OMP_SHARE_DEFAULT
     {
 
 
@@ -699,7 +699,7 @@ void compute_MPI_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(loader, parser, ph, i, buffers, counts, nprocs, nthreads, rank) default(none)
+#pragma omp parallel num_threads(nthreads) shared(loader, parser, ph, i, buffers, counts, nprocs, nthreads, rank) OMP_SHARE_DEFAULT
       {
         Compute op(nprocs, rank, nthreads);
 
@@ -811,7 +811,7 @@ void compute_MPI_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
 
       // send the last part out.
       int k;
-#pragma omp parallel for default(none) shared(nprocs, nthreads, buffers, rank)
+#pragma omp parallel for OMP_SHARE_DEFAULT shared(nprocs, nthreads, buffers, rank)
       for (k = 0; k < nprocs * nthreads; ++k) {
         buffers[(k+ rank) % (nprocs * nthreads)].flush();
       }

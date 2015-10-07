@@ -9,7 +9,7 @@
  *
  * TODO add License
  */
-
+#include "bliss-config.hpp"
 #include <vector>
 #include <unordered_map>
 #include "concurrent/copyable_atomic.hpp"
@@ -148,7 +148,7 @@ void simulate(int iterations) {
 
 //    testTSAN<nThreads> test;
 //    test.before();
-//#pragma omp parallel default(none) num_threads(nThreads) shared(test)
+//#pragma omp parallel OMP_SHARE_DEFAULT num_threads(nThreads) shared(test)
 //    {
 //      test.thread(omp_get_thread_num());
 //    }
@@ -157,7 +157,7 @@ void simulate(int iterations) {
     copyableAtomicsThreadLocalTest<int, nThreads, 100>  test1;
     test1.before();
 
-#pragma omp parallel default(none) num_threads(nThreads) shared(test1)
+#pragma omp parallel OMP_SHARE_DEFAULT num_threads(nThreads) shared(test1)
     {
       test1.thread(omp_get_thread_num());
     }
@@ -168,7 +168,7 @@ void simulate(int iterations) {
     copyableAtomicsTest<int, nThreads, 100>  test2;
     test2.before();
 
-#pragma omp parallel default(none) num_threads(nThreads) shared(test2)
+#pragma omp parallel OMP_SHARE_DEFAULT num_threads(nThreads) shared(test2)
     {
       test2.thread(omp_get_thread_num());
     }

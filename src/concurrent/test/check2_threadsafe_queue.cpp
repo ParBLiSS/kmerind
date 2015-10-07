@@ -10,6 +10,7 @@
  * TODO add License
  */
 
+#include "bliss-config.hpp"
 
 #include <iostream>
 #include <unistd.h>
@@ -37,7 +38,7 @@ template<typename T, bliss::concurrent::LockType LT>
 void testWaitAndPush(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int entries, const int nProducer) {
   //usleep(1000);
   int count = 0;
-#pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+:count)
+#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nProducer) shared(queue) reduction(+:count)
   for (int i = 0; i < entries; ++i) {
     if (queue.waitAndPush(T(i)).first)
 //    if (i % 1000 == 0) usleep(5);
@@ -55,7 +56,7 @@ template<typename T, bliss::concurrent::LockType LT>
 void testWaitAndPushSome(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int entries, const int nProducer) {
   //usleep(1000);
   int count = 0;
-#pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+:count)
+#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nProducer) shared(queue) reduction(+:count)
   for (int i = 0; i < entries; ++i) {
     if (queue.waitAndPush(T(i)).first)
 //    if (i % 1000 == 0) usleep(5);
@@ -72,7 +73,7 @@ template<typename T, bliss::concurrent::LockType LT>
 void testTryPush(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int entries, const int nProducer) {
   //usleep(1000);
   int count = 0, count2 = 0;
-#pragma omp parallel for default(none) num_threads(nProducer) shared(queue) reduction(+: count, count2)
+#pragma omp parallel for OMP_SHARE_DEFAULT num_threads(nProducer) shared(queue) reduction(+: count, count2)
   for (int i = 0; i < entries; ++i) {
     if (queue.tryPush(T(i)).first)
       ++count;
@@ -146,7 +147,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int nCon
   int counts3[nConsumer];
 
   // while producer is producing, don't know the size.  spawn tasks.
-#pragma omp parallel num_threads(nConsumer) default(none) shared(queue, counts, counts2, counts3)
+#pragma omp parallel num_threads(nConsumer) OMP_SHARE_DEFAULT shared(queue, counts, counts2, counts3)
   {
     counts[omp_get_thread_num()] = 0;
     counts2[omp_get_thread_num()] = 0;
@@ -157,7 +158,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int nCon
       while(queue.canPop()) {
 
         // deferred task to pop.
-//#pragma omp task default(none) shared(queue, counts, counts2)
+//#pragma omp task OMP_SHARE_DEFAULT shared(queue, counts, counts2)
 //        {
           if (queue.tryPop().first)
             ++counts[omp_get_thread_num()];
@@ -179,7 +180,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int nCon
 
   // now use parallel for to flush the data queue
   size_t size = queue.getSize();
-#pragma omp parallel for num_threads(nConsumer) default(none) shared(queue, size, counts2, counts3)
+#pragma omp parallel for num_threads(nConsumer) OMP_SHARE_DEFAULT shared(queue, size, counts2, counts3)
   for (size_t i = 0; i < size; ++i) {
     if (queue.tryPop().first)
       ++counts3[omp_get_thread_num()];
@@ -190,7 +191,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int nCon
 
   // summarize
   int count = 0, count2 = 0, count3 = 0;
-#pragma omp parallel num_threads(nConsumer) default(none) shared(counts, counts2, counts3) reduction(+:count, count2, count3)
+#pragma omp parallel num_threads(nConsumer) OMP_SHARE_DEFAULT shared(counts, counts2, counts3) reduction(+:count, count2, count3)
   {
     count = counts[omp_get_thread_num()];
     count2 = counts2[omp_get_thread_num()];
@@ -210,7 +211,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
   size_t entries = (!queue.isFixedSize()) ? 10000 : queue.getCapacity();
 
-  INFOF("=== TEST %s: %d producers, %d consumers, capacity %lu, entries %d", message.c_str(), nProducer, nConsumer, queue.getCapacity(), entries);
+  INFOF("=== TEST %s: %d producers, %d consumers, capacity %lu, entries %lu", message.c_str(), nProducer, nConsumer, queue.getCapacity(), entries);
 
 
   size_t i = 0;
@@ -219,7 +220,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
   INFOF("  CHECK tryPop on empty: ");  fflush(stdout);
   queue.clear();
-#pragma omp parallel for num_threads(nConsumer) private(i) shared(queue, entries) default(none) reduction(+: count, count2)
+#pragma omp parallel for num_threads(nConsumer) private(i) shared(queue, entries) OMP_SHARE_DEFAULT reduction(+: count, count2)
   for (i = 0; i < entries; ++i) {
     if ( queue.tryPop().first )
       ++count;
@@ -233,7 +234,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   count = 0;
   count2 = 0;
   queue.clear();
-#pragma omp parallel for num_threads(nProducer) private(i) shared(queue, entries) default(none) reduction(+: count, count2)
+#pragma omp parallel for num_threads(nProducer) private(i) shared(queue, entries) OMP_SHARE_DEFAULT reduction(+: count, count2)
   for (i = 0; i < (entries + 2); ++i) {
     if (queue.tryPush(T(i)).first)
       ++count;
@@ -247,7 +248,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   INFOF("  CHECK tryPop too much: ");  fflush(stdout);
   count = 0;
   count2 = 0;
-#pragma omp parallel for num_threads(nConsumer) private(i) shared(queue, entries) default(none) reduction(+: count, count2)
+#pragma omp parallel for num_threads(nConsumer) private(i) shared(queue, entries) OMP_SHARE_DEFAULT reduction(+: count, count2)
   for (i = 0; i < (entries + 2); ++i) {
     if ( queue.tryPop().first)
       ++count;
@@ -264,14 +265,14 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   queue.clear();
   queue.enablePush();
   count = 0;
-#pragma omp parallel for num_threads(nProducer) private(i) shared(queue, entries) default(none) reduction(+: count, count2)
+#pragma omp parallel for num_threads(nProducer) private(i) shared(queue, entries) OMP_SHARE_DEFAULT reduction(+: count, count2)
   for (i = 0; i < entries; ++i) {
     if (queue.waitAndPush(T(i)).first)
       ++count;
   }
 
   count2 = 0;
-#pragma omp parallel for num_threads(nConsumer) private(i) shared(queue, count) default(none) reduction(+: count2)
+#pragma omp parallel for num_threads(nConsumer) private(i) shared(queue, count) OMP_SHARE_DEFAULT reduction(+: count2)
   for (i = 0; i < count; ++i) {
     if (queue.waitAndPop().first)
       ++count2;
@@ -285,7 +286,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   INFOF("  CHECK tryPush, and tryPop: ");  fflush(stdout);
   queue.clear();
   queue.enablePush();
-#pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
+#pragma omp parallel sections num_threads(2) shared(queue, entries) OMP_SHARE_DEFAULT
   {
 #pragma omp section
     {
@@ -306,7 +307,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   INFOF("  CHECK waitAndPush, and tryPop: ");   fflush(stdout);
   queue.clear();
   queue.enablePush();
-#pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
+#pragma omp parallel sections num_threads(2) shared(queue, entries) OMP_SHARE_DEFAULT
   {
 #pragma omp section
     {
@@ -326,7 +327,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   INFOF("  CHECK waitAndPush, and disablePush: ");   fflush(stdout);
   queue.clear();
   queue.enablePush();
-#pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
+#pragma omp parallel sections num_threads(2) shared(queue, entries) OMP_SHARE_DEFAULT
   {
 #pragma omp section
     {
@@ -352,7 +353,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     INFOF("  CHECK tryPush, and waitAndPop: ");  fflush(stdout);
     queue.clear();
     queue.enablePush();
-  #pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
+  #pragma omp parallel sections num_threads(2) shared(queue, entries) OMP_SHARE_DEFAULT
     {
   #pragma omp section
       {
@@ -371,7 +372,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
     INFOF("  CHECK waitAndPush, and waitAndPop: ");  fflush(stdout);
     queue.clear();
     queue.enablePush();
-  #pragma omp parallel sections num_threads(2) shared(queue, entries) default(none)
+  #pragma omp parallel sections num_threads(2) shared(queue, entries) OMP_SHARE_DEFAULT
     {
   #pragma omp section
       {
@@ -390,8 +391,6 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
 
 int main(int argc, char** argv) {
 
-  std::chrono::high_resolution_clock::time_point t1, t2;
-  std::chrono::duration<double> time_span;
 
   omp_set_nested(1);
   omp_set_dynamic(0);
@@ -406,27 +405,27 @@ int main(int argc, char** argv) {
 
   typedef bliss::concurrent::ThreadSafeQueue<int, lt> QueueType;
 
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 4, 1);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 2);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 3);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 1, 4);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 2);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 2, 3);
-  testTSQueue("TSQ nthread 100 elements", std::move(QueueType(100)), 3, 2);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 1, 1);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 2, 1);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 3, 1);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 4, 1);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 1, 2);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 1, 3);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 1, 4);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 2, 2);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 2, 3);
+  testTSQueue("TSQ nthread 100 elements", QueueType(100), 3, 2);
 
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 1);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 1);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 3, 1);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 4, 1);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 2);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 3);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 1, 4);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 2);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 2, 3);
-  testTSQueue("TSQ nthread growable", std::move(QueueType()), 3, 2);
+  testTSQueue("TSQ nthread growable", QueueType(), 1, 1);
+  testTSQueue("TSQ nthread growable", QueueType(), 2, 1);
+  testTSQueue("TSQ nthread growable", QueueType(), 3, 1);
+  testTSQueue("TSQ nthread growable", QueueType(), 4, 1);
+  testTSQueue("TSQ nthread growable", QueueType(), 1, 2);
+  testTSQueue("TSQ nthread growable", QueueType(), 1, 3);
+  testTSQueue("TSQ nthread growable", QueueType(), 1, 4);
+  testTSQueue("TSQ nthread growable", QueueType(), 2, 2);
+  testTSQueue("TSQ nthread growable", QueueType(), 2, 3);
+  testTSQueue("TSQ nthread growable", QueueType(), 3, 2);
 
 
 

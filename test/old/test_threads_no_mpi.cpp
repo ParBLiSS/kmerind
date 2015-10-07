@@ -132,7 +132,7 @@ int buffer_size = 8192*1024;
       }
 
 
-#pragma omp parallel num_threads(nthreads) firstprivate(t1, t2, time_span) shared(parser, loader, ph, i, counts, nprocs, rank, nthreads) default(none)
+#pragma omp parallel num_threads(nthreads) firstprivate(t1, t2, time_span) shared(parser, loader, ph, i, counts, nprocs, rank, nthreads) OMP_SHARE_DEFAULT
       {
         int tid = omp_get_thread_num();
         INFO("Level 1: compute: thread id = " << tid);
@@ -157,7 +157,7 @@ int buffer_size = 8192*1024;
               li = i;
               ++i;
 
-  #pragma omp task firstprivate(read, li, begin, end, chunkRead, copying) shared(op, rank, parser, counts) default(none)
+  #pragma omp task firstprivate(read, li, begin, end, chunkRead, copying) shared(op, rank, parser, counts) OMP_SHARE_DEFAULT
               {
 
                 IteratorType fastq_start(parser, begin, end);
@@ -266,7 +266,7 @@ void compute_OMP_NoMaster(FileLoaderType &loader, PartitionHelperType &ph,
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(loader, parser, ph, i, counts, nprocs, nthreads, rank) default(none)
+#pragma omp parallel num_threads(nthreads) shared(loader, parser, ph, i, counts, nprocs, nthreads, rank) OMP_SHARE_DEFAULT
       {
         Compute op(nprocs, rank, nthreads);
 
@@ -430,7 +430,7 @@ void compute_OMP_ParFor(FileLoaderType &loader, PartitionHelperType &ph,
 
       // VERSION 2.  uses the fastq iterator as the queue itself, instead of master/slave.
       //   at this point, no strong difference.
-#pragma omp parallel num_threads(nthreads) shared(loader, parser, ph, i, counts, nprocs, nthreads, rank) default(none)
+#pragma omp parallel num_threads(nthreads) shared(loader, parser, ph, i, counts, nprocs, nthreads, rank) OMP_SHARE_DEFAULT
       {
         Compute op(nprocs, rank, nthreads);
 

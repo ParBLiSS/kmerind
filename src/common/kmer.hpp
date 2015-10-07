@@ -18,12 +18,15 @@
 // C++ STL includes:
 #include <iterator>
 #include <type_traits>
+#include <typeinfo>   // typeid
 #include <string>
+#include <iostream>   //std::cout, for debugging.
 #include <sstream>
 #include <algorithm>
 #include <utility>  // std::pair
 #include <stack>
 #include <cstring>  // memset, memcpy
+#include <iomanip>  // setfill, setw, for std::cout
 
 
 // own includes
@@ -98,10 +101,15 @@ namespace bliss
   template <unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE=WordType>
   class Kmer
   {
+
+      static_assert(::std::is_integral<WORD_TYPE>::value && !::std::is_signed<WORD_TYPE>::value, "Kmer only accepts primitive unsigned integral type for internal storage.");
+
       friend std::string bliss::utils::KmerUtils::toASCIIString< Kmer >(const Kmer & kmer);
   
       template<unsigned int K, typename ALPHA, typename WT>
       friend std::ostream& operator<<(std::ostream& ost, const Kmer<K, ALPHA, WT> & kmer);
+
+
 
    public:
       /// The size of the Kmer, i.e. the number of characters
@@ -116,7 +124,6 @@ namespace bliss
     static constexpr unsigned int nBits = size * bitsPerChar;
 
    private:
-  
   
     /// The padding traits of an unpadded stream (i.e. the padding for the very
     /// last word)
@@ -163,30 +170,28 @@ public:
   
 
     static constexpr uint8_t simd_mask_b[16] __attribute__((aligned(16))) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
-    static constexpr __m128i const *simd_mask = reinterpret_cast<const __m128i*>(simd_mask_b);
-
+    //static constexpr __m128i const *simd_mask = reinterpret_cast<const __m128i*>(simd_mask_b);
 
     // mask for reversing the order of items
     static constexpr uint8_t simd_rev_mask_b[16] __attribute__((aligned(16))) = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
-    static constexpr __m128i const *simd_rev_mask = reinterpret_cast<const __m128i*>(simd_rev_mask_b);
+    //static constexpr __m128i const *simd_rev_mask = reinterpret_cast<const __m128i*>(simd_rev_mask_b);
 
     // lookup table for reversing bits in a byte in groups of 1
     static constexpr uint8_t simd_lut1_lo_b[16] __attribute__((aligned(16))) = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
-    static constexpr __m128i const *simd_lut1_lo = reinterpret_cast<const __m128i*>(simd_lut1_lo_b);
+    //static constexpr __m128i const *simd_lut1_lo = reinterpret_cast<const __m128i*>(simd_lut1_lo_b);
+
+
     static constexpr uint8_t simd_lut1_hi_b[16] __attribute__((aligned(16))) = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
-    static constexpr __m128i const *simd_lut1_hi = reinterpret_cast<const __m128i*>(simd_lut1_hi_b);
+    //static constexpr __m128i const *simd_lut1_hi = reinterpret_cast<const __m128i*>(simd_lut1_hi_b);
+
     // lookup table for reversing bits in a byte in groups of 2
     static constexpr uint8_t simd_lut2_lo_b[16] __attribute__((aligned(16))) = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
-    static constexpr __m128i const *simd_lut2_lo = reinterpret_cast<const __m128i*>(simd_lut2_lo_b);
+    //static constexpr __m128i const *simd_lut2_lo = reinterpret_cast<const __m128i*>(simd_lut2_lo_b);
+
     static constexpr uint8_t simd_lut2_hi_b[16] __attribute__((aligned(16))) = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
-    static constexpr __m128i const *simd_lut2_hi = reinterpret_cast<const __m128i*>(simd_lut2_hi_b);
+    //static constexpr __m128i const *simd_lut2_hi = reinterpret_cast<const __m128i*>(simd_lut2_hi_b);
+
     // lookup table for reversing bits in a byte in groups of 4 - no need, just use the simd_mask.
-
-    // compare to self sets  register to all 1's.
-    static constexpr uint8_t simd_true_mask_b[32] __attribute__((aligned(16))) = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
-                                                                                  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-    static constexpr __m128i const *simd_true_mask = reinterpret_cast<const __m128i*>(simd_true_mask_b);
-
 
   public:
 
@@ -213,6 +218,7 @@ public:
   
     /// copy assignment operator
     Kmer& operator=(Kmer const &other) {
+
       memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
       return *this;
     }
@@ -612,7 +618,7 @@ public:
       // (better compiler optimization)
   
       nextFromWordInternal(c, bitsPerChar);
-  
+
       // clean up
       do_sanitize();
     }
@@ -884,9 +890,9 @@ public:
     Kmer reversed_kmer() const
     {
 #if defined(__SSSE3__)
-      return ::std::move(do_reverse_simd<ALPHABET>(*this));
+      return do_reverse_simd<ALPHABET>(*this);
 #else
-      return ::std::move(do_reverse_swar<ALPHABET>(*this));
+      return do_reverse_swar<ALPHABET>(*this);
 #endif
     }
 
@@ -901,9 +907,9 @@ public:
     Kmer reverse_complement() const
     {
 #if defined(__SSSE3__)
-      return ::std::move(do_reverse_complement_simd<ALPHABET>(*this));
+      return do_reverse_complement_simd<ALPHABET>(*this);
 #else
-      return ::std::move(do_reverse_complement_swar<ALPHABET>(*this));
+      return do_reverse_complement_swar<ALPHABET>(*this);
 #endif
     }
   
@@ -918,7 +924,7 @@ public:
      */
     Kmer reverse_serial() const
     {
-      return ::std::move(do_reverse_serial(*this));
+      return do_reverse_serial(*this);
     }
 
     /**
@@ -931,7 +937,7 @@ public:
      */
     Kmer reverse_complement_serial() const
     {
-      return ::std::move(do_reverse_complement_serial(*this));
+      return do_reverse_complement_serial(*this);
     }
 
 #if defined(__SSSE3__)
@@ -945,7 +951,7 @@ public:
      */
     Kmer reverse_simd() const
     {
-      return ::std::move(do_reverse_simd<ALPHABET>(*this));
+      return do_reverse_simd<ALPHABET>(*this);
     }
 
     /**
@@ -958,7 +964,7 @@ public:
      */
     Kmer reverse_complement_simd() const
     {
-      return ::std::move(do_reverse_complement_simd<ALPHABET>(*this));
+      return do_reverse_complement_simd<ALPHABET>(*this);
     }
 #endif
     /**
@@ -971,7 +977,7 @@ public:
      */
     Kmer reverse_swar() const
     {
-      return ::std::move(do_reverse_swar<ALPHABET>(*this));
+      return do_reverse_swar<ALPHABET>(*this);
     }
 
     /**
@@ -984,7 +990,7 @@ public:
      */
     Kmer reverse_complement_swar() const
     {
-      return ::std::move(do_reverse_complement_swar<ALPHABET>(*this));
+      return do_reverse_complement_swar<ALPHABET>(*this);
     }
 
     /**
@@ -997,7 +1003,7 @@ public:
      */
     Kmer reverse_bswap() const
     {
-      return ::std::move(do_reverse_bswap<ALPHABET>(*this));
+      return do_reverse_bswap<ALPHABET>(*this);
     }
 
     /**
@@ -1010,7 +1016,7 @@ public:
      */
     Kmer reverse_complement_bswap() const
     {
-      return ::std::move(do_reverse_complement_bswap<ALPHABET>(*this));
+      return do_reverse_complement_bswap<ALPHABET>(*this);
     }
 
     // for debug purposes
@@ -1025,7 +1031,9 @@ public:
     {
       /* return the hex representation of the data array values */
       std::stringstream ss;
-      ss << "k-mer of size " << size << ": [";
+      ss << "k-mer of size " << size << " alphabet ";
+      ss << typeid(ALPHABET).name();
+      ss << ": [";
       for (unsigned int i = 0; i < nWords; ++i)
       {
         ss << "0x" << std::hex << data[i] << " ";
@@ -1171,7 +1179,6 @@ public:
   
     }
   
-  
     /**
      * @brief internal method to add one more character to the kmer at the LSB side
      * @param c     character to add.
@@ -1187,7 +1194,7 @@ public:
       *data |= static_cast<WORD_TYPE>(w) &
           getLeastSignificantBitsMask<WORD_TYPE>(shift);
     }
-  
+
     /**
      * @brief internal method to add one more character to the kmer at the MSB side
      * @param c     character to add.
@@ -1204,7 +1211,6 @@ public:
           getLeastSignificantBitsMask<WORD_TYPE>(shift)) << (bitstream::invPadBits - shift);
     }
   
-  
     /**
      * @brief Sets all unused bits of the underlying k-mer data to 0.
      * @details  highest order bits in highest number element are 0.
@@ -1214,7 +1220,7 @@ public:
       // TODO use templated helper struct for <0> template specialization
       data[nWords-1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::invPadBits);
     }
-  
+
     /**
      * @brief Sets all bits to zero.
      */
@@ -1339,7 +1345,7 @@ public:
 //      // set ununsed bits to 0
 //      this->do_sanitize();
 
-      return ::std::move(result);
+      return result;
     }
   
     /**
@@ -1378,35 +1384,71 @@ public:
 //      // set ununsed bits to 0
 //      this->do_sanitize();
 
-      return ::std::move(result);
+      return result;
 
     }
 
 #if defined(__SSSE3__)
+    static void print_simd_register(__m128i const & v, std::string const & label) {
+      WORD_TYPE tmp[simd_stride];
+      _mm_storeu_si128((__m128i*)tmp, v);
+      std::cout << label << ": ";
+      size_t width = sizeof(WORD_TYPE) * 2;
+      for (int i = simd_stride - 1; i >= 0; --i) {
+        std::cout << std::hex << std::setfill('0') << std::setw(width) << tmp[i] << " ";
+      }
+      std::cout << std::dec << std::endl;
+    }
+
+
     /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.  8 to 100 times faster.
     // this code is inspired by http://stackoverflow.com/questions/746171/best-algorithm-for-bit-reversal-from-msb-lsb-to-lsb-msb-in-c
     template <typename A = ALPHABET>
     static INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
     ::std::is_same<A, RNA>::value, __m128i>::type word_reverse_simd(__m128i const & b) {
+
+//        print(b, "b");
+
+      // load constants:
+      __m128i mask_lo = _mm_load_si128((__m128i*)simd_mask_b);
+
+//        print(mask_lo, "mask_lo");
+
       //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, *simd_rev_mask);                                    // SSSE3
+      __m128i r = _mm_shuffle_epi8(b, _mm_load_si128((__m128i*)simd_rev_mask_b));// *(reinterpret_cast<const __m128i*>(simd_rev_mask_b)));                                    // SSSE3
+
+//        print(r, "r");
 
       //== get the lut indices.
       // lower 4 bits
-      __m128i lo = _mm_and_si128(*simd_mask, r);                                          // SSE2
+      __m128i lo = _mm_and_si128(mask_lo, r); //*(reinterpret_cast<const __m128i*>(simd_mask_b)), r);                                          // SSE2
       // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
-      __m128i hi = _mm_srli_epi16(_mm_andnot_si128(*simd_mask, r), 4);                    // SSE2
+      __m128i hi = _mm_srli_epi16(_mm_andnot_si128(mask_lo, r), 4);   //*(reinterpret_cast<const __m128i*>(simd_mask_b)), r), 4);                    // SSE2
 
-      //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
-      return _mm_or_si128(_mm_shuffle_epi8(*simd_lut2_hi, lo), _mm_shuffle_epi8(*simd_lut2_lo, hi));  // SSSE3, SSE2
+//        print(lo, "lo");
+//        print(hi, "hi");
+
+        __m128i slo = _mm_shuffle_epi8(_mm_load_si128((__m128i*)simd_lut2_hi_b), lo);
+        __m128i shi = _mm_shuffle_epi8(_mm_load_si128((__m128i*)simd_lut2_lo_b), hi);
+
+//        print(slo, "slo");
+//        print(shi, "shi");
+
+        //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+      __m128i res =  _mm_or_si128(slo, shi);                           // SSSE3, SSE2
+
+//      print(res, "result");
+
+      return res;
 
     }
     /// do reverse complement.  8 to 100 times faster than serially reversing the bits.
     template <typename A = ALPHABET>
     static INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
         ::std::is_same<A, RNA>::value, __m128i>::type word_reverse_complement_simd(__m128i const & b) {
-      // DNA type, requires that alphabet be setup so that negation produces the complement.
-      return _mm_xor_si128(word_reverse_simd<A>(b), *simd_true_mask);  // sse does not have negation.   // SSE2
+
+      // DNA type, requires that alphabet be setup so that negation produces the complement.  cmpeq to return a value with all bits set to 1
+      return _mm_xor_si128(word_reverse_simd<A>(b), _mm_cmpeq_epi8(b, b));  // sse does not have negation. use xor with FFFF   // SSE2
     }
 
     // reverse via bit swapping in 4 bit increment.  this complement table is then used for lookup.
@@ -1415,13 +1457,15 @@ public:
     // TODO:  the use of bswap_xx makes it gnu c dependent.
     template <typename A = ALPHABET>
     static INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value, __m128i>::type word_reverse_simd(__m128i const & b) {
+      __m128i mask_lo = _mm_load_si128((__m128i*)simd_mask_b);
+
       //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, *simd_rev_mask);
+      __m128i r = _mm_shuffle_epi8(b, _mm_load_si128((__m128i*)simd_rev_mask_b));
 
       // lower 4 bits shift to upper
-      __m128i lo = _mm_slli_epi32(_mm_and_si128(*simd_mask, r), 4);
+      __m128i lo = _mm_slli_epi32(_mm_and_si128(mask_lo, r), 4);
       // upper 4 bits shift to lower.
-      __m128i hi = _mm_srli_epi32(_mm_andnot_si128(*simd_mask, r), 4);
+      __m128i hi = _mm_srli_epi32(_mm_andnot_si128(mask_lo, r), 4);
 
       // swap bits in groups of 4 bits, so after this point, just or.
 
@@ -1431,17 +1475,20 @@ public:
     // TODO:  the use of bswap_xx makes it gnu c dependent.
     template <typename A = ALPHABET>
     static INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value, __m128i>::type word_reverse_complement_simd(__m128i const & b) {
+      __m128i mask_lo = _mm_load_si128((__m128i*)simd_mask_b);
+
       //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, *simd_rev_mask);
+      __m128i r = _mm_shuffle_epi8(b, _mm_load_si128((__m128i*)simd_rev_mask_b));
 
       //== get the lut indices.
       // lower 4 bits
-      __m128i lo = _mm_and_si128(*simd_mask, r);
+      __m128i lo = _mm_and_si128(mask_lo, r);
       // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
-      __m128i hi = _mm_srli_epi32(_mm_andnot_si128(*simd_mask, r), 4);
+      __m128i hi = _mm_srli_epi32(_mm_andnot_si128(mask_lo, r), 4);
 
       //== now use shuffle to look up the reversed bytes.  hi and lo are now indices. and lut2_lo/hi are lookup tables. remember that lo and hi need to be swapped.
-      return _mm_or_si128(_mm_shuffle_epi8(*simd_lut1_hi, lo), _mm_shuffle_epi8(*simd_lut1_lo, hi));
+      return _mm_or_si128(_mm_shuffle_epi8(_mm_load_si128((__m128i*)simd_lut1_hi_b), lo),
+                          _mm_shuffle_epi8(_mm_load_si128((__m128i*)simd_lut1_lo_b), hi));
 
     }
 //
@@ -1466,20 +1513,44 @@ public:
                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
     INLINE Kmer do_reverse_simd(Kmer const & src) const
     {
+      //std::cout << "SIMD before = " << src << std::endl;
+
       Kmer result;  // empty kmer for output
 
       // do the rem.  When rem is not 0, then it's very slow.  (like 40 to 50 times slower.)  (because of maskmoveu)
       if (simd_rem > 0) {
-        __m128i mword = word_reverse_simd<A>(_mm_loadu_si128((__m128i*)(src.data + nWords - simd_stride)));     // SSE2
-        // store back to result - uses a mask to select which bytes are stored.
-        if (simd_iters > 0) {
-          // has room, extra will be overwritten, so just use _mm_storeu.
-            _mm_storeu_si128((__m128i*)(result.data), mword);                                                   // SSE2
+
+        // not enough room, so need to copy.
+        if (nWords < simd_stride) {
+          // allocate space
+          WORD_TYPE tmp[simd_stride] __attribute__((aligned(16)));
+
+          // copy then load to register.
+          memcpy((tmp + simd_stride - nWords), src.data, nWords * sizeof(WORD_TYPE));
+          __m128i in = _mm_loadu_si128((__m128i*)tmp);
+
+//          print(in , "in");
+
+          // do reverse.
+          __m128i mword = word_reverse_simd<A>(in);     // SSE2
+
+          // copy back out
+          _mm_storeu_si128((__m128i*)tmp, mword);
+
+          // maskmoveu is very slow.  why?
+          //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));               // SSE2
+          memcpy(result.data, tmp, nWords * sizeof(WORD_TYPE));                                             // SSE2
+
         } else {
-          // not enough room, so need to copy.  maskmoveu is very slow.  why?
-          memcpy(result.data, &mword, simd_rem * sizeof(WORD_TYPE));
-            //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));               // SSE2
+          // has room, extra will be overwritten, so just use _mm_storeu.
+          __m128i in = _mm_loadu_si128((__m128i*)(src.data + nWords - simd_stride));
+
+          __m128i mword = word_reverse_simd<A>(in);     // SSE2
+
+          // store back out
+          _mm_storeu_si128((__m128i*)(result.data), mword);                                                     // SSE2
         }
+
       }  // else no rem.
 
 
@@ -1496,11 +1567,14 @@ public:
         }
       }
 
-
+//
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return ::std::move(result);
+//      std::cout << "SIMD reversed, shifted = " << result << std::endl;
+//      std::cout << "SIMD before = " << src << std::endl << std::endl;
+
+      return result;
     }
 
     /**
@@ -1520,20 +1594,36 @@ public:
 
       // do the rem.  When rem is not 0, then it's very slow.  (like 40 to 50 times slower.)  (because of maskmoveu)
       if (simd_rem > 0) {
-        __m128i mword = word_reverse_complement_simd<A>(_mm_loadu_si128((__m128i*)(src.data + nWords - simd_stride)));   // SSE2
-        // store back to result - uses a mask to select which bytes are stored.
-        // do the remainder first because we want the reversed high bits to be overwritten.
-        if (simd_iters > 0) {
-          // has room, extra will be overwritten, so just use _mm_storeu.
-            _mm_storeu_si128((__m128i*)(result.data), mword);                                                             // SSE2
-        } else {
-          // not enough room, so do maskmoveu.  maskmoveu is very slow.  why?
-// don't need this part...
-//          WORD_TYPE tmp[simd_stride] __attribute__((aligned(16)));
-//          _mm_storeu_si128((__m128i*)tmp, mword);
-          memcpy(result.data, &mword, simd_rem * sizeof(WORD_TYPE));
 
-          //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));                           // SSE2
+        // not enough room, so need to copy.
+        if (nWords < simd_stride) {
+          // allocate space
+          WORD_TYPE tmp[simd_stride] __attribute__((aligned(16)));
+
+          // copy then load to register.
+          memcpy((tmp + simd_stride - nWords), src.data, nWords * sizeof(WORD_TYPE));
+          __m128i in = _mm_loadu_si128((__m128i*)tmp);
+
+//          print(in , "in");
+
+          // do reverse.
+          __m128i mword = word_reverse_complement_simd<A>(in);     // SSE2
+
+          // copy back out
+          _mm_storeu_si128((__m128i*)tmp, mword);
+
+          // maskmoveu is very slow.  why?
+          //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));               // SSE2
+          memcpy(result.data, tmp, nWords * sizeof(WORD_TYPE));                                             // SSE2
+
+        } else {
+          // has room, extra will be overwritten, so just use _mm_storeu.
+          __m128i in = _mm_loadu_si128((__m128i*)(src.data + nWords - simd_stride));
+
+          __m128i mword = word_reverse_complement_simd<A>(in);     // SSE2
+
+          // store back out
+          _mm_storeu_si128((__m128i*)(result.data), mword);                                                     // SSE2
         }
       }  // else no rem.
 
@@ -1556,7 +1646,7 @@ public:
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return ::std::move(result);
+      return result;
     }
 
     /**
@@ -1572,7 +1662,7 @@ public:
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse_simd(Kmer const & src) const
     {
-       return ::std::move(do_reverse_serial(src));
+       return do_reverse_serial(src);
     }
 
     /**
@@ -1588,7 +1678,7 @@ public:
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse_complement_simd(Kmer const & src) const
     {
-      return ::std::move(do_reverse_complement_serial(src));
+      return do_reverse_complement_serial(src);
     }
 
 
@@ -1788,14 +1878,20 @@ public:
     {
       Kmer result;  // empty kmer for output
 
+
       // swap the word order.  also swap the packed chars in the word at the same time.
       for (int i = 0, j = nWords - 1, max = nWords; i < max; ++i, --j)
         result.data[j] = word_reverse<A, WORD_TYPE>(src.data[i]);
 
+//      std::cout << "SWAR reversed = " << result << std::endl;
+
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return ::std::move(result);
+//      std::cout << "SWAR reversed, shifted = " << result << std::endl;
+//      std::cout << "SWAR before: " << src << std::endl;
+
+      return result;
     }
   
     /**
@@ -1820,7 +1916,7 @@ public:
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return ::std::move(result);
+      return result;
     }
 
     /**
@@ -1836,7 +1932,7 @@ public:
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse_swar(Kmer const & src) const
     {
-       return ::std::move(do_reverse_serial(src));
+       return do_reverse_serial(src);
     }
 
     /**
@@ -1852,7 +1948,7 @@ public:
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse_complement_swar(Kmer const & src) const
     {
-      return ::std::move(do_reverse_complement_serial(src));
+      return do_reverse_complement_serial(src);
     }
 
 
@@ -1997,7 +2093,7 @@ public:
             // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return ::std::move(result);
+      return result;
     }
 
     /**
@@ -2046,7 +2142,7 @@ public:
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
-      return ::std::move(result);
+      return result;
     }
 
     /**
@@ -2062,7 +2158,7 @@ public:
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse_bswap(Kmer const & src) const
     {
-       return ::std::move(do_reverse_serial(src));
+       return do_reverse_serial(src);
     }
 
     /**
@@ -2078,7 +2174,7 @@ public:
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse_complement_bswap(Kmer const & src) const
     {
-      return ::std::move(do_reverse_complement_serial(src));
+      return do_reverse_complement_serial(src);
     }
 
 
@@ -2115,9 +2211,11 @@ public:
       WORD_TYPE* out = data;
       for (unsigned int i = 0; i < nWords; ++i)
       {
+//        std::cout << " 0x" << std::hex << *begin;
         *(out++) = *(begin++);
       }
-  
+//      std::cout << std::endl;
+
       // set unused bits to zero to make this a valid kmer
       do_sanitize();
     }
@@ -2155,8 +2253,6 @@ public:
   constexpr uint8_t Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::simd_lut2_lo_b[16];
   template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
   constexpr uint8_t Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::simd_lut2_hi_b[16];
-  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-  constexpr uint8_t Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::simd_true_mask_b[32];
 
 
   } // namespace common

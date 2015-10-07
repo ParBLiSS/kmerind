@@ -57,69 +57,65 @@
 #include "farmhash.cc"
 
 
-// Kmer specialization for std::hash
-namespace std {
-  /**
-   * @brief std::hash specialization for kmer.
-   * @note  note that WORD_TYPE may be much smaller than uint64_t.  std::hash does a static_cast internally,
-   *        so high bits are more likely to be 0.
-   *
-   *        solution is to reinterpret the data as uint64_t.
-   */
-  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-  class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
-    protected:
-      using KmerType = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
-
-      static constexpr size_t tuplesize = sizeof(uint64_t) / sizeof(WORD_TYPE);
-      static constexpr size_t tuples = KmerType::nWords / tuplesize;
-      static constexpr size_t leftover = (tuplesize <= 1) ? 0 : (KmerType::nWords % tuplesize) * sizeof(WORD_TYPE);
-
-    public:
-
-      using value_type = KmerType;
-      static const unsigned int default_init_value = ::std::min(KmerType::nBits, 64U);
-      hash(const unsigned int) {};  // ignored.
-
-      /**
-       * @brief function to compute the kmer's hash
-       * @details  note that if the kmer uses a word type that is different than uint64_t,
-       *        we need to make sure that we use all 64 bits of the hash value..
-       *        if the number of bits in kmer is smaller than 64, then we also need to
-       *        add an offset.
-       *
-       *        note that on 32 bit system, this operator does not conform to std::hash declaration.
-       *
-       * @param kmer
-       * @return
-       */
-      inline uint64_t operator()(value_type const& kmer) const
-      {
-
-        // first compute the hash, from 64 bits of input at a time
-        uint64_t const * data = reinterpret_cast<uint64_t const*>(kmer.getData());
-        uint64_t h = std::hash<uint64_t>()(data[0]);
-        uint64_t hp;
-        for (size_t i = 1; i < tuples; ++i) {
-          hp = std::hash<uint64_t>()(data[i]);
-          h ^= (hp << 1);
-        }
-
-        // the remainder bits, if any, needs to be dealt with now.
-        if (leftover > 0) {
-          hp = 0;
-          memcpy(&hp, kmer.getData() + tuples * tuplesize, leftover);
-          hp = std::hash<uint64_t>()(hp);
-          h ^= (hp << 1);
-        }
-
-        return h;
-      }
-  };
-
-
-}  // namespace std
-
+//// Kmer specialization for std::hash
+//namespace std {
+//  /**
+//   * @brief std::hash specialization for kmer.
+//   * @note  note that WORD_TYPE may be much smaller than uint64_t.  std::hash does a static_cast internally,
+//   *        so high bits are more likely to be 0.
+//   *
+//   *        solution is to reinterpret the data as uint64_t.
+//   */
+//  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
+//  struct hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
+//      using KmerType = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
+//
+//      static constexpr size_t tuples = KmerType::nBytes / sizeof(uint64_t);
+//      static constexpr size_t leftover = KmerType::nBytes % sizeof(uint64_t);
+//
+//      using value_type = KmerType;
+//      static const unsigned int default_init_value = KmerType::nBits < 64U ? KmerType::nBits : 64U;
+//
+//
+//      /**
+//       * @brief function to compute the kmer's hash
+//       * @details  note that if the kmer uses a word type that is different than uint64_t,
+//       *        we need to make sure that we use all 64 bits of the hash value..
+//       *        if the number of bits in kmer is smaller than 64, then we also need to
+//       *        add an offset.
+//       *
+//       *        note that on 32 bit system, this operator does not conform to std::hash declaration.
+//       *
+//       * @param kmer
+//       * @return
+//       */
+//      inline uint64_t operator()(value_type const& kmer) const
+//      {
+//
+//        // first compute the hash, from 64 bits of input at a time
+//        uint64_t const * data = reinterpret_cast<uint64_t const*>(kmer.getData());
+//        uint64_t h = std::hash<uint64_t>()(data[0]);
+//        uint64_t hp;
+//        for (size_t i = 1; i < tuples; ++i) {
+//          hp = std::hash<uint64_t>()(data[i]);
+//          h ^= (hp << 1);
+//        }
+//
+//        // the remainder bits, if any, needs to be dealt with now.
+//        if (leftover > 0) {
+//          hp = 0;
+//          memcpy(&hp, kmer.getData() + tuples * sizeof(uint64_t), leftover);
+//          hp = std::hash<uint64_t>()(hp);
+//          h ^= (hp << 1);
+//        }
+//
+//        return h;
+//      }
+//  };
+//
+//
+//}  // namespace std
+//
 
 
 
@@ -172,6 +168,23 @@ namespace bliss {
       };
 
 
+      template <typename KMER, template <typename KMER> class TRANS>
+      struct tuple_transform {
+          TRANS<KMER> transform;
+
+          inline KMER operator()(KMER & x) {
+            x = transform(x);
+            return x;
+          }
+
+          template <typename VAL>
+          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> & x) {
+            x.first = transform(x.first);
+            return x;
+          }
+
+      };
+
     } // namespace transform
 
 
@@ -186,9 +199,12 @@ namespace bliss {
       template<typename KMER, bool Prefix = false>
       class cpp_std {
         protected:
+          static constexpr size_t tuples = KMER::nWords * sizeof(typename KMER::KmerWordType) / sizeof(uint64_t);
+          static constexpr size_t leftover = KMER::nWords * sizeof(typename KMER::KmerWordType) % sizeof(uint64_t);
+
           int64_t shift;
         public:
-          static constexpr unsigned int default_init_value = ::std::min(KMER::nBits, 64U);
+          static constexpr unsigned int default_init_value = (KMER::nBits < 64U) ? KMER::nBits : 64U;
 
           cpp_std(const unsigned int prefix_bits = default_init_value) : shift(default_init_value - prefix_bits) {
             if (prefix_bits > default_init_value)  throw ::std::invalid_argument("ERROR: prefix larger than available hash size or kmer size.");
@@ -196,14 +212,32 @@ namespace bliss {
 
           /// operator to compute hash
           inline size_t operator()(const KMER & kmer) const {
+
+            // first compute the hash, from 64 bits of input at a time
+            size_t const * data = reinterpret_cast<size_t const*>(kmer.getData());
+            size_t h = std::hash<size_t>()(data[0]);
+            size_t hp;
+            for (size_t i = 1; i < tuples; ++i) {
+              hp = std::hash<size_t>()(data[i]);
+              h ^= (hp << 1);
+            }
+
+            // the remainder bits, if any, needs to be dealt with now.
+            if (leftover > 0) {
+              hp = 0;
+              memcpy(&hp, kmer.getData() + tuples * sizeof(size_t), leftover);
+              hp = std::hash<size_t>()(hp);
+              h ^= (hp << 1);
+            }
+
             if (Prefix)
               // if multiword, nBits > 64, then the returned hash will have meaningful msb.  min(nBits, 64) == 64.
               // if single word, nBits <= 64, then min(nBits, 64) = nBits, and shift is the right thing.
-              return ::std::hash<KMER>(kmer) >> shift;
+              return h >> shift;
             else
               // if multiword, nBits > 64, then the returned hash will have meaningful msb.  min(nBits, 64) == 64.
               // if single word, nBits <= 64, then min(nBits, 64) = nBits, and shift is the right thing.
-              return ::std::hash<KMER>(kmer);
+              return h;
           }
 
       };
@@ -219,7 +253,7 @@ namespace bliss {
         protected:
           unsigned int bits;
         public:
-          static const unsigned int default_init_value = ::std::min(KMER::nBits, 64U);
+          static const unsigned int default_init_value = KMER::nBits < 64U ? KMER::nBits : 64U;
 
           /// constructor
           identity(const unsigned int prefix_bits = default_init_value) : bits(prefix_bits) {
@@ -246,9 +280,11 @@ namespace bliss {
           static constexpr unsigned int nBytes = (KMER::nBits + 7) / 8;
 
         public:
-          murmur(const unsigned int) {};
+          static const unsigned int default_init_value = 64U;
 
-          inline uint64_t operator()(KMER const& kmer) const
+          murmur(const unsigned int prefix_bits = default_init_value) {};
+
+          inline uint64_t operator()(const KMER & kmer) const
           {
             // produces 128 bit hash.
             uint64_t h[2];

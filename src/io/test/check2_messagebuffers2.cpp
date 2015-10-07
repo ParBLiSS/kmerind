@@ -56,7 +56,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   unsigned int fswap = 0;
 
 
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, fullBuffers, nelems, bufferSize) reduction(+ : success, failure, sswap, fswap)
+#pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(i, op_suc, ptr) firstprivate(id) shared(buffers, fullBuffers, nelems, bufferSize) reduction(+ : success, failure, sswap, fswap)
   for (i = 0; i < nelems; ++i) {
     //INFOF("insert %lu chars into %d", data.length(), id);
     //INFOF("insert %lu chars into %d", sizeof(int), id);
@@ -110,7 +110,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 //  INFOF("releasing: ");
 
   unsigned int iterations = (sswap + fswap) + 10;
-#pragma omp parallel for num_threads(nthreads) default(none) private(id, op_suc, ptr) shared(buffers, fullBuffers, bufferSize, iterations) reduction(+ : sswap2, fswap2, error, over)
+#pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(id, op_suc, ptr) shared(buffers, fullBuffers, bufferSize, iterations) reduction(+ : sswap2, fswap2, error, over)
   for (id = 0; id < iterations; ++id) {
     try {
       std::tie(op_suc, ptr) = fullBuffers.tryPop();
@@ -152,7 +152,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
 
   id = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(stored, appended, buffers, nelems, bufferSize) reduction(+ : success3, failure3, sswap3, fswap3, bytes3)
+#pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(i, op_suc, ptr) firstprivate(id) shared(stored, appended, buffers, nelems, bufferSize) reduction(+ : success3, failure3, sswap3, fswap3, bytes3)
   for (i = 0; i < nelems; ++i) {
     int data = i;
     int * data_remain = nullptr;
@@ -171,7 +171,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
         if (updating) INFOF("  FULLBUFFER1: size %ld updating? %s, blocked? %s", ptr->getSize(), (updating ? "Y" : "N"), (ptr->is_read_only() ? "Y" : "N"));
 
         bytes3 += ptr->getSize();
-        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), ptr->operator int*(), ptr->operator int*() + ptr->getSize() / sizeof(int));
+        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), ptr->template begin<int>(), ptr->template end<int>());
         buffers.releaseBuffer(std::move(ptr));
       }
     } else {
@@ -187,7 +187,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 
         bytes3 += ptr->getSize();
 
-        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), ptr->operator int*(), ptr->operator int*() + ptr->getSize() / sizeof(int));
+        stored[omp_get_thread_num()].insert(stored[omp_get_thread_num()].end(), ptr->template begin<int>(), ptr->template end<int>());
         buffers.releaseBuffer(std::move(ptr));
       }
     }
@@ -211,7 +211,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   for (auto final : finals) {
     gbytes += (final == nullptr) ? 0 : final->getSize();
     if (final) {
-      allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize() / sizeof(int));
+      allstored.insert(allstored.end(), final->template begin<int>(),  final->template end<int>());
       buffers.releaseBuffer(std::move(final));
     }
     //if (count7 != count/sizeof(int)) ERRORF("FAIL: append count = %d, actual data inserted is %ld", count7, count/sizeof(int) );
@@ -227,7 +227,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
   unsigned int gbytes2 = 0;
   for (auto final : finals) {
     gbytes2 += (final == nullptr) ? 0 : final->getSize();
-      allstored.insert(allstored.end(), final->operator int*(),  final->operator int*() + final->getSize() / sizeof(int));
+      allstored.insert(allstored.end(), final->template begin<int>(),  final->template end<int>());
     buffers.releaseBuffer(std::move(final));
   }
   finals.clear();
@@ -313,7 +313,7 @@ void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockTyp
   //INFOF("full buffer: ");
   id = 0;
   unsigned int attempts = 0;
-#pragma omp parallel for num_threads(nthreads) default(none) private(i, op_suc, ptr) firstprivate(id) shared(buffers, nelems, bufferSize) reduction(+ : swap, bytes, attempts)
+#pragma omp parallel for num_threads(nthreads) OMP_SHARE_DEFAULT private(i, op_suc, ptr) firstprivate(id) shared(buffers, nelems, bufferSize) reduction(+ : swap, bytes, attempts)
   for (i = 0; i < nelems; ++i) {
 
     do {
@@ -409,12 +409,12 @@ int main(int argc, char** argv) {
   bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 > pool;
 
   for (int i = 1; i <= 8; ++i) {  // num targets
-    //testPool(std::move(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i,1)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
+    //testPool(bliss::io::SendMessageBuffers<bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 2047>(i,1), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::NONE, 1);
 
     for (int j = 1; j <= 8; ++j) {  // num threads
-      testBuffers(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 >>(pool, i, j)), lt, lt2, j);
+      testBuffers(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 > >(pool, i, j), lt, lt2, j);
 
-      testBuffersWaitForInsert(std::move(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 >>(pool, i, j)), lt, lt2, j);
+      testBuffersWaitForInsert(bliss::io::SendMessageBuffers<lt, bliss::concurrent::ObjectPool<bliss::io::Buffer<lt2, 2047, 0>, lt1 > >(pool, i, j), lt, lt2, j);
 
     }
   }

@@ -202,7 +202,7 @@ namespace io
         * @param searchRange
         * @return
         */
-       const std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
+       std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
        throw (bliss::io::IOException) {
          //== range checking
          if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
@@ -646,7 +646,7 @@ namespace io
 
           if (_filename.length() <= 0) throw std::invalid_argument("ERROR: Filename Length is less than 1");
           if (_nThreads <= 0) throw std::invalid_argument("ERROR: Number of threads is less than 1");
-          if (_loaderId < 0) throw std::invalid_argument("ERROR: Loader ID is less than 0");
+          //if (_loaderId < 0) throw std::invalid_argument("ERROR: Loader ID is less than 0");
           if (_nConcurrentLoaders <= _loaderId) throw std::invalid_argument("ERROR: Loader ID is greater than number of loaders");
 
           L1BlockSize = (_L1BlockSize == 0) ? pageSize : _L1BlockSize;
@@ -1464,7 +1464,7 @@ namespace io
           /// memory map.  requires that the starting position is block aligned.
           size_t block_start = RangeType::align_to_page(r, pageSize);
 
-          // NOT using MAP_POPULATE.  it slows things done when testing on single node.
+          // NOT using MAP_POPULATE.  it slows things done when testing on single node.  NOTE HUGETLB not supported for file mapping.
           PointerType result = (PointerType)mmap64(nullptr, (r.end - block_start ) * sizeof(T),
                                      PROT_READ,
                                      MAP_PRIVATE, fileHandle,
@@ -1487,8 +1487,20 @@ namespace io
             throw IOException(ss.str());
           }
 
+
+          int madv_result = madvise(result, r.end - block_start, MADV_SEQUENTIAL | MADV_WILLNEED);
+          if ( madv_result == -1) {
+            std::stringstream ss;
+            int myerr = errno;
+            ss << "ERROR in madvise: " << myerr << ": " << strerror(myerr);
+            throw IOException(ss.str());
+          }
+
           return result;
         }
+
+
+
 
         /**
          * @brief unmaps a file region from memory

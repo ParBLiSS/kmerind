@@ -476,7 +476,8 @@ namespace dsc  // distributed std container
 
         ::std::unordered_set<Key, TransformedHash, typename Base::TransformedEqual > temp;
         temp.reserve(c.size());
-        for (auto it = c.begin(), end = c.end(); it != end; ++it) {
+        auto end = c.end();
+        for (auto it = c.begin(); it != end; ++it) {
           temp.emplace(it->first);
         }
         result.assign(temp.begin(), temp.end());
@@ -679,6 +680,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class map : public distributed_map_base<Key, T, ::std::map, Comm, KeyTransform, Hash, Less, Alloc> {
+    protected:
       using Base = distributed_map_base<Key, T, ::std::map, Comm, KeyTransform, Hash, Less, Alloc>;
 
 
@@ -733,7 +735,7 @@ namespace dsc  // distributed std container
       } find_element;
 
 
-      virtual void local_reduction(std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
         this->Base::retain_unique(input, sorted_input);
       }
 
@@ -838,6 +840,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class multimap : public distributed_map_base<Key, T, ::std::multimap, Comm, KeyTransform, Hash, Less, Alloc> {
+    protected:
       using Base = distributed_map_base<Key, T, ::std::multimap, Comm, KeyTransform, Hash, Less, Alloc>;
 
 
@@ -921,7 +924,7 @@ namespace dsc  // distributed std container
 
 
       /// update the multiplicity.  only multimap needs to do this.
-      virtual size_t update_multiplicity() const {
+      virtual size_t update_multiplicity() {
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
         // problem with this approach is that for unordered map, to get the count for a key is essentially O(count), so we get quadratic time.
@@ -963,7 +966,8 @@ namespace dsc  // distributed std container
         //        printf("%lu elements, %lu buckets, %lu unique\n", this->c.size(), this->c.bucket_count(), uniq_count);
         // alternative approach to get number of unique keys is to use an set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
         ::std::unordered_set<Key, typename Base::TransformedHash, typename Base::Base::TransformedEqual > unique_set(this->c.size());
-        for (auto it = this->c.begin(), max = this->c.end(); it != max; ++it) {
+        auto max = this->c.end();
+        for (auto it = this->c.begin(); it != max; ++it) {
           unique_set.emplace(it->first);
         }
         uniq_count = unique_set.size();
@@ -1124,9 +1128,11 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class reduction_map : public map<Key, T, Comm, KeyTransform, Hash, Less, Alloc> {
+      static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
+
+    protected:
       using Base = map<Key, T, Comm, KeyTransform, Hash, Less, Alloc>;
 
-      static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -1176,7 +1182,7 @@ namespace dsc  // distributed std container
 
       }
 
-      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input, bool sorted_input = false) {
 
         if (input.size() == 0) return;
 
@@ -1188,7 +1194,8 @@ namespace dsc  // distributed std container
         TIMER_END(reduce_tuple, "reserve", input.size());
 
         TIMER_START(reduce_tuple);
-        for (auto it = input.begin(), end = input.end(); it != end; ++it) {
+        auto end = input.end();
+        for (auto it = input.begin(); it != end; ++it) {
           if (temp.count(it->first) == 0) temp[it->first] = it->second;  // don't rely on initialization to set T to 0.
           else temp[it->first] = r(temp[it->first], it->second);
         }
@@ -1298,9 +1305,10 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class counting_map : public reduction_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Less,Alloc> {
-      using Base = reduction_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Less, Alloc>;
-
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
+
+    protected:
+      using Base = reduction_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Less, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;

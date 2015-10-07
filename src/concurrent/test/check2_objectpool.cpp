@@ -10,6 +10,7 @@
  * TODO add License
  */
 
+#include "bliss-config.hpp"
 //#include <unistd.h>  // for usleep
 
 #include "omp.h"
@@ -62,7 +63,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
   if (buf_ptr) buf_ptr->clear_and_unblock_writes();
 
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, gold, stored, writelock, writelock3, pool) private(i, data, result) reduction(+:success, failure, swap)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(buf_ptr, gold, stored, writelock, writelock3, pool) private(i, data, result) reduction(+:success, failure, swap)
   for (i = 0; i < total_count; ++i) {
 
 //    while (writelock2.test_and_set());
@@ -109,7 +110,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 //      while (writelock3.test_and_set());
       //sptr = new_buf_ptr;
       omp_set_lock(&writelock3);
-      if (sptr) stored.insert(stored.end(), sptr->operator int*(), sptr->operator int*() + sptr->getSize() / sizeof(int));
+      if (sptr) stored.insert(stored.end(), sptr->template begin<int>(), sptr->template end<int>());
       omp_unset_lock(&writelock3);
 //      writelock3.clear();
 
@@ -125,7 +126,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
   if (sptr) {sptr->block_and_flush();
 
     // compare unordered buffer content.
-    stored.insert(stored.end(), sptr->operator int*(), sptr->operator int*() + sptr->getSize() / sizeof(int));
+    stored.insert(stored.end(), sptr->template begin<int>(), sptr->template end<int>());
   }
   pool.releaseObject(buf_ptr);
   int stored_count = stored.size();
@@ -172,7 +173,7 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
   if (buf_ptr) buf_ptr->clear_and_unblock_writes();
 
 
-#pragma omp parallel for num_threads(NumThreads) default(none) shared(buf_ptr, stdout, pool, capInEl) reduction(+:success, failure, failure2,failure3,swap)
+#pragma omp parallel for num_threads(NumThreads) OMP_SHARE_DEFAULT shared(buf_ptr, stdout, pool, capInEl) reduction(+:success, failure, failure2,failure3,swap)
   for (i = 0; i < total_count; ++i) {
 
     size_t data = i;
@@ -196,7 +197,7 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
         size_t od = *(reinterpret_cast<size_t*>(out));
         if (od != data) {
           FATALF("ERROR: thread %d successful append but value is not correctly stored: expected %lu, actual %lu. buffer %p data ptr %p, offset %ld",
-                 omp_get_thread_num(), data, od, sptr, sptr->operator char*(), (char*)out - sptr->operator char*());
+                 omp_get_thread_num(), data, od, sptr, sptr->template begin<char>(), (char*)out - sptr->template begin<char>());
           fflush(stdout);
           ++failure3;
         }
@@ -268,7 +269,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   int i = 0;
   int count = 0;
   int mx = pool.isUnlimited() ? 100 : pool.getCapacity();
-#pragma omp parallel for num_threads(pool_threads) default(none) private(i) shared(pool, mx) reduction(+ : count)
+#pragma omp parallel for num_threads(pool_threads) OMP_SHARE_DEFAULT private(i) shared(pool, mx) reduction(+ : count)
   for (i = 0; i < mx; ++i) {
 	  auto ptr = pool.tryAcquireObject();
     if (! ptr) {
@@ -284,7 +285,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   i = 0;
   count = 0;
   mx = pool.isUnlimited() ? 100 : pool.getCapacity();
-#pragma omp parallel for num_threads(pool_threads) default(none) private(i) shared(pool, mx) reduction(+ : count)
+#pragma omp parallel for num_threads(pool_threads) OMP_SHARE_DEFAULT private(i) shared(pool, mx) reduction(+ : count)
   for (i = 0; i <= mx; ++i) {  // <= so we get 1 extra
 		auto ptr = pool.tryAcquireObject();
 	    if (! ptr) {
@@ -309,7 +310,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
     temp.push_back(ptr);
     temp.push_back(ptr);
   }
-#pragma omp parallel for num_threads(pool_threads) default(none) shared(pool, mx, temp) private(i) reduction(+ : count)
+#pragma omp parallel for num_threads(pool_threads) OMP_SHARE_DEFAULT shared(pool, mx, temp) private(i) reduction(+ : count)
   for (i = 0; i < mx * 2; ++i) {
 
     typename PoolType::ObjectPtrType ptr = temp[i];
@@ -332,7 +333,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   count = 0;
   int count1 = 0;
   int count2 = 0;
-#pragma omp parallel num_threads(pool_threads) default(none) shared(pool, std::cout) reduction(+ : count, count1, count2)
+#pragma omp parallel num_threads(pool_threads) OMP_SHARE_DEFAULT shared(pool, std::cout) reduction(+ : count, count1, count2)
   {
     int v = omp_get_thread_num() + 5;
     auto ptr = pool.tryAcquireObject();
@@ -348,7 +349,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
         ++count;
       }
 
-      int u = ptr->operator int*()[0];
+      int u = ptr->template begin<int>()[0];
       if (v != u) {
         ++count1;
       }
@@ -369,7 +370,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   auto ptr = pool.tryAcquireObject();
   ptr->clear_and_unblock_writes();
 
-#pragma omp parallel num_threads(buffer_threads) default(none) shared(pool, ptr)
+#pragma omp parallel num_threads(buffer_threads) OMP_SHARE_DEFAULT shared(pool, ptr)
   {
     int v = 7;
     ptr->append(&v, 1);
@@ -377,7 +378,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
 
   bool same = true;
   for (int i = 0; i < buffer_threads ; ++i) {
-    same &= ptr->operator int*()[i] == 7;
+    same &= ptr->template begin<int>()[i] == 7;
   }
   if (!same) FATALF("FAIL: inserted not same");
   else INFOF("PASSED.");
@@ -388,7 +389,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   omp_set_nested(1);
 
   INFOF("TEST all operations together: ");
-#pragma omp parallel num_threads(pool_threads) default(none) shared(pool, pool_threads, buffer_threads, std::cout)
+#pragma omp parallel num_threads(pool_threads) OMP_SHARE_DEFAULT shared(pool, pool_threads, buffer_threads, std::cout)
   {
     // Id range is 0 to 100
     int iter;
@@ -408,7 +409,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
       // access
       iter = rand() % 100;
       int count = 0;
-#pragma omp parallel for num_threads(buffer_threads) default(none) shared(buf, iter) private(j) reduction(+:count)
+#pragma omp parallel for num_threads(buffer_threads) OMP_SHARE_DEFAULT shared(buf, iter) private(j) reduction(+:count)
       for (j = 0; j < iter; ++j) {
         bool res = buf->append(&j, 1);
         if (! (res & 0x1)) {
@@ -461,32 +462,32 @@ int main(int argc, char** argv) {
   /// thread unsafe.  test in single thread way.
 
 
-  testPool(std::move(bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192>, bliss::concurrent::LockType::NONE >()), bliss::concurrent::LockType::NONE,bliss::concurrent::LockType::NONE, 1, 1);
-  testPool(std::move(bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192>, bliss::concurrent::LockType::NONE >(16)), bliss::concurrent::LockType::NONE,bliss::concurrent::LockType::NONE, 1, 1);
+  testPool(bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192>, bliss::concurrent::LockType::NONE >(), bliss::concurrent::LockType::NONE,bliss::concurrent::LockType::NONE, 1, 1);
+  testPool(bliss::concurrent::ObjectPool< bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192>, bliss::concurrent::LockType::NONE >(16), bliss::concurrent::LockType::NONE,bliss::concurrent::LockType::NONE, 1, 1);
 
   for (int i = 1; i <= 8; ++i) {
 	if (i == 5 || i == 6 || i == 7) continue;
 
     // okay to test.  in real life, pools would not be single threaded.
-    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , bliss::concurrent::LockType::NONE >()),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
-//    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE >()), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
-    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, bliss::concurrent::LockType::NONE >()), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
+    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , bliss::concurrent::LockType::NONE >(),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
+//    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE >(), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
+    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, bliss::concurrent::LockType::NONE >(), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
 
     // okay to test.  in real life, pools would not be single threaded.
-    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , bliss::concurrent::LockType::NONE  >(16)),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
-//    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE  >(16)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
-    testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, bliss::concurrent::LockType::NONE  >(16)), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
+    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , bliss::concurrent::LockType::NONE  >(16),    bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::MUTEX, 1, i);
+//    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, bliss::concurrent::LockType::NONE  >(16), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::SPINLOCK, 1, i);
+    testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, bliss::concurrent::LockType::NONE  >(16), bliss::concurrent::LockType::NONE, bliss::concurrent::LockType::LOCKFREE, 1, i);
 
 
     for (int j = 1; j <= 4; ++j) {
 	if (i * j > 16) continue;
-      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , lt>()),    lt, bliss::concurrent::LockType::MUTEX, j, i);
-//      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt>()), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
-      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt>()), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
+      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , lt>(),    lt, bliss::concurrent::LockType::MUTEX, j, i);
+//      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt>(), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
+      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt>(), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
 
-      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , lt>(16)),    lt, bliss::concurrent::LockType::MUTEX, j, i);
-//      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt>(16)), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
-      testPool(std::move(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt>(16)), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
+      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::MUTEX, 8192>   , lt>(16),    lt, bliss::concurrent::LockType::MUTEX, j, i);
+//      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::SPINLOCK, 8192>, lt>(16), lt, bliss::concurrent::LockType::SPINLOCK, j, i);
+      testPool(bliss::concurrent::ObjectPool<bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 8192>, lt>(16), lt, bliss::concurrent::LockType::LOCKFREE, j, i);
 
     }
 
@@ -500,8 +501,8 @@ int main(int argc, char** argv) {
 //    stresstestAppendMultipleBuffers<bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::LOCKFREE, 2048> > >(i, 1000000000, lt, bliss::concurrent::LockType::LOCKFREE, 2048);
 
     // no multithread pool single thread buffer test right now.
-    //testPool(std::move(bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >()), lt, bliss::concurrent::LockType::NONE, i, 1);
-    //testPool(std::move(bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >(16)), lt, bliss::concurrent::LockType::NONE, i, 1);
+    //testPool(bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >(), lt, bliss::concurrent::LockType::NONE, i, 1);
+    //testPool(bliss::concurrent::ObjectPool<lt, bliss::io::Buffer<bliss::concurrent::LockType::NONE, 8192> >(16), lt, bliss::concurrent::LockType::NONE, i, 1);
   }
 
 

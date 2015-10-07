@@ -18,6 +18,7 @@
 #include <tuple>   // pair
 #include <scoped_allocator>
 #include <algorithm>
+#include <cmath>   // ceil
 
 
 namespace fsc {  // fast standard container
@@ -506,16 +507,35 @@ namespace fsc {  // fast standard container
         map.clear();
       }
 
-      /// rehash for new count.  iterators are invalidated.
+      /// rehash for new count number of BUCKETS.  iterators are invalidated.  side effect is multiplicity is updated.
       void rehash(size_type count) {
-        multiplicity = (s + map.size() - 1) / map.size();
+        // compute current average number of entries per vector.  this is side effect.
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
-        map.rehash(::std::max(map.size(), (count + multiplicity - 1) / multiplicity));
+        // only rehash if new bucket count is greater than old bucket count
+        if (count > map.bucket_count())
+          map.rehash(count);
       }
 
-      /// reserve for new count.  iterators may be invalidated.
+      /// bucket count.  same as underlying buckets
+      size_type bucket_count() { return map.bucket_count(); }
+
+      /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
+      float max_load_factor() {
+        // compute current average number of entries per vector.  this is side effect.
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
+
+        return (map.size() == 0) ? map.max_load_factor() : map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
+      }
+
+
+      /// reserve for new count of elements.  iterators may be invalidated.
       void reserve(size_type count) {
-        map.reserve((count + multiplicity - 1) / multiplicity);
+        // compute current average number of entries per vector.  this is side effect
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
+
+        // compute number of buckets required.
+        this->rehash(std::ceil(static_cast<float>(count) / this->max_load_factor()));
       }
 
       iterator insert(const value_type & value) {
@@ -577,10 +597,11 @@ namespace fsc {  // fast standard container
 
       void shrink_to_fit() {
         // update multiplicity.
-        this->multiplicity = (s + map.size() - 1) / map.size();
+        this->multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
         // for each vector, shrink it.
-        for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+        auto max = map.end();
+        for (auto it = map.begin(); it != max; ++it) {
           it->second.shrink_to_fit();
         }
       }
@@ -598,14 +619,16 @@ namespace fsc {  // fast standard container
       }
       size_type get_max_multiplicity() const {
         size_type max_multiplicity = 0;
-        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+        auto max = map.cend();
+        for (auto it = map.cbegin(); it != max; ++it) {
           max_multiplicity = ::std::max(max_multiplicity, it->second.size());
         }
         return max_multiplicity;
       }
       size_type get_min_multiplicity() const {
         size_type min_multiplicity = ::std::numeric_limits<size_type>::max();
-        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+        auto max = map.cend();
+        for (auto it = map.cbegin(); it != max; ++it) {
           min_multiplicity = ::std::min(min_multiplicity, it->second.size());
         }
         return min_multiplicity;
@@ -615,7 +638,8 @@ namespace fsc {  // fast standard container
       }
       double get_stdev_multiplicity() const {
         double stdev_multiplicity = 0;
-        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+        auto max = map.cend();
+        for (auto it = map.cbegin(); it != max; ++it) {
           stdev_multiplicity += (it->second.size() * it->second.size());
         }
         return stdev_multiplicity / double(map.size()) - get_mean_multiplicity();
@@ -1018,16 +1042,35 @@ namespace fsc {  // fast standard container
         map.clear();
       }
 
-      /// rehash for new count.  iterators are invalidated.
+      /// rehash for new count number of BUCKETS.  iterators are invalidated.  side effect is multiplicity is updated.
       void rehash(size_type count) {
-        multiplicity = (s + map.size() - 1) / map.size();
+        // compute current average number of entries per vector.  this is side effect.
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
-        map.rehash(::std::max(map.size(), (count + multiplicity - 1) / multiplicity));
+        // only rehash if new bucket count is greater than old bucket count
+        if (count > map.bucket_count())
+          map.rehash(count);
       }
 
-      /// reserve for new count.  iterators may be invalidated.
+      /// bucket count.  same as underlying buckets
+      size_type bucket_count() { return map.bucket_count(); }
+
+      /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
+      float max_load_factor() {
+        // compute current average number of entries per vector.  this is side effect.
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
+
+        return (map.size() == 0) ? map.max_load_factor() : map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
+      }
+
+
+      /// reserve for new count of elements.  iterators may be invalidated.
       void reserve(size_type count) {
-        map.reserve((count + multiplicity - 1) / multiplicity);
+        // compute current average number of entries per vector.  this is side effect
+        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
+
+        // compute number of buckets required.
+        this->rehash(std::ceil(static_cast<float>(count) / this->max_load_factor()));
       }
 
       iterator insert(const value_type & value) {
@@ -1088,10 +1131,11 @@ namespace fsc {  // fast standard container
 
       void shrink_to_fit() {
         // update multiplicity.
-        this->multiplicity = (s + map.size() - 1) / map.size();
+        this->multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
 
         // for each vector, shrink it.
-        for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+        auto max = map.end();
+        for (auto it = map.begin(); it != max; ++it) {
           it->second.shrink_to_fit();
         }
       }
@@ -1111,14 +1155,16 @@ namespace fsc {  // fast standard container
       }
       size_type get_max_multiplicity() const {
         size_type max_multiplicity = 0;
-        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+        auto max = map.cend();
+        for (auto it = map.cbegin(); it != max; ++it) {
           max_multiplicity = ::std::max(max_multiplicity, it->second.size());
         }
         return max_multiplicity;
       }
       size_type get_min_multiplicity() const {
         size_type min_multiplicity = ::std::numeric_limits<size_type>::max();
-        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+        auto max = map.cend();
+        for (auto it = map.cbegin(); it != max; ++it) {
           min_multiplicity = ::std::min(min_multiplicity, it->second.size());
         }
         return min_multiplicity;
@@ -1128,7 +1174,8 @@ namespace fsc {  // fast standard container
       }
       double get_stdev_multiplicity() const {
         double stdev_multiplicity = 0;
-        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+        auto max = map.cend();
+        for (auto it = map.cbegin(); it != max; ++it) {
           stdev_multiplicity += (it->second.size() * it->second.size());
         }
         return stdev_multiplicity / double(map.size()) - get_mean_multiplicity();

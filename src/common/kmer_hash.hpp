@@ -67,15 +67,12 @@ namespace std {
    *        solution is to reinterpret the data as uint64_t.
    */
   template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-  class hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
-    protected:
+  struct hash<::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> > {
       using KmerType = ::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>;
 
       static constexpr size_t tuplesize = sizeof(uint64_t) / sizeof(WORD_TYPE);
       static constexpr size_t tuples = KmerType::nWords / tuplesize;
       static constexpr size_t leftover = (tuplesize <= 1) ? 0 : (KmerType::nWords % tuplesize) * sizeof(WORD_TYPE);
-
-    public:
 
       using value_type = KmerType;
       static const unsigned int default_init_value = ::std::min(KmerType::nBits, 64U);

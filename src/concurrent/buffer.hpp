@@ -299,30 +299,52 @@ namespace bliss
           return VAR(data_ptr) + getSize<LockType>();
         }
 
+//        /**
+//         * @brief cast the internal data buffer to type T and return pointer to user.
+//         * @note  this breaks the encapsulation a little.
+//         * @tparam  T   desired data type.
+//         */
+//        template<typename T>
+//        operator T*() const {
+//          std::atomic_thread_fence(std::memory_order_acquire);
+//          uint8_t* d = VAR(data_ptr);
+//          return reinterpret_cast<T*>(d);
+//        }
+
+
         /**
-         * @brief cast the internal data buffer to type T and return pointer to user.
-         * @note  this breaks the encapsulation a little.
-         * @tparam  T   desired data type.
+         * @brief Get a pointer to the buffer data memory block.
+         *
+         * @note  DO NOT DEALLOCATE THE MEMORY SPACE RETURNED.
+         *
+         * const because the caller will have a const reference to the buffer
+         *
          */
-        template<typename T>
-        operator T*() const {
-          std::atomic_thread_fence(std::memory_order_acquire);
-          uint8_t* d = VAR(data_ptr);
-          return reinterpret_cast<T*>(d);
+        template <typename T>
+        T* begin() const
+        {
+          return reinterpret_cast<T*>(begin());
+        }
+
+        /// pointer to the end of the data block in buffer.
+        template <typename T>
+        T* end() const
+        {
+          return reinterpret_cast<T*>(end());
         }
 
         /**
          * @brief   get the capacity of the buffer.
          * @return  maximum capacity of buffer.
          */
-        static const size_t getCapacity()
+        static size_t getCapacity()
         {
           return Capacity;
         }
 
 
       	/// get the metadata size
-      	static const size_t getMetadataSize()
+      	static size_t getMetadataSize()
        	{
       	  return MetadataSize;
        	}

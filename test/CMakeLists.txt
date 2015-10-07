@@ -53,6 +53,52 @@ SET_TARGET_PROPERTIES(benchmark_concurrent_IO_MMAP PROPERTIES COMPILE_FLAGS -DTE
 target_link_libraries(benchmark_concurrent_IO_MMAP ${EXTRA_LIBS})
 cotire(benchmark_concurrent_IO_MMAP )
 
+
+# EXECUTABLES
+add_executable(benchmark_concurrent_IO_MMAP_ADVISE benchmark_concurrent_IO.cpp)
+SET_TARGET_PROPERTIES(benchmark_concurrent_IO_MMAP_ADVISE PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP_ADVISE)
+target_link_libraries(benchmark_concurrent_IO_MMAP_ADVISE ${EXTRA_LIBS})
+cotire(benchmark_concurrent_IO_MMAP_ADVISE )
+
+# EXECUTABLES
+add_executable(benchmark_concurrent_IO_MMAP_POPULATE benchmark_concurrent_IO.cpp)
+SET_TARGET_PROPERTIES(benchmark_concurrent_IO_MMAP_POPULATE PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP_POPULATE)
+target_link_libraries(benchmark_concurrent_IO_MMAP_POPULATE ${EXTRA_LIBS})
+cotire(benchmark_concurrent_IO_MMAP_POPULATE )
+
+# EXECUTABLES
+add_executable(benchmark_concurrent_IO_MMAP_POPULATE_ADVISE benchmark_concurrent_IO.cpp)
+SET_TARGET_PROPERTIES(benchmark_concurrent_IO_MMAP_POPULATE_ADVISE PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP_POPULATE_ADVISE)
+target_link_libraries(benchmark_concurrent_IO_MMAP_POPULATE_ADVISE ${EXTRA_LIBS})
+cotire(benchmark_concurrent_IO_MMAP_POPULATE_ADVISE )
+
+# HUGETLB DOES NOT WORK WITH FILES.
+## EXECUTABLES
+#add_executable(benchmark_concurrent_IO_MMAP_HUGEPAGE benchmark_concurrent_IO.cpp)
+#SET_TARGET_PROPERTIES(benchmark_concurrent_IO_MMAP_HUGEPAGE PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP_HUGEPAGE)
+#target_link_libraries(benchmark_concurrent_IO_MMAP_HUGEPAGE ${EXTRA_LIBS})
+#cotire(benchmark_concurrent_IO_MMAP_HUGEPAGE )
+#
+## EXECUTABLES
+#add_executable(benchmark_concurrent_IO_MMAP_HUGEPAGE_ADVISE benchmark_concurrent_IO.cpp)
+#SET_TARGET_PROPERTIES(benchmark_concurrent_IO_MMAP_HUGEPAGE_ADVISE PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP_HUGEPAGE_ADVISE)
+#target_link_libraries(benchmark_concurrent_IO_MMAP_HUGEPAGE_ADVISE ${EXTRA_LIBS})
+#cotire(benchmark_concurrent_IO_MMAP_HUGEPAGE_ADVISE )
+#
+## EXECUTABLES
+#add_executable(benchmark_concurrent_IO_MMAP_POPULATE_HUGEPAGE benchmark_concurrent_IO.cpp)
+#SET_TARGET_PROPERTIES(benchmark_concurrent_IO_MMAP_POPULATE_HUGEPAGE PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP_POPULATE_HUGEPAGE)
+#target_link_libraries(benchmark_concurrent_IO_MMAP_POPULATE_HUGEPAGE ${EXTRA_LIBS})
+#cotire(benchmark_concurrent_IO_MMAP_POPULATE_HUGEPAGE )
+#
+## EXECUTABLES
+#add_executable(benchmark_concurrent_IO_MMAP_POPULATE_HUGEPAGE_ADVISE benchmark_concurrent_IO.cpp)
+#SET_TARGET_PROPERTIES(benchmark_concurrent_IO_MMAP_POPULATE_HUGEPAGE_ADVISE PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP_POPULATE_HUGEPAGE_ADVISE)
+#target_link_libraries(benchmark_concurrent_IO_MMAP_POPULATE_HUGEPAGE_ADVISE ${EXTRA_LIBS})
+#cotire(benchmark_concurrent_IO_MMAP_POPULATE_HUGEPAGE_ADVISE )
+#
+
+
 # EXECUTABLES
 add_executable(benchmark_concurrent_IO_FILELOADER benchmark_concurrent_IO.cpp)
 SET_TARGET_PROPERTIES(benchmark_concurrent_IO_FILELOADER PROPERTIES COMPILE_FLAGS -DTEST_OP_FILELOADER)

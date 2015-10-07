@@ -214,11 +214,12 @@ namespace dsc  // distributed std container
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_reserve( size_t n) {
-        c.reserve(n);
+        local_rehash(std::ceil(static_cast<float>(n) / this->c.max_load_factor()) );
       }
 
       /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_rehash( size_type n) {
+        if (this->c.bucket_count() < n) this->c.rehash(n);
       }
 
       struct LocalCount {
@@ -295,7 +296,7 @@ namespace dsc  // distributed std container
           if (first == last) return 0;
 
           size_t before = c.size();
-          this->c.reserve(before + ::std::distance(first, last));
+          this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             c.emplace(*it);
@@ -314,7 +315,7 @@ namespace dsc  // distributed std container
           if (first == last) return 0;
 
           size_t before = c.size();
-          this->c.reserve(before + ::std::distance(first, last));
+          this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) c.emplace(*it);
@@ -687,7 +688,8 @@ namespace dsc  // distributed std container
 
         ::std::unordered_set<Key, TransformedHash, typename Base::TransformedEqual > temp;
         temp.reserve(c.size());
-        for (auto it = c.begin(), end = c.end(); it != end; ++it) {
+        auto end = c.end();
+        for (auto it = c.begin(); it != end; ++it) {
           temp.emplace((*it).first);
         }
         result.assign(temp.begin(), temp.end());
@@ -778,7 +780,8 @@ namespace dsc  // distributed std container
             // within start-end, values are unique, so don't need to set unique to true.
             QueryProcessor::process(c, start, end, emplace_iter, count_element, true, pred);
 
-            if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+            if (this->comm.rank() == 0)
+            	DEBUGF("R %d added %lu results for %lu queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
             start = end;
           }
@@ -864,7 +867,7 @@ namespace dsc  // distributed std container
         retain_unique(keys, si);
 
         // then call local remove.
-        size_t count = QueryProcessor::process(c, keys.begin(), keys.end(), keys.end(), erase_element, true, pred);
+        QueryProcessor::process(c, keys.begin(), keys.end(), keys.end(), erase_element, true, pred);
 
         return before - this->c.size();
       }
@@ -918,6 +921,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class unordered_map : public unordered_map_base<Key, T, ::std::unordered_map, Comm, KeyTransform, Hash, Equal, Alloc> {
+    protected:
       using Base = unordered_map_base<Key, T, ::std::unordered_map, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 
@@ -979,7 +983,7 @@ namespace dsc  // distributed std container
       } find_element;
 
 
-      virtual void local_reduction(std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
         this->Base::retain_unique(input, sorted_input);
       }
 
@@ -1089,6 +1093,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class unordered_multimap : public unordered_map_base<Key, T, ::std::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc> {
+    protected:
       using Base = unordered_map_base<Key, T, ::std::unordered_multimap, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 
@@ -1178,7 +1183,7 @@ namespace dsc  // distributed std container
 
 /*
       /// update the multiplicity.  only multimap needs to do this.
-      virtual size_t update_multiplicity() const {
+      virtual size_t update_multiplicity() {
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
         // problem with this approach is that for unordered map, to get the count for a key is essentially O(count), so we get quadratic time.
@@ -1259,7 +1264,7 @@ namespace dsc  // distributed std container
         return this->key_multiplicity;
       }
 */
-      virtual size_t update_multiplicity() const {
+      virtual size_t update_multiplicity() {
         printf("unordered map bucket count: %lu\n", this->c.bucket_count());
         printf("unordered map load factor: %f\n", this->c.load_factor());
         printf("unordered map unique entries: %lu\n", this->c.size());
@@ -1349,9 +1354,10 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class reduction_unordered_map : public unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc> {
-      using Base = unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc>;
-
       static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
+
+    protected:
+      using Base = unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -1387,7 +1393,7 @@ namespace dsc  // distributed std container
       size_t local_insert(InputIterator first, InputIterator last) {
           size_t before = this->c.size();
 
-          this->c.reserve(before + ::std::distance(first, last));
+          this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             if (this->c.find(it->first) == this->c.end()) this->c.emplace(*it);
@@ -1406,7 +1412,7 @@ namespace dsc  // distributed std container
       size_t local_insert(InputIterator first, InputIterator last, Predicate const & pred) {
           size_t before = this->c.size();
 
-          this->c.reserve(before + ::std::distance(first, last));
+          this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) {
@@ -1421,7 +1427,7 @@ namespace dsc  // distributed std container
 
       /// local reduction via a copy of local container type (i.e. unordered_map).
       /// this takes quite a bit of memory due to use of unordered_map, but is significantly faster than sorting.
-      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input, bool sorted_input = false) {
 
         if (input.size() == 0) return;
 
@@ -1435,7 +1441,8 @@ namespace dsc  // distributed std container
         TIMER_START(reduce_tuple);
         Key k;
         T v;
-        for (auto it = input.begin(), end = input.end(); it != end; ++it) {
+        auto end = input.end();
+        for (auto it = input.begin(); it != end; ++it) {
           k = it->first;
           v = it->second;
           if (temp.find(k) == temp.end()) temp.emplace(k, v);  // don't rely on initialization to set T to 0.
@@ -1551,9 +1558,10 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class counting_unordered_map : public reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal,Alloc> {
-      using Base = reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal, Alloc>;
-
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
+
+    protected:
+      using Base = reduction_unordered_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Equal, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -1674,6 +1682,8 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class unordered_multimap_vec : public unordered_map_base<Key, T, ::fsc::unordered_vecmap, Comm, KeyTransform, Hash, Equal, Alloc> {
+
+    protected:
       using Base = unordered_map_base<Key, T, ::fsc::unordered_vecmap, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 
@@ -1903,6 +1913,7 @@ namespace dsc  // distributed std container
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class unordered_multimap_compact_vec : public unordered_map_base<Key, T, ::fsc::unordered_compact_vecmap, Comm, KeyTransform, Hash, Equal, Alloc> {
+    protected:
       using Base = unordered_map_base<Key, T, ::fsc::unordered_compact_vecmap, Comm, KeyTransform, Hash, Equal, Alloc>;
 
 

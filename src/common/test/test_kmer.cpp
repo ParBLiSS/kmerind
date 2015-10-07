@@ -10,345 +10,7 @@
 #include "utils/logging.h"
 
 template<unsigned int KMER_SIZE, typename ALPHABET, typename word_type=WordType>
-class MyKmer : bliss::common::Kmer<KMER_SIZE, ALPHABET, word_type>
-{
-  public:
-    using SuperType = typename bliss::common::Kmer<KMER_SIZE, ALPHABET, word_type>;
-
-    explicit MyKmer(const SuperType& other) : SuperType(other) {};
-
-    template<typename InputIterator>
-    explicit MyKmer(InputIterator iter) : SuperType(iter) {};
-    MyKmer() : SuperType() {};
-    template <typename InputIterator, typename offset_t>
-    // TODO: add option for bit offset in input sequence?
-    unsigned int fillFromPackedStream(InputIterator& begin, offset_t& offset, bool stop_on_last = false) {
-      return SuperType::fillFromPackedStream(begin, offset, stop_on_last);
-    }
-    template <typename InputIterator>
-    void fillFromChars(InputIterator& begin, bool stop_on_last = false) {
-      SuperType::fillFromChars(begin, stop_on_last);
-    }
-    template <typename InputIterator, typename offset_t>
-    void nextFromPackedStream(InputIterator& begin, offset_t& offset) {
-      SuperType::nextFromPackedStream(begin, offset);
-    }
-    void nextFromChar(char c) {
-      SuperType::nextFromChar(c);
-    }
-
-    inline bool operator==(const MyKmer& rhs) const
-    {
-      return SuperType::operator==(rhs);
-    }
-    inline bool operator!=(const MyKmer& rhs) const
-    {
-      return SuperType::operator!=(rhs);
-    }
-    inline bool operator<(const MyKmer& rhs) const
-    {
-      return SuperType::operator<(rhs);
-    }
-    inline bool operator<=(const MyKmer& rhs) const
-    {
-      return SuperType::operator<=(rhs);
-    }
-    inline bool operator>(const MyKmer& rhs) const
-    {
-      return SuperType::operator>(rhs);
-    }
-    inline bool operator>=(const MyKmer& rhs) const
-    {
-      return SuperType::operator>=(rhs);
-    }
-    inline MyKmer operator^(const MyKmer& rhs) const
-    {
-      return MyKmer(SuperType::operator^(rhs).data);
-    }
-    inline MyKmer& operator^=(const MyKmer& rhs) const
-    {
-      return SuperType::operator^=(rhs);
-    }
-    inline MyKmer operator&(const MyKmer& rhs) const
-    {
-      return SuperType::operator&(rhs);
-    }
-    inline MyKmer& operator&=(const MyKmer& rhs) const
-    {
-      return SuperType::operator&=(rhs);
-    }
-    inline MyKmer operator|(const MyKmer& rhs) const
-    {
-      return SuperType::operator|(rhs);
-    }
-    inline MyKmer& operator|=(const MyKmer& rhs) const
-    {
-      return SuperType::operator|=(rhs);
-    }
-    inline MyKmer operator<<(const MyKmer& rhs) const
-    {
-      return SuperType::operator<<(rhs);
-    }
-    inline MyKmer& operator<<=(const MyKmer& rhs) const
-    {
-      return SuperType::operator<<=(rhs);
-    }
-    inline MyKmer operator>>(const MyKmer& rhs) const
-    {
-      return SuperType::operator>>(rhs);
-    }
-    inline MyKmer& operator>>=(const MyKmer& rhs) const
-    {
-      return SuperType::operator>>=(rhs);
-    }
-    MyKmer reversed_kmer() const
-    {
-      return MyKmer(SuperType::reversed_kmer());
-    }
-    std::string toString() const
-    {
-      return SuperType::toString();
-    }
-
-    uint64_t getPrefix64() const {
-      return SuperType::getPrefix64();
-    }
-
-};
-
-
-struct Bits4
-{
-  static constexpr AlphabetSizeType SIZE = 15;
-  // lookup table for XYZ
-  static constexpr uint8_t FROM_ASCII[256] =
-  {
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-//     'A'     'C'             'G'
-    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-//                 'T'
-    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-//     'a'     'c'             'g'
-    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-//                 't'
-    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-  };
-
-  // reverse lookup table for XYZ
-  static constexpr char TO_ASCII[SIZE] =
-  {
-    'A',  // = 0
-    'C',  // = 1
-    'G',  // = 2
-    'T'  // = 3
-  };
-
-  // reverse lookup table for DNA5
-  static constexpr uint8_t TO_COMPLEMENT[SIZE] =
-  {
-    3,  // = 0
-    2,  // = 1
-    1,  // = 2
-    0  // = 3
-  };
-};
-struct Bits5
-{
-  static constexpr AlphabetSizeType SIZE = 31;
-  // lookup table for XYZ
-  static constexpr uint8_t FROM_ASCII[256] =
-  {
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-//     'A'     'C'             'G'
-    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-//                 'T'
-    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-//     'a'     'c'             'g'
-    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-//                 't'
-    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-  };
-
-  // reverse lookup table for XYZ
-  static constexpr char TO_ASCII[SIZE] =
-  {
-    'A',  // = 0
-    'C',  // = 1
-    'G',  // = 2
-    'T'  // = 3
-  };
-
-  // reverse lookup table for DNA5
-  static constexpr uint8_t TO_COMPLEMENT[SIZE] =
-  {
-    3,  // = 0
-    2,  // = 1
-    1,  // = 2
-    0  // = 3
-  };
-};
-struct Bits6
-{
-  static constexpr AlphabetSizeType SIZE = 63;
-  // lookup table for XYZ
-  static constexpr uint8_t FROM_ASCII[256] =
-  {
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-//     'A'     'C'             'G'
-    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-//                 'T'
-    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-//     'a'     'c'             'g'
-    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-//                 't'
-    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-  };
-
-  // reverse lookup table for XYZ
-  static constexpr char TO_ASCII[SIZE] =
-  {
-    'A',  // = 0
-    'C',  // = 1
-    'G',  // = 2
-    'T'  // = 3
-  };
-
-  // reverse lookup table for DNA5
-  static constexpr uint8_t TO_COMPLEMENT[SIZE] =
-  {
-    3,  // = 0
-    2,  // = 1
-    1,  // = 2
-    0  // = 3
-  };
-};
-struct Bits7
-{
-  static constexpr AlphabetSizeType SIZE = 127;
-  // lookup table for XYZ
-  static constexpr uint8_t FROM_ASCII[256] =
-  {
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-//     'A'     'C'             'G'
-    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-//                 'T'
-    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-//     'a'     'c'             'g'
-    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-//                 't'
-    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-  };
-
-  // reverse lookup table for XYZ
-  static constexpr char TO_ASCII[SIZE] =
-  {
-    'A',  // = 0
-    'C',  // = 1
-    'G',  // = 2
-    'T'  // = 3
-  };
-
-  // reverse lookup table for DNA5
-  static constexpr uint8_t TO_COMPLEMENT[SIZE] =
-  {
-    3,  // = 0
-    2,  // = 1
-    1,  // = 2
-    0  // = 3
-  };
-};
-struct Bits8
-{
-  static constexpr AlphabetSizeType SIZE = 255;
-  // lookup table for XYZ
-  static constexpr uint8_t FROM_ASCII[256] =
-  {
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-//     'A'     'C'             'G'
-    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-//                 'T'
-    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-//     'a'     'c'             'g'
-    0,  0,  0,  1,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,
-//                 't'
-    0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-  };
-
-  // reverse lookup table for XYZ
-  static constexpr char TO_ASCII[SIZE] =
-  {
-    'A',  // = 0
-    'C',  // = 1
-    'G',  // = 2
-    'T'  // = 3
-  };
-
-  // reverse lookup table for DNA5
-  static constexpr uint8_t TO_COMPLEMENT[SIZE] =
-  {
-    3,  // = 0
-    2,  // = 1
-    1,  // = 2
-    0  // = 3
-  };
-};
-
-
+using MyKmer = bliss::common::Kmer<KMER_SIZE, ALPHABET, word_type>;
 
 // templated test function
 template<typename kmer_word_type, typename input_word_type, unsigned int kmer_size=31, class Alphabet=bliss::common::DNA>
@@ -429,19 +91,6 @@ void test_kmers_3_packed(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned
   test_kmers_with_packed_input<input_word_type, 13, bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
   test_kmers_with_packed_input<input_word_type, 9,  bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
   test_kmers_with_packed_input<input_word_type, 1,  bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
-}
-
-template<typename input_word_type>
-void test_kmers_5_packed(input_word_type* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
-{
-  // maximum in 64 bits is 12
-  test_kmers_with_packed_input<input_word_type, 12, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 11, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 10, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 9,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 5,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 3,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_packed_input<input_word_type, 1,  Bits5>(kmer_data, kmer_ex, nkmers);
 }
 
 /**
@@ -672,124 +321,6 @@ TEST(KmerGeneration, TestKmerGenerationPacked3)
 
 }
 
-/**
- * Test k-mer generation with 5 bits and thus padded input
- */
-TEST(KmerGeneration, TestKmerGenerationPacked5)
-{
-  // test sequence: 0xabbacafebabe1234deadbeef01c0ffee
-
-  // expected kmers:
-  // generated by the python commands (thank you python for integrated bigints)
-  /*
-   * val = 0xabbacafebabe1234deadbeef01c0ffee
-   * print(",\n".join([" "*24 + hex(val >> (128 - 60 - 5*i) & 0x0fffffffffffffff)[:-1] for i in range(0,14)]))
-   */
-  uint64_t kmer_ex[14] = {
-                          0xabbacafebabe123,
-                          0x77595fd757c2469,
-                          0xeb2bfaeaf848d37,
-                          0x657f5d5f091a6f5,
-                          0xafebabe1234dead,
-                          0xfd757c2469bd5b7,
-                          0xaeaf848d37ab6fb,
-                          0xd5f091a6f56df77,
-                          0xbe1234deadbeef0,
-                          0xc2469bd5b7dde03,
-                          0x48d37ab6fbbc070,
-                          0x1a6f56df7780e07,
-                          0x4deadbeef01c0ff,
-                          0xbd5b7dde0381ffd
-  };
-
-
-  // 8 bit input
-  /* python:
-   * import operator
-   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*5)) & 0x1f) << (j*5) ) for j in range(0,1)], 0) )[:-1] for i in range(0, 25) ) )
-    */
-  uint8_t kmer_data_8[25] = {
-                             0x15,
-                             0xe,
-                             0x1d,
-                             0xc,
-                             0x15,
-                             0x1f,
-                             0x15,
-                             0x1a,
-                             0x17,
-                             0x18,
-                             0x9,
-                             0x3,
-                             0x9,
-                             0x17,
-                             0x15,
-                             0xd,
-                             0x17,
-                             0x1b,
-                             0x17,
-                             0x10,
-                             0x3,
-                             0x10,
-                             0x7,
-                             0x1f,
-                             0x1d
-  };
-
-  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
-  test_kmers_5_packed<uint8_t>(kmer_data_8, kmer_ex, 14);
-
-
-
-  // 16 bit input  1 bit pad.   8 entries means only have 120 bits in input.  this covers the initial 60 bits, and 12 5-bit shifts, for total of 13 entries.
-  /* python:
-   * import operator
-   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*5)) & 0x1f) << (j*5) ) for j in range(0,3)], 0) )[:-1] for i in range(0, 24, 3) ) )
-    */
-  uint16_t kmer_data_16[8] = {
-                              0x75d5,
-                              0x7eac,
-                              0x5f55,
-                              0xd38,
-                              0x56e9,
-                              0x6eed,
-                              0xe17,
-                              0x7cf0
-  };
-
-  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
-  test_kmers_5_packed<uint16_t>(kmer_data_16, kmer_ex, 13);
-
-
-  // 32 bit input,  2 bit pad.   4 entries means only have 120 bits in input.  this covers the initial 60 bits, and 12 5-bit shifts, for total of 13 entries.
-  /* python:
-   * import operator
-   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*5)) & 0x1f) << (j*5) ) for j in range(0,6)], 0) )[:-1] for i in range(0, 24, 6) ) )
-    */
-  uint32_t kmer_data_32[4] = {
-                              0x3f5675d5,
-                              0x69c5f55,
-                              0x3776d6e9,
-                              0x3e780e17
-  };
-
-  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
-  test_kmers_5_packed<uint32_t>(kmer_data_32, kmer_ex, 13);
-
-  // 64 bit input,  4 bit pad.   2 entries means only have 120 bits in input.  this covers the initial 60 bits, and 12 5-bit shifts, for total of 13 entries.
-  /* python:
-   * import operator
-   * print(",\n".join( hex( reduce(operator.or_, [( ((val >> (128 - (i+j+1)*5)) & 0x1f) << (j*5) ) for j in range(0,12)], 0) )[:-1] for i in range(0, 24, 12) ) )
-    */
-  uint64_t kmer_data_64[2] = {
-                              0x1a717d57f5675d5,
-                              0xf9e0385f776d6e9
-  };
-
-  // unpadded stream (bits_per_char is 3, 2 chars per char => 2 bit padding)
-  test_kmers_5_packed<uint64_t>(kmer_data_64, kmer_ex, 13);
-
-}
 
 
 // templated test function
@@ -861,18 +392,6 @@ void test_kmers_3_unpacked(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned
   test_kmers_with_unpacked_input<13, bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
   test_kmers_with_unpacked_input<9,  bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
   test_kmers_with_unpacked_input<1,  bliss::common::DNA5>(kmer_data, kmer_ex, nkmers);
-}
-
-void test_kmers_5_unpacked(unsigned char* kmer_data, uint64_t* kmer_ex, unsigned int nkmers)
-{
-  // maximum in 64 bits is 12
-  test_kmers_with_unpacked_input<12, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<11, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<10, Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<9,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<5,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<3,  Bits5>(kmer_data, kmer_ex, nkmers);
-  test_kmers_with_unpacked_input<1,  Bits5>(kmer_data, kmer_ex, nkmers);
 }
 
 /**
@@ -1112,74 +631,6 @@ TEST(KmerGeneration, TestKmerGenerationChar3)
 
 }
 
-/**
- * Test k-mer generation with 5 bits and thus padded input
- */
-TEST(KmerGeneration, TestKmerGenerationChar5)
-{
-  // test sequence: 0xabbacafebabe1234deadbeef01c0ffee
-
-  // expected kmers:
-  // generated by the python commands (thank you python for integrated bigints)
-  /*
-   * val = 0xabbacafebabe1234deadbeef01c0ffee
-   * print(",\n".join([" "*24 + hex(val >> (128 - 60 - 5*i) & 0x0fffffffffffffff)[:-1] for i in range(0,14)]))
-   */
-  uint64_t kmer_ex[14] = {
-                          0xabbacafebabe123,
-                          0x77595fd757c2469,
-                          0xeb2bfaeaf848d37,
-                          0x657f5d5f091a6f5,
-                          0xafebabe1234dead,
-                          0xfd757c2469bd5b7,
-                          0xaeaf848d37ab6fb,
-                          0xd5f091a6f56df77,
-                          0xbe1234deadbeef0,
-                          0xc2469bd5b7dde03,
-                          0x48d37ab6fbbc070,
-                          0x1a6f56df7780e07,
-                          0x4deadbeef01c0ff,
-                          0xbd5b7dde0381ffd
-  };
-
-
-  /* python:
-   * print(",\n".join([" "*24 + hex(val >> (128 - 5*(i+1) ) & 0x1f)[:-1] for i in range(0,25)]))
-   */
-  uint8_t kmer_data_8[25] = {
-                             0x15,
-                             0xe,
-                             0x1d,
-                             0xc,
-                             0x15,
-                             0x1f,
-                             0x15,
-                             0x1a,
-                             0x17,
-                             0x18,
-                             0x9,
-                             0x3,
-                             0x9,
-                             0x17,
-                             0x15,
-                             0xd,
-                             0x17,
-                             0x1b,
-                             0x17,
-                             0x10,
-                             0x3,
-                             0x10,
-                             0x7,
-                             0x1f,
-                             0x1d
-  };
-  // test with 8 bit (padded by 3 bits)
-  test_kmers_5_unpacked(kmer_data_8, kmer_ex, 14);
-
-}
-
-
-
 
 /**
  * Testing k-mer comparison operators.
@@ -1241,20 +692,22 @@ TEST(KmerReverse, TestKmerReverse112)
   /* python:
    * ", ".join(hex((val >> i*16) & 0xffff) for i in range(0, 8))
    */
-  uint16_t kmer_val[] = {0xffee, 0x1c0, 0xbeef, 0xdead, 0x1234, 0x5678, 0xabba};
-  uint16_t kmer_ex[] = {0xaeea, 0x2d95, 0x1c84, 0x7ab7, 0xfbbe, 0x340, 0xbbff};
+  uint16_t kmer_val[] =  {0xffee, 0x1c0, 0xbeef, 0xdead, 0x1234, 0x5678, 0xabba};
+  uint16_t kmer_ex[] =   {0xaeea, 0x2d95, 0x1c84, 0x7ab7, 0xfbbe, 0x340, 0xbbff};
   uint16_t kmer_ex_3[] = {0x2faa, 0x2795, 0x34a4, 0xdabd, 0x3ebe, 0x2311, 0x6bff};
   uint16_t kmer_ex_4[] = {0xabba, 0x8765, 0x4321, 0xdaed, 0xfeeb, 0xc10, 0xeeff};
-  uint16_t kmer_ex_5[] = {0xd375, 0xb13a, 0xba40, 0xd5f5, 0xe77c, 0x8780, 0x1dff};
-  uint16_t kmer_ex_7[] = {0xb755, 0xcf2, 0xa644, 0xd6bd, 0x1777, 0x18ee, 0xddfc};
 
 
   /* test for bits_per_char = 2 */
   MyKmer<7*8, bliss::common::DNA, uint16_t> kmer_in(kmer_val);
   MyKmer<7*8, bliss::common::DNA, uint16_t> kmer_ex_rev(kmer_ex);
-  // get the reverse
+
+//  std::cout << "src kmer: " << kmer_in << std::endl;
+
   MyKmer<7*8, bliss::common::DNA, uint16_t> kmer_rev = kmer_in.reversed_kmer();
+//  std::cout << "rev kmer: " << kmer_rev << std::endl;
   EXPECT_EQ(kmer_ex_rev, kmer_rev);
+
 
   /* test for bits_per_char = 3 */
   MyKmer<37, bliss::common::DNA5, uint16_t> kmer3_in(kmer_val);
@@ -1264,25 +717,10 @@ TEST(KmerReverse, TestKmerReverse112)
   EXPECT_EQ(kmer3_ex_rev, kmer3_rev);
 
   /* test for bits_per_char = 4 */
-  MyKmer<28, Bits4, uint16_t> kmer4_in(kmer_val);
-  MyKmer<28, Bits4, uint16_t> kmer4_ex_rev(kmer_ex_4);
+  MyKmer<28, bliss::common::DNA16, uint16_t> kmer4_in(kmer_val);
+  MyKmer<28, bliss::common::DNA16, uint16_t> kmer4_ex_rev(kmer_ex_4);
   // get the reverse
-  MyKmer<28, Bits4, uint16_t> kmer4_rev = kmer4_in.reversed_kmer();
+  MyKmer<28, bliss::common::DNA16, uint16_t> kmer4_rev = kmer4_in.reversed_kmer();
   EXPECT_EQ(kmer4_ex_rev, kmer4_rev);
-
-  /* test for bits_per_char = 5 */
-  MyKmer<22, Bits5, uint16_t> kmer5_in(kmer_val);
-  MyKmer<22, Bits5, uint16_t> kmer5_ex_rev(kmer_ex_5);
-  // get the reverse
-  MyKmer<22, Bits5, uint16_t> kmer5_rev = kmer5_in.reversed_kmer();
-  EXPECT_EQ(kmer5_ex_rev, kmer5_rev);
-
-  /* test for bits_per_char = 7 */
-  MyKmer<16, Bits7, uint16_t> kmer7_in(kmer_val);
-  MyKmer<16, Bits7, uint16_t> kmer7_ex_rev(kmer_ex_7);
-  // get the reverse
-  MyKmer<16, Bits7, uint16_t> kmer7_rev = kmer7_in.reversed_kmer();
-  EXPECT_EQ(kmer7_ex_rev, kmer7_rev);
-  // TODO: tests for smaller sizes and bigger bits_per_char
 
 }

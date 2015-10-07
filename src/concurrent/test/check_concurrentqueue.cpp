@@ -10,7 +10,7 @@
  * TODO add License
  */
 
-
+#include "bliss-config.hpp"
 
 #include "concurrentqueue/concurrentqueue.h"
 #include <cassert>
@@ -237,11 +237,11 @@ void test5() {
   std::atomic<bool> finished(false);
   ConcurrentQueue<int> q;
 
-#pragma omp parallel sections default(none) shared(q, input, outputs, nThreads, elements, finished) num_threads(2)
+#pragma omp parallel sections OMP_SHARE_DEFAULT shared(q, input, outputs, nThreads, elements, finished) num_threads(2)
   {
 #pragma omp section
     {
-#pragma omp parallel default(none) shared(q, input, elements, finished) num_threads(nThreads)
+#pragma omp parallel OMP_SHARE_DEFAULT shared(q, input, elements, finished) num_threads(nThreads)
       {
          int tid = omp_get_thread_num();
          int nt = omp_get_num_threads();
@@ -256,7 +256,7 @@ void test5() {
 
 #pragma omp section
     {
-#pragma omp parallel default(none) shared(q, outputs, finished) num_threads(nThreads)
+#pragma omp parallel OMP_SHARE_DEFAULT shared(q, outputs, finished) num_threads(nThreads)
       {
         int tid = omp_get_thread_num();
         int v = 0;
@@ -298,11 +298,11 @@ void testMove5() {
   std::atomic<bool> finished(false);
   ConcurrentQueue<int> q;
 
-#pragma omp parallel sections default(none) shared(q, input, outputs, nThreads, elements, finished) num_threads(2)
+#pragma omp parallel sections OMP_SHARE_DEFAULT shared(q, input, outputs, nThreads, elements, finished) num_threads(2)
   {
 #pragma omp section
     {
-#pragma omp parallel default(none) shared(q, input, elements, finished) num_threads(nThreads)
+#pragma omp parallel OMP_SHARE_DEFAULT shared(q, input, elements, finished) num_threads(nThreads)
       {
          int tid = omp_get_thread_num();
          int nt = omp_get_num_threads();
@@ -319,7 +319,7 @@ void testMove5() {
 
 #pragma omp section
     {
-#pragma omp parallel default(none) shared(q, outputs, finished) num_threads(nThreads)
+#pragma omp parallel OMP_SHARE_DEFAULT shared(q, outputs, finished) num_threads(nThreads)
       {
         int tid = omp_get_thread_num();
         int v = 0;

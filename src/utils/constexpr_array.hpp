@@ -37,7 +37,7 @@ namespace bliss {
       template<class Functor, std::size_t ... Indices>
       constexpr auto make_array_helper(
           Functor f,
-          bliss::utils::index_sequence<Indices...>)
+          bliss::utils::seq<std::size_t, Indices...>)
           -> std::array<typename std::result_of<Functor(std::size_t)>::type, sizeof...(Indices)>
       {
           // double curl braces aggregate initializes the stdarray.
@@ -55,7 +55,7 @@ namespace bliss {
        * @return
        */
       template<typename T, std::size_t ... Indices>
-      constexpr auto make_array_helper(bliss::utils::index_sequence<Indices...>)
+      constexpr auto make_array_helper(bliss::utils::seq<size_t, Indices...>)
           -> std::array<T, sizeof...(Indices)>
       {
           // double curl braces aggregate initializes the stdarray.

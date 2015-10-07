@@ -170,10 +170,12 @@ TYPED_TEST_P(UnorderedCompactVecMapTest, iterator)
   ::std::vector<valType> test_vals;
   ::std::vector<valType> gold_vals;
 
-  for (auto it = this->test.begin(), max = this->test.end(); it != max; ++it) {
+  auto mx = this->test.end();
+  for (auto it = this->test.begin(); it != mx; ++it) {
     test_vals.push_back(*it);
   }
-  for (auto it = this->gold.begin(), max = this->gold.end(); it != max; ++it) {
+  auto mx2 = this->gold.end();
+  for (auto it = this->gold.begin(); it != mx2; ++it) {
     gold_vals.push_back(*it);
   }
 
@@ -424,10 +426,12 @@ TYPED_TEST_P(UnorderedVecMapTest, iterator)
   ::std::vector<valType> test_vals;
   ::std::vector<valType> gold_vals;
 
-  for (auto it = this->test.begin(), max = this->test.end(); it != max; ++it) {
+  auto mx = this->test.end();
+  for (auto it = this->test.begin(); it != mx; ++it) {
     test_vals.push_back(*it);
   }
-  for (auto it = this->gold.begin(), max = this->gold.end(); it != max; ++it) {
+  auto mx2 = this->gold.end();
+  for (auto it = this->gold.begin(); it != mx2; ++it) {
     gold_vals.push_back(*it);
   }
 

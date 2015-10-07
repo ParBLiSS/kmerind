@@ -24,9 +24,9 @@
     // preprocessor macro to save some typing
 #define BLISS_UTILS_CONTAINER_HAS_METHOD_WITH_NAME(NAME) \
         template<typename CC = C> \
-        static constexpr auto has_##NAME(CC*) -> decltype(std::declval<CC>().NAME(), ::std::true_type()); \
+        static constexpr auto has_##NAME(CC*) -> decltype(std::declval<CC>().NAME(), ::std::true_type()) { return ::std::true_type(); }; \
         template<typename> \
-        static constexpr ::std::false_type has_##NAME(...);
+        static constexpr ::std::false_type has_##NAME(...) { return ::std::false_type(); };
 
 
 namespace bliss {
@@ -36,28 +36,28 @@ namespace bliss {
     template <typename Container>
     struct container_mem_traits { static constexpr bool is_contiguous = false; };
 
-    template <>
+//    template <>
     template <typename T, typename A>
     struct container_mem_traits<::std::vector<T, A> > { static constexpr bool is_contiguous = true; };
 
-    template <>
+//    template <>
     template <typename T, ::std::size_t N>
     struct container_mem_traits<::std::array<T, N> > { static constexpr bool is_contiguous = true; };
 
-    template <>
+//    template <>
     template <typename CharT, typename Traits, typename Allocator>
-    struct container_mem_traits<::std::basic_string<CharT, Traits, Allocator>> { static constexpr bool is_contiguous = true; };
+    struct container_mem_traits<::std::basic_string<CharT, Traits, Allocator> > { static constexpr bool is_contiguous = true; };
 
-    template <>
+//    template <>
     template <typename T>
     struct container_mem_traits<::std::valarray<T> > { static constexpr bool is_contiguous = true; };
 
-    template <>
+//    template <>
     template <typename T>
     struct container_mem_traits<::std::initializer_list<T> > { static constexpr bool is_contiguous = true; };
 
 
-    template <>
+//    template <>
     template <typename T>
     struct container_mem_traits< T* > { static constexpr bool is_contiguous = true; };
 
@@ -177,9 +177,9 @@ namespace bliss {
         static constexpr auto has_assign(CC*) ->
             decltype(std::declval<CC>().assign(::std::declval<decltype(std::declval<CC>().begin())>(),
                                                ::std::declval<decltype(std::declval<CC>().end())>()
-                                               ), ::std::true_type());
+                                               ), ::std::true_type()) { return ::std::true_type(); };
         template<typename>
-        static constexpr ::std::false_type has_assign(...);
+        static constexpr ::std::false_type has_assign(...) { return ::std::false_type(); };
 
       public:
 

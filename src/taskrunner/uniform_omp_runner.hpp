@@ -65,7 +65,7 @@ class UniformOMPRunner : public Runner
 
       qs.clear();
       for (int i = 0; i < nThreads; ++i) {
-        qs.push_back(std::move(bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable>, LockType >()));
+        qs.push_back(bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable>, LockType >());
       }
     }
 
@@ -79,14 +79,14 @@ class UniformOMPRunner : public Runner
      */
     void operator()() {
       size_t proc = 0;
-#pragma omp parallel num_threads(nThreads) default(none) reduction(+: proc)
+#pragma omp parallel num_threads(nThreads) OMP_SHARE_DEFAULT reduction(+: proc)
       {
         // iterator for list is valid during append (no insertion in middle, no deletion).
         // no deletion since this is shared.
         bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable>, LockType >& q = qs[omp_get_thread_num()];
         while (q.canPop())
         {
-          auto v = std::move(q.waitAndPop());
+          auto v = q.waitAndPop();
           if (v.first) {
             (v.second)->operator()();
             ++proc;
@@ -110,7 +110,7 @@ class UniformOMPRunner : public Runner
       for (; i < nThreads-1; ++i) {
         id = (omp_get_thread_num() + i) % nThreads;
         bliss::concurrent::ThreadSafeQueue<std::shared_ptr<Runnable>, LockType >& q = qs[id];
-        auto result = q.waitAndPush(std::move(std::shared_ptr<Runnable>(t)));
+        auto result = q.waitAndPush(std::shared_ptr<Runnable>(t));
 
         out &= result.first;
       }

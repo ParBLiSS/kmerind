@@ -208,7 +208,7 @@ namespace bliss
          * @return            position of the start of next read sequence (@).  if there is no complete sequence within the parentRange, return end of parentRange.
          * @throws            if no start is found, and search range does not cover the parent's end, then the search range does not include a complete record, throws IOException
          */
-        const std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
+        std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
         throw (bliss::io::IOException) {
 
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;

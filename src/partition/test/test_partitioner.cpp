@@ -441,9 +441,7 @@ TYPED_TEST_P(PartitionTest, demandPartition_openmp){
 #pragma omp parallel
       {
         RangeType r;
-        TypeParam e;
 
-        SizeType div = 1;
 
         size_t block = omp_get_thread_num();
 

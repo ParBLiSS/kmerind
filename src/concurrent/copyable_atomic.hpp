@@ -48,10 +48,9 @@ namespace bliss
         }
 
 
-        /// nonvirtual destructor, since atomic does not have a virtual destructor.
-        ~copyable_atomic() noexcept {
-          base::~atomic();
-        }
+        // nonvirtual destructor, since atomic has trivial destructors (does nothing, not virtual, members have trivial destructor)
+        // in fact, make it trivial (implicitly defined.)
+        //~copyable_atomic() noexcept {}
 
         /// assignemnt operator
         T operator=(T desired) noexcept {
