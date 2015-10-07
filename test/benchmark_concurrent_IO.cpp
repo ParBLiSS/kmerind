@@ -186,7 +186,7 @@ struct readMMap {
       void *p;
       if (buffering) {
         posix_memalign(&p, page_size, aligned_t - aligned_s);   // TODO: can preallocate.
-        memcpy(p, mapped_data + (aligned_s - block_start), aligned_t - aligned_s);
+        memcpy(p, reinterpret_cast<unsigned char*>(mapped_data) + (aligned_s - block_start), aligned_t - aligned_s);
         ld = reinterpret_cast<unsigned char*>(p) + (r2.start - aligned_s);
       }
 

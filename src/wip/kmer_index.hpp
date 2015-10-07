@@ -365,15 +365,6 @@ public:
 
     TIMER_REPORT_MPI(file, comm.rank(), comm);
 
-
-
-		INFOF("freeing group communicator");
-		MPI_Comm_free(&group);
-		INFOF("freeing group_leader communicator");
-		if (group_leaders != MPI_COMM_NULL) MPI_Comm_free(&group_leaders);
-		INFOF("DONE WITH communicator release");
-
-
 		return result.size() - before;
 	}
 

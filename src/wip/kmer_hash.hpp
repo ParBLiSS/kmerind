@@ -168,7 +168,7 @@ namespace bliss {
       };
 
 
-      template <typename KMER, template <typename KMER> class TRANS>
+      template <typename KMER, template <typename> class TRANS>
       struct tuple_transform {
           TRANS<KMER> transform;
 

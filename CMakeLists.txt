@@ -18,7 +18,7 @@ add_definitions(-Wall -std=c++11 -fPIC)
 
 set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
-#set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_dIR}/cmake ${CMAKE_MODULE_PATH}) 
+#set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH}) 
 
 ### tool to speed up compilation
 if(CMAKE_VERSION VERSION_GREATER 2.8.3)
