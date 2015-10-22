@@ -69,17 +69,22 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   
   
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-  execute_process(
-    COMMAND llvm-config --version OUTPUT_VARIABLE CLANG_VERSION)
+  EXECUTE_PROCESS( COMMAND ${CMAKE_CXX_COMPILER} --version OUTPUT_VARIABLE clang_full_version_string )
+  string (REGEX REPLACE ".*clang version ([0-9]+\\.[0-9]+).*" "\\1" CLANG_VERSION ${clang_full_version_string})
+    
   if (NOT (CLANG_VERSION VERSION_GREATER 3.7 OR CLANG_VERSION VERSION_EQUAL 3.7))
     message(FATAL_ERROR "${PROJECT_NAME} requires clang 3.7 or greater.")
   endif ()
     # message(FATAL_ERROR "${PROJECT_NAME} currently does not support clang due to include path issues")
   #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")   # do not use libc++ - may not be there . libstdc++ (from gnu) is a safer bet.
   #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -v -E")		      # for debugging to see how clang finds header files.
-  #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp=libomp")  # not sure if needed for openmp. 
+#  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp=libomp")  # not sure if needed for openmp. 
+#  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp=libomp")  # not sure if needed for openmp. 
   set(_CMAKE_TOOLCHAIN_PREFIX "llvm-")
-  include_directories("/usr/lib/llvm-3.7/lib/clang/3.7.0/include")		      # this is here for SSE headers.
+  string (REGEX REPLACE ".*clang version ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" CLANG_VERSION_FULL ${clang_full_version_string})
+  
+  get_filename_component(CLANG_COMPILER_DIR ${CMAKE_CXX_COMPILER} PATH)
+  include_directories("${CLANG_COMPILER_DIR}/../lib/clang/${CLANG_VERSION_FULL}/include")		      # this is here for SSE headers.
 	# clang uses gcc headers, and can find most by itself.
   SET(SUPPORTS_SANITIZER ON CACHE INTERNAL "compiler supports sanitizer?")
   SET(SUPPORTS_COVERAGE ON CACHE INTERNAL "compiler supports coverage?")
@@ -330,18 +335,19 @@ if (OPENMP_FOUND)
 else(OPENMP_FOUND)
 	message(STATUS "NO OpenMP.  check compiler version now.")
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    execute_process(
-     COMMAND llvm-config --version OUTPUT_VARIABLE CLANG_VERSION)
+    EXECUTE_PROCESS( COMMAND ${CMAKE_CXX_COMPILER} --version OUTPUT_VARIABLE clang_full_version_string )
+    string (REGEX REPLACE ".*clang version ([0-9]+\\.[0-9]+).*" "\\1" CLANG_VERSION ${clang_full_version_string})
   
    	if (CLANG_VERSION VERSION_GREATER 3.7 OR CLANG_VERSION VERSION_EQUAL 3.7)
 	  	message(STATUS "Found OpenMP for CLANG ${CLANG_VERSION}")
 	  	set(OPENMP_FOUND 1)
-	  	set(OpenMP_C_FLAGS "-fopenmp")
-	  	set(OpenMP_CXX_FLAGS "-fopenmp")
+	  	set(OpenMP_C_FLAGS "-fopenmp=libomp")
+	  	set(OpenMP_CXX_FLAGS "-fopenmp=libomp")
 	  	
-	  	set(CLANG_OPENMP_HOME "" CACHE PATH "Path to Clang OpenMP root directory.")
-	  	include_directories(${CLANG_OPENMP_HOME}/include)  # clang uses gcc headers, but can't find all gcc headers by itself.  this is for omp.h
-	  	link_directories(${CLANG_OPENMP_HOME}/lib)
+   	    set(CLANG_OPENMP_HOME "" CACHE PATH "Path to Clang OpenMP root directory.")
+   	    include_directories(${CLANG_OPENMP_HOME}/include)  # clang uses gcc headers, but can't find all gcc headers by itself.  this is for omp.h
+   	    link_directories(${CLANG_OPENMP_HOME}/lib)
+   	
 	  else()
 	    message(FATAL_ERROR "${PROJECT_NAME} requires clang 3.7 or greater for OpenMP support.")
   	endif()
@@ -364,8 +370,8 @@ endif (USE_OPENMP)
 #### native hardware architecture
 OPTION(USE_SIMD_IF_AVAILABLE "Enable SIMD instructions, if available on hardware. (-march=native)" ON)
 if (USE_SIMD_IF_AVAILABLE)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native -fabi-version=6")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fabi-version=6")
 endif(USE_SIMD_IF_AVAILABLE)
 
 
