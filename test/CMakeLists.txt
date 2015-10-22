@@ -208,9 +208,6 @@ add_executable(hash_vs_sort hash_vs_sort.cpp)
 target_link_libraries(hash_vs_sort ${EXTRA_LIBS})
 
 
-add_executable(kmer_reverse kmer_reverse.cpp)
-target_link_libraries(kmer_reverse ${EXTRA_LIBS})
-
 if (Boost_FOUND)
 	add_executable(cust_alloc test_custom_allocator.cpp)
 	target_link_libraries(cust_alloc ${EXTRA_LIBS})
