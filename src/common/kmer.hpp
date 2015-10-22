@@ -169,26 +169,26 @@ public:
                             // TODO: can use MPI_Type_create_resized() to fix this problem for tuple and struct, but for primitive types its's not so easy.
   
 
-    static constexpr uint8_t simd_mask_b[16] __attribute__((aligned(16))) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
+    static constexpr uint8_t simd_mask_b[16] alignas(16) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
     //static constexpr __m128i const *simd_mask = reinterpret_cast<const __m128i*>(simd_mask_b);
 
     // mask for reversing the order of items
-    static constexpr uint8_t simd_rev_mask_b[16] __attribute__((aligned(16))) = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
+    static constexpr uint8_t simd_rev_mask_b[16] alignas(16) = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
     //static constexpr __m128i const *simd_rev_mask = reinterpret_cast<const __m128i*>(simd_rev_mask_b);
 
     // lookup table for reversing bits in a byte in groups of 1
-    static constexpr uint8_t simd_lut1_lo_b[16] __attribute__((aligned(16))) = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
+    static constexpr uint8_t simd_lut1_lo_b[16] alignas(16) = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
     //static constexpr __m128i const *simd_lut1_lo = reinterpret_cast<const __m128i*>(simd_lut1_lo_b);
 
 
-    static constexpr uint8_t simd_lut1_hi_b[16] __attribute__((aligned(16))) = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
+    static constexpr uint8_t simd_lut1_hi_b[16] alignas(16) = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
     //static constexpr __m128i const *simd_lut1_hi = reinterpret_cast<const __m128i*>(simd_lut1_hi_b);
 
     // lookup table for reversing bits in a byte in groups of 2
-    static constexpr uint8_t simd_lut2_lo_b[16] __attribute__((aligned(16))) = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
+    static constexpr uint8_t simd_lut2_lo_b[16] alignas(16) = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
     //static constexpr __m128i const *simd_lut2_lo = reinterpret_cast<const __m128i*>(simd_lut2_lo_b);
 
-    static constexpr uint8_t simd_lut2_hi_b[16] __attribute__((aligned(16))) = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
+    static constexpr uint8_t simd_lut2_hi_b[16] alignas(16) = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
     //static constexpr __m128i const *simd_lut2_hi = reinterpret_cast<const __m128i*>(simd_lut2_hi_b);
 
     // lookup table for reversing bits in a byte in groups of 4 - no need, just use the simd_mask.
@@ -1324,7 +1324,7 @@ public:
     {
       // TODO implement logarithmic version (logarithmic in number of bits in a word, linear in number of words).  non power of 2 bitsPerChar is tricky because of byte boundaries.
   
-      /* Linear (unefficient) reverse: */
+      /* Linear (inefficient) reverse: */
   
       // get temporary copy of this
       Kmer tmp_copy = src;
@@ -1523,7 +1523,7 @@ public:
         // not enough room, so need to copy.
         if (nWords < simd_stride) {
           // allocate space
-          WORD_TYPE tmp[simd_stride] __attribute__((aligned(16)));
+          WORD_TYPE tmp[simd_stride] alignas(16);
 
           // copy then load to register.
           memcpy((tmp + simd_stride - nWords), src.data, nWords * sizeof(WORD_TYPE));
@@ -1598,7 +1598,7 @@ public:
         // not enough room, so need to copy.
         if (nWords < simd_stride) {
           // allocate space
-          WORD_TYPE tmp[simd_stride] __attribute__((aligned(16)));
+          WORD_TYPE tmp[simd_stride] alignas(16);
 
           // copy then load to register.
           memcpy((tmp + simd_stride - nWords), src.data, nWords * sizeof(WORD_TYPE));
