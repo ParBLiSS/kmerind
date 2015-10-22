@@ -85,6 +85,9 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp_seq)
 
 TYPED_TEST_P(KmerReverseBenchmark, rev_bswap)
 {
+  if (TypeParam::bitsPerChar == 3) return;
+
+
   TypeParam km, rev;
   km = this->kmer;
 
@@ -99,6 +102,9 @@ TYPED_TEST_P(KmerReverseBenchmark, rev_bswap)
 
 TYPED_TEST_P(KmerReverseBenchmark, revcomp_bswap)
 {
+  if (TypeParam::bitsPerChar == 3) return;
+
+
   TypeParam km, rev;
   km = this->kmer;
 
@@ -114,6 +120,9 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp_bswap)
 
 TYPED_TEST_P(KmerReverseBenchmark, rev_swar)
 {
+  if (TypeParam::bitsPerChar == 3) return;
+
+
   TypeParam km, rev;
   km = this->kmer;
 
@@ -128,6 +137,9 @@ TYPED_TEST_P(KmerReverseBenchmark, rev_swar)
 
 TYPED_TEST_P(KmerReverseBenchmark, revcomp_swar)
 {
+  if (TypeParam::bitsPerChar == 3) return;
+
+
   TypeParam km, rev;
   km = this->kmer;
 
@@ -140,11 +152,44 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp_swar)
   EXPECT_FALSE(rev == km);
 }
 
+TYPED_TEST_P(KmerReverseBenchmark, rev_new)
+{
+
+  TypeParam km, rev;
+  km = this->kmer;
+
+
+  for (size_t i = 0; i < this->iterations; ++i) {
+    rev ^= km.reverse_new();
+
+    km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
+  }
+  EXPECT_FALSE(rev == km);
+}
+
+TYPED_TEST_P(KmerReverseBenchmark, revcomp_new)
+{
+
+  TypeParam km, rev;
+  km = this->kmer;
+
+
+  for (size_t i = 0; i < this->iterations; ++i) {
+    rev ^= km.reverse_complement_new();
+
+    km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
+  }
+  EXPECT_FALSE(rev == km);
+}
+
 
 
 #ifdef __SSSE3__
 TYPED_TEST_P(KmerReverseBenchmark, rev_ssse3)
 {
+  if (TypeParam::bitsPerChar == 3) return;
+
+
   TypeParam km, rev;
   km = this->kmer;
 
@@ -159,6 +204,9 @@ TYPED_TEST_P(KmerReverseBenchmark, rev_ssse3)
 
 TYPED_TEST_P(KmerReverseBenchmark, revcomp_ssse3)
 {
+  if (TypeParam::bitsPerChar == 3) return;
+
+
   TypeParam km, rev;
   km = this->kmer;
 
@@ -176,10 +224,10 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp_ssse3)
 
 #ifdef __SSSE3__
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, rev_seq, revcomp_seq, rev_bswap, revcomp_bswap, rev_swar, revcomp_swar, rev_ssse3, revcomp_ssse3);
+REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, rev_seq, revcomp_seq, rev_bswap, revcomp_bswap, rev_swar, revcomp_swar, rev_new, revcomp_new, rev_ssse3, revcomp_ssse3);
 #else
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, rev_seq, revcomp_seq, rev_bswap, revcomp_bswap, rev_swar, revcomp_swar);
+REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, rev_seq, revcomp_seq, rev_bswap, revcomp_bswap, rev_swar, revcomp_swar, rev_new, revcomp_new);
 #endif
 
 //////////////////// RUN the tests with different types.

@@ -37,6 +37,8 @@
 #include "common/padding.hpp"
 #include "utils/kmer_utils.hpp"
 
+#include "utils/bit_reverse.hpp"
+
 // #include <xmmintrin.h>  // sse2
 #if defined(__SSSE3__)
 #include <tmmintrin.h>  // ssse3  includes sse2
@@ -132,6 +134,7 @@ namespace bliss
    public:
     /// The number of stored words inside the Kmer
     static constexpr unsigned int nWords = bitstream::nWords;
+    static constexpr unsigned int nBytes = bitstream::nBytes;
   
    private:
   
@@ -992,6 +995,34 @@ public:
     {
       return do_reverse_complement_swar<ALPHABET>(*this);
     }
+
+
+    /**
+     * @brief Returns a reversed k-mer.
+     *
+     * Note that this does NOT reverse the bit pattern, but reverses
+     * the sequence of `BITS_PER_CHAR` bits each.
+     *
+     * @returns   The reversed k-mer.
+     */
+    Kmer reverse_new() const
+    {
+      return do_reverse_new(*this);
+    }
+
+    /**
+     * @brief Returns a reverse complement of a k-mer.
+     *
+     * Note that this does NOT reverse the bit pattern, but reverses
+     * the sequence of `BITS_PER_CHAR` bits each.
+     *
+     * @returns   The reversed k-mer.
+     */
+    Kmer reverse_complement_new() const
+    {
+      return do_reverse_complement_new<ALPHABET>(*this);
+    }
+
 
     /**
      * @brief Returns a reversed k-mer.
@@ -2045,7 +2076,6 @@ public:
       return v;
     }
 
-
     /**
      * @brief Reverses this k-mer.
      *
@@ -2173,6 +2203,64 @@ public:
                                     ::std::is_same<A, RNA>::value ||
                                     ::std::is_same<A, DNA16>::value), int>::type = 0>
     INLINE Kmer do_reverse_complement_bswap(Kmer const & src) const
+    {
+      return do_reverse_complement_serial(src);
+    }
+
+
+
+    INLINE Kmer do_reverse_new(Kmer const & src) const
+    {
+      Kmer result;
+
+      const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
+      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
+
+      ::bliss::utils::bit_ops::reverse<bitsPerChar>(out, in, nBytes);
+
+      result.do_right_shift(nBytes * 8 - nBits);
+      return result;
+    }
+
+
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<::std::is_same<A, DNA>::value ||
+                                  ::std::is_same<A, RNA>::value, int>::type = 0>
+    INLINE Kmer do_reverse_complement_new(Kmer const& src) const
+    {
+      // DNA and RNA complement is via negation.
+      Kmer result = do_reverse_new(src);
+      for (uint32_t i = 0; i < nWords; ++i) result.data[i] = ~result.data[i];
+      result.do_sanitize();
+      return result;  // negate by xor with 0
+    }
+
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<::std::is_same<A, DNA6>::value ||
+                                  ::std::is_same<A, RNA6>::value ||
+                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
+    INLINE Kmer do_reverse_complement_new(Kmer const& src) const
+    {
+      // DNA6, RNA6, and DNA16 use 1 bit reverse.   DNA5 and RNA5 are aliased to DNA6 and RNA6
+
+      Kmer result;
+
+      const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
+      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
+
+      ::bliss::utils::bit_ops::reverse<1>(out, in, nBytes);
+
+      result.do_right_shift(nBytes * 8 - nBits);
+      return result;
+    }
+
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
+                                    ::std::is_same<A, RNA>::value ||
+                                    ::std::is_same<A, DNA6>::value ||
+                                    ::std::is_same<A, RNA6>::value ||
+                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
+    INLINE Kmer do_reverse_complement_new(Kmer const & src) const
     {
       return do_reverse_complement_serial(src);
     }
