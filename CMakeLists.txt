@@ -579,6 +579,41 @@ if (ENABLE_TESTING)
     add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
   endfunction(bliss_add_test)
 
+  function(bliss_add_benchmark module_name module_link)
+    # set the name for the test target and executable
+    set(test_target_name benchmark-${module_name})
+    # add all give files
+    message(STATUS ${ARGN})
+    add_executable(${test_target_name} ${ARGN})
+    # add the googletest dependency
+    # commented out because there is no googletest dependency    add_dependencies(${test_target_name} googletest)
+    # set binary output path for tests
+    set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
+    # link test with gtest_main
+    target_link_libraries(${test_target_name} gtest_main)
+
+    # all the extra libs
+    target_link_libraries(${test_target_name} ${EXTRA_LIBS})
+
+    # link to the tested module (but only if that module produces a linkable
+    # library)
+    if (module_link)
+        target_link_libraries(${test_target_name} ${module_name})
+    endif (module_link)
+    
+    # if code coverage is to be determined: link with gcov
+    if (ENABLE_COVERAGE)
+      target_link_libraries(${test_target_name} gcov)
+    endif(ENABLE_COVERAGE)
+
+    cotire(${test_target_name})
+
+    # generate google test XML results, to be parsed by Jenkins
+    # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
+    add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
+  endfunction(bliss_add_benchmark)
+
+
 
   function(bliss_add_test_new module_name module_link modules)
     # set the name for the test target and executable
