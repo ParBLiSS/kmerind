@@ -16,6 +16,7 @@
 
 // include google test
 #include <gtest/gtest.h>
+#include "utils/bitgroup_ops.hpp"
 
 #include <random>
 #include <cstdint>
@@ -26,7 +27,6 @@
 #include "common/alphabets.hpp"
 #include "common/alphabet_traits.hpp"
 
-#include "utils/bit_reverse.hpp"
 
 
 // include files to test

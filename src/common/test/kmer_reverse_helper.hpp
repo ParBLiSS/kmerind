@@ -36,8 +36,8 @@
 #include "common/bit_ops.hpp"
 #include "common/padding.hpp"
 #include "utils/kmer_utils.hpp"
+#include "utils/bitgroup_ops.hpp"
 
-#include "utils/bit_reverse.hpp"
 
 // #include <xmmintrin.h>  // sse2
 #if defined(__SSSE3__)

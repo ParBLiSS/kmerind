@@ -16,6 +16,7 @@
 
 // include google test
 #include <gtest/gtest.h>
+#include "utils/bitgroup_ops.hpp"
 
 #include <random>
 #include <cstdint>
@@ -26,7 +27,6 @@
 
 #include "common/test/kmer_reverse_helper.hpp"
 
-#include "utils/bit_reverse.hpp"
 
 // include files to test
 

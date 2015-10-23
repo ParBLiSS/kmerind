@@ -1,7 +1,6 @@
 
 // include google test
 #include <gtest/gtest.h>
-#include <utils/bit_reverse.hpp>
 
 #include <random>
 #include <array>
@@ -11,6 +10,7 @@
 
 // include files to test
 #include "utils/logging.h"
+#include "utils/bitgroup_ops.hpp"
 
 
 //TESTS: Sequential, SWAR/BSWAP, SSSE3, AVX2 versions of bit reverse.
@@ -56,7 +56,7 @@ TYPED_TEST_P(BitReverseBenchmark, reverse_uint8)
 
 
         for (size_t iter = 0; iter < this->helper.iters; ++iter) {
-          in[(k+1)%(33-sizeof(WORD_TYPE))] = op.operator()(in[k]);
+          in[(k+1)%(33-sizeof(WORD_TYPE))] = op.reverse(in[k]);
 
       }
     }  // else too large, so don't do the test.
@@ -79,7 +79,7 @@ TYPED_TEST_P(BitReverseBenchmark, reverse_uint16)
 
 
         for (size_t iter = 0; iter < this->helper.iters; ++iter) {
-          in[(k+1)%(33-sizeof(WORD_TYPE))] = op.operator()(in[k]);
+          in[(k+1)%(33-sizeof(WORD_TYPE))] = op.reverse(in[k]);
 
       }
     }  // else too large, so don't do the test.
@@ -102,7 +102,7 @@ TYPED_TEST_P(BitReverseBenchmark, reverse_uint32)
 
 
         for (size_t iter = 0; iter < this->helper.iters; ++iter) {
-          in[(k+1)%(33-sizeof(WORD_TYPE))] = op.operator()(in[k]);
+          in[(k+1)%(33-sizeof(WORD_TYPE))] = op.reverse(in[k]);
 
       }
     }  // else too large, so don't do the test.
@@ -126,7 +126,7 @@ TYPED_TEST_P(BitReverseBenchmark, reverse_uint64)
 
 
         for (size_t iter = 0; iter < this->helper.iters; ++iter) {
-          in[(k+1)%(33-sizeof(WORD_TYPE))] = op.operator()(in[k]);
+          in[(k+1)%(33-sizeof(WORD_TYPE))] = op.reverse(in[k]);
 
       }
     }  // else too large, so don't do the test.
@@ -153,7 +153,7 @@ TYPED_TEST_P(BitReverseBenchmark, reverse_short_array)
 			  for (int k = 0; k <= (32 - i); ++k) {
 				  for (int j = 0; j < 8; ++j) {
 
-					  op.operator()(out, out + k, i, j);
+					  op.reverse(out, out + k, i, j);
 					  ++iter;
 //					  if (iter % 1000 == 0) printf(".");
 					  if (iter >= this->helper.iters) break;
@@ -178,7 +178,7 @@ TYPED_TEST_P(BitReverseBenchmark, reverse_short_array)
 
 			  for (int k = 0; k <= (32 - i); ++k) {
 
-				  op.operator()(out, out + k, i, 0);
+				  op.reverse(out, out + k, i, 0);
 				  ++iter;
 //				  if (iter % 1000 == 0) printf(".");
 				  if (iter >= this->helper.iters) break;
@@ -203,20 +203,20 @@ REGISTER_TYPED_TEST_CASE_P(BitReverseBenchmark, reverse_uint8, reverse_uint16, r
 //////////////////// RUN the tests with different types.
 
 typedef ::testing::Types<
-    ::bliss::utils::bit_ops::bit_reverse< 1, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
-     ::bliss::utils::bit_ops::bit_reverse< 2, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
-      ::bliss::utils::bit_ops::bit_reverse< 3, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
-       ::bliss::utils::bit_ops::bit_reverse< 4, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
-        ::bliss::utils::bit_ops::bit_reverse< 8, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
-         ::bliss::utils::bit_ops::bit_reverse<16, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
-          ::bliss::utils::bit_ops::bit_reverse<32, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
-           ::bliss::utils::bit_ops::bit_reverse< 1, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
-            ::bliss::utils::bit_ops::bit_reverse< 2, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
-             ::bliss::utils::bit_ops::bit_reverse< 3, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
-              ::bliss::utils::bit_ops::bit_reverse< 4, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
-               ::bliss::utils::bit_ops::bit_reverse< 8, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
-                ::bliss::utils::bit_ops::bit_reverse<16, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
-                 ::bliss::utils::bit_ops::bit_reverse<32, ::bliss::utils::bit_ops::BIT_REV_SWAR>
+    ::bliss::utils::bit_ops::bitgroup_ops< 1, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
+     ::bliss::utils::bit_ops::bitgroup_ops< 2, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
+      ::bliss::utils::bit_ops::bitgroup_ops< 3, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
+       ::bliss::utils::bit_ops::bitgroup_ops< 4, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
+        ::bliss::utils::bit_ops::bitgroup_ops< 8, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
+         ::bliss::utils::bit_ops::bitgroup_ops<16, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
+          ::bliss::utils::bit_ops::bitgroup_ops<32, ::bliss::utils::bit_ops::BIT_REV_SEQ>,
+           ::bliss::utils::bit_ops::bitgroup_ops< 1, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
+            ::bliss::utils::bit_ops::bitgroup_ops< 2, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
+             ::bliss::utils::bit_ops::bitgroup_ops< 3, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
+              ::bliss::utils::bit_ops::bitgroup_ops< 4, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
+               ::bliss::utils::bit_ops::bitgroup_ops< 8, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
+                ::bliss::utils::bit_ops::bitgroup_ops<16, ::bliss::utils::bit_ops::BIT_REV_SWAR> ,
+                 ::bliss::utils::bit_ops::bitgroup_ops<32, ::bliss::utils::bit_ops::BIT_REV_SWAR>
 > BitReverseBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseBenchmark, BitReverseBenchmarkTypes);
 
@@ -253,7 +253,7 @@ TYPED_TEST_P(BitReverseSSSEBenchmark, reverse_m128i)
 
 
         for (size_t iter = 0; iter < this->helper.iters; ++iter) {
-          in[(k+1)%17] = op.operator()(in[k]);
+          in[(k+1)%17] = op.reverse(in[k]);
 
       }
     }  // else too large, so don't do the test.
@@ -283,7 +283,7 @@ TYPED_TEST_P(BitReverseSSSEBenchmark, reverse_short_array)
 			  for (int k = 0; k <= (32 - i); ++k) {
 				  for (int j = 0; j < 8; ++j) {
 
-					  op.operator()(out, out + k, i, j);
+					  op.reverse(out, out + k, i, j);
 					  ++iter;
 //					  if (iter % 1000 == 0) printf(".");
 					  if (iter >= this->helper.iters) break;
@@ -309,7 +309,7 @@ TYPED_TEST_P(BitReverseSSSEBenchmark, reverse_short_array)
 
 			  for (int k = 0; k <= (32 - i); ++k) {
 
-				  op.operator()(out, out + k, i, 0);
+				  op.reverse(out, out + k, i, 0);
 				  ++iter;
 //				  if (iter % 1000 == 0) printf(".");
 				  if (iter >= this->helper.iters) break;
@@ -332,14 +332,14 @@ REGISTER_TYPED_TEST_CASE_P(BitReverseSSSEBenchmark, reverse_m128i, reverse_short
 //////////////////// RUN the tests with different types.
 
 typedef ::testing::Types<
-    ::bliss::utils::bit_ops::bit_reverse< 1, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
-     ::bliss::utils::bit_ops::bit_reverse< 2, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
-      ::bliss::utils::bit_ops::bit_reverse< 3, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
-       ::bliss::utils::bit_ops::bit_reverse< 4, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
-        ::bliss::utils::bit_ops::bit_reverse< 8, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
-         ::bliss::utils::bit_ops::bit_reverse<16, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
-          ::bliss::utils::bit_ops::bit_reverse<32, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
-           ::bliss::utils::bit_ops::bit_reverse<64, ::bliss::utils::bit_ops::BIT_REV_SSSE3>
+    ::bliss::utils::bit_ops::bitgroup_ops< 1, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
+     ::bliss::utils::bit_ops::bitgroup_ops< 2, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
+      ::bliss::utils::bit_ops::bitgroup_ops< 3, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
+       ::bliss::utils::bit_ops::bitgroup_ops< 4, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
+        ::bliss::utils::bit_ops::bitgroup_ops< 8, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
+         ::bliss::utils::bit_ops::bitgroup_ops<16, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
+          ::bliss::utils::bit_ops::bitgroup_ops<32, ::bliss::utils::bit_ops::BIT_REV_SSSE3> ,
+           ::bliss::utils::bit_ops::bitgroup_ops<64, ::bliss::utils::bit_ops::BIT_REV_SSSE3>
 > BitReverseSSSEBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseSSSEBenchmark, BitReverseSSSEBenchmarkTypes);
 
@@ -368,7 +368,7 @@ TYPED_TEST_P(BitReverseAVX2Benchmark, reverse_m256i)
     if (TypeParam::bitsPerGroup < 256 ) {
 
       for (size_t iter = 0; iter < this->helper.iters; ++iter) {
-        in = op.operator()(in);
+        in = op.reverse(in);
 
     }  // else too large, so don't do the test.
   }
@@ -397,7 +397,7 @@ TYPED_TEST_P(BitReverseAVX2Benchmark, reverse_short_array)
 			  for (int k = 0; k <= (32 - i); ++k) {
 				  for (int j = 0; j < 8; ++j) {
 
-					  op.operator()(out, out + k, i, j);
+					  op.reverse(out, out + k, i, j);
 					  ++iter;
 
 //					  if (iter % 1000 == 0) printf(".");
@@ -424,7 +424,7 @@ TYPED_TEST_P(BitReverseAVX2Benchmark, reverse_short_array)
 
 			  for (int k = 0; k <= (32 - i); ++k) {
 
-				  op.operator()(out, out + k, i, 0);
+				  op.reverse(out, out + k, i, 0);
 				  ++iter;
 //				  if (iter % 1000 == 0) printf(".");
 				  if (iter >= this->helper.iters) break;
@@ -446,15 +446,15 @@ REGISTER_TYPED_TEST_CASE_P(BitReverseAVX2Benchmark, reverse_m256i, reverse_short
 //////////////////// RUN the tests with different types.
 
 typedef ::testing::Types<
-    ::bliss::utils::bit_ops::bit_reverse< 1, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
-     ::bliss::utils::bit_ops::bit_reverse< 2, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
-      ::bliss::utils::bit_ops::bit_reverse< 3, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
-       ::bliss::utils::bit_ops::bit_reverse< 4, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
-        ::bliss::utils::bit_ops::bit_reverse< 8, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
-         ::bliss::utils::bit_ops::bit_reverse<16, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
-          ::bliss::utils::bit_ops::bit_reverse<32, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
-           ::bliss::utils::bit_ops::bit_reverse<64, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
-            ::bliss::utils::bit_ops::bit_reverse<128, ::bliss::utils::bit_ops::BIT_REV_AVX2>
+    ::bliss::utils::bit_ops::bitgroup_ops< 1, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
+     ::bliss::utils::bit_ops::bitgroup_ops< 2, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
+      ::bliss::utils::bit_ops::bitgroup_ops< 3, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
+       ::bliss::utils::bit_ops::bitgroup_ops< 4, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
+        ::bliss::utils::bit_ops::bitgroup_ops< 8, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
+         ::bliss::utils::bit_ops::bitgroup_ops<16, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
+          ::bliss::utils::bit_ops::bitgroup_ops<32, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
+           ::bliss::utils::bit_ops::bitgroup_ops<64, ::bliss::utils::bit_ops::BIT_REV_AVX2> ,
+            ::bliss::utils::bit_ops::bitgroup_ops<128, ::bliss::utils::bit_ops::BIT_REV_AVX2>
 > BitReverseAVX2BenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseAVX2Benchmark, BitReverseAVX2BenchmarkTypes);
 
