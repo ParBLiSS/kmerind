@@ -138,7 +138,7 @@ TYPED_TEST_P(BitReverseBenchmark, reverse_short_array)
 {
   TypeParam op;
 
-  uint8_t out[32] alignas(32);
+  uint8_t out alignas(32) [32];
   memcpy(out, this->helper.input, 32);
 
   int max = 8;
@@ -267,7 +267,7 @@ TYPED_TEST_P(BitReverseSSSEBenchmark, reverse_short_array)
 
   TypeParam op;
 
-  uint8_t out[32] alignas(32);
+  uint8_t out alignas(32) [32];
   memcpy(out, this->helper.input, 32);
 
   int max = 16;
@@ -381,7 +381,7 @@ TYPED_TEST_P(BitReverseAVX2Benchmark, reverse_short_array)
 
   TypeParam op;
 
-  uint8_t out[32] alignas(32);
+  uint8_t out alignas(32) [32];
   memcpy(out, this->helper.input, 32);
 
   int max = 32;

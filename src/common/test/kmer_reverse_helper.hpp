@@ -44,7 +44,7 @@
 #include <tmmintrin.h>  // ssse3  includes sse2
 #endif
 
-#include <bits/byteswap.h>
+#include <byteswap.h>
 
 
 #define INLINE inline
@@ -127,20 +127,20 @@ namespace bliss
     static constexpr int simd_rem = Kmer::nWords % simd_stride;
 
 
-    static constexpr uint8_t simd_mask_b[16] alignas(16) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
+    static constexpr uint8_t simd_mask_b alignas(16) [16] = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
 
     // mask for reversing the order of items
-    static constexpr uint8_t simd_rev_mask_b[16] alignas(16) = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
+    static constexpr uint8_t simd_rev_mask_b alignas(16) [16] = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
 
     // lookup table for reversing bits in a byte in groups of 1
-    static constexpr uint8_t simd_lut1_lo_b[16] alignas(16) = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
+    static constexpr uint8_t simd_lut1_lo_b alignas(16) [16] = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
 
-    static constexpr uint8_t simd_lut1_hi_b[16] alignas(16) = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
+    static constexpr uint8_t simd_lut1_hi_b alignas(16) [16] = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
 
     // lookup table for reversing bits in a byte in groups of 2
-    static constexpr uint8_t simd_lut2_lo_b[16] alignas(16) = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
+    static constexpr uint8_t simd_lut2_lo_b alignas(16) [16] = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
 
-    static constexpr uint8_t simd_lut2_hi_b[16] alignas(16) = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
+    static constexpr uint8_t simd_lut2_hi_b alignas(16) [16] = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
 
     // lookup table for reversing bits in a byte in groups of 4 - no need, just use the simd_mask.
 
@@ -358,7 +358,7 @@ namespace bliss
         // not enough room, so need to copy.
         if (Kmer::nWords < simd_stride) {
           // allocate space
-          WORD_TYPE tmp[simd_stride] alignas(16);
+          WORD_TYPE tmp alignas(16) [simd_stride];
 
           // copy then load to register.
           memcpy((tmp + simd_stride - Kmer::nWords), src.getConstData(), Kmer::nWords * sizeof(WORD_TYPE));
@@ -433,7 +433,7 @@ namespace bliss
         // not enough room, so need to copy.
         if (Kmer::nWords < simd_stride) {
           // allocate space
-          WORD_TYPE tmp[simd_stride] alignas(16);
+          WORD_TYPE tmp alignas(16) [simd_stride];
 
           // copy then load to register.
           memcpy((tmp + simd_stride - Kmer::nWords), src.getConstData(), Kmer::nWords * sizeof(WORD_TYPE));
@@ -807,9 +807,9 @@ namespace bliss
       switch (sizeof(W) * 8)
       {
         // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
-        case 64 :  v = __bswap_64(v); break; // bswap_64 instruction
-        case 32 :  v = __bswap_32(v); break; // bswap or bswap_32 instruction
-        case 16 :  v = __bswap_16(v); break; // XCHG instruction
+        case 64 :  v = _bliss_bswap_64(v); break; // bswap_64 instruction
+        case 32 :  v = _bliss_bswap_32(v); break; // bswap or bswap_32 instruction
+        case 16 :  v = _bliss_bswap_16(v); break; // XCHG instruction
         default :  break;
       }
       // finally, bit swap within the bytes.  only need to go down to chars of 2 bits.
@@ -838,9 +838,9 @@ namespace bliss
       switch (sizeof(W) * 8)
       {
         // use bswap_xx from gnu c library.
-        case 64 :  v = __bswap_64(v); break;   // bswap_64 instruction           // LATER.
-        case 32 :  v = __bswap_32(v); break;   // bswap or bswap_32 instruction  // PENTIUM
-        case 16 :  v = __bswap_16(v); break;   // XCHG instruction
+        case 64 :  v = _bliss_bswap_64(v); break;   // bswap_64 instruction           // LATER.
+        case 32 :  v = _bliss_bswap_32(v); break;   // bswap or bswap_32 instruction  // PENTIUM
+        case 16 :  v = _bliss_bswap_16(v); break;   // XCHG instruction
         default :  break;
       }
       // finally, bit swap within the bytes.  only need to go down to chars of 4 bits.
@@ -859,9 +859,9 @@ namespace bliss
       {
         // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
         // use bswap_xx from gnu c library.
-        case 64 :  v = __bswap_64(v); break;   // bswap_64 instruction
-        case 32 :  v = __bswap_32(v); break;   // bswap or bswap_32 instruction
-        case 16 :  v = __bswap_16(v); break;   // XCHG instruction
+        case 64 :  v = _bliss_bswap_64(v); break;   // bswap_64 instruction
+        case 32 :  v = _bliss_bswap_32(v); break;   // bswap or bswap_32 instruction
+        case 16 :  v = _bliss_bswap_16(v); break;   // XCHG instruction
         default :  break;
       }
 
@@ -1016,17 +1016,17 @@ namespace bliss
   
   
   template<typename Kmer>
-  constexpr uint8_t KmerReverseHelper<Kmer>::simd_mask_b[16];
+  constexpr uint8_t KmerReverseHelper<Kmer>::simd_mask_b alignas(16) [16];
   template<typename Kmer>
-  constexpr uint8_t KmerReverseHelper<Kmer>::simd_rev_mask_b[16];
+  constexpr uint8_t KmerReverseHelper<Kmer>::simd_rev_mask_b alignas(16) [16];
   template<typename Kmer>
-  constexpr uint8_t KmerReverseHelper<Kmer>::simd_lut1_lo_b[16];
+  constexpr uint8_t KmerReverseHelper<Kmer>::simd_lut1_lo_b alignas(16) [16];
   template<typename Kmer>
-  constexpr uint8_t KmerReverseHelper<Kmer>::simd_lut1_hi_b[16];
+  constexpr uint8_t KmerReverseHelper<Kmer>::simd_lut1_hi_b alignas(16) [16];
   template<typename Kmer>
-  constexpr uint8_t KmerReverseHelper<Kmer>::simd_lut2_lo_b[16];
+  constexpr uint8_t KmerReverseHelper<Kmer>::simd_lut2_lo_b alignas(16) [16];
   template<typename Kmer>
-  constexpr uint8_t KmerReverseHelper<Kmer>::simd_lut2_hi_b[16];
+  constexpr uint8_t KmerReverseHelper<Kmer>::simd_lut2_hi_b alignas(16) [16];
 
     } // namespace test
   } // namespace common

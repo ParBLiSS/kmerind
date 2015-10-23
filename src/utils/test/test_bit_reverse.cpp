@@ -170,8 +170,8 @@ class BitReverseTestHelper {
 #ifdef __SSSE3__
     bool is_reverse(__m128i const & orig, __m128i const & rev, uint8_t bit_offset = 0) {
 
-      uint8_t orig_arr[16] alignas(16);
-      uint8_t rev_arr[16] alignas(16);
+      uint8_t orig_arr alignas(16) [16];
+      uint8_t  rev_arr alignas(16) [16];
 
       _mm_store_si128((__m128i*)orig_arr, orig);
       _mm_store_si128((__m128i*)rev_arr, rev);
@@ -186,8 +186,8 @@ class BitReverseTestHelper {
 
     bool is_reverse(__m256i const & orig, __m256i const & rev, uint8_t bit_offset = 0) {
 
-      uint8_t orig_arr[32] alignas(32);
-      uint8_t rev_arr[32] alignas(32);
+      uint8_t orig_arr alignas(32) [32];
+      uint8_t  rev_arr alignas(32) [32];
 
       _mm256_store_si256((__m256i*)orig_arr, orig);
       _mm256_store_si256((__m256i*)rev_arr, rev);
@@ -309,7 +309,7 @@ TYPED_TEST_P(BitReverseTest, reverse_short_array)
 
   TypeParam op;
 
-  uint8_t out[32] alignas(32);
+  uint8_t out alignas(32) [32];
 
   unsigned int max = 8;
 
@@ -440,7 +440,7 @@ TYPED_TEST_P(BitReverseSSSETest, reverse_short_array)
 
   TypeParam op;
 
-  uint8_t out[32] alignas(32);
+  uint8_t out alignas(32) [32];
 
   int max = 16;
 
@@ -554,7 +554,7 @@ TYPED_TEST_P(BitReverseAVX2Test, reverse_short_array)
 
   TypeParam op;
 
-  uint8_t out[32] alignas(32);
+  uint8_t out alignas(32) [32];
 
   int max = 32;
 
@@ -659,7 +659,7 @@ TYPED_TEST_CASE_P(BitReverseLongArrayTest);
 TYPED_TEST_P(BitReverseLongArrayTest, reverse_long_array)
 {
 
-  uint8_t out[128] alignas(32);
+  uint8_t out alignas(32) [128];
 
   unsigned int max = 128;
 
