@@ -157,70 +157,161 @@ namespace bliss
 
 
 
-      /// DNA5 Alphabet: A T C G N
+      /**
+       * @brief DNA6 alphabet contains A C G T N and ".", where "." is the gap character.
+       * @details  the design of this alphabet aims to avoid using lookup table for complement translation.
+       *        basically, the complement can be calculated by reversing the bits.
+       *        A = 001
+       *        C = 011
+       *        G = 110
+       *        T = 100
+       *        X/N = 111
+       *        -/. = 000
+       *
+       *        010 and 101 are not really used.  they are mapped to '?'
+       */
       template <typename DUMMY = void>
-      struct DNA5_T : BaseAlphabetChar
+      struct DNA6_T : BaseAlphabetChar
       {
           // This should make char and DNA useable interchangebly
-          DNA5_T& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
-          DNA5_T(const CharType& c) : BaseAlphabetChar(c) {}
-          DNA5_T() : BaseAlphabetChar() {}
+          DNA6_T& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
+          DNA6_T(const CharType& c) : BaseAlphabetChar(c) {}
+          DNA6_T() : BaseAlphabetChar() {}
 
-        /// alphabet size
-        static constexpr AlphabetSizeType SIZE = 5;
+          /// alphabet size
+        static constexpr AlphabetSizeType SIZE = 8;
 
         /// ascii to alphabet lookup table
         static constexpr std::array<uint8_t, 256> FROM_ASCII =
         {{
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-      //      'A'     'C'             'G'                         'N'
-          4,  0,  4,  1,  4,  4,  4,  2,  4,  4,  4,  4,  4,  4,  4,  4,
-      //                  'T'
-          4,  4,  4,  4,  3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-      //      'a'     'c'             'g'                         'n'
-          4,  0,  4,  1,  4,  4,  4,  2,  4,  4,  4,  4,  4,  4,  4,  4,
-      //                  't'
-          4,  4,  4,  4,  3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+     //                                                      '-' '.'
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  2,
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+     //      'A'     'C'             'G'                         'N'
+          2,  1,  2,  3,  2,  2,  2,  6,  2,  2,  2,  2,  2,  2,  7,  2,
+      //                 'T'             'X'
+          2,  2,  2,  2,  4,  2,  2,  2,  7,  2,  2,  2,  2,  2,  2,  2,
+     //      'a'     'c'             'g'                         'n'
+          2,  1,  2,  3,  2,  2,  2,  6,  2,  2,  2,  2,  2,  2,  7,  2,
+      //                 't'             'x'
+          2,  2,  2,  2,  4,  2,  2,  2,  7,  2,  2,  2,  2,  2,  2,  2,
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+          2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
         }};
 
         /// alphabet to ascii lookup table
         static constexpr std::array<char, SIZE> TO_ASCII =
         {{
-          'A',  // = 0
-          'C',  // = 1
-          'G',  // = 2
-          'T',  // = 3
-          'N'  // = 4
+          '.',  // = 0  gap  choose . instead of -
+          'A',  // = 1
+          '?',  // = 2  unused
+          'C',  // = 3
+          'T',  // = 4
+          '?',  // = 5  unused
+          'G',  // = 6
+          'N'   // = 7  unknown.  choose N instead of X
         }};
 
         /// complement lookup table
         static constexpr std::array<uint8_t, SIZE> TO_COMPLEMENT =
         {{
-          3,  // = 0
-          2,  // = 1
-          1,  // = 2
-          0,  // = 3
-          4   // = 4
+          0,  // = 0  gap map to self/
+          4,  // = 1  A -> T
+          2,  // = 2  unused map to self
+          6,  // = 3  C -> G
+          1,  // = 4  T -> A
+          5,  // = 5  unused map to self
+          3,  // = 6  G -> C
+          7   // = 7  unknown maps to self.
         }};
 
+        // use default, serial reverse and rev complement
+        static constexpr uint8_t from_ascii(uint8_t ascii) {
+          return FROM_ASCII[ascii];
+        }
       };
+
       template <typename DUMMY>
-      constexpr std::array<uint8_t, 256> DNA5_T<DUMMY>::FROM_ASCII;
+      constexpr std::array<uint8_t, 256> DNA6_T<DUMMY>::FROM_ASCII;
       template <typename DUMMY>
-      constexpr std::array<char, DNA5_T<DUMMY>::SIZE> DNA5_T<DUMMY>::TO_ASCII;
+      constexpr std::array<char, DNA6_T<DUMMY>::SIZE> DNA6_T<DUMMY>::TO_ASCII;
       template <typename DUMMY>
-      constexpr std::array<uint8_t, DNA5_T<DUMMY>::SIZE> DNA5_T<DUMMY>::TO_COMPLEMENT;
+      constexpr std::array<uint8_t, DNA6_T<DUMMY>::SIZE> DNA6_T<DUMMY>::TO_COMPLEMENT;
+
+
+// OLD DNA5_T.  note that the bit pattern is not symmetrical.  +: the lower 2 bits have same pattern as DNA.  -: to get complement, have to use lookup table.
+//      /// DNA5 Alphabet: A T C G N
+//      template <typename DUMMY = void>
+//      struct DNA5_T : BaseAlphabetChar
+//      {
+//          // This should make char and DNA useable interchangebly
+//          DNA5_T& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
+//          DNA5_T(const CharType& c) : BaseAlphabetChar(c) {}
+//          DNA5_T() : BaseAlphabetChar() {}
+//
+//        /// alphabet size
+//        static constexpr AlphabetSizeType SIZE = 5;
+//
+//        /// ascii to alphabet lookup table
+//        static constexpr std::array<uint8_t, 256> FROM_ASCII =
+//        {{
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//      //      'A'     'C'             'G'                         'N'
+//          4,  0,  4,  1,  4,  4,  4,  2,  4,  4,  4,  4,  4,  4,  4,  4,
+//      //                  'T'
+//          4,  4,  4,  4,  3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//      //      'a'     'c'             'g'                         'n'
+//          4,  0,  4,  1,  4,  4,  4,  2,  4,  4,  4,  4,  4,  4,  4,  4,
+//      //                  't'
+//          4,  4,  4,  4,  3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//          4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4
+//        }};
+//
+//        /// alphabet to ascii lookup table
+//        static constexpr std::array<char, SIZE> TO_ASCII =
+//        {{
+//          'A',  // = 0
+//          'C',  // = 1
+//          'G',  // = 2
+//          'T',  // = 3
+//          'N'  // = 4
+//        }};
+//
+//        /// complement lookup table
+//        static constexpr std::array<uint8_t, SIZE> TO_COMPLEMENT =
+//        {{
+//          3,  // = 0
+//          2,  // = 1
+//          1,  // = 2
+//          0,  // = 3
+//          4   // = 4
+//        }};
+//
+//      };
+//      template <typename DUMMY>
+//      constexpr std::array<uint8_t, 256> DNA5_T<DUMMY>::FROM_ASCII;
+//      template <typename DUMMY>
+//      constexpr std::array<char, DNA5_T<DUMMY>::SIZE> DNA5_T<DUMMY>::TO_ASCII;
+//      template <typename DUMMY>
+//      constexpr std::array<uint8_t, DNA5_T<DUMMY>::SIZE> DNA5_T<DUMMY>::TO_COMPLEMENT;
 
 
 
@@ -289,60 +380,80 @@ namespace bliss
     constexpr std::array<uint8_t, RNA_T<DUMMY>::SIZE> RNA_T<DUMMY>::TO_COMPLEMENT;
 
 
+    /**
+     * @brief RNA6 alphabet contains A C G U N and ".", where "." is the gap character.
+     * @details  the design of this alphabet aims to avoid using lookup table for complement translation.
+     *        basically, the complement can be calculated by reversing the bits.
+     *        A = 001
+     *        C = 011
+     *        G = 110
+     *        U = 100
+     *        X/N = 111
+     *        -/. = 000
+     *
+     *        010 and 101 are not really used.  they are mapped to '?'
+     */
     template <typename DUMMY = void>
-    struct RNA5_T : BaseAlphabetChar
+    struct RNA6_T : BaseAlphabetChar
     {
         // This should make char and RNA useable interchangebly
-        RNA5_T& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
-        RNA5_T(const CharType& c) : BaseAlphabetChar(c) {}
-        RNA5_T() : BaseAlphabetChar() {}
+        RNA6_T& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
+        RNA6_T(const CharType& c) : BaseAlphabetChar(c) {}
+        RNA6_T() : BaseAlphabetChar() {}
     
         /// alphabet size
-      static constexpr AlphabetSizeType SIZE = 5;
+      static constexpr AlphabetSizeType SIZE = 8;
     
       /// ascii to alphabet lookup table
       static constexpr std::array<uint8_t, 256> FROM_ASCII =
       {{
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-    //      'A'     'C'             'G'                         'N'
-        4,  0,  4,  1,  4,  4,  4,  2,  4,  4,  4,  4,  4,  4,  4,  4,
-    //                     'U'
-        4,  4,  4,  4,  4,  3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-    //      'a'     'c'             'g'                         'n'
-        4,  0,  4,  1,  4,  4,  4,  2,  4,  4,  4,  4,  4,  4,  4,  4,
-    //                     'u'
-        4,  4,  4,  4,  4,  3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+   //                                                      '-' '.'
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  2,
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+   //      'A'     'C'             'G'                         'N'
+        2,  1,  2,  3,  2,  2,  2,  6,  2,  2,  2,  2,  2,  2,  7,  2,
+    //                     'U'         'X'
+        2,  2,  2,  2,  2,  4,  2,  2,  7,  2,  2,  2,  2,  2,  2,  2,
+   //      'a'     'c'             'g'                         'n'
+        2,  1,  2,  3,  2,  2,  2,  6,  2,  2,  2,  2,  2,  2,  7,  2,
+    //                     'u'         'x'
+        2,  2,  2,  2,  2,  4,  2,  2,  7,  2,  2,  2,  2,  2,  2,  2,
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
       }};
     
       /// alphabet to ascii lookup table
       static constexpr std::array<char, SIZE> TO_ASCII =
       {{
-        'A',  // = 0
-        'C',  // = 1
-        'G',  // = 2
-        'U',  // = 3
-        'N'  // = 4
+        '.',  // = 0  gap  choose . instead of -
+        'A',  // = 1
+        '?',  // = 2  unused
+        'C',  // = 3
+        'U',  // = 4
+        '?',  // = 5  unused
+        'G',  // = 6
+        'N'   // = 7  unknown.  choose N instead of X
       }};
     
       /// complement lookup table
       static constexpr std::array<uint8_t, SIZE> TO_COMPLEMENT =
       {{
-        3,  // = 0
-        2,  // = 1
-        1,  // = 2
-        0,  // = 3
-        4   // = 4
+        0,  // = 0  gap map to self/
+        4,  // = 1  A -> U
+        2,  // = 2  unused map to self
+        6,  // = 3  C -> G
+        1,  // = 4  U -> A
+        5,  // = 5  unused map to self
+        3,  // = 6  G -> C
+        7   // = 7  unknown maps to self.
       }};
 
       // use default, serial reverse and rev complement
@@ -352,13 +463,84 @@ namespace bliss
     };
     
     template <typename DUMMY>
-    constexpr std::array<uint8_t, 256> RNA5_T<DUMMY>::FROM_ASCII;
+    constexpr std::array<uint8_t, 256> RNA6_T<DUMMY>::FROM_ASCII;
     template <typename DUMMY>
-    constexpr std::array<char, RNA5_T<DUMMY>::SIZE> RNA5_T<DUMMY>::TO_ASCII;
+    constexpr std::array<char, RNA6_T<DUMMY>::SIZE> RNA6_T<DUMMY>::TO_ASCII;
     template <typename DUMMY>
-    constexpr std::array<uint8_t, RNA5_T<DUMMY>::SIZE> RNA5_T<DUMMY>::TO_COMPLEMENT;
+    constexpr std::array<uint8_t, RNA6_T<DUMMY>::SIZE> RNA6_T<DUMMY>::TO_COMPLEMENT;
+
+
+// OLD RNA5_T.  note that the bit pattern is not symmetrical.  +: the lower 2 bits have same pattern as RNA.  -: to get complement, have to use lookup table.
+//    template <typename DUMMY = void>
+//    struct RNA5_T : BaseAlphabetChar
+//    {
+//        // This should make char and RNA useable interchangebly
+//        RNA5_T& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
+//        RNA5_T(const CharType& c) : BaseAlphabetChar(c) {}
+//        RNA5_T() : BaseAlphabetChar() {}
+//
+//        /// alphabet size
+//      static constexpr AlphabetSizeType SIZE = 5;
+//
+//      /// ascii to alphabet lookup table
+//      static constexpr std::array<uint8_t, 256> FROM_ASCII =
+//      {{
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//    //      'A'     'C'             'G'                         'N'
+//        4,  0,  4,  1,  4,  4,  4,  2,  4,  4,  4,  4,  4,  4,  4,  4,
+//    //                     'U'
+//        4,  4,  4,  4,  4,  3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//    //      'a'     'c'             'g'                         'n'
+//        4,  0,  4,  1,  4,  4,  4,  2,  4,  4,  4,  4,  4,  4,  4,  4,
+//    //                     'u'
+//        4,  4,  4,  4,  4,  3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+//        4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4
+//      }};
+//
+//      /// alphabet to ascii lookup table
+//      static constexpr std::array<char, SIZE> TO_ASCII =
+//      {{
+//        'A',  // = 0
+//        'C',  // = 1
+//        'G',  // = 2
+//        'U',  // = 3
+//        'N'  // = 4
+//      }};
+//
+//      /// complement lookup table
+//      static constexpr std::array<uint8_t, SIZE> TO_COMPLEMENT =
+//      {{
+//        3,  // = 0
+//        2,  // = 1
+//        1,  // = 2
+//        0,  // = 3
+//        4   // = 4
+//      }};
+//
+//      // use default, serial reverse and rev complement
+//      static constexpr uint8_t from_ascii(uint8_t ascii) {
+//        return FROM_ASCII[ascii];
+//      }
+//    };
+//    template <typename DUMMY>
+//    constexpr std::array<uint8_t, 256> RNA5_T<DUMMY>::FROM_ASCII;
+//    template <typename DUMMY>
+//    constexpr std::array<char, RNA5_T<DUMMY>::SIZE> RNA5_T<DUMMY>::TO_ASCII;
+//    template <typename DUMMY>
+//    constexpr std::array<uint8_t, RNA5_T<DUMMY>::SIZE> RNA5_T<DUMMY>::TO_COMPLEMENT;
 
     
+
     /// IUPAC encoding, following strict interpretation of IUPAC-IUB SYMBOLS FOR NUCLEOTIDE (DNA OR RNA) NOMENCLATURE:
     ///                                                    Cornish-Bowden (1985) Nucl. Acids Res. 13: 3021-3030
     /// specifically, U is treated separately from T and X has same meaning as N.
@@ -563,9 +745,11 @@ namespace bliss
 
       using ASCII = ::bliss::common::alphabet::ASCII_T<>;
       using DNA = ::bliss::common::alphabet::DNA_T<>;
-      using DNA5 = ::bliss::common::alphabet::DNA5_T<>;
+      using DNA5 = ::bliss::common::alphabet::DNA6_T<>;
+      using DNA6 = ::bliss::common::alphabet::DNA6_T<>;
       using RNA = ::bliss::common::alphabet::RNA_T<>;
-      using RNA5 = ::bliss::common::alphabet::RNA5_T<>;
+      using RNA5 = ::bliss::common::alphabet::RNA6_T<>;
+      using RNA6 = ::bliss::common::alphabet::RNA6_T<>;
       using DNA16 = ::bliss::common::alphabet::DNA16_T<>;
       using DNA_IUPAC = ::bliss::common::alphabet::DNA_IUPAC_T<>;
 
