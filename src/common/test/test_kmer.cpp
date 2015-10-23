@@ -704,7 +704,7 @@ TEST(KmerReverse, TestKmerReverse112)
 
 //  std::cout << "src kmer: " << kmer_in << std::endl;
 
-  MyKmer<7*8, bliss::common::DNA, uint16_t> kmer_rev = kmer_in.reversed_kmer();
+  MyKmer<7*8, bliss::common::DNA, uint16_t> kmer_rev = kmer_in.reverse();
 //  std::cout << "rev kmer: " << kmer_rev << std::endl;
   EXPECT_EQ(kmer_ex_rev, kmer_rev);
 
@@ -713,14 +713,14 @@ TEST(KmerReverse, TestKmerReverse112)
   MyKmer<37, bliss::common::DNA5, uint16_t> kmer3_in(kmer_val);
   MyKmer<37, bliss::common::DNA5, uint16_t> kmer3_ex_rev(kmer_ex_3);
   // get the reverse
-  MyKmer<37, bliss::common::DNA5, uint16_t> kmer3_rev = kmer3_in.reversed_kmer();
+  MyKmer<37, bliss::common::DNA5, uint16_t> kmer3_rev = kmer3_in.reverse();
   EXPECT_EQ(kmer3_ex_rev, kmer3_rev);
 
   /* test for bits_per_char = 4 */
   MyKmer<28, bliss::common::DNA16, uint16_t> kmer4_in(kmer_val);
   MyKmer<28, bliss::common::DNA16, uint16_t> kmer4_ex_rev(kmer_ex_4);
   // get the reverse
-  MyKmer<28, bliss::common::DNA16, uint16_t> kmer4_rev = kmer4_in.reversed_kmer();
+  MyKmer<28, bliss::common::DNA16, uint16_t> kmer4_rev = kmer4_in.reverse();
   EXPECT_EQ(kmer4_ex_rev, kmer4_rev);
 
 }

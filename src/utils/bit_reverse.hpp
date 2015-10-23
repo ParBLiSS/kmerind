@@ -1296,11 +1296,11 @@ namespace bliss {
        *    if the requirement is not satisfied, then it should fallback to next lowest.
        */
 
-      // no arbitrary BIT_GROUP_SIZE, therefore no SEQ bit_reverse needed.
+      // no arbitrary BIT_GROUP_SIZE, therefore no SEQ bit_reverse supported.
 
       /**
        * @brief
-       * @details   enabled only if BIT_GROUP_SIZE not power of 2, not 3, and greater than 0.
+       * @details   enabled only if BIT_GROUP_SIZE is 3, and greater than 0.
        * @param out
        * @param in
        * @param len
@@ -1405,7 +1405,7 @@ namespace bliss {
 
       /**
        * @brief
-       * @details   enabled only if BIT_GROUP_SIZE is power of 2 or is 3, and greater than 0.
+       * @details   enabled only if BIT_GROUP_SIZE is power of 2, and greater than 0.
        * @param out
        * @param in
        * @param len
@@ -1495,13 +1495,123 @@ namespace bliss {
       }
 
 
-
+      /// convenience function to convert from WORD_TYPE pointer to uint8_t pointer.
       template <typename WORD_TYPE, unsigned int BIT_GROUP_SIZE, typename ::std::enable_if<(::std::is_integral<WORD_TYPE>::value && (sizeof(WORD_TYPE) > 1)), int>::type = 1>
       uint8_t reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const len, uint8_t const bit_offset) {
         return reverse<BIT_GROUP_SIZE>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t const *>(in), len * sizeof(WORD_TYPE), bit_offset);
       }
 
 
+      /**
+       * @brief
+       * @details   enabled only if BIT_GROUP_SIZE is 3, and greater than 0.
+       * @param out
+       * @param in
+       * @param len
+       * @param bit_offset
+       * @return
+       */
+      template <unsigned int BIT_GROUP_SIZE>
+      typename std::enable_if<(BIT_GROUP_SIZE == 3), uint8_t>::type
+      reverse_seq(uint8_t * out, uint8_t const * in, size_t const len, uint8_t bit_offset = 0 ) {
+
+        memset(out, 0, len);
+
+        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
+        size_t rem = len;
+        // pointers
+        uint8_t * v = out + len;
+        const uint8_t * u = in;
+
+
+        bit_reverse<3, BIT_REV_SEQ> op64;
+        while (rem >= 8) {
+
+          // enough bytes.  do an iteration
+          v -= 8;
+          bit_offset = op64.operator()(v, u, 8, bit_offset);
+          u += 8;
+          rem -= 8;
+
+          if (bit_offset > 0) {  // if there is overlap.  adjust
+            u -= 1;
+            rem += 1;
+            v += 1;
+            bit_offset = 8 - bit_offset;
+          } // else no adjustment is needed.
+//          std::cout << "SWAR full.  rem = " << std::dec << rem << " len=" << (len - rem) << std::endl;
+
+        }
+        if (rem > 0) {
+
+          // do another iteration with all the remaining.
+
+          // original length is less than 32, so has to do memcpy
+          bit_offset = op64.operator()(out, in + len - rem, rem, bit_offset);
+
+          rem = 0;
+//          std::cout << "SWAR part.  rem = " << std::dec << rem << " len=" << (len - rem) << std::endl;
+        }
+
+        return bit_offset;  // return remainder.
+      }
+
+      /**
+       * @brief
+       * @details   enabled only if BIT_GROUP_SIZE is power of 2, and greater than 0.
+       * @param out
+       * @param in
+       * @param len
+       * @param bit_offset
+       * @return
+       */
+      template <unsigned int BIT_GROUP_SIZE>
+      typename std::enable_if<((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
+      reverse_seq(uint8_t * out, uint8_t const * in, size_t const len, uint8_t bit_offset = 0 ) {
+        static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
+        static_assert(BIT_GROUP_SIZE <= 64, "ERROR: currenly reverse does not support 128 BIT_GRUOP_SIZE");
+
+        if (bit_offset != 0) throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE require bit_offset to be 0.");
+
+        if ((len % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
+          throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
+
+        memset(out, 0, len);
+
+        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
+        size_t rem = len;
+        // pointers
+        uint8_t * v = out + len;
+        const uint8_t * u = in;
+
+        bit_reverse<BIT_GROUP_SIZE, BIT_REV_SEQ> op64;
+        while (rem >= 8) {
+          // enough bytes.  do an iteration
+          v -= 8;
+          op64.operator()(v, u, 8, 0);
+          u += 8;
+
+          rem -= 8;
+        }
+        if (rem > 0) {
+          // do another iteration with all the remaining.
+          if (len > 8) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
+            op64.operator()(out, in + len - 8, 8, 0);
+          } else {  // original length is less than 32, so has to do memcpy
+            op64.operator()(out, in + len - rem, rem, 0);
+          }
+          rem = 0;
+        }
+
+        return 0;  // return remainder.
+      }
+
+
+      /// convenience function to convert from WORD_TYPE pointer to uint8_t pointer.
+      template <typename WORD_TYPE, unsigned int BIT_GROUP_SIZE, typename ::std::enable_if<(::std::is_integral<WORD_TYPE>::value && (sizeof(WORD_TYPE) > 1)), int>::type = 1>
+      uint8_t reverse_seq(WORD_TYPE * out, WORD_TYPE const * in, size_t const len, uint8_t const bit_offset) {
+        return reverse_seq<BIT_GROUP_SIZE>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t const *>(in), len * sizeof(WORD_TYPE), bit_offset);
+      }
 
 
 

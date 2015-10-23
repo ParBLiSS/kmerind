@@ -467,12 +467,12 @@ TEST_P(Mxx2KmerTest, bucketing)
     {
       ::std::cout << i << " test: ";
       for (int j = 0; j < test_counts[i]; ++start, ++j) {
-        ::std::cout << start->getData()[0] << "(" << (h(*start) %pp) << "),";
+        ::std::cout << start->getConstData()[0] << "(" << (h(*start) %pp) << "),";
       }
       ::std::cout << ::std::endl;
       ::std::cout << i << " gold: ";
       for (int j = 0; j < gold_counts[i]; ++start_gold, ++j) {
-        ::std::cout << start_gold->getData()[0] << "(" << (h(*start_gold) %pp) << "),";
+        ::std::cout << start_gold->getConstData()[0] << "(" << (h(*start_gold) %pp) << "),";
       }
       ::std::cout << ::std::endl;
     } else {
@@ -551,12 +551,12 @@ TEST_P(Mxx2KmerTest, unique)
     {
       ::std::cout << i << " test: ";
       for (int j = 0; j < test_counts[i]; ++start, ++j) {
-        ::std::cout << start->getData()[0] << "(" << (h(*start) %pp) << "),";
+        ::std::cout << start->getConstData()[0] << "(" << (h(*start) %pp) << "),";
       }
       ::std::cout << ::std::endl;
       ::std::cout << i << " gold: ";
       for (int j = 0; j < gold_counts[i]; ++start_gold, ++j) {
-        ::std::cout << start_gold->getData()[0] << "(" << (h(*start_gold) %pp) << "),";
+        ::std::cout << start_gold->getConstData()[0] << "(" << (h(*start_gold) %pp) << "),";
       }
       ::std::cout << ::std::endl;
     } else {

@@ -24,6 +24,10 @@
 #include "common/alphabets.hpp"
 #include "common/alphabet_traits.hpp"
 
+#include "common/test/kmer_reverse_helper.hpp"
+
+#include "utils/bit_reverse.hpp"
+
 // include files to test
 
 //TESTS: Sequential, SWAR/BSWAP, SSSE3, AVX2 versions of kmer reverse.
@@ -35,6 +39,8 @@ class KmerReverseTest : public ::testing::Test {
   protected:
 
     T kmer;
+    bliss::common::test::KmerReverseHelper<T> helper;
+
     static const size_t iterations = 10001;
 
     virtual void SetUp()
@@ -53,7 +59,7 @@ class KmerReverseTest : public ::testing::Test {
 // indicate this is a typed test
 TYPED_TEST_CASE_P(KmerReverseTest);
 
-TYPED_TEST_P(KmerReverseTest, reverse_seq)
+TYPED_TEST_P(KmerReverseTest, reverse_seq_self)
 {
   TypeParam km, gold;
   km = this->kmer;
@@ -63,11 +69,11 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq)
   bool local_same;
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    km = km.reverse_serial();
-    km = km.reverse_complement_serial();
+    km = this->helper.reverse_serial(km);
+    km = this->helper.reverse_complement_serial(km);
 
-    km = km.reverse_serial();
-    km = km.reverse_complement_serial();
+    km = this->helper.reverse_serial(km);
+    km = this->helper.reverse_complement_serial(km);
 
     local_same = (km == gold);
 
@@ -80,6 +86,42 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq)
     km = gold;
   }
   EXPECT_TRUE(same);
+}
+
+
+
+TYPED_TEST_P(KmerReverseTest, reverse_seq)
+{
+  TypeParam km, rev, rev_seq;
+  km = this->kmer;
+
+  bool rev_same = true;
+  bool local_rev_same = true;
+
+  uint8_t* out = reinterpret_cast<uint8_t*>(rev.getData());
+  const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getConstData());
+
+  for (size_t i = 0; i < this->iterations; ++i) {
+    rev_seq = this->helper.reverse_serial(km);
+
+    memset(out, 0, TypeParam::nBytes);
+
+    bliss::utils::bit_ops::reverse_seq<TypeParam::bitsPerChar>(out, in, TypeParam::nBytes);
+    rev.right_shift_bits(TypeParam::nBytes * 8 - TypeParam::nBits);  // shift by remainder bits..
+
+    local_rev_same = (rev == rev_seq);
+
+    if (!local_rev_same) {
+      DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+    }
+
+    rev_same &= local_rev_same;
+
+
+    km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
+  }
+  EXPECT_TRUE(rev_same);
+
 }
 
 TYPED_TEST_P(KmerReverseTest, reverse_bswap)
@@ -95,11 +137,11 @@ TYPED_TEST_P(KmerReverseTest, reverse_bswap)
   bool local_revcomp_same = true;
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev_seq = km.reverse_serial();
-    revcomp_seq = km.reverse_complement_serial();
+    rev_seq = this->helper.reverse_serial(km);
+    revcomp_seq = this->helper.reverse_complement_serial(km);
 
-    rev = km.reverse_bswap();
-    revcomp = km.reverse_complement_bswap();
+    rev = this->helper.reverse_bswap(km);
+    revcomp = this->helper.reverse_complement_bswap(km);
 
     local_rev_same = (rev == rev_seq);
     local_revcomp_same = (revcomp == revcomp_seq);
@@ -135,11 +177,11 @@ TYPED_TEST_P(KmerReverseTest, reverse_swar)
   bool local_revcomp_same = true;
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev_seq = km.reverse_serial();
-    revcomp_seq = km.reverse_complement_serial();
+    rev_seq = this->helper.reverse_serial(km);
+    revcomp_seq = this->helper.reverse_complement_serial(km);
 
-    rev = km.reverse_swar();
-    revcomp = km.reverse_complement_swar();
+    rev = this->helper.reverse_swar(km);
+    revcomp = this->helper.reverse_complement_swar(km);
 
     local_rev_same = (rev == rev_seq);
     local_revcomp_same = (revcomp == revcomp_seq);
@@ -161,7 +203,7 @@ TYPED_TEST_P(KmerReverseTest, reverse_swar)
 
 }
 
-TYPED_TEST_P(KmerReverseTest, reverse_new)
+TYPED_TEST_P(KmerReverseTest, reverse)
 {
   TypeParam km, rev, revcomp, rev_seq, revcomp_seq;
   km = this->kmer;
@@ -172,11 +214,11 @@ TYPED_TEST_P(KmerReverseTest, reverse_new)
   bool local_revcomp_same = true;
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev_seq = km.reverse_serial();
-    revcomp_seq = km.reverse_complement_serial();
+    rev_seq = this->helper.reverse_serial(km);
+    revcomp_seq = this->helper.reverse_complement_serial(km);
 
-    rev = km.reverse_new();
-    revcomp = km.reverse_complement_new();
+    rev = km.reverse();
+    revcomp = km.reverse_complement();
 
     local_rev_same = (rev == rev_seq);
     local_revcomp_same = (revcomp == revcomp_seq);
@@ -198,9 +240,9 @@ TYPED_TEST_P(KmerReverseTest, reverse_new)
 
 }
 
-#ifdef __SSSE3__
 TYPED_TEST_P(KmerReverseTest, reverse_ssse3)
 {
+#ifdef __SSSE3__
   if (TypeParam::bitsPerChar == 3) return;
 
 
@@ -213,11 +255,11 @@ TYPED_TEST_P(KmerReverseTest, reverse_ssse3)
   bool local_revcomp_same = true;
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev_seq = km.reverse_serial();
-    revcomp_seq = km.reverse_complement_serial();
+    rev_seq = this->helper.reverse_serial(km);
+    revcomp_seq = this->helper.reverse_complement_serial(km);
 
-    rev = km.reverse_simd();
-    revcomp = km.reverse_complement_simd();
+    rev = this->helper.reverse_simd(km);
+    revcomp = this->helper.reverse_complement_simd(km);
 
     local_rev_same = (rev == rev_seq);
     local_revcomp_same = (revcomp == revcomp_seq);
@@ -237,19 +279,15 @@ TYPED_TEST_P(KmerReverseTest, reverse_ssse3)
   }
   EXPECT_TRUE(rev_same);
   EXPECT_TRUE(revcomp_same);
+#else
+  WARNINGF("SSSE3 is not enabled or not available.");
+#endif
 
 }
-#endif
 
 
 
-#ifdef __SSSE3__
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(KmerReverseTest, reverse_seq, reverse_bswap, reverse_swar, reverse_new, reverse_ssse3);
-#else
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(KmerReverseTest, reverse_seq, reverse_bswap, reverse_swar, reverse_new);
-#endif
+REGISTER_TYPED_TEST_CASE_P(KmerReverseTest, reverse_seq_self, reverse_seq, reverse_bswap, reverse_swar, reverse, reverse_ssse3);
 
 //////////////////// RUN the tests with different types.
 

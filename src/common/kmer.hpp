@@ -39,11 +39,6 @@
 
 #include "utils/bit_reverse.hpp"
 
-// #include <xmmintrin.h>  // sse2
-#if defined(__SSSE3__)
-#include <tmmintrin.h>  // ssse3  includes sse2
-#endif
-
 #define INLINE inline
 
 namespace bliss
@@ -154,50 +149,10 @@ namespace bliss
 
     using MACH_WORD_TYPE = size_t;
 
-public:
-    static constexpr int stride = sizeof(MACH_WORD_TYPE) / sizeof(WORD_TYPE);
-    static constexpr int iters = nWords / stride;
-    static constexpr int rem = nWords % stride;
-
-    static constexpr int simd_stride = 16 / sizeof(WORD_TYPE);
-    static constexpr int simd_iters = nWords / simd_stride;
-    static constexpr int simd_rem = nWords % simd_stride;
-
-
-  protected:
     /// The actual storage of the k-mer
-    WORD_TYPE data[nWords]; //  not compatible with mxx datatype stuff - causes size of std::pair to increase greatly because alignment of elements is based on most resitrictive element.
-                            // __attribute__((aligned(16)));
-    						// actually, worse than that.  built-in types are having problems as well - alignment of primitive types is not reflected in sizeof or alignof keywords.
-                            // TODO: can use MPI_Type_create_resized() to fix this problem for tuple and struct, but for primitive types its's not so easy.
+    WORD_TYPE data[nWords]; // alignas is not compatible with mxx datatype stuff - causes size of std::pair to increase greatly because alignment of elements is based on most resitrictive element.
   
-
-    static constexpr uint8_t simd_mask_b[16] alignas(16) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
-    //static constexpr __m128i const *simd_mask = reinterpret_cast<const __m128i*>(simd_mask_b);
-
-    // mask for reversing the order of items
-    static constexpr uint8_t simd_rev_mask_b[16] alignas(16) = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
-    //static constexpr __m128i const *simd_rev_mask = reinterpret_cast<const __m128i*>(simd_rev_mask_b);
-
-    // lookup table for reversing bits in a byte in groups of 1
-    static constexpr uint8_t simd_lut1_lo_b[16] alignas(16) = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
-    //static constexpr __m128i const *simd_lut1_lo = reinterpret_cast<const __m128i*>(simd_lut1_lo_b);
-
-
-    static constexpr uint8_t simd_lut1_hi_b[16] alignas(16) = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
-    //static constexpr __m128i const *simd_lut1_hi = reinterpret_cast<const __m128i*>(simd_lut1_hi_b);
-
-    // lookup table for reversing bits in a byte in groups of 2
-    static constexpr uint8_t simd_lut2_lo_b[16] alignas(16) = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
-    //static constexpr __m128i const *simd_lut2_lo = reinterpret_cast<const __m128i*>(simd_lut2_lo_b);
-
-    static constexpr uint8_t simd_lut2_hi_b[16] alignas(16) = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
-    //static constexpr __m128i const *simd_lut2_hi = reinterpret_cast<const __m128i*>(simd_lut2_hi_b);
-
-    // lookup table for reversing bits in a byte in groups of 4 - no need, just use the simd_mask.
-
   public:
-
 
     /**
      * @brief   The default constructor, creates an uninitialized k-mer.
@@ -240,9 +195,14 @@ public:
      *        useful for hash function and others.
      * @return pointer to internal data
      */
-    WORD_TYPE const * getData() const  {
+    WORD_TYPE const * getConstData() const  {
       return data;
     }
+
+    WORD_TYPE* getData() {
+    	return data;
+    }
+
   
     /**
      * FIXME: update documentation for `size => (size-1)`
@@ -853,6 +813,17 @@ public:
     }
   
     /**
+     * @brief Shifts the kmer left by the given number of bits.
+     * @param shift_by
+     * @return
+     */
+    INLINE Kmer left_shift_bits(const std::size_t shift_by) {
+      this->do_left_shift(shift_by);
+      this->do_sanitize();
+      return *this;
+    }
+
+    /**
      * @brief Shifts the k-mer right by the given number of CHARACTERS.
      *
      * @note  This shifts by the number of characters (which is a larger shift
@@ -881,6 +852,17 @@ public:
       return result;
     }
   
+    /**
+     * @brief Shifts the kmer right by the given number of bits.
+     * @param shift_by
+     * @return
+     */
+    INLINE Kmer right_shift_bits(const std::size_t shift_by) {
+      this->do_right_shift(shift_by);
+      this->do_sanitize();
+      return *this;
+    }
+
   
     /**
      * @brief Returns a reversed k-mer.
@@ -890,13 +872,10 @@ public:
      *
      * @returns   The reversed k-mer.
      */
-    Kmer reversed_kmer() const
+    Kmer reverse() const
     {
-#if defined(__SSSE3__)
-      return do_reverse_simd<ALPHABET>(*this);
-#else
-      return do_reverse_swar<ALPHABET>(*this);
-#endif
+      // only needs to know the bitsPerChar info.
+      return do_reverse(*this);
     }
 
     /**
@@ -909,146 +888,9 @@ public:
      */
     Kmer reverse_complement() const
     {
-#if defined(__SSSE3__)
-      return do_reverse_complement_simd<ALPHABET>(*this);
-#else
-      return do_reverse_complement_swar<ALPHABET>(*this);
-#endif
+      return do_reverse_complement<ALPHABET>(*this);
     }
   
-  
-    /**
-     * @brief Returns a reversed k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     * @returns   The reversed k-mer.
-     */
-    Kmer reverse_serial() const
-    {
-      return do_reverse_serial(*this);
-    }
-
-    /**
-     * @brief Returns a reverse complement of a k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     * @returns   The reversed k-mer.
-     */
-    Kmer reverse_complement_serial() const
-    {
-      return do_reverse_complement_serial(*this);
-    }
-
-#if defined(__SSSE3__)
-    /**
-     * @brief Returns a reversed k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     * @returns   The reversed k-mer.
-     */
-    Kmer reverse_simd() const
-    {
-      return do_reverse_simd<ALPHABET>(*this);
-    }
-
-    /**
-     * @brief Returns a reverse complement of a k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     * @returns   The reversed k-mer.
-     */
-    Kmer reverse_complement_simd() const
-    {
-      return do_reverse_complement_simd<ALPHABET>(*this);
-    }
-#endif
-    /**
-     * @brief Returns a reversed k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     * @returns   The reversed k-mer.
-     */
-    Kmer reverse_swar() const
-    {
-      return do_reverse_swar<ALPHABET>(*this);
-    }
-
-    /**
-     * @brief Returns a reverse complement of a k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     * @returns   The reversed k-mer.
-     */
-    Kmer reverse_complement_swar() const
-    {
-      return do_reverse_complement_swar<ALPHABET>(*this);
-    }
-
-
-    /**
-     * @brief Returns a reversed k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     * @returns   The reversed k-mer.
-     */
-    Kmer reverse_new() const
-    {
-      return do_reverse_new(*this);
-    }
-
-    /**
-     * @brief Returns a reverse complement of a k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     * @returns   The reversed k-mer.
-     */
-    Kmer reverse_complement_new() const
-    {
-      return do_reverse_complement_new<ALPHABET>(*this);
-    }
-
-
-    /**
-     * @brief Returns a reversed k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     * @returns   The reversed k-mer.
-     */
-    Kmer reverse_bswap() const
-    {
-      return do_reverse_bswap<ALPHABET>(*this);
-    }
-
-    /**
-     * @brief Returns a reverse complement of a k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     * @returns   The reversed k-mer.
-     */
-    Kmer reverse_complement_bswap() const
-    {
-      return do_reverse_complement_bswap<ALPHABET>(*this);
-    }
 
     // for debug purposes
     /**
@@ -1108,9 +950,6 @@ public:
 
 
 
-  
-  
-  
     /// get 64 bit prefix.  for hashing.
     uint64_t getPrefix(const unsigned int NumBits = 64) const {
   
@@ -1344,51 +1183,66 @@ public:
       memset(data + (nWords - word_shift), 0, word_shift * sizeof(WORD_TYPE));
     }
   
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    INLINE Kmer do_reverse_serial(Kmer const & src) const
-    {
-      // TODO implement logarithmic version (logarithmic in number of bits in a word, linear in number of words).  non power of 2 bitsPerChar is tricky because of byte boundaries.
-  
-      /* Linear (inefficient) reverse: */
-  
-      // get temporary copy of this
-      Kmer tmp_copy = src;
-      Kmer result;
-  
-      // get lower most bits from the temp copy and push them into the lower bits
-      // of this
-      for (unsigned int i = 0; i < size; ++i)
-      {
-        result.do_left_shift(bitsPerChar);   // shifting the whole thing, inefficient but correct,
-                                            // especially for char that cross word boundaries.
-        // copy `bitsperChar` least significant bits
-        copyBitsFixed<WORD_TYPE, bitsPerChar>(result.data[0], tmp_copy.data[0]);
-        tmp_copy.do_right_shift(bitsPerChar);
-      }
-  
-      // result already was 0 to begin with, so no need to sanitize
-//      // set ununsed bits to 0
-//      this->do_sanitize();
 
+
+
+
+    /// reverse the kmer.  only parameter of ALPHABET that matters here is bitsPerChar.
+    INLINE Kmer do_reverse(Kmer const & src) const
+    {
+      Kmer result;
+
+      const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
+      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
+
+      ::bliss::utils::bit_ops::reverse<bitsPerChar>(out, in, nBytes);
+
+      result.do_right_shift(nBytes * 8 - nBits);
       return result;
     }
-  
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    INLINE Kmer do_reverse_complement_serial(Kmer const & src) const
+
+    /// reverse complement of kmer.  specialzied for DNA/RNA, where the complement is the bitwise negation.
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<::std::is_same<A, DNA>::value ||
+                                  ::std::is_same<A, RNA>::value, int>::type = 0>
+    INLINE Kmer do_reverse_complement(Kmer const& src) const
     {
-      // TODO implement logarithmic version (logarithmic in number of bits in a word, linear in number of words).  non power of 2 bitsPerChar is tricky because of byte boundaries.
+      // DNA and RNA complement is via negation.
+      Kmer result = do_reverse(src);
+      for (uint32_t i = 0; i < nWords; ++i) result.data[i] = ~result.data[i];
+      result.do_sanitize();
+      return result;  // negate by xor with 0
+    }
+
+    /// reverse complement of kmer.  specialzied for DNA5/DNA6/RNA5/RNA6/DNA16, where the complement is the bitwise reverse.
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<::std::is_same<A, DNA6>::value ||
+                                  ::std::is_same<A, RNA6>::value ||
+                                  ::std::is_same<A, DNA16>::value, int>::type = 0>
+    INLINE Kmer do_reverse_complement(Kmer const& src) const
+    {
+      // DNA6, RNA6, and DNA16 use 1 bit reverse.   DNA5 and RNA5 are aliased to DNA6 and RNA6
+
+      Kmer result;
+
+      const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
+      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
+
+      ::bliss::utils::bit_ops::reverse<1>(out, in, nBytes);
+
+      result.do_right_shift(nBytes * 8 - nBits);
+      return result;
+    }
+
+    /// other alphabet types - reverse complement via serial implementation and applies ALPHABET's TO_COMPLEMENT lookup.
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
+                                    ::std::is_same<A, RNA>::value ||
+                                    ::std::is_same<A, DNA6>::value ||
+                                    ::std::is_same<A, RNA6>::value ||
+                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
+    INLINE Kmer do_reverse_complement(Kmer const & src) const
+    {
 
       /* Linear (inefficient) reverse: */
 
@@ -1417,852 +1271,6 @@ public:
 
       return result;
 
-    }
-
-#if defined(__SSSE3__)
-    static void print_simd_register(__m128i const & v, std::string const & label) {
-      WORD_TYPE tmp[simd_stride];
-      _mm_storeu_si128((__m128i*)tmp, v);
-      std::cout << label << ": ";
-      size_t width = sizeof(WORD_TYPE) * 2;
-      for (int i = simd_stride - 1; i >= 0; --i) {
-        std::cout << std::hex << std::setfill('0') << std::setw(width) << tmp[i] << " ";
-      }
-      std::cout << std::dec << std::endl;
-    }
-
-
-    /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.  8 to 100 times faster.
-    // this code is inspired by http://stackoverflow.com/questions/746171/best-algorithm-for-bit-reversal-from-msb-lsb-to-lsb-msb-in-c
-    template <typename A = ALPHABET>
-    static INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-    ::std::is_same<A, RNA>::value, __m128i>::type word_reverse_simd(__m128i const & b) {
-
-//        print(b, "b");
-
-      // load constants:
-      __m128i mask_lo = _mm_load_si128((__m128i*)simd_mask_b);
-
-//        print(mask_lo, "mask_lo");
-
-      //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, _mm_load_si128((__m128i*)simd_rev_mask_b));// *(reinterpret_cast<const __m128i*>(simd_rev_mask_b)));                                    // SSSE3
-
-//        print(r, "r");
-
-      //== get the lut indices.
-      // lower 4 bits
-      __m128i lo = _mm_and_si128(mask_lo, r); //*(reinterpret_cast<const __m128i*>(simd_mask_b)), r);                                          // SSE2
-      // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
-      __m128i hi = _mm_srli_epi16(_mm_andnot_si128(mask_lo, r), 4);   //*(reinterpret_cast<const __m128i*>(simd_mask_b)), r), 4);                    // SSE2
-
-//        print(lo, "lo");
-//        print(hi, "hi");
-
-        __m128i slo = _mm_shuffle_epi8(_mm_load_si128((__m128i*)simd_lut2_hi_b), lo);
-        __m128i shi = _mm_shuffle_epi8(_mm_load_si128((__m128i*)simd_lut2_lo_b), hi);
-
-//        print(slo, "slo");
-//        print(shi, "shi");
-
-        //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
-      __m128i res =  _mm_or_si128(slo, shi);                           // SSSE3, SSE2
-
-//      print(res, "result");
-
-      return res;
-
-    }
-    /// do reverse complement.  8 to 100 times faster than serially reversing the bits.
-    template <typename A = ALPHABET>
-    static INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-        ::std::is_same<A, RNA>::value, __m128i>::type word_reverse_complement_simd(__m128i const & b) {
-
-      // DNA type, requires that alphabet be setup so that negation produces the complement.  cmpeq to return a value with all bits set to 1
-      return _mm_xor_si128(word_reverse_simd<A>(b), _mm_cmpeq_epi8(b, b));  // sse does not have negation. use xor with FFFF   // SSE2
-    }
-
-    // reverse via bit swapping in 4 bit increment.  this complement table is then used for lookup.
-    /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.
-    /// 8 to 50 times faster than sequentially reverse the bits.
-    // TODO:  the use of bswap_xx makes it gnu c dependent.
-    template <typename A = ALPHABET>
-    static INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value, __m128i>::type word_reverse_simd(__m128i const & b) {
-      __m128i mask_lo = _mm_load_si128((__m128i*)simd_mask_b);
-
-      //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, _mm_load_si128((__m128i*)simd_rev_mask_b));
-
-      // lower 4 bits shift to upper
-      __m128i lo = _mm_slli_epi32(_mm_and_si128(mask_lo, r), 4);
-      // upper 4 bits shift to lower.
-      __m128i hi = _mm_srli_epi32(_mm_andnot_si128(mask_lo, r), 4);
-
-      // swap bits in groups of 4 bits, so after this point, just or.
-
-      return _mm_or_si128(hi, lo);
-    }
-    /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
-    // TODO:  the use of bswap_xx makes it gnu c dependent.
-    template <typename A = ALPHABET>
-    static INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value, __m128i>::type word_reverse_complement_simd(__m128i const & b) {
-      __m128i mask_lo = _mm_load_si128((__m128i*)simd_mask_b);
-
-      //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, _mm_load_si128((__m128i*)simd_rev_mask_b));
-
-      //== get the lut indices.
-      // lower 4 bits
-      __m128i lo = _mm_and_si128(mask_lo, r);
-      // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
-      __m128i hi = _mm_srli_epi32(_mm_andnot_si128(mask_lo, r), 4);
-
-      //== now use shuffle to look up the reversed bytes.  hi and lo are now indices. and lut2_lo/hi are lookup tables. remember that lo and hi need to be swapped.
-      return _mm_or_si128(_mm_shuffle_epi8(_mm_load_si128((__m128i*)simd_lut1_hi_b), lo),
-                          _mm_shuffle_epi8(_mm_load_si128((__m128i*)simd_lut1_lo_b), hi));
-
-    }
-//
-//    void print128_num(__m128i var)
-//    {
-//        uint8_t *val = (uint8_t*) &var;
-//        printf("Numerical: %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x \n",
-//               val[0], val[1], val[2], val[3], val[4], val[5],
-//               val[6], val[7], val[8], val[9], val[10], val[11], val[12], val[13],
-//               val[14], val[15]);
-//    }
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                  ::std::is_same<A, RNA>::value ||
-                                  ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse_simd(Kmer const & src) const
-    {
-      //std::cout << "SIMD before = " << src << std::endl;
-
-      Kmer result;  // empty kmer for output
-
-      // do the rem.  When rem is not 0, then it's very slow.  (like 40 to 50 times slower.)  (because of maskmoveu)
-      if (simd_rem > 0) {
-
-        // not enough room, so need to copy.
-        if (nWords < simd_stride) {
-          // allocate space
-          WORD_TYPE tmp[simd_stride] alignas(16);
-
-          // copy then load to register.
-          memcpy((tmp + simd_stride - nWords), src.data, nWords * sizeof(WORD_TYPE));
-          __m128i in = _mm_loadu_si128((__m128i*)tmp);
-
-//          print(in , "in");
-
-          // do reverse.
-          __m128i mword = word_reverse_simd<A>(in);     // SSE2
-
-          // copy back out
-          _mm_storeu_si128((__m128i*)tmp, mword);
-
-          // maskmoveu is very slow.  why?
-          //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));               // SSE2
-          memcpy(result.data, tmp, nWords * sizeof(WORD_TYPE));                                             // SSE2
-
-        } else {
-          // has room, extra will be overwritten, so just use _mm_storeu.
-          __m128i in = _mm_loadu_si128((__m128i*)(src.data + nWords - simd_stride));
-
-          __m128i mword = word_reverse_simd<A>(in);     // SSE2
-
-          // store back out
-          _mm_storeu_si128((__m128i*)(result.data), mword);                                                     // SSE2
-        }
-
-      }  // else no rem.
-
-
-      // swap the word order.  also swap the packed chars in the word at the same time.
-      if (simd_iters > 0) {
-        auto in = src.data;
-        auto out = result.data + nWords - simd_stride;
-
-        for (int i = 0; i < simd_iters; ++i) {
-          // load, reverse, then store.  assuming unaligned.
-          _mm_storeu_si128((__m128i*)out, word_reverse_simd<A>(_mm_loadu_si128((__m128i*)in)));                 // SSE2
-          in += simd_stride;
-          out -= simd_stride;
-        }
-      }
-
-//
-      // shift if necessary      // ununsed bits will be set to 0 by shift
-      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
-
-//      std::cout << "SIMD reversed, shifted = " << result << std::endl;
-//      std::cout << "SIMD before = " << src << std::endl << std::endl;
-
-      return result;
-    }
-
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                  ::std::is_same<A, RNA>::value ||
-                                  ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse_complement_simd(Kmer const & src) const
-    {
-      Kmer result;  // empty kmer for output
-
-      // do the rem.  When rem is not 0, then it's very slow.  (like 40 to 50 times slower.)  (because of maskmoveu)
-      if (simd_rem > 0) {
-
-        // not enough room, so need to copy.
-        if (nWords < simd_stride) {
-          // allocate space
-          WORD_TYPE tmp[simd_stride] alignas(16);
-
-          // copy then load to register.
-          memcpy((tmp + simd_stride - nWords), src.data, nWords * sizeof(WORD_TYPE));
-          __m128i in = _mm_loadu_si128((__m128i*)tmp);
-
-//          print(in , "in");
-
-          // do reverse.
-          __m128i mword = word_reverse_complement_simd<A>(in);     // SSE2
-
-          // copy back out
-          _mm_storeu_si128((__m128i*)tmp, mword);
-
-          // maskmoveu is very slow.  why?
-          //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));               // SSE2
-          memcpy(result.data, tmp, nWords * sizeof(WORD_TYPE));                                             // SSE2
-
-        } else {
-          // has room, extra will be overwritten, so just use _mm_storeu.
-          __m128i in = _mm_loadu_si128((__m128i*)(src.data + nWords - simd_stride));
-
-          __m128i mword = word_reverse_complement_simd<A>(in);     // SSE2
-
-          // store back out
-          _mm_storeu_si128((__m128i*)(result.data), mword);                                                     // SSE2
-        }
-      }  // else no rem.
-
-
-      // swap the word order.  also swap the packed chars in the word at the same time.
-      if (simd_iters > 0) {
-        auto in = src.data;
-        auto out = result.data + nWords - simd_stride;
-
-        for (int i = 0; i < simd_iters; ++i) {
-          // load, reverse, then store.  assuming unaligned.
-          _mm_storeu_si128((__m128i*)out, word_reverse_complement_simd<A>(_mm_loadu_si128((__m128i*)in)));                // SSE2
-          in += simd_stride;
-          out -= simd_stride;
-        }
-      }
-
-
-
-      // shift if necessary      // ununsed bits will be set to 0 by shift
-      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
-
-      return result;
-    }
-
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
-                                    ::std::is_same<A, RNA>::value ||
-                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
-    INLINE Kmer do_reverse_simd(Kmer const & src) const
-    {
-       return do_reverse_serial(src);
-    }
-
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
-                                    ::std::is_same<A, RNA>::value ||
-                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
-    INLINE Kmer do_reverse_complement_simd(Kmer const & src) const
-    {
-      return do_reverse_complement_serial(src);
-    }
-
-
-#endif
-
-    /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits. 
-    /// 8 to 100 times faster when using DNA/RNA, and 8 to 50 times faster than sequentially reverse the bits when DNA16.
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<(::std::is_same<A, DNA>::value ||
-                                     ::std::is_same<A, RNA>::value ||
-                                     ::std::is_same<A, DNA16>::value) &&
-                                      (sizeof(W) == 8), W>::type word_reverse(W const & b) const {
-      W v = b;
-      W mask = (static_cast<W>(~0) >> 32);
-
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-      // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
-      v =  (v >> 32)         |  (v         << 32);  mask ^= (mask << 16); // swap 32 bit. can use BSWAP_64 here
-      v = ((v >> 16) & mask) | ((v & mask) << 16);  mask ^= (mask << 8);  // swap 16 bit. can use BSWAP here.
-      v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);  // sqap bytes. can use XCHG here
-      v = ((v >>  4) & mask) | ((v & mask) <<  4);                        // swap nibbles.
-      if (!::std::is_same<A, DNA16>::value) {                             // if not DNA16, then swap 2 bits
-        mask ^= (mask << 2);
-        v = ((v >>  2) & mask) | ((v & mask) <<  2);
-      }
-
-      return v;
-    }
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<(::std::is_same<A, DNA>::value ||
-                                     ::std::is_same<A, RNA>::value ||
-                                     ::std::is_same<A, DNA16>::value) &&
-                                      (sizeof(W) == 4), W>::type word_reverse(W const & b) const {
-      W v = b;
-      W mask = (static_cast<W>(~0) >> 16);
-
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-      // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
-      v =  (v >> 16)         |  (v         << 16);  mask ^= (mask << 8);  // swap 16 bit. can use BSWAP here.
-      v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);  // sqap bytes. can use XCHG here
-      v = ((v >>  4) & mask) | ((v & mask) <<  4);                        // swap nibbles.
-      if (!::std::is_same<A, DNA16>::value) {                             // if not DNA16, then swap 2 bits
-        mask ^= (mask << 2);
-        v = ((v >>  2) & mask) | ((v & mask) <<  2);
-      }
-
-      return v;
-    }
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<(::std::is_same<A, DNA>::value ||
-                                     ::std::is_same<A, RNA>::value ||
-                                     ::std::is_same<A, DNA16>::value) &&
-                                      (sizeof(W) == 2), W>::type word_reverse(W const & b) const {
-      W v = b;
-      W mask = (static_cast<W>(~0) >> 8);
-
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-      // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
-      v =  (v >>  8)         |  (v         <<  8);  mask ^= (mask << 4);  // sqap bytes. can use XCHG here
-      v = ((v >>  4) & mask) | ((v & mask) <<  4);                        // swap nibbles.
-      if (!::std::is_same<A, DNA16>::value) {                             // if not DNA16, then swap 2 bits
-        mask ^= (mask << 2);
-        v = ((v >>  2) & mask) | ((v & mask) <<  2);
-      }
-
-      return v;
-    }
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<(::std::is_same<A, DNA>::value ||
-                                     ::std::is_same<A, RNA>::value ||
-                                     ::std::is_same<A, DNA16>::value) &&
-                                      (sizeof(W) == 1), W>::type word_reverse(W const & b) const {
-      W v = b;
-      W mask = (static_cast<W>(~0) >> 4);
-
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-      // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
-      v =  (v >>  4)         |  (v         <<  4);                        // swap nibbles.
-      if (!::std::is_same<A, DNA16>::value) {                             // if not DNA16, then swap 2 bits
-        mask ^= (mask << 2);
-        v = ((v >>  2) & mask) | ((v & mask) <<  2);
-      }
-
-      return v;
-    }
-    
-    /// do reverse complement.  8 to 100 times faster than serially reversing the bits.
-    template <typename A = ALPHABET>
-        INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                         ::std::is_same<A, RNA>::value, WORD_TYPE>::type word_reverse_complement(WORD_TYPE const & b) const {
-      // DNA type, requires that alphabet be setup so that negation produces the complement.
-      return ~(word_reverse<A, WORD_TYPE>(b));
-    }
-
-
-    /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value &&
-            (sizeof(W) == 8), W>::type word_reverse_complement(W const & b) const {
-      // DNA type:
-      W v = b;
-      W mask = (static_cast<W>(~0) >> 32);
-
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-
-      // REQUIRES that alphabet where complement is bit reversal of the original character.
-      // since for DNA16, complement is bit reversal in a nibble, we do 2 extra iterations.
-      v =  (v >> 32)         |  (v         << 32);  mask ^= (mask << 16);
-      v = ((v >> 16) & mask) | ((v & mask) << 16);  mask ^= (mask << 8);
-      v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);
-      v = ((v >>  4) & mask) | ((v & mask) <<  4);  mask ^= (mask << 2);  // reverse nibbles within a byte
-      v = ((v >>  2) & mask) | ((v & mask) <<  2);  mask ^= (mask << 1);  // last 2 steps create the complement
-      v = ((v >>  1) & mask) | ((v & mask) <<  1);
-
-      // if we were to walk through the data byte by byte, and do complement and swap the low and high 4 bits,
-      // the code would be as SLOW as do_reverse_complement.
-
-      return v;
-    }
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value &&
-            (sizeof(W) == 4), W>::type word_reverse_complement(W const & b) const {
-      // DNA type:
-      W v = b;
-      W mask = (static_cast<W>(~0) >> 16);
-
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-
-      // REQUIRES that alphabet where complement is bit reversal of the original character.
-      // since for DNA16, complement is bit reversal in a nibble, we do 2 extra iterations.
-      v =  (v >> 16)         |  (v         << 16);  mask ^= (mask << 8);
-      v = ((v >>  8) & mask) | ((v & mask) <<  8);  mask ^= (mask << 4);
-      v = ((v >>  4) & mask) | ((v & mask) <<  4);  mask ^= (mask << 2);  // reverse nibbles within a byte
-      v = ((v >>  2) & mask) | ((v & mask) <<  2);  mask ^= (mask << 1);  // last 2 steps create the complement
-      v = ((v >>  1) & mask) | ((v & mask) <<  1);
-
-      // if we were to walk through the data byte by byte, and do complement and swap the low and high 4 bits,
-      // the code would be as SLOW as do_reverse_complement.
-
-      return v;
-    }
-    /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value &&
-            (sizeof(W) == 2), W>::type word_reverse_complement(W const & b) const {
-      // DNA type:
-      W v = b;
-      W mask = (static_cast<W>(~0) >> 8);
-
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-
-      // REQUIRES that alphabet where complement is bit reversal of the original character.
-      // since for DNA16, complement is bit reversal in a nibble, we do 2 extra iterations.
-      v =  (v >>  8)         |  (v         <<  8);  mask ^= (mask << 4);
-      v = ((v >>  4) & mask) | ((v & mask) <<  4);  mask ^= (mask << 2);  // reverse nibbles within a byte
-      v = ((v >>  2) & mask) | ((v & mask) <<  2);  mask ^= (mask << 1);  // last 2 steps create the complement
-      v = ((v >>  1) & mask) | ((v & mask) <<  1);
-
-      // if we were to walk through the data byte by byte, and do complement and swap the low and high 4 bits,
-      // the code would be as SLOW as do_reverse_complement.
-
-      return v;
-    }
-    /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value &&
-            (sizeof(W) == 1), W>::type word_reverse_complement(W const & b) const {
-      // DNA type:
-      W v = b;
-      W mask = (static_cast<W>(~0) >> 4);
-
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-
-      // REQUIRES that alphabet where complement is bit reversal of the original character.
-      // since for DNA16, complement is bit reversal in a nibble, we do 2 extra iterations.
-      v =  (v >>  4)         |  (v         <<  4);  mask ^= (mask << 2);  // reverse nibbles within a byte
-      v = ((v >>  2) & mask) | ((v & mask) <<  2);  mask ^= (mask << 1);  // last 2 steps create the complement
-      v = ((v >>  1) & mask) | ((v & mask) <<  1);
-
-      // if we were to walk through the data byte by byte, and do complement and swap the low and high 4 bits,
-      // the code would be as SLOW as do_reverse_complement.
-
-      return v;
-    }
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                  ::std::is_same<A, RNA>::value ||
-                                  ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse_swar(Kmer const & src) const
-    {
-      Kmer result;  // empty kmer for output
-
-
-      // swap the word order.  also swap the packed chars in the word at the same time.
-      for (int i = 0, j = nWords - 1, max = nWords; i < max; ++i, --j)
-        result.data[j] = word_reverse<A, WORD_TYPE>(src.data[i]);
-
-//      std::cout << "SWAR reversed = " << result << std::endl;
-
-      // shift if necessary      // ununsed bits will be set to 0 by shift
-      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
-
-//      std::cout << "SWAR reversed, shifted = " << result << std::endl;
-//      std::cout << "SWAR before: " << src << std::endl;
-
-      return result;
-    }
-  
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                  ::std::is_same<A, RNA>::value ||
-                                  ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse_complement_swar(Kmer const & src) const
-    {
-      Kmer result;  // empty kmerfor output
-
-      // swap the word order.  also do rev_comp for the chars in the word at the same time.
-      for (int i = 0, j = nWords - 1, max = nWords; i < max; ++i, --j)
-        result.data[j] = word_reverse_complement<A>(src.data[i]);
-
-      // shift if necessary      // ununsed bits will be set to 0 by shift
-      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
-
-      return result;
-    }
-
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
-                                    ::std::is_same<A, RNA>::value ||
-                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
-    INLINE Kmer do_reverse_swar(Kmer const & src) const
-    {
-       return do_reverse_serial(src);
-    }
-
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
-                                    ::std::is_same<A, RNA>::value ||
-                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
-    INLINE Kmer do_reverse_complement_swar(Kmer const & src) const
-    {
-      return do_reverse_complement_serial(src);
-    }
-
-
-
-    // ================ experiement with bswap operations.
-#include <bits/byteswap.h>
-
-    static constexpr uint64_t mask0 = 0x0F0F0F0F0F0F0F0F;
-    static constexpr uint64_t mask1 = 0x3333333333333333;
-    static constexpr uint64_t mask2 = 0x5555555555555555;
-//    static constexpr uint32_t mask_32[3] = { 0x0F0F0F0F, 0x33333333, 0x55555555 };
-//    static constexpr uint16_t mask_16[3] = { 0x0F0F, 0x3333, 0x5555 };
-//    static constexpr uint8_t  mask_8[3]  = { 0x0F, 0x33, 0x55 };
-
-    /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.  8 to 100 times faster.
-    // TODO:  the use of bswap_xx makes it gnu c dependent.
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                     ::std::is_same<A, RNA>::value, W>::type word_reverse_bswap(W const & b) const {
-      W v = b;
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-      switch (sizeof(W) * 8)
-      {
-        // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
-        case 64 :  v = __bswap_64(v); break; // bswap_64 instruction
-        case 32 :  v = __bswap_32(v); break; // bswap or bswap_32 instruction
-        case 16 :  v = __bswap_16(v); break; // XCHG instruction
-        default :  break;
-      }
-      // finally, bit swap within the bytes.  only need to go down to chars of 2 bits.
-      v = ((v >>  4) & mask0) | ((v & mask0) <<  4);  // SWAR style
-      v = ((v >>  2) & mask1) | ((v & mask1) <<  2);
-
-      return v;
-    }
-    /// do reverse complement.  8 to 100 times faster than serially reversing the bits.
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-        INLINE typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                         ::std::is_same<A, RNA>::value, W>::type word_reverse_complement_bswap(W const & b) const {
-      // DNA type, requires that alphabet be setup so that negation produces the complement.
-      return ~(word_reverse_bswap<A, W>(b));
-    }
-
-    // reverse via bit swapping in 4 bit increment.  this complement table is then used for lookup.
-    /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.
-    /// 8 to 50 times faster than sequentially reverse the bits.
-    // TODO:  the use of bswap_xx makes it gnu c dependent.
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-        INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value, W>::type  word_reverse_bswap(W const & b) const {
-      W v = b;
-
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-      switch (sizeof(W) * 8)
-      {
-        // use bswap_xx from gnu c library.
-        case 64 :  v = __bswap_64(v); break;   // bswap_64 instruction           // LATER.
-        case 32 :  v = __bswap_32(v); break;   // bswap or bswap_32 instruction  // PENTIUM
-        case 16 :  v = __bswap_16(v); break;   // XCHG instruction
-        default :  break;
-      }
-      // finally, bit swap within the bytes.  only need to go down to chars of 4 bits.
-      v = ((v >>  4) & mask0) | ((v & mask0) <<  4);  // SWAR style
-
-      return v;
-    }
-    /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
-    // TODO:  the use of bswap_xx makes it gnu c dependent.
-    template <typename A = ALPHABET, typename W = WORD_TYPE>
-        INLINE typename ::std::enable_if<::std::is_same<A, DNA16>::value, W>::type  word_reverse_complement_bswap(W const & b) const {
-      W v = b;
-
-      // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
-      switch (sizeof(W) * 8)
-      {
-        // TODO: do byte level shuffling in 1 instruction. - would need to take care of WORD_TYPE vs machine word size mismatch.
-        // use bswap_xx from gnu c library.
-        case 64 :  v = __bswap_64(v); break;   // bswap_64 instruction
-        case 32 :  v = __bswap_32(v); break;   // bswap or bswap_32 instruction
-        case 16 :  v = __bswap_16(v); break;   // XCHG instruction
-        default :  break;
-      }
-
-      // finally, bit swap within the bytes.  first swap the 4 bit characters
-      v = ((v >>  4) & mask0) | ((v & mask0) <<  4);  // SWAR style
-
-      // now the complement.
-      // since for DNA16, complement is bit reversal in a nibble, we do 2 extra iterations.
-      v = ((v >>  2) & mask1) | ((v & mask1) <<  2);
-      v = ((v >>  1) & mask2) | ((v & mask2) <<  1);
-      // REQUIRES that alphabet where complement is bit reversal of the original character.
-
-      // NOTE: if on AMD, VPPERM can do 128 bit bit reverse,
-
-      return v;
-    }
-
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                  ::std::is_same<A, RNA>::value ||
-                                  ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse_bswap(Kmer const & src) const
-    {
-      Kmer result;  // empty kmer for output
-
-      // unchunked reverse works.
-            for (int i = 0, j = nWords - 1, max = nWords; i < max; ++i, --j)
-              result.data[j] = word_reverse_bswap<A, WORD_TYPE>(src.data[i]);
-
-
-/*      //== chunked revcomp does NOT always work, although slightly faster, especially for small words.
-      if (iters > 0) {
-    	  // right here there is a warrning about 'dereferencing type-punned pointer will break strict-aliasing rules'
-              const MACH_WORD_TYPE *s = reinterpret_cast<const MACH_WORD_TYPE*>(src.data);
-              WORD_TYPE *d = result.data + nWords - stride;
-
-              // swap the word order.  also swap the packed chars in the word at the same time.
-              // do the first part of source in multiple of MACH_WORD_TYPE.
-              for (int i = 0; i < iters; ++i, d -= stride)
-                *(reinterpret_cast<MACH_WORD_TYPE*>(d)) = word_reverse_bswap<A, MACH_WORD_TYPE>(s[i]);
-            }
-      //      printf("1st step:\t\t%s\n", result.toAlphabetString().c_str());
-
-            // do the rem.
-            if (rem > 1) {
-          	  // right here there is a warrning about 'dereferencing type-punned pointer will break strict-aliasing rules'
-              MACH_WORD_TYPE mword = word_reverse_bswap<A, MACH_WORD_TYPE>(*(reinterpret_cast<const MACH_WORD_TYPE*>(src.data + nWords - stride)));
-              memcpy(result.data, &mword, rem * sizeof(WORD_TYPE));
-            } else if (rem == 1) {
-              result.data[0] = word_reverse_bswap<A, WORD_TYPE>(src.data[nWords - 1]);
-            }  // else no rem.
-      //      printf("2nd step:\t\t%s\n", result.toAlphabetString().c_str());
-*/
-
-            // shift if necessary      // ununsed bits will be set to 0 by shift
-      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
-
-      return result;
-    }
-
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                  ::std::is_same<A, RNA>::value ||
-                                  ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse_complement_bswap(Kmer const & src) const
-    {
-      Kmer result;  // empty kmer for output
-
-
-      // swap the word order.  also do rev_comp for the chars in the word at the same time.
-      for (int i = 0, j = nWords - 1, max = nWords; i < max; ++i, --j)
-        result.data[j] = word_reverse_complement_bswap<A, WORD_TYPE>(src.data[i]);
-
-/*      //== chunked revcomp does NOT always work, although slightly faster, especially for small words.
-      if (iters > 0) {
-    	  // right here there is a warrning about 'dereferencing type-punned pointer will break strict-aliasing rules'
-        const MACH_WORD_TYPE *s = reinterpret_cast<const MACH_WORD_TYPE*>(src.data);
-        WORD_TYPE *d = result.data + nWords - stride;
-
-        // swap the word order.  also swap the packed chars in the word at the same time.
-        // do the first part of source in multiple of MACH_WORD_TYPE.
-        for (int i = 0; i < iters; ++i, d -= stride)
-          *(reinterpret_cast<MACH_WORD_TYPE*>(d)) = word_reverse_complement_bswap<A, MACH_WORD_TYPE>(s[i]);
-      }
-//      printf("1st step:\t\t%s\n", result.toAlphabetString().c_str());
-
-      // do the rem.
-      if (rem > 1) {
-    	  // right here there is a warrning about 'dereferencing type-punned pointer will break strict-aliasing rules'
-        MACH_WORD_TYPE mword = word_reverse_complement_bswap<A, MACH_WORD_TYPE>(*(reinterpret_cast<const MACH_WORD_TYPE*>(src.data + nWords - stride)));
-        memcpy(result.data, &mword, rem * sizeof(WORD_TYPE));
-      } else if (rem == 1) {
-        result.data[0] = word_reverse_complement_bswap<A, WORD_TYPE>(src.data[nWords - 1]);
-      }  // else no rem.
-//      printf("2nd step:\t\t%s\n", result.toAlphabetString().c_str());
-*/
-      // shift if necessary      // ununsed bits will be set to 0 by shift
-      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
-
-      return result;
-    }
-
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
-                                    ::std::is_same<A, RNA>::value ||
-                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
-    INLINE Kmer do_reverse_bswap(Kmer const & src) const
-    {
-       return do_reverse_serial(src);
-    }
-
-    /**
-     * @brief Reverses this k-mer.
-     *
-     * Note that this does NOT reverse the bit pattern, but reverses
-     * the sequence of `BITS_PER_CHAR` bits each.
-     *
-     */
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
-                                    ::std::is_same<A, RNA>::value ||
-                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
-    INLINE Kmer do_reverse_complement_bswap(Kmer const & src) const
-    {
-      return do_reverse_complement_serial(src);
-    }
-
-
-
-    INLINE Kmer do_reverse_new(Kmer const & src) const
-    {
-      Kmer result;
-
-      const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
-      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
-
-      ::bliss::utils::bit_ops::reverse<bitsPerChar>(out, in, nBytes);
-
-      result.do_right_shift(nBytes * 8 - nBits);
-      return result;
-    }
-
-
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA>::value ||
-                                  ::std::is_same<A, RNA>::value, int>::type = 0>
-    INLINE Kmer do_reverse_complement_new(Kmer const& src) const
-    {
-      // DNA and RNA complement is via negation.
-      Kmer result = do_reverse_new(src);
-      for (uint32_t i = 0; i < nWords; ++i) result.data[i] = ~result.data[i];
-      result.do_sanitize();
-      return result;  // negate by xor with 0
-    }
-
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA6>::value ||
-                                  ::std::is_same<A, RNA6>::value ||
-                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
-    INLINE Kmer do_reverse_complement_new(Kmer const& src) const
-    {
-      // DNA6, RNA6, and DNA16 use 1 bit reverse.   DNA5 and RNA5 are aliased to DNA6 and RNA6
-
-      Kmer result;
-
-      const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
-      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
-
-      ::bliss::utils::bit_ops::reverse<1>(out, in, nBytes);
-
-      result.do_right_shift(nBytes * 8 - nBits);
-      return result;
-    }
-
-    template <typename A = ALPHABET,
-        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
-                                    ::std::is_same<A, RNA>::value ||
-                                    ::std::is_same<A, DNA6>::value ||
-                                    ::std::is_same<A, RNA6>::value ||
-                                    ::std::is_same<A, DNA16>::value), int>::type = 0>
-    INLINE Kmer do_reverse_complement_new(Kmer const & src) const
-    {
-      return do_reverse_complement_serial(src);
     }
 
 
@@ -2328,20 +1336,6 @@ public:
     return ost;
   }
   
-  
-  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-  constexpr uint8_t Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::simd_mask_b[16];
-  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-  constexpr uint8_t Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::simd_rev_mask_b[16];
-  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-  constexpr uint8_t Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::simd_lut1_lo_b[16];
-  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-  constexpr uint8_t Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::simd_lut1_hi_b[16];
-  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-  constexpr uint8_t Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::simd_lut2_lo_b[16];
-  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
-  constexpr uint8_t Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::simd_lut2_hi_b[16];
-
 
   } // namespace common
 } // namespace bliss

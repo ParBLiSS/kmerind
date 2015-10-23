@@ -21,8 +21,12 @@
 #include <cstdint>
 
 #include "common/kmer.hpp"
+#include "common/test/kmer_reverse_helper.hpp"
+
 #include "common/alphabets.hpp"
 #include "common/alphabet_traits.hpp"
+
+#include "utils/bit_reverse.hpp"
 
 
 // include files to test
@@ -36,6 +40,8 @@ class KmerReverseBenchmark : public ::testing::Test {
   protected:
 
     T kmer;
+    bliss::common::test::KmerReverseHelper<T> helper;
+
     static const size_t iterations = 1000001;
 
     virtual void SetUp()
@@ -59,14 +65,37 @@ TYPED_TEST_P(KmerReverseBenchmark, rev_seq)
   TypeParam km, rev;
   km = this->kmer;
 
-
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev ^= km.reverse_serial();
+    rev ^= this->helper.reverse_serial(km);
+
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
   EXPECT_FALSE(rev == km);
 }
+
+TYPED_TEST_P(KmerReverseBenchmark, rev_seq2)
+{
+  TypeParam km, rev, tmp;
+  km = this->kmer;
+
+  uint8_t* out = reinterpret_cast<uint8_t*>(tmp.getData());
+  const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getConstData());
+
+  for (size_t i = 0; i < this->iterations; ++i) {
+
+    memset(out, 0, TypeParam::nBytes);
+
+    bliss::utils::bit_ops::reverse_seq<TypeParam::bitsPerChar>(out, in, TypeParam::nBytes);
+    tmp.right_shift_bits(TypeParam::nBytes * 8 - TypeParam::nBits);  // shift by remainder/padding.
+
+    rev ^= tmp;
+
+    km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
+  }
+  EXPECT_FALSE(rev == km);
+}
+
 
 TYPED_TEST_P(KmerReverseBenchmark, revcomp_seq)
 {
@@ -75,7 +104,7 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp_seq)
 
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev ^= km.reverse_complement_serial();
+    rev ^= this->helper.reverse_complement_serial(km);
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
@@ -93,7 +122,7 @@ TYPED_TEST_P(KmerReverseBenchmark, rev_bswap)
 
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev ^= km.reverse_bswap();
+    rev ^= this->helper.reverse_bswap(km);
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
@@ -110,7 +139,7 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp_bswap)
 
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev ^= km.reverse_complement_bswap();
+    rev ^= this->helper.reverse_complement_bswap(km);
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
@@ -128,7 +157,7 @@ TYPED_TEST_P(KmerReverseBenchmark, rev_swar)
 
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev ^= km.reverse_swar();
+    rev ^= this->helper.reverse_swar(km);
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
@@ -145,14 +174,14 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp_swar)
 
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev ^= km.reverse_complement_swar();
+    rev ^= this->helper.reverse_complement_swar(km);
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
   EXPECT_FALSE(rev == km);
 }
 
-TYPED_TEST_P(KmerReverseBenchmark, rev_new)
+TYPED_TEST_P(KmerReverseBenchmark, rev)
 {
 
   TypeParam km, rev;
@@ -160,14 +189,14 @@ TYPED_TEST_P(KmerReverseBenchmark, rev_new)
 
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev ^= km.reverse_new();
+    rev ^= km.reverse();
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
   EXPECT_FALSE(rev == km);
 }
 
-TYPED_TEST_P(KmerReverseBenchmark, revcomp_new)
+TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 {
 
   TypeParam km, rev;
@@ -175,7 +204,7 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp_new)
 
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev ^= km.reverse_complement_new();
+    rev ^= km.reverse_complement();
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
@@ -184,9 +213,9 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp_new)
 
 
 
-#ifdef __SSSE3__
 TYPED_TEST_P(KmerReverseBenchmark, rev_ssse3)
 {
+#ifdef __SSSE3__
   if (TypeParam::bitsPerChar == 3) return;
 
 
@@ -195,7 +224,7 @@ TYPED_TEST_P(KmerReverseBenchmark, rev_ssse3)
 
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev ^= km.reverse_simd();
+    rev ^= this->helper.reverse_simd(km);
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
@@ -212,23 +241,19 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp_ssse3)
 
 
   for (size_t i = 0; i < this->iterations; ++i) {
-    rev ^= km.reverse_complement_simd();
+    rev ^= this->helper.reverse_complement_simd(km);
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
   EXPECT_FALSE(rev == km);
-}
-#endif
-
-
-
-#ifdef __SSSE3__
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, rev_seq, revcomp_seq, rev_bswap, revcomp_bswap, rev_swar, revcomp_swar, rev_new, revcomp_new, rev_ssse3, revcomp_ssse3);
 #else
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, rev_seq, revcomp_seq, rev_bswap, revcomp_bswap, rev_swar, revcomp_swar, rev_new, revcomp_new);
+  WARNINGF("SSSE3 is not enabled or not available.");
 #endif
+}
+
+
+
+REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, rev_seq, rev_seq2, revcomp_seq, rev_bswap, revcomp_bswap, rev_swar, revcomp_swar, rev, revcomp, rev_ssse3, revcomp_ssse3);
 
 //////////////////// RUN the tests with different types.
 

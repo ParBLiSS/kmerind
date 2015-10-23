@@ -63,7 +63,7 @@ namespace bliss
           size_t forBitMask = (1 << Kmer::bitsPerChar) - 1;
           for (unsigned int i = 0; i < Kmer::size; ++i)
           {
-            result[Kmer::size-i-1] = Alphabet::TO_ASCII[static_cast<size_t>(forBitMask & cpy.getData()[0])];
+            result[Kmer::size-i-1] = Alphabet::TO_ASCII[static_cast<size_t>(forBitMask & cpy.getConstData()[0])];
             //cpy.do_right_shift(Kmer::bitsPerChar);
             cpy >>= 1;
           }

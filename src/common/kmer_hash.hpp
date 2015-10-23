@@ -94,7 +94,7 @@ namespace std {
       {
 
         // first compute the hash, from 64 bits of input at a time
-        uint64_t const * data = reinterpret_cast<uint64_t const*>(kmer.getData());
+        uint64_t const * data = reinterpret_cast<uint64_t const*>(kmer.getConstData());
         uint64_t h = std::hash<uint64_t>()(data[0]);
         uint64_t hp;
         for (size_t i = 1; i < tuples; ++i) {
@@ -105,7 +105,7 @@ namespace std {
         // the remainder bits, if any, needs to be dealt with now.
         if (leftover > 0) {
           hp = 0;
-          memcpy(&hp, kmer.getData() + tuples * tuplesize, leftover);
+          memcpy(&hp, kmer.getConstData() + tuples * tuplesize, leftover);
           hp = std::hash<uint64_t>()(hp);
           h ^= (hp << 1);
         }
@@ -244,9 +244,9 @@ namespace bliss {
                 uint64_t h[2];
                 // let compiler optimize out all except one of these.
                 if (sizeof(void*) == 8)
-                  MurmurHash3_x64_128(kmer.getData(), nBytes, 42, h);
+                  MurmurHash3_x64_128(kmer.getConstData(), nBytes, 42, h);
                 else if (sizeof(void*) == 4)
-                  MurmurHash3_x86_128(kmer.getData(), nBytes, 42, h);
+                  MurmurHash3_x86_128(kmer.getConstData(), nBytes, 42, h);
                 else
                   throw ::std::logic_error("ERROR: neither 32 bit nor 64 bit system");
 
@@ -293,9 +293,9 @@ namespace bliss {
               /// operator to compute hash
               inline uint64_t operator()(const KMER & kmer) const {
                 if (Prefix)
-                  return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes) >> shift;
+                  return ::util::Hash(reinterpret_cast<const char*>(kmer.getConstData()), nBytes) >> shift;
                 else
-                  return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes);
+                  return ::util::Hash(reinterpret_cast<const char*>(kmer.getConstData()), nBytes);
               }
 
           };
