@@ -30,6 +30,8 @@
 // done:  see effect of not shifting when working with byte arrays.  okay not to shift, if bit_offset is passed to reverse
 // done:  vector reverse.
 // TODO:  perf compare to old impl.
+// TODO:  add other operations such as masking, shifting, loading data from mem and storing data to mem.  refactor array version of reverse to use load/op/store
+
 
 namespace bliss {
 
@@ -47,6 +49,18 @@ namespace bliss {
 #if defined(__AVX2__)
       static constexpr unsigned char BIT_REV_AVX2 = 4;
 #endif
+
+
+      /// shift right by number of bits less than 8.
+      template <typename WORD_TYPE>
+      inline WORD_TYPE srli(WORD_TYPE const val, uint8_t shift) {
+        return val >> shift;
+      }
+      /// shift left by number of bits less than 8.
+      template <typename WORD_TYPE>
+      inline WORD_TYPE slli(WORD_TYPE const val, uint8_t shift) {
+        return val << shift;
+      }
 
 
       /**
@@ -529,6 +543,8 @@ namespace bliss {
 
 #if defined(__SSSE3__)
 
+
+
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 128bit)
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
       struct bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2> {
@@ -746,26 +762,26 @@ namespace bliss {
 
           /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
           __m128i srli(__m128i val, uint8_t shift) {
-        	  // shuffle to get the 9th byte into the 8th position
-//        	  __m128i tmp = _mm_shuffle_epi8(val, _mm_load_si128((__m128i*)srli_mask));
-        	  __m128i tmp = _mm_srli_si128(val, 1);   // shift by 1 byte
+            // get the 9th byte into the 8th position
+            // shift by 1 byte.  avoids a mask load during shuffle, and is friendly with epi16, epi32, and epi64 versions of shifts.
+            __m128i tmp = _mm_srli_si128(val, 1);
 
-        	  // then left shift to get the bits in the right place
-        	  // shift the input value via epi64 by the number of shifts
-        	  // then or together.
-        	  return _mm_or_si128(_mm_slli_epi64(tmp, 8 - shift), _mm_srli_epi64(val, shift));
+            // then left shift to get the bits in the right place
+            // shift the input value via epi64 by the number of shifts
+            // then or together.
+            return _mm_or_si128(_mm_slli_epi64(tmp, 8 - shift), _mm_srli_epi64(val, shift));
           }
 
           /// shift left by number of bits less than 8.
           __m128i slli(__m128i val, uint8_t shift) {
-        	  // shuffle to get the 9th byte into the 8th position
-//        	  __m128i tmp = _mm_shuffle_epi8(val, _mm_load_si128((__m128i*)slli_mask));
-        	  __m128i tmp = _mm_slli_si128(val, 1);
+            // get the 9th byte into the 8th position
+            // shift by 1 byte.  avoids a mask load during shuffle, and is friendly with epi16, epi32, and epi64 versions of shifts.
+            __m128i tmp = _mm_slli_si128(val, 1);
 
-        	  // then left shift to get the bits in the right place
-        	  // shift the input value via epi64 by the number of shifts
-        	  // then or together.
-        	  return _mm_or_si128(_mm_srli_epi64(tmp, 8 - shift), _mm_slli_epi64(val, shift));
+            // then left shift to get the bits in the right place
+            // shift the input value via epi64 by the number of shifts
+            // then or together.
+            return _mm_or_si128(_mm_srli_epi64(tmp, 8 - shift), _mm_slli_epi64(val, shift));
           }
 
 
@@ -885,6 +901,9 @@ namespace bliss {
 #endif
 
 #if defined(__AVX2__)
+
+
+
 
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 256bit)
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
@@ -1106,41 +1125,36 @@ namespace bliss {
             return ss.str();
           }
 
+
           /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
           __m256i srli(__m256i val, uint8_t shift) {
-            // shuffle to get the 9th byte into the 8th position.  shuffle and slli operate on 128 bit lanes only.
-//        	  __m128i tmp = _mm_shuffle_epi8(val, _mm_load_si128((__m128i*)srli_mask));
+            // shuffle to get the 8th byte into the 9th position.  shuffle and slli operate on 128 bit lanes only, so do alignr and permute2x128 instead
             // alternative:  alignr.  2 inputs: a, b.  output composition is lowest shift bytes from the 2 lanes of a become the high bytes in the 2 lanes, in order,
             //                              and highest 16-shift bytes from b's 2 lanes are the lower bytes in teh 2 lanes of output.
             //                        to shift right, b = val, N = 1, lower lane of a should be upper lane of val, upper lane of a should be 0.  possibly 2 ops. permute latency is 3
             __m256i tmp = _mm256_permute2x128_si256(val, val, 0x83);  // lower lane is 0, higher lane is lower lane of val
             tmp = _mm256_alignr_epi8(tmp, val, 1);
-            //std::cout << "byte srli: " << toString(tmp) << std::endl;
 
-        	  // then left shift to get the bits in the right place
-        	  // shift the input value via epi64 by the number of shifts
-        	  // then or together.
-        	  return _mm256_or_si256(_mm256_slli_epi64(tmp, 8 - shift), _mm256_srli_epi64(val, shift));
+            // then left shift to get the bits in the right place
+            // shift the input value via epi64 by the number of shifts
+            // then or together.
+            return _mm256_or_si256(_mm256_slli_epi64(tmp, 8 - shift), _mm256_srli_epi64(val, shift));
           }
 
           /// shift left by number of bits less than 8.
           __m256i slli(__m256i val, uint8_t shift) {
-        	  // shuffle to get the 8th byte into the 9th position.  shuffle and slli operate on 128 bit lanes only.
-            //__m256i tmp = _mm256_permute4x64_epi64(val, _MM_SHUFFLE(2, 1, 0, 3));  // shift to left by 64 bits.  also need to mask out the lowest 64.  - load and AND
-            // alternative:  8x32 permute .  load.  may still need to AND
+            // shuffle to get the 8th byte into the 9th position.  shuffle and slli operate on 128 bit lanes only, so do alignr and permute2x128 instead
             // alternative:  alignr.  2 inputs: a, b.  output composition is lowest shift bytes from the 2 lanes of a become the high bytes in the 2 lanes, in order,
             //                              and highest 16-shift bytes from b's 2 lanes are the lower bytes in teh 2 lanes of output.
             //                        to shift left, a = val, N = 15, lower lane of b should be 0, higher lane of b should be lower lane of val.  possibly 2 ops, permute latency is 3.
             __m256i tmp = _mm256_permute2x128_si256(val, val, 0x08);  // lower lane is 0, higher lane is lower lane of val
             tmp = _mm256_alignr_epi8(val, tmp, 15);
-            //std::cout << "byte slli: " << toString(tmp) << std::endl;
 
-        	  // then left shift to get the bits in the right place
-        	  // shift the input value via epi64 by the number of shifts
-        	  // then or together.
-        	  return _mm256_or_si256(_mm256_srli_epi64(tmp, 8 - shift), _mm256_slli_epi64(val, shift));
+            // then left shift to get the bits in the right place
+            // shift the input value via epi64 by the number of shifts
+            // then or together.
+            return _mm256_or_si256(_mm256_srli_epi64(tmp, 8 - shift), _mm256_slli_epi64(val, shift));
           }
-
 
           /// reverse function to reverse bits for data types are are not __mm128i  (has to be bigger than at least half)
           size_t reverse(uint8_t * out, uint8_t const * in, size_t len, size_t const bit_offset = 0) {
@@ -1222,16 +1236,11 @@ namespace bliss {
             // first reverse bits in groups of 1.
             __m256i v = bit_rev_1.reverse(u);  // 4 loads, 3 shuffles, 3 logical ops, 1 shift op
 
-//            std::cout << "1bit rev: " << toString(v) << std::endl;
 
             // then get the individual bits.  3 loads, 3 ORs.
             __m256i lo = _mm256_and_si256(v, _mm256_load_si256((__m256i*)mask3lo));
             __m256i mid = _mm256_and_si256(v, _mm256_load_si256((__m256i*)mask3mid));
             __m256i hi = _mm256_and_si256(v, _mm256_load_si256((__m256i*)mask3hi));
-
-//            std::cout << "3bit lo: " << toString(lo) << std::endl;
-//            std::cout << "3bit mid: " << toString(mid) << std::endl;
-//            std::cout << "3bit hi: " << toString(hi) << std::endl;
 
             __m256i tmp ;
 
@@ -1257,10 +1266,6 @@ namespace bliss {
               hi  = slli(lo, 2);
               lo = tmp;
             }
-
-//            std::cout << "3bit lo2: " << toString(lo2) << std::endl;
-//            std::cout << "3bit mid2: " << toString(mid2) << std::endl;
-//            std::cout << "3bit hi2: " << toString(hi2) << std::endl;
 
             v = _mm256_or_si256(lo, _mm256_or_si256(mid, hi) );
 
