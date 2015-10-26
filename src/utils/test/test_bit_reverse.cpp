@@ -574,15 +574,15 @@ TYPED_TEST_P(BitReverseAVX2Test, reverse_short_array)
 
           if (!same) {
             std::cout << "in: ";
-            for (int j = 0; j < i; ++j) {
-              std::cout << std::hex << static_cast<size_t>(this->helper.input[k + i - 1 - j]) << " ";
+            for (int l = 0; l < i; ++l) {
+              std::cout << std::hex << static_cast<size_t>(this->helper.input[k + i - 1 - l]) << " ";
 
             }
             std::cout << std::endl;
 
             std::cout << "out: ";
-            for (int j = 0; j < i; ++j) {
-              std::cout << std::hex << static_cast<size_t>(out[i - 1 - j]) << " ";
+            for (int l = 0; l < i; ++l) {
+              std::cout << std::hex << static_cast<size_t>(out[i - 1 - l]) << " ";
 
             }
             std::cout << std::endl;
