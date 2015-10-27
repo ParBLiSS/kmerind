@@ -148,10 +148,10 @@ namespace bliss {
               case 6:
               case 5:
                 {
-                  uint64_t v7 = 0;
-                  memcpy(reinterpret_cast<uint8_t*>(&v7), in, len);
+                  uint64_t v7i =  *(reinterpret_cast<const uint64_t*>(in));
+                  //memcpy(reinterpret_cast<uint8_t*>(&v7), in, len);
                   ///v7 >>= bit_offset;
-                  v7 = this->reverse(v7, bit_offset); // >> bit_offset;
+                  uint64_t v7 = this->reverse(v7i, bit_offset); // >> bit_offset;
                   out[0] |= *(reinterpret_cast<uint8_t*>(&v7) + 8 - len);
                   memcpy(out + 1, reinterpret_cast<uint8_t*>(&v7) + (9 - len), len - 2);
                   out[len - 1] |= *(reinterpret_cast<uint8_t*>(&v7) + 7);
@@ -167,10 +167,10 @@ namespace bliss {
                 break;
               case 3:
                 {
-                  uint32_t v3 = 0;
-                  memcpy(reinterpret_cast<uint8_t*>(&v3), in, 3);
+                  uint32_t v3i = *(reinterpret_cast<const uint32_t*>(in));
+                  //memcpy(reinterpret_cast<uint8_t*>(&v3), in, 3);
                   // v3 >>= bit_offset;
-                  v3 = this->reverse(v3, bit_offset); // >> bit_offset;
+                  uint32_t v3 = this->reverse(v3i, bit_offset); // >> bit_offset;
                   out[0] |= *(reinterpret_cast<uint8_t*>(&v3) + 1);
                   out[1] =  *(reinterpret_cast<uint8_t*>(&v3) + 2);
                   out[2] |= *(reinterpret_cast<uint8_t*>(&v3) + 3);
@@ -296,9 +296,9 @@ namespace bliss {
               case 6:
               case 5:
                 {
-                  uint64_t v64 = 0;
-                  memcpy(reinterpret_cast<uint8_t*>(&v64), in, len);
-                  v64 = this->reverse(v64);
+                  uint64_t v64i = *(reinterpret_cast<const uint64_t*>(in));
+                  //memcpy(reinterpret_cast<uint8_t*>(&v64), in, len);
+                  uint64_t v64 = this->reverse(v64i);
                   memcpy(out, reinterpret_cast<uint8_t*>(&v64) + (8-len), len);
                 }
                 break;
@@ -307,9 +307,9 @@ namespace bliss {
                 break;
               case 3:
                 {
-                  uint32_t v32 = 0;
-                  memcpy(reinterpret_cast<uint8_t*>(&v32), in, len);
-                  v32 = this->reverse(v32);
+                  uint32_t v32i = *(reinterpret_cast<const uint32_t*>(in));
+                  //memcpy(reinterpret_cast<uint8_t*>(&v32), in, len);
+                  uint32_t v32 = this->reverse(v32i);
                   memcpy(out, reinterpret_cast<uint8_t*>(&v32) + (4 - len), len);
                 }
                 break;
@@ -427,6 +427,8 @@ namespace bliss {
           static constexpr size_t mask3mid = 0x2492492492492492;
           static constexpr size_t mask3hi = 0x4924924924924924;
 
+          static constexpr size_t  mask_all = 0xFFFFFFFFFFFFFFFF;
+
           static constexpr unsigned int bitsPerGroup = 3;
           static constexpr unsigned char simd_type = BIT_REV_SWAR;
 
@@ -445,14 +447,14 @@ namespace bliss {
 //            std::cout << std::endl;
 
             // SHIFTS are NOT NECESSARY.
-
+            // memcpy input is not needed.
+            // NEED To zero the extra bytes.
 
 
             switch (len) {
               case 8:
                 {
                   uint64_t v8 = *(reinterpret_cast<const uint64_t*>(in));
-                  //v8 >>= bit_offset;
                   *(reinterpret_cast<uint64_t*>(out)) |= this->reverse(v8, bit_offset); // >> bit_offset;
                 }
                 break;
@@ -460,10 +462,9 @@ namespace bliss {
               case 6:
               case 5:
                 {
-                  uint64_t v7 = 0;
-                  memcpy(reinterpret_cast<uint8_t*>(&v7), in, len);
-                  //v7 >>= bit_offset;
-                  v7 = this->reverse(v7, bit_offset); // >> bit_offset;
+                  uint64_t v7i = *(reinterpret_cast<const uint64_t*>(in));
+                  v7i &= (mask_all >> (64 - len * 8));
+                  uint64_t v7 = this->reverse(v7i, bit_offset);
                   out[0] |= *(reinterpret_cast<uint8_t*>(&v7) + 8 - len);
                   memcpy(out + 1, reinterpret_cast<uint8_t*>(&v7) + (9 - len), len - 2);
                   out[len - 1] |= *(reinterpret_cast<uint8_t*>(&v7) + 7);
@@ -473,16 +474,14 @@ namespace bliss {
               case 4:
                 {
                   uint32_t v4 = *(reinterpret_cast<const uint32_t*>(in));
-                  //v4 >>= bit_offset;
                   *(reinterpret_cast<uint32_t*>(out)) |= this->reverse(v4, bit_offset); // >> bit_offset;
                 }
                 break;
               case 3:
                 {
-                  uint32_t v3 = 0;
-                  memcpy(reinterpret_cast<uint8_t*>(&v3), in, 3);
-                  //v3 >>= bit_offset;
-                  v3 = this->reverse(v3, bit_offset); // >> bit_offset;
+                  uint32_t v3i = *(reinterpret_cast<const uint32_t*>(in));
+                  v3i &= (mask_all >> 40);
+                  uint32_t v3 = this->reverse(v3i, bit_offset);
                   out[0] |= *(reinterpret_cast<uint8_t*>(&v3) + 1);
                   out[1] =  *(reinterpret_cast<uint8_t*>(&v3) + 2);
                   out[2] |= *(reinterpret_cast<uint8_t*>(&v3) + 3);
@@ -492,21 +491,22 @@ namespace bliss {
               case 2:
                 {
                   uint16_t v2 = *(reinterpret_cast<const uint16_t*>(in));
-                  //v2 >>= bit_offset;
-                  *(reinterpret_cast<uint16_t*>(out)) |= this->reverse(v2, bit_offset); // >> bit_offset;
+                  *(reinterpret_cast<uint16_t*>(out)) |= this->reverse(v2, bit_offset);
                 }
                 break;
               case 1:
                 {
                   uint8_t v1 = *in;
-                  //v1 >>= bit_offset;
-                  *out |= this->reverse(v1, bit_offset); // >> bit_offset;
+                  *out |= this->reverse(v1, bit_offset);
                 }
                 break;
               default:
                 ERRORF("ERROR:  length of array should be > 0 and <= 8.  For longer, break it up or use the vector version of bitgroup_ops.");
                 break;
             }
+
+
+
 
 //            std::cout << "out: ";
 //            for (size_t i = 0; i < len; ++i) {
@@ -523,6 +523,7 @@ namespace bliss {
             static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
             static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
 
+            //========================== first reverse bits in groups of 1.
             WORD_TYPE v = u;
 
             // essentially a Duff's Device here, cascading to smaller swap sizes.
@@ -553,19 +554,25 @@ namespace bliss {
             DEBUGF("SWAR reverse in 1 bit groups");
             v = ((v >>  1) &  mask1) | ((v &  mask1) <<  1);  // swap 1 bits
 
+            //============================ done reverse bits in groups of 1
+
             // and then swap the 1st and 3rd elements in the group.  this should suffice.
             // note that remainders are at low bits now, so we need 3 patterns for shifting.
 
             // 2 shifts, 2 ors, 3 ands
-            if (((sizeof(WORD_TYPE) * 8 - bit_offset) % 3) == 2) {
-              // rem == 2:                    mid, hi, lo
-              v = ((v &  mask3mid) >>  2) | (v & mask3lo ) | ((v &  mask3hi ) << 2);
-            } else if (((sizeof(WORD_TYPE) * 8 - bit_offset) % 3) == 1) {
-              // rem == 1:                    hi, lo, mid
-              v = ((v &  mask3lo ) >>  2) | (v & mask3hi ) | ((v &  mask3mid) << 2);
-            } else {
-              // rem == 0:  first 3 bits are: lo, mid, hi in order of significant bits
-              v = ((v &  mask3hi ) >>  2) | (v & mask3mid) | ((v &  mask3lo ) << 2);
+            switch ((sizeof(WORD_TYPE) * 8 - bit_offset) % 3) {
+              case 2:
+                // rem == 2:                    mid, hi, lo
+                v = ((v &  mask3mid) >>  2) | (v & mask3lo ) | ((v &  mask3hi ) << 2);
+                break;
+              case 1:
+                // rem == 1:                    hi, lo, mid
+                v = ((v &  mask3lo ) >>  2) | (v & mask3hi ) | ((v &  mask3mid) << 2);
+                break;
+              default:
+                // rem == 0:  first 3 bits are: lo, mid, hi in order of significant bits
+                v = ((v &  mask3hi ) >>  2) | (v & mask3mid) | ((v &  mask3lo ) << 2);
+                break;
             }
 
 
@@ -623,33 +630,29 @@ namespace bliss {
           /// reverse function to reverse bits for data types are are not __mm128i  (has to be bigger than at least half)
           size_t reverse(uint8_t * out, uint8_t const * in, size_t len, size_t const bit_offset = 0) {
             if (len == 0) throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
-
-            if ((len % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
-              throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
-
             if (len > 16) throw std::invalid_argument("ERROR:  length of array should be <= 16.  For longer, use a different bitgroup_ops (AVX2) or break it up.");
-            //assert(len > 8); //  "ERROR:  length of array should be > 8.  For shorter, use a different bitgroup_ops type.");
+            if (((len * 8) % BIT_GROUP_SIZE) > 0)
+              throw ::std::invalid_argument("ERROR reversing byte array:  len in bits needs to be a multiple of BIT_GROUP_SIZE");
 
-            // enforce bit_offset to be less than 8, since we are ORing the first and last bytes.
             if (bit_offset > 0) throw ::std::invalid_argument("ERROR reversing byte array:  bit offset should be 0 for SSSE3 bit reverse and power of 2 BIT_GROUP_SIZE.");
 
+            // convert to __m128i, then call the __m128i version.  note that there aren't types that have 128 bits other than simd types
 
-            if (len == 16) {
+            if (len == 16) { // full 16 byte array and BIT_GROUP_SIZE is power of 2, so directly load and store.
             	_mm_storeu_si128((__m128i*)out, this->reverse( _mm_loadu_si128((__m128i*)in) ));
-            } else {
-				// convert to __m128i, then call the __m128i version.  note that there aren't types that have 128 bits other than simd types
-				// allocate temp space
-				uint8_t tmp alignas(16) [16];
+            } else { // not the full 16 bytes.  so need to copy out at the end to out array.
+              // we can directly cast from __m128i to uint8_t
 
-				// copy data to end of array (reverse will move it to front.
-				memcpy(tmp, in, len);
+              // DO NOT NEED TO WORRY about reverse involving bits from outside the specified length, so directly loading from "in" is okay and no memset is needed.
 
-				// copy in, do reverse, copy back out
-				_mm_store_si128((__m128i*)tmp, this->reverse( _mm_load_si128((__m128i*)tmp) ));                    // SSE2
+              __m128i w = this->reverse(_mm_loadu_si128((__m128i*)in));
 
-				// maskmoveu is very slow.  why?
-				//_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));        // SSE2
-				memcpy(out, tmp + 16 - len, len);
+              // cast to uint8_t array for copy out
+              uint8_t* tmp = reinterpret_cast<uint8_t*>(&w);
+
+              // maskmoveu is very slow.  why?
+              //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));        // SSE2
+              memcpy(out, tmp + 16 - len, len);
             }
             return 0;
           }
@@ -698,6 +701,8 @@ namespace bliss {
                 DEBUGF("SSSE3 reverse in 64 bit groups");
                 v = _mm_shuffle_epi32(v, 0x4E);
                 break;  // original 11 10 01 00 (high to low) => 01 00 11 10 (high to low) == 0x4E				   // SSE2
+              default:
+                break;
             }
             //        print(r, "r");
 
@@ -785,6 +790,8 @@ namespace bliss {
           static constexpr size_t mask3lo  alignas(16) [2] = { 0x9249249249249249, 0x4924924924924924 };
           static constexpr size_t mask3mid alignas(16) [2] = { 0x2492492492492492, 0x9249249249249249 };
           static constexpr size_t mask3hi  alignas(16) [2] = { 0x4924924924924924, 0x2492492492492492 };
+          static constexpr uint8_t mask_all alignas(16) [32] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+                                                                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
           bitgroup_ops<1, BIT_REV_SSSE3, true> bit_rev_1;
 
@@ -826,64 +833,53 @@ namespace bliss {
           /// reverse function to reverse bits for data types are are not __mm128i  (has to be bigger than at least half)
           size_t reverse(uint8_t * out, uint8_t const * in, size_t len, size_t const bit_offset = 0) {
             if (len == 0) throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
-
             if (len > 16) throw std::invalid_argument("ERROR:  length of array should be <= 16.  For longer, use a different bitgroup_ops (AVX2) or break it up.");
-            //assert(len > 8); //  "ERROR:  length of array should be > 8.  For shorter, use a different bitgroup_ops type.");
 
             // enforce bit_offset to be less than 8, since we are ORing the first and last bytes.
             if (bit_offset >= 8) throw ::std::invalid_argument("ERROR reversing byte array SSSE3:  bit offset should be less than 8.  for larger, shift input instead.");
 
-			// convert to __m128i, then call the __m128i version.  note that there aren't types that have 128 bits other than simd types
+            // convert to __m128i, then call the __m128i version.  note that there aren't types that have 128 bits other than simd types
 
-            // allocate temp space
-            uint8_t tmp alignas(16) [16];
+            // NOTE that reversed byte array will need to be OR'd together,
 
-            __m128i v;
-            __m128i w;
+            __m128i v = _mm_loadu_si128((__m128i*)in);
 
-            // load the data
-            if (len == 16) {
-            	v = _mm_loadu_si128((__m128i*)in);
-            } else {
-            	memcpy(tmp, in, len);
+            if (len < 16)
+              // NOTE since reverse may involve bits outside of len, we have to zero the part outside of len.  only do if len is less than 16.
+              v = _mm_and_si128(v, _mm_loadu_si128((__m128i*)(mask_all + 16 - len)));
 
-            	v = _mm_load_si128((__m128i*)tmp);
-            }
+            // ARE THE SHIFTS NECESSARY?  they end up zeroing out the offset, which could be accomplished via a mask.
+            // note that the remainder portion is not zeroed, specifically, if rem == 2, then the center bit is not zeroed, but the side bits are zeroed.
+            // center bit OR with itself does not change.  side bits from next iter ORed with zeroed side bits (this iter) returns the right results.
+            // SO ARE THE ZEROING ALSO NECESSARY?
+
+            // SHIFTS are NOT NECESSARY.
 
             // do the conversion
-            if (bit_offset == 0) {
-            	w = this->reverse( v );
-            } else {
-            	// ARE THE SHIFTS NECESSARY?  they end up zeroing out the offset, which could be accomplished via a mask.
-            	// note that the remainder portion is not zeroed, specifically, if rem == 2, then the center bit is not zeroed, but the side bits are zeroed.
-              // center bit OR with itself does not change.  side bits from next iter ORed with zeroed side bits (this iter) returns the right results.
-            	// SO ARE THE ZEROING ALSO NECESSARY?
+            v = this->reverse( v , bit_offset);
 
-              // SHIFTS are NOT NECESSARY.
+            // save the first and last byte, then copy the data back, finally OR the first and last byte back.
+            uint8_t first = out[0], last = out[len-1];
 
-
-
-            	// shift right before
-//            	v = srli(v, bit_offset);
-
-            	// convert
-            	w = this->reverse( v , bit_offset);
-
-            	// shift right after
-//            	w = srli(w, bit_offset);
+            // copy the data
+            if (len == 16) {
+              _mm_storeu_si128((__m128i*)out, v);
+            } else {  // has to do memcpy.
+              // copy back to out. need to OR with existing output, so we always need to copy regardless of len.
+              uint8_t * tmp = reinterpret_cast<uint8_t*>(&v);   // can reinterpret_cast directly.
+              memcpy(out, tmp + (16 - len), len);
             }
 
-            // copy back to out.  ALWAYS NEED TO OR, so can never directly store.
-            _mm_store_si128((__m128i*)tmp, w);                    // SSE2
-            if (len > 2) memcpy(out+1, tmp + (17 - len), len - 2);
-            if (len > 1) out[len - 1] |= tmp[15];
-            out[0] |= tmp[16 - len];
+            // or back the old values.
+            out[0] |= first;
+            out[len-1] |= last;
 
             // maskmoveu is very slow.  why?
 			//_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));        // SSE2
 
             // return remainder.
             return (len * 8 - bit_offset) % 3;
+
           }
 
 
@@ -897,24 +893,45 @@ namespace bliss {
 
             //        print(v, "v");
 
-            // first reverse bits in groups of 1.
-            __m128i v = bit_rev_1.reverse(u);  // 4 loads, 3 shuffles, 3 logical ops, 1 shift op
+            //========================== first reverse bits in groups of 1.
+            //__m128i v = bit_rev_1.reverse(u);  // 4 loads, 3 shuffles, 3 logical ops, 1 shift op
+            __m128i v = _mm_shuffle_epi8(u, _mm_load_si128((__m128i*) bitgroup_ops<1, BIT_REV_SSSE3, true>::rev_idx8));
+            //== next get the lut indices.
+            // load constants:
+            __m128i _mask_lo = _mm_load_si128((__m128i*)bitgroup_ops<1, BIT_REV_SSSE3, true>::mask4);                                         // SSE2
+
+            // lower 4 bits
+            __m128i lo = _mm_and_si128(_mask_lo, v);                                                      // SSE2
+            // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
+            // shift not using si128 - that instruction shifts bytes not bits.
+            __m128i hi = _mm_srli_epi16(_mm_andnot_si128(_mask_lo, v), 4);                                // SSE2
+
+            //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+            lo = _mm_shuffle_epi8(_mm_load_si128((__m128i*)bitgroup_ops<1, BIT_REV_SSSE3, true>::lut1_hi), lo);                        // SSSE3
+            hi = _mm_shuffle_epi8(_mm_load_si128((__m128i*)bitgroup_ops<1, BIT_REV_SSSE3, true>::lut1_lo), hi);                        // SSSE3
+
+            v =  _mm_or_si128(lo, hi);
+            //=========================== done reverse bits in groups of 1
 
             // then get the individual bits.  3 loads, 3 ORs.
-            __m128i lo = _mm_and_si128(v, _mm_load_si128((__m128i*)mask3lo));
+            lo = _mm_and_si128(v, _mm_load_si128((__m128i*)mask3lo));
             __m128i mid = _mm_and_si128(v, _mm_load_si128((__m128i*)mask3mid));
-            __m128i hi = _mm_and_si128(v, _mm_load_si128((__m128i*)mask3hi));
+            hi = _mm_and_si128(v, _mm_load_si128((__m128i*)mask3hi));
 
             // next shift based on the rem bits.  2 cross boundary shifts = 2 byteshift, 4 shifts, 2 ORs. + 2 ORs.
-            if (((128 - bit_offset) % 3) == 2) {
-              // rem == 2:                    mid, hi, lo
-              v = _mm_or_si128(srli(mid, 2), _mm_or_si128(lo, slli( hi, 2) ) );
-            } else if (((128 - bit_offset) % 3) == 1) {
-              // rem == 1:                    hi, lo, mid
+            switch ((128 - bit_offset) % 3) {
+              case 2:
+                // rem == 2:                    mid, hi, lo
+                v = _mm_or_si128(srli(mid, 2), _mm_or_si128(lo, slli( hi, 2) ) );
+                break;
+              case 1:
+                // rem == 1:                    hi, lo, mid
                 v = _mm_or_si128(srli(lo, 2), _mm_or_si128(hi, slli( mid, 2) ) );
-            } else {
-              // rem == 0:  first 3 bits are: lo, mid, hi in order of significant bits
+                break;
+              default:
+                // rem == 0:  first 3 bits are: lo, mid, hi in order of significant bits
                 v = _mm_or_si128(srli(hi, 2), _mm_or_si128(mid, slli( lo, 2) ) );
+                break;
             }
 
             // alternatively,  for cross-boundary shift, do byte shift, and reverse shift (8-bit_offset), then or. with shifted (offset)->  each CBS is finished in 4 ops w/o load.
@@ -933,6 +950,8 @@ namespace bliss {
       constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::mask3mid alignas(16) [2];
       template <bool POW2>
       constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::mask3hi  alignas(16) [2];
+      template <bool POW2>
+      constexpr uint8_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::mask_all  alignas(16) [32];
 
 
 
@@ -997,28 +1016,36 @@ namespace bliss {
           /// reverse function to reverse bits for data types are are not __mm256i   (has to be bigger than at least half)
           size_t reverse(uint8_t * out, uint8_t const * in, size_t len, size_t const bit_offset = 0) {
             if (len == 0) throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
-
-            if ((len % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
-              throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
-
-
             if (len > 32) throw std::invalid_argument("ERROR:  length of array should be <= 32.  For longer, break it up.");
+            if (((len * 8) % BIT_GROUP_SIZE) > 0)
+              throw ::std::invalid_argument("ERROR reversing byte array:  len in bits needs to be a multiple of BIT_GROUP_SIZE");
 
-            // convert to __m128i, then call the __m128i version.  note that there aren't types that have 128 bits other than simd types
-            // allocate temp space
-            uint8_t tmp alignas(32) [32];
+            if (bit_offset > 0) throw ::std::invalid_argument("ERROR reversing byte array:  bit offset should be 0 for AVX2 bit reverse and power of 2 BIT_GROUP_SIZE.");
 
-            // copy data to end of array (reverse will move it to front.
-            memcpy(tmp + 32 - len, in, len);
 
-            // copy in, do reverse, copy back out
-            // NOTE: aligned load does not seem to work correctly - SEGV.  use unaligned load.
-            _mm256_storeu_si256((__m256i*)tmp, this->reverse( _mm256_loadu_si256((__m256i*)tmp) ));                    // AVX
+            // convert to __m256i, then call the __m256i version.  note that there aren't types that have 256 bits other than simd types
 
-            // maskmoveu is very slow.  why?
-            //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));        // SSE2
-            memcpy(out, tmp, len);
+            if (len == 32) {  // full 32 byte array and BIT_GROUP_SIZE is power of 2, so directly load and store.
+              // copy in, do reverse, copy back out
+              // NOTE: aligned load does not seem to work correctly - SEGV.  use unaligned load.
+              _mm256_storeu_si256((__m256i*)out, this->reverse( _mm256_loadu_si256((__m256i*)in) ));                    // AVX
 
+            } else {  // not the full 32 bytes.  so need to copy out at the end to out array.
+              // we can directly cast from __m256i to uint8_t
+
+              // DO NOT NEED TO WORRY about reverse involving bits from outside the specified length, so directly loading from "in" is okay and no memset is needed.
+
+              // copy in, do reverse, copy back out
+              // NOTE: aligned load does not seem to work correctly - SEGV.  use unaligned load.
+              __m256i w = this->reverse( _mm256_loadu_si256((__m256i*)in) );
+
+              // cast to uint8_t array for copy out
+              uint8_t *tmp = reinterpret_cast<uint8_t*>(&w);
+
+              // maskmoveu is very slow.  why?
+              //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));        // SSE2
+              memcpy(out, tmp + 32 - len, len);
+            }
             return 0;
           }
 
@@ -1072,6 +1099,8 @@ namespace bliss {
                 DEBUGF("AVX2 reverse in 128 bit groups");
                 v = _mm256_permute2x128_si256(v, v, 0x03);                                                         // AVX2 latency = 3
                 break; //  low half of first -> hi, high half of second -> low  (coding is 0 1 2 3 => a_lo, a_hi, b_lo, b_hi)  // AVX2
+              default:
+                break;
             }
 
             //        print(r, "r");
@@ -1153,6 +1182,10 @@ namespace bliss {
           static constexpr size_t mask3lo  alignas(32) [4] = { 0x9249249249249249, 0x4924924924924924, 0x2492492492492492, 0x9249249249249249 };
           static constexpr size_t mask3mid alignas(32) [4] = { 0x2492492492492492, 0x9249249249249249, 0x4924924924924924, 0x2492492492492492 };
           static constexpr size_t mask3hi  alignas(32) [4] = { 0x4924924924924924, 0x2492492492492492, 0x9249249249249249, 0x4924924924924924 };
+          static constexpr uint8_t mask_all alignas(32) [64] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+                                                                0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+                                                                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+                                                                0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
           bitgroup_ops<1, BIT_REV_AVX2, true> bit_rev_1;
 
@@ -1200,60 +1233,46 @@ namespace bliss {
           /// reverse function to reverse bits for data types are are not __mm128i  (has to be bigger than at least half)
           size_t reverse(uint8_t * out, uint8_t const * in, size_t len, size_t const bit_offset = 0) {
             if (len == 0) throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
-
             if (len > 32) throw std::invalid_argument("ERROR:  length of array should be <= 32.  For longer, break it up.");
-            //assert(len > 8); //  "ERROR:  length of array should be > 8.  For shorter, use a different bitgroup_ops type.");
 
             // enforce bit_offset to be less than 8, since we are ORing the first and last bytes.
             if (bit_offset >= 8) throw ::std::invalid_argument("ERROR reversing byte array AVX2:  bit offset should be less than 8.  for larger, shift input instead.");
 
-			// convert to __m128i, then call the __m128i version.  note that there aren't types that have 128 bits other than simd types
+            // convert to __m256i, then call the __m256i version.  note that there aren't types that have 256 bits other than simd types
 
-            // allocate temp space
-            uint8_t tmp alignas(32) [32];
-            memset(tmp, 0, 32);
+            // NOTE that reversed byte array will need to be OR'd together, 
 
-            __m256i v;
-            __m256i w;
-
-            // load the data
-            if (len == 32) {
-            	v = _mm256_loadu_si256((__m256i*)in);
-            } else {
-            	memcpy(tmp, in, len);
-
-            	v = _mm256_load_si256((__m256i*)tmp);
-            }
+            __m256i v = _mm256_loadu_si256((__m256i*)in);
+            
+            if (len < 32)  // only need to do this if len is < 32
+              // NOTE since reverse may involve bits outside of len, we have to zero the part outside of len.
+              v = _mm256_and_si256(v, _mm256_loadu_si256((__m256i*)(mask_all + 32 - len)));
 
             // do the conversion
-            if (bit_offset == 0) {
-            	w = this->reverse( v );
-            } else {
-            	// ARE THE SHIFTS NECESSARY?  they end up zeroing out the offset, which could be accomplished via a mask.
-            	// note that the remainder portion is not zeroed, specifically, if rem == 2, then the center bit is not zeroed, but the side bits are zeroed.
-            	// center bit OR with itself does not change.  side bits from next iter ORed with zeroed side bits (this iter) returns the right results.
-            	// SO ARE THE ZEROING ALSO NECESSARY?
+            // ARE THE SHIFTS NECESSARY?  they end up zeroing out the offset, which could be accomplished via a mask.
+            // note that the remainder portion is not zeroed, specifically, if rem == 2, then the center bit is not zeroed, but the side bits are zeroed.
+            // center bit OR with itself does not change.  side bits from next iter ORed with zeroed side bits (this iter) returns the right results.
+            // SO ARE THE ZEROING ALSO NECESSARY?
 
-              // SHIFTS are NOT NECESSARY.
+            // SHIFTS are NOT NECESSARY.
+            v = this->reverse( v, bit_offset );
 
 
+            // save the first and last byte, then copy the data back, finally OR the first and last byte back.
+            uint8_t first = out[0], last = out[len-1];
 
-            	// shift right before
-//            	v = srli(v, bit_offset);
-
-            	// convert
-            	w = this->reverse( v, bit_offset );
-
-            	// shift right after
-//            	w = srli(w, bit_offset);
+            // copy the data
+            if (len == 32) {
+              _mm256_storeu_si256((__m256i*)out, v);
+            } else {  // has to do memcpy.
+              // copy back to out. need to OR with existing output, so we always need to copy regardless of len.
+              uint8_t * tmp = reinterpret_cast<uint8_t*>(&v);   // can reinterpret_cast directly.
+              memcpy(out, tmp + (32 - len), len);
             }
 
-            // copy back to out. need to OR with existing output, so cannot directly store.
-            _mm256_store_si256((__m256i*)tmp, w);                    // SSE2
-
-            if (len > 2) memcpy(out+1, tmp + (33 - len), len - 2);
-            if (len > 1) out[len - 1] |= tmp[31];
-            out[0] |= tmp[32 - len];
+            // or back the old values.
+            out[0] |= first;
+            out[len-1] |= last;
 
             // maskmoveu is very slow.  why?
 			//_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));        // SSE2
@@ -1274,14 +1293,39 @@ namespace bliss {
             //        print(v, "v");
 //            std::cout << "1bit orig: " << toString(u) << std::endl;
 
-            // first reverse bits in groups of 1.
-            __m256i v = bit_rev_1.reverse(u);  // 4 loads, 3 shuffles, 3 logical ops, 1 shift op
+            //========================== first reverse bits in groups of 1.
+            //__m256i v = bit_rev_1.reverse(u);  // 4 loads, 3 shuffles, 3 logical ops, 1 shift op
+
+            //== first reverse the bit groups via 1 shuffle operation
+            // if bit group is <= 8, then need to shuffle bytes, and then shuffle bits.
+            DEBUGF("AVX2 reverse in 8 bit groups");
+            __m256i v = _mm256_shuffle_epi8(u, _mm256_load_si256((__m256i*) bitgroup_ops<1, BIT_REV_AVX2, true>::rev_idx_lane8));     // reverse 8 in each of 128 bit lane          // AVX2
+            v = _mm256_permute2x128_si256(v, v, 0x03);                  // then swap the lanes                           // AVX2.  latency = 3
+
+            //== next get the lut indices.
+            // load constants:
+            __m256i _mask_lo = _mm256_load_si256((__m256i*)bitgroup_ops<1, BIT_REV_AVX2, true>::mask4);                                         // AVX
+
+            // lower 4 bits
+            __m256i lo = _mm256_and_si256(_mask_lo, v); // no and_si256.  had to cast to ps first.           // AVX2
+            // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
+            // shift not using si128 - that instruction shifts bytes not bits.
+            __m256i hi = _mm256_srli_epi16(_mm256_andnot_si256(_mask_lo, v), 4);                                // AVX2
+
+            DEBUGF("AVX2 reverse in 1 bit groups");
+            //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+            lo = _mm256_shuffle_epi8(_mm256_load_si256((__m256i*)bitgroup_ops<1, BIT_REV_AVX2, true>::lut1_hi), lo);                        // AVX2
+            hi = _mm256_shuffle_epi8(_mm256_load_si256((__m256i*)bitgroup_ops<1, BIT_REV_AVX2, true>::lut1_lo), hi);                        // AVX2
+
+            // recombine
+            v =  _mm256_or_si256(lo, hi);                                                                  // AVX2
+            //=========================== done reverse bits in groups of 1.
 
 
             // then get the individual bits.  3 loads, 3 ORs.
-            __m256i lo = _mm256_and_si256(v, _mm256_load_si256((__m256i*)mask3lo));
+            lo = _mm256_and_si256(v, _mm256_load_si256((__m256i*)mask3lo));
             __m256i mid = _mm256_and_si256(v, _mm256_load_si256((__m256i*)mask3mid));
-            __m256i hi = _mm256_and_si256(v, _mm256_load_si256((__m256i*)mask3hi));
+            hi = _mm256_and_si256(v, _mm256_load_si256((__m256i*)mask3hi));
 
             __m256i tmp ;
 
@@ -1325,6 +1369,8 @@ namespace bliss {
       constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::mask3mid alignas(32) [4];
       template <bool POW2>
       constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::mask3hi  alignas(32) [4];
+      template <bool POW2>
+      constexpr uint8_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::mask_all  alignas(32) [64];
 
 
 
@@ -1365,8 +1411,7 @@ namespace bliss {
         // pointers
         uint8_t * v = out + len;
         const uint8_t * u = in;
-
-
+        uint8_t init_offset = bit_offset;
 #ifdef __AVX2__
         bitgroup_ops<3, BIT_REV_AVX2, false> op256;
         while (rem >= 32) {
@@ -1376,7 +1421,7 @@ namespace bliss {
           u += 32;
           rem -= 32;
 
-          if (bit_offset > 0) {  // if there is overlap.  adjust
+          if ((rem > 0) && (bit_offset > 0) ) {  // if there is overlap.  adjust
             u -= 1;
             rem += 1;
             v += 1;
@@ -1384,12 +1429,20 @@ namespace bliss {
           } // else no adjustment is needed.
 //          std::cout << "AVX full.  rem=" << std::dec << rem << " len=" << (len - rem) << std::endl;
         }
-        if (rem > 16) {
-          // do another iteration with all the remaining.   not that offset is tied to the current u position, so can't use memcpy avoiding approach.
-          bit_offset = op256.reverse(out, in + len - rem, rem, bit_offset);
-          rem = 0;
-//          std::cout << "AVX part.  rem=" << std::dec << rem << " len=" << (len - rem) << std::endl;
-        }  // otherwise use either SSSE3 or SWAR
+//        if (rem > 16) {
+//          // do another iteration with all the remaining.   not that offset is tied to the current u position, so can't use memcpy-avoiding approach.
+//          if (len > 32) {
+//            bit_offset = ((len - 32) * 8 - init_offset) % 3;
+//            bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
+//            bit_offset = op256.reverse(out, in + len - 32, 32, bit_offset);
+//            rem = 0;
+//            return bit_offset;
+//          //} else { not enough room.  use ssse3
+//          }
+////          std::cout << "AVX part.  rem=" << std::dec << rem << " len=" << (len - rem) << std::endl;
+//        } else if (rem == 0) {
+//            return bit_offset;
+//        }  // otherwise use either SSSE3 or SWAR
 #endif
 
 #ifdef __SSSE3__
@@ -1402,7 +1455,7 @@ namespace bliss {
           u += 16;
           rem -= 16;
 
-          if (bit_offset > 0) {  // if there is overlap.  adjust
+          if ((rem > 0) && (bit_offset > 0)) {  // if there is overlap.  adjust
             u -= 1;
             rem += 1;
             v += 1;
@@ -1413,10 +1466,17 @@ namespace bliss {
         if (rem > 8) {
 
           // do another iteration with all the remaining.
-          bit_offset = op128.reverse(out, in + len - rem, rem, bit_offset);
-          rem = 0;
+          if (len > 16) {
+            bit_offset = ((len - 16) * 8 - init_offset) % 3;
+            bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
+            bit_offset = op128.reverse(out, in + len - 16, 16, bit_offset);
+            rem = 0;
+            return bit_offset;
 //          std::cout << "SSSE part.  rem = " << std::dec << rem << " len=" << (len - rem) << std::endl;
-        }
+          }
+        } else if (rem == 0) {
+            return bit_offset;
+        }  // else let SWAR handle it.
 #endif
         bitgroup_ops<3, BIT_REV_SWAR> op64;
         while (rem >= 8) {
@@ -1427,7 +1487,7 @@ namespace bliss {
           u += 8;
           rem -= 8;
 
-          if (bit_offset > 0) {  // if there is overlap.  adjust
+          if ((rem > 0) && (bit_offset > 0)) {  // if there is overlap.  adjust
             u -= 1;
             rem += 1;
             v += 1;
@@ -1439,10 +1499,14 @@ namespace bliss {
         if (rem > 0) {
 
           // do another iteration with all the remaining.
-
-          // original length is less than 32, so has to do memcpy
-          bit_offset = op64.reverse(out, in + len - rem, rem, bit_offset);
-
+          if (len > 8) {
+            bit_offset = ((len - 8) * 8 - init_offset) % 3;
+            bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
+            bit_offset = op64.reverse(out, in + len - 8, 8, bit_offset);
+          } else {
+            // original length is less than 32, so has to do memcpy
+            bit_offset = op64.reverse(out, in + len - rem, rem, bit_offset);
+          }
           rem = 0;
 //          std::cout << "SWAR part.  rem = " << std::dec << rem << " len=" << (len - rem) << std::endl;
         }
@@ -1478,6 +1542,7 @@ namespace bliss {
         uint8_t * v = out + len;
         const uint8_t * u = in;
 
+        // memcpy is expensive.  try to avoid it.
 #ifdef __AVX2__
         bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2> op256;
         while (rem >= 32) {
@@ -1488,15 +1553,20 @@ namespace bliss {
 
           rem -= 32;
         }
-        if (rem > 16) {
-          // do another iteration with all the remaining.
-          if (len > 32) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
-            op256.reverse(out, in + len - 32, 32, 0);
-          } else {  // original length is less than 32, so has to do memcpy
-            op256.reverse(out, in + len - rem, rem, 0);
-          }
-          rem = 0;
-        }  // otherwise use either SSSE3 or SWAR
+//        if (rem > 16) {
+//          // do another iteration with all the remaining.
+//          if (len > 32) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
+//            op256.reverse(out, in + len - 32, 32, 0);
+//            rem = 0;
+////          } else {  // original length is less than 32, so has to do memcpy     // avoiding memcpy
+////            op256.reverse(out, in + len - rem, rem, 0);
+////            rem = 0;
+//            return 0;
+//          }
+//        } else if (rem == 0) {
+//            return 0;
+//
+//        }  // otherwise use either SSSE3 or SWAR
 #endif
 
 #ifdef __SSSE3__
@@ -1513,10 +1583,15 @@ namespace bliss {
           // do another iteration with all the remaining.
           if (len > 16) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
             op128.reverse(out, in + len - 16, 16, 0);
-          } else {  // original length is less than 32, so has to do memcpy
-            op128.reverse(out, in + len - rem, rem, 0);
+            rem = 0;
+//          } else {  // original length is less than 32, so has to do memcpy   // avoiding memcpy
+//            op128.reverse(out, in + len - rem, rem, 0);
+//            rem = 0;
+            return 0;
           }
-          rem = 0;
+        } else if (rem == 0) {
+            return 0;
+
         }
 #endif
         bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SWAR> op64;
@@ -1532,7 +1607,7 @@ namespace bliss {
           // do another iteration with all the remaining.
           if (len > 8) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
             op64.reverse(out, in + len - 8, 8, 0);
-          } else {  // original length is less than 32, so has to do memcpy
+          } else {  // original length is less than 32, so has to do memcpy.  NO CHOICE.
             op64.reverse(out, in + len - rem, rem, 0);
           }
           rem = 0;
@@ -1549,59 +1624,6 @@ namespace bliss {
       }
 
 
-      /**
-       * @brief
-       * @details   enabled only if BIT_GROUP_SIZE is 3, and greater than 0.
-       * @param out
-       * @param in
-       * @param len
-       * @param bit_offset
-       * @return
-       */
-      template <unsigned int BIT_GROUP_SIZE>
-      typename std::enable_if<(BIT_GROUP_SIZE == 3), uint8_t>::type
-      reverse_seq(uint8_t * out, uint8_t const * in, size_t const len, uint8_t bit_offset = 0 ) {
-
-        memset(out, 0, len);
-
-        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
-        size_t rem = len;
-        // pointers
-        uint8_t * v = out + len;
-        const uint8_t * u = in;
-
-
-        bitgroup_ops<3, BIT_REV_SEQ> op64;
-        while (rem >= 8) {
-
-          // enough bytes.  do an iteration
-          v -= 8;
-          bit_offset = op64.reverse(v, u, 8, bit_offset);
-          u += 8;
-          rem -= 8;
-
-          if (bit_offset > 0) {  // if there is overlap.  adjust
-            u -= 1;
-            rem += 1;
-            v += 1;
-            bit_offset = 8 - bit_offset;
-          } // else no adjustment is needed.
-//          std::cout << "SWAR full.  rem = " << std::dec << rem << " len=" << (len - rem) << std::endl;
-
-        }
-        if (rem > 0) {
-
-          // do another iteration with all the remaining.
-
-          // original length is less than 32, so has to do memcpy
-          bit_offset = op64.reverse(out, in + len - rem, rem, bit_offset);
-
-          rem = 0;
-//          std::cout << "SWAR part.  rem = " << std::dec << rem << " len=" << (len - rem) << std::endl;
-        }
-
-        return bit_offset;  // return remainder.
-      }
 
       /**
        * @brief
@@ -1613,16 +1635,17 @@ namespace bliss {
        * @return
        */
       template <unsigned int BIT_GROUP_SIZE>
-      typename std::enable_if<((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
-      reverse_seq(uint8_t * out, uint8_t const * in, size_t const len, uint8_t bit_offset = 0 ) {
+      uint8_t reverse_seq(uint8_t * out, uint8_t const * in, size_t const len, uint8_t bit_offset = 0 ) {
         static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
         static_assert(BIT_GROUP_SIZE <= 64, "ERROR: currenly reverse does not support 128 BIT_GRUOP_SIZE");
 
-        if (bit_offset != 0) throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE require bit_offset to be 0.");
+        if (((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0) && (bit_offset != 0)) 
+          throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE require bit_offset to be 0.");
 
-        if ((len % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
+        if ((len % ((BIT_GROUP_SIZE + 7) / 8)) > 0) {
+          std::cout << "len: " << len << "BITGROUP_SIZE: " << BIT_GROUP_SIZE << std::endl;
           throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
-
+        }
         memset(out, 0, len);
 
         // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
@@ -1630,27 +1653,44 @@ namespace bliss {
         // pointers
         uint8_t * v = out + len;
         const uint8_t * u = in;
+        uint8_t init_offset = bit_offset;
 
         bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SEQ> op64;
         while (rem >= 8) {
           // enough bytes.  do an iteration
           v -= 8;
-          op64.reverse(v, u, 8, 0);
+          bit_offset = op64.reverse(v, u, 8, bit_offset);
           u += 8;
 
           rem -= 8;
+
+
+          if ((rem > 0) && (bit_offset > 0)) {  // if there is overlap.  adjust
+            u -= 1;
+            rem += 1;
+            v += 1;
+            bit_offset = 8 - bit_offset;
+          } // else no adjustment is needed.
         }
+
         if (rem > 0) {
           // do another iteration with all the remaining.
           if (len > 8) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
-            op64.reverse(out, in + len - 8, 8, 0);
+            // if there is an offset, the offset at (u) prob is not the same as at (in + len - 8)
+            if ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) != 0) {
+              bit_offset = ((len - 8) * 8 - init_offset) % 3;
+              bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
+            }
+            bit_offset = op64.reverse(out, in + len - 8, 8, bit_offset);
           } else {  // original length is less than 32, so has to do memcpy
-            op64.reverse(out, in + len - rem, rem, 0);
+
+
+            bit_offset = op64.reverse(out, in + len - rem, rem, bit_offset);
           }
           rem = 0;
         }
 
-        return 0;  // return remainder.
+        return bit_offset;  // return remainder.
       }
 
 
