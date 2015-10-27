@@ -24,44 +24,49 @@
 
 #include "io/mxx_support.hpp"
 
+//TODO: make this class friendly.
+
+struct Timer {
+    std::chrono::steady_clock::time_point t1, t2;
+    std::vector<std::string> names;
+    std::vector<double> durations; 
+    std::vector<double> counts;
+    std::chrono::duration<double> time_span;
+};
 
 
-#define TIMER_INIT(timing)      std::chrono::steady_clock::time_point timing##_t1, timing##_t2; \
-                                 std::vector<std::string> timing##_names; \
-                                 std::vector<double> timing##_durations; \
-                                 std::vector<double> timing##_counts; \
-                                 std::chrono::duration<double> timing##_time_span;
+#define TIMER_INIT(timing)      Timer timing##_timer;
 
 
-#define TIMER_RESET(timing)     do {  timing##_names.clear(); \
-                                       timing##_durations.clear(); \
-                                       timing##_count.clear(); \
+#define TIMER_RESET(timing)     do {  timing##_timer.names.clear(); \
+                                       timing##_timer.durations.clear(); \
+                                       timing##_timer.count.clear(); \
                                  } while (0)
 
-#define TIMER_LOOP(timing)     do { timing##_time_span = std::chrono::duration<double>::zero(); } while (0)
-#define TIMER_LOOP_RESUME(timing)    do { timing##_t1 = std::chrono::steady_clock::now(); } while (0)
-#define TIMER_LOOP_PAUSE(timing)     do { timing##_t2 = std::chrono::steady_clock::now(); \
-                                      timing##_time_span += (std::chrono::duration_cast<std::chrono::duration<double> >(timing##_t2 - timing##_t1)); } while (0)
-#define TIMER_LOOP_END(timing, name, n_elem) do { timing##_names.push_back(name); \
-                                             timing##_durations.push_back(timing##_time_span.count()); \
-                                             timing##_counts.push_back(n_elem); \
+#define TIMER_LOOP_START(timing)     do { timing##_timer.time_span = std::chrono::duration<double>::zero(); } while (0)
+#define TIMER_LOOP_RESUME(timing)    do { timing##_timer.t1 = std::chrono::steady_clock::now(); } while (0)
+#define TIMER_LOOP_PAUSE(timing)     do { timing##_timer.t2 = std::chrono::steady_clock::now(); \
+                                      timing##_timer.time_span += (std::chrono::duration_cast<std::chrono::duration<double> >(timing##_timer.t2 - timing##_timer.t1)); } while (0)
+#define TIMER_LOOP_END(timing, name, n_elem) do { timing##_timer.names.push_back(name); \
+                                             timing##_timer.durations.push_back(timing##_timer.time_span.count()); \
+                                             timing##_timer.counts.push_back(n_elem); \
                                         } while (0)
 
-#define TIMER_START(timing)     do { timing##_t1 = std::chrono::steady_clock::now(); } while (0)
+#define TIMER_START(timing)     do { timing##_timer.t1 = std::chrono::steady_clock::now(); } while (0)
 #define TIMER_COLLECTIVE_START(timing, name, comm)     do { \
-  timing##_t1 = std::chrono::steady_clock::now(); \
+  timing##_timer.t1 = std::chrono::steady_clock::now(); \
   MPI_Barrier(comm); \
-  timing##_t2 = std::chrono::steady_clock::now(); \
-  timing##_time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(timing##_t2 - timing##_t1)); \
-  timing##_names.push_back("bar_" name); \
-  timing##_durations.push_back(timing##_time_span.count()); \
-  timing##_counts.push_back(0); \
-  timing##_t1 = std::chrono::steady_clock::now(); } while (0)
-#define TIMER_END(timing, name, n_elem) do { timing##_t2 = std::chrono::steady_clock::now(); \
-                                             timing##_time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(timing##_t2 - timing##_t1)); \
-                                             timing##_names.push_back(name); \
-                                             timing##_durations.push_back(timing##_time_span.count()); \
-                                             timing##_counts.push_back(n_elem); \
+  timing##_timer.t2 = std::chrono::steady_clock::now(); \
+  timing##_timer.time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(timing##_timer.t2 - timing##_timer.t1)); \
+  timing##_timer.names.push_back("bar_" name); \
+  timing##_timer.durations.push_back(timing##_timer.time_span.count()); \
+  timing##_timer.counts.push_back(0); \
+  timing##_timer.t1 = std::chrono::steady_clock::now(); } while (0)
+#define TIMER_END(timing, name, n_elem) do { timing##_timer.t2 = std::chrono::steady_clock::now(); \
+                                             timing##_timer.time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(timing##_timer.t2 - timing##_timer.t1)); \
+                                             timing##_timer.names.push_back(name); \
+                                             timing##_timer.durations.push_back(timing##_timer.time_span.count()); \
+                                             timing##_timer.counts.push_back(n_elem); \
                                         } while (0)
 
 
@@ -71,15 +76,15 @@
           output << std::fixed; \
           output << "R " << rank << " " << #timing << " header\t["; \
           std::ostream_iterator<std::string> nit(output, ","); \
-          std::copy(timing##_names.begin(), timing##_names.end(), nit); \
+          std::copy(timing##_timer.names.begin(), timing##_timer.names.end(), nit); \
           output << "]\n" << #timing << "\tdur\t\t["; \
           output.precision(9); \
           std::ostream_iterator<double> dit(output, ","); \
-          std::copy(timing##_durations.begin(), timing##_durations.end(), dit); \
+          std::copy(timing##_timer.durations.begin(), timing##_timer.durations.end(), dit); \
           output << "]\n" << #timing << "\tcount\t\t["; \
           output.precision(0); \
           std::ostream_iterator<double> cit(output, ","); \
-          std::copy(timing##_counts.begin(), timing##_counts.end(), cit); \
+          std::copy(timing##_timer.counts.begin(), timing##_timer.counts.end(), cit); \
           output << "]"; \
           fflush(stdout); \
           printf("[BENCH]\t%s\n", output.str().c_str()); \
@@ -92,17 +97,17 @@
           int p; \
           MPI_Comm_size(comm, &p); \
           \
-          auto dur_mins = mxx::min_element(timing##_durations, comm); \
-          auto dur_maxs = mxx::max_element(timing##_durations, comm); \
-          auto dur_means = ::mxx::reduce(timing##_durations, 0, ::std::plus<double>(),comm); \
-          ::std::for_each(timing##_durations.begin(), timing##_durations.end(), [](double &x) { x = x*x; }); \
-          auto dur_stdevs = ::mxx::reduce(timing##_durations, 0, ::std::plus<double>(), comm); \
+          auto dur_mins = mxx::min_element(timing##_timer.durations, comm); \
+          auto dur_maxs = mxx::max_element(timing##_timer.durations, comm); \
+          auto dur_means = ::mxx::reduce(timing##_timer.durations, 0, ::std::plus<double>(),comm); \
+          ::std::for_each(timing##_timer.durations.begin(), timing##_timer.durations.end(), [](double &x) { x = x*x; }); \
+          auto dur_stdevs = ::mxx::reduce(timing##_timer.durations, 0, ::std::plus<double>(), comm); \
           \
-          auto cnt_mins = ::mxx::min_element(timing##_counts, comm); \
-          auto cnt_maxs = ::mxx::max_element(timing##_counts, comm); \
-          auto cnt_means = ::mxx::reduce(timing##_counts, 0, ::std::plus<double>(), comm); \
-          ::std::for_each(timing##_counts.begin(), timing##_counts.end(), [](double &x) { x = x*x; }); \
-          auto cnt_stdevs = ::mxx::reduce(timing##_counts, 0, ::std::plus<double>(), comm); \
+          auto cnt_mins = ::mxx::min_element(timing##_timer.counts, comm); \
+          auto cnt_maxs = ::mxx::max_element(timing##_timer.counts, comm); \
+          auto cnt_means = ::mxx::reduce(timing##_timer.counts, 0, ::std::plus<double>(), comm); \
+          ::std::for_each(timing##_timer.counts.begin(), timing##_timer.counts.end(), [](double &x) { x = x*x; }); \
+          auto cnt_stdevs = ::mxx::reduce(timing##_timer.counts, 0, ::std::plus<double>(), comm); \
           \
           if (rank == 0) { \
             ::std::for_each(dur_means.begin(), dur_means.end(), [p](double & x) { x /= p; }); \
@@ -118,7 +123,7 @@
             output << std::fixed; \
             output << "R " << rank << "/" << p << " " << #timing << " header\t["; \
             std::ostream_iterator<std::string> nit(output, ","); \
-            std::copy(timing##_names.begin(), timing##_names.end(), nit); \
+            std::copy(timing##_timer.names.begin(), timing##_timer.names.end(), nit); \
             output.precision(9); \
             auto get_first = [](const std::pair<double, int>& x){return x.first;};\
             auto get_second = [](const std::pair<double, int>& x){return x.second;};\
@@ -161,7 +166,7 @@
 
 #define TIMER_INIT(timing)
 #define TIMER_RESET(timing)
-#define TIMER_LOOP(timing)
+#define TIMER_LOOP_START(timing)
 #define TIMER_LOOP_RESUME(timing)
 #define TIMER_LOOP_PAUSE(timing)
 #define TIMER_LOOP_END(timing, name, n_elem)
