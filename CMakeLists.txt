@@ -844,6 +844,8 @@ OPTION(BUILD_EXAMPLE_APPLICATIONS "Inform whether sample applications should be 
 OPTION(ENABLE_BENCHMARKING "Enable timing measurements for benchmarking." OFF)
 if (ENABLE_BENCHMARKING)
   SET(BENCHMARK 1)
+  #TODO: fix this so that it changes with BENCHMARK flag
+  SET(gtest_disble_pthreads ON)
 else(ENABLE_BENCHMARKING)
   SET(BENCHMARK 0)
 endif(ENABLE_BENCHMARKING)
