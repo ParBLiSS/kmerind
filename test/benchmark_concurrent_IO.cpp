@@ -57,6 +57,8 @@ struct readMMap {
       {
         int myerr = errno;
         FATAL("ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr));
+        USED_BY_LOGGER_ONLY(myerr);
+
       }
 
       /// get the block size
@@ -96,6 +98,8 @@ struct readMMap {
       if (mapped_data == MAP_FAILED) {
         int myerr = errno;
         FATAL("ERROR in map: ["  << filename << "] error " << myerr << ": " << strerror(myerr) << "length " << block_end - block_start << " offset " << block_start);
+        USED_BY_LOGGER_ONLY(myerr);
+
         exit(1);
       }
 
@@ -105,7 +109,8 @@ struct readMMap {
 
       if (preloading)
       {
-        posix_memalign(&mapped, page_size, block_end - block_start);
+        auto rr = posix_memalign(&mapped, page_size, block_end - block_start);
+        BLISS_UNUSED(rr);
         memcpy(mapped, mapped_data, block_end - block_start);  // copy some extra because of alignment issue.
         data = reinterpret_cast<unsigned char*>(mapped) + (r.start - block_start);
 
@@ -157,10 +162,7 @@ struct readMMap {
       size_t s;
 
 #pragma omp atomic capture
-      {
-        s = start;
-        start += chunkSize;
-      }
+      { s = start; start += chunkSize; }
 
       typename RangeType::ValueType block_start = RangeType::align_to_page(r, page_size);
       typename RangeType::ValueType block_end = block_start + ((r.end - block_start + page_size - 1) / page_size) * page_size;
@@ -185,7 +187,8 @@ struct readMMap {
       unsigned char * ld = data  + (r2.start - r.start);
       void *p;
       if (buffering) {
-        posix_memalign(&p, page_size, aligned_t - aligned_s);   // TODO: can preallocate.
+        auto rr = posix_memalign(&p, page_size, aligned_t - aligned_s);   // TODO: can preallocate.
+        BLISS_UNUSED(rr);
         memcpy(p, reinterpret_cast<unsigned char*>(mapped_data) + (aligned_s - block_start), aligned_t - aligned_s);
         ld = reinterpret_cast<unsigned char*>(p) + (r2.start - aligned_s);
       }

@@ -780,6 +780,8 @@ namespace bliss
             if (this->isUnlimited()) {
               int64_t v = this->VAR(size_in_use);
               WARNINGF("ERROR: pool is full but should be unlimited. size %lu.", v);
+              USED_BY_LOGGER_ONLY(v);
+
             }  // else limited size, so return nullptr.
           } else {  // has room.  get one.
 

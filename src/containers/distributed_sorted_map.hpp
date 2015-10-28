@@ -932,7 +932,7 @@ namespace dsc  // distributed std container
             // within start-end, values are unique, so don't need to set unique to true.
             Intersect<false>::process(overlap.first, overlap.second, start, end, emplace_iter, count_element, true, pred);
 
-            if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+            if (this->comm.rank() == 0) DEBUGF("R %d added %lu results for %lu queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
 
             start = end;

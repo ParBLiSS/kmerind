@@ -27,4 +27,5 @@ typedef uint_fast8_t BitSizeType;
 /// A type to represent the size of an alphabet
 typedef uint_fast16_t AlphabetSizeType;
 
+
 #endif // BLISS_COMMON_BASE_TYPES_H

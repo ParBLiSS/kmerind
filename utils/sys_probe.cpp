@@ -53,6 +53,10 @@ int checkMainMem()
 
   INFOF("%ld pages at %ld bytes per page, total %ld bytes\n", pages,
           page_size, pages * page_size);
+
+  USED_BY_LOGGER_ONLY(pages);
+  USED_BY_LOGGER_ONLY(page_size);
+
   return 0;
 }
 
@@ -95,33 +99,19 @@ void cpu_features()
   eax = 1; // cpu features
 
   cpuid(1, &eax, &ebx, &ecx, &edx);  // get cpu features
-  bool mmx =         (edx & (1 << 23)) != 0;
-  bool sse =         (edx & (1 << 25)) != 0;
-  bool sse2 =        (edx & (1 << 26)) != 0;
-  bool sse3 =        (ecx & (1)      ) != 0;
-  bool ssse3 =       (ecx & (1 << 9) ) != 0;
-  bool sse41 =       (ecx & (1 << 19)) != 0;
-  bool sse42 =       (ecx & (1 << 20)) != 0;
-  bool avx =         (ecx & (1 << 28)) != 0;
-  bool ia64 =        (edx & (1 << 30)) != 0;
-  bool hyperthread = (edx & (1 << 28)) != 0;
-  bool fma =         (ecx & (1 << 12)) != 0;
-  bool cx16 =        (ecx & (1 << 13)) != 0;
-  bool popcnt =      (ecx & (1 << 23)) != 0;
-
-  INFOF("mmx: %s\n", (mmx ? "true" : "false"));
-  INFOF("sse: %s\n", (sse ? "true" : "false"));
-  INFOF("sse2: %s\n", (sse2 ? "true" : "false"));
-  INFOF("sse3: %s\n", (sse3 ? "true" : "false"));
-  INFOF("ssse3: %s\n", (ssse3 ? "true" : "false"));
-  INFOF("sse41: %s\n", (sse41 ? "true" : "false"));
-  INFOF("sse42: %s\n", (sse42 ? "true" : "false"));
-  INFOF("avx: %s\n", (avx ? "true" : "false"));
-  INFOF("ia64: %s\n", (ia64 ? "true" : "false"));
-  INFOF("hyperthread: %s\n", (hyperthread ? "true" : "false"));
-  INFOF("fma: %s\n", (fma ? "true" : "false"));
-  INFOF("cx16: %s\n", (cx16 ? "true" : "false"));
-  INFOF("popcnt: %s\n", (popcnt ? "true" : "false"));
+  bool mmx =         (edx & (1 << 23)) != 0;    INFOF("mmx: %s\n", (mmx ? "true" : "false"));                         USED_BY_LOGGER_ONLY(mmx);
+  bool sse =         (edx & (1 << 25)) != 0;    INFOF("sse: %s\n", (sse ? "true" : "false"));                         USED_BY_LOGGER_ONLY(sse);
+  bool sse2 =        (edx & (1 << 26)) != 0;    INFOF("sse2: %s\n", (sse2 ? "true" : "false"));                       USED_BY_LOGGER_ONLY(sse2);
+  bool sse3 =        (ecx & (1)      ) != 0;    INFOF("sse3: %s\n", (sse3 ? "true" : "false"));                       USED_BY_LOGGER_ONLY(sse3);
+  bool ssse3 =       (ecx & (1 << 9) ) != 0;    INFOF("ssse3: %s\n", (ssse3 ? "true" : "false"));                     USED_BY_LOGGER_ONLY(ssse3);
+  bool sse41 =       (ecx & (1 << 19)) != 0;    INFOF("sse41: %s\n", (sse41 ? "true" : "false"));                     USED_BY_LOGGER_ONLY(sse41);
+  bool sse42 =       (ecx & (1 << 20)) != 0;    INFOF("sse42: %s\n", (sse42 ? "true" : "false"));                     USED_BY_LOGGER_ONLY(sse42);
+  bool avx =         (ecx & (1 << 28)) != 0;    INFOF("avx: %s\n", (avx ? "true" : "false"));                         USED_BY_LOGGER_ONLY(avx);
+  bool ia64 =        (edx & (1 << 30)) != 0;    INFOF("ia64: %s\n", (ia64 ? "true" : "false"));                       USED_BY_LOGGER_ONLY(ia64);
+  bool hyperthread = (edx & (1 << 28)) != 0;    INFOF("hyperthread: %s\n", (hyperthread ? "true" : "false"));         USED_BY_LOGGER_ONLY(hyperthread);
+  bool fma =         (ecx & (1 << 12)) != 0;    INFOF("fma: %s\n", (fma ? "true" : "false"));                         USED_BY_LOGGER_ONLY(fma);
+  bool cx16 =        (ecx & (1 << 13)) != 0;    INFOF("cx16: %s\n", (cx16 ? "true" : "false"));                       USED_BY_LOGGER_ONLY(cx16);
+  bool popcnt =      (ecx & (1 << 23)) != 0;    INFOF("popcnt: %s\n", (popcnt ? "true" : "false"));                   USED_BY_LOGGER_ONLY(popcnt);
 
 }
 
@@ -203,6 +193,16 @@ void i386_cpuid_caches()
            cache_total_size >> 10,
            cache_is_fully_associative ? "true" : "false",
            cache_is_self_initializing ? "true" : "false");
+
+    USED_BY_LOGGER_ONLY(cache_type_string);
+    USED_BY_LOGGER_ONLY(cache_level);
+    USED_BY_LOGGER_ONLY(cache_sets);
+    USED_BY_LOGGER_ONLY(cache_coherency_line_size);
+    USED_BY_LOGGER_ONLY(cache_physical_line_partitions);
+    USED_BY_LOGGER_ONLY(cache_ways_of_associativity);
+    USED_BY_LOGGER_ONLY(cache_is_self_initializing);
+    USED_BY_LOGGER_ONLY(cache_is_fully_associative);
+    USED_BY_LOGGER_ONLY(cache_total_size);
   }
 }
 

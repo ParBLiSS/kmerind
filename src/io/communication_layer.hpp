@@ -1536,6 +1536,7 @@ protected:
     // must not have previous epoch.
     assert(oe == CONTROL_TAG_EPOCH);
     DEBUGF("M R %d obtained first epoch %lu, next %lu", commRank, oe, ne);
+    USED_BY_LOGGER_ONLY(oe);
 
     // finally, register it.
     epochProperties.registerEpoch(ne, std::ref(activeEpochCount));

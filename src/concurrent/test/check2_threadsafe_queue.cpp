@@ -199,6 +199,7 @@ void testTryPop(bliss::concurrent::ThreadSafeQueue<T, LT> &queue, const int nCon
   }
   if (!queue.isEmpty() || (count == 0 && count3 == 0)) FATALF("FAIL: TSQueue capacity %lu, finished tryPop. %d successful, %d failed, %d flushed.  empty? %s", queue.getCapacity(), count, count2, count3, (queue.isEmpty() ? "yes" : "no"));
   else INFOF("PASS,");
+  USED_BY_LOGGER_ONLY(count2);
 
 };
 
@@ -258,6 +259,7 @@ void testTSQueue(const std::string &message, bliss::concurrent::ThreadSafeQueue<
   expected = (!queue.isFixedSize()) ? entries+2 : entries;
   if ((count + count2 != (entries+2))) FATALF("FAIL: TSQueue capacity %lu, finished tryPop from full, expected %lu, success %lu, fail %lu",queue.getCapacity(),  expected, count, count2);
   else INFOF("PASS");
+  USED_BY_LOGGER_ONLY(expected);
 
 
 

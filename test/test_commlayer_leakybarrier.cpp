@@ -70,6 +70,8 @@ struct Tester
     if (epoch <= se) {
       int v = lookup_in_build.fetch_add(1);
       ERRORF("B R %d <- %d lookup while build.  epoch %lu, sender Epoch %lu,  BAD %d", my_rank, fromRank, epoch, se, (v+1) );
+      USED_BY_LOGGER_ONLY(v);
+
     }
 
     // first: deserialize

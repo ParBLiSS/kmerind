@@ -52,6 +52,8 @@ int main(int argc, char** argv) {
   {
     int myerr = errno;
     FATAL("ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr));
+    USED_BY_LOGGER_ONLY(myerr);
+
   }
 
 
@@ -68,9 +70,10 @@ int main(int argc, char** argv) {
   int pos = 0;
   int endpos = 0;
   do {
-	pos = -1;
-	endpos = -1;
-	scanf("%d %d", &pos, &endpos);
+    pos = -1;
+    endpos = -1;
+    auto rr = scanf("%d %d", &pos, &endpos);
+    BLISS_UNUSED(rr);
     if (pos >= 0 && endpos >= 0) {
       std::cout << "char at pos " << pos << " - " << endpos << std::endl;
       std::ostream_iterator<unsigned char> oit(std::cout);

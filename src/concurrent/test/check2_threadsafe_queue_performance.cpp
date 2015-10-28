@@ -225,7 +225,7 @@ void timeTSQueueThreaded(const std::string &message, bliss::concurrent::ThreadSa
   else INFOF("PASS");
 
   INFOF(" result = %d\n", result);
-
+  USED_BY_LOGGER_ONLY(result);
 };
 
 

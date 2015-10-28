@@ -37,7 +37,7 @@ unsigned int bufferSize = 2047;
 template<typename BuffersType>
 void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, unsigned int nthreads) {
 
-  INFOF("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %d", poollt, bufferlt, buffers.getNumDests(), nthreads);
+  INFOF("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %d", (int)poollt, (int)bufferlt, buffers.getNumDests(), nthreads);
 
 
   INFOF("TEST append until full: ");
@@ -292,7 +292,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 template<typename BuffersType>
 void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, unsigned int nthreads) {
 
-  INFOF("*** TESTING Buffers WaitForInsert lock %d buffer lock %d: ntargets = %lu, pool threads %d", poollt, bufferlt, buffers.getNumDests(), nthreads);
+  INFOF("*** TESTING Buffers WaitForInsert lock %d buffer lock %d: ntargets = %lu, pool threads %d", (int)poollt, (int)bufferlt, buffers.getNumDests(), nthreads);
 
   typedef typename BuffersType::BufferPtrType BufferPtrType;
   bool op_suc = false;

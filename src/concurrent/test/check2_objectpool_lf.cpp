@@ -41,7 +41,7 @@ void testAppendMultipleBuffers(const int NumThreads, const size_t total_count, b
 
 
   INFOF("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %lu total counts from unlimited pool",
-         NumThreads, poollt, bufferlt, buffer_cap, total_count);
+         NumThreads, (int)poollt, (int)bufferlt, buffer_cap, total_count);
 
 
   PoolType pool;
@@ -156,7 +156,7 @@ template<typename PoolType>
 void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int pool_threads, int buffer_threads) {
 
 
-  INFOF("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d", poollt, bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
+  INFOF("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d", (int)poollt, (int)bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
 
   INFOF("TEST acquire: ");
   size_t expected;
@@ -225,6 +225,7 @@ void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concu
   expected = mx;  // unlimited or not, can only push back in as much as taken out.
   if (count != expected) FATALF("FAIL: number of failed attempt to release buffer should be %lu, actual %lu. started with %ld, pool remaining: %ld/%ld ", expected, count, orig, pool.getAvailableCount(), pool.getCapacity());
   else INFOF("PASSED.");
+  USED_BY_LOGGER_ONLY(orig);
   pool.reset();
   temp.clear();
 

@@ -65,8 +65,14 @@
  * TODO add Licence
  */
 
+// TODO time functions so that we don't have the unused return values.
+
 #ifndef BLISS_LOGGING_H
 #define BLISS_LOGGING_H
+
+// cast to void to suppress unused vars when log level is set to minimal.
+#define USED_BY_LOGGER_ONLY(x) do { (void)(x); } while (0)
+
 
 /// LOG ENGINE TYPES
 // Disable logging
@@ -161,6 +167,7 @@
 #define TRACE(msg)       NOPRINT_TRACE(msg)
 #define TRACEF(msg, ...) NOPRINT_TRACEF(msg, ##__VA_ARGS__)
 #endif
+
 
 /// Initialization function for logger
 // in case a logger doesn't define an init() function, supply an empty one

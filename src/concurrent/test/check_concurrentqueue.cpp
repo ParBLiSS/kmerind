@@ -40,6 +40,7 @@ void test1() {
     bool r = q.try_dequeue(v);
     assert(r);
     INFOF("tid %d dequeued %d.  %s", omp_get_thread_num(), v, (r? "success" : "failure"));
+    USED_BY_LOGGER_ONLY(r);
   }
 
 #pragma omp parallel num_threads(4) shared (q)
@@ -51,6 +52,7 @@ void test1() {
     bool r = q.try_dequeue(v);
     assert(r);
     INFOF("tid %d dequeued %d. %s", omp_get_thread_num(), v, (r? "success" : "failure"));
+    USED_BY_LOGGER_ONLY(r);
   }
 
 
@@ -277,6 +279,8 @@ void test5() {
 
   bool result = compareUnorderedSequences(input.begin(), output.begin(), elements);
   INFOF("enqueue/dequeue result is same? %s", (result ? "y" : "n"));
+  USED_BY_LOGGER_ONLY(result);
+
 }
 
 void testMove5() {
@@ -312,6 +316,8 @@ void testMove5() {
            int v = input[i];
            res = q.enqueue(std::move(v));
          }
+         BLISS_UNUSED(res);
+
       }
 
       finished.store(true, std::memory_order_release);
@@ -340,6 +346,9 @@ void testMove5() {
 
   bool result = compareUnorderedSequences(input.begin(), output.begin(), elements);
   INFOF("enqueue/dequeue result is same? %s", (result ? "y" : "n"));
+
+  USED_BY_LOGGER_ONLY(result);
+
 }
 
 

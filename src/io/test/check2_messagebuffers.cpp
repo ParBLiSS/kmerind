@@ -33,7 +33,7 @@ std::string data("this is a test.  this a test of the emergency broadcast system
 template<typename BuffersType>
 void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, size_t nthreads) {
 
-  INFOF("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %lu", poollt, bufferlt, buffers.getNumDests(), nthreads);
+  INFOF("*** TESTING Buffers lock %d buffer lock %d: ntargets = %lu, pool threads %lu", (int)poollt, (int)bufferlt, buffers.getNumDests(), nthreads);
 
 
   INFOF("TEST append until full: ");
@@ -241,7 +241,7 @@ void testBuffers(BuffersType && buffers, bliss::concurrent::LockType poollt, bli
 template<typename BuffersType>
 void testBuffersWaitForInsert(BuffersType && buffers, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, size_t nthreads) {
 
-  INFOF("*** TESTING Buffers WaitForInsert  lock %d buffer lock %d: ntargets = %lu, pool threads %lu", poollt, bufferlt, buffers.getSize(), nthreads);
+  INFOF("*** TESTING Buffers WaitForInsert  lock %d buffer lock %d: ntargets = %lu, pool threads %lu", (int)poollt, (int)bufferlt, buffers.getSize(), nthreads);
 
   typedef typename BuffersType::BufferPtrType BufferPtrType;
   bool op_suc = false;

@@ -30,7 +30,7 @@ file comment
 #endif
 
 
-
+#define BLISS_UNUSED(x) do { (void)(x); } while(0)
 
 
 #endif /* CONFIG_H */

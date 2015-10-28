@@ -25,10 +25,12 @@ int main(int argc, char *argv[])
   INFO("calling foo()");
   int blah = foo(12, 13);
   DEBUG("blah is " << blah);
+  USED_BY_LOGGER_ONLY(blah);
 
   INFO("calling foo() with wrong arguments");
   int bar = foo(0, 0);
   DEBUG("bar is " << bar);
+  USED_BY_LOGGER_ONLY(bar);
 
   return 0;
 }

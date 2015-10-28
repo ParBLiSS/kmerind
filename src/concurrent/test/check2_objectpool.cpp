@@ -41,7 +41,7 @@ void testAppendMultipleBuffers(const int NumThreads, const int total_count, blis
 
 
   INFOF("TESTING: %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %d total counts from unlimited pool",
-         NumThreads, poollt, bufferlt, buffer_cap, total_count);
+         NumThreads, (int)poollt, (int)bufferlt, buffer_cap, total_count);
 
 
   PoolType pool;
@@ -153,7 +153,7 @@ void stresstestAppendMultipleBuffers(const int NumThreads, const size_t total_co
 
 
   INFOF("TESTING: stress. %d threads, pool lock %d buffer lock %d append with %ld bufferSize and %lu total counts from unlimited pool",
-         NumThreads, poollt, bufferlt, buffer_cap, total_count);
+         NumThreads, (int)poollt, (int)bufferlt, buffer_cap, total_count);
 
 
   PoolType pool;
@@ -262,7 +262,7 @@ template<typename PoolType>
 void testPool(PoolType && pool, bliss::concurrent::LockType poollt, bliss::concurrent::LockType bufferlt, int pool_threads, int buffer_threads) {
 
 
-  INFOF("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d", poollt, bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
+  INFOF("TESTING pool lock %d buffer lock %d %s: pool threads %d, buffer threads %d", (int)poollt, (int)bufferlt, (pool.isUnlimited() ? "GROW" : "FIXED"),  pool_threads, buffer_threads);
 
   INFOF("TEST acquire: ");
   int expected;
