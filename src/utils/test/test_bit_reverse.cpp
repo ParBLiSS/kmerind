@@ -9,7 +9,6 @@
 #include <iostream>
 
 // include files to test
-#include "utils/logging.h"
 #include "utils/bitgroup_ops.hpp"
 
 //TESTS: Sequential, SWAR/BSWAP, SSSE3, AVX2 versions of bit reverse.

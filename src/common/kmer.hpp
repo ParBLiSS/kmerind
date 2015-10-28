@@ -1148,7 +1148,7 @@ namespace bliss
      * @param shift   The number of bits to shift by.
      */
     // TODO template specialization for nWords = 1 (just use base type shift)
-    // TODO implement more efficient version doing fixed left shift by BITS_PER_CHAR
+    // TODO implement more efficient version doing fixed right shift by BITS_PER_CHAR
     INLINE void do_right_shift(size_t shift)
     {
       // inspired by STL bitset implementation
@@ -1195,8 +1195,11 @@ namespace bliss
       const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
       uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
 
-      ::bliss::utils::bit_ops::reverse<bitsPerChar>(out, in, nBytes);
 
+      // NOTE: AVX2 is not faster.
+      ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(out, in, nBytes);
+
+      // TODO: more efficient right shift.
       result.do_right_shift(nBytes * 8 - nBits);
       return result;
     }
@@ -1207,9 +1210,12 @@ namespace bliss
                                   ::std::is_same<A, RNA>::value, int>::type = 0>
     INLINE Kmer do_reverse_complement(Kmer const& src) const
     {
+      //TODO: use more efficient negation.
+
       // DNA and RNA complement is via negation.
       Kmer result = do_reverse(src);
       for (uint32_t i = 0; i < nWords; ++i) result.data[i] = ~result.data[i];
+
       result.do_sanitize();
       return result;  // negate by xor with 0
     }
@@ -1228,8 +1234,10 @@ namespace bliss
       const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
       uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
 
-      ::bliss::utils::bit_ops::reverse<1>(out, in, nBytes);
+      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(out, in, nBytes);
 
+
+      // TODO: MORE EFFICIENT SHIFT
       result.do_right_shift(nBytes * 8 - nBits);
       return result;
     }

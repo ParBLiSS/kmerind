@@ -41,7 +41,7 @@ class KmerReverseTest : public ::testing::Test {
     T kmer;
     bliss::common::test::KmerReverseHelper<T> helper;
 
-    static const size_t iterations = 10001;
+    static const size_t iterations = 100000;
 
     virtual void SetUp()
     {
@@ -104,15 +104,13 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq)
   for (size_t i = 0; i < this->iterations; ++i) {
     rev_seq = this->helper.reverse_serial(km);
 
-    memset(out, 0, TypeParam::nBytes);
-
     bliss::utils::bit_ops::reverse_seq<TypeParam::bitsPerChar>(out, in, TypeParam::nBytes);
     rev.right_shift_bits(TypeParam::nBytes * 8 - TypeParam::nBits);  // shift by remainder bits..
 
     local_rev_same = (rev == rev_seq);
 
     if (!local_rev_same) {
-      DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      printf("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
     }
 
     rev_same &= local_rev_same;
@@ -295,13 +293,11 @@ REGISTER_TYPED_TEST_CASE_P(KmerReverseTest, reverse_seq_self, reverse_seq, rever
 typedef ::testing::Types<
     ::bliss::common::Kmer< 31, bliss::common::DNA,   uint64_t>,  // 1 word, not full
     ::bliss::common::Kmer< 32, bliss::common::DNA,   uint64_t>,  // 1 word, full
-    ::bliss::common::Kmer< 33, bliss::common::DNA,   uint64_t>,  // 2 words, not full
     ::bliss::common::Kmer< 64, bliss::common::DNA,   uint64_t>,  // 2 words, full
     ::bliss::common::Kmer< 80, bliss::common::DNA,   uint64_t>,  // 3 words, not full
     ::bliss::common::Kmer< 96, bliss::common::DNA,   uint64_t>,  // 3 words, full
     ::bliss::common::Kmer< 15, bliss::common::DNA,   uint32_t>,  // 1 word, not full
     ::bliss::common::Kmer< 16, bliss::common::DNA,   uint32_t>,  // 1 word, full
-    ::bliss::common::Kmer< 17, bliss::common::DNA,   uint32_t>,  // 2 words, not full
     ::bliss::common::Kmer< 32, bliss::common::DNA,   uint32_t>,  // 2 words, full
     ::bliss::common::Kmer< 40, bliss::common::DNA,   uint32_t>,  // 3 words, not full
     ::bliss::common::Kmer< 48, bliss::common::DNA,   uint32_t>,  // 3 words, full
@@ -325,13 +321,11 @@ typedef ::testing::Types<
     ::bliss::common::Kmer<  8, bliss::common::DNA5,   uint8_t>,  // 3 words, full
     ::bliss::common::Kmer< 15, bliss::common::DNA16, uint64_t>,  // 1 word, not full
     ::bliss::common::Kmer< 16, bliss::common::DNA16, uint64_t>,  // 1 word, full
-    ::bliss::common::Kmer< 17, bliss::common::DNA16, uint64_t>,  // 2 words, not full
     ::bliss::common::Kmer< 32, bliss::common::DNA16, uint64_t>,  // 2 words, full
     ::bliss::common::Kmer< 40, bliss::common::DNA16, uint64_t>,  // 3 words, not full
     ::bliss::common::Kmer< 48, bliss::common::DNA16, uint64_t>,  // 3 words, full
     ::bliss::common::Kmer<  7, bliss::common::DNA16, uint32_t>,  // 1 word, not full
     ::bliss::common::Kmer<  8, bliss::common::DNA16, uint32_t>,  // 1 word, full
-    ::bliss::common::Kmer<  9, bliss::common::DNA16, uint32_t>,  // 2 words, not full
     ::bliss::common::Kmer< 16, bliss::common::DNA16, uint32_t>,  // 2 words, full
     ::bliss::common::Kmer< 20, bliss::common::DNA16, uint32_t>,  // 3 words, not full
     ::bliss::common::Kmer< 24, bliss::common::DNA16, uint32_t>,  // 3 words, full
@@ -342,7 +336,11 @@ typedef ::testing::Types<
     ::bliss::common::Kmer<  1, bliss::common::DNA16,  uint8_t>,  // 1 word, not full
     ::bliss::common::Kmer<  2, bliss::common::DNA16,  uint8_t>,  // 1 word, full
     ::bliss::common::Kmer<  3, bliss::common::DNA16,  uint8_t>,  // 2 words, not full
-    ::bliss::common::Kmer<  4, bliss::common::DNA16,  uint8_t>   // 2 words, full
+    ::bliss::common::Kmer<  4, bliss::common::DNA16,  uint8_t>,   // 2 words, full
+//    ::bliss::common::Kmer< 15, bliss::common::DNA_IUPAC,   uint64_t>,  // 1 word, not full.  not tested since it is not a bijection.
+//    ::bliss::common::Kmer< 40, bliss::common::DNA_IUPAC,   uint64_t>,  // 3 word, not full
+    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint64_t>,  // 3 words, not full
+    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint8_t>  // 3 words, not full
 > KmerReverseTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerReverseTest, KmerReverseTestTypes);
 
