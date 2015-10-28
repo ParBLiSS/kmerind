@@ -91,7 +91,7 @@ namespace bliss {
       struct bitgroup_ops {
           //  default imple is for SEQuential bit reverse.  this is defined for all bit_group_sizes.
           static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE is 0");
-          static_assert(BIT_GROUP_SIZE <= (sizeof(size_t) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in size_t");
+          static_assert(BIT_GROUP_SIZE < (sizeof(size_t) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in size_t");
           static_assert(((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0) || (BIT_GROUP_SIZE < 8), "ERROR: BIT_GROUP_SIZE is has to be powers of 2 or less than 8");
 
           /* Linear (inefficient) reverse: */
@@ -239,7 +239,7 @@ namespace bliss {
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
       struct bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SWAR, POW2> {
           static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE is 0");
-          static_assert(BIT_GROUP_SIZE <= (sizeof(size_t) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in size_t");
+          static_assert(BIT_GROUP_SIZE < (sizeof(size_t) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in size_t");
           static_assert((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0, "ERROR: BIT_GROUP_SIZE is has to be powers of 2");
 
 
@@ -539,7 +539,7 @@ namespace bliss {
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
       struct bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2> {
           static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE is 0");
-          static_assert(BIT_GROUP_SIZE <= 128, "ERROR: BIT_GROUP_SIZE is greater than number of bits in __m128i");
+          static_assert(BIT_GROUP_SIZE < 128, "ERROR: BIT_GROUP_SIZE is greater than number of bits in __m128i");
           static_assert((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0, "ERROR: BIT_GROUP_SIZE is has to be powers of 2");
 
 
@@ -914,7 +914,7 @@ namespace bliss {
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
       struct bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2> {
           static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE is 0");
-          static_assert(BIT_GROUP_SIZE <= 256, "ERROR: BIT_GROUP_SIZE is greater than number of bits in __m256i");
+          static_assert(BIT_GROUP_SIZE < 256, "ERROR: BIT_GROUP_SIZE is greater than number of bits in __m256i");
           static_assert((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0, "ERROR: BIT_GROUP_SIZE is has to be powers of 2");
 
 

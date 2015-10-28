@@ -669,7 +669,7 @@ TYPED_TEST_P(BitReverseLongArrayTest, reverse_long_array)
       for (unsigned int k = 0; k <= (128 - i); ++k) {
         memset(out, 0, 128);
 
-        bliss::utils::bit_ops::reverse<TypeParam::bitsPerGroup>(out, this->helper.input + k, i);
+        bliss::utils::bit_ops::reverse<TypeParam::bitsPerGroup, bliss::utils::bit_ops::BIT_REV_AVX2>(out, this->helper.input + k, i);
 
         bool same = this->is_reverse(this->helper.input + k, out, i);
 
@@ -694,8 +694,7 @@ typedef ::testing::Types<
     BitsParam< 4> ,
     BitsParam< 8> ,
     BitsParam<16> ,
-    BitsParam<32> ,
-    BitsParam<64>
+    BitsParam<32>
 > BitReverseLongArrayTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseLongArrayTest, BitReverseLongArrayTestTypes);
 

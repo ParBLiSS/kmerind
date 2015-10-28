@@ -349,8 +349,7 @@ typedef ::testing::Types<
     BitsParam< 4>,
     BitsParam< 8>,
     BitsParam<16>,
-    BitsParam<32>,
-    BitsParam<64>
+    BitsParam<32>
 > BitReverseArrayBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseArrayBenchmark, BitReverseArrayBenchmarkTypes);
 
