@@ -306,7 +306,7 @@ namespace bliss
             //if (in_comm2 != MPI_COMM_NULL) {
 
             // now only work with procs with at least 1 complete entry (header start, seq start, seq end
-            bool has_complete = line_starts.size() < ((line_starts.size() > 0 && line_starts.front().second == 0) ? 4 : 3);
+            bool has_complete = line_starts.size() >= ((line_starts.size() > 0 && line_starts.front().second == 0) ? 4 : 3);
             in_comm.with_subset(has_complete, [&](const mxx::comm& subcomm) {
 
               // insert first entry into sequences
@@ -357,7 +357,7 @@ namespace bliss
 
             //== do seg scan (to fill in empty procs).
             // now do inclusive scan to spread the values forward
-            auto maxpair = [](const std::pair<int, SL>& x, const std::pair<int, SL>& y) { return x.first >= y.first ? x : y; };
+            auto maxpair = [](const std::pair<int, SL>& x, const std::pair<int, SL>& y) { return x.first >= y.first ? x : y; };   // when used in this context with this function, scan does same as segscan.
             lastentry = mxx::scan(lastentry, maxpair, in_comm);
 
 
@@ -620,7 +620,7 @@ namespace bliss
         size_t increment(Iterator &iter, const Iterator &end, size_t &offset, size_t & seq_offset, SequenceType& output) throw (bliss::io::IOException)
         {
 
-          if (sequences.size() == 0) throw std::logic_error("calling FASTAParser increment without first initializingfor iterator.");
+          if (sequences.size() == 0) throw std::logic_error("calling FASTAParser increment without first initializing for iterator.");
 
           // end.  return.
           if (iter == end) {
