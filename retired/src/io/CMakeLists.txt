@@ -22,6 +22,17 @@ if (IS_DIRECTORY ./test)
     bliss_add_non_google_test(${TEST_NAME} FALSE ${CHECK_FILES})
 endif()
 
+# load the testing:
+if (IS_DIRECTORY ./test)
+    
+    bliss_add_relacy_test(${TEST_NAME} FALSE test/relacy_messagebuffers.cpp BLISS_MUTEX)
+    
+    bliss_add_metaprog_test(${TEST_NAME} FALSE test/check2_messagebuffers.cpp BLISS_MUTEX)
+
+    bliss_add_metaprog_test(${TEST_NAME} FALSE test/check2_messagebuffers2.cpp BLISS_MUTEX)
+
+endif()
+
 
 
 endif()

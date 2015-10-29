@@ -1,7 +1,7 @@
 
 // include google test
 #include <gtest/gtest.h>
-#include <io/mxx_support.hpp>
+#include "io/mxx_support.hpp"
 #include <cstdlib>  // rand
 
 #include <vector>

@@ -38,7 +38,7 @@
 #include "io/mxx_support.hpp"
 #include "containers/distributed_unordered_map.hpp"
 #include "containers/distributed_sorted_map.hpp"
-// way too slow.  also not updated. #include <containers/distributed_map.hpp>
+// way too slow.  also not updated. #include "containers/distributed_map.hpp"
 
 #include "io/sequence_iterator.hpp"
 #include "io/sequence_id_iterator.hpp"
@@ -47,10 +47,10 @@
 #include "iterators/zip_iterator.hpp"
 #include "iterators/constant_iterator.hpp"
 #include "index/quality_score_iterator.hpp"
-#include "wip/kmer_hash.hpp"
-#include "wip/de_bruijn_node_trait.hpp"
+#include "index/kmer_hash.hpp"
+#include "debruijn/de_bruijn_node_trait.hpp"
 #include "iterators/edge_iterator.hpp"
-#include "wip/kmer_index.hpp"
+#include "index/kmer_index.hpp"
 
 #include "utils/timer.hpp"
 

@@ -21,7 +21,7 @@
 #include <sstream>  // stringstream
 #include <cstdint>       // uint8_t
 
-#include <utils/logging.h>
+#include "utils/logging.h"
 #include <x86intrin.h>   // all intrinsics.  will be enabled based on compiler flag such as __SSSE3__ internally.
 
 // needed by clang else it does not know where to get the bswap function.  however, conflicts with farmhash.cc

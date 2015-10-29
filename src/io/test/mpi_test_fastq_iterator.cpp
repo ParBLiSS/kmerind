@@ -25,7 +25,7 @@
 #include "io/mxx_support.hpp"
 #include "partition/partitioner.hpp"
 #include "partition/range.hpp"
-#include "wip/kmer_index.hpp"
+#include "index/kmer_index.hpp"
 
 #include "io/test/file_loader_test_fixtures.hpp"
 

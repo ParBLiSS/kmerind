@@ -8,9 +8,6 @@
 #ifndef DE_BRUIJN_NODES_DISTRIBUTED_HPP_
 #define DE_BRUIJN_NODES_DISTRIBUTED_HPP_
 
-#include <containers/distributed_map_base.hpp>
-#include <containers/distributed_unordered_map.hpp>
-#include <wip/unordered_vecmap.hpp>
 #include <unordered_map>  // local storage hash table  // for multimap
 #include <unordered_set>  // local storage hash table  // for multimap
 #include <utility> 			  // for std::pair
@@ -23,9 +20,11 @@
 #include <cstdint>  // for uint8, etc.
 
 #include <type_traits>
-#include <wip/de_bruijn_node_trait.hpp>	//node trait data structure storing the linkage information to the node
+#include "debruijn/de_bruijn_node_trait.hpp"	//node trait data structure storing the linkage information to the node
+#include "containers/distributed_map_base.hpp"
+#include "containers/distributed_unordered_map.hpp"
+#include "containers/unordered_vecmap.hpp"
 
-#include "io/mpi_utils.hpp"
 #include "utils/timer.hpp"  // for timing.
 #include "utils/logging.h"
 

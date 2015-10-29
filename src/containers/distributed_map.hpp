@@ -33,7 +33,6 @@
 #define BLISS_DISTRIBUTED_MAP_HPP
 
 
-#include <containers/distributed_map_base.hpp>
 #include <map>  // local storage hash table  // for multimap
 #include <unordered_set>  // local storage hash table  // for multimap
 #include <utility> 			  // for std::pair
@@ -47,11 +46,11 @@
 
 #include <type_traits>
 
-#include "mxx/collective.hpp"
-#include "mxx/reduction.hpp"
-#include "io/mpi_utils.hpp"
+#include <mxx/collective.hpp>
+#include <mxx/reduction.hpp>
 #include "utils/timer.hpp"  // for timing.
 #include "utils/logging.h"
+#include "containers/distributed_map_base.hpp"
 
 
 namespace dsc  // distributed std container

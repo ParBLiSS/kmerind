@@ -36,7 +36,7 @@
 #include "iterators/zip_iterator.hpp"
 #include "index/quality_score_iterator.hpp"
 
-#include "wip/kmer_index.hpp"
+#include "index/kmer_index.hpp"
 
 #include "utils/timer.hpp"
 

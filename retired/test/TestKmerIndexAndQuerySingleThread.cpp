@@ -32,7 +32,7 @@
 #include "utils/kmer_utils.hpp"
 #include <chrono>
 
-#include "mxx/collective.hpp"
+#include <mxx/collective.hpp>
 #include "utils/timer.hpp"
 #include "io/mxx_support.hpp"
 

@@ -9,7 +9,7 @@
  *          useful because Clang only supports 256 levels of recursion.
  *
  *          generalized to use arbitrary primitive type, and therefore also using variadic template types.
- *          generalized to allow arbitrary starting offset.
+ *          NOT YET generalized to allow arbitrary starting offset.
  */
 #ifndef INTEGER_SEQUENCE_HPP_
 #define INTEGER_SEQUENCE_HPP_
@@ -36,9 +36,9 @@ namespace bliss
 
     template<typename T, T... I1, T... I2>                         // TCP: template specialization of concat that does some real work
     struct concat<seq<T, I1...>, seq<T, I2...> >
-      : seq<T, I1..., (sizeof...(I1) + I2)...> {};                 // TCP: note that the values in I2 are offset by size of I1.
+      : seq<T, I1..., (sizeof...(I1) + I2)...> {};                 // TCP: note that the values in I2 are offset by size of I1. limitation: I1 and I2 need to have same starting value.
 
-    template<typename T, T N > struct gen_seq;                      // TCP: forward declare
+    template<typename T, T N > struct gen_seq;                      // TCP: forward declare.  hard coded starting value for the sequence to be 0.
     template<typename T, T N > using GenSeq = Invoke<gen_seq<T, N > >;
 
     //========= type specializations for size_t
@@ -61,92 +61,8 @@ namespace bliss
     template<> struct gen_seq<int8_t, 0 > : seq<int8_t>{};                               // TCP: specializations to handle recursion termination.
     template<> struct gen_seq<int8_t, 1 > : seq<int8_t, 0>{};
 
+    // IF offset is needed, compute it when using the integer sequence.
 
-//    template<typename T>
-//    struct gen_seq<T, std::integral_constant<T, 0> > : seq<T> {};                               // TCP: specializations to handle recursion termination.
-//
-//    template<typename T>
-//    struct gen_seq<T, std::integral_constant<T, 1> > : seq<T, 0> {};
-
-    namespace v2 {
-
-      // using aliases for cleaner syntax
-      template<class T> using Invoke = typename T::type;
-
-      template<typename T, T...> struct seq{ using type = seq; };    // TCP: "variable" holding a sequence of values. values may not be used.
-
-      template<class S1, class S2> struct concat;                    // TCP: generic concat template
-
-      template<typename T, T... I1, T... I2>                         // TCP: template specialization of concat that does some real work
-      struct concat<seq<T, I1...>, seq<T, I2...> >
-        : seq<T, I1..., (sizeof...(I1) + I2)...>{};                  // TCP: note that the values in I2 are offset by size of I1.
-
-      template<class S1, class S2>
-      using Concat = Invoke<concat<S1, S2> >;                        // TCP: alias for convenience - function like.
-
-      template<typename T, typename N, typename O > struct gen_seq;                      // TCP: forward declare
-      template<typename T, T N, T O> using GenSeq = Invoke<gen_seq<T, std::integral_constant<T, N>, std::integral_constant<T, O> > >;
-
-      template<typename T, T N, T O>                                      // TCP: actual recursive template instance.
-      struct gen_seq<T, std::integral_constant<T, N>, std::integral_constant<T, O> > : Concat<GenSeq<T, N/2, O>, GenSeq<T, N - N/2, 0> >{};
-
-      template<typename T>
-      struct gen_seq<T, std::integral_constant<T, 0>, std::integral_constant<T, 0> > : seq<T>{};                               // TCP: specializations to handle recursion termination.
-      template<typename T, T O>
-      struct gen_seq<T, std::integral_constant<T, 1>, std::integral_constant<T, O> > : seq<T, O>{};
-
-
-    }
-
-//
-//    /**
-//     * @class integer_sequence
-//     * @brief     A type that represents a parameter pack of zero or more integer values, each of type T.
-//     * @tparam T  the type of the values.  can only be integral type.
-//     * @tparam I  a variadic list of values.
-//     */
-//    template<typename T, T... I>
-//      struct integer_sequence
-//      {
-//        // T can only be integral
-//        static_assert( std::is_integral<T>::value, "Integral type only" );
-//
-//        /**
-//         * @typedef type
-//         * @brief type for the values in sequence.
-//         */
-//        using type = T;
-//
-//        /**
-//         * @var   size
-//         * @brief number of values in the parameter pack.
-//         * @note can only support non-negative integral values.
-//         */
-//        static constexpr T size = sizeof...(I);
-//
-//        /**
-//         *  @typedef    append
-//         *  @brief      Generate a new integer_sequence with an additional element of value N
-//         *  @details    Usage:  seq.append<4>
-//         *  @tparam N   a new value to append to current sequence, with type T.
-//         *
-//         */
-//        template<T N>
-//          using append = integer_sequence<T, I..., N>;
-//
-//        /**
-//         * @typedef next
-//         * @brief   get the next sequence by appending the current size
-//         * @details repeated call creates a sequence with values 1, 2, 3, ...
-//         */
-//        using next = append<size>;
-//      };
-//
-//    /*
-//     * define the size (declared and initialized in integer_sequence)
-//     */
-//    template<typename T, T... I>
-//      constexpr T integer_sequence<T, I...>::size;
 
     /**
      * @class index_sequence
@@ -155,44 +71,6 @@ namespace bliss
      */
     template<std::size_t... I>
       using index_sequence = seq<std::size_t, I...>;
-//
-//    /**
-//     * @namespace
-//     * @brief  namespace detail contains the logic for constructing a integer sequence at compile time.
-//     */
-//    namespace detail
-//    {
-//      /**
-//       *  @class iota
-//       *  @brief  Metafunction that generates an integer_sequence of T containing [0, N)
-//       *  @details recursively type substituted to construct the integer sequence.
-//       *  @tparam T   value's type
-//       *  @tparam Nt  values
-//       *  @tparam N   total number of elements (remaining)
-//       */
-//      template<typename T, T Nt, std::size_t N>
-//        struct iota
-//        {
-//          static_assert( Nt >= 0, "N cannot be negative" );
-//
-//          using type = typename iota<T, Nt-1, N-1>::type::next;
-//        };
-//
-//      /**
-//       *  @class iota
-//       *  @brief  Terminal Case.  Metafunction that generates an integer_sequence of T containing [0, N)
-//       *  @details Base class constructs an empty integer sequence (not even 0).
-//       *            from here, each recursions back up the stack adds one more value = size of current sequence.
-//       *  @tparam T   value's type
-//       *  @tparam Nt  total number of elements (remaining)
-//       */
-//      template<typename T, T Nt>
-//        struct iota<T, Nt, 0ul>
-//        {
-//          using type = integer_sequence<T>;
-//        };
-//    }
-
 
     /**
      * @typedef make_integer_sequence
@@ -201,8 +79,6 @@ namespace bliss
      * @tparam N  number of entries
      * @tparam O  offset of the first value.
      */
-//    template<typename T, T N>
-//      using make_integer_sequence = gen_seq<T, std::integral_constant<T, N>, typename std::enable_if<(N > 1), int>::type >; // typename detail::iota<T, N, N>::type;
     template<typename T, T N>
       using make_integer_sequence = gen_seq<T, N >; // typename detail::iota<T, N, N>::type;
 

@@ -1,4 +1,4 @@
-set(TEST_NAME bliss-wip)
+set(TEST_NAME bliss-containers)
 include("${PROJECT_SOURCE_DIR}/cmake/Sanitizer.cmake")
 include("${PROJECT_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 

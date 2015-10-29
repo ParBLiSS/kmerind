@@ -30,8 +30,6 @@
 #define BLISS_DISTRIBUTED_UNORDERED_MAP_HPP
 
 
-#include <containers/distributed_map_base.hpp>
-#include <wip/unordered_vecmap.hpp>
 #include <unordered_map>  // local storage hash table  // for multimap
 #include <unordered_set>  // local storage hash table  // for multimap
 #include <utility> 			  // for std::pair
@@ -49,7 +47,9 @@
 #include <mxx/reduction.hpp>
 #include <mxx/algos.hpp> // for bucketing
 
-#include "io/mpi_utils.hpp"
+#include "containers/distributed_map_base.hpp"
+#include "containers/unordered_vecmap.hpp"
+
 #include "utils/timer.hpp"  // for timing.
 #include "utils/logging.h"
 

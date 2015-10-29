@@ -26,7 +26,7 @@
 #include "io/mxx_support.hpp"
 #include "partition/partitioner.hpp"
 #include "partition/range.hpp"
-#include "wip/kmer_index.hpp"
+#include "index/kmer_index.hpp"
 
 #include "io/test/file_loader_test_fixtures.hpp"
 
@@ -42,7 +42,7 @@ using namespace bliss::io;
 static constexpr size_t block_size = 32768;
 
 static constexpr size_t kmer_size = 35;
-typedef FASTALoader2<unsigned char, kmer_size - 1> FASTALoaderType;
+typedef FASTALoader<unsigned char, kmer_size - 1> FASTALoaderType;
 
 class FASTAIteratorTest : public KmerReaderTest<FASTALoaderType > {};
 
@@ -65,7 +65,7 @@ TEST_P(FASTAIteratorTest, read)
   using BlockIterType = typename FASTALoaderType::L1BlockType::iterator;
 
   // define sequence parser
-  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser2 >;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
   //Define Kmer parser
   typedef bliss::common::Kmer<kmer_size, bliss::common::DNA5, uint32_t> KmerType;
@@ -144,7 +144,7 @@ TEST_P(FASTAIteratorTest, read_mpi)
   using BlockIterType = typename FASTALoaderType::L1BlockType::iterator;
 
   // define sequence parser
-  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser2 >;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
   //Define Kmer parser
   typedef bliss::common::Kmer<kmer_size, bliss::common::DNA5, uint32_t> KmerType;
@@ -230,7 +230,7 @@ TEST_P(FASTAIteratorTest, read_omp)
   using BlockIterType = typename FASTALoaderType::L2BlockType::iterator;
 
   // define sequence parser
-  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser2 >;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
   //Define Kmer parser
   typedef bliss::common::Kmer<kmer_size, bliss::common::DNA5, uint32_t> KmerType;
@@ -249,7 +249,7 @@ TEST_P(FASTAIteratorTest, read_omp)
   std::string filename = this->fileName;
 
   auto l1 = loader.getNextL1Block();
-  bliss::io::FASTAParser2<BlockIterType> l1parser = loader.getSeqParser();
+  bliss::io::FASTAParser<BlockIterType> l1parser = loader.getSeqParser();
 
   while (l1.getRange().size() > 0) {
 
@@ -265,7 +265,7 @@ TEST_P(FASTAIteratorTest, read_omp)
 
       bliss::index::kmer::KmerPositionTupleParser<TupleType > kmer_parser;
 
-      bliss::io::FASTAParser2<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
+      bliss::io::FASTAParser<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
 
       bool threadcomp = true;
       local_same[tid] = true;
@@ -355,7 +355,7 @@ TEST_P(FASTAIteratorTest, read_omp_mpi)
   using BlockIterType = typename FASTALoaderType::L2BlockType::iterator;
 
   // define sequence parser
-  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser2 >;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
   //Define Kmer parser
   typedef bliss::common::Kmer<kmer_size, bliss::common::DNA5, uint32_t> KmerType;
@@ -374,12 +374,12 @@ TEST_P(FASTAIteratorTest, read_omp_mpi)
   std::string filename = this->fileName;
 
   auto l1 = loader.getNextL1Block();
-  bliss::io::FASTAParser2<BlockIterType> l1parser = loader.getSeqParser();
+  bliss::io::FASTAParser<BlockIterType> l1parser = loader.getSeqParser();
 
   while (l1.getRange().size() > 0) {
 
     l1parser.init_for_iterator(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
-    bliss::io::FASTAParser2<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
+    bliss::io::FASTAParser<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
 
     size_t localKmerCount = 0;
 

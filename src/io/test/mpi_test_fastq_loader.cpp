@@ -23,7 +23,7 @@
 
 #include "io/fastq_loader.hpp"
 #include "io/file_loader.hpp"
-#include "mxx/reduction.hpp"
+#include <mxx/reduction.hpp>
 
 #include "io/test/file_loader_test_fixtures.hpp"
 

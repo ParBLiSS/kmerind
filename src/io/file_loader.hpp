@@ -34,7 +34,7 @@
 #include <sys/mman.h>   // mmap
 #include <fcntl.h>      // for open
 
-#include "sys/sysinfo.h"  // for meminfo
+#include <sys/sysinfo.h>  // for meminfo
 
 #include "partition/range.hpp"
 #include "partition/partitioner.hpp"

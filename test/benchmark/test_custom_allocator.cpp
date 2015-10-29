@@ -9,7 +9,7 @@
 
 
 #include "common/kmer.hpp"
-#include "wip/kmer_hash.hpp"
+#include "index/kmer_hash.hpp"
 
 #include "boost/pool/pool_alloc.hpp"
 

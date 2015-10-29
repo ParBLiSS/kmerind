@@ -52,7 +52,7 @@
 #include "common/kmer.hpp"
 
 // includ the murmurhash code.
-#include "smhasher/MurmurHash3.cpp"
+#include <smhasher/MurmurHash3.cpp>
 // and farm hash
 #include "farmhash.cc"
 

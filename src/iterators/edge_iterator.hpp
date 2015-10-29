@@ -9,7 +9,6 @@
 #define EDGE_ITERATOR_HPP_
 
 #include <iterator>
-#include "utils/function_traits.hpp"
 #include "common/alphabets.hpp"
 
 namespace bliss

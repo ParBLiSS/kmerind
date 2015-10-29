@@ -26,6 +26,8 @@
 #ifdef USE_MPI
 #include "mpi.h"
 #include "io/mxx_support.hpp"
+#include <mxx/collective.hpp>
+#include <mxx/big_collective.hpp>
 #endif
 
 struct TestFileInfo {

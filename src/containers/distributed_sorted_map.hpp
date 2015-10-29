@@ -31,7 +31,6 @@
 #define BLISS_DISTRIBUTED_SORTED_MAP_HPP
 
 
-#include <containers/distributed_map_base.hpp>
 #include <vector>  // local storage hash table
 #include <utility> 			  // for std::pair
 
@@ -43,12 +42,12 @@
 #include <cstdint>  // for uint8, etc.
 
 
-#include "mxx/collective.hpp"
-#include "mxx/reduction.hpp"
-#include "mxx/sort.hpp"
-#include "io/mpi_utils.hpp"
+#include <mxx/collective.hpp>
+#include <mxx/reduction.hpp>
+#include <mxx/sort.hpp>
 #include "utils/timer.hpp"  // for timing.
 #include "utils/logging.h"
+#include "containers/distributed_map_base.hpp"
 
 
 namespace dsc  // distributed std container

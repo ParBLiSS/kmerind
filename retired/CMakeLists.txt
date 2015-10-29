@@ -528,16 +528,10 @@ if (ENABLE_TESTING)
     endif()
 
   # GTEST use of pthreads does not appear to mix well with openmp code.
-#  if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+  if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
     #clang compile with gtest have trouble with pthreads.
-    add_definitions(-DGTEST_HAS_PTHREAD=0)
-#  endif()
-  
-    #TODO: fix this so that it changes with BENCHMARK flag
-#  if (BENCHMARK)
-#	SET(gtest_disble_pthreads ON)
-#    add_definitions(-DGTEST_HAS_PTHREAD=0)
-#  endif()
+    add_definitions(-DGTEST_HAS_PTHREAD=0)    
+  endif()
 
   message(STATUS "Testing enabled")
   # include/load the Google Test framework
@@ -850,6 +844,8 @@ OPTION(BUILD_EXAMPLE_APPLICATIONS "Inform whether sample applications should be 
 OPTION(ENABLE_BENCHMARKING "Enable timing measurements for benchmarking." OFF)
 if (ENABLE_BENCHMARKING)
   SET(BENCHMARK 1)
+  #TODO: fix this so that it changes with BENCHMARK flag
+  SET(gtest_disble_pthreads ON)
 else(ENABLE_BENCHMARKING)
   SET(BENCHMARK 0)
 endif(ENABLE_BENCHMARKING)
@@ -872,24 +868,24 @@ configure_file(
 # so that we will find TutorialConfig.h
 include_directories("${CMAKE_BINARY_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/src")
-# this below gets the smhasher
 include_directories("${EXT_PROJECTS_DIR}")
 include_directories("${EXT_PROJECTS_DIR}/mxx/include")
 include_directories("${EXT_PROJECTS_DIR}/farmhash/src")
 
 
 add_subdirectory(src/utils)
+
 set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)
 
-add_subdirectory(src/containers)
+add_subdirectory(src/taskrunner)
 add_subdirectory(src/partition)
 add_subdirectory(src/common)
-add_subdirectory(src/iterators)
+add_subdirectory(src/concurrent)
 add_subdirectory(src/io)
 add_subdirectory(src/index)
-#add_subdirectory(src/debruijn)
-add_subdirectory(test/test)
-add_subdirectory(test/benchmark)
+add_subdirectory(src/iterators)
+add_subdirectory(src/wip)
+add_subdirectory(test)
 add_subdirectory(utils)
 
 

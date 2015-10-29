@@ -23,7 +23,7 @@
 
 #include "io/fasta_loader.hpp"
 #include "io/file_loader.hpp"
-#include "mxx/reduction.hpp"
+#include <mxx/reduction.hpp>
 
 #include "io/test/file_loader_test_fixtures.hpp"
 
@@ -32,7 +32,7 @@ using namespace bliss::io;
 static constexpr size_t block_size = 32768;
 
 // for these tests, we are counting sequences, not kmers, so no overlap.
-typedef FASTALoader2<unsigned char, 0> FASTALoaderType;
+typedef FASTALoader<unsigned char, 0> FASTALoaderType;
 
 
 class FASTAParserTest : public FileParserTest<FASTALoaderType >
@@ -53,13 +53,13 @@ TEST_P(FASTAParserTest, parse)
 
   // from FileLoader type, get the block iter type and range type
   using BlockIterType = typename FASTALoaderType::L1BlockType::iterator;
-  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser2 >;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
   FASTALoaderType loader(this->fileName, 1, 0, 1, block_size, block_size );
 
   auto l1 = loader.getNextL1Block();
 
-  bliss::io::FASTAParser2<BlockIterType> l1parser = loader.getSeqParser();
+  bliss::io::FASTAParser<BlockIterType> l1parser = loader.getSeqParser();
 
   while (l1.getRange().size() > 0) {
 
@@ -98,7 +98,7 @@ TEST_P(FASTAParserTest, parse_omp)
 #endif
 
   using BlockIterType = typename FASTALoaderType::L1BlockType::iterator;
-  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser2 >;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
 
   int nthreads = 4;
@@ -108,7 +108,7 @@ TEST_P(FASTAParserTest, parse_omp)
   auto l1 = loader.getNextL1Block();
   size_t localKmerCount = 0;
 
-  bliss::io::FASTAParser2<BlockIterType> l1parser = loader.getSeqParser();
+  bliss::io::FASTAParser<BlockIterType> l1parser = loader.getSeqParser();
 
   while (l1.getRange().size() > 0) {
 
@@ -117,7 +117,7 @@ TEST_P(FASTAParserTest, parse_omp)
     localKmerCount = 0;
 #pragma omp parallel num_threads(nthreads) shared(loader, l1parser) reduction(+:localKmerCount)
    {
-    	  bliss::io::FASTAParser2<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
+    	  bliss::io::FASTAParser<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
 
       int tid = omp_get_thread_num();
 
@@ -174,14 +174,14 @@ TEST_P(FASTAParserTest, parse_mpi)
 {
   // from FileLoader type, get the block iter type and range type
   using BlockIterType = typename FASTALoaderType::L1BlockType::iterator;
-  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser2 >;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
   FASTALoaderType loader(this->fileName, MPI_COMM_WORLD, 1, block_size, block_size );
 
   auto l1 = loader.getNextL1Block();
   this->elemCount = 0;
 
-  bliss::io::FASTAParser2<BlockIterType> l1parser = loader.getSeqParser();
+  bliss::io::FASTAParser<BlockIterType> l1parser = loader.getSeqParser();
 
 
   while (l1.getRange().size() > 0) {
@@ -215,7 +215,7 @@ TEST_P(FASTAParserTest, parse_mpi_omp)
 {
 
   using BlockIterType = typename FASTALoaderType::L1BlockType::iterator;
-  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser2 >;
+  using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
 
   int nthreads = 4;
@@ -227,7 +227,7 @@ TEST_P(FASTAParserTest, parse_mpi_omp)
   size_t localKmerCount = 0;
 
 
-  bliss::io::FASTAParser2<BlockIterType> l1parser = loader.getSeqParser();
+  bliss::io::FASTAParser<BlockIterType> l1parser = loader.getSeqParser();
 
   while (l1.getRange().size() > 0) {
     l1parser.init_for_iterator(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
@@ -236,7 +236,7 @@ TEST_P(FASTAParserTest, parse_mpi_omp)
     localKmerCount = 0;
 #pragma omp parallel num_threads(nthreads) shared(loader, l1parser, l1) reduction(+:localKmerCount)
    {
-    	bliss::io::FASTAParser2<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
+    	bliss::io::FASTAParser<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
       int tid = omp_get_thread_num();
 
       auto l2 = loader.getNextL2Block(tid);

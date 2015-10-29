@@ -97,7 +97,7 @@ namespace bliss
     class FASTQParser : public bliss::io::BaseFileParser<Iterator >
     {
         // let another BaseFileParser with some other iterator type be a friend so we can convert.
-        template <typename Iterator2> friend class FASTAParser2;
+        template <typename Iterator2> friend class FASTAParser;
 
       public:
         using SequenceType = bliss::io::FASTQSequence<Iterator>;  // redefined SequenceType
