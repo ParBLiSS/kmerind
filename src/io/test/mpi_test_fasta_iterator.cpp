@@ -304,10 +304,10 @@ TEST_P(FASTAIteratorTest, read_omp)
             threadcomp = equal(KmertoString.begin(), gold, kmer_size);
 
             if (!threadcomp) {
-              printf("tid %d l2 block: start, %lu end %lu\n", tid, l2.getRange().start, l2.getRange().end);
-              printf("tid %d sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", tid, seq.id.pos_in_file, seq.seq_begin_offset, seq.local_offset, seq.length);
-              printf("tid %d i %lu id: pos %lu, id %lu, file %d\n", tid, i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
-              printf("tid %d\ti %lu\tpos %lu gold: [%s]\n\t\tpos %lu test: [%s]\n", tid,  i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
+              DEBUGF("tid %d l2 block: start, %lu end %lu\n", tid, l2.getRange().start, l2.getRange().end);
+              DEBUGF("tid %d sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", tid, seq.id.pos_in_file, seq.seq_begin_offset, seq.local_offset, seq.length);
+              DEBUGF("tid %d i %lu id: pos %lu, id %lu, file %d\n", tid, i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
+              DEBUGF("tid %d\ti %lu\tpos %lu gold: [%s]\n\t\tpos %lu test: [%s]\n", tid,  i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
             }
 
             local_same[tid] &= threadcomp;
