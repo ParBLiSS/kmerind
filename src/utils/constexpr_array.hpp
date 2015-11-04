@@ -35,7 +35,7 @@ namespace bliss {
        * @return
        */
       template<class Functor, std::size_t ... Indices>
-      constexpr auto make_array_helper(
+      constexpr auto make_array_extract_index_func(
           Functor f,
           bliss::utils::seq<std::size_t, Indices...>)
           -> std::array<typename std::result_of<Functor(std::size_t)>::type, sizeof...(Indices)>
@@ -55,7 +55,7 @@ namespace bliss {
        * @return
        */
       template<typename T, std::size_t ... Indices>
-      constexpr auto make_array_helper(bliss::utils::seq<size_t, Indices...>)
+      constexpr auto make_array_extract_index_cast(bliss::utils::seq<size_t, Indices...>)
           -> std::array<T, sizeof...(Indices)>
       {
           // double curl braces aggregate initializes the stdarray.
@@ -78,7 +78,7 @@ namespace bliss {
     -> std::array<typename std::result_of<Functor(std::size_t)>::type, N>
     {
         // expands N into a index sequence [0, .., N), then transform each via f.
-      return detail::make_array_helper(f, bliss::utils::make_index_sequence<N>{});
+      return detail::make_array_extract_index_func(f, bliss::utils::make_index_sequence<N>{});
     }
 
     /**
@@ -93,7 +93,7 @@ namespace bliss {
     -> std::array<T, N>
     {
         // expands N into a index sequence [0, .., N), then transform each via f.
-      return detail::make_array_helper<T>(bliss::utils::make_index_sequence<N>{});
+      return detail::make_array_extract_index_cast<T>(bliss::utils::make_index_sequence<N>{});
     }
 
   } // namespace utils
