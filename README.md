@@ -18,8 +18,12 @@ BLISS is a C++ library for distributed and multi-core bioinformatics algorithms.
 Required:
 
 - `g++` (version 4.7+)
-- `cmake` (version 2.6+)
+- `cmake` (version 2.8+)
 - `openmpi` or `mpich2` or `intel mpi library`
+
+See 
+http://en.cppreference.com/w/cpp/compiler_support
+
 
 Optional libraries are:
 
