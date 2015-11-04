@@ -22,6 +22,7 @@
 #include <cstdint>       // uint8_t
 
 #include "utils/logging.h"
+#include "bliss-config.hpp"
 #include <x86intrin.h>   // all intrinsics.  will be enabled based on compiler flag such as __SSSE3__ internally.
 
 // needed by clang else it does not know where to get the bswap function.  however, conflicts with farmhash.cc
@@ -545,28 +546,28 @@ namespace bliss {
 
 
           /// index for reversing the bytes in groups of varying size (8: 1 byte; 16: 2 bytes, etc.)
-          static constexpr uint8_t  rev_idx8 alignas(16) [16] = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
-          static constexpr uint8_t rev_idx16 alignas(16) [16] = {0x0E,0x0F,0x0C,0x0D,0x0A,0x0B,0x08,0x09,0x06,0x07,0x04,0x05,0x02,0x03,0x00,0x01};
-          static constexpr uint8_t rev_idx32 alignas(16) [16] = {0x0C,0x0D,0x0E,0x0F,0x08,0x09,0x0A,0x0B,0x04,0x05,0x06,0x07,0x00,0x01,0x02,0x03};
-          static constexpr uint8_t rev_idx64 alignas(16) [16] = {0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07};
+          static constexpr uint8_t  BLISS_ALIGNED_ARRAY(rev_idx8, 16, 16) = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx16, 16, 16) = {0x0E,0x0F,0x0C,0x0D,0x0A,0x0B,0x08,0x09,0x06,0x07,0x04,0x05,0x02,0x03,0x00,0x01};
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx32, 16, 16) = {0x0C,0x0D,0x0E,0x0F,0x08,0x09,0x0A,0x0B,0x04,0x05,0x06,0x07,0x00,0x01,0x02,0x03};
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx64, 16, 16) = {0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07};
 
           /// mask for lower 4 bits
-          static constexpr uint8_t mask4 alignas(16) [16] = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(mask4, 16, 16) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
 
           /// lookup table for reversing bits in a byte in bit groups of 1
-          static constexpr uint8_t lut1_lo alignas(16) [16] = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
-          static constexpr uint8_t lut1_hi alignas(16) [16] = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut1_lo, 16, 16) = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut1_hi, 16, 16) = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
 
           /// lookup table for reversing bits in a byte in bit groups of 2
-          static constexpr uint8_t lut2_lo alignas(16) [16] = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
-          static constexpr uint8_t lut2_hi alignas(16) [16] = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut2_lo, 16, 16) = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut2_hi, 16, 16) = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
 
           /// lookup table for reversing bits in a byte in groups of 4 - no need, just use the mask_lo and shift operator.
           static constexpr unsigned int bitsPerGroup = BIT_GROUP_SIZE;
           static constexpr unsigned char simd_type = BIT_REV_SSSE3;
 
           static ::std::string toString(__m128i const & v) {
-            uint8_t tmp alignas(16) [16];
+            uint8_t BLISS_ALIGNED_ARRAY(tmp, 16, 16);
             _mm_store_si128((__m128i*)tmp, v);
             ::std::stringstream ss;
             for (int i = 15; i >= 0; --i) {
@@ -705,23 +706,23 @@ namespace bliss {
       };
 
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::rev_idx8  alignas(16) [16];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(rev_idx8, 16, 16);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::rev_idx16 alignas(16) [16];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(rev_idx16, 16, 16);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::rev_idx32 alignas(16) [16];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(rev_idx32, 16, 16);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::rev_idx64 alignas(16) [16];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(rev_idx64, 16, 16);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::mask4     alignas(16) [16];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask4, 16, 16);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::lut1_lo alignas(16) [16];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(lut1_lo, 16, 16);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::lut1_hi alignas(16) [16];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(lut1_hi, 16, 16);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::lut2_lo alignas(16) [16];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(lut2_lo, 16, 16);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::lut2_hi alignas(16) [16];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(lut2_hi, 16, 16);
 
 
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 128bit)
@@ -732,16 +733,16 @@ namespace bliss {
           static constexpr unsigned int bitsPerGroup = 3;
           static constexpr unsigned char simd_type = BIT_REV_SSSE3;
 
-          static constexpr size_t mask3lo  alignas(16) [2] = { 0x9249249249249249, 0x4924924924924924 };
-          static constexpr size_t mask3mid alignas(16) [2] = { 0x2492492492492492, 0x9249249249249249 };
-          static constexpr size_t mask3hi  alignas(16) [2] = { 0x4924924924924924, 0x2492492492492492 };
-          static constexpr uint8_t mask_all alignas(16) [32] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3lo, 2, 16) = { 0x9249249249249249, 0x4924924924924924 };
+          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3mid, 2, 16) = { 0x2492492492492492, 0x9249249249249249 };
+          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3hi, 2, 16) = { 0x4924924924924924, 0x2492492492492492 };
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(mask_all, 32, 16) = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
                                                                 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
           bitgroup_ops<1, BIT_REV_SSSE3, true> bit_rev_1;
 
           static ::std::string toString(__m128i const & v) {
-            uint8_t tmp alignas(16) [16];
+            uint8_t BLISS_ALIGNED_ARRAY(tmp, 16, 16);
             _mm_store_si128((__m128i*)tmp, v);
             ::std::stringstream ss;
             for (int i = 15; i >= 0; --i) {
@@ -893,13 +894,13 @@ namespace bliss {
 
       // need the DUMMY template parameter to correctly instantiate here.
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::mask3lo  alignas(16) [2];
+      constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3lo, 2, 16);
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::mask3mid alignas(16) [2];
+      constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3mid, 2, 16);
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::mask3hi  alignas(16) [2];
+      constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3hi, 2, 16);
       template <bool POW2>
-      constexpr uint8_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::mask_all  alignas(16) [32];
+      constexpr uint8_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask_all, 32, 16);
 
 
 
@@ -920,30 +921,30 @@ namespace bliss {
 
 
           /// index for reversing the bytes in groups of varying size (8: 1 byte; 16: 2 bytes, etc.)
-          static constexpr uint8_t  rev_idx_lane8 alignas(32) [32] = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00,
+          static constexpr uint8_t  BLISS_ALIGNED_ARRAY(rev_idx_lane8, 32, 32) = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00,
                                                                      0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
-          static constexpr uint8_t rev_idx_lane16 alignas(32) [32]  = {0x0E,0x0F,0x0C,0x0D,0x0A,0x0B,0x08,0x09,0x06,0x07,0x04,0x05,0x02,0x03,0x00,0x01,
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx_lane16, 32, 32)  = {0x0E,0x0F,0x0C,0x0D,0x0A,0x0B,0x08,0x09,0x06,0x07,0x04,0x05,0x02,0x03,0x00,0x01,
                                                                      0x0E,0x0F,0x0C,0x0D,0x0A,0x0B,0x08,0x09,0x06,0x07,0x04,0x05,0x02,0x03,0x00,0x01};
-          static constexpr uint8_t rev_idx32 alignas(32) [32]  = {0x07,0x00,0x00,0x00,0x06,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x04,0x00,0x00,0x00,
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx32, 32, 32)  = {0x07,0x00,0x00,0x00,0x06,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x04,0x00,0x00,0x00,
                                                                 0x03,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-          //          static constexpr uint8_t rev_idx64 alignas(32) [32] = {0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
+          //          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx64, 32, 32) = {0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
           //        		  0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07};
 
 
           /// mask for lower 4 bits
-          static constexpr uint8_t mask4 alignas(32) [32] = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(mask4, 32, 32) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,
                                                             0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
 
           /// lookup table for reversing bits in a byte in bit groups of 1
-          static constexpr uint8_t lut1_lo alignas(32) [32] = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f,
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut1_lo, 32, 32) = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f,
                                                                0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
-          static constexpr uint8_t lut1_hi alignas(32) [32] = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0,
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut1_hi, 32, 32) = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0,
                                                               0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
 
           /// lookup table for reversing bits in a byte in bit groups of 2
-          static constexpr uint8_t lut2_lo alignas(32) [32] = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f,
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut2_lo, 32, 32) = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f,
                                                               0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
-          static constexpr uint8_t lut2_hi alignas(32) [32] = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0,
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut2_hi, 32, 32) = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0,
                                                               0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
 
           /// lookup table for reversing bits in a byte in groups of 4 - no need, just use the mask_lo and shift operator.
@@ -951,7 +952,7 @@ namespace bliss {
           static constexpr unsigned char simd_type = BIT_REV_AVX2;
 
           static ::std::string toString(__m256i const & v) {
-            uint8_t tmp alignas(32) [32];
+            uint8_t BLISS_ALIGNED_ARRAY(tmp, 32, 32);
             _mm256_store_si256((__m256i*)tmp, v);																// AVX
             ::std::stringstream ss;
             for (int i = 31; i >= 0; --i) {
@@ -1099,21 +1100,21 @@ namespace bliss {
       };
 
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::rev_idx_lane8  alignas(32) [32];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(rev_idx_lane8, 32, 32);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::rev_idx_lane16 alignas(32) [32];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(rev_idx_lane16, 32, 32);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::rev_idx32 alignas(32) [32];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(rev_idx32, 32, 32);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::mask4 alignas(32) [32];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask4, 32, 32);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::lut1_lo alignas(32) [32];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(lut1_lo, 32, 32);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::lut1_hi alignas(32) [32];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(lut1_hi, 32, 32);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::lut2_lo alignas(32) [32];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(lut2_lo, 32, 32);
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
-      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::lut2_hi alignas(32) [32];
+      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(lut2_hi, 32, 32);
 
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 128bit)
       template <bool POW2>
@@ -1123,10 +1124,10 @@ namespace bliss {
           static constexpr unsigned int bitsPerGroup = 3;
           static constexpr unsigned char simd_type = BIT_REV_AVX2;
 
-          static constexpr size_t mask3lo  alignas(32) [4] = { 0x9249249249249249, 0x4924924924924924, 0x2492492492492492, 0x9249249249249249 };
-          static constexpr size_t mask3mid alignas(32) [4] = { 0x2492492492492492, 0x9249249249249249, 0x4924924924924924, 0x2492492492492492 };
-          static constexpr size_t mask3hi  alignas(32) [4] = { 0x4924924924924924, 0x2492492492492492, 0x9249249249249249, 0x4924924924924924 };
-          static constexpr uint8_t mask_all alignas(32) [64] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3lo, 4, 32) = { 0x9249249249249249, 0x4924924924924924, 0x2492492492492492, 0x9249249249249249 };
+          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3mid, 4, 32) = { 0x2492492492492492, 0x9249249249249249, 0x4924924924924924, 0x2492492492492492 };
+          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3hi, 4, 32) = { 0x4924924924924924, 0x2492492492492492, 0x9249249249249249, 0x4924924924924924 };
+          static constexpr uint8_t BLISS_ALIGNED_ARRAY(mask_all, 64, 32) = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
                                                                 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
                                                                 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
                                                                 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
@@ -1134,7 +1135,7 @@ namespace bliss {
           bitgroup_ops<1, BIT_REV_AVX2, true> bit_rev_1;
 
           static ::std::string toString(__m256i const & v) {
-            uint8_t tmp alignas(32) [32];
+            uint8_t BLISS_ALIGNED_ARRAY(tmp, 32, 32);
             _mm256_store_si256((__m256i*)tmp, v);
             ::std::stringstream ss;
             for (int i = 31; i >= 0; --i) {
@@ -1307,13 +1308,13 @@ namespace bliss {
       };
 
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::mask3lo  alignas(32) [4];
+      constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3lo, 4, 32);
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::mask3mid alignas(32) [4];
+      constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3mid, 4, 32);
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::mask3hi  alignas(32) [4];
+      constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3hi, 4, 32);
       template <bool POW2>
-      constexpr uint8_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::mask_all  alignas(32) [64];
+      constexpr uint8_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask_all, 64, 32);
 
 
 

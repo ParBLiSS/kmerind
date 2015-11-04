@@ -158,7 +158,7 @@ class BitReverseRemainderBenchmark : public ::testing::Test {
   	size_t step = (SIMD_TYPE < 2) ? 8 : (SIMD_TYPE == 2) ? 16 : 32;
 	size_t iters = BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 16;
 
-	uint8_t out alignas(32) [32];
+	uint8_t BLISS_ALIGNED_ARRAY(out, 32, 32);
 	memcpy(out, this->helper.input, step);
 
 	std::stringstream ss;	
@@ -267,7 +267,7 @@ class BitReverseArrayBenchmark : public ::testing::Test {
 
     template <uint8_t MAX_SIMD_TYPE, typename P2 = P>
     void array_test( std::string name ) {
-      uint8_t out alignas(32) [128];
+      uint8_t BLISS_ALIGNED_ARRAY(out, 128, 32);
 
       TIMER_LOOP_START(this->bitrev);
 
@@ -282,7 +282,7 @@ class BitReverseArrayBenchmark : public ::testing::Test {
 
     template <typename P2 = P>
     void array_test_seq( std::string name ) {
-      uint8_t out alignas(32) [128];
+      uint8_t BLISS_ALIGNED_ARRAY(out, 128, 32);
 
       TIMER_LOOP_START(this->bitrev);
 

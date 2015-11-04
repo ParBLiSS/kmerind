@@ -271,7 +271,12 @@ OT ParFor(OP &op, const int &nthreads, size_t &_count) {
     #pragma omp for schedule(guided) reduction(+ : v, count)
       for (size_t i = r.start; i < r.end; i+=step)
       {
+#ifdef USE_OPENMP
         op(omp_get_thread_num(), count, v);
+#else
+        op(i, count, v);
+#endif
+
       }
   }
   _count = count;

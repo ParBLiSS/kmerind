@@ -1043,7 +1043,12 @@ int main(int argc, char* argv[])
     count = 0;
 #pragma omp parallel OMP_SHARE_DEFAULT shared(nthreads, step, filename) num_threads(nthreads) reduction(+:v, count)
     {
-      OpType op2(filename, nthreads, omp_get_thread_num(), 1, step);
+      int tid = 0;
+#ifdef USE_OPENMP
+      tid = omp_get_thread_num();
+#endif
+      OpType op2(filename, nthreads, tid, 1, step);
+
       op2.reset();
       double v0 = Sequential<OpType, double>(op2, 1, count);
       //INFOF("%d processing range %lu %lu. result = %f\n", omp_get_thread_num(), op2.getRange().start, op2.getRange().end, v0);

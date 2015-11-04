@@ -1222,7 +1222,7 @@ namespace bliss
 
     /// reverse complement of kmer.  specialzied for DNA5/DNA6/RNA5/RNA6/DNA16, where the complement is the bitwise reverse.
     template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA6>::value ||
+        typename ::std::enable_if< ::std::is_same<A, DNA6>::value ||
                                   ::std::is_same<A, RNA6>::value ||
                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
     INLINE Kmer do_reverse_complement(Kmer const& src) const
