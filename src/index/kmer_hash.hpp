@@ -199,10 +199,12 @@ namespace bliss {
       template<typename KMER, bool Prefix = false>
       class cpp_std {
         protected:
-          static constexpr size_t tuples = KMER::nWords * sizeof(typename KMER::KmerWordType) / sizeof(uint64_t);
-          static constexpr size_t leftover = KMER::nWords * sizeof(typename KMER::KmerWordType) % sizeof(uint64_t);
+          static constexpr size_t tuples = KMER::nWords * sizeof(typename KMER::KmerWordType) / sizeof(size_t);
+          static constexpr size_t leftover = KMER::nWords * sizeof(typename KMER::KmerWordType) % sizeof(size_t);
 
           int64_t shift;
+          ::std::hash<size_t> op;
+
         public:
           static constexpr unsigned int default_init_value = (KMER::nBits < 64U) ? KMER::nBits : 64U;
 
@@ -213,22 +215,22 @@ namespace bliss {
           /// operator to compute hash
           inline size_t operator()(const KMER & kmer) const {
 
-            // first compute the hash, from 64 bits of input at a time
-            size_t const * data = reinterpret_cast<size_t const*>(kmer.getConstData());
-            size_t h = std::hash<size_t>()(data[0]);
-            size_t hp;
-            for (size_t i = 1; i < tuples; ++i) {
-              hp = std::hash<size_t>()(data[i]);
+              size_t const * data = reinterpret_cast<size_t const*>(kmer.getConstData());
+              size_t h = 0;
+
+			  // first deal with the remainder bits, if any.
+			  if (leftover > 0) {
+				memcpy(&h, kmer.getConstData() + tuples * sizeof(size_t), leftover);
+				h = op(h);
+			  }
+
+              size_t hp;
+            // then compute the hash, from 64 bits of input at a time
+            for (size_t i = 0; i < tuples; ++i) {
+              hp = op(data[i]);
               h ^= (hp << 1);
             }
 
-            // the remainder bits, if any, needs to be dealt with now.
-            if (leftover > 0) {
-              hp = 0;
-              memcpy(&hp, kmer.getConstData() + tuples * sizeof(size_t), leftover);
-              hp = std::hash<size_t>()(hp);
-              h ^= (hp << 1);
-            }
 
             if (Prefix)
               // if multiword, nBits > 64, then the returned hash will have meaningful msb.  min(nBits, 64) == 64.
