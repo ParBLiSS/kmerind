@@ -10,6 +10,7 @@
 
 #include "common/kmer.hpp"
 #include "index/kmer_hash.hpp"
+#include "common/kmer_transform.hpp"
 
 #include "boost/pool/pool_alloc.hpp"
 

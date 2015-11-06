@@ -54,6 +54,8 @@
 #include "common/base_types.hpp"
 #include "common/sequence.hpp"
 #include "utils/kmer_utils.hpp"
+#include "index/kmer_hash.hpp"
+#include "common/kmer_transform.hpp"
 
 #include "io/mxx_support.hpp"
 #include "containers/distributed_unordered_map.hpp"
@@ -68,7 +70,6 @@
 #include "iterators/unzip_iterator.hpp"
 #include "iterators/constant_iterator.hpp"
 #include "index/quality_score_iterator.hpp"
-#include "index/kmer_hash.hpp"
 
 #include "utils/timer.hpp"
 #include "utils/file_utils.hpp"

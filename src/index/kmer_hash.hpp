@@ -52,10 +52,14 @@
 #include "common/kmer.hpp"
 
 // includ the murmurhash code.
+#ifndef _MURMURHASH3_H_
 #include <smhasher/MurmurHash3.cpp>
-// and farm hash
-#include "farmhash.cc"
+#endif
 
+// and farm hash
+#ifndef FARM_HASH_H_
+#include <farmhash.cc>
+#endif
 
 //// Kmer specialization for std::hash
 //namespace std {
@@ -124,68 +128,6 @@ namespace bliss {
   namespace kmer
   {
 
-    namespace transform {
-
-      // QUESTION:  xor of hash, or hash of xor?.  second is faster.  Also if there is GC-AT imbalance, xor of raw sequence kind of flattens the distribution, so hash input is now more even.
-
-      template <typename KMER>
-      struct identity {
-          inline KMER operator()(KMER const & x) const {
-            return x;
-          }
-      };
-
-      template <typename KMER>
-      struct xor_rev_comp {
-          inline KMER operator()(KMER const & x) const {
-            return x ^ x.reverse_complement();
-          }
-          inline KMER operator()(::std::pair<KMER, KMER> const & x) const  {
-            return x.first ^ x.second;
-          }
-      };
-
-      template <typename KMER>
-      struct lex_less {
-          inline KMER operator()(KMER const & x) const  {
-            auto y = x.reverse_complement();
-            return (x < y) ? x : y;
-          }
-          inline KMER operator()(::std::pair<KMER, KMER> const & x) const  {
-            return (x.first < x.second) ? x.first : x.second;
-          }
-      };
-
-      template <typename KMER>
-      struct lex_greater {
-          inline KMER operator()(KMER const & x) const  {
-            auto y = x.reverse_complement();
-            return (x > y) ? x : y;
-          }
-          inline KMER operator()(::std::pair<KMER, KMER> const & x) const  {
-            return (x.first > x.second) ? x.first : x.second;
-          }
-      };
-
-
-      template <typename KMER, template <typename> class TRANS>
-      struct tuple_transform {
-          TRANS<KMER> transform;
-
-          inline KMER operator()(KMER & x) {
-            x = transform(x);
-            return x;
-          }
-
-          template <typename VAL>
-          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> & x) {
-            x.first = transform(x.first);
-            return x;
-          }
-
-      };
-
-    } // namespace transform
 
 
     namespace hash

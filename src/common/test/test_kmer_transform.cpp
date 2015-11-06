@@ -16,7 +16,6 @@
 
 // include google test
 #include <gtest/gtest.h>
-#include "index/kmer_hash.hpp"
 
 #include <random>
 #include <cstdint>
@@ -24,6 +23,7 @@
 #include "common/kmer.hpp"
 #include "common/alphabets.hpp"
 #include "common/alphabet_traits.hpp"
+#include "common/kmer_transform.hpp"
 
 
 
