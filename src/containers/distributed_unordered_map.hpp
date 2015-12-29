@@ -527,7 +527,7 @@ namespace dsc  // distributed std container
             recv_from = (this->comm.rank() + (this->comm_size - i)) % this->comm_size; // rank to recv data from
 
             // set up receive.
-            mxx::datatype<::std::pair<Key, T> > dt;
+            mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T> >();
             MPI_Irecv(&results[resp_displs[recv_from]], resp_counts[recv_from], dt.type(),
                       recv_from, i, this->comm, &reqs[2 * i]);
 

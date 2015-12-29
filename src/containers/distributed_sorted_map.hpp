@@ -659,7 +659,7 @@ namespace dsc  // distributed std container
             total = 0;
             std::vector<MPI_Request> reqs(2 * this->comm_size);
 
-            mxx::datatype<::std::pair<Key, T> > dt;
+            mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T>>();
             for (int i = 0; i < this->comm_size; ++i) {
               recv_from = (this->comm.rank() + (this->comm_size - i)) % this->comm_size; // rank to recv data from
 
@@ -1283,7 +1283,7 @@ namespace dsc  // distributed std container
 
           if (!this->balanced) {
             TIMER_START(rehash);
-            this->c = ::mxx::stable_block_decompose(this->c, this->comm);
+            this->c = ::mxx::stable_distribute(this->c, this->comm);
             TIMER_END(rehash, "block1", this->c.size());
           }
 
@@ -1426,7 +1426,7 @@ namespace dsc  // distributed std container
             // and final rebalance
             TIMER_START(rehash);
             // rebalance
-            this->c = ::mxx::stable_block_decompose(this->c, this->comm);
+            this->c = ::mxx::stable_distribute(this->c, this->comm);
             TIMER_END(rehash, "block2", this->c.size());
 
 //          }
@@ -1595,7 +1595,7 @@ namespace dsc  // distributed std container
           // TODO: stable_block_decompose uses all2all internally.  is it better to move the deltas ourselves?
           if (!this->balanced) {
             TIMER_START(rehash);
-            ::mxx::stable_block_decompose(this->c, this->comm).swap(this->c);
+            ::mxx::stable_distribute(this->c, this->comm).swap(this->c);
 
             TIMER_END(rehash, "block1", this->c.size());
           }

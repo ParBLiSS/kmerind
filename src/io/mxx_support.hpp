@@ -29,56 +29,203 @@
 namespace mxx {
 
   template<unsigned int size, typename A, typename WT>
-  class datatype<typename bliss::common::Kmer<size, A, WT> > :
-    public datatype_contiguous<typename bliss::common::Kmer<size, A, WT>::KmerWordType,
-      bliss::common::Kmer<size, A, WT>::nWords> {};
+    struct datatype_builder<typename bliss::common::Kmer<size, A, WT> > : 
+    public datatype_contiguous<typename bliss::common::Kmer<size, A, WT>::KmerWordType , 
+           bliss::common::Kmer<size, A, WT>::nWords> {
+
+      typedef datatype_contiguous<typename bliss::common::Kmer<size, A, WT>::KmerWordType,
+      bliss::common::Kmer<size, A, WT>::nWords> baseType;
+
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
+
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
+
 
   template<unsigned int size, typename A, typename WT>
-  class datatype<const typename bliss::common::Kmer<size, A, WT> > :
-    public datatype_contiguous<typename bliss::common::Kmer<size, A, WT>::KmerWordType,
-      bliss::common::Kmer<size, A, WT>::nWords> {};
+    struct datatype_builder<const typename bliss::common::Kmer<size, A, WT> > : 
+    public datatype_contiguous<typename bliss::common::Kmer<size, A, WT>::KmerWordType , 
+           bliss::common::Kmer<size, A, WT>::nWords> {
+
+      typedef datatype_contiguous<typename bliss::common::Kmer<size, A, WT>::KmerWordType,
+      bliss::common::Kmer<size, A, WT>::nWords> baseType;
+
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
+
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
+
+  
+  template<>
+    struct datatype_builder<bliss::common::LongSequenceKmerId> : 
+    public datatype_builder<decltype(bliss::common::LongSequenceKmerId::id)> {
+
+      typedef datatype_builder<decltype(bliss::common::LongSequenceKmerId::id)> baseType;
+
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
+
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
+
 
   template<>
-  class datatype<bliss::common::LongSequenceKmerId > :
-    public datatype<decltype(bliss::common::LongSequenceKmerId::id)> {};
+    struct datatype_builder<const bliss::common::LongSequenceKmerId> : 
+    public datatype_builder<decltype(bliss::common::LongSequenceKmerId::id)> {
+
+      typedef datatype_builder<decltype(bliss::common::LongSequenceKmerId::id)> baseType;
+
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
+
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
+
+
   template<>
-  class datatype<const bliss::common::LongSequenceKmerId > :
-    public datatype<decltype(bliss::common::LongSequenceKmerId::id)> {};
+    struct datatype_builder<bliss::common::ShortSequenceKmerId> : 
+    public datatype_builder<decltype(bliss::common::ShortSequenceKmerId::id)> {
+
+      typedef datatype_builder<decltype(bliss::common::ShortSequenceKmerId::id)> baseType;
+
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
+
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
+
 
   template<>
-  class datatype<bliss::common::ShortSequenceKmerId > :
-    public datatype<decltype(bliss::common::ShortSequenceKmerId::id)> {};
+    struct datatype_builder<const bliss::common::ShortSequenceKmerId> : 
+    public datatype_builder<decltype(bliss::common::ShortSequenceKmerId::id)> {
 
-  template<>
-  class datatype<const bliss::common::ShortSequenceKmerId > :
-    public datatype<decltype(bliss::common::ShortSequenceKmerId::id)> {};
+      typedef datatype_builder<decltype(bliss::common::ShortSequenceKmerId::id)> baseType;
 
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
 
-  template <typename T>
-  class datatype<bliss::partition::range<T> > :
-    public datatype_contiguous<T, sizeof(bliss::partition::range<T>) / sizeof(T)> {};
-
-  template <typename T>
-  class datatype<const bliss::partition::range<T> > :
-    public datatype_contiguous<T, sizeof(bliss::partition::range<T>) / sizeof(T)> {};
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
 
 
-  template <typename A, typename T>
-  class datatype<bliss::de_bruijn::node::edge_counts<A, T> > :
-    public datatype<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts)> {};
+  template<typename T>
+    struct datatype_builder<bliss::partition::range<T> > : 
+    public datatype_contiguous<T , 
+           sizeof(bliss::partition::range<T>)/sizeof(T) > {
 
-  template <typename A, typename T>
-  class datatype<const bliss::de_bruijn::node::edge_counts<A, T> > :
-    public datatype<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts)> {};
+      typedef datatype_contiguous<T,
+      sizeof(bliss::partition::range<T>)/sizeof(T) > baseType;
 
-  template <typename A>
-  class datatype<bliss::de_bruijn::node::edge_exists<A> > :
-    public datatype<decltype(bliss::de_bruijn::node::edge_exists<A>::counts)> {};
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
 
-  template <typename A>
-  class datatype<const bliss::de_bruijn::node::edge_exists<A> > :
-    public datatype<decltype(bliss::de_bruijn::node::edge_exists<A>::counts)> {};
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
 
+
+  template<typename T>
+    struct datatype_builder<const bliss::partition::range<T> > : 
+    public datatype_contiguous<T , 
+           sizeof(bliss::partition::range<T>)/sizeof(T) > {
+
+      typedef datatype_contiguous<T,
+      sizeof(bliss::partition::range<T>)/sizeof(T) > baseType;
+
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
+
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
+
+
+  template<typename A, typename T>
+    struct datatype_builder<bliss::de_bruijn::node::edge_counts<A, T> > : 
+    public datatype_builder<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts) > {
+
+      typedef datatype_builder<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts) > baseType;
+
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
+
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
+
+
+  template<typename A, typename T>
+    struct datatype_builder<const bliss::de_bruijn::node::edge_counts<A, T> > : 
+    public datatype_builder<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts) > {
+
+      typedef datatype_builder<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts) > baseType;
+
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
+
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
+
+
+  template<typename A>
+    struct datatype_builder<bliss::de_bruijn::node::edge_exists<A> > : 
+    public datatype_builder<decltype(bliss::de_bruijn::node::edge_exists<A>::counts) > {
+
+      typedef datatype_builder<decltype(bliss::de_bruijn::node::edge_exists<A>::counts) > baseType;
+
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
+
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
+
+
+  template<typename A>
+    struct datatype_builder<const bliss::de_bruijn::node::edge_exists<A> > : 
+    public datatype_builder<decltype(bliss::de_bruijn::node::edge_exists<A>::counts) > {
+
+      typedef datatype_builder<decltype(bliss::de_bruijn::node::edge_exists<A>::counts) > baseType;
+
+      static MPI_Datatype get_type(){ 
+        return baseType::get_type(); 
+      }
+
+      static size_t num_basic_elements() {
+        return baseType::num_basic_elements();
+      }
+    };
 }
 
 std::ostream &operator<<(std::ostream &os, uint8_t const &t) {
@@ -90,7 +237,7 @@ std::ostream &operator<<(std::ostream &os, int8_t const &t) {
 
 template <typename T1, typename T2>
 std::ostream &operator<<(std::ostream &os, std::pair<T1, T2> const &t) {
-    return os << t.first << ":" << t.second;
+  return os << t.first << ":" << t.second;
 }
 
 #endif /* SRC_IO_MXX_SUPPORT_HPP_ */

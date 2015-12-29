@@ -325,7 +325,7 @@ public:
 
 			// scatter the ranges
 			// TODO: mxx::bcast function
-			mxx::datatype<typename FileLoaderType::RangeType> range_dt;
+      mxx::datatype range_dt = mxx::get_datatype<typename FileLoaderType::RangeType >();
 			MPI_Bcast(&file_range, 1, range_dt.type(), 0, group);
 
 			range = mxx::scatter_one(ranges, 0, group);
@@ -342,7 +342,7 @@ public:
 			//== reserve
 			TIMER_START(file);
 			// broadcast the estimated size
-			mxx::datatype<size_t> size_dt;
+      mxx::datatype size_dt = mxx::get_datatype<size_t>();
 			MPI_Bcast(&est_size, 1, size_dt.type(), 0, group);
 			result.reserve(est_size);
 			TIMER_END(file, "reserve", est_size);
