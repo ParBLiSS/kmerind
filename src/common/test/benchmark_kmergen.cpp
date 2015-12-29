@@ -22,7 +22,7 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
   // TODO: do this as transformation iterator
   bliss::common::AlphabetTraits<bliss::common::DNA>::translateFromAscii(dna.begin(), dna.end(), dna.begin());
   auto stop = std::chrono::high_resolution_clock::now();
-  INFO( "Duration of translation: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" );
+  BL_INFO( "Duration of translation: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" );
 
   // define a packing iterator to wrap around the string's iterators
   typedef bliss::common::PackingIterator<std::string::iterator, bliss::common::AlphabetTraits<bliss::common::DNA>::getBitsPerChar()> packit_t;
@@ -42,7 +42,7 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
     ++j;
   }
   stop = std::chrono::high_resolution_clock::now();
-  INFO( "Duration of packing (j = " << j << ", packarr=" << packarr[0] << packarr[999] << "): " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" );
+  BL_INFO( "Duration of packing (j = " << j << ", packarr=" << packarr[0] << packarr[999] << "): " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" );
 
 
   /*****************************
@@ -51,7 +51,7 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
 
   // generate Kmers
   typedef bliss::common::Kmer<35, bliss::common::DNA, uint32_t> Kmer;
-  INFO( "size of kmer: " << sizeof(Kmer) );
+  BL_INFO( "size of kmer: " << sizeof(Kmer) );
   typedef bliss::common::PackedKmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
 
   kmer_gen_it_t kmerGenIt(packIt);
@@ -72,8 +72,8 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
   stop = std::chrono::high_resolution_clock::now();
 
   EXPECT_EQ(i, nKmers);
-  INFO( "kmer[0] = " << kmer_arr[0].toString() );
-  INFO( "Duration of packing + kmer generation (i = " << i << "): " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" );
+  BL_INFO( "kmer[0] = " << kmer_arr[0].toString() );
+  BL_INFO( "Duration of packing + kmer generation (i = " << i << "): " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" );
 
 
   /**************************************************
@@ -100,8 +100,8 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
   stop = std::chrono::high_resolution_clock::now();
 
   EXPECT_EQ(i, nKmers);
-  INFO( "kmer[0] = " << kmer_arr2[0].toString() );
-  INFO( "Duration of direct kmer generation (i = " << i << "): " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" );
+  BL_INFO( "kmer[0] = " << kmer_arr2[0].toString() );
+  BL_INFO( "Duration of direct kmer generation (i = " << i << "): " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" );
 
 
   // check that for both methods, the final 1000 kmers are identical

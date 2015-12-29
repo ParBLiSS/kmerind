@@ -144,7 +144,7 @@ std::vector<KmerType> readForQuery_subcomm(const std::string & filename, MPI_Com
 //        //          temp.push_back(*it);
 //        //        }
 //        //std::copy(index_start, index_end, temp.end());
-//        //        INFOF("R %d inserted.  new temp size = %lu", rank, temp.size());
+//        //        BL_INFOF("R %d inserted.  new temp size = %lu", rank, temp.size());
 //      }
 //
 //      partition = loader.getNextL1Block();
@@ -171,7 +171,7 @@ void testIndex(const mxx::comm& comm, const std::string & filename, std::string 
 
   TIMER_INIT(test);
 
-  if (comm.rank() == 0) INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+  if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
   TIMER_START(test);
   idx.template build<SeqParser>(filename, comm);
@@ -202,7 +202,7 @@ void testIndex2(const mxx::comm& comm, const std::string & filename, std::string
 
   TIMER_INIT(test);
 
-  if (comm.rank() == 0) INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+  if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
   TIMER_START(test);
   idx.template build_with_mpi_subcomm<SeqParser>(filename, comm);
@@ -266,7 +266,7 @@ int main(int argc, char** argv) {
     MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
 
     if (provided < MPI_THREAD_FUNNELED) {
-      ERRORF("The MPI Library Does not have thread support.");
+      BL_ERRORF("The MPI Library Does not have thread support.");
       MPI_Abort(MPI_COMM_WORLD, 1);
     }
   } else {
@@ -279,7 +279,7 @@ int main(int argc, char** argv) {
 
   MPI_Barrier(comm);
 
-  if (rank == 0) INFOF("USE_MPI is set");
+  if (rank == 0) BL_INFOF("USE_MPI is set");
 #else
   static_assert(false, "MPI used although compilation is not set to use MPI");
 #endif
@@ -316,7 +316,7 @@ int main(int argc, char** argv) {
   //////////////  clean up MPI.
   MPI_Finalize();
 
-  //INFOF("M Rank %d called MPI_Finalize", rank);
+  //BL_INFOF("M Rank %d called MPI_Finalize", rank);
 
 
 

@@ -9,24 +9,24 @@
  *
  * There are 2 sets of macros APIs:
  * 	the first set uses c++ style stream operator <<
- *      - FATAL(msg)
- *      - ERROR(msg)
- *      - WARNING(msg)
- *      - INFO(msg)
- *      - DEBUG(msg)
- *      - TRACE(msg)
+ *      - BL_FATAL(msg)
+ *      - BL_ERROR(msg)
+ *      - BL_WARNING(msg)
+ *      - BL_INFO(msg)
+ *      - BL_DEBUG(msg)
+ *      - BL_TRACE(msg)
  *     Example how the macro has to be called:
  *          DEBUG("current coordinates: x = " << x << ", y = " << y);
  *
  *     Any type that implements the << operator can be printed to the log in this
  *     way.
  * 	the second set uses c style printf syntax.  These are suffixed with F.
- *      - FATALF(format, ...)
- *      - ERRORF(format, ...)
- *      - WARNINGF(format, ...)
- *      - INFOF(format, ...)
- *      - DEBUGF(format, ...)
- *      - TRACEF(format, ...)
+ *      - BL_FATALF(format, ...)
+ *      - BL_ERRORF(format, ...)
+ *      - BL_WARNINGF(format, ...)
+ *      - BL_INFOF(format, ...)
+ *      - BL_DEBUGF(format, ...)
+ *      - BL_TRACEF(format, ...)
  *     Example how the macro has to be called:
  *          DEBUGF("current coordinates: x = %d, y = %d", x, y);
  *
@@ -41,13 +41,13 @@
  * 			in openmp clauses.
  *
  * Logging can be configured with different verbosity levels named after the
- * minimum required severity level, i.e. FATAL, ERROR, WARNING, etc.
+ * minimum required severity level, i.e. BL_FATAL, BL_ERROR, BL_WARNING, etc.
  * 	when a verbosity level is specified, messages at the corresponding
  * 	severity level, and any level more severe, are printed, while messages
  * 	from less severe levels are discards.
  * e.g.
- * 		verbosity of INFO included FATAL, ERROR, WARNING, and INFO,
- * 			but not DEBUG or TRACE.
+ * 		verbosity of INFO included BL_FATAL, BL_ERROR, BL_WARNING, and BL_INFO,
+ * 			but not BL_DEBUG or BL_TRACE.
  *
  * Implementation of this selection is via empty preprocessor macros.
  *

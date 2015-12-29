@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
   struct stat filestat;
   int ret = stat(filename.c_str(), &filestat);
   if (ret < 0 ) {
-    ERROR( "ERROR in file open to get size." );
+    BL_ERROR( "ERROR in file open to get size." );
     exit(-1);
   }
   size_t file_size = static_cast<size_t>(filestat.st_size);
@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
   if (file_handle == -1)
   {
     int myerr = errno;
-    FATAL("ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr));
+    BL_FATAL("ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr));
     USED_BY_LOGGER_ONLY(myerr);
 
   }

@@ -38,8 +38,8 @@ void compute_kmer_iter(std::string input) {
     int res = strncmp(gold.c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str(), K);
 
     if (res != 0) {
-      INFOF("%d iterator input %s\n", i, gold.c_str());
-      INFOF("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
+      BL_INFOF("%d iterator input %s\n", i, gold.c_str());
+      BL_INFOF("kmer %s %s %s\n", kmer.toString().c_str(), kmer.toAlphabetString().c_str(), bliss::utils::KmerUtils::toASCIIString(kmer).c_str());
     }
 
     EXPECT_EQ(0, res);

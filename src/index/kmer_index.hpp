@@ -352,7 +352,7 @@ public:
 			TIMER_START(file);
 			read_block<KP>(block, l2parser, result);
 			TIMER_END(file, "read", result.size());
-      INFO("Last: pos - kmer " << result.back());
+      BL_INFO("Last: pos - kmer " << result.back());
 		}
 
     if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
@@ -480,7 +480,7 @@ public:
 //         }
 //         ofs.close();
 
-     DEBUG("Last: pos - kmer " << temp.back());
+     BL_DEBUG("Last: pos - kmer " << temp.back());
      this->insert(temp);
 
 	 }
@@ -507,7 +507,7 @@ public:
      ::std::vector<typename KmerParser::value_type> temp;
      this->read_file_mpi_subcomm<SeqParser, KmerParser, PreCanonicalizer  >(filename, temp, comm);
 
-     DEBUG("Last: pos - kmer " << temp.back());
+     BL_DEBUG("Last: pos - kmer " << temp.back());
      this->insert(temp);
 
 	 }

@@ -54,13 +54,13 @@ bool compareSequences(Iterator1 data1, Iterator2 data2, size_t count) {
       ss.str("");
       ss.clear();
       std::copy(t1only.begin(), t1only.end(), oit);
-      INFOF("\t first buffer exclusive: size=%lu, entries=[%s]\n", t1only.size(), ss.str().c_str());
+      BL_INFOF("\t first buffer exclusive: size=%lu, entries=[%s]\n", t1only.size(), ss.str().c_str());
     }
     if (t2only.size() > 0) {
       ss.str("");
       ss.clear();
       std::copy(t2only.begin(), t2only.end(), oit);
-      INFOF("\t second buffer exclusive: size=%lu, entries=[%s]\n", t2only.size(), ss.str().c_str());
+      BL_INFOF("\t second buffer exclusive: size=%lu, entries=[%s]\n", t2only.size(), ss.str().c_str());
     }
   }
   return same;

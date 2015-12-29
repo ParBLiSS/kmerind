@@ -45,7 +45,7 @@ struct readMMap {
       struct stat filestat;
       int ret = stat(filename.c_str(), &filestat);
       if (ret < 0 ) {
-        ERROR( "ERROR in file open to get size." );
+        BL_ERROR( "ERROR in file open to get size." );
         exit(-1);
       }
       file_size = static_cast<size_t>(filestat.st_size);
@@ -56,7 +56,7 @@ struct readMMap {
       if (file_handle == -1)
       {
         int myerr = errno;
-        FATAL("ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr));
+        BL_FATAL("ERROR in file open: ["  << filename << "] error " << myerr << ": " << strerror(myerr));
         USED_BY_LOGGER_ONLY(myerr);
 
       }
@@ -97,7 +97,7 @@ struct readMMap {
                                            block_start);
       if (mapped_data == MAP_FAILED) {
         int myerr = errno;
-        FATAL("ERROR in map: ["  << filename << "] error " << myerr << ": " << strerror(myerr) << "length " << block_end - block_start << " offset " << block_start);
+        BL_FATAL("ERROR in map: ["  << filename << "] error " << myerr << ": " << strerror(myerr) << "length " << block_end - block_start << " offset " << block_start);
         USED_BY_LOGGER_ONLY(myerr);
 
         exit(1);
@@ -175,7 +175,7 @@ struct readMMap {
 
 
       if (r1.size() == 0) {
-        //INFOF("%d empty at %lu - %lu, in range %lu - %lu! chunkSize %lu\n", tid, r2.start, r2.end, r.start, r.end, chunkSize);
+        //BL_INFOF("%d empty at %lu - %lu, in range %lu - %lu! chunkSize %lu\n", tid, r2.start, r2.end, r.start, r.end, chunkSize);
         return true;
       }
 
@@ -250,7 +250,7 @@ struct readFileLoader {
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
 
-//      INFOF("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
+//      BL_INFOF("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
       data = loader.getCurrentL1Block();
     }
@@ -339,7 +339,7 @@ struct readFileLoaderAtomic {
       page_size = sysconf(_SC_PAGE_SIZE);
 
       // mmap
-//      INFOF("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
+//      BL_INFOF("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
     }
 
@@ -420,7 +420,7 @@ struct readFASTQ {
 
       loader.getNextL1Block();
 
-//      INFOF("reading: %lu - %lu, values '%c' '%c'\n", r.start, r.end, *(loader.getData().begin()), *(loader.getData().end()));
+//      BL_INFOF("reading: %lu - %lu, values '%c' '%c'\n", r.start, r.end, *(loader.getData().begin()), *(loader.getData().end()));
 
 
 
@@ -428,7 +428,7 @@ struct readFASTQ {
       page_size = sysconf(_SC_PAGE_SIZE);
 
       // mmap
-//      INFOF("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
+//      BL_INFOF("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
     }
 
@@ -519,7 +519,7 @@ struct SequencesIterator {
       page_size = sysconf(_SC_PAGE_SIZE);
 
       // mmap
-//      INFOF("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
+//      BL_INFOF("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
     }
 
@@ -637,8 +637,8 @@ struct SequencesIterator2 {
 
       loader.getNextL1Block();
 
-//      INFOF("loader from thread %d loaded range = %lu %lu\n", omp_get_thread_num(), loader.getData().getRange().start, loader.getData().getRange().end);
-//      INFOF("loader from thread %d file range = %lu %lu\n", omp_get_thread_num(), loader.getFileRange().start, loader.getFileRange().end);
+//      BL_INFOF("loader from thread %d loaded range = %lu %lu\n", omp_get_thread_num(), loader.getData().getRange().start, loader.getData().getRange().end);
+//      BL_INFOF("loader from thread %d file range = %lu %lu\n", omp_get_thread_num(), loader.getFileRange().start, loader.getFileRange().end);
 
       /// get the block size
       page_size = sysconf(_SC_PAGE_SIZE);
@@ -753,7 +753,7 @@ struct SequencesIteratorNoQual {
       page_size = sysconf(_SC_PAGE_SIZE);
 
       // mmap
-//      INFOF("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
+//      BL_INFOF("loader from thread %d range = %lu %lu\n", omp_get_thread_num(), _r.start, _r.end);
 
     }
 
@@ -779,18 +779,18 @@ struct SequencesIteratorNoQual {
 
       // try copying the data.
       typename LoaderType::L2BlockType data = loader.getNextL2Block(tid);
-//      INFOF("thread %d getting block %lu-%lu, got block of length %ld\n", omp_get_thread_num(), start, end, (data.end() - data.begin()));
+//      BL_INFOF("thread %d getting block %lu-%lu, got block of length %ld\n", omp_get_thread_num(), start, end, (data.end() - data.begin()));
 
 
       if (data.begin() == data.end()) {
-//        INFO( " range = " << start << "-" << end );
+//        BL_INFO( " range = " << start << "-" << end );
         return true;
       }
 
-//      INFO( "Range: " << data.getRange() );
-//      INFO( "Start: " << data.begin()[0] );
-//      INFO( "End: "   << data.end()[0] );
-//      INFO( "len: "   << (data.end() - data.begin())  << " len from range: " << (data.getRange().end - data.getRange().start) );
+//      BL_INFO( "Range: " << data.getRange() );
+//      BL_INFO( "Start: " << data.begin()[0] );
+//      BL_INFO( "End: "   << data.end()[0] );
+//      BL_INFO( "len: "   << (data.end() - data.begin())  << " len from range: " << (data.getRange().end - data.getRange().start) );
 
 
       // traverse using fastq iterator.
@@ -833,7 +833,7 @@ void printTiming(std::string tag, std::string name, int rank, int nprocs, int nt
                  const std::chrono::duration<double>& time_span, int iter,
                  double v, size_t count)
 {
-  INFO( name << "\t" << tag <<"\tMPI rank: " << rank << "/" << nprocs << "\tOMP "
+  BL_INFO( name << "\t" << tag <<"\tMPI rank: " << rank << "/" << nprocs << "\tOMP "
             << nthreads << " threads\ttook " << std::fixed
             << std::setprecision(6) << time_span.count() / iter
             << "s,\tresult = " << v << " count = " << count );
@@ -852,13 +852,13 @@ int main(int argc, char* argv[])
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   if (rank == 0)
-  INFO( "USE_MPI is set" );
+  BL_INFO( "USE_MPI is set" );
 #endif
 
   int nthreads = 1;
 #ifdef USE_OPENMP
   if (rank == 0)
-  INFO( "USE_OPENMP is set" );
+  BL_INFO( "USE_OPENMP is set" );
   omp_set_nested(1);
   omp_set_dynamic(0);
   nthreads = omp_get_max_threads();
@@ -1051,7 +1051,7 @@ int main(int argc, char* argv[])
 
       op2.reset();
       double v0 = Sequential<OpType, double>(op2, 1, count);
-      //INFOF("%d processing range %lu %lu. result = %f\n", omp_get_thread_num(), op2.getRange().start, op2.getRange().end, v0);
+      //BL_INFOF("%d processing range %lu %lu. result = %f\n", omp_get_thread_num(), op2.getRange().start, op2.getRange().end, v0);
 
       v += v0;
     }

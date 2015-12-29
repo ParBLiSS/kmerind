@@ -32,7 +32,7 @@
  */
 
 
-#include "farmhash.cc"
+#include "farmhash/src/farmhash.cc"
 #include <vector>
 #include <unordered_map>
 #include <algorithm>  // sort, equal_range,

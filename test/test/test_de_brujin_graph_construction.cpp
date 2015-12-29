@@ -91,7 +91,7 @@ void testDeBruijnGraph(const mxx::comm& comm, const std::string & filename, cons
 	TIMER_INIT(test);
 
 	if (comm.rank() == 0)
-		INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+		BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
 	TIMER_START(test);
 	idx.template build<SeqParser>(filename, comm);
@@ -175,13 +175,13 @@ int main(int argc, char** argv) {
 		char hostname[256];
 		memset(hostname, 0, 256);
 		gethostname(hostname, 256);
-		//INFOF("Rank %d hostname [%s]", rank, hostname);
+		//BL_INFOF("Rank %d hostname [%s]", rank, hostname);
 	}
 	MPI_Comm_size(comm, &size);
 	MPI_Barrier(comm);
 
 	if (rank == 0)
-		INFOF("USE_MPI is set");
+		BL_INFOF("USE_MPI is set");
 #else
 	static_assert(false, "MPI used although compilation is not set to use MPI");
 #endif
@@ -210,7 +210,7 @@ int main(int argc, char** argv) {
 	//////////////  clean up MPI.
 	MPI_Finalize();
 
-	//INFOF("M Rank %d called MPI_Finalize", rank);
+	//BL_INFOF("M Rank %d called MPI_Finalize", rank);
 
 	return 0;
 }

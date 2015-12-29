@@ -103,10 +103,10 @@ TEST_P(FASTQIteratorTest, read)
         same &= local_same;
 
         if (!local_same) {
-        	DEBUGF("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.pos_in_file, seq.seq_begin_offset, seq.local_offset, seq.length);
-          DEBUGF("i %lu id: pos %lu, id %lu, file %d\n", i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
+        	BL_DEBUGF("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.pos_in_file, seq.seq_begin_offset, seq.local_offset, seq.length);
+          BL_DEBUGF("i %lu id: pos %lu, id %lu, file %d\n", i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
 
-          DEBUGF("i %lu pos %lu gold: [%s]\npos %lu test: [%s]\n", i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
+          BL_DEBUGF("i %lu pos %lu gold: [%s]\npos %lu test: [%s]\n", i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
         }
       }
 

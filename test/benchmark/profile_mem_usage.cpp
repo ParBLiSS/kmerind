@@ -49,13 +49,13 @@ void checkMemUsed(long long &phyMemUsed, long long &swapUsed, bool print) {
   phyMemUsed = (memInfo.totalram - memInfo.freeram) * memInfo.mem_unit;
   swapUsed = (memInfo.totalswap - memInfo.freeswap) * memInfo.mem_unit;
   if (print)
-    INFOF("physical mem used %lld, swap used %lld", phyMemUsed, swapUsed);
+    BL_INFOF("physical mem used %lld, swap used %lld", phyMemUsed, swapUsed);
 }
 
 void memUsedvsBaseline(const long long &phyMemUsed, const long long &swapUsed, long long &phyMemUsed2, long long &swapUsed2) {
   checkMemUsed(phyMemUsed2, swapUsed2, false);
 
-  INFOF("physical mem used new %lld, swap used new %lld", phyMemUsed2 - phyMemUsed, swapUsed2 - swapUsed);
+  BL_INFOF("physical mem used new %lld, swap used new %lld", phyMemUsed2 - phyMemUsed, swapUsed2 - swapUsed);
 }
 
 
@@ -69,12 +69,12 @@ int main(int argc, char** argv) {
 
   int size = 1000000;
 
-  INFOF("");
+  BL_INFOF("");
   checkMemUsed(phyMemUsed, swapUsed, true);
   {
-    INFOF("KmerIndexElement copy.  element size %lu", sizeof(KmerIndexType1));
+    BL_INFOF("KmerIndexElement copy.  element size %lu", sizeof(KmerIndexType1));
     std::vector<KmerIndexType1 > test;
-    INFOF("\tcreated vector");
+    BL_INFOF("\tcreated vector");
 
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
@@ -84,25 +84,25 @@ int main(int argc, char** argv) {
       kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
       test.push_back(kmer);
     }
-    INFOF("\tpopulated vector %lu", test.size());
+    BL_INFOF("\tpopulated vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
 
     test.clear();
-    INFOF("\tcleared vector %lu", test.size());
+    BL_INFOF("\tcleared vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
   }
-  INFOF("\tdeallocated vector");
+  BL_INFOF("\tdeallocated vector");
   memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
   sleep(2);
 
-  INFOF("");
+  BL_INFOF("");
   checkMemUsed(phyMemUsed, swapUsed, true);
   {
-    INFOF("KmerIndexElement with move.  element size %lu", sizeof(KmerIndexType1));
+    BL_INFOF("KmerIndexElement with move.  element size %lu", sizeof(KmerIndexType1));
     std::vector<KmerIndexType1 > test;
-    INFOF("\tcreated vector");
+    BL_INFOF("\tcreated vector");
 
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
@@ -112,26 +112,26 @@ int main(int argc, char** argv) {
       kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
       test.push_back(std::move(kmer));
     }
-    INFOF("\tpopulated vector %lu", test.size());
+    BL_INFOF("\tpopulated vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
 
     test.clear();
-    INFOF("\tcleared vector %lu", test.size());
+    BL_INFOF("\tcleared vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
   }
-  INFOF("\tdeallocated vector");
+  BL_INFOF("\tdeallocated vector");
   memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
   sleep(2);
 
 
-  INFOF("");
+  BL_INFOF("");
   checkMemUsed(phyMemUsed, swapUsed, true);
   {
-    INFOF("Shared KmerIndexElement with move.  element size %lu", sizeof(KmerIndexType1));
+    BL_INFOF("Shared KmerIndexElement with move.  element size %lu", sizeof(KmerIndexType1));
     std::vector<KmerIndexType1 > test;
-    INFOF("\tcreated vector");
+    BL_INFOF("\tcreated vector");
 
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
@@ -141,16 +141,16 @@ int main(int argc, char** argv) {
       kmer.nextFromChar(rand() % (std::numeric_limits<uint8_t>::max() + 1));
       test.push_back(std::move(kmer));
     }
-    INFOF("\tpopulated vector %lu", test.size());
+    BL_INFOF("\tpopulated vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
 
     test.clear();
-    INFOF("\tcleared vector %lu", test.size());
+    BL_INFOF("\tcleared vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
   }
-  INFOF("\tdeallocated vector");
+  BL_INFOF("\tdeallocated vector");
   memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
   sleep(2);
 
@@ -158,12 +158,12 @@ int main(int argc, char** argv) {
 
 
 
-  INFOF("");
+  BL_INFOF("");
   checkMemUsed(phyMemUsed, swapUsed, true);
   {
-    INFOF("KmerIndexElementWithId.  element size %lu", sizeof(KmerIndexType2));
+    BL_INFOF("KmerIndexElementWithId.  element size %lu", sizeof(KmerIndexType2));
     std::vector<KmerIndexType2 > test;
-    INFOF("\tcreated vector");
+    BL_INFOF("\tcreated vector");
 
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
@@ -175,26 +175,26 @@ int main(int argc, char** argv) {
 
       test.push_back(std::move(kmer));
     }
-    INFOF("\tpopulated vector %lu", test.size());
+    BL_INFOF("\tpopulated vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
 
     test.clear();
-    INFOF("\tcleared vector %lu", test.size());
+    BL_INFOF("\tcleared vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
   }
-  INFOF("\tdeallocated vector");
+  BL_INFOF("\tdeallocated vector");
   memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
   sleep(2);
 
 
-  INFOF("");
+  BL_INFOF("");
   checkMemUsed(phyMemUsed, swapUsed, true);
   {
-    INFOF("KmerIndexElementWithIdAndQuality.  element size %lu", sizeof(KmerIndexType3));
+    BL_INFOF("KmerIndexElementWithIdAndQuality.  element size %lu", sizeof(KmerIndexType3));
     std::vector<KmerIndexType3 > test;
-    INFOF("\tcreated vector");
+    BL_INFOF("\tcreated vector");
 
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
@@ -207,25 +207,25 @@ int main(int argc, char** argv) {
 
       test.push_back(std::move(kmer));
     }
-    INFOF("\tpopulated vector %lu", test.size());
+    BL_INFOF("\tpopulated vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
 
     test.clear();
-    INFOF("\tcleared vector %lu", test.size());
+    BL_INFOF("\tcleared vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
   }
-  INFOF("\tdeallocated vector");
+  BL_INFOF("\tdeallocated vector");
   memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
   sleep(2);
 
 
   checkMemUsed(phyMemUsed, swapUsed, true);
   {
-    INFOF("KmerIndexElementWithIdAndQuality.  element size %lu", sizeof(KmerIndexType4));
+    BL_INFOF("KmerIndexElementWithIdAndQuality.  element size %lu", sizeof(KmerIndexType4));
     std::vector<KmerIndexType4 > test;
-    INFOF("\tcreated vector");
+    BL_INFOF("\tcreated vector");
 
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
@@ -238,16 +238,16 @@ int main(int argc, char** argv) {
 
       test.push_back(std::move(kmer));
     }
-    INFOF("\tpopulated vector %lu", test.size());
+    BL_INFOF("\tpopulated vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
 
     test.clear();
-    INFOF("\tcleared vector %lu", test.size());
+    BL_INFOF("\tcleared vector %lu", test.size());
     memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
 
   }
-  INFOF("\tdeallocated vector");
+  BL_INFOF("\tdeallocated vector");
   memUsedvsBaseline(phyMemUsed, swapUsed, phyMemUsed2, swapUsed2);
   sleep(2);
 

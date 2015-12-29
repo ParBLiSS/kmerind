@@ -2,18 +2,18 @@
 
 int foo(int x, int y)
 {
-  INFO("function foo() was called");
-  DEBUG("x is " << x);
-  DEBUG("y is " << y);
+  BL_INFO("function foo() was called");
+  BL_DEBUG("x is " << x);
+  BL_DEBUG("y is " << y);
   if (x == 0)
   {
-    ERROR("x is null");
+    BL_ERROR("x is null");
   }
 
   int z = x * y;
-  DEBUG("z is " << z);
+  BL_DEBUG("z is " << z);
 
-  INFO("function foo() is done");
+  BL_INFO("function foo() is done");
   return z;
 }
 
@@ -22,14 +22,14 @@ int main(int argc, char *argv[])
   // init the logging
   LOG_INIT();
 
-  INFO("calling foo()");
+  BL_INFO("calling foo()");
   int blah = foo(12, 13);
-  DEBUG("blah is " << blah);
+  BL_DEBUG("blah is " << blah);
   USED_BY_LOGGER_ONLY(blah);
 
-  INFO("calling foo() with wrong arguments");
+  BL_INFO("calling foo() with wrong arguments");
   int bar = foo(0, 0);
-  DEBUG("bar is " << bar);
+  BL_DEBUG("bar is " << bar);
   USED_BY_LOGGER_ONLY(bar);
 
   return 0;

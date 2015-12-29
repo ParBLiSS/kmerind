@@ -518,7 +518,7 @@ namespace dsc  // distributed std container
               // within start-end, values are unique, so don't need to set unique to true.
               send_counts[i] = Intersect<false>::process(overlap.first, overlap.second, start, end, emplace_iter, local_find, true, pred);
 
-//              if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+//              if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
               start = end;
             }
@@ -680,7 +680,7 @@ namespace dsc  // distributed std container
               // work on query from process i.
               auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), start, end, true);
               found = Intersect<false>::process(overlap.first, overlap.second, start, end, local_emplace_iter, local_find, true, pred);
-             // if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+             // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
               total += found;
               //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
 
@@ -931,7 +931,7 @@ namespace dsc  // distributed std container
             // within start-end, values are unique, so don't need to set unique to true.
             Intersect<false>::process(overlap.first, overlap.second, start, end, emplace_iter, count_element, true, pred);
 
-            if (this->comm.rank() == 0) DEBUGF("R %d added %lu results for %lu queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+            if (this->comm.rank() == 0) BL_DEBUGF("R %d added %lu results for %lu queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
 
             start = end;
@@ -1627,7 +1627,7 @@ namespace dsc  // distributed std container
 
           if (this->comm.rank() == 0)
             for (size_t i = 0; i < this->key_to_rank.map.size(); ++i) {
-              DEBUGF("R %d unique key_to_rank.map[%lu] = (%s->%d)", this->comm.rank(), i, bliss::utils::KmerUtils::toASCIIString(this->key_to_rank.map[i].first).c_str() , this->key_to_rank.map[i].second );
+              BL_DEBUGF("R %d unique key_to_rank.map[%lu] = (%s->%d)", this->comm.rank(), i, bliss::utils::KmerUtils::toASCIIString(this->key_to_rank.map[i].first).c_str() , this->key_to_rank.map[i].second );
             }
           assert(this->key_to_rank.map.size() > 0);
 
@@ -1650,7 +1650,7 @@ namespace dsc  // distributed std container
           assert(send_counts.size() == static_cast<size_t>(this->comm_size));
 
           for (size_t i = 0; i < send_counts.size(); ++i) {
-            DEBUGF("R %d send_counts[%lu] = %lu", this->comm.rank(), i, send_counts[i]);
+            BL_DEBUGF("R %d send_counts[%lu] = %lu", this->comm.rank(), i, send_counts[i]);
           }
 
           TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);

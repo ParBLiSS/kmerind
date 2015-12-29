@@ -89,13 +89,13 @@ TYPED_TEST_P(PartitionTest, blockPartition){
         auto div = len / static_cast<SizeType>(p);
         auto rem = len - div * static_cast<SizeType>(p);
 
-        //      INFOF("%ld, %d\n", static_cast<size_t>(len), i);
+        //      BL_INFOF("%ld, %d\n", static_cast<size_t>(len), i);
         size_t block = 0;
 
         // first block
         r = part.getNext(block);
-//        INFOF("here 1 p = %lu/%lu ", block, p);
-//        INFO( "src: " << src << " part: " << r );
+//        BL_INFOF("here 1 p = %lu/%lu ", block, p);
+//        BL_INFO( "src: " << src << " part: " << r );
         EXP_EQ(TypeParam, start, r.start);
 
         e = (rem == 0 ? (div) : (div + 1)) + start;
@@ -106,8 +106,8 @@ TYPED_TEST_P(PartitionTest, blockPartition){
         // middle block
         block = (p-1)/2;
         r = part.getNext(block);
-//        INFOF("here 2 p = %lu/%lu ", block, p);
-//        INFO( "src: " << src << " part: " << r );
+//        BL_INFOF("here 2 p = %lu/%lu ", block, p);
+//        BL_INFO( "src: " << src << " part: " << r );
         e = (rem == 0 ? block * div :
             ( block >= rem ? block * div + rem : block * (div + 1))) + start;
         EXP_EQ(TypeParam, e, r.start);
@@ -120,8 +120,8 @@ TYPED_TEST_P(PartitionTest, blockPartition){
         // last block
         block = p-1;
         r = part.getNext(block);
-//        INFOF("here 3 p = %lu/%lu ", block, p);
-//        INFO( "src: " << src << " part: " << r );
+//        BL_INFOF("here 3 p = %lu/%lu ", block, p);
+//        BL_INFO( "src: " << src << " part: " << r );
         e = (rem == 0 ? block * div :
             ( block >= rem ? block * div + rem : block * (div + 1))) + start;
         EXP_EQ(TypeParam, e, r.start);
@@ -214,17 +214,17 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
   PartitionerType part;
   for (auto start : starts)
   {
-//    INFO( "start: " << start );
+//    BL_INFO( "start: " << start );
 
     for (auto len : lens)
     {
-//      INFO( "len: " << len );
+//      BL_INFO( "len: " << len );
 
 //      src = RangeType(start, (std::numeric_limits<TypeParam>::max() - start >= len) ? start + len : std::numeric_limits<TypeParam>::max());
       src = RangeType(start, static_cast<SizeType>(std::numeric_limits<TypeParam>::max() - start) > len ? start + static_cast<TypeParam>(len) : std::numeric_limits<TypeParam>::max());
       for (auto p : partitionCount)
       {
-//        INFO( "parts: " << p );
+//        BL_INFO( "parts: " << p );
 
 
         //        if (len < i)
@@ -235,14 +235,14 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
 
         SizeType div = 1;
 
-        //      INFOF("%ld, %d\n", static_cast<size_t>(len), i);
+        //      BL_INFOF("%ld, %d\n", static_cast<size_t>(len), i);
         size_t nChunks = static_cast<size_t>(std::ceil(src.size() / div));
 
         // middle block
         size_t block = (p-1)/2;
         r = part.getNext(block);
-//        INFOF("here 1 p = %lu/%lu ", block, p);
-//        INFO( "src: " << src << " part: " << r );
+//        BL_INFOF("here 1 p = %lu/%lu ", block, p);
+//        BL_INFO( "src: " << src << " part: " << r );
         e = std::min(static_cast<ValueType>(src.end),
                      static_cast<ValueType>(std::min(nChunks, block) * div + start));
         EXP_EQ(TypeParam, e, r.start);
@@ -254,12 +254,12 @@ TYPED_TEST_P(PartitionTest, cyclicPartition){
 
         // middle block
         r = part.getNext(block);
-//        INFOF("here 2 p = %lu/%lu ", block, p);
-//        INFO( "src: " << src << " part: " << r );
+//        BL_INFOF("here 2 p = %lu/%lu ", block, p);
+//        BL_INFO( "src: " << src << " part: " << r );
         e = std::min(static_cast<ValueType>(src.end),
                      static_cast<ValueType>(std::min(nChunks, block + p) * div + start));
         EXP_EQ(TypeParam, e, r.start);
-//        INFOF("block %lu, partition %lu, start %lu, len %lu, nchunks %lu, div %lu \n", block, p, start, len, nChunks, div);
+//        BL_INFOF("block %lu, partition %lu, start %lu, len %lu, nchunks %lu, div %lu \n", block, p, start, len, nChunks, div);
         e = std::min(static_cast<ValueType>(src.end),
                      static_cast<ValueType>(std::min(nChunks, block + p + 1) * div + start));
         EXP_EQ(TypeParam, e, r.end);
@@ -369,13 +369,13 @@ TYPED_TEST_P(PartitionTest, demandPartition){
 
         SizeType div = 1;
 
-        //      INFOF("%ld, %d\n", static_cast<size_t>(len), i);
+        //      BL_INFOF("%ld, %d\n", static_cast<size_t>(len), i);
         size_t block = 0;
 
         // first block
         r = part.getNext(block);
-//        INFOF("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d, src start %d end %d", block, p, len, div, start, src.start, src.end);
-//        INFO( "src: " << src << " part: " << r );
+//        BL_INFOF("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d, src start %d end %d", block, p, len, div, start, src.start, src.end);
+//        BL_INFO( "src: " << src << " part: " << r );
         EXP_EQ(TypeParam, start, r.start);
         e = (start >= src.end) ? src.end :
             std::min(static_cast<ValueType>(src.end),
@@ -385,8 +385,8 @@ TYPED_TEST_P(PartitionTest, demandPartition){
         // middle block
         block = (p-1)/2;
         r = part.getNext(block);
-//        INFOF("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d\n", block, p, len, div, start);
-//        INFO( "src: " << src << " part: " << r );
+//        BL_INFOF("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d\n", block, p, len, div, start);
+//        BL_INFO( "src: " << src << " part: " << r );
         EXP_EQ(TypeParam, e, r.start);
         e = (e >= src.end) ? src.end :
             std::min(static_cast<ValueType>(src.end),
@@ -396,8 +396,8 @@ TYPED_TEST_P(PartitionTest, demandPartition){
         // last block
         block = p-1;
         r = part.getNext(block);
-//        INFOF("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d\n", block, p, len, div, start);
-//        INFO( "src: " << src << " part: " << r );
+//        BL_INFOF("here 1 block/p = %lu/%lu, len %lu, div %lu, start %d\n", block, p, len, div, start);
+//        BL_INFO( "src: " << src << " part: " << r );
         EXP_EQ(TypeParam, e, r.start);
         e = (e >= src.end) ? src.end :
             std::min(static_cast<ValueType>(src.end),
@@ -505,7 +505,7 @@ TYPED_TEST_P(PartitionTest, badPartitionId){
 
     for (auto i : partitionIds)
     {
-      //INFOF("%ld, %ld\n", static_cast<int64_t>(start), i);
+      //BL_INFOF("%ld, %ld\n", static_cast<int64_t>(start), i);
       PartitionerType part;
       part.configure(src, 4, 1, 0);
 

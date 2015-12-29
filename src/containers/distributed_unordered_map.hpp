@@ -398,7 +398,7 @@ namespace dsc  // distributed std container
 
             // work on query from process i.
             send_counts[i] = QueryProcessor::process(c, start, end, emplace_iter, find_element, true, pred);
-           // if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+           // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
             start = end;
           }
@@ -543,7 +543,7 @@ namespace dsc  // distributed std container
             local_results.clear();
             // work on query from process i.
             found = QueryProcessor::process(c, start, end, local_emplace_iter, find_element, true, pred);
-           // if (this->comm.rank() == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+           // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
             total += found;
             //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
 
@@ -781,7 +781,7 @@ namespace dsc  // distributed std container
             QueryProcessor::process(c, start, end, emplace_iter, count_element, true, pred);
 
             if (this->comm.rank() == 0)
-            	DEBUGF("R %d added %lu results for %lu queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+            	BL_DEBUGF("R %d added %lu results for %lu queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
             start = end;
           }
