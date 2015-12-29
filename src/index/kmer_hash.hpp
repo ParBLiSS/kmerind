@@ -58,7 +58,7 @@
 
 // and farm hash
 #ifndef FARM_HASH_H_
-#include <farmhash.cc>
+#include <farmhash/src/farmhash.cc>
 #endif
 
 //// Kmer specialization for std::hash
