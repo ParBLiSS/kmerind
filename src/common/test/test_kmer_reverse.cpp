@@ -99,7 +99,7 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq)
   bool local_rev_same = true;
 
   uint8_t* out = reinterpret_cast<uint8_t*>(rev.getData());
-  const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getConstData());
+  const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getData());
 
   for (size_t i = 0; i < this->iterations; ++i) {
     rev_seq = this->helper.reverse_serial(km);

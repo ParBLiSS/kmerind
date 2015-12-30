@@ -141,7 +141,7 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
   km = KmerReverseBenchmark<TypeParam>::kmer;
 
   uint8_t* out = reinterpret_cast<uint8_t*>(tmp.getData());
-  const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getConstData());
+  const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getData());
 
   TIMER_LOOP_START(km);
 
