@@ -14,7 +14,6 @@
 
 #include <unistd.h>  // get hostname
 
-
 #include <functional>
 #include <random>
 #include <algorithm>
@@ -40,40 +39,50 @@
 
 #include "utils/timer.hpp"
 
+template<typename IndexType, typename KmerType = typename IndexType::KmerType,
+		template<typename > class PreCanonicalizer = bliss::kmer::transform::identity>
+std::vector<KmerType> readForQuery(const std::string & filename,
+		MPI_Comm comm) {
 
-template <typename IndexType, typename KmerType = typename IndexType::KmerType, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
-std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
+	::std::vector<KmerType> query;
 
-  ::std::vector<KmerType> query;
+	std::string extension = ::bliss::utils::file::get_file_extension(filename);
+	std::transform(extension.begin(), extension.end(), extension.begin(),
+			::tolower);
+	if (extension.compare("fastq") == 0) {
+		// default to including quality score iterators.
+		IndexType::template read_file<::bliss::io::FASTQParser,
+				::bliss::index::kmer::KmerParser<KmerType>, PreCanonicalizer>(
+				filename, query, comm);
+	} else {
+		throw std::invalid_argument(
+				"input filename extension is not supported.");
+	}
 
-  std::string extension = ::bliss::utils::file::get_file_extension(filename);
-  std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-  if (extension.compare("fastq") == 0) {
-    // default to including quality score iterators.
-    IndexType::template read_file<::bliss::io::FASTQParser, ::bliss::index::kmer::KmerParser<KmerType>, PreCanonicalizer >(filename, query, comm);
-  } else {
-    throw std::invalid_argument("input filename extension is not supported.");
-  }
-
-  return query;
+	return query;
 }
 
+template<typename IndexType, typename KmerType = typename IndexType::KmerType,
+		template<typename > class PreCanonicalizer = bliss::kmer::transform::identity>
+std::vector<KmerType> readForQuery_subcomm(const std::string & filename,
+		MPI_Comm comm) {
 
-template <typename IndexType, typename KmerType = typename IndexType::KmerType, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
-std::vector<KmerType> readForQuery_subcomm(const std::string & filename, MPI_Comm comm) {
+	::std::vector<KmerType> query;
 
-  ::std::vector<KmerType> query;
+	std::string extension = ::bliss::utils::file::get_file_extension(filename);
+	std::transform(extension.begin(), extension.end(), extension.begin(),
+			::tolower);
+	if (extension.compare("fastq") == 0) {
+		// default to including quality score iterators.
+		IndexType::template read_file_mpi_subcomm<::bliss::io::FASTQParser,
+				::bliss::index::kmer::KmerParser<KmerType>, PreCanonicalizer>(
+				filename, query, comm);
+	} else {
+		throw std::invalid_argument(
+				"input filename extension is not supported.");
+	}
 
-  std::string extension = ::bliss::utils::file::get_file_extension(filename);
-  std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-  if (extension.compare("fastq") == 0) {
-    // default to including quality score iterators.
-    IndexType::template read_file_mpi_subcomm<::bliss::io::FASTQParser, ::bliss::index::kmer::KmerParser<KmerType>, PreCanonicalizer >(filename, query, comm);
-  } else {
-    throw std::invalid_argument("input filename extension is not supported.");
-  }
-
-  return query;
+	return query;
 }
 
 //template <typename KmerType>
@@ -153,159 +162,140 @@ std::vector<KmerType> readForQuery_subcomm(const std::string & filename, MPI_Com
 //  return query;
 //}
 
-
-
 template<typename KmerType>
 void sample(std::vector<KmerType> &query, size_t n, unsigned int seed) {
-  std::shuffle(query.begin(), query.begin() + ::std::min(4 * n, query.size()), std::default_random_engine(seed));
-  query.erase(query.begin() + n, query.end());
+	std::shuffle(query.begin(), query.begin() + ::std::min(4 * n, query.size()),
+			std::default_random_engine(seed));
+	query.erase(query.begin() + n, query.end());
 }
 
+template<typename IndexType, template<typename > class SeqParser>
+void testIndex(const mxx::comm& comm, const std::string & filename,
+		std::string test) {
 
+	IndexType idx(comm);
 
+	TIMER_INIT(test);
 
-template <typename IndexType, template <typename> class SeqParser>
-void testIndex(const mxx::comm& comm, const std::string & filename, std::string test ) {
+	if (comm.rank() == 0)
+		printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(),
+				test.c_str());
 
-  IndexType idx(comm);
+	TIMER_START(test);
+	idx.template build<SeqParser>(filename, comm);
+	TIMER_END(test, "build", idx.local_size());
 
-  TIMER_INIT(test);
+	TIMER_START(test);
+	auto query = readForQuery<IndexType>(filename, comm);
+	TIMER_END(test, "read query", query.size());
 
-  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+	// for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
+	TIMER_START(test);
+	unsigned seed = comm.rank() * 23;
+	sample(query, query.size() / 100, seed);
+	TIMER_END(test, "select 1%", query.size());
 
-  TIMER_START(test);
-  idx.template build<SeqParser>(filename, comm);
-  TIMER_END(test, "build", idx.local_size());
+	auto query_orig = query;
 
+	auto query1 = query_orig;
+	query1.resize(1);
 
+	// query 1
+	TIMER_START(test);
+	auto results3 = idx.find(query1);
+	TIMER_END(test, "query 1", results3.size());
 
-  TIMER_START(test);
-  auto query = readForQuery<IndexType>(filename, comm);
-  TIMER_END(test, "read query", query.size());
+	query1 = query_orig;
+	query1.resize(1);
 
+	// query 1
+	TIMER_START(test);
+	auto results4 = idx.count(query1);
+	TIMER_END(test, "count 1", results4.size());
 
-  // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
-  TIMER_START(test);
-  unsigned seed = comm.rank() * 23;
-  sample(query, query.size() / 100, seed);
-  TIMER_END(test, "select 1%", query.size());
+	query = query_orig;
 
-  auto query_orig = query;
+	// process query
+	// query
+	TIMER_START(test);
+	auto results = idx.find(query);
+	TIMER_END(test, "query 1%", results.size());
 
-  auto query1 = query_orig;
-  query1.resize(1);
+	query = query_orig;
 
-  // query 1
-  TIMER_START(test);
-  auto results3 = idx.find(query1);
-  TIMER_END(test, "query 1", results3.size());
+	// count
+	TIMER_START(test);
+	auto results2 = idx.count(query);
+	TIMER_END(test, "count 1%", results2.size());
 
-  query1 = query_orig;
-  query1.resize(1);
-
-  // query 1
-  TIMER_START(test);
-  auto results4 = idx.count(query1);
-  TIMER_END(test, "count 1", results4.size());
-
-
-
-  query = query_orig;
-
-  // process query
-  // query
-  TIMER_START(test);
-  auto results = idx.find(query);
-  TIMER_END(test, "query 1%", results.size());
-
-  query = query_orig;
-
-  // count
-  TIMER_START(test);
-  auto results2 = idx.count(query);
-  TIMER_END(test, "count 1%", results2.size());
-
-
-
-
-  TIMER_REPORT_MPI(test, comm.rank(), comm);
+	TIMER_REPORT_MPI(test, comm.rank(), comm);
 
 }
 
+template<typename IndexType, template<typename > class SeqParser, template<
+		typename > class PreCanonicalizer = bliss::kmer::transform::lex_less>
+void testIndexPrecomputeCanonical(const mxx::comm& comm,
+		const std::string & filename, std::string test) {
 
+	IndexType idx(comm);
 
+	TIMER_INIT(test);
 
-template <typename IndexType, template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::lex_less>
-void testIndexPrecomputeCanonical(const mxx::comm& comm, const std::string & filename, std::string test ) {
+	if (comm.rank() == 0)
+		printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(),
+				test.c_str());
 
+	TIMER_START(test);
+	idx.template build<SeqParser, PreCanonicalizer>(filename, comm);
+	TIMER_END(test, "build", idx.local_size());
 
-  IndexType idx(comm);
+	TIMER_START(test);
+	auto query = readForQuery<IndexType, typename IndexType::KmerType,
+			PreCanonicalizer>(filename, comm);
+	TIMER_END(test, "read query", query.size());
 
-  TIMER_INIT(test);
+	// for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
+	TIMER_START(test);
+	unsigned seed = comm.rank() * 23;
+	sample(query, query.size() / 100, seed);
+	TIMER_END(test, "select 1%", query.size());
 
-  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+	auto query_orig = query;
 
-  TIMER_START(test);
-  idx.template build<SeqParser, PreCanonicalizer>(filename, comm);
-  TIMER_END(test, "build", idx.local_size());
+	auto query1 = query_orig;
+	query1.resize(1);
 
+	// query 1
+	TIMER_START(test);
+	auto results3 = idx.find(query1);
+	TIMER_END(test, "query 1", results3.size());
 
+	query1 = query_orig;
+	query1.resize(1);
 
-  TIMER_START(test);
-  auto query = readForQuery<IndexType, typename IndexType::KmerType, PreCanonicalizer>(filename, comm);
-  TIMER_END(test, "read query", query.size());
+	// query 1
+	TIMER_START(test);
+	auto results4 = idx.count(query1);
+	TIMER_END(test, "count 1", results4.size());
 
+	query = query_orig;
 
-  // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
-  TIMER_START(test);
-  unsigned seed = comm.rank() * 23;
-  sample(query, query.size() / 100, seed);
-  TIMER_END(test, "select 1%", query.size());
+	// process query
+	// query
+	TIMER_START(test);
+	auto results = idx.find(query);
+	TIMER_END(test, "query 1%", results.size());
 
-  auto query_orig = query;
+	query = query_orig;
 
-  auto query1 = query_orig;
-  query1.resize(1);
+	// count
+	TIMER_START(test);
+	auto results2 = idx.count(query);
+	TIMER_END(test, "count 1%", results2.size());
 
-  // query 1
-  TIMER_START(test);
-  auto results3 = idx.find(query1);
-  TIMER_END(test, "query 1", results3.size());
-
-  query1 = query_orig;
-  query1.resize(1);
-
-  // query 1
-  TIMER_START(test);
-  auto results4 = idx.count(query1);
-  TIMER_END(test, "count 1", results4.size());
-
-
-
-  query = query_orig;
-
-  // process query
-  // query
-  TIMER_START(test);
-  auto results = idx.find(query);
-  TIMER_END(test, "query 1%", results.size());
-
-  query = query_orig;
-
-  // count
-  TIMER_START(test);
-  auto results2 = idx.count(query);
-  TIMER_END(test, "count 1%", results2.size());
-
-
-
-
-  TIMER_REPORT_MPI(test, comm.rank(), comm);
+	TIMER_REPORT_MPI(test, comm.rank(), comm);
 
 }
-
-
-
 
 /**
  *
@@ -315,214 +305,229 @@ void testIndexPrecomputeCanonical(const mxx::comm& comm, const std::string & fil
  */
 int main(int argc, char** argv) {
 
-  //////////////// init logging
-  LOG_INIT();
+	//////////////// init logging
+	LOG_INIT();
 
-  //////////////// parse parameters
+	//////////////// parse parameters
 
-  //std::string filename("/home/tpan/src/bliss/test/data/test.medium.fastq");
-  std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
+	//std::string filename("/home/tpan/src/bliss/test/data/test.medium.fastq");
+	std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
 
-  if (argc > 1)
-  {
-    filename.assign(argv[1]);
-  }
+	if (argc > 2) {
+		filename.assign(argv[2]);
+	}
 
-  int which = -1;
-  if (argc > 2)
-	which = atoi(argv[2]);
+	int which = -1;
+	if (argc > 1)
+		which = atoi(argv[1]);
 
-
-  int rank = 0;
+	int rank = 0;
 	int nthreads = 1;
-  //////////////// initialize MPI and openMP
+	//////////////// initialize MPI and openMP
 #ifdef USE_MPI
 
-  if (nthreads > 1) {
+	if (nthreads > 1) {
 
-    int provided;
+		int provided;
 
-    // one thread will be making all MPI calls.
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
+		// one thread will be making all MPI calls.
+		MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
 
-    if (provided < MPI_THREAD_FUNNELED) {
-      ERRORF("The MPI Library Does not have thread support.");
-      MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-  } else {
-    MPI_Init(&argc, &argv);
-  }
+		if (provided < MPI_THREAD_FUNNELED) {
+			ERRORF("The MPI Library Does not have thread support.");
+			MPI_Abort(MPI_COMM_WORLD, 1);
+		}
+	} else {
+		MPI_Init(&argc, &argv);
+	}
 
+	mxx::comm comm = mxx::comm();
 
-  mxx::comm comm = mxx::comm();
+	{
+		char hostname[256];
+		memset(hostname, 0, 256);
+		gethostname(hostname, 256);
+		//INFOF("Rank %d hostname [%s]", rank, hostname);
+	}
+	MPI_Barrier(comm);
 
-  {
-    char hostname[256];
-    memset(hostname, 0, 256);
-    gethostname(hostname, 256);
-    //INFOF("Rank %d hostname [%s]", rank, hostname);
-  }
-  MPI_Barrier(comm);
-
-  if (rank == 0) INFOF("USE_MPI is set");
+	if (rank == 0)
+		INFOF("USE_MPI is set");
 #else
-  static_assert(false, "MPI used although compilation is not set to use MPI");
+	static_assert(false, "MPI used although compilation is not set to use MPI");
 #endif
-  
+
 //  if (which != -1) std::cin.get();
 
+	using Alphabet = bliss::common::DNA;
+	using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
 
-  using Alphabet = bliss::common::DNA;
-  using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
+	using IdType = bliss::common::ShortSequenceKmerId;
+	using QualType = float;
+	using KmerInfoType = std::pair<IdType, QualType>;
 
-  using IdType = bliss::common::ShortSequenceKmerId;
-  using QualType = float;
-  using KmerInfoType = std::pair<IdType, QualType>;
+	if (which == -1 || which == 2) {
+		using MapType = ::dsc::counting_unordered_map<
+		KmerType, uint32_t, int,
+		bliss::kmer::transform::lex_less,
+		bliss::kmer::hash::farm >;
+		testIndex<bliss::index::kmer::CountIndex<MapType>,
+				bliss::io::FASTQParser>(comm, filename,
+				"ST, hash, count index.");
+		comm.barrier();
+	}
 
+	if (which == -1 || which == 4) {
+		using MapType = ::dsc::unordered_multimap<
+		KmerType, IdType, int,
+		bliss::kmer::transform::lex_less,
+		bliss::kmer::hash::farm >;
+		testIndex<bliss::index::kmer::PositionIndex<MapType>,
+				bliss::io::FASTQParser>(comm, filename,
+				"ST, hash, position index.");
+		comm.barrier();
+	}
+	if (which == -1 || which == 7) {
+		using MapType = ::dsc::unordered_multimap<
+		KmerType, KmerInfoType, int,
+		bliss::kmer::transform::lex_less,
+		bliss::kmer::hash::farm >;
+		testIndex<bliss::index::kmer::PositionQualityIndex<MapType>,
+				bliss::io::FASTQParser>(comm, filename,
+				"ST, hash, pos+qual index");
+		comm.barrier();
+	}
 
-  if (which == -1 || which == 2)
-  {
-  using MapType = ::dsc::counting_unordered_map<
-      KmerType, uint32_t, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-    testIndex<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser > (comm, filename, "ST, hash, count index.");
-    comm.barrier();
-}
+	if (which == -1 || which == 1) {
+		using MapType = ::dsc::unordered_multimap_vec<
+		KmerType, IdType, int,
+		bliss::kmer::transform::lex_less,
+		bliss::kmer::hash::farm >;
+		testIndex<bliss::index::kmer::PositionIndex<MapType>,
+				bliss::io::FASTQParser>(comm, filename,
+				"ST, hashvec, position index.");
 
-  if (which == -1 || which == 4)
-  {
-  using MapType = ::dsc::unordered_multimap<
-      KmerType, IdType, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionIndex<MapType>, bliss::io::FASTQParser >(comm, filename, "ST, hash, position index.");
-  comm.barrier();
-}
-  if (which == -1 || which == 7)
-  {
-  using MapType = ::dsc::unordered_multimap<
-      KmerType, KmerInfoType, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType>, bliss::io::FASTQParser >(comm, filename , "ST, hash, pos+qual index");
-  comm.barrier();
-}
+		comm.barrier();
+	}
 
-  if (which == -1 || which == 1)
-  {
-  using MapType = ::dsc::unordered_multimap_vec<
-      KmerType, IdType, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionIndex<MapType>, bliss::io::FASTQParser >(comm, filename, "ST, hashvec, position index.");
+	if (which == -1 || which == 6) {
+		using MapType = ::dsc::unordered_multimap_vec<
+		KmerType, KmerInfoType, int,
+		bliss::kmer::transform::lex_less,
+		bliss::kmer::hash::farm >;
+		testIndex<bliss::index::kmer::PositionQualityIndex<MapType>,
+				bliss::io::FASTQParser>(comm, filename,
+				"ST, hashvec, pos+qual index");
+		comm.barrier();
+	}
 
-  comm.barrier();
-  }
+	if (which == -1 || which == 3) {
+		using MapType = ::dsc::counting_sorted_map<
+		KmerType, uint32_t, int,
+		bliss::kmer::transform::lex_less>;
+		testIndex<bliss::index::kmer::CountIndex<MapType>,
+				bliss::io::FASTQParser>(comm, filename,
+				"ST, sort, count index.");
+		comm.barrier();
+	}
 
-  if (which == -1 || which == 6)
-  {
-  using MapType = ::dsc::unordered_multimap_vec<
-      KmerType, KmerInfoType, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType>, bliss::io::FASTQParser >(comm, filename , "ST, hashvec, pos+qual index");
-  comm.barrier();
-}
+	if (which == -1 || which == 5) {
+		using MapType = ::dsc::sorted_multimap<
+		KmerType, IdType, int,
+		bliss::kmer::transform::lex_less>;
+		testIndex<bliss::index::kmer::PositionIndex<MapType>,
+				bliss::io::FASTQParser>(comm, filename,
+				"ST, sort, position index.");
+		comm.barrier();
+	}
 
+	if (which == -1 || which == 8) {
+		using MapType = ::dsc::sorted_multimap<
+		KmerType, KmerInfoType, int,
+		bliss::kmer::transform::lex_less>;
+		testIndex<bliss::index::kmer::PositionQualityIndex<MapType>,
+				bliss::io::FASTQParser>(comm, filename,
+				"ST, sort, pos+qual index");
+		comm.barrier();
+	}
 
-  if (which == -1 || which == 3)
-  {
-  using MapType = ::dsc::counting_sorted_map<
-      KmerType, uint32_t, int,
-      bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser > (comm, filename, "ST, sort, count index.");
-  comm.barrier();
-}
+	if (which == -1 || which == 9) {
+		using MapType = ::dsc::unordered_multimap_compact_vec<
+		KmerType, IdType, int,
+		bliss::kmer::transform::lex_less,
+		bliss::kmer::hash::farm >;
+		testIndex<bliss::index::kmer::PositionIndex<MapType>,
+				bliss::io::FASTQParser>(comm, filename,
+				"ST, hashvec2, position index.");
 
-    if (which == -1 || which == 5)
-{
-  using MapType = ::dsc::sorted_multimap<
-      KmerType, IdType, int,
-      bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::PositionIndex<MapType>, bliss::io::FASTQParser >(comm, filename, "ST, sort, position index.");
-  comm.barrier();
-}
+		comm.barrier();
+	}
 
-  if (which == -1 || which == 8)
-  {
-  using MapType = ::dsc::sorted_multimap<
-      KmerType, KmerInfoType, int,
-      bliss::kmer::transform::lex_less>;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType>, bliss::io::FASTQParser >(comm, filename , "ST, sort, pos+qual index");
-  comm.barrier();
-}
+	if (which == -1 || which == 10) {
+		using MapType = ::dsc::unordered_multimap_compact_vec<
+		KmerType, KmerInfoType, int,
+		bliss::kmer::transform::lex_less,
+		bliss::kmer::hash::farm >;
+		testIndex<bliss::index::kmer::PositionQualityIndex<MapType>,
+				bliss::io::FASTQParser>(comm, filename,
+				"ST, hashvec2, pos+qual index");
+		comm.barrier();
+	}
 
-  if (which == -1 || which == 9)
-  {
-  using MapType = ::dsc::unordered_multimap_compact_vec<
-      KmerType, IdType, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionIndex<MapType>, bliss::io::FASTQParser >(comm, filename, "ST, hashvec2, position index.");
+	if (which == -1 || which == 11) {
+		using MapType = ::dsc::counting_unordered_map<
+		KmerType, uint32_t, int,
+		bliss::kmer::transform::identity,
+		bliss::kmer::hash::cpp_std >;
+		testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>,
+				bliss::io::FASTQParser, bliss::kmer::transform::lex_less>(comm,
+				filename, "ST, hash, count index precanonical, std hash.");
+		MPI_Barrier(comm);
+	}
 
-  comm.barrier();
-  }
+	if (which == -1 || which == 12) {
+		using MapType = ::dsc::counting_unordered_map<
+		KmerType, uint32_t, int,
+		bliss::kmer::transform::identity,
+		bliss::kmer::hash::identity >;
+		testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>,
+				bliss::io::FASTQParser, bliss::kmer::transform::lex_less>(comm,
+				filename, "ST, hash, count index, precononical, iden hash.");
+		MPI_Barrier(comm);
+	}
 
-  if (which == -1 || which == 10)
-  {
-  using MapType = ::dsc::unordered_multimap_compact_vec<
-      KmerType, KmerInfoType, int,
-      bliss::kmer::transform::lex_less,
-      bliss::kmer::hash::farm >;
-  testIndex<bliss::index::kmer::PositionQualityIndex<MapType>, bliss::io::FASTQParser >(comm, filename , "ST, hashvec2, pos+qual index");
-  comm.barrier();
-}
+	if (which == -1 || which == 13) {
+		using MapType = ::dsc::counting_unordered_map<
+		KmerType, uint32_t, int,
+		bliss::kmer::transform::identity,
+		bliss::kmer::hash::murmur >;
+		testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>,
+				bliss::io::FASTQParser, bliss::kmer::transform::lex_less>(comm,
+				filename, "ST, hash, count index, precononical, murmur hash.");
+		MPI_Barrier(comm);
+	}
 
+	if (which == -1 || which == 15) {
+		using MapType = ::dsc::counting_unordered_map<
+		KmerType, uint32_t, int,
+		bliss::kmer::transform::identity,
+		bliss::kmer::hash::farm >;
+		testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>,
+				bliss::io::FASTQParser, bliss::kmer::transform::lex_less>(comm,
+				filename, "ST, hash, count index precanonical, farm hash.");
+		MPI_Barrier(comm);
+	}
 
-  if (which == -1 || which == 11)
-  {
-  using MapType = ::dsc::counting_unordered_map<
-      KmerType, uint32_t, int,
-      bliss::kmer::transform::identity,
-      bliss::kmer::hash::cpp_std >;
-      testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser, bliss::kmer::transform::lex_less > (comm, filename, "ST, hash, count index precanonical, std hash.");
-      MPI_Barrier(comm);
-}
-
-
-  if (which == -1 || which == 12)
-  {
-  using MapType = ::dsc::counting_unordered_map<
-      KmerType, uint32_t, int,
-      bliss::kmer::transform::identity,
-      bliss::kmer::hash::identity >;
-      testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser, bliss::kmer::transform::lex_less > (comm, filename, "ST, hash, count index, precononical, iden hash.");
-      MPI_Barrier(comm);
-}
-
-  if (which == -1 || which == 13)
-  {
-  using MapType = ::dsc::counting_unordered_map<
-      KmerType, uint32_t, int,
-      bliss::kmer::transform::identity,
-      bliss::kmer::hash::murmur >;
-      testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser, bliss::kmer::transform::lex_less > (comm, filename, "ST, hash, count index, precononical, murmur hash.");
-      MPI_Barrier(comm);
-}
-
-  if (which == -1 || which == 14)
-  {
-  using MapType = ::dsc::counting_unordered_map<
-      KmerType, uint32_t, int,
-      bliss::kmer::transform::xor_rev_comp,
-      bliss::kmer::hash::farm >;
-      testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser, bliss::kmer::transform::identity > (comm, filename, "ST, hash, count index, xor in flight, farm hash.");
-      MPI_Barrier(comm);
-}
-
-
-
+	if (which == -1 || which == 14) {
+		using MapType = ::dsc::counting_unordered_map<
+		KmerType, uint32_t, int,
+		bliss::kmer::transform::xor_rev_comp,
+		bliss::kmer::hash::farm >;
+		testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>,
+				bliss::io::FASTQParser, bliss::kmer::transform::identity>(comm,
+				filename, "ST, hash, count index, xor in flight, farm hash.");
+		MPI_Barrier(comm);
+	}
 
 //
 //
@@ -556,12 +561,10 @@ int main(int argc, char** argv) {
 //    MPI_Barrier(comm);
 //}
 
-  //////////////  clean up MPI.
-  MPI_Finalize();
+	//////////////  clean up MPI.
+	MPI_Finalize();
 
-  //INFOF("M Rank %d called MPI_Finalize", rank);
+	//INFOF("M Rank %d called MPI_Finalize", rank);
 
-
-
-  return 0;
+	return 0;
 }

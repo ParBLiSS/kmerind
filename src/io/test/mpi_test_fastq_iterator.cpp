@@ -411,7 +411,7 @@ TEST_P(FASTQIteratorTest, read_omp_mpi)
 #endif
 #endif
 
-
+// first number is number of kmers (duplicate or not).  second number is file size.
 INSTANTIATE_TEST_CASE_P(Bliss, FASTQIteratorTest, ::testing::Values(
     TestFileInfo(500, 29250, std::string("/test/data/natural.fastq")),
     TestFileInfo(3640, 18761, std::string("/test/data/test.medium.fastq")),
