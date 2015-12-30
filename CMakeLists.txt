@@ -51,7 +51,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
 # dependency on gcc.  not compatible with gcc 5.  should search.
   set(GCC_BINARY "/usr/bin/gcc" CACHE PATH "Path to gcc binary. Requires version 4.9 or earlier.  Intel compiler uses GCC headers.")
   EXECUTE_PROCESS( COMMAND ${GCC_BINARY} --version OUTPUT_VARIABLE gcc_full_version_string )
-  string (REGEX REPLACE "gcc-[0-9\\.]+ [^\\)]*[\\)]*[ ]*([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
+  string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
   
   if (GCC_VERSION VERSION_GREATER 5.0.0 OR GCC_VERSION VERSION_EQUAL 5.0.0)
     message(FATAL_ERROR "${PROJECT_NAME} is using Intel compiler, which requires gcc headers from version 4.9 or earlier.")
@@ -64,7 +64,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
 
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   EXECUTE_PROCESS( COMMAND ${CMAKE_CXX_COMPILER} --version OUTPUT_VARIABLE gcc_full_version_string )
-  string (REGEX REPLACE "g\\+\\+\\-[0-9\\.]+ [^\\)]*[\\)]*[ ]*([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
+  string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
 
   if (NOT (GCC_VERSION VERSION_GREATER 4.8.1 OR GCC_VERSION VERSION_EQUAL 4.8.1))
     message(FATAL_ERROR "${PROJECT_NAME} requires g++ 4.8.1 or greater.  found version ${GCC_VERSION} from ${gcc_full_version_string}")
@@ -887,7 +887,6 @@ include_directories("${PROJECT_SOURCE_DIR}/src")
 # this below gets the smhasher
 include_directories("${EXT_PROJECTS_DIR}")
 include_directories("${EXT_PROJECTS_DIR}/mxx/include")
-include_directories("${EXT_PROJECTS_DIR}/farmhash/src")
 
 
 add_subdirectory(src/utils)

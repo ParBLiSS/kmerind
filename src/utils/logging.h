@@ -9,24 +9,24 @@
  *
  * There are 2 sets of macros APIs:
  * 	the first set uses c++ style stream operator <<
- *      - FATAL(msg)
- *      - ERROR(msg)
- *      - WARNING(msg)
- *      - INFO(msg)
- *      - DEBUG(msg)
- *      - TRACE(msg)
+ *      - BL_FATAL(msg)
+ *      - BL_ERROR(msg)
+ *      - BL_WARNING(msg)
+ *      - BL_INFO(msg)
+ *      - BL_DEBUG(msg)
+ *      - BL_TRACE(msg)
  *     Example how the macro has to be called:
  *          DEBUG("current coordinates: x = " << x << ", y = " << y);
  *
  *     Any type that implements the << operator can be printed to the log in this
  *     way.
  * 	the second set uses c style printf syntax.  These are suffixed with F.
- *      - FATALF(format, ...)
- *      - ERRORF(format, ...)
- *      - WARNINGF(format, ...)
- *      - INFOF(format, ...)
- *      - DEBUGF(format, ...)
- *      - TRACEF(format, ...)
+ *      - BL_FATALF(format, ...)
+ *      - BL_ERRORF(format, ...)
+ *      - BL_WARNINGF(format, ...)
+ *      - BL_INFOF(format, ...)
+ *      - BL_DEBUGF(format, ...)
+ *      - BL_TRACEF(format, ...)
  *     Example how the macro has to be called:
  *          DEBUGF("current coordinates: x = %d, y = %d", x, y);
  *
@@ -41,13 +41,13 @@
  * 			in openmp clauses.
  *
  * Logging can be configured with different verbosity levels named after the
- * minimum required severity level, i.e. FATAL, ERROR, WARNING, etc.
+ * minimum required severity level, i.e. BL_FATAL, BL_ERROR, BL_WARNING, etc.
  * 	when a verbosity level is specified, messages at the corresponding
  * 	severity level, and any level more severe, are printed, while messages
  * 	from less severe levels are discards.
  * e.g.
- * 		verbosity of INFO included FATAL, ERROR, WARNING, and INFO,
- * 			but not DEBUG or TRACE.
+ * 		verbosity of INFO included BL_FATAL, BL_ERROR, BL_WARNING, and BL_INFO,
+ * 			but not BL_DEBUG or BL_TRACE.
  *
  * Implementation of this selection is via empty preprocessor macros.
  *
@@ -116,56 +116,56 @@
 
 /// FATAL severity logging functions
 #if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_FATAL
-#define FATAL(msg)       PRINT_FATAL(msg)
-#define FATALF(msg, ...) PRINT_FATALF(msg, ##__VA_ARGS__)
+#define BL_FATAL(msg)       PRINT_FATAL(msg)
+#define BL_FATALF(msg, ...) PRINT_FATALF(msg, ##__VA_ARGS__)
 #else
-#define FATAL(msg)       NOPRINT_FATAL(msg)
-#define FATALF(msg, ...) NOPRINT_FATALF(msg, ##__VA_ARGS__)
+#define BL_FATAL(msg)       NOPRINT_FATAL(msg)
+#define BL_FATALF(msg, ...) NOPRINT_FATALF(msg, ##__VA_ARGS__)
 #endif
 
 /// ERROR severity logging functions
 #if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_ERROR
-#define ERROR(msg)       PRINT_ERROR(msg)
-#define ERRORF(msg, ...) PRINT_ERRORF(msg, ##__VA_ARGS__)
+#define BL_ERROR(msg)       PRINT_ERROR(msg)
+#define BL_ERRORF(msg, ...) PRINT_ERRORF(msg, ##__VA_ARGS__)
 #else
-#define ERROR(msg)       NOPRINT_ERROR(msg)
-#define ERRORF(msg, ...) NOPRINT_ERRORF(msg, ##__VA_ARGS__)
+#define BL_ERROR(msg)       NOPRINT_ERROR(msg)
+#define BL_ERRORF(msg, ...) NOPRINT_ERRORF(msg, ##__VA_ARGS__)
 #endif
 
 /// WARNING severity logging functions
 #if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_WARNING
-#define WARNING(msg)       PRINT_WARNING(msg)
-#define WARNINGF(msg, ...) PRINT_WARNINGF(msg, ##__VA_ARGS__)
+#define BL_WARNING(msg)       PRINT_WARNING(msg)
+#define BL_WARNINGF(msg, ...) PRINT_WARNINGF(msg, ##__VA_ARGS__)
 #else
-#define WARNING(msg)       NOPRINT_WARNING(msg)
-#define WARNINGF(msg, ...) NOPRINT_WARNINGF(msg, ##__VA_ARGS__)
+#define BL_WARNING(msg)       NOPRINT_WARNING(msg)
+#define BL_WARNINGF(msg, ...) NOPRINT_WARNINGF(msg, ##__VA_ARGS__)
 #endif
 
 /// INFO severity logging functions
 #if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_INFO
-#define INFO(msg)       PRINT_INFO(msg)
-#define INFOF(msg, ...) PRINT_INFOF(msg, ##__VA_ARGS__)
+#define BL_INFO(msg)       PRINT_INFO(msg)
+#define BL_INFOF(msg, ...) PRINT_INFOF(msg, ##__VA_ARGS__)
 #else
-#define INFO(msg)       NOPRINT_INFO(msg)
-#define INFOF(msg, ...) NOPRINT_INFOF(msg, ##__VA_ARGS__)
+#define BL_INFO(msg)       NOPRINT_INFO(msg)
+#define BL_INFOF(msg, ...) NOPRINT_INFOF(msg, ##__VA_ARGS__)
 #endif
 
 /// DEBUG severity logging functions
 #if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_DEBUG
-#define DEBUG(msg)       PRINT_DEBUG(msg)
-#define DEBUGF(msg, ...) PRINT_DEBUGF(msg, ##__VA_ARGS__)
+#define BL_DEBUG(msg)       PRINT_DEBUG(msg)
+#define BL_DEBUGF(msg, ...) PRINT_DEBUGF(msg, ##__VA_ARGS__)
 #else
-#define DEBUG(msg)       NOPRINT_DEBUG(msg)
-#define DEBUGF(msg, ...) NOPRINT_DEBUGF(msg, ##__VA_ARGS__)
+#define BL_DEBUG(msg)       NOPRINT_DEBUG(msg)
+#define BL_DEBUGF(msg, ...) NOPRINT_DEBUGF(msg, ##__VA_ARGS__)
 #endif
 
 /// TRACE severity logging functions
 #if LOGGER_VERBOSITY >= BLISS_LOGGER_VERBOSITY_TRACE
-#define TRACE(msg)       PRINT_TRACE(msg)
-#define TRACEF(msg, ...) PRINT_TRACEF(msg, ##__VA_ARGS__)
+#define BL_TRACE(msg)       PRINT_TRACE(msg)
+#define BL_TRACEF(msg, ...) PRINT_TRACEF(msg, ##__VA_ARGS__)
 #else
-#define TRACE(msg)       NOPRINT_TRACE(msg)
-#define TRACEF(msg, ...) NOPRINT_TRACEF(msg, ##__VA_ARGS__)
+#define BL_TRACE(msg)       NOPRINT_TRACE(msg)
+#define BL_TRACEF(msg, ...) NOPRINT_TRACEF(msg, ##__VA_ARGS__)
 #endif
 
 

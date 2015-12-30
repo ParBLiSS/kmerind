@@ -180,7 +180,7 @@ namespace bliss {
                 }
                 break;
               default:
-                ERRORF("ERROR:  length of array should be > 0 and <= 8.  For longer, break it up or use the vector version of bitgroup_ops.");
+                BL_ERRORF("ERROR:  length of array should be > 0 and <= 8.  For longer, break it up or use the vector version of bitgroup_ops.");
                 break;
             }
 
@@ -298,7 +298,7 @@ namespace bliss {
                 *out = this->reverse(*in);
                 break;
               default:
-                ERRORF("ERROR:  length of array should be > 0 and <= 8.  For longer, break it up or use the vector version of bitgroup_ops.");
+                BL_ERRORF("ERROR:  length of array should be > 0 and <= 8.  For longer, break it up or use the vector version of bitgroup_ops.");
                 break;
 
             }
@@ -462,7 +462,7 @@ namespace bliss {
                 }
                 break;
               default:
-                ERRORF("ERROR:  length of array should be > 0 and <= 8.  For longer, break it up or use the vector version of bitgroup_ops.");
+                BL_ERRORF("ERROR:  length of array should be > 0 and <= 8.  For longer, break it up or use the vector version of bitgroup_ops.");
                 break;
             }
 
@@ -1580,7 +1580,7 @@ namespace bliss {
           throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE require bit_offset to be 0.");
 
         if ((len % ((BIT_GROUP_SIZE + 7) / 8)) > 0) {
-          ERROR("len: " << len << "BITGROUP_SIZE: " << BIT_GROUP_SIZE);
+          BL_ERROR("len: " << len << "BITGROUP_SIZE: " << BIT_GROUP_SIZE);
           throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
         }
         memset(out, 0, len);

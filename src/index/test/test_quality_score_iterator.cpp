@@ -86,7 +86,7 @@ typename std::enable_if<std::is_same<T, double>::value, bool>::type compare_vect
     return true;   // if same object
   }
   if (first.size() != second.size()) {
-    ERROR( "size not the same" );
+    BL_ERROR( "size not the same" );
     return false;  // if size differ
   }
 
@@ -94,7 +94,7 @@ typename std::enable_if<std::is_same<T, double>::value, bool>::type compare_vect
     return fabs(x - y) < 1.0e-14; }
   )) return true;
   else {
-    ERROR( "Vectors not the same" );
+    BL_ERROR( "Vectors not the same" );
     for (size_t i = 0; i < first.size(); ++i) {
       std::cout<< (first[i] - second[i]) << ",";
     }
@@ -109,7 +109,7 @@ typename std::enable_if<std::is_same<T, float>::value, bool>::type compare_vecto
     return true;   // if same object
   }
   if (first.size() != second.size()) {
-    ERROR( "size not the same" );
+    BL_ERROR( "size not the same" );
     return false;  // if size differ
   }
 
@@ -117,7 +117,7 @@ typename std::enable_if<std::is_same<T, float>::value, bool>::type compare_vecto
     return fabs(x - y) < 1.0e-6; }
   )) return true;
   else {
-    ERROR( "Vectors not the same" );
+    BL_ERROR( "Vectors not the same" );
     for (size_t i = 0; i < first.size(); ++i) {
       std::cout << (first[i] - second[i]) << ",";
     }
@@ -134,7 +134,7 @@ typename std::enable_if<!std::is_floating_point<T>::value, bool>::type compare_v
   if (std::equal(first.cbegin(), first.cend(), second.cbegin())) return true;
   else {
 
-    ERROR( "Vectors not the same" );
+    BL_ERROR( "Vectors not the same" );
     for (int i = 0; i < first.size(); ++i) {
       std::cout << (first[i] - second[i] ) << ",";
     }
@@ -171,7 +171,7 @@ void codec_decode(const std::vector<unsigned char> & data, // quality score valu
 
   CODEC decoder;
 
-//  INFO( "decoder LUT SIZE: " << (int)CODEC::size );
+//  BL_INFO( "decoder LUT SIZE: " << (int)CODEC::size );
 //  for (int i = 0; i < CODEC::size; ++i) {
 //    std::cout << CODEC::lut[i] << ", ";
 //  }
@@ -293,12 +293,12 @@ void testQualityIterator(const std::string & strdata) {
   bool same = compare_vectors<OT>(codecDecoded, goldDecoded);
 
   if (!same) {
-    ERROR( "codec decode: result not same" << std::endl );
+    BL_ERROR( "codec decode: result not same" << std::endl );
 
-    ERROR( "GOLD decoded: size: " << goldDecoded.size());
+    BL_ERROR( "GOLD decoded: size: " << goldDecoded.size());
     std::copy(goldDecoded.begin() , goldDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
     std::cout << std::endl;
-    ERROR( "codec decoded: size: " << codecDecoded.size());
+    BL_ERROR( "codec decoded: size: " << codecDecoded.size());
     std::copy(codecDecoded.begin() , codecDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
     std::cout << std::endl;
   }
@@ -311,12 +311,12 @@ void testQualityIterator(const std::string & strdata) {
   same = compare_vectors<OT>(iterDecoded, goldDecoded);
 
   if (!same) {
-    ERROR( "iter decode: result not same" << std::endl );
+    BL_ERROR( "iter decode: result not same" << std::endl );
 
-    ERROR( "GOLD decoded: size: " << goldDecoded.size() );
+    BL_ERROR( "GOLD decoded: size: " << goldDecoded.size() );
     std::copy(goldDecoded.begin() , goldDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
     std::cout << std::endl;
-    ERROR( "iter decoded: size: " << iterDecoded.size());
+    BL_ERROR( "iter decoded: size: " << iterDecoded.size());
     std::copy(iterDecoded.begin() , iterDecoded.end(), std::ostream_iterator<OT>(std::cout, ","));
     std::cout << std::endl;
   }

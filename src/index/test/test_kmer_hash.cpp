@@ -81,7 +81,7 @@ class KmerHashTest : public ::testing::Test {
       same = (hashes.size() == this->unique_kmers.size());
       //printf(" hash size: %lu, unique_kmers %lu, maxUnique %f, iterations %lu\n", hashes.size(), this->unique_kmers.size(), max_uniq_kmers, this->iterations);
       if (!same)
-    	  DEBUGF("ERROR: hash %s size %lu is not same as unique kmers: %lu.  input size %lu", name.c_str(), hashes.size(), this->unique_kmers.size(), this->kmers.size());
+    	  BL_DEBUGF("ERROR: hash %s size %lu is not same as unique kmers: %lu.  input size %lu", name.c_str(), hashes.size(), this->unique_kmers.size(), this->kmers.size());
 
       EXPECT_TRUE(same);
 

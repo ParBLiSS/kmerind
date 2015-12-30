@@ -161,7 +161,7 @@ namespace bliss
           // now populate sequences
 
           if (!::std::is_same<typename std::iterator_traits<Iterator>::iterator_category, std::random_access_iterator_tag>::value)
-            WARNING("WARNING: countSequenceStarts input iterator is not random access iterator.  lower.");
+            BL_WARNING("WARNING: countSequenceStarts input iterator is not random access iterator.  lower.");
 
           using TT = typename std::iterator_traits<Iterator>::value_type;
 
@@ -186,7 +186,7 @@ namespace bliss
           // if first char of proc i is ">", and rank is 0, can assume this is a starting point.  else, if prev char is "\n", then this is a start.
 
 
-          DEBUGF("Rank %d search range [%lu, %lu)\n", comm.rank(), r.start, r.end);
+          BL_DEBUGF("Rank %d search range [%lu, %lu)\n", comm.rank(), r.start, r.end);
 
 
           // ===== get the previous character from the next smaller, non-empty rank.
@@ -265,7 +265,7 @@ namespace bliss
             //=====DONE===== KEEP JUST THE FIRST POSITION OF CONSECUTIVE HEADER OR SEQUENCE LINES
 
 //            for (auto x : line_starts)
-//              DEBUGF("R %d line starts %lu, new record? %d\n", myRank, x.first, x.second);
+//              BL_DEBUGF("R %d line starts %lu, new record? %d\n", myRank, x.first, x.second);
 
 
             //============== CONVERT FROM LINE START POSITION TO SEQUENCE OBJECTS
@@ -344,7 +344,7 @@ namespace bliss
 
 
 //            for (auto x : sequences)
-//              DEBUGF("R %d before spreading [%lu, %lu, %lu), id %lu\n", myRank, std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
+//              BL_DEBUGF("R %d before spreading [%lu, %lu, %lu), id %lu\n", myRank, std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
 
 
             using SL = SequenceOffsetsType;
@@ -389,7 +389,7 @@ namespace bliss
 
 
 //            for (auto x : sequences)
-//              DEBUGF("R %d header range [%lu, %lu, %lu), id %lu\n", myRank, std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
+//              BL_DEBUGF("R %d header range [%lu, %lu, %lu), id %lu\n", myRank, std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
         }
 #endif
 
@@ -413,7 +413,7 @@ namespace bliss
           // now populate sequences
 
           if (!::std::is_same<typename std::iterator_traits<Iterator>::iterator_category, std::random_access_iterator_tag>::value)
-            WARNING("WARNING: countSequenceStarts input iterator is not random access iterator.  lower.");
+            BL_WARNING("WARNING: countSequenceStarts input iterator is not random access iterator.  lower.");
 
           using TT = typename std::iterator_traits<Iterator>::value_type;
 
@@ -510,7 +510,7 @@ namespace bliss
 
 
 //            for (auto x : sequences)
-//              DEBUGF("R 0 header range [%lu, %lu, %lu), id %lu\n", std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
+//              BL_DEBUGF("R 0 header range [%lu, %lu, %lu), id %lu\n", std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
 
 
         }
@@ -530,7 +530,7 @@ namespace bliss
 
           // end.  return.
           if (iter == end) {
-        	  WARNINGF("FASTA LOADER searching increment iter == end\n");
+        	  BL_WARNINGF("FASTA LOADER searching increment iter == end\n");
               output = SequenceType(SequenceIdType(std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()),
   	  	  	  	    0, 0, 0,
   	  	  	  	    end, end);
@@ -548,7 +548,7 @@ namespace bliss
           size_t seq_offset = std::distance(sequences.begin(), seqveciter);
 
           if (seqveciter == sequences.end()) {
-        	  WARNINGF("FASTA LOADER searching increment seqveciter == sequences.end()\n");
+        	  BL_WARNINGF("FASTA LOADER searching increment seqveciter == sequences.end()\n");
             // did not find a matching one.
             offset += std::distance(iter, end);
             iter = end;
@@ -563,7 +563,7 @@ namespace bliss
 
           // the offset tuple from sequences, position 1 and 2 mark the begin and end of the dna sequence
 //          if (std::get<1>(seq) > std::get<2>(seq)) {
-//            DEBUGF("seq: offset %lu start %lu seq %lu end %lu, id %lu\n", offset, std::get<0>(seq), std::get<1>(seq), std::get<2>(seq), std::get<3>(seq));
+//            BL_DEBUGF("seq: offset %lu start %lu seq %lu end %lu, id %lu\n", offset, std::get<0>(seq), std::get<1>(seq), std::get<2>(seq), std::get<3>(seq));
 //          }
           RangeType found(std::get<1>(seq), std::get<2>(seq));
 
@@ -571,7 +571,7 @@ namespace bliss
           RangeType valid = RangeType::intersect(input, found);
 
           if (valid.size() == 0) {
-        	  DEBUGF("FASTA LOADER search increment valid.size() == 0.  seq: [%lu, %lu, %lu).  block range [%lu, %lu)\n",
+        	  BL_DEBUGF("FASTA LOADER search increment valid.size() == 0.  seq: [%lu, %lu, %lu).  block range [%lu, %lu)\n",
         			  std::get<0>(seq), std::get<1>(seq), std::get<2>(seq),
 					  input.start, input.end);
             // no valid.
@@ -624,7 +624,7 @@ namespace bliss
 
           // end.  return.
           if (iter == end) {
-        	  WARNINGF("FASTA LOADER iter == end\n");
+        	  BL_WARNINGF("FASTA LOADER iter == end\n");
               output = SequenceType(SequenceIdType(std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()),
   	  	  	  	    0, 0, 0,
 					end, end);
@@ -644,7 +644,7 @@ namespace bliss
           // no more.  return.
           if (seq_offset >= sequences.size()) {
             if (offset > std::get<2>(sequences.back()))
-              WARNINGF("FASTA LOADER did not find sequence for offset %lu.  last one ended at %lu\n", offset, std::get<2>(sequences.back()));
+              BL_WARNINGF("FASTA LOADER did not find sequence for offset %lu.  last one ended at %lu\n", offset, std::get<2>(sequences.back()));
             offset += input_dist;
             iter = end;
             output = SequenceType(SequenceIdType(std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()),
@@ -660,7 +660,7 @@ namespace bliss
           RangeType input(offset, offset + input_dist);
 
 //          if (std::get<1>(seq) > std::get<2>(seq)) {
-//            DEBUGF("seq: offset %lu start %lu seq %lu end %lu, id %lu\n", offset, std::get<0>(seq), std::get<1>(seq), std::get<2>(seq), std::get<3>(seq));
+//            BL_DEBUGF("seq: offset %lu start %lu seq %lu end %lu, id %lu\n", offset, std::get<0>(seq), std::get<1>(seq), std::get<2>(seq), std::get<3>(seq));
 //          }
           RangeType found(std::get<1>(seq), std::get<2>(seq));
 
@@ -669,7 +669,7 @@ namespace bliss
           // or potentially completely just header.
           if (valid.size() == 0) {
             // no valid.
-        	  DEBUGF("FASTA LOADER valid.size() == 0.  seq: [%lu, %lu, %lu).  block range [%lu, %lu)\n",
+        	  BL_DEBUGF("FASTA LOADER valid.size() == 0.  seq: [%lu, %lu, %lu).  block range [%lu, %lu)\n",
         			  std::get<0>(seq), std::get<1>(seq), std::get<2>(seq),
 					  input.start, input.end);
 

@@ -78,7 +78,7 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq_self)
     local_same = (km == gold);
 
     if (!local_same) {
-      DEBUGF("ERROR: seq rev-revcomp-rev-revcomp diff at iter %lu:\n\tinput %s\n\toutput %s", i, gold.toAlphabetString().c_str(), km.toAlphabetString().c_str());
+      BL_DEBUGF("ERROR: seq rev-revcomp-rev-revcomp diff at iter %lu:\n\tinput %s\n\toutput %s", i, gold.toAlphabetString().c_str(), km.toAlphabetString().c_str());
     }
     same &= local_same;
 
@@ -99,7 +99,7 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq)
   bool local_rev_same = true;
 
   uint8_t* out = reinterpret_cast<uint8_t*>(rev.getData());
-  const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getConstData());
+  const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getData());
 
   for (size_t i = 0; i < this->iterations; ++i) {
     rev_seq = this->helper.reverse_serial(km);
@@ -145,10 +145,10 @@ TYPED_TEST_P(KmerReverseTest, reverse_bswap)
     local_revcomp_same = (revcomp == revcomp_seq);
 
     if (!local_rev_same) {
-      DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
     }
     if (!local_revcomp_same) {
-      DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+      BL_DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
     }
 
     rev_same &= local_rev_same;
@@ -185,10 +185,10 @@ TYPED_TEST_P(KmerReverseTest, reverse_swar)
     local_revcomp_same = (revcomp == revcomp_seq);
 
     if (!local_rev_same) {
-      DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
     }
     if (!local_revcomp_same) {
-      DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+      BL_DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
     }
 
     rev_same &= local_rev_same;
@@ -222,10 +222,10 @@ TYPED_TEST_P(KmerReverseTest, reverse)
     local_revcomp_same = (revcomp == revcomp_seq);
 
     if (!local_rev_same) {
-      DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
     }
     if (!local_revcomp_same) {
-      DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+      BL_DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
     }
 
     rev_same &= local_rev_same;
@@ -263,10 +263,10 @@ TYPED_TEST_P(KmerReverseTest, reverse_ssse3)
     local_revcomp_same = (revcomp == revcomp_seq);
 
     if (!local_rev_same) {
-      DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
     }
     if (!local_revcomp_same) {
-      DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+      BL_DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
     }
 
     rev_same &= local_rev_same;
@@ -278,7 +278,7 @@ TYPED_TEST_P(KmerReverseTest, reverse_ssse3)
   EXPECT_TRUE(rev_same);
   EXPECT_TRUE(revcomp_same);
 #else
-  WARNINGF("SSSE3 is not enabled or not available.");
+  BL_WARNINGF("SSSE3 is not enabled or not available.");
 #endif
 
 }

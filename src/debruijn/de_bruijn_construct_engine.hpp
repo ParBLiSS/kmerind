@@ -47,6 +47,7 @@
 #include "iterators/zip_iterator.hpp"
 #include "iterators/constant_iterator.hpp"
 #include "index/quality_score_iterator.hpp"
+#include "common/kmer_transform.hpp"
 #include "index/kmer_hash.hpp"
 #include "debruijn/de_bruijn_node_trait.hpp"
 #include "iterators/edge_iterator.hpp"

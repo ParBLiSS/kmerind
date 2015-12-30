@@ -171,7 +171,7 @@ namespace bliss
         result <<= 1;   // shifting the whole thing, inefficient but correct,
                                             // especially for char that cross word boundaries.
         // copy `bitsperChar` least significant bits
-        copyBitsFixed<WORD_TYPE, Kmer::bitsPerChar>(result.getData()[0], tmp_copy.getConstData()[0]);
+        copyBitsFixed<WORD_TYPE, Kmer::bitsPerChar>(result.getData()[0], tmp_copy.getData()[0]);
 
         tmp_copy >>= 1;
       }
@@ -208,7 +208,7 @@ namespace bliss
         result <<= 1;   // shifting the whole thing, inefficient but correct,
                                             // especially for char that cross word boundaries.
 
-        tmp = ALPHABET::TO_COMPLEMENT[tmp_copy.getConstData()[0] & getLeastSignificantBitsMask<WORD_TYPE>(Kmer::bitsPerChar)];
+        tmp = ALPHABET::TO_COMPLEMENT[tmp_copy.getData()[0] & getLeastSignificantBitsMask<WORD_TYPE>(Kmer::bitsPerChar)];
 
         // copy `bitsperChar` least significant bits
         copyBitsFixed<WORD_TYPE, Kmer::bitsPerChar>(result.getData()[0], tmp);
@@ -361,7 +361,7 @@ namespace bliss
           WORD_TYPE tmp alignas(16) [simd_stride];
 
           // copy then load to register.
-          memcpy((tmp + simd_stride - Kmer::nWords), src.getConstData(), Kmer::nWords * sizeof(WORD_TYPE));
+          memcpy((tmp + simd_stride - Kmer::nWords), src.getData(), Kmer::nWords * sizeof(WORD_TYPE));
           __m128i in = _mm_loadu_si128((__m128i*)tmp);
 
 //          print(in , "in");
@@ -378,7 +378,7 @@ namespace bliss
 
         } else {
           // has room, extra will be overwritten, so just use _mm_storeu.
-          __m128i in = _mm_loadu_si128((__m128i*)(src.getConstData() + Kmer::nWords - simd_stride));
+          __m128i in = _mm_loadu_si128((__m128i*)(src.getData() + Kmer::nWords - simd_stride));
 
           __m128i mword = word_reverse_simd<A>(in);     // SSE2
 
@@ -391,7 +391,7 @@ namespace bliss
 
       // swap the word order.  also swap the packed chars in the word at the same time.
       if (simd_iters > 0) {
-        auto in = src.getConstData();
+        auto in = src.getData();
         auto out = result.getData() + Kmer::nWords - simd_stride;
 
         for (int i = 0; i < simd_iters; ++i) {
@@ -436,7 +436,7 @@ namespace bliss
           WORD_TYPE tmp alignas(16) [simd_stride];
 
           // copy then load to register.
-          memcpy((tmp + simd_stride - Kmer::nWords), src.getConstData(), Kmer::nWords * sizeof(WORD_TYPE));
+          memcpy((tmp + simd_stride - Kmer::nWords), src.getData(), Kmer::nWords * sizeof(WORD_TYPE));
           __m128i in = _mm_loadu_si128((__m128i*)tmp);
 
 //          print(in , "in");
@@ -453,7 +453,7 @@ namespace bliss
 
         } else {
           // has room, extra will be overwritten, so just use _mm_storeu.
-          __m128i in = _mm_loadu_si128((__m128i*)(src.getConstData() + Kmer::nWords - simd_stride));
+          __m128i in = _mm_loadu_si128((__m128i*)(src.getData() + Kmer::nWords - simd_stride));
 
           __m128i mword = word_reverse_complement_simd<A>(in);     // SSE2
 
@@ -465,7 +465,7 @@ namespace bliss
 
       // swap the word order.  also swap the packed chars in the word at the same time.
       if (simd_iters > 0) {
-        auto in = src.getConstData();
+        auto in = src.getData();
         auto out = result.getData() + Kmer::nWords - simd_stride;
 
         for (int i = 0; i < simd_iters; ++i) {
@@ -716,7 +716,7 @@ namespace bliss
 
       // swap the word order.  also swap the packed chars in the word at the same time.
       for (int i = 0, j = Kmer::nWords - 1, max = Kmer::nWords; i < max; ++i, --j)
-        result.getData()[j] = word_reverse<A, WORD_TYPE>(src.getConstData()[i]);
+        result.getData()[j] = word_reverse<A, WORD_TYPE>(src.getData()[i]);
 
 //      std::cout << "SWAR reversed = " << result << std::endl;
 
@@ -746,7 +746,7 @@ namespace bliss
 
       // swap the word order.  also do rev_comp for the chars in the word at the same time.
       for (int i = 0, j = Kmer::nWords - 1, max = Kmer::nWords; i < max; ++i, --j)
-        result.getData()[j] = word_reverse_complement<A>(src.getConstData()[i]);
+        result.getData()[j] = word_reverse_complement<A>(src.getData()[i]);
 
       // shift if necessary      // ununsed bits will be set to 0 by shift
       result.right_shift_bits(Kmer::nWords * sizeof(WORD_TYPE) * 8 - Kmer::nBits);
@@ -896,13 +896,13 @@ namespace bliss
 
       // unchunked reverse works.
             for (int i = 0, j = Kmer::nWords - 1, max = Kmer::nWords; i < max; ++i, --j)
-              result.getData()[j] = word_reverse_bswap<A, WORD_TYPE>(src.getConstData()[i]);
+              result.getData()[j] = word_reverse_bswap<A, WORD_TYPE>(src.getData()[i]);
 
 
 /*      //== chunked revcomp does NOT always work, although slightly faster, especially for small words.
       if (iters > 0) {
     	  // right here there is a warrning about 'dereferencing type-punned pointer will break strict-aliasing rules'
-              const MACH_WORD_TYPE *s = reinterpret_cast<const MACH_WORD_TYPE*>(src.getConstData());
+              const MACH_WORD_TYPE *s = reinterpret_cast<const MACH_WORD_TYPE*>(src.getData());
               WORD_TYPE *d = result.getData() + Kmer::nWords - stride;
 
               // swap the word order.  also swap the packed chars in the word at the same time.
@@ -915,10 +915,10 @@ namespace bliss
             // do the rem.
             if (rem > 1) {
           	  // right here there is a warrning about 'dereferencing type-punned pointer will break strict-aliasing rules'
-              MACH_WORD_TYPE mword = word_reverse_bswap<A, MACH_WORD_TYPE>(*(reinterpret_cast<const MACH_WORD_TYPE*>(src.getConstData() + Kmer::nWords - stride)));
+              MACH_WORD_TYPE mword = word_reverse_bswap<A, MACH_WORD_TYPE>(*(reinterpret_cast<const MACH_WORD_TYPE*>(src.getData() + Kmer::nWords - stride)));
               memcpy(result.getData(), &mword, rem * sizeof(WORD_TYPE));
             } else if (rem == 1) {
-              result.getData()[0] = word_reverse_bswap<A, WORD_TYPE>(src.getConstData()[Kmer::nWords - 1]);
+              result.getData()[0] = word_reverse_bswap<A, WORD_TYPE>(src.getData()[Kmer::nWords - 1]);
             }  // else no rem.
       //      printf("2nd step:\t\t%s\n", result.toAlphabetString().c_str());
 */
@@ -947,12 +947,12 @@ namespace bliss
 
       // swap the word order.  also do rev_comp for the chars in the word at the same time.
       for (int i = 0, j = Kmer::nWords - 1, max = Kmer::nWords; i < max; ++i, --j)
-        result.getData()[j] = word_reverse_complement_bswap<A, WORD_TYPE>(src.getConstData()[i]);
+        result.getData()[j] = word_reverse_complement_bswap<A, WORD_TYPE>(src.getData()[i]);
 
 /*      //== chunked revcomp does NOT always work, although slightly faster, especially for small words.
       if (iters > 0) {
     	  // right here there is a warrning about 'dereferencing type-punned pointer will break strict-aliasing rules'
-        const MACH_WORD_TYPE *s = reinterpret_cast<const MACH_WORD_TYPE*>(src.getConstData());
+        const MACH_WORD_TYPE *s = reinterpret_cast<const MACH_WORD_TYPE*>(src.getData());
         WORD_TYPE *d = result.getData() + Kmer::nWords - stride;
 
         // swap the word order.  also swap the packed chars in the word at the same time.
@@ -965,10 +965,10 @@ namespace bliss
       // do the rem.
       if (rem > 1) {
     	  // right here there is a warrning about 'dereferencing type-punned pointer will break strict-aliasing rules'
-        MACH_WORD_TYPE mword = word_reverse_complement_bswap<A, MACH_WORD_TYPE>(*(reinterpret_cast<const MACH_WORD_TYPE*>(src.getConstData() + Kmer::nWords - stride)));
+        MACH_WORD_TYPE mword = word_reverse_complement_bswap<A, MACH_WORD_TYPE>(*(reinterpret_cast<const MACH_WORD_TYPE*>(src.getData() + Kmer::nWords - stride)));
         memcpy(result.getData(), &mword, rem * sizeof(WORD_TYPE));
       } else if (rem == 1) {
-        result.getData()[0] = word_reverse_complement_bswap<A, WORD_TYPE>(src.getConstData()[Kmer::nWords - 1]);
+        result.getData()[0] = word_reverse_complement_bswap<A, WORD_TYPE>(src.getData()[Kmer::nWords - 1]);
       }  // else no rem.
 //      printf("2nd step:\t\t%s\n", result.toAlphabetString().c_str());
 */

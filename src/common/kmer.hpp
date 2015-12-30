@@ -195,7 +195,7 @@ namespace bliss
      *        useful for hash function and others.
      * @return pointer to internal data
      */
-    WORD_TYPE const * getConstData() const  {
+    WORD_TYPE const * getData() const  {
       return data;
     }
 

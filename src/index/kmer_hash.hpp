@@ -52,10 +52,14 @@
 #include "common/kmer.hpp"
 
 // includ the murmurhash code.
+#ifndef _MURMURHASH3_H_
 #include <smhasher/MurmurHash3.cpp>
-// and farm hash
-#include "farmhash.cc"
+#endif
 
+// and farm hash
+#ifndef FARM_HASH_H_
+#include <farmhash/src/farmhash.cc>
+#endif
 
 //// Kmer specialization for std::hash
 //namespace std {
@@ -93,7 +97,7 @@
 //      {
 //
 //        // first compute the hash, from 64 bits of input at a time
-//        uint64_t const * data = reinterpret_cast<uint64_t const*>(kmer.getConstData());
+//        uint64_t const * data = reinterpret_cast<uint64_t const*>(kmer.getData());
 //        uint64_t h = std::hash<uint64_t>()(data[0]);
 //        uint64_t hp;
 //        for (size_t i = 1; i < tuples; ++i) {
@@ -104,7 +108,7 @@
 //        // the remainder bits, if any, needs to be dealt with now.
 //        if (leftover > 0) {
 //          hp = 0;
-//          memcpy(&hp, kmer.getConstData() + tuples * sizeof(uint64_t), leftover);
+//          memcpy(&hp, kmer.getData() + tuples * sizeof(uint64_t), leftover);
 //          hp = std::hash<uint64_t>()(hp);
 //          h ^= (hp << 1);
 //        }
@@ -124,68 +128,6 @@ namespace bliss {
   namespace kmer
   {
 
-    namespace transform {
-
-      // QUESTION:  xor of hash, or hash of xor?.  second is faster.  Also if there is GC-AT imbalance, xor of raw sequence kind of flattens the distribution, so hash input is now more even.
-
-      template <typename KMER>
-      struct identity {
-          inline KMER operator()(KMER const & x) const {
-            return x;
-          }
-      };
-
-      template <typename KMER>
-      struct xor_rev_comp {
-          inline KMER operator()(KMER const & x) const {
-            return x ^ x.reverse_complement();
-          }
-          inline KMER operator()(::std::pair<KMER, KMER> const & x) const  {
-            return x.first ^ x.second;
-          }
-      };
-
-      template <typename KMER>
-      struct lex_less {
-          inline KMER operator()(KMER const & x) const  {
-            auto y = x.reverse_complement();
-            return (x < y) ? x : y;
-          }
-          inline KMER operator()(::std::pair<KMER, KMER> const & x) const  {
-            return (x.first < x.second) ? x.first : x.second;
-          }
-      };
-
-      template <typename KMER>
-      struct lex_greater {
-          inline KMER operator()(KMER const & x) const  {
-            auto y = x.reverse_complement();
-            return (x > y) ? x : y;
-          }
-          inline KMER operator()(::std::pair<KMER, KMER> const & x) const  {
-            return (x.first > x.second) ? x.first : x.second;
-          }
-      };
-
-
-      template <typename KMER, template <typename> class TRANS>
-      struct tuple_transform {
-          TRANS<KMER> transform;
-
-          inline KMER operator()(KMER & x) {
-            x = transform(x);
-            return x;
-          }
-
-          template <typename VAL>
-          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> & x) {
-            x.first = transform(x.first);
-            return x;
-          }
-
-      };
-
-    } // namespace transform
 
 
     namespace hash
@@ -215,12 +157,12 @@ namespace bliss {
           /// operator to compute hash
           inline size_t operator()(const KMER & kmer) const {
 
-              size_t const * data = reinterpret_cast<size_t const*>(kmer.getConstData());
+              size_t const * data = reinterpret_cast<size_t const*>(kmer.getData());
               size_t h = 0;
 
 			  // first deal with the remainder bits, if any.
 			  if (leftover > 0) {
-				memcpy(&h, kmer.getConstData() + tuples * sizeof(size_t), leftover);
+				memcpy(&h, kmer.getData() + tuples * sizeof(size_t), leftover);
 				h = op(h);
 			  }
 
@@ -292,9 +234,9 @@ namespace bliss {
             uint64_t h[2];
             // let compiler optimize out all except one of these.
             if (sizeof(void*) == 8)
-              MurmurHash3_x64_128(kmer.getConstData(), nBytes, 42, h);
+              MurmurHash3_x64_128(kmer.getData(), nBytes, 42, h);
             else if (sizeof(void*) == 4)
-              MurmurHash3_x86_128(kmer.getConstData(), nBytes, 42, h);
+              MurmurHash3_x86_128(kmer.getData(), nBytes, 42, h);
             else
               throw ::std::logic_error("ERROR: neither 32 bit nor 64 bit system");
 
@@ -330,9 +272,9 @@ namespace bliss {
           /// operator to compute hash.  64 bit again.
           inline uint64_t operator()(const KMER & kmer) const {
             if (Prefix)
-              return ::util::Hash(reinterpret_cast<const char*>(kmer.getConstData()), nBytes) >> shift;
+              return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes) >> shift;
             else
-              return ::util::Hash(reinterpret_cast<const char*>(kmer.getConstData()), nBytes);
+              return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes);
           }
 
       };

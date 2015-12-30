@@ -54,6 +54,8 @@
 #include "common/base_types.hpp"
 #include "common/sequence.hpp"
 #include "utils/kmer_utils.hpp"
+#include "index/kmer_hash.hpp"
+#include "common/kmer_transform.hpp"
 
 #include "io/mxx_support.hpp"
 #include "containers/distributed_unordered_map.hpp"
@@ -68,7 +70,6 @@
 #include "iterators/unzip_iterator.hpp"
 #include "iterators/constant_iterator.hpp"
 #include "index/quality_score_iterator.hpp"
-#include "index/kmer_hash.hpp"
 
 #include "utils/timer.hpp"
 #include "utils/file_utils.hpp"
@@ -324,7 +325,7 @@ public:
 
 			// scatter the ranges
 			// TODO: mxx::bcast function
-			mxx::datatype<typename FileLoaderType::RangeType> range_dt;
+      mxx::datatype range_dt = mxx::get_datatype<typename FileLoaderType::RangeType >();
 			MPI_Bcast(&file_range, 1, range_dt.type(), 0, group);
 
 			range = mxx::scatter_one(ranges, 0, group);
@@ -341,7 +342,7 @@ public:
 			//== reserve
 			TIMER_START(file);
 			// broadcast the estimated size
-			mxx::datatype<size_t> size_dt;
+      mxx::datatype size_dt = mxx::get_datatype<size_t>();
 			MPI_Bcast(&est_size, 1, size_dt.type(), 0, group);
 			result.reserve(est_size);
 			TIMER_END(file, "reserve", est_size);
@@ -351,7 +352,7 @@ public:
 			TIMER_START(file);
 			read_block<KP>(block, l2parser, result);
 			TIMER_END(file, "read", result.size());
-      INFO("Last: pos - kmer " << result.back());
+      BL_INFO("Last: pos - kmer " << result.back());
 		}
 
     if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
@@ -479,7 +480,7 @@ public:
 //         }
 //         ofs.close();
 
-     DEBUG("Last: pos - kmer " << temp.back());
+     BL_DEBUG("Last: pos - kmer " << temp.back());
      this->insert(temp);
 
 	 }
@@ -506,7 +507,7 @@ public:
      ::std::vector<typename KmerParser::value_type> temp;
      this->read_file_mpi_subcomm<SeqParser, KmerParser, PreCanonicalizer  >(filename, temp, comm);
 
-     DEBUG("Last: pos - kmer " << temp.back());
+     BL_DEBUG("Last: pos - kmer " << temp.back());
      this->insert(temp);
 
 	 }

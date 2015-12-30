@@ -27,7 +27,7 @@ size_t getFileSize(const std::string& filename) throw (bliss::io::IOException) {
 
   // handle any error
   if (ret < 0) {
-    ERROR( "ERROR in file size detection: ["  << filename << "] error " );
+    BL_ERROR( "ERROR in file size detection: ["  << filename << "] error " );
   }
 
   // return file size.
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
   MPI_Comm_size(comm, &groupSize);
   MPI_Comm_rank(comm, &id);
 
-  INFO( id <<  " file size: " << getFileSize("/mnt/data/1000genome/HG00096/sequence_read/SRR077487.filt.fastq.gz") );
+  BL_INFO( id <<  " file size: " << getFileSize("/mnt/data/1000genome/HG00096/sequence_read/SRR077487.filt.fastq.gz") );
 
   MPI_Barrier(comm);
   MPI_Finalize();

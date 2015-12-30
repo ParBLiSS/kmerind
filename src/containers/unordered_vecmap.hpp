@@ -607,10 +607,10 @@ namespace fsc {  // fast standard container
       }
 
       void report() {
-        INFOF("compact vecmap bucket count: %lu", map.bucket_count());
-        INFOF("compact vecmap load factor: %f", map.load_factor());
-        INFOF("compact vecmap unique entries: %lu", map.size());
-        INFOF("compact vecmap total entries: %lu", this->s);
+        BL_INFOF("compact vecmap bucket count: %lu", map.bucket_count());
+        BL_INFOF("compact vecmap load factor: %f", map.load_factor());
+        BL_INFOF("compact vecmap unique entries: %lu", map.size());
+        BL_INFOF("compact vecmap total entries: %lu", this->s);
       }
 
 

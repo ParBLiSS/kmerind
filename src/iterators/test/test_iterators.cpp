@@ -35,7 +35,7 @@ TEST(IteratorTests, TestCompressingIterator)
   while (comp_it != comp_it_end)
   {
     comp_it--;
-    INFO( *(comp_it+2) << ", " );
+    BL_INFO( *(comp_it+2) << ", " );
     comp_it++;
     comp_it += 1;
 

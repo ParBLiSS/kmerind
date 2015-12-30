@@ -198,7 +198,7 @@ namespace bliss
 
           // error when final position is greater than the size of range vector
           if (curr_iter_pos >= static_cast<int64_t>(ranges.size())) {
-            ERRORF("position pointing to beyond available ranges: pos %ld, size %lu", curr_iter_pos, ranges.size());
+            BL_ERRORF("position pointing to beyond available ranges: pos %ld, size %lu", curr_iter_pos, ranges.size());
             return false;
           }
 
@@ -211,7 +211,7 @@ namespace bliss
             ++curr_iter_pos;
 
             curr = ranges[curr_iter_pos].first;
-            //WARNINGF("Converting empty or finished ConcatenatingIterator (end iterator) to non-empty (non-end).  pos %ld", curr_iter_pos);
+            //BL_WARNINGF("Converting empty or finished ConcatenatingIterator (end iterator) to non-empty (non-end).  pos %ld", curr_iter_pos);
             // end iterator, now converted to non-end
           }
           return true;
@@ -226,7 +226,7 @@ namespace bliss
 
           // error when final position is greater than the size of range vector
           if (curr_iter_pos >= static_cast<int64_t>(ranges.size())) {
-            ERRORF("position pointing to beyond available ranges: pos %ld, size %lu", curr_iter_pos, ranges.size());
+            BL_ERRORF("position pointing to beyond available ranges: pos %ld, size %lu", curr_iter_pos, ranges.size());
             return false;
           }
 
@@ -240,7 +240,7 @@ namespace bliss
             ++curr_iter_pos;
 
             curr = ranges[curr_iter_pos].first;
-            WARNINGF("Converting empty or finished ConcatenatingIterator (end iterator) to non-empty (non-end).  pos %ld", curr_iter_pos);
+            BL_WARNINGF("Converting empty or finished ConcatenatingIterator (end iterator) to non-empty (non-end).  pos %ld", curr_iter_pos);
             // end iterator, now converted to non-end
           }
           return true;
@@ -388,7 +388,7 @@ namespace bliss
           if (curr_iter_pos < 0) return true;
           // start iterator ended
           if (curr_iter_pos >= static_cast<int64_t>(ranges.size())) {
-            ERRORF("ERROR: concat iterator at one position past end of iterator vector");
+            BL_ERRORF("ERROR: concat iterator at one position past end of iterator vector");
             return true;
           }
           // last iterator and last entry in iterator, finished as well

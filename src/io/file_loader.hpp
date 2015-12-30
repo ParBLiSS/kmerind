@@ -171,7 +171,7 @@ namespace io
         * @param endOffset   offset for the end of the data in question
         */
        void handleWarning(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
-         WARNING("WARNING: " << "did not find "<< errType << " in " << startOffset << " to " << endOffset);
+         BL_WARNING("WARNING: " << "did not find "<< errType << " in " << startOffset << " to " << endOffset);
        }
 
 
@@ -937,11 +937,11 @@ namespace io
               // either start or end are not found so return an empty range.
 
               // TODO: need to handle this scenario better - should keep search until end.
-              WARNINGF("%s\n", ex.what());
+              BL_WARNINGF("%s\n", ex.what());
 
-              WARNINGF("curr range: partition hint %lu-%lu, next %lu-%lu, file_range %lu-%lu\n",
+              BL_WARNINGF("curr range: partition hint %lu-%lu, next %lu-%lu, file_range %lu-%lu\n",
                      hint.start, hint.end, end_search_range.start, end_search_range.end, this->fileRange.start, this->fileRange.end);
-              WARNINGF("got an exception search for partition:  %s \n", ex.what());
+              BL_WARNINGF("got an exception search for partition:  %s \n", ex.what());
 
               output.start = hint.end;
               output.end = hint.end;
@@ -1150,12 +1150,12 @@ namespace io
             } catch (IOException& ex) {
               // either start or end are not found, so return nothing.
 
-              WARNING(ex.what());
+              BL_WARNING(ex.what());
 
-              ERRORF("curr range: chunk %lu, hint %lu-%lu, next %lu-%lu, srcData range %lu-%lu, mmap_range %lu-%lu\n",
+              BL_ERRORF("curr range: chunk %lu, hint %lu-%lu, next %lu-%lu, srcData range %lu-%lu, mmap_range %lu-%lu\n",
                      this->L2BlockSize, hint.start, hint.end, end_search_range.start, end_search_range.end,
                      parentRange.start, parentRange.end, this->L1Block.getRange().start, this->L1Block.getRange().end);
-              ERRORF("got an exception search:  %s \n", ex.what());
+              BL_ERRORF("got an exception search:  %s \n", ex.what());
 
               output.start = hint.end;
               output.end = hint.end;
@@ -1367,7 +1367,7 @@ namespace io
          size_t kmersPerRecord = seqSizeInRecord == 0 ? seqSizeInRecord - k + 1 : 0;  // fastq has quality.
 
 
-          DEBUGF("file range [%lu, %lu], recordSize = %lu, kmersPerRecord = %lu, numRecords = %lu",
+          BL_DEBUGF("file range [%lu, %lu], recordSize = %lu, kmersPerRecord = %lu, numRecords = %lu",
                  this->getFileRange().start, this->getFileRange().end, recordSize, kmersPerRecord, numRecords);
 
           return numRecords * kmersPerRecord;

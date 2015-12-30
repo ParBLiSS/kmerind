@@ -102,7 +102,7 @@ void get_mem_consumed_sysinfo(const long long &phyMemBaseline, const long long &
           std::copy(memsession##_memcounts.begin(), memsession##_memcounts.end(), cit); \
           output << "]"; \
           fflush(stdout); \
-          INFOF("%s\n", output.str().c_str()); \
+          BL_INFOF("%s\n", output.str().c_str()); \
           fflush(stdout); \
         } while (0)
 
@@ -180,7 +180,7 @@ void get_mem_consumed_sysinfo(const long long &phyMemBaseline, const long long &
             std::copy(cnt_stdevs.begin(), cnt_stdevs.end(), dit); \
             output << "]"; \
             fflush(stdout); \
-            INFOF("%s\n", output.str().c_str()); \
+            BL_INFOF("%s\n", output.str().c_str()); \
             fflush(stdout); \
           } \
           MPI_Barrier(comm); \

@@ -377,7 +377,7 @@ namespace dsc  // distributed std container
 
             // work on query from process i.
             QueryProcessor::process(c, start, end, emplace_iter, find_element, true, pred);
-           // if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+           // if (this->comm_rank == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
 
             start = end;
           }
@@ -555,7 +555,7 @@ namespace dsc  // distributed std container
             // within start-end, values are unique, so don't need to set unique to true.
             QueryProcessor::process(c, start, end, emplace_iter, count_element, true, pred);
 
-            if (this->comm_rank == 0) DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
+            if (this->comm_rank == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm_rank, send_counts[i], recv_counts[i], i);
 
             start = end;
           }

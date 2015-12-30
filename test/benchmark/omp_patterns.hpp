@@ -127,8 +127,8 @@ OT P2P(OP &op, const int &nthreads, size_t &_count) {
 
 #pragma omp parallel num_threads(nthreads) shared(op) OMP_SHARE_DEFAULT reduction(+:v, count)
   {
-//      INFOF("MPI rank: %d/%d OMP thread: %d/%d\n", (rank+1), nprocs, (tid+1), nthreads);
-//    INFOF("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
+//      BL_INFOF("MPI rank: %d/%d OMP thread: %d/%d\n", (rank+1), nprocs, (tid+1), nthreads);
+//    BL_INFOF("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 
 //    OT tv = 0;
     bool done = false;
@@ -165,7 +165,7 @@ OT MasterSlave(OP &op, const int &nthreads, size_t &_count) {
 
 #pragma omp parallel num_threads(nthreads) shared(r, v, counts, op, step) OMP_SHARE_DEFAULT
   {
-//    INFOF("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
+//    BL_INFOF("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 // wait or nowait?
 #pragma omp single
     {
@@ -218,7 +218,7 @@ OT MasterSlaveNoWait(OP &op, const int &nthreads, size_t &_count) {
 
 #pragma omp parallel num_threads(nthreads) shared(r, v, counts, op, step) OMP_SHARE_DEFAULT
   {
-//    INFOF("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
+//    BL_INFOF("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 
 // wait or nowait?
 #pragma omp single nowait
@@ -234,7 +234,7 @@ OT MasterSlaveNoWait(OP &op, const int &nthreads, size_t &_count) {
 #endif
           op(tid, counts[tid], v[tid]);
 
-//          INFOF("%d %lu %lf\n", omp_get_thread_num(), j, tv);
+//          BL_INFOF("%d %lu %lf\n", omp_get_thread_num(), j, tv);
         }
 
       } //for
@@ -266,7 +266,7 @@ OT ParFor(OP &op, const int &nthreads, size_t &_count) {
 
 #pragma omp parallel num_threads(nthreads) OMP_SHARE_DEFAULT shared(r, v, count, op, step)
   {
-//    INFOF("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
+//    BL_INFOF("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
 
     #pragma omp for schedule(guided) reduction(+ : v, count)
       for (size_t i = r.start; i < r.end; i+=step)
@@ -290,7 +290,7 @@ OT Sequential(OP &op, const int &nthreads, size_t &_count) {
   OT v = 0;
   size_t count = 0;
 
-//  INFOF("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
+//  BL_INFOF("thread %d range: %lu, %lu\n", omp_get_thread_num(), r.start, r.end);
   RangeType r = op.getRange();
   size_t step = op.getChunkSize();
 

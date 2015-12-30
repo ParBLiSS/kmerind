@@ -72,8 +72,13 @@ namespace bliss{
 			   */
 			  template <class InputIterator>
 			  size_t local_insert(InputIterator first, InputIterator last) {
-				  int32_t relative_strand;
+				  
+          if (first == last) return 0;
+          
+          int32_t relative_strand;
 				  size_t before = this->c.size();
+
+          
 
 				  /*reserve space*/
 				  this->local_reserve(before + ::std::distance(first, last));
@@ -142,6 +147,9 @@ namespace bliss{
 			   */
 			  template <class InputIterator, class Predicate>
 			  size_t local_insert(InputIterator first, InputIterator last, Predicate const & pred) {
+
+
+          if (first == last) return 0;
 				  int32_t relative_strand;
 				  size_t before = this->c.size();
 

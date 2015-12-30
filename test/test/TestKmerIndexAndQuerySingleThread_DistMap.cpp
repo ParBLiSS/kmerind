@@ -153,7 +153,7 @@ std::vector<KmerType> readForQuery_subcomm(const std::string & filename,
 //        //          temp.push_back(*it);
 //        //        }
 //        //std::copy(index_start, index_end, temp.end());
-//        //        INFOF("R %d inserted.  new temp size = %lu", rank, temp.size());
+//        //        BL_INFOF("R %d inserted.  new temp size = %lu", rank, temp.size());
 //      }
 //
 //      partition = loader.getNextL1Block();
@@ -332,27 +332,25 @@ int main(int argc, char** argv) {
 
 		// one thread will be making all MPI calls.
 		MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
-
-		if (provided < MPI_THREAD_FUNNELED) {
-			ERRORF("The MPI Library Does not have thread support.");
-			MPI_Abort(MPI_COMM_WORLD, 1);
-		}
-	} else {
-		MPI_Init(&argc, &argv);
-	}
+    if (provided < MPI_THREAD_FUNNELED) {
+      BL_ERRORF("The MPI Library Does not have thread support.");
+      MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+  } else {
+    MPI_Init(&argc, &argv);
+  }
 
 	mxx::comm comm = mxx::comm();
 
-	{
-		char hostname[256];
-		memset(hostname, 0, 256);
-		gethostname(hostname, 256);
-		//INFOF("Rank %d hostname [%s]", rank, hostname);
-	}
-	MPI_Barrier(comm);
+  {
+    char hostname[256];
+    memset(hostname, 0, 256);
+    gethostname(hostname, 256);
+    //BL_INFOF("Rank %d hostname [%s]", rank, hostname);
+  }
+  MPI_Barrier(comm);
 
-	if (rank == 0)
-		INFOF("USE_MPI is set");
+  if (rank == 0) BL_INFOF("USE_MPI is set");
 #else
 	static_assert(false, "MPI used although compilation is not set to use MPI");
 #endif
@@ -561,10 +559,10 @@ int main(int argc, char** argv) {
 //    MPI_Barrier(comm);
 //}
 
-	//////////////  clean up MPI.
-	MPI_Finalize();
+  //////////////  clean up MPI.
+  MPI_Finalize();
 
-	//INFOF("M Rank %d called MPI_Finalize", rank);
+  //BL_INFOF("M Rank %d called MPI_Finalize", rank);
 
 	return 0;
 }
