@@ -887,6 +887,7 @@ include_directories("${PROJECT_SOURCE_DIR}/src")
 # this below gets the smhasher
 include_directories("${EXT_PROJECTS_DIR}")
 include_directories("${EXT_PROJECTS_DIR}/mxx/include")
+include_directories("${EXT_PROJECTS_DIR}/tclap-1.2.1/include")
 
 
 add_subdirectory(src/utils)
