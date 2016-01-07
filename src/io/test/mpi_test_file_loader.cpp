@@ -250,6 +250,8 @@ REGISTER_TYPED_TEST_CASE_P(FileLoaderTest, open);
 #endif
 #endif
 
+// TODO: need to test mmap with multibyte elements.
+
 typedef ::testing::Types<
     FileLoader<unsigned char, 0, bliss::io::BaseFileParser, false, false>,
     FileLoader<char,          0, bliss::io::BaseFileParser, false, false>,

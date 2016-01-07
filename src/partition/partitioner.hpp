@@ -150,7 +150,7 @@ namespace bliss
          *
          * @param[out] r            the range to compute.  initialized in the function to pr.start + start_offset
          * @param[in] pr            the parent range
-         * @param[in] start_offset  offset to add to the start position
+         * @param[in] start_offset  offset to add to the start position.  only used for block partitioner to spread the remainders to first blocks.
          * @param[in] chunkId       the chunkId of the current range.
          * @param[in] non_overlap_size    the size of the chunk excluding the overlapped portion        (precomputed or user specified)
          */

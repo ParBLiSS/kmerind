@@ -289,7 +289,8 @@ namespace bliss
         /// offset of global seqBegin from beginning of record.
         size_t seq_begin_offset;
 
-        /// offset of seqBegin from the beginning of the record.  NOTE THAT IF SEQUENCE IS TRUNCATED, seqBegin may start later than the full sequence's starting point.
+        /// offset of seqBegin from the beginning of the record.
+        /// NOTE THAT IF SEQUENCE IS TRUNCATED, seqBegin may start later than the full sequence's starting point.
         size_t local_offset;
 
         /// begin iterator for the sequence

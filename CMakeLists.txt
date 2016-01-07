@@ -715,7 +715,7 @@ if (ENABLE_TESTING)
       set (mpi_params_7 -np 7 ${TEST_BINARY_OUTPUT_DIR}/${test_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}_7.xml)
       set (mpi_params_8 -np 8 ${TEST_BINARY_OUTPUT_DIR}/${test_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}_8.xml)
             
-      add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
+      add_test(NAME ${test_target_name}   WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
       add_test(NAME ${test_target_name}_1 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_1}  )
       add_test(NAME ${test_target_name}_2 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_2}  )
       add_test(NAME ${test_target_name}_3 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_3}  )

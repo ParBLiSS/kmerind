@@ -35,6 +35,7 @@
 #include <fcntl.h>      // for open
 
 #include <sys/sysinfo.h>  // for meminfo
+#include <type_traits>
 
 #include "partition/range.hpp"
 #include "partition/partitioner.hpp"
@@ -56,7 +57,7 @@ namespace io
    * @brief  Partitions input data into sequences, e.g. blocks or reads.
    * @details  Iterator template parameter refers to the iterator type that is currently being traversed.
    * 		 this applies to the sequence object, and the following methods:
-   * 		 increment, init_increment, and find_start.
+   * 		 increment, and find_start.
    * 		 
    * 		 init method can potentially use a different iterator type. this is useful when
    * 		   state information is extracted from perhaps a containing block (e.g. L1Block),
@@ -68,7 +69,8 @@ namespace io
    *
    *    to handle the first case: approaches are
    *    1a. to allow a parser to operate on different iterator types when invoking findStart, increment.
-   *          additional template parameter for these functions.  SequenceType will need to change.  API in SequenceIterator, BaseFileParser, FASTQParser, FASTAParser all need to change
+   *          additional template parameter for these functions.  SequenceType will need to change.
+   *          API in SequenceIterator, BaseFileParser, FASTQParser, FASTAParser all need to change
    *    1b. convert the seq parser from L1 to L2, but copy the state of L1.
    *          can be shared between threads.  additional api for convert only
    *
@@ -88,10 +90,12 @@ namespace io
    * @tparam Iterator   The underlying iterator to be traversed to generate a Sequence
    *
    */
-  template <typename Iterator >
+  template <typename Iterator = unsigned char* >
    class BaseFileParser {
+
       // let another BaseFileParser with some other iterator type be a friend so we can convert.
-      template <typename Iterator2> friend class BaseFileParser;
+      template <typename Iterator2>
+      friend class BaseFileParser;
 
      public:
 //      using SequenceIdType = SeqIdType;
@@ -119,7 +123,11 @@ namespace io
         * @param[in/out] offset  the global offset of the sequence record within the file.  used as record id.
         * @return        iterator at the new position, where the Non EOL char is found, or end.
         */
-       inline Iterator findNonEOL(Iterator& iter, const Iterator& end, size_t &offset) const {
+       template <typename IT = Iterator,
+           typename = typename ::std::enable_if<(::std::is_same<typename ::std::iterator_traits<IT>::value_type, char>::value ||
+                                                ::std::is_same<typename ::std::iterator_traits<IT>::value_type, unsigned char>::value)
+                                               >::type >
+       inline IT findNonEOL(IT& iter, const IT& end, size_t &offset) const {
          while ((iter != end) && ((*iter == eol) || (*iter == cr))) {
            ++iter;
            ++offset;
@@ -135,7 +143,11 @@ namespace io
         * @param[in/out] offset  the global offset of the sequence record within the file.  used as record id.
         * @return        iterator at the new position, where the EOL char is found, or end.
         */
-       inline Iterator findEOL(Iterator& iter, const Iterator& end, size_t &offset) const {
+       template <typename IT = Iterator,
+           typename = typename ::std::enable_if<(::std::is_same<typename ::std::iterator_traits<IT>::value_type, char>::value ||
+                                                ::std::is_same<typename ::std::iterator_traits<IT>::value_type, unsigned char>::value)
+                                               >::type >
+       inline IT findEOL(IT& iter, const IT& end, size_t &offset) const {
          while ((iter != end) && ((*iter != eol) && (*iter != cr) ) ) {
            ++iter;
            ++offset;
@@ -195,6 +207,7 @@ namespace io
        /**
         * @brief given a block, find the starting point that best aligns with the first sequence object (here, just the actual start)
         * @note  not virtual for performance reason.
+        *         used by getNextL1BlockRange to find exact range for an L1 Partition.
         *
         * @param _data
         * @param parentRange
@@ -202,6 +215,8 @@ namespace io
         * @param searchRange
         * @return
         */
+       // TODO: consolidate findStart and init_for_iterator?
+
        std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
        throw (bliss::io::IOException) {
          //== range checking
@@ -211,7 +226,6 @@ namespace io
          return RangeType::intersect(searchRange, inMemRange).start;
        }
 
-       // TODO: consolidate these.
 
 #ifdef USE_MPI
        /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.
@@ -229,8 +243,10 @@ namespace io
        /**
         * @brief increment to get next sequence object
         * @note   not virtual because SequenceType is different for each subclass, so the signatures are different.  We rely on compiler to enforce the correct one.
-        *         this is in general not an issue as we do not need polymorphic Sequence Parsers - they are specific too file types.
+        *         this is in general not an issue as we do not need polymorphic Sequence Parsers - they are specific to file types.
         *         this is probably better for performance anyways.
+        *
+        *         Used by FileLoader's getRecordSize to compute an average record size.
         *
         * @param iter           start of a sequence object.  this is the beginning of a record, not just DNA sequence
         * @param end            end of a sequence object.  this is the end of a record, not just DNA sequence
@@ -257,6 +273,9 @@ namespace io
         * @brief initializes the Parser object for sequencesIterator.  primarily to search for index within global array (e.g. FASTA)
         * @note   not virtual because SequenceType is different for each subclass, so the signatures are different.  We rely on compiler to enforce the correct one.
         *         this is in general not an issue as we do not need polymorphic Sequence Parsers - they are specific too file types.
+        *
+        *         Used by FileLoader's getRecordSize to compute an average record size.
+        *
         *
         * @param iter
         * @param parentRange
@@ -314,7 +333,8 @@ namespace io
      *        MemMap
      *          Memmap maps a file to a memory address range, and allows direct, random access to the
      *          file.  it utilizes the same mechanism as virtual memory paging, so it's efficient.
-     *          Performance of mmap is good generally compared to traditional open-read-close-process
+     *          Performance of mmap is good generally compared to traditional file open-read-close-process
+     *          NOTE: reading past the mmapped length can cause SEGV
      *
      *  Simple Usage:
      *    1. instantiate file_loader - // default partitioning is based on MPI communicator
@@ -352,6 +372,7 @@ namespace io
      *    5. unload                       // mem unmap
      *    6. destroy file_loader          // close the file.
      *
+     * Alternatively, modify the range in BaseFileParser.  See fastq_loader.hpp for example.
      *
      * @note:   For real data,  No Buffering is better for large files and limited memory, while
      *              buffering is better for smaller files and/or large amount of memory.
@@ -363,13 +384,15 @@ namespace io
      *            not the first element mapped.
      *
      * @tparam  T                 type of each element read from file
-     * @tparam  Overlap           Size of overlap between L1 or L2 blocks.
+     * @tparam  Overlap           Size of overlap between L1 or L2 blocks. in units of T.  this affects mmap.
      * @tparam  Parser            Sequence Parser for generating the the sequence objects.  NOTE: template template parameter, template being an Iterator with value type T.
      * @tparam  L1Buffering       bool indicating if L1 partition blocks should be buffered.  default to false
      * @tparam  L2Buffering       bool indicating if L2 partition blocks should be buffered.  default to true (to avoid contention between threads)
      * @tparam  L1PartitionerT    Type of the Level 1 Partitioner to generate the range of the file to load from disk
      * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
      */
+  // TODO: simplify and cleanup.
+
     template <typename T, size_t Overlap = 0, template <typename > class Parser = BaseFileParser,
           bool L2Buffering = true,
           bool L1Buffering = false,
@@ -906,6 +929,8 @@ namespace io
           // output data structure
           RangeType output(hint);
 
+          // TODO: SEARCH 1 and communicate, then record size does not matter.
+
           // find starting and ending positions.  do not search in overlap region.
           if (hint.size() > 0) {
 
@@ -995,6 +1020,7 @@ namespace io
           overlappedRange.intersect(fileRange);
           size_t mmap_start = RangeType::align_to_page(overlappedRange.start, pageSize);
 
+          // TODO: Handle Overlap better.  overlap should belong to the current proc, not previous.
           if (Overlap > 0) {
             // search for overlap starts at end of the requested block
             RangeType olr(overlappedRange.end, fileRange.end);
@@ -1007,6 +1033,7 @@ namespace io
             auto e = mmapData + (olr.start - mmap_olr_start);
             auto pos = olr.start;
             for (size_t i = 0; (pos < olr.end) && (i < Overlap); ++e, ++pos) {
+              // TODO: probably should not skip eol characters.  this is searching the tail end.
               if ((*e != bliss::io::BaseFileParser<decltype(mmapData)>::cr) && (*e != bliss::io::BaseFileParser<decltype(mmapData)>::eol)) ++i;
             }
 
@@ -1192,9 +1219,11 @@ namespace io
           std::advance(e, r.size());
 
           // now handle overlap, excluding eol etc.
+          // TODO: handle Overlap better.  should not skip overlap.
           if (Overlap > 0) {
             auto oe = e;
             for (size_t i = 0; (oe != L1Block.end()) && (i < Overlap); ++oe) {
+              // TODO: probably should not skip EOL characters.  this is searching the tail end.
               if ((*oe != bliss::io::BaseFileParser<typename L1BlockType::iterator>::cr) && (*oe != bliss::io::BaseFileParser<typename L1BlockType::iterator>::eol)) ++i;
             }
             r.end += std::distance(e, oe);
@@ -1279,6 +1308,7 @@ namespace io
          * @param count    number of records to read to compute the approximation. default = 3
          * @return  pair of values, first is estimated record size, second is estimated sequence length in the recored
          */
+        // TODO: try to get rid of this - RecordSize is not used outside of this class, and only works for some file types.
         std::pair<size_t, size_t> getRecordSize(const int iterations = 10) {
           std::size_t counts[2] = {0, 0};  // do average.
 
@@ -1358,6 +1388,7 @@ namespace io
 
 
         /// get number of estimated kmers, given k.
+        // TODO: try to do this without getRecordSize.
         size_t getKmerCountEstimate(const int k) {
 
           if (recordSize == 0 || seqSizeInRecord == 0) std::tie(recordSize, seqSizeInRecord) = this->getRecordSize(10);
@@ -1458,17 +1489,20 @@ namespace io
          * @note      AGNOSTIC of overlaps
          * @param r   range specifying the portion of the file to map.
          * @return    memory address (pointer) to where the data is mapped.
+         *            TODO: should return std::pair<PointerType, page aligned offset>
          */
         PointerType map(const RangeType &r) throw (IOException) {
 
           /// memory map.  requires that the starting position is block aligned.
-          size_t block_start = RangeType::align_to_page(r, pageSize);
+          size_t block_start = RangeType::align_to_page(r, pageSize);   // mixed use of range semantic and pageSize byte
+
+          size_t block_size = (r.end - block_start + Overlap) * sizeof(T);
 
           // NOT using MAP_POPULATE.  it slows things done when testing on single node.  NOTE HUGETLB not supported for file mapping.
-          PointerType result = (PointerType)mmap64(nullptr, (r.end - block_start ) * sizeof(T),
+          PointerType result = (PointerType)mmap64(nullptr, block_size,
                                      PROT_READ,
                                      MAP_PRIVATE, fileHandle,
-                                     block_start * sizeof(T));
+                                     block_start * sizeof(T));  // TODO: range means bytes or number of elements?
 
           // if mmap failed,
           if (result == MAP_FAILED)
@@ -1488,7 +1522,7 @@ namespace io
           }
 
 
-          int madv_result = madvise(result, r.end - block_start, MADV_SEQUENTIAL | MADV_WILLNEED);
+          int madv_result = madvise(result, block_size, MADV_SEQUENTIAL | MADV_WILLNEED);
           if ( madv_result == -1) {
             std::stringstream ss;
             int myerr = errno;
@@ -1510,7 +1544,7 @@ namespace io
          */
         void unmap(PointerType &d, const RangeType &r) {
 
-          munmap(d, (r.end - RangeType::align_to_page(r, pageSize)) * sizeof(T));
+          munmap(d, (r.end - RangeType::align_to_page(r, pageSize) + Overlap) * sizeof(T));
         }
 
     };

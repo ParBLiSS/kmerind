@@ -34,6 +34,7 @@ namespace bliss
 
     template <typename Iterator>
     class FASTQSequence : public ::bliss::common::Sequence<Iterator> {
+
       public:
       /// Iterator type for traversing the sequence.
       typedef Iterator IteratorType;
@@ -97,7 +98,8 @@ namespace bliss
     class FASTQParser : public bliss::io::BaseFileParser<Iterator >
     {
         // let another BaseFileParser with some other iterator type be a friend so we can convert.
-        template <typename Iterator2> friend class FASTAParser;
+        template <typename Iterator2>
+        friend class FASTAParser;
 
       public:
         using SequenceType = bliss::io::FASTQSequence<Iterator>;  // redefined SequenceType

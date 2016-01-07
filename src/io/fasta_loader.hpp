@@ -70,7 +70,8 @@ namespace bliss
     {
 
         // let another BaseFileParser with some other iterator type be a friend so we can convert.
-        template <typename Iterator2> friend class FASTAParser;
+        template <typename Iterator2>
+        friend class FASTAParser;
 
       protected:
 //        struct NotEOL {
