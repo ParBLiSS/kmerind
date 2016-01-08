@@ -28,7 +28,6 @@ namespace bliss
     //          FASTA reading may require that the user specify whether to use ShortSequenceKmerId or LongSequenceKmerId.
     //          ShortSequenceKmerId will encounter more constructions, so make that fast - in SequenceId, encode in ShortSequenceKmerId form.
 
-    // TODO here!
 
     /**
      * @brief SequenceId is used to identify a sequence in a file.  This is the basic type that is suitable for position in files.
@@ -39,8 +38,8 @@ namespace bliss
      *        contiguous, otherwise a mxx::datatype specialization should be used.
      *        
      *        this keeps a 64 bit position within the file.   (16 Exabyte per file)
-     *                   a 64 bit seq_id within the file      (16 x 10^18  sequences in 1 file.  )
-     *                   a 32 bit file id                     (4 billion files)
+     *                   a 64 bit seq_id within the file      (16 x 10^18 sequences in 1 file.  )
+     *                   a 16 bit file id                     (64K files)
      *
      *        Future and current KmerId classes can extract the meaningful part based on realistic limits for each user applications.
      *          e.g. 1TB files, 32K sequences per file, etc.
@@ -49,7 +48,7 @@ namespace bliss
      */
     struct SequenceId {
 
-        /// Id of the sequence.  Typically, this is the position in the file.
+        /// Id of the sequence.  Typically, seq_id is same as position in the file.
         size_t pos_in_file;
         size_t seq_id;
         uint16_t file_id;
@@ -69,7 +68,7 @@ namespace bliss
 
         SequenceId() = default;
 
-        SequenceId(size_t const & _file_pos, size_t const & _seq_id = 0, uint32_t const & _file_id = 0) :
+        SequenceId(size_t const & _file_pos, size_t const & _seq_id = 0, uint16_t const & _file_id = 0) :
           pos_in_file(_file_pos), seq_id(_seq_id), file_id(_file_id) {};
 
         SequenceId(SequenceId const & other) : pos_in_file(other.pos_in_file), seq_id(other.seq_id), file_id(other.file_id) {}
@@ -89,9 +88,15 @@ namespace bliss
      * @brief     an Id in a file with short sequences, e.g. multiFASTA or FASTQ.  Can be used to id Sequence or Kmer.
      * @details   Accessor functions are used to extract the sub fields.  bit shift and bitwise and/or are used.  they are endian-independent.
      *
-     *            this keeps a 16 bit position within the sequence.   (32K length for each sequence)
-     *                       a 40 bit sequence id                     (1 TB file)
+     *            this keeps a 16 bit position within the sequence.   (64K length for each sequence.  identifies kmer within a sequence)
+     *                       a 40 bit sequence id                     (1 TB file, == file position. identifies the sequence from which the kmer comes)
      *                       an 8 bit file id                         (256 files)
+     *
+     *                         |<-------pos
+     *      file_id |===[=====][========*======]====================|
+     *              |<---------seq_id
+     *
+     *
      * @note      not using union since layout of unioned struct may be architecture or compiler dependent, and we need to send this via MPI.
      *            shift operator is reliable.
      *
@@ -180,9 +185,14 @@ namespace bliss
      * @brief     an Id in a file with short sequences, e.g. genomic FASTA.  Can be used to id Sequence or Kmer
      * @details   Accessor functions are used to extract the sub fields.  bit shift and bitwise and/or are used.  they are endian-independent.
      *
-     *            this keeps a 40 bit position within the sequence.  (1TBase sequence, max 1TB file size)
-     *                       a 16 bit sequence id.                   (32000 sequences per file)
+     *            this keeps a 40 bit position within the sequence.  (1TBase sequence, max 1TB file size.  identifies kmer position inside sequence)
+     *                       a 16 bit sequence id.                   (64K sequences per file, adjacent sequences have adjacent values (2, 3, 4 ...).
+     *                                                                identifies sequence (with sequence position table))
      *                       an 8 bit file id                        (256 files)
+     *
+     *                         |<-------pos
+     *      file_id |===[=====][========*======]====================|
+     *                  seq_id seq_id
      *
      * @note      not using union since layout of unioned struct may be architecture or compiler dependent, and we need to send this via MPI.
      *            shift operator is reliable.
@@ -268,59 +278,79 @@ namespace bliss
      * @details   internally we store 2 iterators, start and end, instead of start + length.
      *            reason is that using length is best for random access iterators and we don't have guarantee of that.
      *
-     *            stores position as id.  also
+     *
+     *                         id  seq_begin   seq_end
+     *              |===[=====][==={===========}===]================|
+     *                         |<-- record_size -->|
+     *                         |<->| seq_offset
+     *
      * @tparam Iterator   allows walking through the sequence data.
      */
-    template<typename Iterator>
+    template<typename Iterator, typename SeqId>
     class Sequence
     {
       public:
         /// Iterator type for traversing the sequence.
         typedef Iterator IteratorType;
         /// type for the id struct/union
-        typedef SequenceId IdType;
+        typedef SeqId IdType;
 
-        /// id of the sequence:  correspond to sequence_iter
-        SequenceId id;
+        /// id of the sequence:  correspond to sequence_iter.  file_pos field points to beginning of record.
+        const IdType id;
 
-        // length of full sequence.
-        size_t length;
+        // length of full record.
+        const size_t record_size;
 
-        /// offset of global seqBegin from beginning of record.
-        size_t seq_begin_offset;
+        /// offset of seq_begin in global coordinates. (TODO: does not appear to be used anywhere)
+        // size_t seq_begin_offset;
 
-        /// offset of seqBegin from the beginning of the record.
-        /// NOTE THAT IF SEQUENCE IS TRUNCATED, seqBegin may start later than the full sequence's starting point.
-        size_t local_offset;
+        /// offset of seq_begin from the beginning of the record.
+        /// NOTE THAT IF SEQUENCE IS TRUNCATED, seq_begin may start later than the full sequence's starting point (?)
+        const size_t seq_offset;
 
-        /// begin iterator for the sequence
-        Iterator seqBegin;
-        /// end iterator for the sequence.
-        Iterator seqEnd;
+        /// begin iterator for the sequence (may not be at record's starting position)
+        mutable Iterator seq_begin;
+        /// end iterator for the sequence. (may not be at record's end position)
+        mutable Iterator seq_end;
+
+        /**
+         * @brief << operator to write out SequenceId
+         * @param[in/out] ost   output stream to which the content is directed.
+         * @param[in]     db    BufferedDataBlock object to write out
+         * @return              output stream object
+         */
+        friend std::ostream& operator<<(std::ostream& ost, const Sequence & seq)
+        {
+          ost << " Sequence: id=[" << id << "] record_size=" << record_size << " seq_offset=" << seq_offset;
+          return ost;
+        }
 
 
+        Sequence() = default;  // needed for copy
 
-        Sequence() = default;
-
-        Sequence(SequenceId const & _id, size_t const & _length, size_t const& _offset, size_t const& _local_offset, Iterator const & _begin, Iterator const & _end) :
-          id(_id), length(_length), seq_begin_offset(_offset), local_offset(_local_offset), seqBegin(_begin), seqEnd(_end) {}
+        Sequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_offset, Iterator const & _begin, Iterator const & _end) :
+          id(_id), record_size(_record_size), seq_offset(_seq_offset), seq_begin(_begin), seq_end(_end) {}
 
         Sequence(Sequence const & other) :
-          id(other.id), length(other.length), seq_begin_offset(other.seq_begin_offset), local_offset(other.local_offset), seqBegin(other.seqBegin), seqEnd(other.seqEnd) {}
+          id(other.id), record_size(other.record_size), seq_offset(other.seq_offset), seq_begin(other.seq_begin), seq_end(other.seq_end) {}
 
         Sequence& operator=(Sequence const & other) {
           id = other.id;
-          length = other.length;
-          seq_begin_offset = other.seq_begin_offset;
-          local_offset = other.local_offset;
-          seqBegin = other.seqBegin;
-          seqEnd = other.seqEnd;
+          record_size = other.record_size;
+          seq_offset = other.seq_offset;
+          seq_begin = other.seq_begin;
+          seq_end = other.seq_end;
 
           return *this;
         }
 
+        virtual ~Sequence() {};
 
         static constexpr bool has_quality() { return false; }
+
+        size_t seq_size() const {
+          return ::std::distance(seq_begin, seq_end);
+        }
     };
 
   } /* namespace common */

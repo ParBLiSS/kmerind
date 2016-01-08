@@ -94,11 +94,11 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
         read = *seqs_start;
 
         // then compute and store into index (this will generate kmers and insert into index)
-        if (read.seqBegin == read.seqEnd) continue;
+        if (read.seq_begin == read.seq_end) continue;
 
         //== set up the kmer generating iterators.
-        KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-        KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+        KmerIterType start(BaseCharIterator(read.seq_begin, bliss::common::ASCII2<Alphabet>()), true);
+        KmerIterType end(BaseCharIterator(read.seq_end, bliss::common::ASCII2<Alphabet>()), false);
 
 
         query.insert(query.end(), start, end);
@@ -408,11 +408,11 @@ class PositionIndex {
             read = *seqs_start;
 
             // then compute and store into index (this will generate kmers and insert into index)
-            if (read.seqBegin == read.seqEnd) continue;
+            if (read.seq_begin == read.seq_end) continue;
 
             //== set up the kmer generating iterators.
-            KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-            KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+            KmerIterType start(BaseCharIterator(read.seq_begin, bliss::common::ASCII2<Alphabet>()), true);
+            KmerIterType end(BaseCharIterator(read.seq_end, bliss::common::ASCII2<Alphabet>()), false);
 
             //== set up the position iterators
             IdIterType id_start(read.id);
@@ -569,18 +569,18 @@ class PositionQualityIndex {
         read = *seqs_start;
 
         // then compute and store into index (this will generate kmers and insert into index)
-        if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) continue;
+        if (read.seq_begin == read.seq_end || read.qual_begin == read.qual_end) continue;
 
         //== set up the kmer generating iterators.
-        KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-        KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+        KmerIterType start(BaseCharIterator(read.seq_begin, bliss::common::ASCII2<Alphabet>()), true);
+        KmerIterType end(BaseCharIterator(read.seq_end, bliss::common::ASCII2<Alphabet>()), false);
 
         //== set up the position iterators
         IdIterType id_start(read.id);
         IdIterType id_end(read.id);
 
-	QualIterType qual_start(read.qualBegin);
-	QualIterType qual_end(read.qualEnd);
+	QualIterType qual_start(read.qual_begin);
+	QualIterType qual_end(read.qual_end);
 
 	KmerInfoIterType info_start(id_start, qual_start);
 	KmerInfoIterType info_end(id_end, qual_end);
@@ -721,11 +721,11 @@ class CountIndex {
         read = *seqs_start;
 
         // then compute and store into index (this will generate kmers and insert into index)
-        if (read.seqBegin == read.seqEnd) continue;
+        if (read.seq_begin == read.seq_end) continue;
 
         //== set up the kmer generating iterators.
-        KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-        KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+        KmerIterType start(BaseCharIterator(read.seq_begin, bliss::common::ASCII2<Alphabet>()), true);
+        KmerIterType end(BaseCharIterator(read.seq_end, bliss::common::ASCII2<Alphabet>()), false);
 
 
         temp.insert(temp.end(), start, end);

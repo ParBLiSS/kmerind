@@ -149,7 +149,7 @@ public:
 		{
 //		  std::cout << "** seq: " << (*seqs_start).id.id << ", ";
 //		  ostream_iterator<typename std::iterator_traits<typename SeqType::IteratorType>::value_type> osi(std::cout);
-//		  std::copy((*seqs_start).seqBegin, (*seqs_start).seqEnd, osi);
+//		  std::copy((*seqs_start).seq_begin, (*seqs_start).seq_end, osi);
 //		  std::cout << std::endl;
 
 			emplace_iter = kmer_parser(*seqs_start, emplace_iter);
@@ -204,7 +204,7 @@ public:
       // not reusing the SeqParser in loader.  instead, reinitializing one.
       TIMER_START(file);
       auto l1parser = loader.getSeqParser();
-      l1parser.init_for_iterator(partition.begin(), loader.getFileRange(), partition.getRange(), partition.getRange(), _comm);
+      l1parser.init_parser(partition.begin(), loader.getFileRange(), partition.getRange(), partition.getRange(), _comm);
       TIMER_END(file, "mark_seqs", est_size);
 
 			TIMER_START(file);
@@ -336,7 +336,7 @@ public:
 			// not reusing the SeqParser in loader.  instead, reinitializing one.
       TIMER_START(file);
 			SeqParser<typename FileLoaderType::L2BlockType::iterator> l2parser;
-			l2parser.init_for_iterator(block.begin(), file_range, range, range, comm);
+			l2parser.init_parser(block.begin(), file_range, range, range, comm);
       TIMER_END(file, "mark_seqs", est_size);
 
 			//== reserve
@@ -587,12 +587,12 @@ struct KmerParser {
 				"input iterator and output iterator's value types differ");
 
 		// then compute and store into index (this will generate kmers and insert into index)
-		if (read.seqBegin == read.seqEnd) return output_iter;
+		if (read.seq_begin == read.seq_end) return output_iter;
 
 		//== filtering iterator
 		NotEOL neol;
-		NonEOLIter<typename SeqType::IteratorType> eolstart(neol, read.seqBegin, read.seqEnd);
-		NonEOLIter<typename SeqType::IteratorType> eolend(neol, read.seqEnd);
+		NonEOLIter<typename SeqType::IteratorType> eolstart(neol, read.seq_begin, read.seq_end);
+		NonEOLIter<typename SeqType::IteratorType> eolend(neol, read.seq_end);
 
 		//== set up the kmer generating iterators.
 		KmerIterType start(BaseCharIterator(eolstart, bliss::common::ASCII2<Alphabet>()), true);
@@ -662,23 +662,23 @@ struct KmerPositionTupleParser {
 
 
 		// then compute and store into index (this will generate kmers and insert into index)
-		if (read.seqBegin == read.seqEnd) return output_iter;
+		if (read.seq_begin == read.seq_end) return output_iter;
 
     //== set up the kmer generating iterators.
     NotEOL neol;
-    KmerIter start(BaseCharIterator(CharIter(neol, read.seqBegin, read.seqEnd), bliss::common::ASCII2<Alphabet>()), true);
-    KmerIter end(BaseCharIterator(CharIter(neol, read.seqEnd), bliss::common::ASCII2<Alphabet>()), false);
+    KmerIter start(BaseCharIterator(CharIter(neol, read.seq_begin, read.seq_end), bliss::common::ASCII2<Alphabet>()), true);
+    KmerIter end(BaseCharIterator(CharIter(neol, read.seq_end), bliss::common::ASCII2<Alphabet>()), false);
 
 
 		//== set up the position iterators
 		IdType seq_begin_id(read.id);
-		seq_begin_id += read.local_offset;  // change id to point to start of sequence (in file coord)
+		seq_begin_id += read.seq_offset;  // change id to point to start of sequence (in file coord)
 		IdType seq_end_id(seq_begin_id);
-		seq_end_id += std::distance(read.seqBegin, read.seqEnd);
+		seq_end_id += std::distance(read.seq_begin, read.seq_end);
 
 		// tie chars and id together
-		PairedIter pp_begin(read.seqBegin, IdIterType(seq_begin_id));
-		PairedIter pp_end(read.seqEnd, IdIterType(seq_end_id));
+		PairedIter pp_begin(read.seq_begin, IdIterType(seq_begin_id));
+		PairedIter pp_end(read.seq_end, IdIterType(seq_end_id));
 
     // filter eol
 		CharPosIter cp_begin(neol, pp_begin, pp_end);
@@ -780,24 +780,24 @@ struct KmerPositionQualityTupleParser {
 
 
 		// then compute and store into index (this will generate kmers and insert into index)
-		if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) return output_iter;
+		if (read.seq_begin == read.seq_end || read.qual_begin == read.qual_end) return output_iter;
 
 
     //== set up the kmer generating iterators.
     NotEOL neol;
-    KmerIter start(BaseCharIterator(CharIter(neol, read.seqBegin, read.seqEnd), bliss::common::ASCII2<Alphabet>()), true);
-    KmerIter end(BaseCharIterator(CharIter(neol, read.seqEnd), bliss::common::ASCII2<Alphabet>()), false);
+    KmerIter start(BaseCharIterator(CharIter(neol, read.seq_begin, read.seq_end), bliss::common::ASCII2<Alphabet>()), true);
+    KmerIter end(BaseCharIterator(CharIter(neol, read.seq_end), bliss::common::ASCII2<Alphabet>()), false);
 
 
     //== set up the position iterators
     IdType seq_begin_id(read.id);
-    seq_begin_id += read.local_offset;  // change id to point to start of sequence (in file coord)
+    seq_begin_id += read.seq_offset;  // change id to point to start of sequence (in file coord)
     IdType seq_end_id(seq_begin_id);
-    seq_end_id += std::distance(read.seqBegin, read.seqEnd);
+    seq_end_id += std::distance(read.seq_begin, read.seq_end);
 
     // tie chars and id together
-    PairedIter pp_begin(read.seqBegin, IdIterType(seq_begin_id));
-    PairedIter pp_end(read.seqEnd, IdIterType(seq_end_id));
+    PairedIter pp_begin(read.seq_begin, IdIterType(seq_begin_id));
+    PairedIter pp_end(read.seq_end, IdIterType(seq_end_id));
 
     // filter eol
     CharPosIter cp_begin(neol, pp_begin, pp_end);
@@ -805,8 +805,8 @@ struct KmerPositionQualityTupleParser {
 
     // ==== quality scoring
 		// filter eol and generate quality scores
-		QualIterType qual_start(CharIter(neol, read.qualBegin, read.qualEnd));
-		QualIterType qual_end(CharIter(neol, read.qualEnd));
+		QualIterType qual_start(CharIter(neol, read.qual_begin, read.qual_end));
+		QualIterType qual_end(CharIter(neol, read.qual_end));
 
 		KmerInfoIterType info_start(IdIter(cp_begin), qual_start);
 		KmerInfoIterType info_end(IdIter(cp_end), qual_end);
@@ -872,12 +872,12 @@ struct KmerCountTupleParser {
 		CountIterType count_start(1);
 
 		// then compute and store into index (this will generate kmers and insert into index)
-		if (read.seqBegin == read.seqEnd) return output_iter;
+		if (read.seq_begin == read.seq_end) return output_iter;
 
 		//== set up the kmer generating iterators.
 		NotEOL neol;
-		NonEOLIter<typename SeqType::IteratorType> eolstart(neol, read.seqBegin, read.seqEnd);
-		NonEOLIter<typename SeqType::IteratorType> eolend(neol, read.seqEnd);
+		NonEOLIter<typename SeqType::IteratorType> eolstart(neol, read.seq_begin, read.seq_end);
+		NonEOLIter<typename SeqType::IteratorType> eolend(neol, read.seq_end);
 
 		KmerIterType start(BaseCharIterator(eolstart, bliss::common::ASCII2<Alphabet>()), true);
 		KmerIterType end(BaseCharIterator(eolend, bliss::common::ASCII2<Alphabet>()), false);

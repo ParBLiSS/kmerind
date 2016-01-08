@@ -123,8 +123,6 @@ namespace bliss
          */
         size_t file_offset;
 
-        ///  sequence index in any shared data vector.
-        size_t seq_offset;
 
 
       public:
@@ -140,14 +138,14 @@ namespace bliss
          */
         SequencesIterator(const Parser<Iterator> & f, const Iterator& start,
                        const Iterator& end, const size_t &_offset)
-            : seq(), _curr(start), _next(start), _end(end), parser(f), file_offset(_offset), seq_offset(0)
+            : seq(), _curr(start), _next(start), _end(end), parser(f), file_offset(_offset)
         {
           // parse the first entry, if start != end.
           // effect: _next incremented to next parse start point.
           //         file_offset updated to next start point,
           //         output updated with either empty (if _next at end)  or the new output
           if (_next != _end)
-            seq_offset = parser.increment(_next, _end, file_offset, seq);  // first increment.
+            seq = parser.get_next_record(_next, _end, file_offset);  // first increment.
         }
 
         /**
@@ -157,7 +155,7 @@ namespace bliss
          * @param end     end of the data to be parsed.
          */
         explicit SequencesIterator(const Iterator& end)
-            : seq(), _curr(end), _next(end), _end(end), parser(), file_offset(std::numeric_limits<size_t>::max()), seq_offset(std::numeric_limits<size_t>::max())
+            : seq(), _curr(end), _next(end), _end(end), parser(), file_offset(std::numeric_limits<size_t>::max())
         {
         }
 
@@ -167,7 +165,7 @@ namespace bliss
          */
         explicit SequencesIterator(const type& Other)
             : seq(Other.seq), _curr(Other._curr), _next(Other._next), _end(Other._end),
-              parser(Other.parser),  file_offset(Other.file_offset), seq_offset(Other.seq_offset)
+              parser(Other.parser),  file_offset(Other.file_offset)
         {}
 
         /**
@@ -183,7 +181,7 @@ namespace bliss
           _end = Other._end;
           parser = Other.parser;
           file_offset = Other.file_offset;
-          seq_offset = Other.seq_offset;
+
           return *this;
         }
 
@@ -193,7 +191,7 @@ namespace bliss
          */
         explicit SequencesIterator(type && Other)
             : seq(std::move(Other.seq)), _curr(std::move(Other._curr)), _next(std::move(Other._next)), _end(std::move(Other._end)),
-              parser(std::move(Other.parser)),  file_offset(std::move(Other.file_offset)), seq_offset(std::move(Other.seq_offset))
+              parser(std::move(Other.parser)),  file_offset(std::move(Other.file_offset))
         {}
 
         /**
@@ -209,7 +207,6 @@ namespace bliss
           _end =  std::move(Other._end);
           parser = std::move(Other.parser);
           file_offset = std::move(Other.file_offset);
-          seq_offset = std::move(Other.seq_offset);
           return *this;
         }
 
@@ -248,7 +245,7 @@ namespace bliss
             _curr = _next;
 
             //== then try parsing.  this advances _next and offset, ready for next ++ call, and updates output cache.
-            parser.increment(_next, _end, file_offset, seq_offset, seq);
+            seq = parser.get_next_record(_next, _end, file_offset);
           }
 
           //== states updated.  return self.

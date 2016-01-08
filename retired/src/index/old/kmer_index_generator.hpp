@@ -115,12 +115,12 @@ namespace bliss
         void operator()(SequenceType &read, IndexType &index) {
 
           KmerGenOp kmer_op(read.id);
-          KmerIter start(read.seqBegin, kmer_op);
-          KmerIter end(read.seqEnd, kmer_op);
+          KmerIter start(read.seq_begin, kmer_op);
+          KmerIter end(read.seq_end, kmer_op);
 
           QualGenOp qual_op;
-          QualIter qstart(read.qualBegin, qual_op);
-          QualIter qend(read.qualEnd, qual_op);
+          QualIter qstart(read.qual_begin, qual_op);
+          QualIter qend(read.qual_end, qual_op);
 
           KmerIndexPairType kmer;
 //          int kmerCount = 0;

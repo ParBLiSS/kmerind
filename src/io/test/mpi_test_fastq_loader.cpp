@@ -66,8 +66,8 @@ TEST_P(FASTQParserTest, parse)
     for (; seqs_start != seqs_end; ++seqs_start, ++(this->elemCount))
     {
       //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
-      //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
-      //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).seq_begin) << ", " << std::distance(l1.begin(), (*seqs_start).seq_end) << ", ";
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
     }
 
     l1 = loader.getNextL1Block();
@@ -124,8 +124,8 @@ TEST_P(FASTQParserTest, parse_omp)
         for (; seqs_start != seqs_end; ++seqs_start, ++localKmerCount)
         {
           //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
-          //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
-          //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).seq_begin) << ", " << std::distance(l1.begin(), (*seqs_start).seq_end) << ", ";
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
         }
 
         l2 = loader.getNextL2Block(tid);
@@ -171,8 +171,8 @@ TEST_P(FASTQParserTest, parse_mpi)
     for (; seqs_start != seqs_end; ++seqs_start, ++this->elemCount)
     {
       //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
-      //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
-      //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).seq_begin) << ", " << std::distance(l1.begin(), (*seqs_start).seq_end) << ", ";
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
     }
 
     l1 = loader.getNextL1Block();
@@ -225,8 +225,8 @@ TEST_P(FASTQParserTest, parse_mpi_omp)
         for (; seqs_start != seqs_end; ++seqs_start, ++localKmerCount)
         {
           //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
-          //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
-          //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).seq_begin) << ", " << std::distance(l1.begin(), (*seqs_start).seq_end) << ", ";
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
         }
 
         l2 = loader.getNextL2Block(tid);

@@ -571,36 +571,36 @@ struct SequencesIterator {
 
         // simulate kmer computation
         // simulate multiple traversals.
-        for (BaseIterType iter = read.seqBegin; iter != read.seqEnd; ++iter) {
+        for (BaseIterType iter = read.seq_begin; iter != read.seq_end; ++iter) {
           c = std::max(*iter, c);
         }
-        for (BaseIterType iter = read.qualBegin; iter != read.qualEnd; ++iter) {
+        for (BaseIterType iter = read.qual_begin; iter != read.qual_end; ++iter) {
           c = std::max(*iter, c);
         }
 
-        for (BaseIterType iter = read.seqBegin; iter != read.seqEnd; ++iter) {
+        for (BaseIterType iter = read.seq_begin; iter != read.seq_end; ++iter) {
           d = std::min(*iter, d);
         }
-        for (BaseIterType iter = read.qualBegin; iter != read.qualEnd; ++iter) {
+        for (BaseIterType iter = read.qual_begin; iter != read.qual_end; ++iter) {
           d = std::min(*iter, d);
         }
 
         // simulate kmer computation
-        for (BaseIterType iter = read.seqBegin; iter != read.seqEnd; ++iter) {
+        for (BaseIterType iter = read.seq_begin; iter != read.seq_end; ++iter) {
           km <<= 8;
           km |= static_cast<uint64_t>(*iter);
         }
-        for (BaseIterType iter = read.qualBegin; iter != read.qualEnd; ++iter) {
+        for (BaseIterType iter = read.qual_begin; iter != read.qual_end; ++iter) {
           km <<= 8;
           km |= static_cast<uint64_t>(*iter);
         }
 
         // simulate quality score computation.
         tv += static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-        for (BaseIterType iter = read.seqBegin; iter != read.seqEnd; ++iter) {
+        for (BaseIterType iter = read.seq_begin; iter != read.seq_end; ++iter) {
           tv += log2(*iter);
         }
-        for (BaseIterType iter = read.qualBegin; iter != read.qualEnd; ++iter) {
+        for (BaseIterType iter = read.qual_begin; iter != read.qual_end; ++iter) {
           tv += log2(*iter);
         }
 
@@ -696,9 +696,9 @@ struct SequencesIterator2 {
         // simulate kmer computation
 
         // simulate kmer computation
-        iter = read.seqBegin;
+        iter = read.seq_begin;
         for (;
-            iter != read.seqEnd;
+            iter != read.seq_end;
             ++iter) {
           km <<= 8;
           km |= static_cast<uint64_t>(*iter);
@@ -707,9 +707,9 @@ struct SequencesIterator2 {
 
         // simulate quality score computation.
         tv += static_cast<OT>(km) / static_cast<OT>(std::numeric_limits<uint64_t>::max() );
-        iter = read.qualBegin;
+        iter = read.qual_begin;
         for (;   // slow because of log2.
-            iter != read.qualEnd;
+            iter != read.qual_end;
             ++iter) {
           tv += log2(*iter);
 //          ++j;
@@ -812,7 +812,7 @@ struct SequencesIteratorNoQual {
         // simulate kmer computation
 
         // simulate kmer computation
-        for (BaseIterType iter = read.seqBegin; iter != read.seqEnd; ++iter) {
+        for (BaseIterType iter = read.seq_begin; iter != read.seq_end; ++iter) {
           km <<= 8;
           km |= static_cast<uint64_t>(*iter);
         }

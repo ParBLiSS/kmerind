@@ -484,11 +484,11 @@ namespace bliss
          */
         virtual void buildForSequence(SeqType &read, MapType& index) {
 
-          if (read.seqBegin == read.seqEnd) return;
+          if (read.seq_begin == read.seq_end) return;
 
           //== transform ascii to coded value
-          BaseCharIterator charStart(read.seqBegin, bliss::common::ASCII2<Alphabet>());
-          BaseCharIterator charEnd(read.seqEnd, bliss::common::ASCII2<Alphabet>());
+          BaseCharIterator charStart(read.seq_begin, bliss::common::ASCII2<Alphabet>());
+          BaseCharIterator charEnd(read.seq_end, bliss::common::ASCII2<Alphabet>());
 
           //== set up the kmer generating iterators.
           KmerIterType start(charStart, true);
@@ -629,11 +629,11 @@ namespace bliss
          */
         virtual void buildForSequence(SeqType &read, MapType& index) {
 
-          if (read.seqBegin == read.seqEnd) return;
+          if (read.seq_begin == read.seq_end) return;
 
           //== set up the kmer generating iterators.
-          KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-          KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+          KmerIterType start(BaseCharIterator(read.seq_begin, bliss::common::ASCII2<Alphabet>()), true);
+          KmerIterType end(BaseCharIterator(read.seq_end, bliss::common::ASCII2<Alphabet>()), false);
 
           //== set up the position iterators
           IdIterType id_start(read.id);
@@ -794,19 +794,19 @@ namespace bliss
          */
         virtual void buildForSequence(SeqType &read, MapType& index) {
 
-          if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) return;
+          if (read.seq_begin == read.seq_end || read.qual_begin == read.qual_end) return;
 
           //== set up the kmer generating iterators.
-          KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-          KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+          KmerIterType start(BaseCharIterator(read.seq_begin, bliss::common::ASCII2<Alphabet>()), true);
+          KmerIterType end(BaseCharIterator(read.seq_end, bliss::common::ASCII2<Alphabet>()), false);
 
           //== set up the position iterators
           IdIterType id_start(read.id);
           IdIterType id_end(read.id);
 
           // set up the quality iterator
-          QualIterType qual_start(read.qualBegin);
-          QualIterType qual_end(read.qualEnd);
+          QualIterType qual_start(read.qual_begin);
+          QualIterType qual_end(read.qual_end);
 
           KmerInfoIterType info_start(id_start, qual_start);
           KmerInfoIterType info_end(id_end, qual_end);
@@ -945,13 +945,13 @@ namespace bliss
            */
           virtual void buildForSequence(SeqType &read, MapType& index) {
 
-            if (read.seqBegin == read.seqEnd) return;
+            if (read.seq_begin == read.seq_end) return;
 
             //== set up the kmer generating iterators.
             KmoleculeOpType kmer_op;
             bliss::utils::KmoleculeToCanonicalKmerFunctor<KmerType> transform;
-            KmerIndexIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
-            KmerIndexIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
+            KmerIndexIterType start(KmoleculeIterType(read.seq_begin, kmer_op), transform);
+            KmerIndexIterType end(KmoleculeIterType(read.seq_end, kmer_op), transform);
 
 
             // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
@@ -1095,13 +1095,13 @@ namespace bliss
            */
           virtual void buildForSequence(SeqType &read, MapType& index) {
 
-            if (read.seqBegin == read.seqEnd) return;
+            if (read.seq_begin == read.seq_end) return;
 
             //== set up the kmer generating iterators.
             KmoleculeOpType kmer_op;
             bliss::utils::KmoleculeToCanonicalKmerFunctor<KmerType> transform;
-            KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
-            KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
+            KmerIterType start(KmoleculeIterType(read.seq_begin, kmer_op), transform);
+            KmerIterType end(KmoleculeIterType(read.seq_end, kmer_op), transform);
 
             //== set up the position iterators
             IdIterType id_start(read.id);
@@ -1264,21 +1264,21 @@ namespace bliss
            */
           virtual void buildForSequence(SeqType &read, MapType& index) {
 
-            if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) return;
+            if (read.seq_begin == read.seq_end || read.qual_begin == read.qual_end) return;
 
             //== set up the kmer generating iterators.
             KmoleculeOpType kmer_op;
             bliss::utils::KmoleculeToCanonicalKmerFunctor<KmerType> transform;
-            KmerIterType start(KmoleculeIterType(read.seqBegin, kmer_op), transform);
-            KmerIterType end(KmoleculeIterType(read.seqEnd, kmer_op), transform);
+            KmerIterType start(KmoleculeIterType(read.seq_begin, kmer_op), transform);
+            KmerIterType end(KmoleculeIterType(read.seq_end, kmer_op), transform);
 
             //== set up the position iterators
             IdIterType id_start(read.id);
             IdIterType id_end(read.id);
 
             // set up the quality iterator
-            QualIterType qual_start(read.qualBegin);
-            QualIterType qual_end(read.qualEnd);
+            QualIterType qual_start(read.qual_begin);
+            QualIterType qual_end(read.qual_end);
 
             KmerInfoIterType info_start(id_start, qual_start);
             KmerInfoIterType info_end(id_end, qual_end);

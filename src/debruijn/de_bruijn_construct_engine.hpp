@@ -110,17 +110,17 @@ namespace bliss
 		        "Generating iterator and output iterator's value types differ");
 
 		    // then compute and store into index (this will generate kmers and insert into index)
-		     if (read.seqBegin == read.seqEnd) return output_iter;
+		     if (read.seq_begin == read.seq_end) return output_iter;
 
 		     //== set up the kmer generating iterators.
 		     bliss::index::kmer::NotEOL neol;
-		     KmerIter start(BaseCharIterator(CharIter(neol, read.seqBegin, read.seqEnd), bliss::common::ASCII2<Alphabet>()), true);
-		     KmerIter end(BaseCharIterator(CharIter(neol, read.seqEnd), bliss::common::ASCII2<Alphabet>()), false);
+		     KmerIter start(BaseCharIterator(CharIter(neol, read.seq_begin, read.seq_end), bliss::common::ASCII2<Alphabet>()), true);
+		     KmerIter end(BaseCharIterator(CharIter(neol, read.seq_end), bliss::common::ASCII2<Alphabet>()), false);
 
 
 		     // set up edge iterator.  returns the left and right chars around the kmer IN THE READ.
-	       EdgeIterType edge_start(CharIter(neol, read.seqBegin, read.seqEnd), CharIter(neol, read.seqEnd), KmerType::size);
-	       EdgeIterType edge_end (CharIter(neol, read.seqEnd));
+	       EdgeIterType edge_start(CharIter(neol, read.seq_begin, read.seq_end), CharIter(neol, read.seq_end), KmerType::size);
+	       EdgeIterType edge_end (CharIter(neol, read.seq_end));
 
 
 	       // ==== set up the zip iterators
@@ -182,21 +182,21 @@ namespace bliss
 
 
            // then compute and store into index (this will generate kmers and insert into index)
-           if (read.seqBegin == read.seqEnd || read.qualBegin == read.qualEnd) return output_iter;
+           if (read.seq_begin == read.seq_end || read.qual_begin == read.qual_end) return output_iter;
 
            //== set up the kmer generating iterators.
            bliss::index::kmer::NotEOL neol;
-           KmerIter start(BaseCharIterator(CharIter(neol, read.seqBegin, read.seqEnd), bliss::common::ASCII2<Alphabet>()), true);
-           KmerIter end(BaseCharIterator(CharIter(neol, read.seqEnd), bliss::common::ASCII2<Alphabet>()), false);
+           KmerIter start(BaseCharIterator(CharIter(neol, read.seq_begin, read.seq_end), bliss::common::ASCII2<Alphabet>()), true);
+           KmerIter end(BaseCharIterator(CharIter(neol, read.seq_end), bliss::common::ASCII2<Alphabet>()), false);
 
 
            // set up edge iterator.  returns the left and right chars around the kmer IN THE READ.
-           EdgeIterType edge_start(CharIter(neol, read.seqBegin, read.seqEnd), CharIter(neol, read.seqEnd), KmerType::size);
-           EdgeIterType edge_end (CharIter(neol, read.seqEnd));
+           EdgeIterType edge_start(CharIter(neol, read.seq_begin, read.seq_end), CharIter(neol, read.seq_end), KmerType::size);
+           EdgeIterType edge_end (CharIter(neol, read.seq_end));
 
 
-           QualIterType qual_start(CharIter(neol, read.qualBegin, read.qualEnd));
-            QualIterType qual_end(CharIter(neol, read.qualEnd));
+           QualIterType qual_start(CharIter(neol, read.qual_begin, read.qual_end));
+            QualIterType qual_end(CharIter(neol, read.qual_end));
 
             KmerInfoIterType info_start(edge_start, qual_start);
             KmerInfoIterType info_end(edge_end, qual_end);

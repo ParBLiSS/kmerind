@@ -21,7 +21,7 @@
 #include "common/base_types.hpp"
 #include "common/sequence.hpp"
 #include "io/file_loader.hpp"
-
+#include <type_traits>
 
 namespace bliss
 {
@@ -32,49 +32,61 @@ namespace bliss
 
     };
 
-    template <typename Iterator>
-    class FASTQSequence : public ::bliss::common::Sequence<Iterator> {
+    template <typename Iterator, bool HasQuality = true>
+    class FASTQSequence : public ::bliss::common::Sequence<Iterator, ::bliss::common::ShortSequenceKmerId> {
+
+      protected:
+        using BaseType = ::bliss::common::Sequence<Iterator, ::bliss::common::ShortSequenceKmerId>;
 
       public:
       /// Iterator type for traversing the sequence.
       typedef Iterator IteratorType;
       /// type for the id struct/union
-      typedef typename ::bliss::common::Sequence<Iterator>::IdType IdType;
+      typedef ::bliss::common::ShortSequenceKmerId IdType;
 
       /// begin iterator for the sequence
-      Iterator qualBegin;
+      Iterator qual_begin;
       /// end iterator for the sequence.
-      Iterator qualEnd;
+      Iterator qual_end;
 
 
 
       FASTQSequence() = default;
 
-      FASTQSequence(IdType const & _id, size_t const & _length, size_t const& _offset, size_t const& _local_offset, Iterator const & _begin, Iterator const & _end) :
-        ::bliss::common::Sequence<Iterator>(_id, _length, _offset, _local_offset,  _begin, _end) {}
+      template <bool Q = HasQuality>
+      FASTQSequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_offset, Iterator const & _begin, Iterator const & _end,
+                    typename ::std::enable_if<!Q>::type* = 0) :
+        BaseType(_id, _record_size, _seq_offset,  _begin, _end) {}
+
+      FASTQSequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_offset,
+                    Iterator const & _seq_begin, Iterator const & _seq_end,
+                    Iterator const & _qual_begin, Iterator const & _qual_end) :
+        BaseType(_id, _record_size, _seq_offset,  _seq_begin, _seq_end), qual_begin(other.qual_begin), qual_end(other.qual_end) {}
+
 
       FASTQSequence(FASTQSequence const & other) :
-        ::bliss::common::Sequence<Iterator>(other.id, other.length, other.seq_begin_offset, other.local_offset, other.seqBegin, other.seqEnd), qualBegin(other.qualBegin), qualEnd(other.qualEnd) {}
+        BaseType(other.id, other.record_size, other.seq_offset, other.seq_begin, other.seq_end), qual_begin(other.qual_begin), qual_end(other.qual_end) {}
 
       FASTQSequence& operator=(FASTQSequence const & other) {
+
         this->id = other.id;
-        this->length = other.length;
-        this->seq_begin_offset = other.seq_begin_offset;
-        this->local_offset = other.local_offset;
-        this->seqBegin = other.seqBegin;
-        this->seqEnd = other.seqEnd;
-        qualBegin = other.qualBegin;
-        qualEnd = other.qualEnd;
+        this->record_size = other.record_size;
+        this->seq_offset = other.seq_offset;
+        this->seq_begin = other.seq_begin;
+        this->seq_end = other.seq_end;
+
+        qual_begin = other.qual_begin;
+        qual_end = other.qual_end;
 
         return *this;
       }
 
-      void set_quality(Iterator const & _begin, Iterator const & _end) {
-        qualBegin = _begin;
-        qualEnd = _end;
-      }
+//      void set_quality(Iterator const & _begin, Iterator const & _end) {
+//        qual_begin = _begin;
+//        qual_end = _end;
+//      }
 
-      static constexpr bool has_quality() { return true; }
+      static constexpr bool has_quality() { return HasQuality; }
     };
 
     /**
@@ -109,7 +121,7 @@ namespace bliss
         FASTQParser() : bliss::io::BaseFileParser<Iterator>() {};
 
         /// default destructor
-        ~FASTQParser() {};
+        virtual ~FASTQParser() {};
 
         /// converting constructor.
         template <typename Iterator2>
@@ -135,7 +147,7 @@ namespace bliss
          * @return
          */
         bool isQualityIteratorAtEnd(SequenceType& seq) {
-          return seq.qualBegin == seq.qualEnd;
+          return seq.qual_begin == seq.qual_end;
         }
 
       public:
@@ -210,8 +222,8 @@ namespace bliss
          * @return            position of the start of next read sequence (@).  if there is no complete sequence within the parentRange, return end of parentRange.
          * @throws            if no start is found, and search range does not cover the parent's end, then the search range does not include a complete record, throws IOException
          */
-        std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
-        throw (bliss::io::IOException) {
+        std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
+        {
 
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
 
@@ -299,6 +311,21 @@ namespace bliss
           throw bliss::io::IOException(ss.str());
         }
 
+        // inherited reset.
+
+        // TODO: store offset for first record...
+
+        virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) {
+          return find_first_record(_data, parentRange, inMemRange, searchRange);
+        }
+ #ifdef USE_MPI
+        /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.
+        virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm)
+        {
+          return find_first_record(_data, parentRange, inMemRange, searchRange);
+        };
+ #endif
+
         /**
          * @brief increments the iterator to the beginning of the next record, while saving the current record in memory and update the record id.
          * @details   Called by the containing iterator during operator++ or operator+=
@@ -318,7 +345,7 @@ namespace bliss
          * @param[in/out] output        updated sequence type, values updated.
          * @throw IOException           if parse failed, throw exception
          */
-        size_t increment(Iterator &iter, const Iterator &end, size_t &offset, size_t &seq_offset, SequenceType& output) throw (bliss::io::IOException)
+        SequenceType get_next_record(Iterator &iter, const Iterator &end, size_t &offset)
         {
           //== first make a copy of iter so we can later use the original in exception handling.
           Iterator orig_iter = iter;
@@ -337,6 +364,8 @@ namespace bliss
           //== find 1st line, also the starting point.
           // find start of line, \nX or end.
           this->findNonEOL(iter, end, offset);
+          if ((iter != end) && (*iter != '@'))
+            this->handleError("missing @ on first line. Perhaps init is needed?", orig_iter, iter, orig_offset, offset);
           // offset pointing to first start, save it as the id.  - either \n or end
           record_start_offset = offset;
           // then find the end of that line  - either \n or end.
@@ -351,6 +380,8 @@ namespace bliss
 
           // == find 3rd line, and discard it.
           this->findNonEOL(iter, end, offset);
+          if ((iter != end) && (*iter != '+'))
+            this->handleError("missing + on first line", orig_iter, iter, orig_offset, offset);
           // then find the end of that line  - either \n or end.
           this->findEOL(iter, end, offset);
 
@@ -360,56 +391,26 @@ namespace bliss
           lend = this->findEOL(iter, end, offset);
 
 
-          // skip over any \n.
+          // skip over any remaining \n.
           this->findNonEOL(iter, end, offset);
 
-          // store where the actual DNA sequence starts relative to the beginnig of the record.
-          output = SequenceType(SequenceIdType(record_start_offset),
-                                offset - record_start_offset,
-                                seq_start_offset - record_start_offset,
-                                seq_start_offset - record_start_offset,
-                                sstart, send);
-          // don't even bother to call if Quality type is void - avoids copy operations.
-          output.set_quality(lstart, lend);
-
+          // store where the actual DNA sequence starts relative to the beginning of the record.
 
           //== now check for error conditions.
           // if either sequence or if required quality score were not found, then failed parsing
-          if (output.seqBegin == output.seqEnd) {
-            // if nothing is found, throw a warning.
+          // likely the record was truncated.
+          if ((sstart == send) || (lstart == lend))
+            this->handleError("truncated record? missing seq or quality", orig_iter, lend, orig_offset, offset);
+          else if (::std::distance(sstart, send) != ::std::distance(lstart, lend))
+            this->handleError("truncated record? seq and qual differ in length", orig_iter, lend, orig_offset, offset);
 
-            this->handleWarning("sequence", orig_iter, lend, orig_offset, offset);
-          } else {
-            // sequence parsing is fine.  now check quality parsing.  if quality is not parsed, then this is an error.
-            if (isQualityIteratorAtEnd(output)) {  // if quality score is not specified, the code below is never called.
-              output.seqBegin = output.seqEnd;  // force seq data not to be used.
-              this->handleError("required quality score", orig_iter, lend, orig_offset, offset);
-            }
-          }
 
-          // leave iter and offset advanced.
-          ++seq_offset;
-          return seq_offset;
+          return SequenceType(SequenceIdType(record_start_offset),
+                              offset - record_start_offset,
+                              seq_start_offset - record_start_offset,
+                              sstart, send, lstart, lend);
         }
 
-
-        /**
-         * @brief initializes the Parser object for sequencesIterator.  primarily to search for index within global array (e.g. FASTA)
-         * @note SequenceType is different than that in base type, so this is an overload, not override.
-         *
-         * @param iter
-         * @param parentRange
-         * @param inMemRange
-         * @param searchRange
-         * @return   index in process-local (shared) sequence vector.
-         */
-        size_t increment(Iterator &iter, const Iterator &end, size_t &offset, SequenceType& output) throw (bliss::io::IOException) {
-          size_t result = 0;
-
-          increment(iter, end, offset, result, output);
-
-          return 0;
-        };
     };
 
 
@@ -430,7 +431,7 @@ namespace bliss
      *          Majority of the interface is inherited from FileLoader.
      *          This class modifies the behaviors of GetNextL1Block and getNextL2Block,
      *            as described in FileLoader's "Advanced Usage".  Specifically, the range is modified
-     *            for each block by calling "findStart" to align the start and end to FASTQ sequence
+     *            for each block by calling "find_first_record" to align the start and end to FASTQ sequence
      *            record boundaries.
      *
      * @note    Processes 1 file at a time.  For paired end reads, a separate subclass is appropriate.

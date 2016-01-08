@@ -87,7 +87,7 @@ TEST_P(FASTAIteratorTest, read)
   bool local_same = true;
 
   while (l1.getRange().size() > 0) {
-    l1parser.init_for_iterator(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
+    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
 
     //==  and wrap the chunk inside an iterator that emits Reads.
     SeqIterType seqs_start(l1parser, l1.begin(), l1.end(), l1.getRange().start);
@@ -104,7 +104,7 @@ TEST_P(FASTAIteratorTest, read)
       emplace_iter = kmer_parser(seq, emplace_iter);
 
       // compare the results.
-//  	printf("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.pos_in_file, seq.seq_begin_offset, seq.local_offset, seq.length);
+//  	printf("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.pos_in_file, seq.seq_begin_offset, seq.seq_offset, seq.record_size);
       for (size_t i = 0; i < result.size(); ++i) {
         this->readFilePOSIX(this->fileName, result[i].second.get_pos(), kmer_size, gold);
 
@@ -114,9 +114,9 @@ TEST_P(FASTAIteratorTest, read)
         same &= local_same;
 
         if (!local_same) {
-          printf("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.pos_in_file, seq.seq_begin_offset, seq.local_offset, seq.length);
-          printf("i %lu id: pos %lu, id %lu, file %d\n", i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
-          printf("i %lu pos %lu gold: [%s]\npos %lu test: [%s]\n", i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
+          BL_ERROR("sequence record: " << seq);
+          BL_ERRORF("i %lu id: pos %lu, id %lu, file %d\n", i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
+          BL_ERRORF("i %lu pos %lu gold: [%s]\npos %lu test: [%s]\n", i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
         }
       }
 
@@ -171,7 +171,7 @@ TEST_P(FASTAIteratorTest, read_mpi)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   while (l1.getRange().size() > 0) {
-    l1parser.init_for_iterator(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
+    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
 
 //    printf("block range [%lu, %lu)\n", l1.getRange().start, l1.getRange().end);
 
@@ -253,7 +253,7 @@ TEST_P(FASTAIteratorTest, read_omp)
 
   while (l1.getRange().size() > 0) {
 
-    l1parser.init_for_iterator(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
+    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
 
 
     size_t localKmerCount = 0;
@@ -304,10 +304,10 @@ TEST_P(FASTAIteratorTest, read_omp)
             threadcomp = equal(KmertoString.begin(), gold, kmer_size);
 
             if (!threadcomp) {
-              BL_DEBUGF("tid %d l2 block: start, %lu end %lu\n", tid, l2.getRange().start, l2.getRange().end);
-              BL_DEBUGF("tid %d sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", tid, seq.id.pos_in_file, seq.seq_begin_offset, seq.local_offset, seq.length);
-              BL_DEBUGF("tid %d i %lu id: pos %lu, id %lu, file %d\n", tid, i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
-              BL_DEBUGF("tid %d\ti %lu\tpos %lu gold: [%s]\n\t\tpos %lu test: [%s]\n", tid,  i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
+              BL_ERRORF("tid %d l2 block: start, %lu end %lu\n", tid, l2.getRange().start, l2.getRange().end);
+              BL_ERROR("tid " << tid << " sequence record: " <<  seq);
+              BL_ERRORF("tid %d i %lu id: pos %lu, id %lu, file %d\n", tid, i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
+              BL_ERRORF("tid %d\ti %lu\tpos %lu gold: [%s]\n\t\tpos %lu test: [%s]\n", tid,  i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
             }
 
             local_same[tid] &= threadcomp;
@@ -378,7 +378,7 @@ TEST_P(FASTAIteratorTest, read_omp_mpi)
 
   while (l1.getRange().size() > 0) {
 
-    l1parser.init_for_iterator(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
+    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
     bliss::io::FASTAParser<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
 
     size_t localKmerCount = 0;

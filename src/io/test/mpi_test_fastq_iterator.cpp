@@ -88,7 +88,7 @@ TEST_P(FASTQIteratorTest, read)
     	auto seq = *seqs_start;
       result.clear();
 
-//      printf("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.pos_in_file, seq.seq_begin_offset, seq.local_offset, seq.length);
+//      printf("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.pos_in_file, seq.seq_begin_offset, seq.seq_offset, seq.record_size);
 
       ::fsc::back_emplace_iterator<ResultVecType > emplace_iter(result);
       emplace_iter = kmer_parser(seq, emplace_iter);
@@ -103,10 +103,9 @@ TEST_P(FASTQIteratorTest, read)
         same &= local_same;
 
         if (!local_same) {
-        	BL_DEBUGF("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.pos_in_file, seq.seq_begin_offset, seq.local_offset, seq.length);
-          BL_DEBUGF("i %lu id: pos %lu, id %lu, file %d\n", i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
-
-          BL_DEBUGF("i %lu pos %lu gold: [%s]\npos %lu test: [%s]\n", i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
+        	BL_ERRORF("sequence record: " << seq);
+          BL_ERRORF("i %lu id: pos %lu, id %lu, file %d\n", i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
+          BL_ERRORF("i %lu pos %lu gold: [%s]\npos %lu test: [%s]\n", i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
         }
       }
 

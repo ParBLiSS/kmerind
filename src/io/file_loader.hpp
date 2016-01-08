@@ -43,6 +43,8 @@
 #include "io/io_exception.hpp"
 #include "utils/logging.h"
 #include "common/sequence.hpp"
+#include <mxx/comm.hpp> // for mxx::comm
+
 
 namespace bliss
 {
@@ -52,12 +54,14 @@ namespace io
 
   };
 
+  // TODO: simplify  possibly by separating L1 and L2 partitioning.
+
 
   /**
    * @brief  Partitions input data into sequences, e.g. blocks or reads.
    * @details  Iterator template parameter refers to the iterator type that is currently being traversed.
    * 		 this applies to the sequence object, and the following methods:
-   * 		 increment, and find_start.
+   * 		 get_next_record, and find_first_record.
    * 		 
    * 		 init method can potentially use a different iterator type. this is useful when
    * 		   state information is extracted from perhaps a containing block (e.g. L1Block),
@@ -65,10 +69,10 @@ namespace io
    * 		 	
    * @note   there are 2 (non-interchangeable) scenarios when we may need to change the iterator type.
    *    1. L1 at process level, L2 at thread level.  SeqParser state is calculated at L1.
-   *    2. L1 at a subset of process, L2 is broadcast to the "children" of these processes.  SeqParser state is calculated at L1.
+   *    2. L1 at rank 0 of a sub communicator (processes), L2 is broadcast from rank0 of the rest of processes.  SeqParser state is calculated at L1.
    *
    *    to handle the first case: approaches are
-   *    1a. to allow a parser to operate on different iterator types when invoking findStart, increment.
+   *    1a. to allow a parser to operate on different iterator types when invoking find_first_record, increment.
    *          additional template parameter for these functions.  SequenceType will need to change.
    *          API in SequenceIterator, BaseFileParser, FASTQParser, FASTAParser all need to change
    *    1b. convert the seq parser from L1 to L2, but copy the state of L1.
@@ -113,7 +117,6 @@ namespace io
         * @brief   range object types
         */
       using RangeType = bliss::partition::range<size_t>;
-
 
        /**
         * @brief  search for first non-EOL character in a iterator, returns the stopping position as an iterator.  also records offset.
@@ -182,7 +185,7 @@ namespace io
         * @param startOffset offset for the beginning of the data in question
         * @param endOffset   offset for the end of the data in question
         */
-       void handleWarning(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
+       void handleWarning(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) {
          BL_WARNING("WARNING: " << "did not find "<< errType << " in " << startOffset << " to " << endOffset);
        }
 
@@ -190,24 +193,29 @@ namespace io
      public:
 
        /// default constructor.
-       BaseFileParser() {};
+       BaseFileParser() : offset(0) {};
 
        /// default destructor
-       ~BaseFileParser() {};
+       virtual ~BaseFileParser() {};
 
 
        /// converting constructor.
        template <typename Iterator2>
-       BaseFileParser(BaseFileParser<Iterator2> const & other) {}
+       BaseFileParser(BaseFileParser<Iterator2> const & other) : offset(other.offset) {}
        /// converting assignment operator that can transform the base iterator type.
        template <typename Iterator2>
-       BaseFileParser<Iterator>& operator=(BaseFileParser<Iterator2> const & other) { return *this; }
+       BaseFileParser<Iterator>& operator=(BaseFileParser<Iterator2> const & other) {
+         offset = other.offset;
+         return *this;
+       }
 
 
        /**
-        * @brief given a block, find the starting point that best aligns with the first sequence object (here, just the actual start)
+        * @brief given a block/range, find the starting point of the first sequence object (here, just the actual start)
         * @note  not virtual for performance reason.
         *         used by getNextL1BlockRange to find exact range for an L1 Partition.
+        *
+        *         Also can be used to do other initializations.
         *
         * @param _data
         * @param parentRange
@@ -215,10 +223,9 @@ namespace io
         * @param searchRange
         * @return
         */
-       // TODO: consolidate findStart and init_for_iterator?
 
-       std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
-       throw (bliss::io::IOException) {
+       std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
+       {
          //== range checking
          if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
 
@@ -227,16 +234,20 @@ namespace io
        }
 
 
+       // TODO: store offset for first record...
+
+       virtual void reset() {}
+
+       virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) {
+         return find_first_record(_data, parentRange, inMemRange, searchRange);
+       }
 #ifdef USE_MPI
        /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.
-       void init_for_iterator(const Iterator &_data, const RangeType &parentRange,
-                         const RangeType &inMemRange, const RangeType &searchRange, MPI_Comm comm)
-       throw (bliss::io::IOException)  {};
+       virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm)
+       {
+         return find_first_record(_data, parentRange, inMemRange, searchRange);
+       };
 #endif
-       /// initializes the parser.  only useful for FASTA parser for now.
-       void init_for_iterator(const Iterator &_data, const RangeType &parentRange,
-                         const RangeType &inMemRange, const RangeType &searchRange)
-       throw (bliss::io::IOException)  {};
 
 
 
@@ -255,40 +266,18 @@ namespace io
         * @param output         updated sequence object.
         * @return               next seq id offset.
         */
-       size_t increment(Iterator &iter, const Iterator &end, size_t &offset, size_t & seq_offset, SequenceType& output) throw (bliss::io::IOException)
+       SequenceType get_next_record(Iterator & iter, const Iterator & end, size_t & offset)
        {
-         size_t dist = std::distance(iter, end);
+         Iterator orig_iter = iter;
+         size_t orig_offset = offset;
 
-         output = SequenceType(SequenceIdType(offset), dist, 0, 0, iter, end);
+         size_t dist = std::distance(iter, end);
 
          offset += dist;
          iter = end;
 
-         ++seq_offset;
-         return seq_offset;
+         return SequenceType(SequenceIdType(orig_offset), dist, 0, orig_iter, end);
        }
-
-
-       /**
-        * @brief initializes the Parser object for sequencesIterator.  primarily to search for index within global array (e.g. FASTA)
-        * @note   not virtual because SequenceType is different for each subclass, so the signatures are different.  We rely on compiler to enforce the correct one.
-        *         this is in general not an issue as we do not need polymorphic Sequence Parsers - they are specific too file types.
-        *
-        *         Used by FileLoader's getRecordSize to compute an average record size.
-        *
-        *
-        * @param iter
-        * @param parentRange
-        * @param inMemRange
-        * @param searchRange
-        * @return   index in process-local (shared) sequence vector.
-        */
-       size_t increment(Iterator &iter, const Iterator &end, size_t &offset, SequenceType& output) throw (bliss::io::IOException) {
-         size_t result = 0;
-
-         return increment(iter, end, offset, result, output);
-       };
-
 
    };
    /// template class' static variable definition (declared and initialized in class)
@@ -912,7 +901,7 @@ namespace io
          * @details   This method is the CTRP implementation called by the base class' getNextL1BlockRange method.
          *            The method modifies the base range to align the boundary to record boundaries at both ends
          *
-         *            This is accomplished by memmapping a Range and performing findStart to find the
+         *            This is accomplished by memmapping a Range and performing find_first_record to find the
          *              start, and doing the same on the next L1Block to find the end.
          *            Start and End may be at the same position.  since we use recordSize, there is some hope that we find a valid starting point.
          * @param pid   The L1 partition id.
@@ -951,10 +940,10 @@ namespace io
 
             Parser<decltype(searchData)> parser;  // local parser, since iterator type may not be the same.
 
-            // search for new start and end using findStart
+            // search for new start and end using find_first_record
             try {
-              output.start = parser.findStart(searchData, this->fileRange, loadRange, start_search_range);
-              output.end = parser.findStart(searchData, this->fileRange, loadRange, end_search_range);
+              output.start = parser.init_parser(searchData, this->fileRange, loadRange, start_search_range);
+              output.end = parser.find_first_record(searchData, this->fileRange, loadRange, end_search_range);   // TODO: can't call this again
 
               //std::cout << "start in " << hint << " end in " << end_search_range << " final " << output << std::endl;
 
@@ -1132,7 +1121,7 @@ namespace io
          *
          *            The method modifies the base range to align the boundary to record boundaries at both ends
          *
-         *            This is accomplished by performing findStart to find the
+         *            This is accomplished by performing find_first_record to find the
          *              start, and doing the same on the next L2Block to find the end.
          *
          *
@@ -1172,8 +1161,8 @@ namespace io
             try {
 
               // search for start and end
-              output.start = L1parser.findStart(this->L1Block.begin(), parentRange, parentRange, start_search_range);
-              output.end = L1parser.findStart(this->L1Block.begin(), parentRange, parentRange, end_search_range);
+              output.start = L1parser.init_parser(this->L1Block.begin(), parentRange, parentRange, start_search_range);
+              output.end = L1parser.find_first_record(this->L1Block.begin(), parentRange, parentRange, end_search_range);
             } catch (IOException& ex) {
               // either start or end are not found, so return nothing.
 
@@ -1306,7 +1295,7 @@ namespace io
          *          and determining size of a DataBlock.
          *
          * @param count    number of records to read to compute the approximation. default = 3
-         * @return  pair of values, first is estimated record size, second is estimated sequence length in the recored
+         * @return  pair of values, first is estimated record size, second is estimated sequence length in the records
          */
         // TODO: try to get rid of this - RecordSize is not used outside of this class, and only works for some file types.
         std::pair<size_t, size_t> getRecordSize(const int iterations = 10) {
@@ -1335,13 +1324,16 @@ namespace io
             Parser<decltype(sstart)> local_parser;
 
             // For FASTAParser, this computes the sequence demarcation vector.  For FASTQ, this does nothing.
-            local_parser.init_for_iterator(sstart, this->getFileRange(), inmem, search_range);  // in the case of FASTAParser, this creates the sequence demarcation vector.
+            size_t offset = 0;
+#ifdef USE_MPI
+            offset = local_parser.init_parser(sstart, this->getFileRange(), inmem, search_range, this->comm);  // in the case of FASTAParser, this creates the sequence demarcation vector.
+#else
+            offset = local_parser.init_parser(sstart, this->getFileRange(), inmem, search_range);
+#endif
             // then find start, and adjust search range.  NOT NEEDED HERE since we are at beginning of file.
 
             // now initialize the search.  no need to call the first increment separately since we know that we have to start from seq id 0.
             typename Parser<decltype(sstart)>::SequenceType seq;
-            size_t next_seq_id = 0;
-            size_t offset = 0;
             size_t seq_data_len = 0;
 
             int i = 0;
@@ -1349,17 +1341,17 @@ namespace io
               // repeat for iterations or until no more sequences (empty sequence is returned).
 
               // get the next sequence
-              next_seq_id = local_parser.increment(sstart, send, offset, next_seq_id, seq);
+              seq = local_parser.get_next_record(sstart, send, offset);
 
               // get the char count in a record
-              seq_data_len = std::distance(seq.seqBegin, seq.seqEnd);
+              seq_data_len = std::distance(seq.seq_begin, seq.seq_end);
 
               if (seq_data_len >= (1 << 16))  {// larger than 16 bit DNA length  so stop and just return this.
                 i = 1;
                 break;
               }
               // else sum up.
-              counts[0] += seq.length;
+              counts[0] += seq.record_size;
               counts[1] += seq_data_len;
               ++i;
 
@@ -1445,6 +1437,7 @@ namespace io
          * @note  the method uses fstat64, which does not require opening the file and seeking.  also avoids file encoding and text/binary issues.
          * @param fd    file descriptor, from fstat or fstat64
          * @return      size in bytes, data type size_t.
+   constexpr unsigned char bliss::io::BaseFileParser<Iterator>::cr;
          */
         size_t getFileSize(const int& fd) throw (bliss::io::IOException) {
 

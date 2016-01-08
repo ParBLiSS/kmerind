@@ -63,10 +63,10 @@ TEST_P(FASTAParserTest, parse)
 
   while (l1.getRange().size() > 0) {
 
-    l1parser.init_for_iterator(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
+    size_t offset = l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
 
     //==  and wrap the chunk inside an iterator that emits Reads.
-    SeqIterType seqs_start(l1parser, l1.begin(), l1.end(), l1.getRange().start);
+    SeqIterType seqs_start(l1parser, l1.begin(), l1.end(), offset);
     SeqIterType seqs_end(l1.end());
 
     //== loop over the reads
@@ -74,8 +74,8 @@ TEST_P(FASTAParserTest, parse)
     {
     	if (l1.getRange().start <= (*seqs_start).id.pos_in_file) ++(this->elemCount);
 //            std::cout << *seqs_start << ", ";
-//            std::cout << std::distance((*seqs_start).seqBegin, (*seqs_start).seqEnd) << std::endl;
-      //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+//            std::cout << std::distance((*seqs_start).seq_begin, (*seqs_start).seq_end) << std::endl;
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
     }
 
     l1 = loader.getNextL1Block();
@@ -112,7 +112,7 @@ TEST_P(FASTAParserTest, parse_omp)
 
   while (l1.getRange().size() > 0) {
 
-    l1parser.init_for_iterator(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
+    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
 
     localKmerCount = 0;
 #pragma omp parallel num_threads(nthreads) shared(loader, l1parser) reduction(+:localKmerCount)
@@ -143,12 +143,12 @@ TEST_P(FASTAParserTest, parse_omp)
         	if (l2.getRange().start <= (*seqs_start).id.pos_in_file) ++localKmerCount;
         	// else printf("tid %d excluded:  pos in file %lu < l2 range start %lu, id = %d\n", tid, (*seqs_start).id.pos_in_file, l2.getRange().start, i);
           //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
-          //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
-          //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).seq_begin) << ", " << std::distance(l1.begin(), (*seqs_start).seq_end) << ", ";
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
 
 //        	last_pos = (*seqs_start).id.pos_in_file;
 //        	last_seq_start = last_pos + (*seqs_start).seq_begin_offset;
-//        	last_seq_end = last_pos + (*seqs_start).length;
+//        	last_seq_end = last_pos + (*seqs_start).record_size;
         }
         //printf("tid %d last: pos in file [%lu, %lu, %lu), l2 range start: %lu, i=%d\n", tid, last_pos, last_seq_start, last_seq_end, l2.getRange().start, i);
 
@@ -185,7 +185,7 @@ TEST_P(FASTAParserTest, parse_mpi)
 
 
   while (l1.getRange().size() > 0) {
-    l1parser.init_for_iterator(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
+    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
 
 
     //==  and wrap the chunk inside an iterator that emits Reads.
@@ -198,8 +198,8 @@ TEST_P(FASTAParserTest, parse_mpi)
     	if (l1.getRange().start <= (*seqs_start).id.pos_in_file) ++(this->elemCount);
 
       //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
-      //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
-      //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).seq_begin) << ", " << std::distance(l1.begin(), (*seqs_start).seq_end) << ", ";
+      //      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
     }
 
     l1 = loader.getNextL1Block();
@@ -230,7 +230,7 @@ TEST_P(FASTAParserTest, parse_mpi_omp)
   bliss::io::FASTAParser<BlockIterType> l1parser = loader.getSeqParser();
 
   while (l1.getRange().size() > 0) {
-    l1parser.init_for_iterator(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
+    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
 
 
     localKmerCount = 0;
@@ -255,8 +255,8 @@ TEST_P(FASTAParserTest, parse_mpi_omp)
         {
         	if (l2.getRange().start <= (*seqs_start).id.pos_in_file) ++localKmerCount;
           //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
-          //      std::cout << std::distance(l1.begin(), (*seqs_start).seqBegin) << ", " << std::distance(l1.begin(), (*seqs_start).seqEnd) << ", ";
-          //      std::cout << std::distance(l1.begin(), (*seqs_start).qualBegin) << ", " << std::distance(l1.begin(), (*seqs_start).qualEnd) << std::endl;
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).seq_begin) << ", " << std::distance(l1.begin(), (*seqs_start).seq_end) << ", ";
+          //      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
         }
 
 // /       printf("tid %d l1 range [%lu, %lu), l2 range [%lu, %lu) local kmer count: %lu\n", tid, l1.getRange().start, l1.getRange().end, l2.getRange().start, l2.getRange().end, localKmerCount);

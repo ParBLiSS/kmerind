@@ -86,7 +86,7 @@ namespace bliss
 
       public:
         /// sequence
-        using SequenceType = typename ::bliss::common::Sequence<BaseCharIterator>;
+        using SequenceType = typename ::bliss::common::Sequence<BaseCharIterator, LongSequenceKmerId>;
         using SequenceIdType = typename SequenceType::IdType;
 
 
@@ -106,12 +106,12 @@ namespace bliss
          * @brief internal storage marking each sequence.
          */
         SequenceVecType sequences;
-
+        size_t seq_offset;
 
       public:
 
         /// default constructor.
-        FASTAParser() {};
+        FASTAParser() : seq_offset(::std::numeric_limits<size_t>::max()) {};
 
         /// default destructor
         ~FASTAParser() {};
@@ -120,28 +120,35 @@ namespace bliss
 
         /// converting constructor.
         template <typename Iterator2>
-        FASTAParser(FASTAParser<Iterator2> const & other) : sequences(other.sequences.begin(), other.sequences.end()) { }
+        FASTAParser(FASTAParser<Iterator2> const & other) : sequences(other.sequences), seq_offset(other.seq_offset) { }
         /// converting assignment operator that can transform the base iterator type.
         template <typename Iterator2>
         FASTAParser<Iterator>& operator=(FASTAParser<Iterator2> const & other) {
           sequences.assign(other.sequences.begin(), other.sequences.end());
+          seq_offset = other.seq_offset;
           return *this;
         }
 
 
-
+// use base class definition
 //        /**
 //         * @brief  given a block, find the starting point that best aligns with the first sequence object (here, just just the actual start)
 //         * @note   not overridden since here we just look for the beginning of the assigned block, same as the BaseFileParser logic.
 //         */
-//        const std::size_t findStart(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) const
-//        throw (bliss::io::IOException) {
-//          return bliss::io::BaseFileParser<Iterator>::findStart(_data, parentRange, inMemRange, searchRange);
+//        std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
+//        {
+//          init_for_iterator(_data, parentRange, inMemRange, searchRange);
+//          return bliss::io::BaseFileParser<Iterator>::find_first_record(_data, parentRange, inMemRange, searchRange);
 //        }
 
-        // TODO: consolidate this.
+        virtual void reset() {
+          seq_offset = ::std::numeric_limits<size_t>::max();
+          sequences.clear();
+        }
+
 
 #ifdef USE_MPI
+
         /**
          * @brief   Keep track of all '>' and the following EOL character to save the positions of the fasta record headers for each fasta record in the local block
          * @attention   This function should be called by all the MPI ranks in MPI communicator
@@ -156,13 +163,21 @@ namespace bliss
          * @param[out]  sequences  vector of positions of the fasta sequence headers.
          *              Each pair in the vector represents the position of '>' and '\n' in the fasta record header
          */
-        void init_for_iterator(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm)
+        virtual size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm)
           throw (bliss::io::IOException) {
+
+          //== range checking
+          if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
 
           // now populate sequences
 
           if (!::std::is_same<typename std::iterator_traits<Iterator>::iterator_category, std::random_access_iterator_tag>::value)
             BL_WARNING("WARNING: countSequenceStarts input iterator is not random access iterator.  lower.");
+
+          if (sequences.size() > 0) {
+            BL_WARNING("WARNING: fasta_parser init called without reset first.  previous records are cleared.");
+            sequences.clear();
+          }
 
           using TT = typename std::iterator_traits<Iterator>::value_type;
 
@@ -171,12 +186,11 @@ namespace bliss
 
           // construct the search Range so they do not overlap.  This is necessary so that the sequences tuples are computed correctly.
           if (comm.rank() == (comm.size()-1))
-            mxx::left_shift(r.start, comm);
+            (void) mxx::left_shift(r.start, comm);
           else
             r.end = mxx::left_shift(r.start, comm);
 
           // clear the starting position storage.
-          sequences.clear();
 
           TT prev_char = '\n';  // default to EOL char.
 
@@ -187,7 +201,7 @@ namespace bliss
           // if first char of proc i is ">", and rank is 0, can assume this is a starting point.  else, if prev char is "\n", then this is a start.
 
 
-          BL_DEBUGF("Rank %d search range [%lu, %lu)\n", comm.rank(), r.start, r.end);
+          BL_WARNINGF("Rank %d search range [%lu, %lu)\n", comm.rank(), r.start, r.end);
 
 
           // ===== get the previous character from the next smaller, non-empty rank.
@@ -391,6 +405,9 @@ namespace bliss
 
 //            for (auto x : sequences)
 //              BL_DEBUGF("R %d header range [%lu, %lu, %lu), id %lu\n", myRank, std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
+
+            // no op, other than to use intersect to make sure that the start is valid and within parent, and in memry ranges.
+            return RangeType::intersect(searchRange, inMemRange).start;
         }
 #endif
 
@@ -408,21 +425,29 @@ namespace bliss
          * @param[out]  sequences  vector of positions of the fasta sequence headers.
          *              Each pair in the vector represents the position of '>' and '\n' in the fasta record header
          */
-        void init_for_iterator(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
+        virtual size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
           throw (bliss::io::IOException) {
+
+          //== range checking
+          if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
 
           // now populate sequences
 
           if (!::std::is_same<typename std::iterator_traits<Iterator>::iterator_category, std::random_access_iterator_tag>::value)
             BL_WARNING("WARNING: countSequenceStarts input iterator is not random access iterator.  lower.");
 
+          if (sequences.size() > 0) {
+            BL_WARNING("WARNING: fasta_parser init called without reset first.  previous records are cleared.");
+            // clear the starting position storage.
+            sequences.clear();
+          }
+
           using TT = typename std::iterator_traits<Iterator>::value_type;
 
           // make sure searchRange is inside parent Range.
           RangeType r = RangeType::intersect(searchRange, parentRange);
 
-          // clear the starting position storage.
-          sequences.clear();
+          if (r.size() == 0) return;
 
           TT prev_char = '\n';  // default to EOL char.
 
@@ -513,96 +538,9 @@ namespace bliss
 //            for (auto x : sequences)
 //              BL_DEBUGF("R 0 header range [%lu, %lu, %lu), id %lu\n", std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
 
+              // no op, other than to use intersect to make sure that the start is valid and within parent, and in memry ranges.
+              return RangeType::intersect(searchRange, inMemRange).start;
 
-        }
-        /**
-         * @brief searches the thread shared vector of sequence starts for where the offset belongs.  called as first increment.
-         * @details  this method is almost the same as increment, but does a binary search whereas increment does not.
-         *
-         * @param iter
-         * @param end
-         * @param offset   offset from the file's start.
-         * @param output
-         * @return
-         */
-        size_t increment(Iterator &iter, const Iterator &end, size_t &offset, SequenceType &output) throw (bliss::io::IOException) {
-
-          if (sequences.size() == 0) throw std::logic_error("calling FASTAParser increment without first initializingfor iterator.");
-
-          // end.  return.
-          if (iter == end) {
-        	  BL_WARNINGF("FASTA LOADER searching increment iter == end\n");
-              output = SequenceType(SequenceIdType(std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()),
-  	  	  	  	    0, 0, 0,
-  	  	  	  	    end, end);
-              return 0;
-          }
-
-          size_t input_dist = std::distance(iter, end);
-
-          RangeType input(offset, offset + input_dist);
-
-          // search for position using offset and the sequence's third element + std::upper_bound.
-          // then we get first position where seq_end > offset, i.e. offset is inside the header or in the sequence.
-          auto seqveciter = std::upper_bound(sequences.begin(), sequences.end(),
-        		  offset, [](size_t const & off, SequenceOffsetsType const & seq){ return off < std::get<2>(seq); });
-          size_t seq_offset = std::distance(sequences.begin(), seqveciter);
-
-          if (seqveciter == sequences.end()) {
-        	  BL_WARNINGF("FASTA LOADER searching increment seqveciter == sequences.end()\n");
-            // did not find a matching one.
-            offset += std::distance(iter, end);
-            iter = end;
-            output = SequenceType(SequenceIdType(std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()),
-	  	  	  	    0, 0, 0,
-	  	  	  	    end, end);
-            return seq_offset;
-          }
-
-          auto seq = *seqveciter;
-
-
-          // the offset tuple from sequences, position 1 and 2 mark the begin and end of the dna sequence
-//          if (std::get<1>(seq) > std::get<2>(seq)) {
-//            BL_DEBUGF("seq: offset %lu start %lu seq %lu end %lu, id %lu\n", offset, std::get<0>(seq), std::get<1>(seq), std::get<2>(seq), std::get<3>(seq));
-//          }
-          RangeType found(std::get<1>(seq), std::get<2>(seq));
-
-          // intersect them to identify the valid region.
-          RangeType valid = RangeType::intersect(input, found);
-
-          if (valid.size() == 0) {
-        	  BL_DEBUGF("FASTA LOADER search increment valid.size() == 0.  seq: [%lu, %lu, %lu).  block range [%lu, %lu)\n",
-        			  std::get<0>(seq), std::get<1>(seq), std::get<2>(seq),
-					  input.start, input.end);
-            // no valid.
-            iter = end;
-            offset += input_dist;
-            output = SequenceType(SequenceIdType(std::get<0>(seq), std::get<3>(seq)),
-	  	  	  	    std::get<2>(seq) - std::get<0>(seq),
-                  std::get<1>(seq) - std::get<0>(seq),
-                    valid.start - std::get<0>(seq),
-                    end, end);
-            return seq_offset;
-          } // else there is valid
-
-          // compute the output sequencetype = start to end of valid
-          std::advance(iter, valid.start - offset);
-          Iterator start = iter;
-          std::advance(iter, valid.size());
-
-          output = SequenceType(SequenceIdType(std::get<0>(seq), std::get<3>(seq)),
-                                std::get<2>(seq) - std::get<0>(seq),
-                                std::get<1>(seq) - std::get<0>(seq),
-                                valid.start - std::get<0>(seq),
-								start, iter);
-
-//          printf("Sequence Id: seq_offset=%lu\n", seq_offset);
-
-          // compute the new offset = end of valid.
-          offset = valid.end;
-
-          return ++seq_offset;
         }
 
 
@@ -615,56 +553,68 @@ namespace bliss
          * @param[in/out] iter          source iterator, pointing to data to traverse
          * @param[in]     end           end of the source iterator - not to go past.
          * @param[in/out] offset        starting position in units of source character types (e.g. char) from the beginning of the file.
-         * @param[in/out] output        updated sequence type, values updated.
-         * @throw IOException           if parse failed, throw exception
+         * @return                      sequence object
          */
-        size_t increment(Iterator &iter, const Iterator &end, size_t &offset, size_t & seq_offset, SequenceType& output) throw (bliss::io::IOException)
+        SequenceType get_next_record(Iterator &iter, const Iterator &end, size_t &offset)
         {
 
           if (sequences.size() == 0) throw std::logic_error("calling FASTAParser increment without first initializing for iterator.");
 
           // end.  return.
           if (iter == end) {
-        	  BL_WARNINGF("FASTA LOADER iter == end\n");
-              output = SequenceType(SequenceIdType(std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()),
-  	  	  	  	    0, 0, 0,
-					end, end);
-              return seq_offset;
+        	  BL_WARNINGF("FASTA LOADER get next record iter == end\n");
+            return SequenceType(SequenceIdType(offset),
+  	  	  	  	    0, // length
+  	  	  	  	    0, // offset in record
+  	  	  	  	    iter, iter);
           }
 
-          // use the seq_offset to get the offset group and convert to sequence type.
+          if (seq_offset == ::std::numeric_limits<size_t>::max()) {  // first search.  do binary
+            // search for position using offset and the sequence's third element + std::upper_bound.
+            // then we get first position where seq_end > offset, i.e. offset is inside the header or in the sequence.
+            auto seqveciter = std::upper_bound(sequences.begin(), sequences.end(),
+                offset, [](size_t const & off, SequenceOffsetsType const & seq){
+                  return off < ::std::get<2>(seq);
+                });
+            seq_offset = std::distance(sequences.begin(), seqveciter);
 
-          // do a linear scan search to find the correct sequence
-          // again, search until the seq_end > offset, i.e. offset is in header or seq.
-          while ((seq_offset < sequences.size()) && (offset >= std::get<2>(sequences[seq_offset]))) {
-        	  ++seq_offset;
+          } else {  // subsequent search.  do linear.
+            // do a linear scan search to find the correct sequence
+            // again, search until the seq_end > offset, i.e. offset is in header or seq.
+            while ((seq_offset < sequences.size()) &&
+                (offset >= std::get<2>(sequences[seq_offset]))) {
+              ++seq_offset;
+            }
           }
 
+          // check if we found one.
           size_t input_dist = std::distance(iter, end);
 
           // no more.  return.
           if (seq_offset >= sequences.size()) {
-            if (offset > std::get<2>(sequences.back()))
-              BL_WARNINGF("FASTA LOADER did not find sequence for offset %lu.  last one ended at %lu\n", offset, std::get<2>(sequences.back()));
+            BL_WARNINGF("FASTA LOADER did not find sequence for offset %lu.  last one ended at %lu\n", offset, std::get<2>(sequences.back()));
             offset += input_dist;
             iter = end;
-            output = SequenceType(SequenceIdType(std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()),
-	  	  	  	    0, 0, 0,
-	  	  	  	    end, end);
-            return seq_offset;
+
+            return SequenceType(SequenceIdType(offset),
+                    0, // length
+                    0, // offset in record
+                    iter, iter);
           }
 
-
+          // use the seq_offset to get the offset group and convert to sequence type.
           auto seq = sequences[seq_offset];
 
           // compute the valid range.  get input, get the selected, then intersect them.  this is in case iter-end is only part of a sequence.
           RangeType input(offset, offset + input_dist);
 
+          // the offset tuple from sequences, position 1 and 2 mark the begin and end of the dna sequence
 //          if (std::get<1>(seq) > std::get<2>(seq)) {
 //            BL_DEBUGF("seq: offset %lu start %lu seq %lu end %lu, id %lu\n", offset, std::get<0>(seq), std::get<1>(seq), std::get<2>(seq), std::get<3>(seq));
 //          }
           RangeType found(std::get<1>(seq), std::get<2>(seq));
 
+          // intersect them to identify the valid region.
           RangeType valid = RangeType::intersect(input, found);
 
           // or potentially completely just header.
@@ -674,32 +624,28 @@ namespace bliss
         			  std::get<0>(seq), std::get<1>(seq), std::get<2>(seq),
 					  input.start, input.end);
 
+            // no valid.
             offset += input_dist;
             iter = end;
-            output = SequenceType(SequenceIdType(std::get<0>(seq), std::get<3>(seq)),
-	  	  	  	    std::get<2>(seq) - std::get<0>(seq),
-                  std::get<1>(seq) - std::get<0>(seq),
-                    valid.start - std::get<0>(seq),
-					end, end);
-            return seq_offset;
-          } // else there is valid
+            return SequenceType(SequenceIdType(std::get<0>(seq), std::get<3>(seq)),
+	  	  	  	      std::get<2>(seq) - std::get<0>(seq), // record length
+                    offset - std::get<0>(seq),  // offset in record
+                    iter, iter);
+          } // else there is valid range of sequence data
 
           // now convert to sequence type
           std::advance(iter, valid.start - offset);
           Iterator start = iter;
           std::advance(iter, valid.size());
-
-          output = SequenceType(SequenceIdType(std::get<0>(seq), std::get<3>(seq)),
-        		  	  	  	    std::get<2>(seq) - std::get<0>(seq),
-                            std::get<1>(seq) - std::get<0>(seq),
-                                valid.start - std::get<0>(seq),
-								start, iter);
-
-//          printf("Sequence Id: seq_offset=%lu\n", seq_offset);
-
           offset = valid.end;
+	
+					++seq_offset;
 
-          return ++seq_offset;
+          return SequenceType(SequenceIdType(std::get<0>(seq), std::get<3>(seq)),
+        		  	  	  	    std::get<2>(seq) - std::get<0>(seq),
+                                valid.start - std::get<0>(seq),
+                                start, iter);
+
         }
 
 
@@ -724,7 +670,7 @@ namespace bliss
      *          Majority of the interface is inherited from FileLoader.
      *          This class modifies the behaviors of GetNextL1Block and getNextL2Block,
      *            as described in FileLoader's "Advanced Usage".  Specifically, the range is modified
-     *            for each block by calling "findStart" to align the start and end to FASTA sequence
+     *            for each block by calling "find_first_record" to align the start and end to FASTA sequence
      *            record boundaries.
      *
      * @note    Processes 1 file at a time.  For paired end reads, a separate subclass is appropriate.

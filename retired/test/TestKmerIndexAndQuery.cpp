@@ -86,12 +86,12 @@ void testQueryOld(MPI_Comm comm, const std::string & filename, const int nthread
           // first get read
           read = *fastq_start;
 
-          if (read.seqBegin != read.seqEnd) {
+          if (read.seq_begin != read.seq_end) {
 
             typename KmerIndexType::KmoleculeOpType kmer_op;
             bliss::utils::KmoleculeToCanonicalKmerFunctor<typename KmerIndexType::KmerType> transform;
-            typename KmerIndexType::KmerIterType start(typename KmerIndexType::KmoleculeIterType(read.seqBegin, kmer_op), transform);
-            typename KmerIndexType::KmerIterType end(typename KmerIndexType::KmoleculeIterType(read.seqEnd, kmer_op), transform);
+            typename KmerIndexType::KmerIterType start(typename KmerIndexType::KmoleculeIterType(read.seq_begin, kmer_op), transform);
+            typename KmerIndexType::KmerIterType end(typename KmerIndexType::KmoleculeIterType(read.seq_end, kmer_op), transform);
 
             unsigned int k = KmerIndexType::KmerType::size;
 //            int i = 0;
@@ -190,11 +190,11 @@ void testQuery(MPI_Comm comm, const std::string & filename, const int nthreads, 
           // first get read
           read = *fastq_start;
 
-          if (read.seqBegin != read.seqEnd) {
+          if (read.seq_begin != read.seq_end) {
 
           //== set up the kmer generating iterators.
-          typename KmerIndexType::KmerIterType start(typename KmerIndexType::BaseCharIterator(read.seqBegin, bliss::common::ASCII2<bliss::common::DNA>()), true);
-          typename KmerIndexType::KmerIterType end(typename KmerIndexType::BaseCharIterator(read.seqEnd, bliss::common::ASCII2<bliss::common::DNA>()), false);
+          typename KmerIndexType::KmerIterType start(typename KmerIndexType::BaseCharIterator(read.seq_begin, bliss::common::ASCII2<bliss::common::DNA>()), true);
+          typename KmerIndexType::KmerIterType end(typename KmerIndexType::BaseCharIterator(read.seq_end, bliss::common::ASCII2<bliss::common::DNA>()), false);
 
   //          int kmerCount = 0;
 

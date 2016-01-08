@@ -141,11 +141,11 @@ std::vector<KmerType> readForQuery_subcomm(const std::string & filename,
 //        read = *seqs_start;
 //
 //        // then compute and store into index (this will generate kmers and insert into index)
-//        if (read.seqBegin == read.seqEnd) continue;
+//        if (read.seq_begin == read.seq_end) continue;
 //
 //        //== set up the kmer generating iterators.
-//        KmerIterType start(BaseCharIterator(read.seqBegin, bliss::common::ASCII2<Alphabet>()), true);
-//        KmerIterType end(BaseCharIterator(read.seqEnd, bliss::common::ASCII2<Alphabet>()), false);
+//        KmerIterType start(BaseCharIterator(read.seq_begin, bliss::common::ASCII2<Alphabet>()), true);
+//        KmerIterType end(BaseCharIterator(read.seq_end, bliss::common::ASCII2<Alphabet>()), false);
 //
 //
 //        query.insert(query.end(), start, end);
