@@ -49,6 +49,17 @@ namespace bliss
       /// end iterator for the sequence.
       Iterator qual_end;
 
+      /**
+       * @brief << operator to write out SequenceId
+       * @param[in/out] ost   output stream to which the content is directed.
+       * @param[in]     db    BufferedDataBlock object to write out
+       * @return              output stream object
+       */
+      friend std::ostream& operator<<(std::ostream& ost, const FASTQSequence & seq)
+      {
+        ost << " FASTQ Sequence: id=[" << seq.id << "] record_size=" << seq.record_size << " seq_offset=" << seq.seq_offset;
+        return ost;
+      }
 
 
       FASTQSequence() = default;
@@ -61,7 +72,7 @@ namespace bliss
       FASTQSequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_offset,
                     Iterator const & _seq_begin, Iterator const & _seq_end,
                     Iterator const & _qual_begin, Iterator const & _qual_end) :
-        BaseType(_id, _record_size, _seq_offset,  _seq_begin, _seq_end), qual_begin(other.qual_begin), qual_end(other.qual_end) {}
+        BaseType(_id, _record_size, _seq_offset,  _seq_begin, _seq_end), qual_begin(_qual_begin), qual_end(_qual_end) {}
 
 
       FASTQSequence(FASTQSequence const & other) :
@@ -228,7 +239,10 @@ namespace bliss
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
 
           //== range checking
-          if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
+          if(!parentRange.contains(inMemRange)) {
+            ::std::cout << "parent: " << parentRange << " , in mem: " << inMemRange << ::std::endl;
+            throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
+          }
           RangeType t = RangeType::intersect(searchRange, inMemRange); // intersection to bound target to between parent's ends.
 
           //== set up the iterator for later
@@ -298,7 +312,7 @@ namespace bliss
           // the search range does not include a complete record.  this is an error and
           // exception is thrown.
           std::stringstream ss;
-          ss << "WARNING in file processing: file segment \n" << "\t\t"
+          ss << "ERROR in file processing: file segment \n" << "\t\t"
               << t << "\n\t\t(original " << searchRange << ")\n"
               << "\t\tdoes not contain valid FASTQ markers.\n String:";
           std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
@@ -308,7 +322,7 @@ namespace bliss
           std::advance(e, (t.end - inMemRange.start));
           std::copy(s, e, oit);
 
-          throw bliss::io::IOException(ss.str());
+          throw ::std::logic_error(ss.str());
         }
 
         // inherited reset.
@@ -361,11 +375,17 @@ namespace bliss
           //==== okay to call findNonEOL or findEOL 4 times - if iter at end, won't advance. and okay for output to have end.
           // each call to findNonEOL will find first char, and trim the leading \n
 
+//#ifdef USE_MPI
+//         int rank = 0;
+//         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+//         std::cout << "rank: " << rank << " offset " << offset << std::endl;
+//#endif
+
           //== find 1st line, also the starting point.
           // find start of line, \nX or end.
           this->findNonEOL(iter, end, offset);
           if ((iter != end) && (*iter != '@'))
-            this->handleError("missing @ on first line. Perhaps init is needed?", orig_iter, iter, orig_offset, offset);
+            this->handleError("missing @ on first line. ", orig_iter, end, orig_offset, orig_offset + ::std::distance(orig_iter, end));
           // offset pointing to first start, save it as the id.  - either \n or end
           record_start_offset = offset;
           // then find the end of that line  - either \n or end.
@@ -381,7 +401,7 @@ namespace bliss
           // == find 3rd line, and discard it.
           this->findNonEOL(iter, end, offset);
           if ((iter != end) && (*iter != '+'))
-            this->handleError("missing + on first line", orig_iter, iter, orig_offset, offset);
+            this->handleError("missing + on third line. ", orig_iter, end, orig_offset, orig_offset + ::std::distance(orig_iter, end));
           // then find the end of that line  - either \n or end.
           this->findEOL(iter, end, offset);
 

@@ -86,7 +86,7 @@ namespace bliss
 
       public:
         /// sequence
-        using SequenceType = typename ::bliss::common::Sequence<BaseCharIterator, LongSequenceKmerId>;
+        using SequenceType = typename ::bliss::common::Sequence<BaseCharIterator, ::bliss::common::LongSequenceKmerId>;
         using SequenceIdType = typename SequenceType::IdType;
 
 
@@ -164,10 +164,13 @@ namespace bliss
          *              Each pair in the vector represents the position of '>' and '\n' in the fasta record header
          */
         virtual size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm)
-          throw (bliss::io::IOException) {
+        {
 
           //== range checking
-          if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
+          if(!parentRange.contains(inMemRange)) {
+            ::std::cout << "parent: " << parentRange << " , in mem: " << inMemRange << ::std::endl;
+            throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
+          }
 
           // now populate sequences
 
@@ -201,7 +204,7 @@ namespace bliss
           // if first char of proc i is ">", and rank is 0, can assume this is a starting point.  else, if prev char is "\n", then this is a start.
 
 
-          BL_WARNINGF("Rank %d search range [%lu, %lu)\n", comm.rank(), r.start, r.end);
+          //BL_WARNINGF("Rank %d search range [%lu, %lu)\n", comm.rank(), r.start, r.end);
 
 
           // ===== get the previous character from the next smaller, non-empty rank.
@@ -209,7 +212,7 @@ namespace bliss
           mxx::comm in_comm = comm.split(r.size() == 0);
 
           // if no data, then in_comm is null, and does not participate further.
-          if (r.size() == 0) return;
+          if (r.size() == 0) return r.start;
 
           //============== GET LAST CHAR FROM PREVIOUS PROCESSOR, to check if first char is at start of line.
             // for the nonempty ones, shift right by 1.
@@ -426,7 +429,7 @@ namespace bliss
          *              Each pair in the vector represents the position of '>' and '\n' in the fasta record header
          */
         virtual size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
-          throw (bliss::io::IOException) {
+        {
 
           //== range checking
           if(!parentRange.contains(inMemRange)) throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
@@ -447,7 +450,7 @@ namespace bliss
           // make sure searchRange is inside parent Range.
           RangeType r = RangeType::intersect(searchRange, parentRange);
 
-          if (r.size() == 0) return;
+          if (r.size() == 0) return searchRange.start;
 
           TT prev_char = '\n';  // default to EOL char.
 

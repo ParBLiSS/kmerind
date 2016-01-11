@@ -103,7 +103,7 @@ TEST_P(FASTQIteratorTest, read)
         same &= local_same;
 
         if (!local_same) {
-        	BL_ERRORF("sequence record: " << seq);
+        	BL_ERROR("sequence record: " << seq);
           BL_ERRORF("i %lu id: pos %lu, id %lu, file %d\n", i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
           BL_ERRORF("i %lu pos %lu gold: [%s]\npos %lu test: [%s]\n", i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
         }

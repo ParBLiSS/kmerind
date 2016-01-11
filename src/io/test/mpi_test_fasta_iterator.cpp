@@ -87,7 +87,7 @@ TEST_P(FASTAIteratorTest, read)
   bool local_same = true;
 
   while (l1.getRange().size() > 0) {
-    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
+    l1parser.init_parser(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
 
     //==  and wrap the chunk inside an iterator that emits Reads.
     SeqIterType seqs_start(l1parser, l1.begin(), l1.end(), l1.getRange().start);
@@ -104,7 +104,7 @@ TEST_P(FASTAIteratorTest, read)
       emplace_iter = kmer_parser(seq, emplace_iter);
 
       // compare the results.
-//  	printf("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.pos_in_file, seq.seq_begin_offset, seq.seq_offset, seq.record_size);
+//  	printf("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.get_pos(), seq.seq_begin_offset, seq.seq_offset, seq.record_size);
       for (size_t i = 0; i < result.size(); ++i) {
         this->readFilePOSIX(this->fileName, result[i].second.get_pos(), kmer_size, gold);
 
@@ -171,7 +171,7 @@ TEST_P(FASTAIteratorTest, read_mpi)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   while (l1.getRange().size() > 0) {
-    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
+    l1parser.init_parser(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
 
 //    printf("block range [%lu, %lu)\n", l1.getRange().start, l1.getRange().end);
 
@@ -253,7 +253,7 @@ TEST_P(FASTAIteratorTest, read_omp)
 
   while (l1.getRange().size() > 0) {
 
-    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
+    l1parser.init_parser(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
 
 
     size_t localKmerCount = 0;
@@ -378,7 +378,7 @@ TEST_P(FASTAIteratorTest, read_omp_mpi)
 
   while (l1.getRange().size() > 0) {
 
-    l1parser.find_first_record(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
+    l1parser.init_parser(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange(), MPI_COMM_WORLD);
     bliss::io::FASTAParser<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
 
     size_t localKmerCount = 0;

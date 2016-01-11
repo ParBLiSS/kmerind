@@ -158,6 +158,10 @@ TEST_P(FASTQParserTest, parse_mpi)
 
   FASTQLoaderType loader(this->fileName, MPI_COMM_WORLD, nthreads, 2048, 2048 * nthreads * 2);
 
+  int rank, nprocs;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
   auto l1 = loader.getNextL1Block();
 
   while (l1.getRange().size() > 0) {
@@ -170,9 +174,11 @@ TEST_P(FASTQParserTest, parse_mpi)
     //== loop over the reads
     for (; seqs_start != seqs_end; ++seqs_start, ++this->elemCount)
     {
-      //      std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.id << ", ";
-      //      std::cout << std::distance(l1.begin(), (*seqs_start).seq_begin) << ", " << std::distance(l1.begin(), (*seqs_start).seq_end) << ", ";
-      //      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
+//
+//
+//            std::cout << "Rank " << rank << "/" << nprocs << " seq: " << (*seqs_start).id.get_id() << ", offset " << (*seqs_start).seq_offset << " size " << (*seqs_start).record_size << " ";
+//            std::cout << std::distance(l1.begin(), (*seqs_start).seq_begin) << ", " << std::distance(l1.begin(), (*seqs_start).seq_end) << ", ";
+//            std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
     }
 
     l1 = loader.getNextL1Block();
@@ -249,6 +255,14 @@ INSTANTIATE_TEST_CASE_P(Bliss, FASTQParserTest, ::testing::Values(
     TestFileInfo(7, 939, std::string("/test/data/test.small.fastq")),
     TestFileInfo(254562, 34111308, std::string("/test/data/test.fastq"))
 ));
+//INSTANTIATE_TEST_CASE_P(Bliss, FASTQParserTest, ::testing::Values(
+//    TestFileInfo(250, 29250, std::string("/test/data/natural.fastq")),
+//    TestFileInfo(140, 18761, std::string("/test/data/test.medium.fastq")),
+//    TestFileInfo(254562, 34111308, std::string("/test/data/test.fastq"))
+//));
+//INSTANTIATE_TEST_CASE_P(Bliss, FASTQParserTest, ::testing::Values(
+//    TestFileInfo(7, 939, std::string("/test/data/test.small.fastq"))
+//));
 
 int main(int argc, char* argv[])
 {

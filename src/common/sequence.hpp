@@ -80,6 +80,16 @@ namespace bliss
 
           return *this;
         }
+
+        /// getter for sequence id  (here, it's a 40 bit unique id == start of seq)
+        size_t get_id() const { return seq_id; }
+
+        /// get position in file
+        size_t get_pos() const { return pos_in_file ; }
+
+        /// getter for file id
+        uint8_t get_file_id() const { return file_id; }
+
     };
 
 
@@ -286,7 +296,7 @@ namespace bliss
      *
      * @tparam Iterator   allows walking through the sequence data.
      */
-    template<typename Iterator, typename SeqId>
+    template<typename Iterator, typename SeqId=SequenceId>
     class Sequence
     {
       public:
@@ -296,17 +306,17 @@ namespace bliss
         typedef SeqId IdType;
 
         /// id of the sequence:  correspond to sequence_iter.  file_pos field points to beginning of record.
-        const IdType id;
+        mutable IdType id;
 
         // length of full record.
-        const size_t record_size;
+        mutable size_t record_size;
 
         /// offset of seq_begin in global coordinates. (TODO: does not appear to be used anywhere)
         // size_t seq_begin_offset;
 
         /// offset of seq_begin from the beginning of the record.
         /// NOTE THAT IF SEQUENCE IS TRUNCATED, seq_begin may start later than the full sequence's starting point (?)
-        const size_t seq_offset;
+        mutable size_t seq_offset;
 
         /// begin iterator for the sequence (may not be at record's starting position)
         mutable Iterator seq_begin;
@@ -321,7 +331,7 @@ namespace bliss
          */
         friend std::ostream& operator<<(std::ostream& ost, const Sequence & seq)
         {
-          ost << " Sequence: id=[" << id << "] record_size=" << record_size << " seq_offset=" << seq_offset;
+          ost << " Sequence: id=[" << seq.id << "] record_size=" << seq.record_size << " seq_offset=" << seq.seq_offset;
           return ost;
         }
 
