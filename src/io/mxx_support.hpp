@@ -137,6 +137,7 @@ namespace mxx {
       sizeof(bliss::partition::range<T>)/sizeof(T) > baseType;
 
       static MPI_Datatype get_type(){ 
+        //== loop over the reads
         return baseType::get_type(); 
       }
 
@@ -165,10 +166,10 @@ namespace mxx {
 
 
   template<typename A, typename T>
-    struct datatype_builder<bliss::de_bruijn::node::edge_counts<A, T> > : 
-    public datatype_builder<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts) > {
+    struct datatype_builder<::bliss::de_bruijn::node::edge_counts<A, T> > :
+    public datatype_builder<decltype(::bliss::de_bruijn::node::edge_counts<A, T>::counts) > {
 
-      typedef datatype_builder<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts) > baseType;
+      typedef datatype_builder<decltype(::bliss::de_bruijn::node::edge_counts<A, T>::counts) > baseType;
 
       static MPI_Datatype get_type(){ 
         return baseType::get_type(); 

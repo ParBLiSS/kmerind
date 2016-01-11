@@ -23,7 +23,9 @@
 
 #include "utils/logging.h"
 #include "bliss-config.hpp"
+#ifdef USE_SIMD
 #include <x86intrin.h>   // all intrinsics.  will be enabled based on compiler flag such as __SSSE3__ internally.
+#endif
 
 // needed by clang else it does not know where to get the bswap function.  however, conflicts with farmhash.cc
 //#include <byteswap.h>
@@ -92,12 +94,12 @@ namespace bliss {
       struct bitgroup_ops {
           //  default imple is for SEQuential bit reverse.  this is defined for all bit_group_sizes.
           static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE is 0");
-          static_assert(BIT_GROUP_SIZE < (sizeof(size_t) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in size_t");
+          static_assert(BIT_GROUP_SIZE < (sizeof(uint64_t) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in uint64_t");
           static_assert(((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0) || (BIT_GROUP_SIZE < 8), "ERROR: BIT_GROUP_SIZE is has to be powers of 2 or less than 8");
 
           /* Linear (inefficient) reverse: */
 
-          static constexpr size_t group_mask = ~(std::numeric_limits<size_t>::max() << BIT_GROUP_SIZE);
+          static constexpr uint64_t group_mask = ~(std::numeric_limits<uint64_t>::max() << BIT_GROUP_SIZE);
 
           static constexpr unsigned int bitsPerGroup = BIT_GROUP_SIZE;
           static constexpr unsigned char simd_type = BIT_REV_SIMD_TYPE;
@@ -108,7 +110,7 @@ namespace bliss {
            *          len has to be a multiple of BIT_GROUP_SIZE if BIT_GROUP_SIZE is greater than 8 (i.e. multiple bytes).
            *          in other words, when a converted word is divided into BIT_GROUP_SIZE, there should not be padding zero's in the groups
            *
-           *
+           * @param len       length of input in bytes
            * @param out       pointer into a byte array.  the array should be initialized to 0 before any call to this function.
            * @return number of bits in the last byte that are not swapped (i.e. last 2 bits for 3 bits op.)
            */
@@ -240,17 +242,17 @@ namespace bliss {
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
       struct bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SWAR, POW2> {
           static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE is 0");
-          static_assert(BIT_GROUP_SIZE < (sizeof(size_t) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in size_t");
+          static_assert(BIT_GROUP_SIZE < (sizeof(uint64_t) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in uint64_t");
           static_assert((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0, "ERROR: BIT_GROUP_SIZE is has to be powers of 2");
 
 
-          // masks.  if size_t indicates that system is 32 bit, then this should truncate.
-          static constexpr size_t mask32 = 0x00000000FFFFFFFF;
-          static constexpr size_t mask16 = 0x0000FFFF0000FFFF;
-          static constexpr size_t  mask8 = 0x00FF00FF00FF00FF;
-          static constexpr size_t  mask4 = 0x0F0F0F0F0F0F0F0F;
-          static constexpr size_t  mask2 = 0x3333333333333333;
-          static constexpr size_t  mask1 = 0x5555555555555555;
+          // masks.  if uint64_t indicates that system is 32 bit, then this should truncate.
+          static constexpr uint64_t mask32 = 0x00000000FFFFFFFF;
+          static constexpr uint64_t mask16 = 0x0000FFFF0000FFFF;
+          static constexpr uint64_t  mask8 = 0x00FF00FF00FF00FF;
+          static constexpr uint64_t  mask4 = 0x0F0F0F0F0F0F0F0F;
+          static constexpr uint64_t  mask2 = 0x3333333333333333;
+          static constexpr uint64_t  mask1 = 0x5555555555555555;
 
           static constexpr unsigned int bitsPerGroup = BIT_GROUP_SIZE;
           static constexpr unsigned char simd_type = BIT_REV_SWAR;
@@ -384,17 +386,17 @@ namespace bliss {
       template <bool POW2>
       struct bitgroup_ops<3, BIT_REV_SWAR, POW2> {
 
-          // masks.  if size_t indicates that system is 32 bit, then this should truncate.
-          static constexpr size_t  mask8 = 0x00FF00FF00FF00FF;
-          static constexpr size_t  mask4 = 0x0F0F0F0F0F0F0F0F;
-          static constexpr size_t  mask2 = 0x3333333333333333;
-          static constexpr size_t  mask1 = 0x5555555555555555;
+          // masks.
+          static constexpr uint64_t  mask8 = 0x00FF00FF00FF00FF;
+          static constexpr uint64_t  mask4 = 0x0F0F0F0F0F0F0F0F;
+          static constexpr uint64_t  mask2 = 0x3333333333333333;
+          static constexpr uint64_t  mask1 = 0x5555555555555555;
 
-          static constexpr size_t mask3lo = 0x9249249249249249;
-          static constexpr size_t mask3mid = 0x2492492492492492;
-          static constexpr size_t mask3hi = 0x4924924924924924;
+          static constexpr uint64_t mask3lo = 0x9249249249249249;
+          static constexpr uint64_t mask3mid = 0x2492492492492492;
+          static constexpr uint64_t mask3hi = 0x4924924924924924;
 
-          static constexpr size_t  mask_all = 0xFFFFFFFFFFFFFFFF;
+          static constexpr uint64_t  mask_all = 0xFFFFFFFFFFFFFFFF;
 
           static constexpr unsigned int bitsPerGroup = 3;
           static constexpr unsigned char simd_type = BIT_REV_SWAR;
@@ -733,9 +735,9 @@ namespace bliss {
           static constexpr unsigned int bitsPerGroup = 3;
           static constexpr unsigned char simd_type = BIT_REV_SSSE3;
 
-          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3lo, 2, 16) = { 0x9249249249249249, 0x4924924924924924 };
-          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3mid, 2, 16) = { 0x2492492492492492, 0x9249249249249249 };
-          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3hi, 2, 16) = { 0x4924924924924924, 0x2492492492492492 };
+          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3lo, 2, 16) = { 0x9249249249249249, 0x4924924924924924 };
+          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3mid, 2, 16) = { 0x2492492492492492, 0x9249249249249249 };
+          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3hi, 2, 16) = { 0x4924924924924924, 0x2492492492492492 };
           static constexpr uint8_t BLISS_ALIGNED_ARRAY(mask_all, 32, 16) = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
                                                                 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
@@ -894,11 +896,11 @@ namespace bliss {
 
       // need the DUMMY template parameter to correctly instantiate here.
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3lo, 2, 16);
+      constexpr uint64_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3lo, 2, 16);
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3mid, 2, 16);
+      constexpr uint64_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3mid, 2, 16);
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3hi, 2, 16);
+      constexpr uint64_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3hi, 2, 16);
       template <bool POW2>
       constexpr uint8_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask_all, 32, 16);
 
@@ -1124,9 +1126,9 @@ namespace bliss {
           static constexpr unsigned int bitsPerGroup = 3;
           static constexpr unsigned char simd_type = BIT_REV_AVX2;
 
-          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3lo, 4, 32) = { 0x9249249249249249, 0x4924924924924924, 0x2492492492492492, 0x9249249249249249 };
-          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3mid, 4, 32) = { 0x2492492492492492, 0x9249249249249249, 0x4924924924924924, 0x2492492492492492 };
-          static constexpr size_t BLISS_ALIGNED_ARRAY(mask3hi, 4, 32) = { 0x4924924924924924, 0x2492492492492492, 0x9249249249249249, 0x4924924924924924 };
+          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3lo, 4, 32) = { 0x9249249249249249, 0x4924924924924924, 0x2492492492492492, 0x9249249249249249 };
+          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3mid, 4, 32) = { 0x2492492492492492, 0x9249249249249249, 0x4924924924924924, 0x2492492492492492 };
+          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3hi, 4, 32) = { 0x4924924924924924, 0x2492492492492492, 0x9249249249249249, 0x4924924924924924 };
           static constexpr uint8_t BLISS_ALIGNED_ARRAY(mask_all, 64, 32) = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
                                                                 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
                                                                 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -1308,11 +1310,11 @@ namespace bliss {
       };
 
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3lo, 4, 32);
+      constexpr uint64_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3lo, 4, 32);
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3mid, 4, 32);
+      constexpr uint64_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3mid, 4, 32);
       template <bool POW2>
-      constexpr size_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3hi, 4, 32);
+      constexpr uint64_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3hi, 4, 32);
       template <bool POW2>
       constexpr uint8_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask_all, 64, 32);
 
