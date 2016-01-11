@@ -646,16 +646,19 @@ namespace bliss
   
     /**
      * @brief Returns whether this k-mer compares smaller than the given k-mer.
+     * @note  kmers have "least recently seen" character at most significant bit.
+     *        and lexicographic comparison is order from least recently seen (prefix to suffix)
+     *        so comparison needs to go from MSB to LSB.
      *
      * @returns `True` if this k-mer compares smaller than the given k-mer,
      *          `False` otherwise.
      */
     INLINE bool operator<(const Kmer& rhs) const
     {
-      auto first = this->data;
-      auto second = rhs.data;
+      auto first = this->data + nWords - 1;
+      auto second = rhs.data + nWords - 1;
 
-      for (size_t i = 0; i < nWords; ++i, ++first, ++second) {
+      for (size_t i = 0; i < nWords; ++i, --first, --second) {
         if (*first != *second) return (*first < *second);  // if equal, keep comparing. else decide.
       }
       return false;  // all equal
@@ -682,25 +685,7 @@ namespace bliss
      */
     INLINE bool operator<=(const Kmer& rhs) const
     {
-      auto first = this->data;
-      auto second = rhs.data;
-
-      for (unsigned int i = 0; i < nWords; ++i, ++first, ++second) {
-        if (*first != *second) return (*first < *second);  // if equal, keep comparing. else decide.
-      }
-      return true;  // all equal
-//      std::pair<const WORD_TYPE*, const WORD_TYPE*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
-//      if (unequal.first == this->data + nWords)
-//      {
-//        // all elements are equal
-//        return true;
-//      }
-//      else
-//      {
-//        // the comparison of the first unequal element will determine the result
-//        return *(unequal.first) < *(unequal.second);
-//      }
-//      return memcmp(data, rhs.data, nWords * sizeof(WORD_TYPE)) <= 0;
+      return !(rhs < *this);
     }
   
     /* symmetric comparison operators */
@@ -714,7 +699,7 @@ namespace bliss
      */
     INLINE bool operator>=(const Kmer& rhs) const
     {
-      return ! (this->operator<(rhs));
+      return !(*this < rhs);
     }
   
     /**
@@ -725,7 +710,7 @@ namespace bliss
      */
     INLINE bool operator>(const Kmer& rhs) const
     {
-      return ! (this->operator<=(rhs));
+      return rhs < *this;
     }
   
     /* bit operators */

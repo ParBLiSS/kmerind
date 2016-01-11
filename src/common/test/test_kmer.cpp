@@ -644,9 +644,13 @@ TEST(KmerComparison, TestKmerComparison1)
   // greater value in 3rd block:
   uint16_t kmer_val_g3[] = {0xffee, 0x1c0, 0xfeef, 0xdead, 0x1234, 0x5678, 0xabba};
 
+  // smaller value in 4th block, greater value in 3rd block:
+  uint16_t kmer_val_g3s4[] = {0xffee, 0x1c0, 0xfeef, 0x1111, 0x1234, 0x5678, 0xabba};
+
   MyKmer<41, bliss::common::DNA, uint16_t> kmer(kmer_val);
   MyKmer<41, bliss::common::DNA, uint16_t> kmer_s(kmer_val_s4);
   MyKmer<41, bliss::common::DNA, uint16_t> kmer_g(kmer_val_g3);
+  MyKmer<41, bliss::common::DNA, uint16_t> kmer_sg(kmer_val_g3s4);
 
   EXPECT_TRUE(kmer > kmer_s);
   EXPECT_TRUE(kmer == kmer);
@@ -658,6 +662,16 @@ TEST(KmerComparison, TestKmerComparison1)
   EXPECT_FALSE(kmer > kmer);
   EXPECT_TRUE(kmer != kmer_g);
   EXPECT_TRUE(kmer != kmer_s);
+
+  EXPECT_TRUE(kmer > kmer_sg);
+  EXPECT_TRUE(kmer_sg < kmer);
+  EXPECT_TRUE(kmer >= kmer_sg);
+  EXPECT_TRUE(kmer_sg <= kmer);
+  EXPECT_TRUE(kmer_g > kmer_sg);
+  EXPECT_TRUE(kmer_s < kmer_sg);
+  EXPECT_TRUE(kmer_g >= kmer_sg);
+  EXPECT_TRUE(kmer_s <= kmer_sg);
+
 
 }
 
