@@ -606,7 +606,7 @@ namespace io
           // NEED TO COMPUTE record size - searching for a starting pointer may require looking at a whole record,
           // and if file segment (for a process) is much smaller than a whole record, we would not be able to find
           // a record at all.
-          recordSize = this->getRecordSize(10).first;
+          recordSize = Overlap > 0 ? Overlap : this->getRecordSize(10).first;
 
           // get from the communicator the number of concurrent loaders, and the id of the current loader.
           int nConcurrentLoaders = 0;
@@ -676,7 +676,7 @@ namespace io
           fileRange = RangeType(0, getFileSize(fileHandle) / sizeof(T));   // range is in units of T
 
 
-          recordSize = this->getRecordSize(10).first;
+          recordSize = Overlap > 0 ? Overlap : this->getRecordSize(10).first;
 
           // configure the L1 partitioner
           configL1Partitioner(L1Partitioner, fileRange, _nConcurrentLoaders, L1BlockSize);
@@ -921,13 +921,13 @@ namespace io
           //if (hint.size() > 0) {
 
             // extend by Overlap
-            RangeType start_search_range(hint.start, hint.end + 2 * recordSize);
+            RangeType start_search_range(hint.start, hint.end + ::std::max(Overlap, 2 * recordSize));
             start_search_range.intersect(this->fileRange);
-            RangeType end_search_range(hint.end, hint.end + 2 * recordSize);
+            RangeType end_search_range(hint.end, hint.end + ::std::max(Overlap, 2 * recordSize));
             end_search_range.intersect(this->fileRange);
 
             // get the combined ranges
-            RangeType loadRange(hint.start, hint.end + 2 * recordSize);
+            RangeType loadRange(hint.start, hint.end + ::std::max(Overlap, 2 * recordSize));
             loadRange.intersect(this->fileRange);
 
             // memmap the content
@@ -1164,9 +1164,9 @@ namespace io
 
 
             // extend by 2 record
-            RangeType start_search_range(hint.start, hint.end + 2 * recordSize);
+            RangeType start_search_range(hint.start, hint.end + ::std::max(Overlap, 2 * recordSize));
             start_search_range.intersect(parentRange);
-            RangeType end_search_range(hint.end, hint.end + 2 * recordSize);
+            RangeType end_search_range(hint.end, hint.end + ::std::max(Overlap, 2 * recordSize));
             end_search_range.intersect(parentRange);
 
             try {
@@ -1265,7 +1265,7 @@ namespace io
           // Set up the partitioner to partition the full file range with nPartitions.  Overlap is set to 0.  FileLoader handles overlap itself.
 
           // update the chunkSize  to at least 2x record size, (passes back to called).
-          chunkSize = std::max(chunkSize, Overlap);
+          chunkSize = std::max(chunkSize, ::std::max(Overlap, 2 * recordSize));
 
           // then configure the partitinoer to use the right number of threads.  Overlap is set to 0.  FileLoader handles overlap itself.
           chunkSize = partitioner.configure(fileRange, nPartitions, chunkSize, 0);
@@ -1291,7 +1291,7 @@ namespace io
 
           //=====  adjust the L2BlockSize adaptively.
           // update the chunkSize  to at least 2x record size, (passes back to called).
-          chunkSize = std::max(chunkSize, Overlap);
+          chunkSize = std::max(chunkSize, ::std::max(Overlap, 2 * recordSize));
 
           // then configure the partitinoer to use the right number of threads.  Overlap is set to 0.  FileLoader handles overlap itself.
           chunkSize = partitioner.configure(L1Block.getRange(), nThreads, chunkSize, 0);
@@ -1401,16 +1401,17 @@ namespace io
         // TODO: try to do this without getRecordSize.
         size_t getKmerCountEstimate(const int k) {
           size_t seqSizeInRecord = 0;
+          size_t record_size = 0;
 
-          std::tie(recordSize, seqSizeInRecord) = this->getRecordSize(10);
+          std::tie(record_size, seqSizeInRecord) = this->getRecordSize(10);
 
-         size_t numRecords = (this->getFileRange().size() + recordSize - 1) / recordSize;
+         size_t numRecords = (this->getFileRange().size() + record_size - 1) / record_size;
 
          size_t kmersPerRecord = seqSizeInRecord == 0 ? seqSizeInRecord - k + 1 : 0;  // fastq has quality.
 
 
-          BL_DEBUGF("file range [%lu, %lu], recordSize = %lu, kmersPerRecord = %lu, numRecords = %lu",
-                 this->getFileRange().start, this->getFileRange().end, recordSize, kmersPerRecord, numRecords);
+          BL_DEBUGF("file range [%lu, %lu], record_size = %lu, kmersPerRecord = %lu, numRecords = %lu",
+                 this->getFileRange().start, this->getFileRange().end, record_size, kmersPerRecord, numRecords);
 
           return numRecords * kmersPerRecord;
         }
@@ -1507,7 +1508,7 @@ namespace io
           /// memory map.  requires that the starting position is block aligned.
           size_t block_start = RangeType::align_to_page(r, pageSize);   // mixed use of range semantic and pageSize byte
 
-          size_t block_size = (r.end - block_start + Overlap) * sizeof(T);
+          size_t block_size = (r.end - block_start) * sizeof(T);
 
           // NOT using MAP_POPULATE.  it slows things done when testing on single node.  NOTE HUGETLB not supported for file mapping.
           PointerType result = (PointerType)mmap64(nullptr, block_size,
@@ -1555,7 +1556,7 @@ namespace io
          */
         void unmap(PointerType &d, const RangeType &r) {
 
-          munmap(d, (r.end - RangeType::align_to_page(r, pageSize) + Overlap) * sizeof(T));
+          munmap(d, (r.end - RangeType::align_to_page(r, pageSize)) * sizeof(T));
         }
 
     };
