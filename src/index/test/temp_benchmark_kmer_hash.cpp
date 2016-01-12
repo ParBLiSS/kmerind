@@ -97,19 +97,17 @@ std::vector<uint8_t> KmerReverseBenchmark<T>::chars;
     TypeParam km, rev, tmp; \
     km = KmerReverseBenchmark<kmertype>::kmer; \
     \
-    TIMER_LOOP_START(km); \
+    TIMER_START(km); \
     \
     for (size_t i = 0; i < KmerReverseBenchmark<kmertype>::iterations; ++i) { \
-      TIMER_LOOP_RESUME(km); \
       \
       tmp = func; \
-      TIMER_LOOP_PAUSE(km); \
       \
       rev ^= tmp; \
       \
       km.nextFromChar(KmerReverseBenchmark<kmertype>::chars[i]); \
     } \
-    TIMER_LOOP_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
+    TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
     \
     EXPECT_TRUE(rev == KmerReverseBenchmark<kmertype>::gold); \
     } while (0)
@@ -143,22 +141,20 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
   uint8_t* out = reinterpret_cast<uint8_t*>(tmp.getData());
   const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getConstData());
 
-  TIMER_LOOP_START(km);
+  TIMER_START(km);
 
   for (size_t i = 0; i < KmerReverseBenchmark<TypeParam>::iterations; ++i) {
 
     memset(out, 0, TypeParam::nBytes);
 
-    TIMER_LOOP_RESUME(km);
     bliss::utils::bit_ops::reverse_seq<TypeParam::bitsPerChar>(out, in, TypeParam::nBytes);
     tmp.right_shift_bits(TypeParam::nBytes * 8 - TypeParam::nBits);  // shift by remainder/padding.
-    TIMER_LOOP_PAUSE(km);
 
     rev ^= tmp;
 
     km.nextFromChar(KmerReverseBenchmark<TypeParam>::chars[i]);
   }
-  TIMER_LOOP_END(km, "seqnew", KmerReverseBenchmark<TypeParam>::iterations);
+  TIMER_END(km, "seqnew", KmerReverseBenchmark<TypeParam>::iterations);
 
   if (rev != KmerReverseBenchmark<TypeParam>::rev_gold) {
     std::cout << "rev: " << rev.toAlphabetString() << std::endl;

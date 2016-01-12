@@ -110,7 +110,7 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq)
     local_rev_same = (rev == rev_seq);
 
     if (!local_rev_same) {
-      printf("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      BL_ERROR("ERROR: rev diff at iter " << i << ":\n\tinput " << km.toAlphabetString().c_str() << "\n\toutput " << rev.toAlphabetString().c_str() << "\n\tgold " << rev_seq.toAlphabetString().c_str());
     }
 
     rev_same &= local_rev_same;

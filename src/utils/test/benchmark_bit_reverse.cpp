@@ -61,14 +61,17 @@ class BitReverseWordBenchmark : public ::testing::Test {
 
         size_t max = BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * count;
 
-        TIMER_LOOP_START(this->bitrev);
+        TIMER_START(this->bitrev);
+        // looping timer too slow.
+//        TIMER_LOOP_START(this->bitrev);
         for (size_t iter = 0; iter < max; ++iter) {
-          TIMER_LOOP_RESUME(this->bitrev);
+//          TIMER_LOOP_RESUME(this->bitrev);
           in[(iter+1)%count] = op.reverse(in[(iter)%count]);
-          TIMER_LOOP_PAUSE(this->bitrev);
+//          TIMER_LOOP_PAUSE(this->bitrev);
 
         }  // else too large, so don't do the test.
-        TIMER_LOOP_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
+//        TIMER_LOOP_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
+        TIMER_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
     }
     template <typename WORD_TYPE, uint8_t SIMD_TYPE, typename P2 = P, typename ::std::enable_if<(P2::bitsPerGroup >= (sizeof(WORD_TYPE) * 8)), int>::type = 0>
     void word_test( std::string name ) {
@@ -171,21 +174,23 @@ class BitReverseRemainderBenchmark : public ::testing::Test {
   	  ss.clear();
 	  ss << name << "_" << i;
 	  	  
-          TIMER_LOOP_START(this->bitrev);
+//          TIMER_LOOP_START(this->bitrev);
+          TIMER_START(this->bitrev);
 
 
   	  for (size_t iter = 0; iter < iters; ++iter) {
 
-	    TIMER_LOOP_RESUME(this->bitrev);
+//	    TIMER_LOOP_RESUME(this->bitrev);
 	    if ((P2::bitsPerGroup & (P2::bitsPerGroup - 1)) == 0)
               op.reverse(out+1, out, i, 0);
 	    else
               op.reverse(out+1, out, i, iter % 8);
 
-            TIMER_LOOP_PAUSE(this->bitrev);
+//            TIMER_LOOP_PAUSE(this->bitrev);
 
           }
-          TIMER_LOOP_END(this->bitrev, ss.str(), iters * i);
+//          TIMER_LOOP_END(this->bitrev, ss.str(), iters * i);
+          TIMER_END(this->bitrev, ss.str(), iters * i);
         }
 
     }
@@ -269,30 +274,34 @@ class BitReverseArrayBenchmark : public ::testing::Test {
     void array_test( std::string name ) {
       uint8_t BLISS_ALIGNED_ARRAY(out, 128, 32);
 
-      TIMER_LOOP_START(this->bitrev);
+      TIMER_START(this->bitrev);
+//      TIMER_LOOP_START(this->bitrev);
 
       for (size_t iter = 0; iter < BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters; ++iter) {
 
-        TIMER_LOOP_RESUME(this->bitrev);
+//        TIMER_LOOP_RESUME(this->bitrev);
         bliss::utils::bit_ops::reverse<P2::bitsPerGroup, MAX_SIMD_TYPE>(out, this->helper.input, 128);
-        TIMER_LOOP_PAUSE(this->bitrev);
+//        TIMER_LOOP_PAUSE(this->bitrev);
       }
-      TIMER_LOOP_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
+//      TIMER_LOOP_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
+      TIMER_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
     }
 
     template <typename P2 = P>
     void array_test_seq( std::string name ) {
       uint8_t BLISS_ALIGNED_ARRAY(out, 128, 32);
 
-      TIMER_LOOP_START(this->bitrev);
+      TIMER_START(this->bitrev);
+//      TIMER_LOOP_START(this->bitrev);
 
       for (size_t iter = 0; iter < BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters; ++iter) {
 
-        TIMER_LOOP_RESUME(this->bitrev);
+//        TIMER_LOOP_RESUME(this->bitrev);
         bliss::utils::bit_ops::reverse_seq<P2::bitsPerGroup>(out, this->helper.input, 128);
-        TIMER_LOOP_PAUSE(this->bitrev);
+//        TIMER_LOOP_PAUSE(this->bitrev);
       }
-      TIMER_LOOP_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
+//      TIMER_LOOP_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
+      TIMER_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
 
     }
 

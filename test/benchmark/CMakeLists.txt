@@ -119,6 +119,10 @@ cotire(profile_mem_usage )
 add_executable(hash_vs_sort hash_vs_sort.cpp)
 target_link_libraries(hash_vs_sort ${EXTRA_LIBS})
 
+add_executable(chrono_vs_time chrono_vs_time.cpp)
+target_link_libraries(chrono_vs_time ${EXTRA_LIBS})
+
+
 if (Boost_FOUND)
 	add_executable(cust_alloc test_custom_allocator.cpp)
 	target_link_libraries(cust_alloc ${EXTRA_LIBS})

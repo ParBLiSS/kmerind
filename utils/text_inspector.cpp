@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
     fseek(f, pos, SEEK_SET );
     unsigned char * data = new unsigned char[size + 1];
 
-    fread(data, sizeof(unsigned char), size, f);
+    (void) fread(data, sizeof(unsigned char), size, f);
 
     std::ostream_iterator<unsigned char> oit(std::cout);
     std::copy(data, data + size, oit);
