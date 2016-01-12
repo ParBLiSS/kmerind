@@ -86,7 +86,7 @@ namespace bliss
 
       public:
         /// sequence
-        using SequenceType = typename ::bliss::common::Sequence<BaseCharIterator, ::bliss::common::LongSequenceKmerId>;
+        using SequenceType = typename ::bliss::common::Sequence<BaseCharIterator>;
         using SequenceIdType = typename SequenceType::IdType;
 
 
@@ -212,7 +212,10 @@ namespace bliss
           mxx::comm in_comm = comm.split(r.size() == 0);
 
           // if no data, then in_comm is null, and does not participate further.
-          if (r.size() == 0) return r.start;
+          if (r.size() == 0) {
+            //::std::cout << r;
+            return r.start;
+          }  // else we are using in_comm != MPI_COMM_NULL
 
           //============== GET LAST CHAR FROM PREVIOUS PROCESSOR, to check if first char is at start of line.
             // for the nonempty ones, shift right by 1.
@@ -289,7 +292,7 @@ namespace bliss
             //============== CONVERT FROM LINE START POSITION TO SEQUENCE OBJECTS
 
             // split comm again for non-empty line start vectors
-            in_comm.with_subset(line_starts.size() != 0, [&](const mxx::comm& subcomm) {
+            in_comm.with_subset(line_starts.size() > 0, [&](const mxx::comm& subcomm) {
               // do a shift
               LL temp = line_starts.front();
               LL next = mxx::left_shift(temp, subcomm);
@@ -645,7 +648,7 @@ namespace bliss
 					++seq_offset;
 
           return SequenceType(SequenceIdType(std::get<0>(seq), std::get<3>(seq)),
-        		  	  	  	    std::get<2>(seq) - std::get<0>(seq),
+                              std::get<2>(seq) - std::get<0>(seq),
                                 valid.start - std::get<0>(seq),
                                 start, iter);
 

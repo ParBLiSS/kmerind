@@ -918,7 +918,7 @@ namespace io
           // TODO: SEARCH 1 and communicate, then record size does not matter.
 
           // find starting and ending positions.  do not search in overlap region.
-          if (hint.size() > 0) {
+          //if (hint.size() > 0) {
 
             // extend by Overlap
             RangeType start_search_range(hint.start, hint.end + 2 * recordSize);
@@ -944,7 +944,7 @@ namespace io
 #else
               output.start = temp_parser.init_parser(searchData, this->fileRange, loadRange, start_search_range);
 #endif
-              if (start_search_range.start <= output.start && output.start < start_search_range.end) {
+              if (hint.start <= output.start && output.start < hint.end) {
                 // if start position is in this file segment, then this proc/thread owns this block.
                 output.end = temp_parser.find_first_record(searchData, this->fileRange, loadRange, end_search_range);
               } else {
@@ -955,7 +955,7 @@ namespace io
 
 
 //              ::std::cout << "start in " << hint << " end in " << end_search_range << " final " << output << ::std::endl;
-            } catch (IOException& ex) {
+            } catch (std::exception& ex) {
               // either start or end are not found so return an empty range.
 
               // TODO: need to handle this scenario better - should keep search until end.
@@ -971,7 +971,6 @@ namespace io
 
             // clean up and unmap
             this->unmap(mappedData, loadRange);
-          }
 
 
           return output;
@@ -1163,7 +1162,6 @@ namespace io
 
           RangeType output(hint);
 
-          if (hint.size() > 0) {
 
             // extend by 2 record
             RangeType start_search_range(hint.start, hint.end + 2 * recordSize);
@@ -1176,7 +1174,7 @@ namespace io
               // search for start and end
               output.start = L1parser.find_first_record(this->L1Block.begin(), parentRange, parentRange, start_search_range);
 
-              if (start_search_range.start <= output.start && output.start < start_search_range.end) {
+              if (hint.start <= output.start && output.start < hint.end) {
                  // if start position is in this file segment, then this proc/thread owns this block.
                 output.end = L1parser.find_first_record(this->L1Block.begin(), parentRange, parentRange, end_search_range);
                } else {
@@ -1186,7 +1184,7 @@ namespace io
                }
 
 
-            } catch (IOException& ex) {
+            } catch (::std::exception& ex) {
               // either start or end are not found, so return nothing.
 
               BL_WARNING(ex.what());
@@ -1200,7 +1198,6 @@ namespace io
               output.end = hint.end;
             }
 
-          }
 
           return output;
 
@@ -1348,11 +1345,10 @@ namespace io
 
             // For FASTAParser, this computes the sequence demarcation vector.  For FASTQ, this does nothing.
             size_t offset = 0;
-#ifdef USE_MPI
-            offset = local_parser.init_parser(sstart, this->getFileRange(), inmem, search_range, this->comm);  // in the case of FASTAParser, this creates the sequence demarcation vector.
-#else
+
+            // only rank 0 needs to use the parser.
             offset = local_parser.init_parser(sstart, this->getFileRange(), inmem, search_range);
-#endif
+
             // then find start, and adjust search range.  NOT NEEDED HERE since we are at beginning of file.
 
             // now initialize the search.  no need to call the first increment separately since we know that we have to start from seq id 0.
@@ -1404,10 +1400,9 @@ namespace io
         /// get number of estimated kmers, given k.
         // TODO: try to do this without getRecordSize.
         size_t getKmerCountEstimate(const int k) {
-          size_t recordSize;
-          size_t seqSizeInRecord;
+          size_t seqSizeInRecord = 0;
 
-          if (recordSize == 0 || seqSizeInRecord == 0) std::tie(recordSize, seqSizeInRecord) = this->getRecordSize(10);
+          std::tie(recordSize, seqSizeInRecord) = this->getRecordSize(10);
 
          size_t numRecords = (this->getFileRange().size() + recordSize - 1) / recordSize;
 

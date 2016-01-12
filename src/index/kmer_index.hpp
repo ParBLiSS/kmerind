@@ -587,7 +587,7 @@ struct KmerParser {
 				"input iterator and output iterator's value types differ");
 
 		// then compute and store into index (this will generate kmers and insert into index)
-		if (read.seq_begin == read.seq_end) return output_iter;
+    if (::std::distance(read.seq_begin, read.seq_end) < KmerType::size) return output_iter;
 
 		//== filtering iterator
 		NotEOL neol;
@@ -662,7 +662,7 @@ struct KmerPositionTupleParser {
 
 
 		// then compute and store into index (this will generate kmers and insert into index)
-		if (read.seq_begin == read.seq_end) return output_iter;
+		if (::std::distance(read.seq_begin, read.seq_end) < KmerType::size) return output_iter;  // if too short...
 
     //== set up the kmer generating iterators.
     NotEOL neol;
@@ -780,7 +780,9 @@ struct KmerPositionQualityTupleParser {
 
 
 		// then compute and store into index (this will generate kmers and insert into index)
-		if (read.seq_begin == read.seq_end || read.qual_begin == read.qual_end) return output_iter;
+		if ((::std::distance(read.seq_begin, read.seq_end) < KmerType::size) ||
+		    (::std::distance(read.qual_begin, read.qual_end) < KmerType::size)) return output_iter;
+		assert(::std::distance(read.seq_begin, read.seq_end) <= ::std::distance(read.qual_begin, read.qual_end));
 
 
     //== set up the kmer generating iterators.
@@ -872,7 +874,7 @@ struct KmerCountTupleParser {
 		CountIterType count_start(1);
 
 		// then compute and store into index (this will generate kmers and insert into index)
-		if (read.seq_begin == read.seq_end) return output_iter;
+    if (::std::distance(read.seq_begin, read.seq_end) < KmerType::size) return output_iter;
 
 		//== set up the kmer generating iterators.
 		NotEOL neol;

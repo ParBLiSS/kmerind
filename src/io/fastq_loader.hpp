@@ -32,17 +32,18 @@ namespace bliss
 
     };
 
-    template <typename Iterator, bool HasQuality = true>
-    class FASTQSequence : public ::bliss::common::Sequence<Iterator, ::bliss::common::ShortSequenceKmerId> {
 
+    template <typename Iterator, bool HasQuality = true>
+    class FASTQSequence : public ::bliss::common::Sequence<Iterator> {
+        // NOTE: uses the default SequenceId type instead of ShortSequenceKmerType, because we are dealing with file coordinate right now and not Kmer's position
       protected:
-        using BaseType = ::bliss::common::Sequence<Iterator, ::bliss::common::ShortSequenceKmerId>;
+        using BaseType = ::bliss::common::Sequence<Iterator>;
 
       public:
       /// Iterator type for traversing the sequence.
       typedef Iterator IteratorType;
       /// type for the id struct/union
-      typedef ::bliss::common::ShortSequenceKmerId IdType;
+      typedef typename ::bliss::common::Sequence<Iterator>::IdType IdType;
 
       /// begin iterator for the sequence
       Iterator qual_begin;

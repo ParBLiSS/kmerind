@@ -32,7 +32,7 @@ namespace bliss
     /**
      * @brief SequenceId is used to identify a sequence in a file.  This is the basic type that is suitable for position in files.
      * @details  this class holds the data from which a KmerId can be created.
-     * @note  This type is NOT sent freqently over mpi.
+     * @note  This type is NOT sent frequently over mpi.
      *        virtual functions break this.  so no virtual destructor or other virtual functions.
      *        In addition, compilers can align the members however.  so preferably the data content should be
      *        contiguous, otherwise a mxx::datatype specialization should be used.
@@ -360,6 +360,10 @@ namespace bliss
 
         size_t seq_size() const {
           return ::std::distance(seq_begin, seq_end);
+        }
+
+        size_t seq_global_offset() const  {
+          return this->id.get_pos() + seq_offset;
         }
     };
 

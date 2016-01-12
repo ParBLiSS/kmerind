@@ -79,8 +79,9 @@ TEST_P(FASTAIteratorTest, read)
   auto l1 = loader.getNextL1Block();
   auto l1parser = loader.getSeqParser();
 
-  ValueType* gold = new ValueType[kmer_size+1];
-  gold[kmer_size] = 0;
+  ValueType* gold = new ValueType[2 * l1.getRange().size()];
+
+
 
   ResultVecType result;
   bool same = true;
@@ -103,20 +104,24 @@ TEST_P(FASTAIteratorTest, read)
       ::fsc::back_emplace_iterator<ResultVecType > emplace_iter(result);
       emplace_iter = kmer_parser(seq, emplace_iter);
 
+      memset(gold, 0, 2 * l1.getRange().size());
+      this->readFilePOSIX(this->fileName, seq.seq_global_offset(), seq.seq_size(), gold);
+
+
       // compare the results.
 //  	printf("sequence record: id %lu, offset %lu, local offset %lu, length %lu\n", seq.id.get_pos(), seq.seq_begin_offset, seq.seq_offset, seq.record_size);
       for (size_t i = 0; i < result.size(); ++i) {
-        this->readFilePOSIX(this->fileName, result[i].second.get_pos(), kmer_size, gold);
 
-        std::string KmertoString = bliss::utils::KmerUtils::toASCIIString(result[i].first);
-
-        local_same = equal(KmertoString.begin(), gold, kmer_size);
+        local_same = equal(bliss::utils::KmerUtils::toASCIIString(result[i].first).begin(), gold + i, kmer_size);
         same &= local_same;
 
         if (!local_same) {
           BL_ERROR("sequence record: " << seq);
           BL_ERRORF("i %lu id: pos %lu, id %lu, file %d\n", i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
-          BL_ERRORF("i %lu pos %lu gold: [%s]\npos %lu test: [%s]\n", i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
+          std::string gold_str(reinterpret_cast<char*>(gold) + i, kmer_size);
+          BL_ERRORF("i %lu pos %lu gold: [%s]\npos %lu test: [%s]\n", i, result[i].second.get_pos(),
+                    gold_str.c_str(), result[i].second.get_pos(),
+                    bliss::utils::KmerUtils::toASCIIString(result[i].first).c_str());
         }
       }
 
@@ -159,8 +164,7 @@ TEST_P(FASTAIteratorTest, read_mpi)
   auto l1 = loader.getNextL1Block();
   auto l1parser = loader.getSeqParser();
 
-  ValueType* gold = new ValueType[kmer_size+1];
-  gold[kmer_size] = 0;
+  ValueType* gold = new ValueType[2 * l1.getRange().size()];
 
   ResultVecType result;
 
@@ -190,13 +194,13 @@ TEST_P(FASTAIteratorTest, read_mpi)
       ::fsc::back_emplace_iterator<ResultVecType > emplace_iter(result);
       emplace_iter = kmer_parser(*seqs_start, emplace_iter);
 
+      memset(gold, 0, 2 * l1.getRange().size());
+      this->readFilePOSIX(this->fileName, seqs_start->seq_global_offset(), seqs_start->seq_size(), gold);
+
       // compare the results.
       for (size_t i = 0; i < result.size(); ++i) {
-        this->readFilePOSIX(this->fileName, result[i].second.get_pos(), kmer_size, gold);
 
-        std::string KmertoString = bliss::utils::KmerUtils::toASCIIString(result[i].first);
-
-        same &= equal(KmertoString.begin(), gold, kmer_size);
+        same &= equal(bliss::utils::KmerUtils::toASCIIString(result[i].first).begin(), gold + i, kmer_size);
       }
 
 //      printf("result size: %lu\n", result.size());
@@ -273,8 +277,9 @@ TEST_P(FASTAIteratorTest, read_omp)
       //Get L2 block for this thread
       auto l2 = loader.getNextL2Block(tid);
 
-      ValueType* gold = new ValueType[kmer_size+1];
-      gold[kmer_size] = 0;
+      ValueType* gold = new ValueType[2 * l2.getRange().size()];
+
+
 
       ResultVecType result;
       ::fsc::back_emplace_iterator<ResultVecType > emplace_iter(result);
@@ -295,20 +300,21 @@ TEST_P(FASTAIteratorTest, read_omp)
           // generate kmers and save them
           emplace_iter = kmer_parser(seq, emplace_iter);
 
+          memset(gold, 0, 2 * l2.getRange().size());
+          this->readFilePOSIX(filename, seqs_start->seq_global_offset(), seqs_start->seq_size(), gold);
+
+
           // compare the results.
           for (size_t i = 0; i < result.size(); ++i) {
-            this->readFilePOSIX(filename, result[i].second.get_pos(), kmer_size, gold);
 
-            std::string KmertoString = bliss::utils::KmerUtils::toASCIIString(result[i].first);
+            threadcomp = equal(bliss::utils::KmerUtils::toASCIIString(result[i].first).begin(), gold+i, kmer_size);
 
-            threadcomp = equal(KmertoString.begin(), gold, kmer_size);
-
-            if (!threadcomp) {
-              BL_ERRORF("tid %d l2 block: start, %lu end %lu\n", tid, l2.getRange().start, l2.getRange().end);
-              BL_ERROR("tid " << tid << " sequence record: " <<  seq);
-              BL_ERRORF("tid %d i %lu id: pos %lu, id %lu, file %d\n", tid, i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
-              BL_ERRORF("tid %d\ti %lu\tpos %lu gold: [%s]\n\t\tpos %lu test: [%s]\n", tid,  i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
-            }
+//            if (!threadcomp) {
+//              BL_ERRORF("tid %d l2 block: start, %lu end %lu\n", tid, l2.getRange().start, l2.getRange().end);
+//              BL_ERROR("tid " << tid << " sequence record: " <<  seq);
+//              BL_ERRORF("tid %d i %lu id: pos %lu, id %lu, file %d\n", tid, i, result[i].second.get_pos(), result[i].second.get_id(), result[i].second.get_file_id());
+//              BL_ERRORF("tid %d\ti %lu\tpos %lu gold: [%s]\n\t\tpos %lu test: [%s]\n", tid,  i, result[i].second.get_pos(), gold, result[i].second.get_pos(), KmertoString.c_str());
+//            }
 
             local_same[tid] &= threadcomp;
           }  // end kmers for
@@ -396,8 +402,8 @@ TEST_P(FASTAIteratorTest, read_omp_mpi)
       //Get L2 block for this thread
       auto l2 = loader.getNextL2Block(tid);
 
-      ValueType* gold = new ValueType[kmer_size+1];
-      gold[kmer_size] = 0;
+      ValueType* gold = new ValueType[2 * l2.getRange().size()];
+
 
       ResultVecType result;
       ::fsc::back_emplace_iterator<ResultVecType > emplace_iter(result);
@@ -417,13 +423,14 @@ TEST_P(FASTAIteratorTest, read_omp_mpi)
           // generate kmers and save them
           kmer_parser(*seqs_start, emplace_iter);
 
+          memset(gold, 0, 2 * l2.getRange().size());
+          this->readFilePOSIX(filename, seqs_start->seq_global_offset(), seqs_start->seq_size(), gold);
+
+
           // compare the results.
           for (size_t i = 0; i < result.size(); ++i) {
-            this->readFilePOSIX(filename, result[i].second.get_pos(), kmer_size, gold);
 
-            std::string KmertoString = bliss::utils::KmerUtils::toASCIIString(result[i].first);
-
-            localcomp &= equal(KmertoString.begin(), gold, kmer_size);
+            localcomp &= equal(bliss::utils::KmerUtils::toASCIIString(result[i].first).begin(), gold + i, kmer_size);
           }  // end kmers for
 
           localKmerCount += result.size();
@@ -453,7 +460,8 @@ TEST_P(FASTAIteratorTest, read_omp_mpi)
 #endif
 
 INSTANTIATE_TEST_CASE_P(Bliss, FASTAIteratorTest, ::testing::Values(
-    TestFileInfo(500, 14625, std::string("/test/data/natural.fasta")),
+    TestFileInfo(434, 13790, std::string("/test/data/natural.fasta")),
+    TestFileInfo(500, 14625, std::string("/test/data/natural.withN.fasta")),
     TestFileInfo(246, 940, std::string("/test/data/test2.fasta")),
     TestFileInfo(335000, 1092580, std::string("/test/data/test.medium.fasta")),
     TestFileInfo(64, 512, std::string("/test/data/test.fasta"))

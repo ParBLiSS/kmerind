@@ -543,7 +543,7 @@ if (ENABLE_TESTING)
   # GTEST use of pthreads does not appear to mix well with openmp code.
 #  if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
     #clang compile with gtest have trouble with pthreads.
-    add_definitions(-DGTEST_HAS_PTHREAD=0)
+#    add_definitions(-DGTEST_HAS_PTHREAD=0)
 #  endif()
   
     #TODO: fix this so that it changes with BENCHMARK flag

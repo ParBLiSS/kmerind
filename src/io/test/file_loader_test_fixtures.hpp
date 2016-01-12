@@ -82,6 +82,8 @@ class FileParserTest : public ::testing::TestWithParam<TestFileInfo>
       stat(fileName.c_str(), &filestat);
       size_t fileSize = static_cast<size_t>(filestat.st_size);
 
+      if (p.fileSize != fileSize) printf("filename : %s\n", fileName.c_str());
+
       ASSERT_EQ(p.fileSize, fileSize);
 #if defined(USE_MPI)
   MPI_Barrier(MPI_COMM_WORLD);
@@ -105,8 +107,8 @@ class FileParserTest : public ::testing::TestWithParam<TestFileInfo>
       }
     }
 
-    virtual void readFilePOSIX(const std::string &fileName, const size_t& offset,
-                              const size_t& length, ValueType* result)
+    virtual void readFilePOSIX(const std::string &fileName, const size_t offset,
+                              const size_t length, ValueType* result)
     {
       FILE *fp = fopen(fileName.c_str(), "r");
       fseek(fp, offset * sizeof(ValueType), SEEK_SET);
@@ -133,16 +135,25 @@ class KmerReaderTest : public FileParserTest<Loader>
 
     virtual ~KmerReaderTest() {};
 
-    virtual void readFilePOSIX(const std::string &fileName, const size_t& offset,
-                              const size_t& length, ValueType* result)
+    /**
+     * @param length_hint   size of range in the file to read.  actual returned results may be smaller
+     *
+     */
+    virtual void readFilePOSIX(const std::string &fileName, const size_t offset,
+                               const size_t length_hint, ValueType* result)
     {
+      // length is the target reading region.
+      // actual output contains only ASCII alphabetic values.
+
+      if (length_hint <= 0) return;
+
       FILE *fp = fopen(fileName.c_str(), "r");
       fseek(fp, offset * sizeof(ValueType), SEEK_SET);
       ValueType c;
       ValueType* curr = result;
       int read = 0;
       size_t total_read = 0;
-      for (size_t i = 0; i < length;) {
+      for (size_t i = 0; i < length_hint; ++i) {
         // each time we read, the position moves forward 1.
         read = fread_unlocked(&c, sizeof(ValueType), 1, fp);
         if (read > 0) {  // only if read something.
@@ -151,8 +162,9 @@ class KmerReaderTest : public FileParserTest<Loader>
             // but only if we read a alphabetic character.
             *curr = std::toupper(c);
             ++curr;
-            ++i;
           }
+        } else {
+          break;
         }
       }
       fclose(fp);
@@ -191,8 +203,8 @@ class FileLoaderTest : public ::testing::Test
 
     }
 
-    virtual void readFilePOSIX(const std::string &fileName, const size_t& offset,
-                              const size_t& length, ValueType* result)
+    virtual void readFilePOSIX(const std::string &fileName, const size_t offset,
+                              const size_t length, ValueType* result)
     {
       FILE *fp = fopen(fileName.c_str(), "r");
       fseek(fp, offset * sizeof(ValueType), SEEK_SET);
