@@ -135,11 +135,31 @@ namespace bliss
 //         * @brief  given a block, find the starting point that best aligns with the first sequence object (here, just just the actual start)
 //         * @note   not overridden since here we just look for the beginning of the assigned block, same as the BaseFileParser logic.
 //         */
-//        std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
+//        virtual std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
 //        {
 //          init_for_iterator(_data, parentRange, inMemRange, searchRange);
 //          return bliss::io::BaseFileParser<Iterator>::find_first_record(_data, parentRange, inMemRange, searchRange);
 //        }
+
+        virtual typename RangeType::ValueType find_overlap_end(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, typename RangeType::ValueType end, size_t overlap ) {
+          // if overlap is 0, then no need to compute.
+          if (overlap == 0) return end;
+
+          RangeType olr(end, inMemRange.end);
+          Iterator curr(_data);
+          ::std::advance(curr, end - inMemRange.start);
+
+          // then advance Overlap characters, excluding eol characters.
+          auto pos = olr.start;
+          for (size_t i = 0; (pos < olr.end) && (i < overlap); ++curr, ++pos) {
+            // TODO: probably should not skip eol characters.  this is searching the tail end.
+            if ((*curr != bliss::io::BaseFileParser<typename ::std::iterator_traits<Iterator>::pointer>::cr) &&
+                (*curr != bliss::io::BaseFileParser<typename ::std::iterator_traits<Iterator>::pointer>::eol)) ++i;
+          }
+
+          // new end.
+          return pos;
+        }
 
         virtual void reset() {
           seq_offset = ::std::numeric_limits<size_t>::max();

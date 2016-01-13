@@ -217,7 +217,7 @@ namespace io
 
        /**
         * @brief given a block/range, find the starting point of the first sequence object (here, just the actual start)
-        * @note  not virtual for performance reason.
+        * @note  virtual function, for convenience.
         *         used by getNextL1BlockRange to find exact range for an L1 Partition.
         *
         *         Also can be used to do other initializations.
@@ -228,7 +228,7 @@ namespace io
         * @param searchRange
         * @return
         */
-       std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
+       virtual std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
        {
          //== range checking
          if(!parentRange.contains(inMemRange)) {
@@ -241,18 +241,22 @@ namespace io
        }
 
 
+       virtual typename RangeType::ValueType find_overlap_end(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, typename RangeType::ValueType end, size_t overlap ) {
+         return end;
+       }
+
        /// reset any parser internal state so the parser can be reused on a different data range.  overridden in subclass.
        virtual void reset() {}
 
        /// initializes parser for a particular data range.  overridden in subclass.  returns start of first record.
        virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) {
-         return find_first_record(_data, parentRange, inMemRange, searchRange);
+         return this->find_first_record(_data, parentRange, inMemRange, searchRange);
        }
 #ifdef USE_MPI
        /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.
        virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm)
        {
-         return find_first_record(_data, parentRange, inMemRange, searchRange);
+         return this->find_first_record(_data, parentRange, inMemRange, searchRange);
        };
 #endif
 
@@ -927,7 +931,7 @@ namespace io
             end_search_range.intersect(this->fileRange);
 
             // get the combined ranges
-            RangeType loadRange(hint.start, hint.end + ::std::max(Overlap, 2 * recordSize));
+            RangeType loadRange(hint.start, hint.end + ::std::max(Overlap, 2 * recordSize) + 2 * Overlap);
             loadRange.intersect(this->fileRange);
 
             // memmap the content
@@ -947,6 +951,9 @@ namespace io
               if (hint.start <= output.start && output.start < hint.end) {
                 // if start position is in this file segment, then this proc/thread owns this block.
                 output.end = temp_parser.find_first_record(searchData, this->fileRange, loadRange, end_search_range);
+
+                // extend by overlap if specified.
+                output.end = temp_parser.find_overlap_end(searchData, this->fileRange, loadRange, output.end, Overlap);
               } else {
                 // else a previous proc/thread owns this block.
                 output.end = hint.end;
@@ -1017,30 +1024,6 @@ namespace io
           RangeType overlappedRange = blockRange;
           size_t mmap_start = RangeType::align_to_page(overlappedRange.start, pageSize);
 
-          // TODO: Handle Overlap better.
-          if (Overlap > 0) {
-            // search for overlap starts at end of the requested block
-            RangeType olr(overlappedRange.end, fileRange.end);
-            size_t mmap_olr_start = RangeType::align_to_page(olr.start, pageSize);
-
-            // map
-            PointerType localData = map(olr);
-
-            // then advance Overlap characters, excluding eol characters.
-            auto e = localData + (olr.start - mmap_olr_start);
-            auto pos = olr.start;
-            for (size_t i = 0; (pos < olr.end) && (i < Overlap); ++e, ++pos) {
-              // TODO: probably should not skip eol characters.  this is searching the tail end.
-              if ((*e != bliss::io::BaseFileParser<decltype(localData)>::cr) && (*e != bliss::io::BaseFileParser<decltype(localData)>::eol)) ++i;
-            }
-
-            // new end.
-            overlappedRange.end = pos;
-            overlappedRange.intersect(fileRange);
-
-            // clean up mapping
-            unmap(localData, olr);
-          }
 
           // check to see if there is enough memory for preloading.
           // if not, then we can't use Buffering even if L1Block chooses Buffering, so throw exception

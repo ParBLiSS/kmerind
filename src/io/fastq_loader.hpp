@@ -234,7 +234,7 @@ namespace bliss
          * @return            position of the start of next read sequence (@).  if there is no complete sequence within the parentRange, return end of parentRange.
          * @throws            if no start is found, and search range does not cover the parent's end, then the search range does not include a complete record, throws IOException
          */
-        std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
+        virtual std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
         {
 
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
@@ -326,20 +326,8 @@ namespace bliss
           throw ::std::logic_error(ss.str());
         }
 
-        // inherited reset.
+        // inherited reset and init_parser and find_overlap_end
 
-        // TODO: store offset for first record...
-
-        virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) {
-          return find_first_record(_data, parentRange, inMemRange, searchRange);
-        }
- #ifdef USE_MPI
-        /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.
-        virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm)
-        {
-          return find_first_record(_data, parentRange, inMemRange, searchRange);
-        };
- #endif
 
         /**
          * @brief increments the iterator to the beginning of the next record, while saving the current record in memory and update the record id.
