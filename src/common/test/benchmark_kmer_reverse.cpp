@@ -109,7 +109,9 @@ std::vector<uint8_t> KmerReverseBenchmark<T>::chars;
     } \
     TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
     \
-    EXPECT_TRUE(rev == KmerReverseBenchmark<kmertype>::gold); \
+    if (rev != KmerReverseBenchmark<kmertype>::gold) \
+      std::cout << "rev " << rev << std::endl << "gold " << KmerReverseBenchmark<kmertype>::gold << std::endl; \
+    ASSERT_TRUE(rev == KmerReverseBenchmark<kmertype>::gold); \
     } while (0)
 
 
@@ -121,10 +123,12 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
 {
   TIMER_INIT(km);
 
-  TEST_REV("rev", km.reverse(), TypeParam, rev_gold);
-//  TEST_REV("seq", KmerReverseBenchmark<TypeParam>::helper.reverse_serial(km), TypeParam, rev_gold);
+  //TEST_REV("oldseq", KmerReverseBenchmark<TypeParam>::helper.reverse_serial(km), TypeParam, rev_gold);
 
-  if ((TypeParam::bitsPerChar & (TypeParam::bitsPerChar - 1)) == 0) {
+  if (((TypeParam::bitsPerChar & (TypeParam::bitsPerChar - 1)) == 0) &&
+      (::std::is_same<typename TypeParam::KmerAlphabet, bliss::common::DNA>::value ||
+          ::std::is_same<typename TypeParam::KmerAlphabet, bliss::common::RNA>::value ||
+           ::std::is_same<typename TypeParam::KmerAlphabet, bliss::common::DNA16>::value)) {
     TEST_REV("bswap", KmerReverseBenchmark<TypeParam>::helper.reverse_bswap(km), TypeParam, rev_gold);
     TEST_REV("swar", KmerReverseBenchmark<TypeParam>::helper.reverse_swar(km), TypeParam, rev_gold);
 
@@ -132,37 +136,38 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
     TEST_REV("ssse3", KmerReverseBenchmark<TypeParam>::helper.reverse_simd(km), TypeParam, rev_gold);
 #endif
 
-  }
+  }  // alphabet for DNA, RNA, and DNA16 are the only ones accelerated with simd type operations.
+  TEST_REV("rev", km.reverse(), TypeParam, rev_gold);
 
-  {
-  TypeParam km, rev, tmp;
-  km = KmerReverseBenchmark<TypeParam>::kmer;
-
-  uint8_t* out = reinterpret_cast<uint8_t*>(tmp.getData());
-  const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getData());
-
-  TIMER_START(km);
-
-  for (size_t i = 0; i < KmerReverseBenchmark<TypeParam>::iterations; ++i) {
-
-    memset(out, 0, TypeParam::nBytes);
-
-    bliss::utils::bit_ops::reverse_seq<TypeParam::bitsPerChar>(out, in, TypeParam::nBytes);
-    tmp.right_shift_bits(TypeParam::nBytes * 8 - TypeParam::nBits);  // shift by remainder/padding.
-
-    rev ^= tmp;
-
-    km.nextFromChar(KmerReverseBenchmark<TypeParam>::chars[i]);
-  }
-  TIMER_END(km, "seqnew", KmerReverseBenchmark<TypeParam>::iterations);
-
-  if (rev != KmerReverseBenchmark<TypeParam>::rev_gold) {
-    std::cout << "rev: " << rev.toAlphabetString() << std::endl;
-    std::cout << "rev_gold: " << KmerReverseBenchmark<TypeParam>::rev_gold.toAlphabetString() << std::endl;
-    std::cout << "tmp: " << tmp.toAlphabetString() << std::endl;
-  }
-  EXPECT_TRUE(rev == KmerReverseBenchmark<TypeParam>::rev_gold);
-  }
+//  {
+//    TypeParam km, rev, tmp;
+//    km = KmerReverseBenchmark<TypeParam>::kmer;
+//
+//    uint8_t* out = reinterpret_cast<uint8_t*>(tmp.getData());
+//    const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getData());
+//
+//    TIMER_START(km);
+//
+//    for (size_t i = 0; i < KmerReverseBenchmark<TypeParam>::iterations; ++i) {
+//
+//      memset(out, 0, TypeParam::nBytes);
+//
+//      bliss::utils::bit_ops::reverse_seq<TypeParam::bitsPerChar>(out, in, TypeParam::nBytes);
+//      tmp.right_shift_bits(TypeParam::nBytes * 8 - TypeParam::nBits);  // shift by remainder/padding.
+//
+//      rev ^= tmp;
+//
+//      km.nextFromChar(KmerReverseBenchmark<TypeParam>::chars[i]);
+//    }
+//    TIMER_END(km, "newseq", KmerReverseBenchmark<TypeParam>::iterations);
+//
+//    if (rev != KmerReverseBenchmark<TypeParam>::rev_gold) {
+//      std::cout << "rev: " << rev.toAlphabetString() << std::endl;
+//      std::cout << "rev_gold: " << KmerReverseBenchmark<TypeParam>::rev_gold.toAlphabetString() << std::endl;
+//      std::cout << "tmp: " << tmp.toAlphabetString() << std::endl;
+//    }
+//    EXPECT_TRUE(rev == KmerReverseBenchmark<TypeParam>::rev_gold);
+//  }
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
 
@@ -174,10 +179,12 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 {
   TIMER_INIT(km);
 
-  TEST_REV("revC", km.reverse_complement(), TypeParam, revcomp_gold);
-//  TEST_REV("seqC", KmerReverseBenchmark<TypeParam>::helper.reverse_complement_serial(km), TypeParam, revcomp_gold);
+  //TEST_REV("oldseqC", KmerReverseBenchmark<TypeParam>::helper.reverse_complement_serial(km), TypeParam, revcomp_gold);
 
-  if ((TypeParam::bitsPerChar & (TypeParam::bitsPerChar - 1)) == 0) {
+  if (((TypeParam::bitsPerChar & (TypeParam::bitsPerChar - 1)) == 0) &&
+      (::std::is_same<typename TypeParam::KmerAlphabet, bliss::common::DNA>::value ||
+                ::std::is_same<typename TypeParam::KmerAlphabet, bliss::common::RNA>::value ||
+                 ::std::is_same<typename TypeParam::KmerAlphabet, bliss::common::DNA16>::value) ) {
     TEST_REV("bswapC", KmerReverseBenchmark<TypeParam>::helper.reverse_complement_bswap(km), TypeParam, revcomp_gold);
     TEST_REV("swarC", KmerReverseBenchmark<TypeParam>::helper.reverse_complement_swar(km), TypeParam, revcomp_gold);
 
@@ -185,7 +192,9 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
     TEST_REV("ssse3C", KmerReverseBenchmark<TypeParam>::helper.reverse_complement_simd(km), TypeParam, revcomp_gold);
 #endif
 
-  }
+  }  // alphabet for DNA, RNA, and DNA16 are the only ones accelerated with simd type operations.
+  TEST_REV("revC", km.reverse_complement(), TypeParam, revcomp_gold);
+
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
 
 }
@@ -201,11 +210,11 @@ REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, reverse, revcomp);
 //////////////////// RUN the tests with different types.
 
 // max of 50 cases
-//typedef ::testing::Types<
+typedef ::testing::Types<
 //    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint64_t>,
 //    ::bliss::common::Kmer< 32, bliss::common::DNA,   uint64_t>,
-//    ::bliss::common::Kmer< 47, bliss::common::DNA,   uint64_t>,
-//    ::bliss::common::Kmer< 64, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer< 47, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer< 64, bliss::common::DNA,   uint64_t>,
 //    ::bliss::common::Kmer< 96, bliss::common::DNA,   uint64_t>,
 //    ::bliss::common::Kmer<128, bliss::common::DNA,   uint64_t>,
 //    ::bliss::common::Kmer<192, bliss::common::DNA,   uint64_t>,
@@ -220,7 +229,7 @@ REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, reverse, revcomp);
 //    ::bliss::common::Kmer<256, bliss::common::DNA5,  uint64_t>,
 //    ::bliss::common::Kmer< 15, bliss::common::DNA16, uint64_t>,
 //    ::bliss::common::Kmer< 16, bliss::common::DNA16, uint64_t>,
-//    ::bliss::common::Kmer< 32, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 32, bliss::common::DNA16, uint64_t>
 //    ::bliss::common::Kmer< 47, bliss::common::DNA16, uint64_t>,
 //    ::bliss::common::Kmer< 64, bliss::common::DNA16, uint64_t>,
 //    ::bliss::common::Kmer< 96, bliss::common::DNA16, uint64_t>,
@@ -246,10 +255,10 @@ REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, reverse, revcomp);
 //    ::bliss::common::Kmer<128, bliss::common::ASCII, uint64_t>,
 //    ::bliss::common::Kmer<192, bliss::common::ASCII, uint64_t>,
 //    ::bliss::common::Kmer<256, bliss::common::ASCII, uint64_t>
-//> KmerReverseBenchmarkTypes;
-typedef ::testing::Types<
-    ::bliss::common::Kmer< 192, bliss::common::DNA,   uint64_t>,
-     ::bliss::common::Kmer< 96, bliss::common::DNA16,   uint64_t>
 > KmerReverseBenchmarkTypes;
+//typedef ::testing::Types<
+//    ::bliss::common::Kmer< 192, bliss::common::DNA,   uint64_t>,
+//     ::bliss::common::Kmer< 96, bliss::common::DNA16,   uint64_t>
+//> KmerReverseBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerReverseBenchmark, KmerReverseBenchmarkTypes);
 

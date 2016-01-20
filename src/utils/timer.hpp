@@ -74,20 +74,20 @@ struct Timer {
         do { \
           std::stringstream output; \
           output << std::fixed; \
-          output << "R " << rank << " " << #timing << " header\t["; \
+          output << "R " << rank << " " << #timing << "\theader\t[,"; \
           std::ostream_iterator<std::string> nit(output, ","); \
           std::copy(timing##_timer.names.begin(), timing##_timer.names.end(), nit); \
-          output << "]\n" << #timing << "\tdur\t\t["; \
+          output << "]\n" << #timing << "\tdur\t[,"; \
           output.precision(9); \
           std::ostream_iterator<double> dit(output, ","); \
           std::copy(timing##_timer.durations.begin(), timing##_timer.durations.end(), dit); \
-          output << "]\n" << #timing << "\tcount\t\t["; \
+          output << "]\n" << #timing << "\tcount\t[,"; \
           output.precision(0); \
           std::ostream_iterator<double> cit(output, ","); \
           std::copy(timing##_timer.counts.begin(), timing##_timer.counts.end(), cit); \
           output << "]"; \
           fflush(stdout); \
-          printf("[BENCH]\t%s\n", output.str().c_str()); \
+          printf("[BENCH] %s\n", output.str().c_str()); \
           fflush(stdout); \
         } while (0)
 
@@ -121,41 +121,41 @@ struct Timer {
             std::ostream_iterator<double> dit(output, ","); \
             std::ostream_iterator<int> iit(output, ","); \
             output << std::fixed; \
-            output << "R " << rank << "/" << p << " " << #timing << " header\t["; \
+            output << "R " << rank << "/" << p << " " << #timing << "\theader\t[,"; \
             std::ostream_iterator<std::string> nit(output, ","); \
             std::copy(timing##_timer.names.begin(), timing##_timer.names.end(), nit); \
             output.precision(9); \
             auto get_first = [](const std::pair<double, int>& x){return x.first;};\
             auto get_second = [](const std::pair<double, int>& x){return x.second;};\
-            output << "]\n" << #timing << "\tdur_min\t\t["; \
+            output << "]\n" << #timing << "\tdur_min\t[,"; \
             std::transform(dur_mins.begin(), dur_mins.end(), dit, get_first); \
-            output << "]\n" << #timing << "\tdur_min_idx\t\t["; \
+            output << "]\n" << #timing << "\tdur_min_idx\t[,"; \
             std::transform(dur_mins.begin(), dur_mins.end(), iit, get_second); \
-            output << "]\n" << #timing << "\tdur_max\t\t["; \
+            output << "]\n" << #timing << "\tdur_max\t[,"; \
             std::transform(dur_maxs.begin(), dur_maxs.end(), dit, get_first); \
-            output << "]\n" << #timing << "\tdur_max_idx\t\t["; \
+            output << "]\n" << #timing << "\tdur_max_idx\t[,"; \
             std::transform(dur_maxs.begin(), dur_maxs.end(), iit, get_second); \
-            output << "]\n" << #timing << "\tdur_mean\t["; \
+            output << "]\n" << #timing << "\tdur_mean\t[,"; \
             std::copy(dur_means.begin(), dur_means.end(), dit); \
-            output << "]\n" << #timing << "\tdur_stdev\t["; \
+            output << "]\n" << #timing << "\tdur_stdev\t[,"; \
             std::copy(dur_stdevs.begin(), dur_stdevs.end(), dit); \
             output.precision(0); \
-            output << "]\n" << #timing << "\tcnt_min\t\t["; \
+            output << "]\n" << #timing << "\tcnt_min\t[,"; \
             std::transform(cnt_mins.begin(), cnt_mins.end(), dit, get_first); \
-            output << "]\n" << #timing << "\tcnt_min_idx\t\t["; \
+            output << "]\n" << #timing << "\tcnt_min_idx\t[,"; \
             std::transform(cnt_mins.begin(), cnt_mins.end(), iit, get_second); \
-            output << "]\n" << #timing << "\tcnt_max\t\t["; \
+            output << "]\n" << #timing << "\tcnt_max\t[,"; \
             std::transform(cnt_maxs.begin(), cnt_maxs.end(), dit, get_first); \
-            output << "]\n" << #timing << "\tcnt_max_idx\t\t["; \
+            output << "]\n" << #timing << "\tcnt_max_idx\t[,"; \
             std::transform(cnt_maxs.begin(), cnt_maxs.end(), iit, get_second); \
             output.precision(2); \
-            output << "]\n" << #timing << "\tcnt_mean\t["; \
+            output << "]\n" << #timing << "\tcnt_mean\t[,"; \
             std::copy(cnt_means.begin(), cnt_means.end(), dit); \
-            output << "]\n" << #timing << "\tcnt_stdev\t["; \
+            output << "]\n" << #timing << "\tcnt_stdev\t[,"; \
             std::copy(cnt_stdevs.begin(), cnt_stdevs.end(), dit); \
             output << "]"; \
             fflush(stdout); \
-            printf("[BENCH]\t%s\n", output.str().c_str()); \
+            printf("[BENCH] %s\n", output.str().c_str()); \
             fflush(stdout); \
           } \
           MPI_Barrier(comm); \

@@ -47,8 +47,6 @@
 #include <byteswap.h>
 
 
-#define INLINE inline
-
 namespace bliss
 {
 
@@ -154,7 +152,7 @@ namespace bliss
      * the sequence of `BITS_PER_CHAR` bits each.
      *
      */
-    INLINE Kmer reverse_serial(Kmer const & src) const
+    inline Kmer reverse_serial(Kmer const & src) const
     {
       // TODO implement logarithmic version (logarithmic in number of bits in a word, linear in number of words).  non power of 2 bitsPerChar is tricky because of byte boundaries.
   
@@ -190,7 +188,7 @@ namespace bliss
      * the sequence of `BITS_PER_CHAR` bits each.
      *
      */
-    INLINE Kmer reverse_complement_serial(Kmer const & src) const
+    inline Kmer reverse_complement_serial(Kmer const & src) const
     {
       // TODO implement logarithmic version (logarithmic in number of bits in a word, linear in number of words).  non power of 2 bitsPerChar is tricky because of byte boundaries.
 
@@ -239,18 +237,19 @@ namespace bliss
     /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.  8 to 100 times faster.
     // this code is inspired by http://stackoverflow.com/questions/746171/best-algorithm-for-bit-reversal-from-msb-lsb-to-lsb-msb-in-c
     template <typename A = ALPHABET>
-    static INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
+    static inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
     ::std::is_same<A, bliss::common::RNA>::value, __m128i>::type word_reverse_simd(__m128i const & b) {
 
 //        print(b, "b");
 
       // load constants:
       __m128i mask_lo = _mm_load_si128((__m128i*)simd_mask_b);
+      __m128i bb = b;
 
 //        print(mask_lo, "mask_lo");
 
       //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, _mm_load_si128((__m128i*)simd_rev_mask_b));// *(reinterpret_cast<const __m128i*>(simd_rev_mask_b)));                                    // SSSE3
+      __m128i r = _mm_shuffle_epi8(bb, _mm_load_si128((__m128i*)simd_rev_mask_b));// *(reinterpret_cast<const __m128i*>(simd_rev_mask_b)));                                    // SSSE3
 
 //        print(r, "r");
 
@@ -279,7 +278,7 @@ namespace bliss
     }
     /// do reverse complement.  8 to 100 times faster than serially reversing the bits.
     template <typename A = ALPHABET>
-    static INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
+    static inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
         ::std::is_same<A, bliss::common::RNA>::value, __m128i>::type word_reverse_complement_simd(__m128i const & b) {
 
       // DNA type, requires that alphabet be setup so that negation produces the complement.  cmpeq to return a value with all bits set to 1
@@ -291,11 +290,12 @@ namespace bliss
     /// 8 to 50 times faster than sequentially reverse the bits.
     // TODO:  the use of bswap_xx makes it gnu c dependent.
     template <typename A = ALPHABET>
-    static INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value, __m128i>::type word_reverse_simd(__m128i const & b) {
+    static inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value, __m128i>::type word_reverse_simd(__m128i const & b) {
       __m128i mask_lo = _mm_load_si128((__m128i*)simd_mask_b);
+      __m128i bb = b;
 
       //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, _mm_load_si128((__m128i*)simd_rev_mask_b));
+      __m128i r = _mm_shuffle_epi8(bb, _mm_load_si128((__m128i*)simd_rev_mask_b));
 
       // lower 4 bits shift to upper
       __m128i lo = _mm_slli_epi32(_mm_and_si128(mask_lo, r), 4);
@@ -309,11 +309,12 @@ namespace bliss
     /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
     // TODO:  the use of bswap_xx makes it gnu c dependent.
     template <typename A = ALPHABET>
-    static INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value, __m128i>::type word_reverse_complement_simd(__m128i const & b) {
+    static inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value, __m128i>::type word_reverse_complement_simd(__m128i const & b) {
       __m128i mask_lo = _mm_load_si128((__m128i*)simd_mask_b);
+      __m128i bb = b;
 
       //== first shuffle (reverse) the bytes
-      __m128i r = _mm_shuffle_epi8(b, _mm_load_si128((__m128i*)simd_rev_mask_b));
+      __m128i r = _mm_shuffle_epi8(bb, _mm_load_si128((__m128i*)simd_rev_mask_b));
 
       //== get the lut indices.
       // lower 4 bits
@@ -346,7 +347,7 @@ namespace bliss
         typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
                                   ::std::is_same<A, bliss::common::RNA>::value ||
                                   ::std::is_same<A, bliss::common::DNA16>::value, int>::type = 0>
-    INLINE Kmer reverse_simd(Kmer const & src) const
+    inline Kmer reverse_simd(Kmer const & src) const
     {
       //std::cout << "SIMD before = " << src << std::endl;
 
@@ -423,7 +424,7 @@ namespace bliss
         typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
                                   ::std::is_same<A, bliss::common::RNA>::value ||
                                   ::std::is_same<A, bliss::common::DNA16>::value, int>::type = 0>
-    INLINE Kmer reverse_complement_simd(Kmer const & src) const
+    inline Kmer reverse_complement_simd(Kmer const & src) const
     {
       Kmer result;  // empty kmer for output
 
@@ -495,7 +496,7 @@ namespace bliss
         typename ::std::enable_if<!(::std::is_same<A, bliss::common::DNA>::value ||
                                     ::std::is_same<A, bliss::common::RNA>::value ||
                                     ::std::is_same<A, bliss::common::DNA16>::value), int>::type = 0>
-    INLINE Kmer reverse_simd(Kmer const & src) const
+    inline Kmer reverse_simd(Kmer const & src) const 
     {
        return reverse_serial(src);
     }
@@ -511,7 +512,7 @@ namespace bliss
         typename ::std::enable_if<!(::std::is_same<A, bliss::common::DNA>::value ||
                                     ::std::is_same<A, bliss::common::RNA>::value ||
                                     ::std::is_same<A, bliss::common::DNA16>::value), int>::type = 0>
-    INLINE Kmer reverse_complement_simd(Kmer const & src) const
+    inline Kmer reverse_complement_simd(Kmer const & src) const
     {
       return reverse_complement_serial(src);
     }
@@ -522,7 +523,7 @@ namespace bliss
     /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits. 
     /// 8 to 100 times faster when using DNA/RNA, and 8 to 50 times faster than sequentially reverse the bits when DNA16.
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<(::std::is_same<A, bliss::common::DNA>::value ||
+    inline typename ::std::enable_if<(::std::is_same<A, bliss::common::DNA>::value ||
                                      ::std::is_same<A, bliss::common::RNA>::value ||
                                      ::std::is_same<A, bliss::common::DNA16>::value) &&
                                       (sizeof(W) == 8), W>::type word_reverse(W const & b) const {
@@ -543,7 +544,7 @@ namespace bliss
       return v;
     }
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<(::std::is_same<A, bliss::common::DNA>::value ||
+    inline typename ::std::enable_if<(::std::is_same<A, bliss::common::DNA>::value ||
                                      ::std::is_same<A, bliss::common::RNA>::value ||
                                      ::std::is_same<A, bliss::common::DNA16>::value) &&
                                       (sizeof(W) == 4), W>::type word_reverse(W const & b) const {
@@ -563,7 +564,7 @@ namespace bliss
       return v;
     }
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<(::std::is_same<A, bliss::common::DNA>::value ||
+    inline typename ::std::enable_if<(::std::is_same<A, bliss::common::DNA>::value ||
                                      ::std::is_same<A, bliss::common::RNA>::value ||
                                      ::std::is_same<A, bliss::common::DNA16>::value) &&
                                       (sizeof(W) == 2), W>::type word_reverse(W const & b) const {
@@ -582,7 +583,7 @@ namespace bliss
       return v;
     }
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<(::std::is_same<A, bliss::common::DNA>::value ||
+    inline typename ::std::enable_if<(::std::is_same<A, bliss::common::DNA>::value ||
                                      ::std::is_same<A, bliss::common::RNA>::value ||
                                      ::std::is_same<A, bliss::common::DNA16>::value) &&
                                       (sizeof(W) == 1), W>::type word_reverse(W const & b) const {
@@ -602,7 +603,7 @@ namespace bliss
     
     /// do reverse complement.  8 to 100 times faster than serially reversing the bits.
     template <typename A = ALPHABET>
-        INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
+        inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
                                          ::std::is_same<A, bliss::common::RNA>::value, WORD_TYPE>::type word_reverse_complement(WORD_TYPE const & b) const {
       // DNA type, requires that alphabet be setup so that negation produces the complement.
       return ~(word_reverse<A, WORD_TYPE>(b));
@@ -611,7 +612,7 @@ namespace bliss
 
     /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value &&
+    inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value &&
             (sizeof(W) == 8), W>::type word_reverse_complement(W const & b) const {
       // DNA type:
       W v = b;
@@ -634,7 +635,7 @@ namespace bliss
       return v;
     }
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value &&
+    inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value &&
             (sizeof(W) == 4), W>::type word_reverse_complement(W const & b) const {
       // DNA type:
       W v = b;
@@ -657,7 +658,7 @@ namespace bliss
     }
     /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value &&
+    inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value &&
             (sizeof(W) == 2), W>::type word_reverse_complement(W const & b) const {
       // DNA type:
       W v = b;
@@ -679,7 +680,7 @@ namespace bliss
     }
     /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value &&
+    inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value &&
             (sizeof(W) == 1), W>::type word_reverse_complement(W const & b) const {
       // DNA type:
       W v = b;
@@ -709,7 +710,7 @@ namespace bliss
         typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
                                   ::std::is_same<A, bliss::common::RNA>::value ||
                                   ::std::is_same<A, bliss::common::DNA16>::value, int>::type = 0>
-    INLINE Kmer reverse_swar(Kmer const & src) const
+    inline Kmer reverse_swar(Kmer const & src) const
     {
       Kmer result;  // empty kmer for output
 
@@ -740,7 +741,7 @@ namespace bliss
         typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
                                   ::std::is_same<A, bliss::common::RNA>::value ||
                                   ::std::is_same<A, bliss::common::DNA16>::value, int>::type = 0>
-    INLINE Kmer reverse_complement_swar(Kmer const & src) const
+    inline Kmer reverse_complement_swar(Kmer const & src) const
     {
       Kmer result;  // empty kmerfor output
 
@@ -765,7 +766,7 @@ namespace bliss
         typename ::std::enable_if<!(::std::is_same<A, bliss::common::DNA>::value ||
                                     ::std::is_same<A, bliss::common::RNA>::value ||
                                     ::std::is_same<A, bliss::common::DNA16>::value), int>::type = 0>
-    INLINE Kmer reverse_swar(Kmer const & src) const
+    inline Kmer reverse_swar(Kmer const & src) const
     {
        return reverse_serial(src);
     }
@@ -781,7 +782,7 @@ namespace bliss
         typename ::std::enable_if<!(::std::is_same<A, bliss::common::DNA>::value ||
                                     ::std::is_same<A, bliss::common::RNA>::value ||
                                     ::std::is_same<A, bliss::common::DNA16>::value), int>::type = 0>
-    INLINE Kmer reverse_complement_swar(Kmer const & src) const
+    inline Kmer reverse_complement_swar(Kmer const & src) const
     {
       return reverse_complement_serial(src);
     }
@@ -800,7 +801,7 @@ namespace bliss
     /// reverse packed characters in a word. implementation is compatible with alphabet size of 1, 2 or 4 bits.  8 to 100 times faster.
     // TODO:  the use of bswap_xx makes it gnu c dependent.
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-    INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
+    inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
                                      ::std::is_same<A, bliss::common::RNA>::value, W>::type word_reverse_bswap(W const & b) const {
       W v = b;
       // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
@@ -820,7 +821,7 @@ namespace bliss
     }
     /// do reverse complement.  8 to 100 times faster than serially reversing the bits.
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-        INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
+        inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
                                          ::std::is_same<A, bliss::common::RNA>::value, W>::type word_reverse_complement_bswap(W const & b) const {
       // DNA type, requires that alphabet be setup so that negation produces the complement.
       return ~(word_reverse_bswap<A, W>(b));
@@ -831,7 +832,7 @@ namespace bliss
     /// 8 to 50 times faster than sequentially reverse the bits.
     // TODO:  the use of bswap_xx makes it gnu c dependent.
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-        INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value, W>::type  word_reverse_bswap(W const & b) const {
+        inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value, W>::type  word_reverse_bswap(W const & b) const {
       W v = b;
 
       // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
@@ -851,7 +852,7 @@ namespace bliss
     /// do reverse complement.  8 to 50 times faster than serially reversing the bits.
     // TODO:  the use of bswap_xx makes it gnu c dependent.
     template <typename A = ALPHABET, typename W = WORD_TYPE>
-        INLINE typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value, W>::type  word_reverse_complement_bswap(W const & b) const {
+        inline typename ::std::enable_if<::std::is_same<A, bliss::common::DNA16>::value, W>::type  word_reverse_complement_bswap(W const & b) const {
       W v = b;
 
       // essentially a Duff's Device here - unrolled loop with constexpr to allow compiler to optimize here.
@@ -890,7 +891,7 @@ namespace bliss
         typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
                                   ::std::is_same<A, bliss::common::RNA>::value ||
                                   ::std::is_same<A, bliss::common::DNA16>::value, int>::type = 0>
-    INLINE Kmer reverse_bswap(Kmer const & src) const
+    inline Kmer reverse_bswap(Kmer const & src) const
     {
       Kmer result;  // empty kmer for output
 
@@ -940,7 +941,7 @@ namespace bliss
         typename ::std::enable_if<::std::is_same<A, bliss::common::DNA>::value ||
                                   ::std::is_same<A, bliss::common::RNA>::value ||
                                   ::std::is_same<A, bliss::common::DNA16>::value, int>::type = 0>
-    INLINE Kmer reverse_complement_bswap(Kmer const & src) const
+    inline Kmer reverse_complement_bswap(Kmer const & src) const
     {
       Kmer result;  // empty kmer for output
 
@@ -989,7 +990,7 @@ namespace bliss
         typename ::std::enable_if<!(::std::is_same<A, bliss::common::DNA>::value ||
                                     ::std::is_same<A, bliss::common::RNA>::value ||
                                     ::std::is_same<A, bliss::common::DNA16>::value), int>::type = 0>
-    INLINE Kmer reverse_bswap(Kmer const & src) const
+    inline Kmer reverse_bswap(Kmer const & src) const
     {
        return reverse_serial(src);
     }
@@ -1005,7 +1006,7 @@ namespace bliss
         typename ::std::enable_if<!(::std::is_same<A, bliss::common::DNA>::value ||
                                     ::std::is_same<A, bliss::common::RNA>::value ||
                                     ::std::is_same<A, bliss::common::DNA16>::value), int>::type = 0>
-    INLINE Kmer reverse_complement_bswap(Kmer const & src) const
+    inline Kmer reverse_complement_bswap(Kmer const & src) const
     {
       return reverse_complement_serial(src);
     }
