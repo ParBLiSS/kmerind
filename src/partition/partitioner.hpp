@@ -1,3 +1,19 @@
+/*
+ * Copyright 2015 Georgia Institute of Technology
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 /**
  * @file		partitioner.hpp
  * @ingroup partition
@@ -5,10 +21,7 @@
  * @brief   contains several class that provide different logic for partitioning a range
  * @details contains block, cyclic, and demand driven (THREAD SAFE) partitioners
 						logic implementation uses comparison to avoid overflows and implicit casting where needed.
- *
- * Copyright (c) 2014 Georgia Institute of Technology.  All Rights Reserved.
- *
- * TODO add License
+
  */
 #ifndef PARTITIONER_HPP_
 #define PARTITIONER_HPP_

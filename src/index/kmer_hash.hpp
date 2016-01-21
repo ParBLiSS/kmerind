@@ -1,3 +1,19 @@
+/*
+ * Copyright 2015 Georgia Institute of Technology
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 /**
  * @file    kmer_hash.hpp
  * @ingroup bliss::hash
@@ -36,10 +52,6 @@
  *          as stated above, 2 versions for each specialization: hash() and hash_prefix().  the specialization is especially for identity and murmur hashes,
  *          as murmur hash produces 128 bit value, and identity hash uses the original kmer.
  *
- *
- * Copyright (c) 2015 Georgia Institute of Technology.  All Rights Reserved.
- *
- * TODO add License
  */
 #ifndef KMER_HASH_HPP_
 #define KMER_HASH_HPP_
