@@ -104,7 +104,7 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq)
   for (size_t i = 0; i < this->iterations; ++i) {
     rev_seq = this->helper.reverse_serial(km);
 
-    bliss::utils::bit_ops::reverse_seq<TypeParam::bitsPerChar>(out, in, TypeParam::nBytes);
+    bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SEQ>(out, in, TypeParam::nBytes);
     rev.right_shift_bits(TypeParam::nBytes * 8 - TypeParam::nBits);  // shift by remainder bits..
 
     local_rev_same = (rev == rev_seq);

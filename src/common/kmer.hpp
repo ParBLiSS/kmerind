@@ -1187,7 +1187,11 @@ namespace bliss
 //
 //      // TODO: more efficient right shift.
 //      result.do_right_shift(nBytes * 8 - nBits);
-      ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
+      if (nWords * sizeof(WORD_TYPE) > 32)  // choose based on performance.
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data, nWords);
+      else
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data, nWords);
+
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
       return result;
@@ -1209,7 +1213,10 @@ namespace bliss
 //      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
 
       // NOTE: AVX2 is not faster.
-      ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
+      if (nWords * sizeof(WORD_TYPE) > 32)
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data, nWords);
+      else
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data, nWords);
       for (uint32_t i = 0; i < nWords; ++i) result.data[i] = ~result.data[i];
 
       // TODO: more efficient right shift.
@@ -1232,8 +1239,10 @@ namespace bliss
 
       //const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
 //      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
-
-      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
+      if (nWords * sizeof(WORD_TYPE) > 32)
+      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data, nWords);
+      else
+      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data, nWords);
 
 
       // TODO: MORE EFFICIENT SHIFT
@@ -1276,8 +1285,6 @@ namespace bliss
       }
 
       // result already was 0 to begin with, so no need to sanitize
-//      // set ununsed bits to 0
-//      this->do_sanitize();
 
       return result;
 

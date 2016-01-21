@@ -319,7 +319,7 @@ class BitReverseArrayBenchmark : public ::testing::Test {
       for (size_t iter = 0; iter < BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters; ++iter) {
 
 //        TIMER_LOOP_RESUME(this->bitrev);
-        bliss::utils::bit_ops::reverse_seq<P2::bitsPerGroup>(out + (iter + 119) % 238, out + (iter % 238), 128);
+        bliss::utils::bit_ops::reverse<P2::bitsPerGroup, bliss::utils::bit_ops::BIT_REV_SEQ>(out + (iter + 119) % 238, out + (iter % 238), 128);
 //        TIMER_LOOP_PAUSE(this->bitrev);
       }
 //      TIMER_LOOP_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);

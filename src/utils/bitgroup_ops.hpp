@@ -1366,240 +1366,240 @@ namespace bliss {
 
       // no arbitrary BIT_GROUP_SIZE, therefore no SEQ bitgroup_ops supported.
 
-      /**
-       * @brief
-       * @details   enabled only if BIT_GROUP_SIZE is 3, and greater than 0.
-       * @param out
-       * @param in
-       * @param len
-       * @param bit_offset
-       * @return
-       */
-      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE = BIT_REV_SSSE3>
-      BITS_INLINE typename std::enable_if<(BIT_GROUP_SIZE == 3), uint8_t>::type
-      reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t bit_offset = 0 ) {
-
-        memset(out, 0, len);  // required, since we use bitwise OR in the bitgroup_ops.
-
-        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
-        size_t rem = len;
-        // pointers
-        uint8_t * v = out + len;
-        const uint8_t * u = in;
-        uint8_t init_offset = bit_offset;
-#ifdef __AVX2__
-        if (MAX_SIMD_TYPE >= BIT_REV_AVX2) {
-          bitgroup_ops<3, BIT_REV_AVX2, false> op256;
-          for (; rem >= 32; rem -= 32) {
-            // enough bytes.  do an iteration
-            v -= 32;
-            bit_offset = op256.reverse(v, u, 32, bit_offset);
-            u += 32;
-
-            if ((rem > 32) && (bit_offset > 0) ) {  // if there is overlap.  adjust
-              u -= 1;
-              rem += 1;
-              v += 1;
-              bit_offset = 8 - bit_offset;
-            } // else no adjustment is needed.
-          }
-          if (rem > 16) {
-            // do another iteration with all the remaining.   not that offset is tied to the current u position, so can't use memcpy-avoiding approach.
-            if (len >= 32) {
-              bit_offset = ((len - 32) * 8 - init_offset) % 3;
-              bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
-              bit_offset = op256.reverse(out, in + len - 32, 32, bit_offset);
-            } else {
-              // original length is less than 32, so has to do memcpy
-              bit_offset = op256.reverse(out, in + len - rem, rem, bit_offset);
-            //} else { not enough room.  use ssse3
-            }
-//          } else if (rem == 0) {
-//              return bit_offset;
-            return bit_offset;
-          }  // otherwise use either SSSE3 or SWAR
-
-        }
-#endif
-
-#ifdef __SSSE3__
-        if (MAX_SIMD_TYPE >= BIT_REV_SSSE3) {
-
-          bitgroup_ops<3, BIT_REV_SSSE3, false> op128;
-          for (; rem >= 16; rem -= 16) {
-
-            // enough bytes.  do an iteration
-            v -= 16;
-            bit_offset = op128.reverse(v, u, 16, bit_offset);
-            u += 16;
-
-            if ((rem > 16) && (bit_offset > 0)) {  // if there is overlap.  adjust
-              u -= 1;
-              rem += 1;
-              v += 1;
-              bit_offset = 8 - bit_offset;
-            } // else no adjustment is needed.
-          }
-          if (rem > 8) {
-
-            // do another iteration with all the remaining.
-            if (len >= 16) {
-              bit_offset = ((len - 16) * 8 - init_offset) % 3;
-              bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
-              bit_offset = op128.reverse(out, in + len - 16, 16, bit_offset);
-
-            } else {
-              // original length is less than 32, so has to do memcpy
-              bit_offset = op128.reverse(out, in + len - rem, rem, bit_offset);
-            }
-//          } else if (rem == 0) {
-//              return bit_offset;
-            return bit_offset;
-          }  // else let SWAR handle it.
-        }
-#endif
-        bitgroup_ops<3, BIT_REV_SWAR> op64;
-        for (; rem >= 8; rem -= 8) {
-
-          // enough bytes.  do an iteration
-          v -= 8;
-          bit_offset = op64.reverse(v, u, 8, bit_offset);
-          u += 8;
-
-          if ((rem > 8) && (bit_offset > 0)) {  // if there is overlap.  adjust
-            u -= 1;
-            rem += 1;
-            v += 1;
-            bit_offset = 8 - bit_offset;
-          } // else no adjustment is needed.
-
-        }
-        if (rem > 0) {
-
-          // do another iteration with all the remaining.
-          if (len >= 8) {
-            // more than 8 in length, so need to compute overlap with previously computed region (bit offsets)
-            bit_offset = ((len - 8) * 8 - init_offset) % 3;
-            bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
-            bit_offset = op64.reverse(out, in + len - 8, 8, bit_offset);
-          } else {
-            // original length is less than 32, so has to do memcpy
-            bit_offset = op64.reverse(out, in + len - rem, rem, bit_offset);
-          }
-        }
-
-        return bit_offset;  // return remainder.
-      }
-
-      /**
-       * @brief
-       * @details   enabled only if BIT_GROUP_SIZE is power of 2, and greater than 0.
-       * @param out
-       * @param in
-       * @param len
-       * @param bit_offset
-       * @return
-       */
-      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE = BIT_REV_SSSE3>
-      BITS_INLINE typename std::enable_if<((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
-      reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t bit_offset = 0 ) {
-        static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
-        static_assert(BIT_GROUP_SIZE <= 64, "ERROR: currenly reverse does not support 128 BIT_GRUOP_SIZE");
-
-        if (bit_offset != 0) throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE require bit_offset to be 0.");
-
-        if ((len % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
-          throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
-
-        //memset(out, 0, len);  // needed because we bitwise OR.
-
-        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
-        size_t rem = len;
-        // pointers
-        uint8_t * v = out + len;
-        const uint8_t * u = in;
-
-        //printf("remainder %lu\n", rem);
-
-        // memcpy is expensive.  try to avoid it.
-#ifdef __AVX2__
-        if (MAX_SIMD_TYPE >= BIT_REV_AVX2) {
-
-          bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2> op256;
-          for ( ; rem >= 32; rem -= 32) {
-            // enough bytes.  do an iteration
-            v -= 32;
-            op256.reverse(v, u, 32, 0);
-            u += 32;
-          }
-          if (rem > 16) {
-            // do another iteration with all the remaining.
-            if (len >= 32) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
-              op256.reverse(out, in + len - 32, 32, 0);
-            } else {  // original length is less than 32, so has to do memcpy     // avoiding memcpy
-              op256.reverse(out, in + len - rem, rem, 0);
-            }
-//          } else if (rem == 0) {
-//              return 0;
+//      /**
+//       * @brief
+//       * @details   enabled only if BIT_GROUP_SIZE is 3, and greater than 0.
+//       * @param out
+//       * @param in
+//       * @param len
+//       * @param bit_offset
+//       * @return
+//       */
+//      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE = BIT_REV_SSSE3>
+//      BITS_INLINE typename std::enable_if<(BIT_GROUP_SIZE == 3), uint8_t>::type
+//      reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t bit_offset = 0 ) {
 //
-            return 0;
-          }  // otherwise use either SSSE3 or SWAR
-        }
-#endif
-
-#ifdef __SSSE3__
-        if (MAX_SIMD_TYPE >= BIT_REV_SSSE3) {
-
-          bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3> op128;
-          for ( ; rem >= 16; rem -= 16) {
-            // enough bytes.  do an iteration
-            v -= 16;
-            op128.reverse(v, u, 16, 0);
-            u += 16;
-          }
-          if (rem > 8) {
-            // do another iteration with all the remaining.
-            if (len >= 16) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
-              op128.reverse(out, in + len - 16, 16, 0);
-            } else {  // original length is less than 32, so has to do memcpy   // avoiding memcpy
-              op128.reverse(out, in + len - rem, rem, 0);
-            }
-//          } else if (rem == 0) {
-//              return 0;
+//        memset(out, 0, len);  // required, since we use bitwise OR in the bitgroup_ops.
 //
-            return 0;
-          }
-        }
-#endif
-        bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SWAR> op64;
-        for (; rem >= 8; rem -= 8) {
-          // enough bytes.  do an iteration
-          v -= 8;
-          op64.reverse(v, u, 8, 0);
-          u += 8;
-        }
-        if (rem > 0) {
-          // do another iteration with all the remaining.
-          if (len > 8) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
-            op64.reverse(out, in + len - 8, 8, 0);
-          } else {  // original length is less than 32, so has to do memcpy.  NO CHOICE.
-            op64.reverse(out, in + len - rem, rem, 0);
-          }
-        }
+//        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
+//        size_t rem = len;
+//        // pointers
+//        uint8_t * v = out + len;
+//        const uint8_t * u = in;
+//        uint8_t init_offset = bit_offset;
+//#ifdef __AVX2__
+//        if (MAX_SIMD_TYPE >= BIT_REV_AVX2) {
+//          bitgroup_ops<3, BIT_REV_AVX2, false> op256;
+//          for (; rem >= 32; rem -= 32) {
+//            // enough bytes.  do an iteration
+//            v -= 32;
+//            bit_offset = op256.reverse(v, u, 32, bit_offset);
+//            u += 32;
+//
+//            if ((rem > 32) && (bit_offset > 0) ) {  // if there is overlap.  adjust
+//              u -= 1;
+//              rem += 1;
+//              v += 1;
+//              bit_offset = 8 - bit_offset;
+//            } // else no adjustment is needed.
+//          }
+//          if (rem > 16) {
+//            // do another iteration with all the remaining.   not that offset is tied to the current u position, so can't use memcpy-avoiding approach.
+//            if (len >= 32) {
+//              bit_offset = ((len - 32) * 8 - init_offset) % 3;
+//              bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
+//              bit_offset = op256.reverse(out, in + len - 32, 32, bit_offset);
+//            } else {
+//              // original length is less than 32, so has to do memcpy
+//              bit_offset = op256.reverse(out, in + len - rem, rem, bit_offset);
+//            //} else { not enough room.  use ssse3
+//            }
+////          } else if (rem == 0) {
+////              return bit_offset;
+//            return bit_offset;
+//          }  // otherwise use either SSSE3 or SWAR
+//
+//        }
+//#endif
+//
+//#ifdef __SSSE3__
+//        if (MAX_SIMD_TYPE >= BIT_REV_SSSE3) {
+//
+//          bitgroup_ops<3, BIT_REV_SSSE3, false> op128;
+//          for (; rem >= 16; rem -= 16) {
+//
+//            // enough bytes.  do an iteration
+//            v -= 16;
+//            bit_offset = op128.reverse(v, u, 16, bit_offset);
+//            u += 16;
+//
+//            if ((rem > 16) && (bit_offset > 0)) {  // if there is overlap.  adjust
+//              u -= 1;
+//              rem += 1;
+//              v += 1;
+//              bit_offset = 8 - bit_offset;
+//            } // else no adjustment is needed.
+//          }
+//          if (rem > 8) {
+//
+//            // do another iteration with all the remaining.
+//            if (len >= 16) {
+//              bit_offset = ((len - 16) * 8 - init_offset) % 3;
+//              bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
+//              bit_offset = op128.reverse(out, in + len - 16, 16, bit_offset);
+//
+//            } else {
+//              // original length is less than 32, so has to do memcpy
+//              bit_offset = op128.reverse(out, in + len - rem, rem, bit_offset);
+//            }
+////          } else if (rem == 0) {
+////              return bit_offset;
+//            return bit_offset;
+//          }  // else let SWAR handle it.
+//        }
+//#endif
+//        bitgroup_ops<3, BIT_REV_SWAR> op64;
+//        for (; rem >= 8; rem -= 8) {
+//
+//          // enough bytes.  do an iteration
+//          v -= 8;
+//          bit_offset = op64.reverse(v, u, 8, bit_offset);
+//          u += 8;
+//
+//          if ((rem > 8) && (bit_offset > 0)) {  // if there is overlap.  adjust
+//            u -= 1;
+//            rem += 1;
+//            v += 1;
+//            bit_offset = 8 - bit_offset;
+//          } // else no adjustment is needed.
+//
+//        }
+//        if (rem > 0) {
+//
+//          // do another iteration with all the remaining.
+//          if (len >= 8) {
+//            // more than 8 in length, so need to compute overlap with previously computed region (bit offsets)
+//            bit_offset = ((len - 8) * 8 - init_offset) % 3;
+//            bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
+//            bit_offset = op64.reverse(out, in + len - 8, 8, bit_offset);
+//          } else {
+//            // original length is less than 32, so has to do memcpy
+//            bit_offset = op64.reverse(out, in + len - rem, rem, bit_offset);
+//          }
+//        }
+//
+//        return bit_offset;  // return remainder.
+//      }
 
-        return 0;  // return remainder.
-      }
-
-
-      /// convenience function to convert from WORD_TYPE pointer to uint8_t pointer.
-      template <typename WORD_TYPE, unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE = BIT_REV_SSSE3,
-          typename ::std::enable_if<(::std::is_integral<WORD_TYPE>::value && (sizeof(WORD_TYPE) > 1)), int>::type = 1>
-      BITS_INLINE uint8_t reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint8_t const bit_offset = 0) {
-        return reverse<BIT_GROUP_SIZE, MAX_SIMD_TYPE>(reinterpret_cast<uint8_t*>(out),
-                                                      reinterpret_cast<uint8_t const *>(in),
-                                                      len * sizeof(WORD_TYPE), bit_offset);
-      }
-
+//      /**
+//       * @brief
+//       * @details   enabled only if BIT_GROUP_SIZE is power of 2, and greater than 0.
+//       * @param out
+//       * @param in
+//       * @param len
+//       * @param bit_offset
+//       * @return
+//       */
+//      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE = BIT_REV_SSSE3>
+//      BITS_INLINE typename std::enable_if<((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
+//      reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t bit_offset = 0 ) {
+//        static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
+//        static_assert(BIT_GROUP_SIZE <= 64, "ERROR: currenly reverse does not support 128 BIT_GRUOP_SIZE");
+//
+//        if (bit_offset != 0) throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE require bit_offset to be 0.");
+//
+//        if ((len % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
+//          throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
+//
+//        //memset(out, 0, len);  // needed because we bitwise OR.
+//
+//        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
+//        size_t rem = len;
+//        // pointers
+//        uint8_t * v = out + len;
+//        const uint8_t * u = in;
+//
+//        //printf("remainder %lu\n", rem);
+//
+//        // memcpy is expensive.  try to avoid it.
+//#ifdef __AVX2__
+//        if (MAX_SIMD_TYPE >= BIT_REV_AVX2) {
+//
+//          bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2> op256;
+//          for ( ; rem >= 32; rem -= 32) {
+//            // enough bytes.  do an iteration
+//            v -= 32;
+//            op256.reverse(v, u, 32, 0);
+//            u += 32;
+//          }
+//          if (rem > 16) {
+//            // do another iteration with all the remaining.
+//            if (len >= 32) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
+//              op256.reverse(out, in + len - 32, 32, 0);
+//            } else {  // original length is less than 32, so has to do memcpy     // avoiding memcpy
+//              op256.reverse(out, in + len - rem, rem, 0);
+//            }
+////          } else if (rem == 0) {
+////              return 0;
+////
+//            return 0;
+//          }  // otherwise use either SSSE3 or SWAR
+//        }
+//#endif
+//
+//#ifdef __SSSE3__
+//        if (MAX_SIMD_TYPE >= BIT_REV_SSSE3) {
+//
+//          bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3> op128;
+//          for ( ; rem >= 16; rem -= 16) {
+//            // enough bytes.  do an iteration
+//            v -= 16;
+//            op128.reverse(v, u, 16, 0);
+//            u += 16;
+//          }
+//          if (rem > 8) {
+//            // do another iteration with all the remaining.
+//            if (len >= 16) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
+//              op128.reverse(out, in + len - 16, 16, 0);
+//            } else {  // original length is less than 32, so has to do memcpy   // avoiding memcpy
+//              op128.reverse(out, in + len - rem, rem, 0);
+//            }
+////          } else if (rem == 0) {
+////              return 0;
+////
+//            return 0;
+//          }
+//        }
+//#endif
+//        bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SWAR> op64;
+//        for (; rem >= 8; rem -= 8) {
+//          // enough bytes.  do an iteration
+//          v -= 8;
+//          op64.reverse(v, u, 8, 0);
+//          u += 8;
+//        }
+//        if (rem > 0) {
+//          // do another iteration with all the remaining.
+//          if (len > 8) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
+//            op64.reverse(out, in + len - 8, 8, 0);
+//          } else {  // original length is less than 32, so has to do memcpy.  NO CHOICE.
+//            op64.reverse(out, in + len - rem, rem, 0);
+//          }
+//        }
+//
+//        return 0;  // return remainder.
+//      }
+//
+//
+//      /// convenience function to convert from WORD_TYPE pointer to uint8_t pointer.
+//      template <typename WORD_TYPE, unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE = BIT_REV_SSSE3,
+//          typename ::std::enable_if<(::std::is_integral<WORD_TYPE>::value && (sizeof(WORD_TYPE) > 1)), int>::type = 1>
+//      BITS_INLINE uint8_t reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint8_t const bit_offset = 0) {
+//        return reverse<BIT_GROUP_SIZE, MAX_SIMD_TYPE>(reinterpret_cast<uint8_t*>(out),
+//                                                      reinterpret_cast<uint8_t const *>(in),
+//                                                      len * sizeof(WORD_TYPE), bit_offset);
+//      }
+//
 
 
       /**
@@ -1611,11 +1611,11 @@ namespace bliss {
        * @param bit_offset
        * @return
        */
-      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WordType, unsigned int LEN,
-          unsigned int WordsInUint64 = sizeof(uint64_t) / sizeof(WordType)>
+      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
+          unsigned int WordsInUint64 = sizeof(uint64_t) / sizeof(WORD_TYPE)>
       BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_SWAR) &&
                                           ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
-      reverse(WordType (&out)[LEN], WordType const (&in)[LEN], uint8_t bit_offset = 0 ) {
+      reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len,  uint8_t bit_offset = 0 ) {
 
         //printf("swar: ");
 
@@ -1623,16 +1623,16 @@ namespace bliss {
         static_assert(BIT_GROUP_SIZE <= 32, "ERROR: currently reverse does not support 64 BIT_GRUOP_SIZE for SIMD within a register");
 
         if (bit_offset != 0) throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE requires bit_offset to be 0.");
-        if ((LEN % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
+        if (((len * sizeof(WORD_TYPE)) % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
           throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
 
         //memset(out, 0, len);  // needed because we bitwise OR.
         // decide which one to use.
 
         // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
-        size_t rem = LEN;
+        size_t rem = len;
         // pointers
-        uint64_t * v = reinterpret_cast<uint64_t *>(out + LEN);
+        uint64_t * v = reinterpret_cast<uint64_t *>(out + len);
         uint64_t const * u = reinterpret_cast<uint64_t const *>(in);
 
         //printf("remainder %lu\n", rem);
@@ -1648,18 +1648,83 @@ namespace bliss {
         }
         if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
           // do another iteration with all the remaining.
-          if (LEN >= WordsInUint64) {  // original length has 8 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
+          if (len >= WordsInUint64) {  // original length has 8 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
             *(reinterpret_cast<uint64_t *>(out)) =
-                op64.reverse(*(reinterpret_cast<uint64_t const *>(in + LEN - WordsInUint64)));
+                op64.reverse(*(reinterpret_cast<uint64_t const *>(in + len - WordsInUint64)));
           } else {  // original length is less than 8, so has to do memcpy.  NO CHOICE.
             uint64_t x = op64.reverse(*(reinterpret_cast<uint64_t const *>(in)));
-            memcpy(out, reinterpret_cast<WordType *>(&x) + (WordsInUint64 - rem), rem * sizeof(WordType));
+            memcpy(out, reinterpret_cast<WORD_TYPE *>(&x) + (WordsInUint64 - rem), rem * sizeof(WORD_TYPE));
           }
         }
 
         //printf("done.\n");
         return 0;  // return remainder.
       }
+
+      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
+          unsigned int WordsInUint64 = sizeof(uint64_t) / sizeof(WORD_TYPE)>
+      BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_SWAR) &&
+                                          (BIT_GROUP_SIZE == 3), uint8_t>::type
+      reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len,  uint8_t bit_offset = 0 ) {
+
+        //printf("swar: ");
+
+        size_t bytes = len * sizeof(WORD_TYPE);
+
+        memset(out, 0, bytes);  // needed because we bitwise OR.
+        // decide which one to use.
+
+        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
+        size_t rem = bytes;
+        // pointers
+        uint8_t * v = reinterpret_cast<uint8_t *>(out + len);
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
+        uint8_t init_offset = bit_offset;
+
+        //printf("remainder %lu\n", rem);
+
+        bitgroup_ops<3, BIT_REV_SWAR> op64;
+
+
+        for (; rem >= 8; rem -= 8) {
+
+          // enough bytes.  do an iteration
+          v -= 8;
+          bit_offset = op64.reverse(v, u, 8, bit_offset);
+          u += 8;
+
+          if ((rem > 8) && (bit_offset > 0)) {  // if there is overlap.  adjust
+            u -= 1;
+            rem += 1;
+            v += 1;
+            bit_offset = 8 - bit_offset;
+          } // else no adjustment is needed.
+
+        }
+        if (rem > 0) {
+          // do another iteration with all the remaining.
+          if (bytes >= 8) {
+            // more than 8 in length, so need to compute overlap with previously computed region (bit offsets)
+            bit_offset = ((bytes - 8) * 8 - init_offset) % BIT_GROUP_SIZE;
+            bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
+            bit_offset = op64.reverse(reinterpret_cast<uint8_t *>(out),
+                                      reinterpret_cast<uint8_t const *>(in) + bytes - 8,
+                                      8, bit_offset);
+
+          } else {
+            // original length is less than 32, so has to do memcpy
+            bit_offset = op64.reverse(reinterpret_cast<uint8_t *>(out),
+                                      reinterpret_cast<uint8_t const *>(in) + bytes - rem,
+                                      rem, bit_offset);
+
+          }
+        }
+
+        return bit_offset;  // return remainder.
+      }
+
+
+
 
 #ifdef __SSSE3__
       /**
@@ -1671,29 +1736,33 @@ namespace bliss {
        * @param bit_offset
        * @return
        */
-      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WordType, unsigned int LEN,
-          unsigned int WordsInM128 = sizeof(__m128i) / sizeof(WordType)>
-      BITS_INLINE typename std::enable_if<(sizeof(WordType) * LEN >= sizeof(__m128i)) &&
-                                          (MAX_SIMD_TYPE == BIT_REV_SSSE3) &&
+      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
+          unsigned int WordsInM128 = sizeof(__m128i) / sizeof(WORD_TYPE)>
+      BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_SSSE3) &&
                                           ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
-      reverse(WordType (&out)[LEN], WordType const (&in)[LEN], uint8_t bit_offset = 0 ) {
+      reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint8_t bit_offset = 0 ) {
         //printf("ssse3: ");
-
+        if ((sizeof(WORD_TYPE) * len) <= sizeof(__m128i)) {
+          return reverse<BIT_GROUP_SIZE, BIT_REV_SWAR>(::std::forward<WORD_TYPE *>(out),
+                                                       ::std::forward<WORD_TYPE const *>(in),
+                                                        len,
+                                                        bit_offset);
+        }
 
         static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
         static_assert(BIT_GROUP_SIZE <= sizeof(uint64_t) * 8, "ERROR: currenly reverse does not support 128 BIT_GRUOP_SIZE for SSSE3");
 
         if (bit_offset != 0) throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE requires bit_offset to be 0.");
-        if ((LEN % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
+        if (((len * sizeof(WORD_TYPE)) % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
           throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
 
         //memset(out, 0, len);  // needed because we bitwise OR.
         // decide which one to use.
 
         // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
-        size_t rem = LEN;
+        size_t rem = len;
         // pointers
-        __m128i * v = reinterpret_cast<__m128i *>(out + LEN);
+        __m128i * v = reinterpret_cast<__m128i *>(out + len);
         __m128i const * u = reinterpret_cast<__m128i const *>(in);
 
         //printf("remainder %lu\n", rem);
@@ -1709,45 +1778,92 @@ namespace bliss {
         }
         if (rem > 0) {  // 0 < rem < WordsInM128
           // do another iteration with all the remaining.
-          if (LEN >= WordsInM128) {  // original length has 8 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
+          if (len >= WordsInM128) {  // original length has 8 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
             _mm_storeu_si128(reinterpret_cast<__m128i *>(out),
-                             op128.reverse(_mm_loadu_si128(reinterpret_cast<__m128i const *>(in + LEN - WordsInM128))));
+                             op128.reverse(_mm_loadu_si128(reinterpret_cast<__m128i const *>(in + len - WordsInM128))));
           } else {  // original length is less than 8, so has to do memcpy.  NO CHOICE.
             __m128i x = op128.reverse(_mm_loadu_si128(reinterpret_cast<__m128i const *>(in)));
-            memcpy(out, reinterpret_cast<WordType *>(&x) + (WordsInM128 - rem), rem * sizeof(WordType));
+            memcpy(out, reinterpret_cast<WORD_TYPE *>(&x) + (WordsInM128 - rem), rem * sizeof(WORD_TYPE));
           }
         }
         //printf("done.\n");
 
         return 0;  // return remainder.
       }
-
-
-      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WordType, unsigned int LEN,
-          unsigned int WordsInM128 = sizeof(__m128i) / sizeof(WordType)>
-      BITS_INLINE typename std::enable_if<(sizeof(WordType) * LEN < sizeof(__m128i)) &&
-                                          (MAX_SIMD_TYPE == BIT_REV_SSSE3) &&
-                                          ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
-      reverse(WordType (&out)[LEN], WordType const (&in)[LEN], uint8_t bit_offset = 0 ) {
-        //printf("ssse3 too short. ");
-
-        // std::forward seems to have improved the speed.
-        return reverse<BIT_GROUP_SIZE, BIT_REV_SWAR>(::std::forward<WordType (&)[LEN]>(out),
-                                                     ::std::forward<WordType const (&)[LEN]>(in),
-                                                      bit_offset);
-      }
-
-#else
-      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WordType, unsigned int LEN,
-          unsigned int WordsInM128 = sizeof(__m128i) / sizeof(WordType)>
+      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
+          unsigned int WordsInM128 = sizeof(__m128i) / sizeof(WORD_TYPE)>
       BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_SSSE3) &&
-                                          ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
-      reverse(WordType (&out)[LEN], WordType const (&in)[LEN], uint8_t bit_offset = 0 ) {
-        //printf("no ssse3. ");
-        return reverse<BIT_GROUP_SIZE, BIT_REV_SWAR>(::std::forward<WordType (&)[LEN]>(out),
-                                                     ::std::forward<WordType const (&)[LEN]>(in),
-                                                      bit_offset);
+                                          (BIT_GROUP_SIZE == 3), uint8_t>::type
+      reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint8_t bit_offset = 0 ) {
+
+//        if ((sizeof(WORD_TYPE) * len) < sizeof(__m128i)) {
+//          // SSSE3 right now is most performant for groups size of 3.  so always use it.
+//          return reverse<BIT_GROUP_SIZE, BIT_REV_SWAR>( ::std::forward<WORD_TYPE *>(out),
+//                                                         ::std::forward<WORD_TYPE const *>(in),
+//                                                          len,
+//                                                          bit_offset);
+//        }
+        size_t bytes = len * sizeof(WORD_TYPE);
+
+
+        memset(out, 0, bytes);  // needed because we bitwise OR.
+
+        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
+        size_t rem = bytes;
+        // pointers
+        uint8_t * v = reinterpret_cast<uint8_t *>(out + len);
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
+        uint8_t init_offset = bit_offset;
+
+
+        bitgroup_ops<3, BIT_REV_SSSE3, false> op128;
+        for (; rem >= 16; rem -= 16) {
+
+          // enough bytes.  do an iteration
+          v -= 16;
+          bit_offset = op128.reverse(v, u, 16, bit_offset);
+          u += 16;
+
+          if ((rem > 16) && (bit_offset > 0)) {  // if there is overlap.  adjust
+            u -= 1;
+            rem += 1;
+            v += 1;
+            bit_offset = 8 - bit_offset;
+          } // else no adjustment is needed.
+        }
+        if (rem > 0) {
+
+          // do another iteration with all the remaining.
+          if (bytes >= 16) {
+            bit_offset = ((bytes - 16) * 8 - init_offset) % 3;
+            bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
+            bit_offset = op128.reverse(reinterpret_cast<uint8_t *>(out),
+                                       reinterpret_cast<uint8_t const *>(in) + bytes - 16,
+                                       16, bit_offset);
+
+          } else {
+            // original length is less than 32, so has to do memcpy
+            bit_offset = op128.reverse(reinterpret_cast<uint8_t *>(out),
+                                       reinterpret_cast<uint8_t const *>(in) + bytes - rem,
+                                       rem, bit_offset);
+          }
+        }  // else let SWAR handle it.
+        return bit_offset;
+
       }
+#else
+      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
+          unsigned int WordsInM128 = sizeof(__m128i) / sizeof(WORD_TYPE)>
+      BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_SSSE3), uint8_t>::type
+      reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint8_t bit_offset = 0 ) {
+        //printf("no ssse3. ");
+        return reverse<BIT_GROUP_SIZE, BIT_REV_SWAR>(::std::forward<WORD_TYPE *>(out),
+                                                     ::std::forward<WORD_TYPE const *>(in),
+                                                      len,
+                                                      bit_offset);
+
+      }
+
 #endif
 
 
@@ -1761,17 +1877,27 @@ namespace bliss {
        * @param bit_offset
        * @return
        */
-      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WordType, unsigned int LEN,
-          unsigned int WordsInM256 = sizeof(__m256i) / sizeof(WordType)>
-      BITS_INLINE typename std::enable_if<(sizeof(WordType) * LEN >= sizeof(__m256i)) &&
-                                          (MAX_SIMD_TYPE == BIT_REV_AVX2) &&
+      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
+          unsigned int WordsInM256 = sizeof(__m256i) / sizeof(WORD_TYPE)>
+      BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_AVX2) &&
                                           ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
-      reverse(WordType (&out)[LEN], WordType const (&in)[LEN], uint8_t bit_offset = 0 ) {
+      reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint8_t bit_offset = 0 ) {
+
+        if ((sizeof(WORD_TYPE) * len) < sizeof(__m256i)) {
+          // SSSE3 right now is not performant for power of 2.
+          return reverse<BIT_GROUP_SIZE, BIT_REV_SSSE3>( ::std::forward<WORD_TYPE *>(out),
+                                                         ::std::forward<WORD_TYPE const *>(in),
+                                                          len,
+                                                          bit_offset);
+        }
+
+
         static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
         static_assert(BIT_GROUP_SIZE <= sizeof(__m128i) * 8, "ERROR: currenly reverse does not support 256 BIT_GRUOP_SIZE for SSSE3");
 
         if (bit_offset != 0) throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE requires bit_offset to be 0.");
-        if ((LEN % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
+
+        if (((len * sizeof(WORD_TYPE)) % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
           throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
 
         //printf("avx2: ");
@@ -1780,9 +1906,9 @@ namespace bliss {
         // decide which one to use.
 
         // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
-        size_t rem = LEN;
+        size_t rem = len;
         // pointers
-        __m256i * v = reinterpret_cast<__m256i *>(out + LEN);
+        __m256i * v = reinterpret_cast<__m256i *>(out + len);
         __m256i const * u = reinterpret_cast<__m256i const *>(in);
 
         //printf("remainder %lu\n", rem);
@@ -1798,12 +1924,12 @@ namespace bliss {
         }
         if (rem > 0) {  // 0 < rem < WordsInM256
           // do another iteration with all the remaining.
-          if (LEN >= WordsInM256) {  // original length has 8 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
+          if (len >= WordsInM256) {  // original length has 8 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
             _mm256_storeu_si256(reinterpret_cast<__m256i *>(out),
-                             op256.reverse(_mm256_loadu_si256(reinterpret_cast<__m256i const *>(in + LEN - WordsInM256))));
+                             op256.reverse(_mm256_loadu_si256(reinterpret_cast<__m256i const *>(in + len - WordsInM256))));
           } else {  // original length is less than 8, so has to do memcpy.  NO CHOICE.
             __m256i x = op256.reverse(_mm256_loadu_si256(reinterpret_cast<__m256i const *>(in)));
-            memcpy(out, reinterpret_cast<WordType *>(&x) + (WordsInM256 - rem), rem * sizeof(WordType));
+            memcpy(out, reinterpret_cast<WORD_TYPE *>(&x) + (WordsInM256 - rem), rem * sizeof(WORD_TYPE));
           }
         }
 
@@ -1811,65 +1937,126 @@ namespace bliss {
 
         return 0;  // return remainder.
       }
-      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WordType, unsigned int LEN,
-          unsigned int WordsInM256 = sizeof(__m256i) / sizeof(WordType)>
-      BITS_INLINE typename std::enable_if<(sizeof(WordType) * LEN < sizeof(__m256i)) &&
-                                          (MAX_SIMD_TYPE == BIT_REV_AVX2) &&
-                                          ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
-      reverse(WordType (&out)[LEN], WordType const (&in)[LEN], uint8_t bit_offset = 0 ) {
-        //printf("avx2 too short. ");
+      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
+          unsigned int WordsInM256 = sizeof(__m256i) / sizeof(WORD_TYPE)>
+      BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_AVX2) &&
+                                          (BIT_GROUP_SIZE == 3), uint8_t>::type
+      reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint8_t bit_offset = 0 ) {
+//        if ((sizeof(WORD_TYPE) * len) < sizeof(__m256i)) {
+          // SSSE3 right now is most performant for bit group size of 3
+          return reverse<BIT_GROUP_SIZE, BIT_REV_SSSE3>( ::std::forward<WORD_TYPE *>(out),
+                                                         ::std::forward<WORD_TYPE const *>(in),
+                                                          len,
+                                                          bit_offset);
+//        }
+//        size_t bytes = len * sizeof(WORD_TYPE);
+//
+//
+//        memset(out, 0, bytes);  // needed because we bitwise OR.
+//
+//        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
+//        size_t rem = bytes;
+//        // pointers
+//        uint8_t * v = reinterpret_cast<uint8_t *>(out + len);
+//        uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
+//        uint8_t init_offset = bit_offset;
+//
+//
+//        bitgroup_ops<3, BIT_REV_AVX2, false> op256;
+//
+//        for (; rem >= 32; rem -= 32) {
+//          // enough bytes.  do an iteration
+//          v -= 32;
+//          bit_offset = op256.reverse(v, u, 32, bit_offset);
+//          u += 32;
+//
+//          if ((rem > 32) && (bit_offset > 0) ) {  // if there is overlap.  adjust
+//            u -= 1;
+//            rem += 1;
+//            v += 1;
+//            bit_offset = 8 - bit_offset;
+//          } // else no adjustment is needed.
+//        }
+//        if (rem > 0) {
+//          // do another iteration with all the remaining.   not that offset is tied to the current u position, so can't use memcpy-avoiding approach.
+//          if (bytes >= 32) {
+//            bit_offset = ((bytes - 32) * 8 - init_offset) % BIT_GROUP_SIZE;
+//            bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
+//            bit_offset = op256.reverse(reinterpret_cast<uint8_t *>(out),
+//                                       reinterpret_cast<uint8_t const *>(in) + bytes - 32,
+//                                       32, bit_offset);
+//          } else {
+//            // original length is less than 32, so has to do memcpy
+//            bit_offset = op256.reverse(reinterpret_cast<uint8_t *>(out),
+//                                       reinterpret_cast<uint8_t const *>(in) + bytes - rem,
+//                                       rem, bit_offset);
+//          }
+//        }  // otherwise use either SSSE3 or SWAR
+//        return bit_offset;
 
-        return reverse<BIT_GROUP_SIZE, BIT_REV_SSSE3>( ::std::forward<WordType (&)[LEN]>(out),
-                                                       ::std::forward<WordType const (&)[LEN]>(in),
-                                                        bit_offset);
       }
+
 
 #else
-      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WordType, unsigned int LEN,
-          unsigned int WordsInM256 = sizeof(__m256i) / sizeof(WordType)>
-      BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_AVX2) &&
-                                          ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0), uint8_t>::type
-      reverse(WordType (&out)[LEN], WordType const (&in)[LEN], uint8_t bit_offset = 0 ) {
+      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
+          unsigned int WordsInM256 = sizeof(__m256i) / sizeof(WORD_TYPE)>
+      BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_AVX2), uint8_t>::type
+      reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint8_t bit_offset = 0 ) {
         //printf("no avx2. ");
-        return reverse<BIT_GROUP_SIZE, BIT_REV_SSSE3>( ::std::forward<WordType (&)[LEN]>(out),
-                                                       ::std::forward<WordType const (&)[LEN]>(in),
+
+        // cascade to SSSE3 and let the choice of implementation be decided there.
+        return reverse<BIT_GROUP_SIZE, BIT_REV_SSSE3>( ::std::forward<WORD_TYPE *>(out),
+                                                       ::std::forward<WORD_TYPE const *>(in),
+                                                        len,
                                                         bit_offset);
       }
+
 #endif
 
 
 
       /**
        * @brief
-       * @details   enabled only if BIT_GROUP_SIZE is power of 2, and greater than 0.
+       * @details   enabled only if SIMD type is SEquential
        * @param out
        * @param in
        * @param len
        * @param bit_offset
        * @return
        */
-      template <unsigned int BIT_GROUP_SIZE >
-      BITS_INLINE uint8_t reverse_seq(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t bit_offset = 0 ) {
+      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
+          unsigned int WordsInUint64 = sizeof(uint64_t) / sizeof(WORD_TYPE)>
+      BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_SEQ), uint8_t>::type
+      reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint8_t bit_offset = 0 ) {
+
+        //printf("seq: ");
+
         static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
-        static_assert(BIT_GROUP_SIZE <= 64, "ERROR: currenly reverse does not support 128 BIT_GRUOP_SIZE");
+        static_assert(BIT_GROUP_SIZE <= 32, "ERROR: currently reverse does not support 64 BIT_GRUOP_SIZE for SIMD within a register");
 
         if (((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0) && (bit_offset != 0)) 
           throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE require bit_offset to be 0.");
 
-        if ((len % ((BIT_GROUP_SIZE + 7) / 8)) > 0) {
-          BL_ERROR("len: " << len << "BITGROUP_SIZE: " << BIT_GROUP_SIZE);
+        size_t bytes = len * sizeof(WORD_TYPE);
+
+        if ((bytes % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
           throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
-        }
-        memset(out, 0, len);  // needed since we need to bitwise OR
+
+        memset(out, 0, bytes);  // needed because we bitwise OR.
+        // decide which one to use.
 
         // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
-        size_t rem = len;
+        size_t rem = bytes;
         // pointers
-        uint8_t * v = out + len;
-        const uint8_t * u = in;
+        uint8_t * v = reinterpret_cast<uint8_t *>(out + len);
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
         uint8_t init_offset = bit_offset;
 
+        //printf("remainder %lu\n", rem);
+
         bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SEQ> op64;
+
+
         for (; rem >= 8; rem -= 8) {
           // enough bytes.  do an iteration
           v -= 8;
@@ -1886,28 +2073,25 @@ namespace bliss {
 
         if (rem > 0) {
           // do another iteration with all the remaining.
-          if (len > 8) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
+          if (bytes >= 8) {  // original length has 32 bytes or more, so avoid memcpy.  duplicate a little work but that's okay.
             // if there is an offset, the offset at (u) prob is not the same as at (in + len - 8)
             if ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) != 0) {
-              bit_offset = ((len - 8) * 8 - init_offset) % 3;
+              bit_offset = ((bytes - 8) * 8 - init_offset) % BIT_GROUP_SIZE;
               bit_offset = (bit_offset == 0) ? 0 : (BIT_GROUP_SIZE - bit_offset);
             }
-            bit_offset = op64.reverse(out, in + len - 8, 8, bit_offset);
+            bit_offset = op64.reverse(reinterpret_cast<uint8_t *>(out),
+                                      reinterpret_cast<uint8_t const *>(in) + bytes - 8,
+                                      8, bit_offset);
           } else {  // original length is less than 32, so has to do memcpy
 
 
-            bit_offset = op64.reverse(out, in + len - rem, rem, bit_offset);
+            bit_offset = op64.reverse(reinterpret_cast<uint8_t *>(out),
+                                      reinterpret_cast<uint8_t const *>(in) + bytes - rem,
+                                      rem, bit_offset);
           }
         }
 
         return bit_offset;  // return remainder.
-      }
-
-
-      /// convenience function to convert from WORD_TYPE pointer to uint8_t pointer.
-      template <typename WORD_TYPE, unsigned int BIT_GROUP_SIZE, typename ::std::enable_if<(::std::is_integral<WORD_TYPE>::value && (sizeof(WORD_TYPE) > 1)), int>::type = 1>
-      BITS_INLINE uint8_t reverse_seq(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint8_t const bit_offset = 0) {
-        return reverse_seq<BIT_GROUP_SIZE>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t const *>(in), len * sizeof(WORD_TYPE), bit_offset);
       }
 
 
