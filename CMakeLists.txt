@@ -20,21 +20,6 @@ set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
 #set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH}) 
 
-### tool to speed up compilation
-if(CMAKE_VERSION VERSION_GREATER 2.8.3)
-    OPTION(ENABLE_COTIRE "Enable using cotire to reduce compilation time (possibly)" OFF)
-    if (ENABLE_COTIRE)
-        set (CMAKE_MODULE_PATH ${EXT_PROJECTS_DIR}/cotire/CMake ${CMAKE_MODULE_PATH})
-        include(cotire)
-    ELSE()
-        function(cotire module_names)
-        endfunction(cotire)  
-    ENDIF()
-else()
-    function(cotire module_names)
-    endfunction(cotire)  
-endif()
-
 
 
 # Compiler-specific C++11 activation.
@@ -440,14 +425,6 @@ CMAKE_DEPENDENT_OPTION(ENABLE_COVERAGE "Enable Code Coverage Reporting" OFF
 CMAKE_DEPENDENT_OPTION(ENABLE_SANITIZER "Enable Sanitizer.  Choose via SANITIZER_STYLE" OFF
                         "ENABLE_TESTING;SUPPORTS_SANITIZER" OFF)
 
-#### turn on/off relacy for thread testing.
-CMAKE_DEPENDENT_OPTION(ENABLE_RELACY "Enable Thread testing with Relacy" OFF
-                        "ENABLE_TESTING;NOT ENABLE_SANITIZER" OFF)
-IF(ENABLE_RELACY)
-    include_directories("${EXT_PROJECTS_DIR}/relacy_2_4")
-    include_directories("${EXT_PROJECTS_DIR}/cq_extracted")
-ENDIF()
-                        
 
 
 
@@ -548,7 +525,7 @@ if (ENABLE_TESTING)
   
     #TODO: fix this so that it changes with BENCHMARK flag
 #  if (BENCHMARK)
-#	SET(gtest_disble_pthreads ON)
+#	 SET(gtest_disble_pthreads ON)
 #    add_definitions(-DGTEST_HAS_PTHREAD=0)
 #  endif()
 
@@ -597,7 +574,6 @@ if (ENABLE_TESTING)
       target_link_libraries(${test_target_name} gcov)
     endif(ENABLE_COVERAGE)
 
-    cotire(${test_target_name})
 
     # generate google test XML results, to be parsed by Jenkins
     # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
@@ -631,7 +607,6 @@ if (ENABLE_TESTING)
       target_link_libraries(${test_target_name} gcov)
     endif(ENABLE_COVERAGE)
 
-    cotire(${test_target_name})
 
     # generate google test XML results, to be parsed by Jenkins
     # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
@@ -640,39 +615,38 @@ if (ENABLE_TESTING)
 
 
 
-  function(bliss_add_test_new module_name module_link modules)
-    # set the name for the test target and executable
-    set(test_target_name test-${module_name})
-    # add all give files
-    message(STATUS ${ARGN})
-    add_executable(${test_target_name} ${ARGN})
-    # add the googletest dependency
-    # commented out because there is no googletest dependency    add_dependencies(${test_target_name} googletest)
-    # set binary output path for tests
-    set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
-    # link test with gtest_main
-    target_link_libraries(${test_target_name} gtest_main)
-
-    # all the extra libs
-    target_link_libraries(${test_target_name} ${EXTRA_LIBS})
-
-    # link to the tested module (but only if that module produces a linkable
-    # library)
-    if (module_link)
-        target_link_libraries(${test_target_name} ${modules})
-    endif (module_link)
-    
-    # if code coverage is to be determined: link with gcov
-    if (ENABLE_COVERAGE)
-      target_link_libraries(${test_target_name} gcov)
-    endif(ENABLE_COVERAGE)
-
-    cotire(${test_target_name})
-
-    # generate google test XML results, to be parsed by Jenkins
-    # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
-    add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
-  endfunction(bliss_add_test_new)
+#  function(bliss_add_test_new module_name module_link modules)
+#    # set the name for the test target and executable
+#    set(test_target_name test-${module_name})
+#    # add all give files
+#    message(STATUS ${ARGN})
+#    add_executable(${test_target_name} ${ARGN})
+#    # add the googletest dependency
+#    # commented out because there is no googletest dependency    add_dependencies(${test_target_name} googletest)
+#    # set binary output path for tests
+#    set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
+#    # link test with gtest_main
+#    target_link_libraries(${test_target_name} gtest_main)
+#
+#    # all the extra libs
+#    target_link_libraries(${test_target_name} ${EXTRA_LIBS})
+#
+#    # link to the tested module (but only if that module produces a linkable
+#    # library)
+#    if (module_link)
+#        target_link_libraries(${test_target_name} ${modules})
+#    endif (module_link)
+#    
+#    # if code coverage is to be determined: link with gcov
+#    if (ENABLE_COVERAGE)
+#      target_link_libraries(${test_target_name} gcov)
+#    endif(ENABLE_COVERAGE)
+#
+#
+#    # generate google test XML results, to be parsed by Jenkins
+#    # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
+#    add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
+#  endfunction(bliss_add_test_new)
 
   function(bliss_add_mpi_test module_name module_link)
     # set the name for the test target and executable
@@ -751,7 +725,6 @@ if (ENABLE_TESTING)
           target_link_libraries(${test_target_name} gcov)
         endif(ENABLE_COVERAGE)
     
-        cotire(${test_target_name})
     
         # generate google test XML results, to be parsed by Jenkins
         # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
@@ -789,8 +762,6 @@ if (ENABLE_TESTING)
           target_link_libraries(${test_target_name} gcov)
         endif(ENABLE_COVERAGE)
     
-        cotire(${test_target_name})
-    
         # generate google test XML results, to be parsed by Jenkins
         # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
         add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name})
@@ -798,49 +769,7 @@ if (ENABLE_TESTING)
   
   endfunction(bliss_add_metaprog_test)
   
-IF(ENABLE_RELACY)  
-    function(bliss_add_relacy_test module_names module_link filename)
-      get_filename_component(test_name ${filename} NAME_WE)
-      
-      foreach(metadef ${ARGN})
-  
-        # set the name for the test target and executable
-        set(test_target_name ${test_name}_${metadef})
-        # add all give files
-        add_executable(${test_target_name} ${filename})
-        # set binary output path for tests
-        set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
-        
-        #get_target_property(targetCompDefs ${test_target_name} COMPILE_DEFINITIONS )
-        set_target_properties(${test_target_name} PROPERTIES COMPILE_DEFINITIONS "${metadef} -DUSE_RELACY")
 
-        # all the extra libs
-        target_link_libraries(${test_target_name} ${EXTRA_LIBS})
-    
-        # link to the tested module (but only if that module produces a linkable
-        # library)
-        if (module_link)
-            target_link_libraries(${test_target_name} ${module_names})
-        endif (module_link)
-        
-        # if code coverage is to be determined: link with gcov
-        if (ENABLE_COVERAGE)
-          target_link_libraries(${test_target_name} gcov)
-        endif(ENABLE_COVERAGE)
-    
-        cotire(${test_target_name})
-    
-        # generate google test XML results, to be parsed by Jenkins
-        # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
-        add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name})
-      endforeach(metadef)
-  
-  endfunction(bliss_add_relacy_test)
-ELSE()
-    function(bliss_add_relacy_test module_names module_link filename)
-  endfunction(bliss_add_relacy_test)
-
-ENDIF()
 
 endif (ENABLE_TESTING)
 
@@ -885,10 +814,10 @@ configure_file(
 # so that we will find TutorialConfig.h
 include_directories("${CMAKE_BINARY_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/src")
-# this below gets the smhasher
+# this below gets the smhasher (murmur hash)
 include_directories("${EXT_PROJECTS_DIR}")
 include_directories("${EXT_PROJECTS_DIR}/mxx/include")
-include_directories("${EXT_PROJECTS_DIR}/tclap-1.2.1/include")
+#include_directories("${EXT_PROJECTS_DIR}/tclap-1.2.1/include")
 
 
 add_subdirectory(src/utils)
