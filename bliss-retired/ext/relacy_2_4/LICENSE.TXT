@@ -1,5 +1,0 @@
-Relacy Race Detector
-Copyright (c) 2008-2009, Dmitry S. Vyukov
-All rights reserved.
-This software is dual licensed under the BSD and GPLv3 licenses.
-See the files LICENSE-BSD.TXT and LICENSE-GPL.TXT for details.
