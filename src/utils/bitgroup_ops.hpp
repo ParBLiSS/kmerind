@@ -88,15 +88,19 @@ namespace bliss {
 
       /// shift right by number of bits less than 8.
       template <typename WORD_TYPE>
-      BITS_INLINE WORD_TYPE srli(WORD_TYPE const val, uint8_t shift) {
+      BITS_INLINE WORD_TYPE srli(WORD_TYPE const val, uint_fast8_t shift) {
         return val >> shift;
       }
       /// shift left by number of bits less than 8.
       template <typename WORD_TYPE>
-      BITS_INLINE WORD_TYPE slli(WORD_TYPE const val, uint8_t shift) {
+      BITS_INLINE WORD_TYPE slli(WORD_TYPE const val, uint_fast8_t shift) {
         return val << shift;
       }
 
+      template <typename WORD_TYPE>
+      BITS_INLINE WORD_TYPE negate(WORD_TYPE const & u) {
+        return ~u;
+      }
 
       /**
        * @brief base bit reverse type. base template only
@@ -202,12 +206,6 @@ namespace bliss {
             }
 
             return (len * 8 - bit_offset) % BIT_GROUP_SIZE;
-          }
-
-
-          template <typename WORD_TYPE>
-          BITS_INLINE WORD_TYPE negate(WORD_TYPE const & u) {
-            return ~u;
           }
 
           /**
@@ -321,11 +319,6 @@ namespace bliss {
             }
 
             return 0;
-          }
-
-          template <typename WORD_TYPE>
-          BITS_INLINE WORD_TYPE negate(WORD_TYPE const & u) {
-            return ~u;
           }
 
           template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS >= (sizeof(WORD_TYPE) * 8)), int>::type = 1>
@@ -487,11 +480,6 @@ namespace bliss {
             return (len * 8 - bit_offset) % 3;
           }
 
-          template <typename WORD_TYPE>
-          BITS_INLINE WORD_TYPE negate(WORD_TYPE const & u) {
-            return ~u;
-          }
-
 
           template <typename WORD_TYPE>
           BITS_INLINE WORD_TYPE reverse(WORD_TYPE const &u, uint8_t bit_offset = 0) {
@@ -551,6 +539,59 @@ namespace bliss {
 
 #if defined(__SSSE3__)
 
+      /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
+      /// DO THIS BECAUSE BITWISE SHIFT does not cross the epi64 boundary.
+      template <>
+      BITS_INLINE __m128i srli(__m128i val, uint_fast8_t shift) {
+    	if (shift == 0) return val;
+    	if (shift >=128) return _mm_setzero_si128();
+
+        // get the 9th byte into the 8th position
+        // shift by 1 byte.  avoids a mask load + shuffle, and is friendly with epi16, epi32, and epi64 versions of shifts.
+        __m128i tmp = _mm_srli_si128(val, 8);  //(bytes level shift only)
+
+        // then left shift TMP to get the bits that crosses the 64 bit boundary.
+        // shift the input value via epi64 by the number of shifts
+        // then or together.
+        if (shift < 64)
+        	return _mm_or_si128(_mm_slli_epi64(tmp, 64 - shift), _mm_srli_epi64(val, shift));
+
+        if (shift > 64)
+        	return _mm_srli_epi64(tmp, shift - 64);
+
+        // 64 bit exactly
+        return tmp;
+
+      }
+
+      /// shift left by number of bits less than 8.
+      template <>
+      BITS_INLINE __m128i slli(__m128i val, uint_fast8_t shift) {
+      	if (shift == 0) return val;
+      	if (shift >=128) return _mm_setzero_si128();
+
+      	// get the 9th byte into the 8th position
+        // shift by 1 byte.  avoids a mask load during shuffle, and is friendly with epi16, epi32, and epi64 versions of shifts.
+        __m128i tmp = _mm_slli_si128(val, 8);
+
+        // then left shift to get the bits in the right place
+        // shift the input value via epi64 by the number of shifts
+        // then or together.
+        if (shift < 64)
+        	return _mm_or_si128(_mm_srli_epi64(tmp, 64 - shift), _mm_slli_epi64(val, shift));
+
+        if (shift > 64)
+        	return _mm_slli_epi64(tmp, shift - 64);
+
+        // 64 bit exactly
+        return tmp;
+      }
+
+
+      template <>
+      BITS_INLINE __m128i negate(__m128i const & u) {
+        return _mm_xor_si128(u, _mm_cmpeq_epi8(u, u));  // no native negation operator, so use xor
+      }
 
 
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 128bit)
@@ -605,7 +646,7 @@ namespace bliss {
           bitgroup_ops() :
             rev_idx8_2(_mm_setr_epi8(0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00)),
             rev_idx16_2(_mm_setr_epi8(0x0E,0x0F,0x0C,0x0D,0x0A,0x0B,0x08,0x09,0x06,0x07,0x04,0x05,0x02,0x03,0x00,0x01)),
-            _mask_lo(_mm_set1_epi8(0x0F)),
+            _mask_lo(_mm_setr_epi8(0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F)),
             lut1_lo_2(_mm_setr_epi8(0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f)),
             lut1_hi_2(_mm_setr_epi8(0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0)),
             lut2_lo_2(_mm_setr_epi8(0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f)),
@@ -643,10 +684,6 @@ namespace bliss {
             return 0;
           }
 
-
-          BITS_INLINE __m128i negate(__m128i const & u) {
-            return _mm_xor_si128(u, _mm_cmpeq_epi8(u, u));  // no native negation operator
-          }
 
           template <unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS >= 128), int>::type = 1>
           BITS_INLINE __m128i reverse(__m128i const & u) {
@@ -795,30 +832,6 @@ namespace bliss {
             return ss.str();
           }
 
-          /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
-          BITS_INLINE __m128i srli(__m128i val, uint8_t shift) {
-            // get the 9th byte into the 8th position
-            // shift by 1 byte.  avoids a mask load during shuffle, and is friendly with epi16, epi32, and epi64 versions of shifts.
-            __m128i tmp = _mm_srli_si128(val, 1);
-
-            // then left shift to get the bits in the right place
-            // shift the input value via epi64 by the number of shifts
-            // then or together.
-            return _mm_or_si128(_mm_slli_epi64(tmp, 8 - shift), _mm_srli_epi64(val, shift));
-          }
-
-          /// shift left by number of bits less than 8.
-          BITS_INLINE __m128i slli(__m128i val, uint8_t shift) {
-            // get the 9th byte into the 8th position
-            // shift by 1 byte.  avoids a mask load during shuffle, and is friendly with epi16, epi32, and epi64 versions of shifts.
-            __m128i tmp = _mm_slli_si128(val, 1);
-
-            // then left shift to get the bits in the right place
-            // shift the input value via epi64 by the number of shifts
-            // then or together.
-            return _mm_or_si128(_mm_srli_epi64(tmp, 8 - shift), _mm_slli_epi64(val, shift));
-          }
-
 
           /// reverse function to reverse bits for data types are are not __mm128i  (has to be bigger than at least half)
           BITS_INLINE uint8_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t const bit_offset = 0) {
@@ -872,9 +885,6 @@ namespace bliss {
 
           }
 
-          BITS_INLINE __m128i negate(__m128i const & u) {
-            return _mm_xor_si128(u, _mm_cmpeq_epi8(u, u));  // no native negation operator
-          }
 
           BITS_INLINE __m128i reverse(__m128i const & u, uint8_t bit_offset = 0 ) {
 
@@ -952,8 +962,114 @@ namespace bliss {
 
 #if defined(__AVX2__)
 
+      // ALSO try using memory...
+      // also try using 64 bit shift
+
+      /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
+      template <>
+      BITS_INLINE __m256i srli(__m256i val, uint_fast8_t shift) {
+    	  if (shift == 0) return val;
+    	  if (shift >= 256) return _mm256_setzero_si256();
+
+    	// goal:  get next higher 64 bits to current position.
+    	  // conditionals:  shift byt 0 to 63, 64 to 128, 128 to 192, and 192 to 256
+    	  // code below can be modified to shift up to 64 bits, and with conditional, up to 128 bits?
+    	  // 64, 192: p+alignr is enough
+    	  // 128: permute is enough
+    	  // 0-63:  same as below - 5 instructions
+    	  // 65-127, 129-191: permute + 2 alignr, then or(slli, srli)  total 6 instructions
+    	  // 193-255: permute + alignr, then right shift. 3 instructions
+
+    	  //alternatives:  permute4x64 (all 256bits, but can't zero), s(l/r)li_si256 (128 bit lanes)
+    	 // alternative, do the 64 bit shift, then do remaining.
+
+        // shuffle to get the 8th byte into the 9th position.  shuffle and slli operate on 128 bit lanes only, so do alignr and permute2x128 instead
+        // alternative:  alignr.  2 inputs: a, b.  output composition is lowest shift bytes from the 2 lanes of a become the high bytes in the 2 lanes, in order,
+        //                              and highest 16-shift bytes from b's 2 lanes are the lower bytes in teh 2 lanes of output.
+        //                        to shift right, b = val, N = 1, lower lane of a should be upper lane of val, upper lane of a should be 0.  possibly 2 ops. permute latency is 3
+        __m256i hi = _mm256_permute2x128_si256(val, val, 0x83);  // 1000.0011 higher lane is 0, lower lane is higher lane of val
+        if (shift == 128) return hi;
+
+        uint_fast8_t byte_shift = (shift & 0xC0) >> 3;  // multiple of 8 bytes, so that we can avoid some ors.
+        __m256i v1 = _mm256_alignr_epi8(hi, val, byte_shift); // alignr:  src1 low OR src2 low, then right shift bytes, put into output low.  same with high
+        uint_fast8_t bit64_shift = shift & 0x3F;        // shift within the 64 bit block
+
+        if (bit64_shift == 0) return v1;  // exact byte alignment.  return it.
+        // together, permute puts the high lane in low of tmp, then tmp and val's low parts are shifted, and high parts are shifted.
+        //    0   hi
+        //    hi  lo    => dest_lo =  hi lo shift
+        //                 dest_hi =   0 hi shift
+        if (byte_shift == 24) return _mm256_srli_epi64(v1, bit64_shift);
+
+        // else we need one more alignr
+        __m256i v2 = _mm256_alignr_epi8(hi, val, byte_shift + 8);
+
+        // then left shift to get the bits in the right place
+        // shift the input value via epi64 by the number of shifts
+        // then or together.
+        return _mm256_or_si256(_mm256_slli_epi64(v2, 64 - bit64_shift), _mm256_srli_epi64(v1, bit64_shift));
+      }
 
 
+
+      /// shift left by number of bits less than 8.
+      template <>
+      BITS_INLINE __m256i slli(__m256i val, uint_fast8_t shift) {
+    	  if (shift == 0) return val;
+    	  if (shift >= 256) return _mm256_setzero_si256();
+
+    	  // val is  A B C D
+
+        // shuffle to get the 8th byte into the 9th position.  shuffle and slli operate on 128 bit lanes only, so do alignr and permute2x128 instead
+        // alternative:  alignr.  2 inputs: a, b.  output composition is lowest shift bytes from the 2 lanes of a become the high bytes in the 2 lanes, in order,
+        //                              and highest 16-shift bytes from b's 2 lanes are the lower bytes in teh 2 lanes of output.
+        //                        to shift left, a = val, N = 15, lower lane of b should be 0, higher lane of b should be lower lane of val.  possibly 2 ops, permute latency is 3.
+        __m256i lo = _mm256_permute2x128_si256(val, val, 0x08);  // lower lane is 0, higher lane is lower lane of val
+        if (shift == 128) return lo;   // lo is C D 0 0
+
+        // together, permute puts the high lane in low of tmp, then tmp and val's low parts are shifted, and high parts are shifted.
+        //    hi  lo
+        //    lo   0    => dest_lo =  hi lo shift
+        //                 dest_hi =   0 hi shift
+        uint_fast8_t byte_shift = (shift & 0xC0) >> 3;  // multiple of 8 bytes, so that we can avoid some ors.
+
+        // TODO - left shift is trickier.
+		__m256i v1 = (shift < 128) ? _mm256_alignr_epi8(val, lo, 8) :  // permute essentially shifted by 16
+				//  else shift > 128
+									 _mm256_permute4x64_epi64(lo, 0x80); // permute and shift lo left more.  2 0 0 0 -> 0x80
+		// if shift < 128, v1 is B C D 0.  else v1 is D 0 0 0
+
+        uint_fast8_t bit64_shift = shift & 0x3F;        // shift within the 64 bit block
+
+        if (bit64_shift == 0) return v1;
+
+        // then left shift to get the bits in the right place
+        // shift the input value via epi64 by the number of shifts
+        // then or together.
+        __m256i lv, rv;
+        switch (shift >> 6) {
+			case 0:
+				rv = val; lv = v1; break;  // shift is < 64.  shift ABCD left and BCD0 right
+			case 1:
+				rv = v1; lv = lo; break;  // shift is < 128.  shift BCD0 left and CD00 right
+			case 2:
+				rv = lo; lv = v1; break;  // shift is < 192.  shift CD00 left and D000 right
+			case 3:
+				return _mm256_slli_epi64(v1, bit64_shift);  // shift is > 192, shift D000 left
+			default:
+				break;
+        };
+
+        // then left shift to get the bits in the right place
+        // shift the input value via epi64 by the number of shifts
+        // then or together.
+        return _mm256_or_si256(_mm256_srli_epi64(lv, 64 - shift), _mm256_slli_epi64(rv, bit64_shift));
+      }
+
+      template <>
+      BITS_INLINE __m256i negate(__m256i const & u) {
+        return _mm256_xor_si256(u, _mm256_cmpeq_epi8(u, u));  // no native negation operator
+      }
 
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 256bit)
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
@@ -1042,9 +1158,7 @@ namespace bliss {
             return 0;
           }
 
-          BITS_INLINE __m256i negate(__m256i const & u) {
-            return _mm256_xor_si256(u, _mm256_cmpeq_epi8(u, u));  // no native negation operator
-          }
+
 
           template <unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS >= 256), int>::type = 1>
           BITS_INLINE __m256i reverse(__m256i const & u) {
@@ -1189,35 +1303,6 @@ namespace bliss {
           }
 
 
-          /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
-          BITS_INLINE __m256i srli(__m256i val, uint8_t shift) {
-            // shuffle to get the 8th byte into the 9th position.  shuffle and slli operate on 128 bit lanes only, so do alignr and permute2x128 instead
-            // alternative:  alignr.  2 inputs: a, b.  output composition is lowest shift bytes from the 2 lanes of a become the high bytes in the 2 lanes, in order,
-            //                              and highest 16-shift bytes from b's 2 lanes are the lower bytes in teh 2 lanes of output.
-            //                        to shift right, b = val, N = 1, lower lane of a should be upper lane of val, upper lane of a should be 0.  possibly 2 ops. permute latency is 3
-            __m256i tmp = _mm256_permute2x128_si256(val, val, 0x83);  // lower lane is 0, higher lane is lower lane of val
-            tmp = _mm256_alignr_epi8(tmp, val, 1);
-
-            // then left shift to get the bits in the right place
-            // shift the input value via epi64 by the number of shifts
-            // then or together.
-            return _mm256_or_si256(_mm256_slli_epi64(tmp, 8 - shift), _mm256_srli_epi64(val, shift));
-          }
-
-          /// shift left by number of bits less than 8.
-          BITS_INLINE __m256i slli(__m256i val, uint8_t shift) {
-            // shuffle to get the 8th byte into the 9th position.  shuffle and slli operate on 128 bit lanes only, so do alignr and permute2x128 instead
-            // alternative:  alignr.  2 inputs: a, b.  output composition is lowest shift bytes from the 2 lanes of a become the high bytes in the 2 lanes, in order,
-            //                              and highest 16-shift bytes from b's 2 lanes are the lower bytes in teh 2 lanes of output.
-            //                        to shift left, a = val, N = 15, lower lane of b should be 0, higher lane of b should be lower lane of val.  possibly 2 ops, permute latency is 3.
-            __m256i tmp = _mm256_permute2x128_si256(val, val, 0x08);  // lower lane is 0, higher lane is lower lane of val
-            tmp = _mm256_alignr_epi8(val, tmp, 15);
-
-            // then left shift to get the bits in the right place
-            // shift the input value via epi64 by the number of shifts
-            // then or together.
-            return _mm256_or_si256(_mm256_srli_epi64(tmp, 8 - shift), _mm256_slli_epi64(val, shift));
-          }
 
           /// reverse function to reverse bits for data types are are not __mm128i  (has to be bigger than at least half)
           BITS_INLINE uint8_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t const bit_offset = 0) {
@@ -1268,10 +1353,6 @@ namespace bliss {
 
             // return remainder.
             return (len * 8 - bit_offset) % 3;
-          }
-
-          BITS_INLINE __m256i negate(__m256i const & u) {
-            return _mm256_xor_si256(u, _mm256_cmpeq_epi8(u, u));  // no native negation operator
           }
 
           BITS_INLINE __m256i reverse(__m256i const & u, uint8_t bit_offset = 0 ) {
