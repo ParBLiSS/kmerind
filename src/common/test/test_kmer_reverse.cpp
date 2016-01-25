@@ -238,11 +238,12 @@ TYPED_TEST_P(KmerReverseTest, reverse)
       BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
     }
     if (!local_revcomp_same) {
-      BL_DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+      BL_WARNINGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
     }
-
     rev_same &= local_rev_same;
     revcomp_same &= local_revcomp_same;
+    ASSERT_TRUE(local_rev_same);
+    ASSERT_TRUE(local_revcomp_same);
 
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }

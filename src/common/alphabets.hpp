@@ -90,7 +90,7 @@ namespace bliss
         static constexpr std::array<uint8_t, 256> FROM_ASCII = bliss::utils::make_array<uint8_t, 256>();
 
         /// alphabet to ascii lookup table
-        static constexpr std::array<uint8_t, SIZE> TO_ASCII = bliss::utils::make_array<uint8_t, 256>();
+        static constexpr std::array<char, SIZE> TO_ASCII = bliss::utils::make_array<char, 256>();
 
         /// complement lookup table
         static constexpr std::array<uint8_t, SIZE> TO_COMPLEMENT = bliss::utils::make_array<uint8_t, 256>();
@@ -100,7 +100,7 @@ namespace bliss
       template <typename DUMMY>
       constexpr std::array<uint8_t, 256> ASCII_T<DUMMY>::FROM_ASCII;
       template <typename DUMMY>
-      constexpr std::array<uint8_t, ASCII_T<DUMMY>::SIZE> ASCII_T<DUMMY>::TO_ASCII;
+      constexpr std::array<char, ASCII_T<DUMMY>::SIZE> ASCII_T<DUMMY>::TO_ASCII;
       template <typename DUMMY>
       constexpr std::array<uint8_t, ASCII_T<DUMMY>::SIZE> ASCII_T<DUMMY>::TO_COMPLEMENT;
 

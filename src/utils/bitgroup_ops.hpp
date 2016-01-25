@@ -1031,7 +1031,7 @@ namespace bliss {
         //    hi  lo
         //    lo   0    => dest_lo =  hi lo shift
         //                 dest_hi =   0 hi shift
-        uint_fast8_t byte_shift = (shift & 0xC0) >> 3;  // multiple of 8 bytes, so that we can avoid some ors.
+        //uint_fast8_t byte_shift = (shift & 0xC0) >> 3;  // multiple of 8 bytes, so that we can avoid some ors.
 
         // TODO - left shift is trickier.
 		__m256i v1 = (shift < 128) ? _mm256_alignr_epi8(val, lo, 8) :  // permute essentially shifted by 16
