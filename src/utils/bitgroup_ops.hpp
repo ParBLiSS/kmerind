@@ -62,7 +62,7 @@
 // done:  3bit reverse - done for SWAR, SSSE3, AVX2
 // done:  see effect of not shifting when working with byte arrays.  okay not to shift, if bit_offset is passed to reverse
 // done:  vector reverse.
-// TODO:  perf compare to old impl.
+// TODO:  perf compare to old impl - slower.  cause:  branching, and sometimes non-inlining.
 // TODO:  add other operations such as masking, shifting, loading data from mem and storing data to mem.  refactor array version of reverse to use load/op/store
 
 // NOTE: alignas placement is accepted by GCC at end of array declaration, or between array name and size specification.  "name[size] alignas(bits)"  or "name alignas(bits) [size]"
@@ -103,9 +103,19 @@ namespace bliss {
       BITS_INLINE WORD_TYPE srli(WORD_TYPE const val, uint_fast8_t shift) {
         return val >> shift;
       }
+      /// shift right by number of bits less than 8.
+      template <typename WORD_TYPE, uint8_t shift>
+      BITS_INLINE WORD_TYPE srli(WORD_TYPE const val) {
+        return val >> shift;
+      }
       /// shift left by number of bits less than 8.
       template <typename WORD_TYPE>
       BITS_INLINE WORD_TYPE slli(WORD_TYPE const val, uint_fast8_t shift) {
+        return val << shift;
+      }
+      /// shift left by number of bits less than 8.
+      template <typename WORD_TYPE, uint8_t shift>
+      BITS_INLINE WORD_TYPE slli(WORD_TYPE const val) {
         return val << shift;
       }
 
@@ -146,7 +156,7 @@ namespace bliss {
            * @return number of bits in the last byte that are not swapped (i.e. last 2 bits for 3 bits op.)
            */
           BITS_INLINE uint8_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t const bit_offset = 0) {
-            if (len == 0) return bit_offset; //throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
+            if ((len * 8) < BIT_GROUP_SIZE) return bit_offset; //throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
 
             // enforce bit_offset to be less than 8, since we are ORing the first and last bytes.
             // if (bit_offset >= 8) throw ::std::invalid_argument("ERROR reversing byte array:  bit offset should be less than 8.  for larger, shift input instead.");
@@ -284,7 +294,7 @@ namespace bliss {
 
           /// reverse function to reverse bits for data types are are not power of 2 number of bytes
           BITS_INLINE uint8_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t const bit_offset = 0) {
-            if (len == 0) return bit_offset; // throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
+            if ( (len * 8) < BIT_GROUP_SIZE ) return bit_offset; // throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
 
             // enforce bit_offset to be 0, since we are ORing the first and last bytes.
             //if (bit_offset > 0) throw ::std::invalid_argument("ERROR reversing byte array:  bit offset should be 0 for SWAR with power of 2 BIT_GROUP_SIZE.");
@@ -335,14 +345,22 @@ namespace bliss {
             return 0;
           }
 
-          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS >= (sizeof(WORD_TYPE) * 8)), int>::type = 1>
-          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const &u) {
-//            static_assert(BIT_GROUP_SIZE == (sizeof(WORD_TYPE) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in WORD_TYPE");
-
+          // bitgroup size is larger than the word type in bits.
+          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS > (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
+          reverse(WORD_TYPE const &u) {
             return u;
           }
-          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS < (sizeof(WORD_TYPE) * 8)), int>::type = 1>
-          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const &u) {
+          // bitgroup size is same size as the word type in bits.
+          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS == (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
+          reverse(WORD_TYPE const &u) {
+            return u;
+          }
+          // this specialization will work for all WORD_TYPE sizes.
+          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS <= 8), WORD_TYPE>::type
+          reverse(WORD_TYPE const &u) {
             static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
             static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
 
@@ -350,44 +368,22 @@ namespace bliss {
 
             // essentially a Duff's Device here, cascading to smaller swap sizes.
             // swap the bit_groups in logarithmic steps.  only execute steps that have swap size smaller than the WORD_TYPE, and only if bit group is <= the current swap size
-            if (BIT_GROUP_SIZE <= 8) {
-              switch (sizeof(WORD_TYPE)) {
-                case 8:
-                  v = _bliss_bswap_64(v);
-                  break;    // swap all 8 bytes
-                case 4:
-                  v = _bliss_bswap_32(v);
-                  break;  // swap all 4 bytes
-                case 2:
-                  v = _bliss_bswap_16(v);
-                  break;  // swap both 2 byte
-                default:
-                  break;
-              }
-            } else {  // BIT_GROUP_SIZE > 8:  16 or 32, depending on word size..  limited by word_type size
-              switch (BIT_GROUP_SIZE) {
-                // should be shifting by 32 but causes compiler warning if v is same size of BIT_GROUP_SIZE
-                case 16:
-                  switch (sizeof(WORD_TYPE)) { // instead of 32 and 16, do BIT_GROUP_SIZE 2x
-                    case 8:
-                      v = (((v >> BIT_GROUP_SIZE) >> BIT_GROUP_SIZE) & mask32) | (((v & mask32) << BIT_GROUP_SIZE) << BIT_GROUP_SIZE );         // swap 4 bytes
-                    case 4:
-                      v = ((v >> BIT_GROUP_SIZE) & mask16) | ((v & mask16) << BIT_GROUP_SIZE);
-                      break;  // swap 2 bytes
-                    default:
-                      break;
-                  };
-                  break;
-                case 32:
-                  v = ((v >> BIT_GROUP_SIZE) & mask32) | ((v & mask32) << BIT_GROUP_SIZE);
-                  break;  // swap 4 bytes.  wordtype has to be size_t
-                default:
-                  break;
-              }
+            switch (sizeof(WORD_TYPE)) {
+              case 8:
+                v = _bliss_bswap_64(v);
+                break;    // swap all 8 bytes
+              case 4:
+                v = _bliss_bswap_32(v);
+                break;  // swap all 4 bytes
+              case 2:
+                v = _bliss_bswap_16(v);
+                break;  // swap both 2 byte
+              default:
+                break;
             }
 
             // now swap if requested group size is 4, 2, or 1.  only execute if bit group is <= to current swap size.
-            switch (BIT_GROUP_SIZE) {
+            switch (BITS) {
               case 1:
                 v = ((v >>  1) &  mask1) | ((v &  mask1) <<  1);  // swap 1 bits
               case 2:
@@ -401,6 +397,43 @@ namespace bliss {
             return v;
           }
 
+          /// this specialization is for 8 byte words.   16 bit or 32 bit groups are allowed.
+          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS < (sizeof(WORD_TYPE) * 8)) && (sizeof(WORD_TYPE) == 8), WORD_TYPE>::type
+          reverse(WORD_TYPE const &u) {
+            static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
+            static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
+
+            WORD_TYPE v = u;
+
+            // essentially a Duff's Device here, cascading to smaller swap sizes.
+            // swap the bit_groups in logarithmic steps.  only execute steps that have swap size smaller than the WORD_TYPE, and only if bit group is <= the current swap size
+            // BIT_GROUP_SIZE > 8:  16 or 32, depending on word size..  limited by word_type size
+            switch (BITS) {
+              // should be shifting by 32 but causes compiler warning if v is same size of BIT_GROUP_SIZE
+              case 16:
+                v = ((v >> 16) & mask16) | ((v & mask16) << 16);
+              case 32:
+                v = ((v >> 32) & mask32) | ((v & mask32) << 32);
+              default:
+                break;
+            }
+
+            return v;
+          }
+
+          /// this specialization is for 4 byte words.  only 16 bit group is allowed/needed here.
+          /// separate by word_type size instead of bits so that we don't shift by 32 when word is 4 bytes.
+          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS < (sizeof(WORD_TYPE) * 8)) && (sizeof(WORD_TYPE) == 4), WORD_TYPE>::type
+          reverse(WORD_TYPE const &u) {
+            static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
+            static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
+
+            return ((u >> 16) & mask16) | ((u & mask16) << 16);
+          }
+
+
       };
 
 
@@ -409,11 +442,6 @@ namespace bliss {
       struct bitgroup_ops<3, BIT_REV_SWAR, POW2> {
 
           // masks.
-          static constexpr uint64_t  mask8 = 0x00FF00FF00FF00FF;
-          static constexpr uint64_t  mask4 = 0x0F0F0F0F0F0F0F0F;
-          static constexpr uint64_t  mask2 = 0x3333333333333333;
-          static constexpr uint64_t  mask1 = 0x5555555555555555;
-
           static constexpr uint64_t mask3lo = 0x9249249249249249;
           static constexpr uint64_t mask3mid = 0x2492492492492492;
           static constexpr uint64_t mask3hi = 0x4924924924924924;
@@ -422,6 +450,10 @@ namespace bliss {
 
           static constexpr unsigned int bitsPerGroup = 3;
           static constexpr unsigned char simd_type = BIT_REV_SWAR;
+
+          bitgroup_ops<1, BIT_REV_SWAR, true> bit_rev_1;
+
+
 
           /// reverse function to reverse bits for data types are are not power of 2 number of bytes
           BITS_INLINE uint8_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t const bit_offset = 0) {
@@ -494,36 +526,24 @@ namespace bliss {
             return (len * 8 - bit_offset) % 3;
           }
 
-
+          // dispatcher
           template <typename WORD_TYPE>
-          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const &u, uint8_t bit_offset = 0) {
+          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & u, uint8_t const & bit_offset) {
+            switch ((sizeof(WORD_TYPE) * 8 - bit_offset) % 3) {
+              case 0: return reverse<WORD_TYPE, 0>(::std::forward<WORD_TYPE const>(u)); break;
+              case 1: return reverse<WORD_TYPE, 1>(::std::forward<WORD_TYPE const>(u)); break;
+              case 2: return reverse<WORD_TYPE, 2>(::std::forward<WORD_TYPE const>(u)); break;
+              default: return 0; break;
+            }
+          }
+
+          template <typename WORD_TYPE, uint8_t offset = 0>
+          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const &u) {
             static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
             static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
 
             //========================== first reverse bits in groups of 1.
-            WORD_TYPE v = u;
-
-            // essentially a Duff's Device here, cascading to smaller swap sizes.
-            // swap the bit_groups in logarithmic steps.  only execute steps that have swap size smaller than the WORD_TYPE, and only if bit group is <= the current swap size
-            switch (sizeof(WORD_TYPE)) {
-              case 8:
-                v = _bliss_bswap_64(v);
-                break;    // swap all 8 bytes
-              case 4:
-                v = _bliss_bswap_32(v);
-                break;  // swap all 4 bytes
-              case 2:
-                v = _bliss_bswap_16(v);
-                break;  // swap both 2 byte
-              default:
-                break;
-
-            } // else single byte, no byte swap needed.
-
-            // now swap the bits as if requested group size is 1
-            v = ((v >>  4) &  mask4) | ((v &  mask4) <<  4);  // swap nibbles
-            v = ((v >>  2) &  mask2) | ((v &  mask2) <<  2);  // swap 2 bits
-            v = ((v >>  1) &  mask1) | ((v &  mask1) <<  1);  // swap 1 bits
+            WORD_TYPE v = bit_rev_1.reverse(::std::forward<WORD_TYPE const>(u));
 
             //============================ done reverse bits in groups of 1
 
@@ -531,18 +551,18 @@ namespace bliss {
             // note that remainders are at low bits now, so we need 3 patterns for shifting.
 
             // 2 shifts, 2 ors, 3 ands
-            switch ((sizeof(WORD_TYPE) * 8 - bit_offset) % 3) {
+            switch (offset) {
               case 2:
                 // rem == 2:                    mid, hi, lo
-                v = ((v &  mask3mid) >>  2) | (v & mask3lo ) | ((v &  mask3hi ) << 2);
+                v = ((v & mask3mid) >>  2) | (v & mask3lo ) | ((v & mask3hi ) << 2);
                 break;
               case 1:
                 // rem == 1:                    hi, lo, mid
-                v = ((v &  mask3lo ) >>  2) | (v & mask3hi ) | ((v &  mask3mid) << 2);
+                v = ((v & mask3lo ) >>  2) | (v & mask3hi ) | ((v & mask3mid) << 2);
                 break;
               default:
                 // rem == 0:  first 3 bits are: lo, mid, hi in order of significant bits
-                v = ((v &  mask3hi ) >>  2) | (v & mask3mid) | ((v &  mask3lo ) << 2);
+                v = ((v & mask3hi ) >>  2) | (v & mask3mid) | ((v & mask3lo ) << 2);
                 break;
             }
 
@@ -575,12 +595,57 @@ namespace bliss {
 
         // 64 bit exactly
         return tmp;
+      }
 
+      /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
+      /// DO THIS BECAUSE BITWISE SHIFT does not cross the epi64 boundary.
+      template <uint8_t shift>
+      BITS_INLINE __m128i srli(__m128i val) {
+        if (shift == 0) return val;
+        if (shift >=128) return _mm_setzero_si128();
+
+        // get the 9th byte into the 8th position
+        // shift by 1 byte.  avoids a mask load + shuffle, and is friendly with epi16, epi32, and epi64 versions of shifts.
+        __m128i tmp = _mm_srli_si128(val, 8);  //(bytes level shift only)
+
+        // then left shift TMP to get the bits that crosses the 64 bit boundary.
+        // shift the input value via epi64 by the number of shifts
+        // then or together.
+        if (shift < 64)
+          return _mm_or_si128(_mm_slli_epi64(tmp, 64 - shift), _mm_srli_epi64(val, shift));
+
+        if (shift > 64)
+          return _mm_srli_epi64(tmp, shift - 64);
+
+        // 64 bit exactly
+        return tmp;
       }
 
       /// shift left by number of bits less than 8.
       template <>
       BITS_INLINE __m128i slli(__m128i val, uint_fast8_t shift) {
+        if (shift == 0) return val;
+        if (shift >=128) return _mm_setzero_si128();
+
+        // get the 9th byte into the 8th position
+        // shift by 1 byte.  avoids a mask load during shuffle, and is friendly with epi16, epi32, and epi64 versions of shifts.
+        __m128i tmp = _mm_slli_si128(val, 8);
+
+        // then left shift to get the bits in the right place
+        // shift the input value via epi64 by the number of shifts
+        // then or together.
+        if (shift < 64)
+          return _mm_or_si128(_mm_srli_epi64(tmp, 64 - shift), _mm_slli_epi64(val, shift));
+
+        if (shift > 64)
+          return _mm_slli_epi64(tmp, shift - 64);
+
+        // 64 bit exactly
+        return tmp;
+      }
+      /// shift left by number of bits less than 8.
+      template <uint8_t shift>
+      BITS_INLINE __m128i slli(__m128i val) {
       	if (shift == 0) return val;
       	if (shift >=128) return _mm_setzero_si128();
 
@@ -615,33 +680,17 @@ namespace bliss {
           static_assert(BIT_GROUP_SIZE < 128, "ERROR: BIT_GROUP_SIZE is greater than number of bits in __m128i");
           static_assert((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0, "ERROR: BIT_GROUP_SIZE is has to be powers of 2");
 
-
-
           /// index for reversing the bytes in groups of varying size (8: 1 byte; 16: 2 bytes, etc.)
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx8 , 16, 16) = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx16, 16, 16) = {0x0E,0x0F,0x0C,0x0D,0x0A,0x0B,0x08,0x09,0x06,0x07,0x04,0x05,0x02,0x03,0x00,0x01};
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx32, 16, 16) = {0x0C,0x0D,0x0E,0x0F,0x08,0x09,0x0A,0x0B,0x04,0x05,0x06,0x07,0x00,0x01,0x02,0x03};
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx64, 16, 16) = {0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07};
-
           const __m128i rev_idx8;
           const __m128i rev_idx16;
+          /// mask for lower 4 bits
           const __m128i _mask_lo;
+          /// lookup table for reversing bits in a byte in bit groups of 1
           const __m128i lut1_lo;
           const __m128i lut1_hi;
+          /// lookup table for reversing bits in a byte in bit groups of 2
           const __m128i lut2_lo;
           const __m128i lut2_hi;
-
-
-//          /// mask for lower 4 bits
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(mask4, 16, 16) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
-//
-//          /// lookup table for reversing bits in a byte in bit groups of 1
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut1_lo, 16, 16) = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut1_hi, 16, 16) = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
-//
-//          /// lookup table for reversing bits in a byte in bit groups of 2
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut2_lo, 16, 16) = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut2_hi, 16, 16) = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
 
           /// lookup table for reversing bits in a byte in groups of 4 - no need, just use the mask_lo and shift operator.
           static constexpr unsigned int bitsPerGroup = BIT_GROUP_SIZE;
@@ -670,7 +719,7 @@ namespace bliss {
 
           /// reverse function to reverse bits for data types are are not __mm128i  (has to be bigger than at least half)
           BITS_INLINE uint8_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t const bit_offset = 0) {
-            if (len == 0) return bit_offset; // throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
+            if ((len * 8) < BIT_GROUP_SIZE) return bit_offset; // throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
             //if (len > 16) throw std::invalid_argument("ERROR:  length of array should be <= 16.  For longer, use a different bitgroup_ops (AVX2) or break it up.");
             assert ( len <= 16);
 //            if (((len * 8) % BIT_GROUP_SIZE) > 0)
@@ -702,16 +751,18 @@ namespace bliss {
           }
 
 
-          template <unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS >= 128), int>::type = 1>
-          BITS_INLINE __m128i reverse(__m128i const & u) {
+          template <unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS >= 128), __m128i>::type
+          reverse(__m128i const & u) {
             static_assert(BIT_GROUP_SIZE == 128, "ERROR: BIT_GROUP_SIZE is greater than number of bits in WORD_TYPE");
 
             return u;
           }
 
           // groupsize =1 version:  4 loads, 3 shuffles, 3 logical ops, 1 shift op
-          template <unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS < 128), int>::type = 1>
-          BITS_INLINE __m128i reverse(__m128i const & u) {
+          template <unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS <= 8), __m128i>::type
+          reverse(__m128i const & u) {
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
             // shuffle may be done via register mixing instructions, but may be slower.
@@ -719,108 +770,76 @@ namespace bliss {
             // shuffle of 16 bit can be done via byte-wise shuffle or by 2 calls to shuffle_epi16 plus an or.  probably not faster.
             // CHECK OUT http://www.agner.org/optimize/instruction_tables.pdf for latency and throughput.
 
-            //        print(v, "v");
+            // if bit group is <= 8, then need to shuffle bytes, and then shuffle bits.
+            __m128i v = _mm_shuffle_epi8(u, rev_idx8);
+
+            //== now see if we need to shuffle bits.
+            if (BIT_GROUP_SIZE == 8) return v;
+
+            //== next get the lut indices.
+
+            // lower 4 bits
+            __m128i lo = _mm_and_si128(_mask_lo, v);                                                      // SSE2
+            // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
+            // shift not using si128 - that instruction shifts bytes not bits.
+            __m128i hi = _mm_srli_epi16(_mm_andnot_si128(_mask_lo, v), 4);                                // SSE2
+
+            switch (BIT_GROUP_SIZE) {
+              case 1:
+                //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+                lo = _mm_shuffle_epi8(lut1_hi, lo);                        // SSSE3
+                hi = _mm_shuffle_epi8(lut1_lo, hi);                        // SSSE3
+                break;
+              case 2:
+                //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+                lo = _mm_shuffle_epi8(lut2_hi, lo);                        // SSSE3
+                hi = _mm_shuffle_epi8(lut2_lo, hi);                        // SSSE3
+                break;
+              case 4:
+                lo = _mm_slli_epi16(lo, 4);  // shift lower 4 to upper
+                break;
+              default:
+                break;
+
+            }
+
+            // recombine
+            return _mm_or_si128(lo, hi);                                                                  // SSE2
+          }
+
+          // groupsize =1 version:  4 loads, 3 shuffles, 3 logical ops, 1 shift op
+          template <unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS < 128), __m128i>::type
+          reverse(__m128i const & u) {
+
+            // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
+            // shuffle may be done via register mixing instructions, but may be slower.
+            // shuffle of 32 bit and 64 bit may be done via either byte-wise shuffle, or by shuffle_epi32.  should be same speed except that  1 SO post suggests epi32 has lower latency (1 less load due to imm).
+            // shuffle of 16 bit can be done via byte-wise shuffle or by 2 calls to shuffle_epi16 plus an or.  probably not faster.
+            // CHECK OUT http://www.agner.org/optimize/instruction_tables.pdf for latency and throughput.
 
             __m128i v;
 
             //== first reverse the bit groups via 1 shuffle operation
             switch (BIT_GROUP_SIZE) {
-              case 1:
-              case 2:
-              case 4:
-              case 8:
-                // if bit group is <= 8, then need to shuffle bytes, and then shuffle bits.
-                //TCP1 v = _mm_shuffle_epi8(u, _mm_load_si128((__m128i*) rev_idx8));
-                v = _mm_shuffle_epi8(u, rev_idx8);//TCP1
-                break;                               // SSSE3
               case 16:   // if bit group is 16, then shuffle using epi8
-                //TCP1 v = _mm_shuffle_epi8(u, _mm_load_si128((__m128i*)rev_idx16));
                 v = _mm_shuffle_epi8(u, rev_idx16);//TCP1
                 break;                                // SSSE3
-              case 32: //v = _mm_shuffle_epi8(v, _mm_load_si128((__m128i*)rev_idx32));                               // SSSE3
+              case 32:
                 v = _mm_shuffle_epi32(u, 0x1B);
                 break; // original 11 10 01 00 (high to low) => 00 01 10 11 (high to low) == 0x1B                // SSE2
-              case 64:  //v = _mm_shuffle_epi8(v, _mm_load_si128((__m128i*)rev_idx64));                               // SSSE3
+              case 64:
                 v = _mm_shuffle_epi32(u, 0x4E);
-                break;  // original 11 10 01 00 (high to low) => 01 00 11 10 (high to low) == 0x4E				   // SSE2
+                break;  // original 11 10 01 00 (high to low) => 01 00 11 10 (high to low) == 0x4E           // SSE2
               default:
                 break;
-            }
-            //        print(r, "r");
-
-            //== now see if we need to shuffle bits.
-            if (BIT_GROUP_SIZE < 8) {
-
-              //== next get the lut indices.
-              // load constants:
-//TCP1              __m128i _mask_lo = _mm_load_si128((__m128i*)mask4);                                         // SSE2
-
-              //        print(mask_lo, "mask_lo");
-
-              // lower 4 bits
-              __m128i lo = _mm_and_si128(_mask_lo, v);                                                      // SSE2
-              // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
-              // shift not using si128 - that instruction shifts bytes not bits.
-              __m128i hi = _mm_srli_epi16(_mm_andnot_si128(_mask_lo, v), 4);                                // SSE2
-
-              //        print(lo, "lo");
-              //        print(hi, "hi");
-
-              switch (BIT_GROUP_SIZE) {
-                case 1:
-
-                  //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
-//TCP1                  lo = _mm_shuffle_epi8(_mm_load_si128((__m128i*)lut1_hi), lo);                        // SSSE3
-//TCP1                  hi = _mm_shuffle_epi8(_mm_load_si128((__m128i*)lut1_lo), hi);                        // SSSE3
-                  lo = _mm_shuffle_epi8(lut1_hi, lo);                        // SSSE3
-                  hi = _mm_shuffle_epi8(lut1_lo, hi);                        // SSSE3
-
-                  break;
-                case 2:
-                  //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
-//TCP1                  lo = _mm_shuffle_epi8(_mm_load_si128((__m128i*)lut2_hi), lo);                        // SSSE3
-//TCP1                  hi = _mm_shuffle_epi8(_mm_load_si128((__m128i*)lut2_lo), hi);                        // SSSE3
-                  lo = _mm_shuffle_epi8(lut2_hi, lo);                        // SSSE3
-                  hi = _mm_shuffle_epi8(lut2_lo, hi);                        // SSSE3
-                  break;
-                case 4:
-                  lo = _mm_slli_epi16(lo, 4);  // shift lower 4 to upper
-                  break;
-                default:
-                  break;
-
-              }
-
-              // recombine
-              v =  _mm_or_si128(lo, hi);                                                                  // SSE2
-
-              //      print(res, "result");
             }
 
             return v;
           }
 
-
       };
 
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(rev_idx8, 16, 16);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(rev_idx16, 16, 16);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(rev_idx32, 16, 16);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(rev_idx64, 16, 16);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask4, 16, 16);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(lut1_lo, 16, 16);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(lut1_hi, 16, 16);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(lut2_lo, 16, 16);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(lut2_hi, 16, 16);
 
 
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 128bit)
@@ -836,9 +855,6 @@ namespace bliss {
           const __m128i mask3hi;
 
 
-//          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3lo, 2, 16) = { 0x9249249249249249, 0x4924924924924924 };
-//          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3mid, 2, 16) = { 0x2492492492492492, 0x9249249249249249 };
-//          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3hi, 2, 16) = { 0x4924924924924924, 0x2492492492492492 };
           static constexpr uint8_t BLISS_ALIGNED_ARRAY(mask_all, 32, 16) = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
                                                                 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
@@ -917,6 +933,17 @@ namespace bliss {
 
 
           BITS_INLINE __m128i reverse(__m128i const & u, uint8_t bit_offset = 0 ) {
+            switch ((128 - bit_offset) % 3) {
+              case 0: return reverse<0>(::std::forward<__m128i const>(u)); break;
+              case 1: return reverse<1>(::std::forward<__m128i const>(u)); break;
+              case 2: return reverse<2>(::std::forward<__m128i const>(u)); break;
+              default: return _mm_setzero_si128();
+                break;
+            }
+          }
+
+            template <uint8_t offset = 0>
+            BITS_INLINE __m128i reverse(__m128i const & u ) {
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
             // shuffle may be done via register mixing instructions, but may be slower.
@@ -927,32 +954,16 @@ namespace bliss {
             //        print(v, "v");
 
             //========================== first reverse bits in groups of 1.
-            //__m128i v = bit_rev_1.reverse(u);  // 4 loads, 3 shuffles, 3 logical ops, 1 shift op
-            __m128i v = _mm_shuffle_epi8(u, bit_rev_1.rev_idx8);
-            //== next get the lut indices.
-            // load constants:
-            //__m128i _mask_lo = bit_rev_1._mask_lo;                                         // SSE2
-
-            // lower 4 bits
-            __m128i lo = _mm_and_si128(bit_rev_1._mask_lo, v);                                                      // SSE2
-            // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
-            // shift not using si128 - that instruction shifts bytes not bits.
-            __m128i hi = _mm_srli_epi16(_mm_andnot_si128(bit_rev_1._mask_lo, v), 4);                                // SSE2
-
-            //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
-            lo = _mm_shuffle_epi8(bit_rev_1.lut1_hi, lo);                        // SSSE3
-            hi = _mm_shuffle_epi8(bit_rev_1.lut1_lo, hi);                        // SSSE3
-
-            v =  _mm_or_si128(lo, hi);
+            __m128i v =  bit_rev_1.reverse(u);
             //=========================== done reverse bits in groups of 1
 
             // then get the individual bits.  3 loads, 3 ANDs.
-            lo = _mm_and_si128(v, mask3lo);
+            __m128i lo = _mm_and_si128(v, mask3lo);
             __m128i mid = _mm_and_si128(v, mask3mid);
-            hi = _mm_and_si128(v, mask3hi);
+            __m128i hi = _mm_and_si128(v, mask3hi);
 
             // next shift based on the rem bits.  2 cross boundary shifts = 2 byteshift, 4 shifts, 2 ORs. + 2 ORs.
-            switch ((128 - bit_offset) % 3) {
+            switch (offset) {
               case 2:
                 // rem == 2:                    mid, hi, lo
                 v = _mm_or_si128(srli(mid, 2), _mm_or_si128(lo, slli( hi, 2) ) );
@@ -977,12 +988,6 @@ namespace bliss {
       };
 
       // need the DUMMY template parameter to correctly instantiate here.
-//      template <bool POW2>
-//      constexpr uint64_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3lo, 2, 16);
-//      template <bool POW2>
-//      constexpr uint64_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3mid, 2, 16);
-//      template <bool POW2>
-//      constexpr uint64_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask3hi, 2, 16);
       template <bool POW2>
       constexpr uint8_t bitgroup_ops<3, BIT_REV_SSSE3, POW2>::BLISS_ALIGNED_ARRAY(mask_all, 32, 16);
 
@@ -1175,7 +1180,7 @@ namespace bliss {
 
           /// reverse function to reverse bits for data types are are not __mm256i   (has to be bigger than at least half)
           BITS_INLINE uint8_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint8_t const bit_offset = 0) {
-            if (len == 0) return bit_offset; // throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
+            if ((len * 8) < BIT_GROUP_SIZE) return bit_offset; // throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
             //if (len > 32) throw std::invalid_argument("ERROR:  length of array should be <= 32.  For longer, break it up.");
             assert(len <= 32);
 

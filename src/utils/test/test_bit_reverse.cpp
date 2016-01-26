@@ -117,6 +117,7 @@ class BitReverseTestHelper {
     template <unsigned char BITS = BITS_PER_GROUP, typename std::enable_if<(BITS < 8) && ((BITS & (BITS - 1)) != 0), int>::type = 1>
     bool is_reverse(uint8_t const * orig, uint8_t const* rev, size_t len, uint8_t bit_offset = 0) {
       bool same = true;
+      bool local_same;
 
       if (len == 1) {  // single byte
 
@@ -130,7 +131,9 @@ class BitReverseTestHelper {
         // check the reversed part
         // align test data so the reversed part is at the highest bits
         for (size_t i = bit_offset, j = (8 - bit_offset - BITS); i < (8 - rem); i += BITS, j -= BITS) {
-          same &= ((*orig >> i) & bits_mask) == ((*rev >> j) & bits_mask);
+          local_same = ((*orig >> i) & bits_mask) == ((*rev >> j) & bits_mask);
+
+          same &= local_same;
         }
 
       } else {   // multibyte
@@ -144,7 +147,6 @@ class BitReverseTestHelper {
 
         uint16_t bits_mask = static_cast<uint16_t>(~(0xFFFF << BITS));
 
-        bool local_same;
 
         for (uint8_t i = 0; i < len-1; ++i) {
           --w;

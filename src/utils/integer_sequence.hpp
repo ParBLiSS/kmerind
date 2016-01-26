@@ -25,7 +25,9 @@
  *          useful because Clang only supports 256 levels of recursion.
  *
  *          generalized to use arbitrary primitive type, and therefore also using variadic template types.
- *          NOT YET generalized to allow arbitrary starting offset.
+ *          NOT generalized to allow arbitrary starting offset.
+ *
+ *          this is instead of std::integer_sequence and std::make_integer_sequence in <utility>, which have linear depth instead of logarithmic.
  */
 #ifndef INTEGER_SEQUENCE_HPP_
 #define INTEGER_SEQUENCE_HPP_
