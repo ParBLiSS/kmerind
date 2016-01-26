@@ -1107,7 +1107,7 @@ namespace bliss
      */
     // TODO template specialization for nWords = 1 (just use base type shift)
     // TODO implement more efficient version doing fixed left shift by BITS_PER_CHAR
-    KMER_INLINE void do_left_shift(size_t shift)
+    KMER_INLINE void do_left_shift(size_t const & shift)
     {
       // inspired by STL bitset implementation
       const size_t word_shift = shift / (sizeof(WORD_TYPE)*8);
@@ -1121,7 +1121,7 @@ namespace bliss
   
       if (offset == 0)
       {
-        // no bit shifting, just shift words around
+        // no bit shifting, just shift words around.  do in reverse so don't overwrite.
         for (size_t i = nWords - 1; i >= word_shift; --i)
         {
           data[i] = data[i - word_shift];
@@ -1130,9 +1130,14 @@ namespace bliss
       else
       {
         const size_t inv_offset = sizeof(WORD_TYPE)*8 - offset;
-        for (size_t i = nWords - 1; i > word_shift; --i)
+        WORD_TYPE t = data[nWords - 1 - word_shift];
+        WORD_TYPE t1;
+
+        for (size_t i = nWords - 1, j = nWords - word_shift - 2; i > word_shift; --i, --j)
         {
-          data[i] = ((data[i - word_shift] << offset) | (data[i - word_shift - 1] >> inv_offset));
+          t1 = data[j];
+          data[i] = ((t << offset) | (t1 >> inv_offset));
+          t = t1;
         }
         data[word_shift] = data[0] << offset;
       }
@@ -1149,7 +1154,7 @@ namespace bliss
      */
     // TODO template specialization for nWords = 1 (just use base type shift)
     // TODO implement more efficient version doing fixed right shift by BITS_PER_CHAR
-    KMER_INLINE void do_right_shift(size_t shift)
+    KMER_INLINE void do_right_shift(size_t const & shift)
     {
       // inspired by STL bitset implementation
       const size_t word_shift = shift / (sizeof(WORD_TYPE)*8);
@@ -1172,11 +1177,15 @@ namespace bliss
       else
       {
         const size_t inv_offset = sizeof(WORD_TYPE)*8 - offset;
-        for (size_t i = 0; i < nWords - word_shift - 1; ++i)
+        WORD_TYPE t = data[word_shift];
+        WORD_TYPE t1;
+        for (size_t i = 1; i < nWords - word_shift; ++i)
         {
-          data[i] = ((data[i + word_shift] >> offset) | (data[i + word_shift + 1] << inv_offset));
+          t1 = data[word_shift + i];
+          data[i-1] = ((t >> offset) | (t1 << inv_offset));
+          t = t1;
         }
-        data[nWords - word_shift - 1] = data[nWords-1] >> offset;
+        data[nWords - word_shift - 1] = t >> offset;
       }
       // set all others to 0
 //      std::fill(data + (nWords - word_shift), data + nWords, static_cast<WORD_TYPE>(0));
@@ -1230,7 +1239,8 @@ namespace bliss
         ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data, nWords);
       else
         ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data, nWords);
-      for (uint32_t i = 0; i < nWords; ++i) result.data[i] = ~result.data[i];
+      //for (uint32_t i = 0; i < nWords; ++i) result.data[i] = ~result.data[i];
+      ::bliss::utils::bit_ops::negate(result.data, result.data, nWords);
 
       // TODO: more efficient right shift.
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
@@ -1282,6 +1292,76 @@ namespace bliss
            ((sizeof(WORD_TYPE) * 8) % bitsPerChar != 0), "do reverse complement is not defined for alphabet with size != 2, 3, 4 and word type not a multiple of bits Per char.");
     }
 
+//    template <typename A = ALPHABET,
+//        typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
+//                                    ::std::is_same<A, RNA>::value ||
+//                                    ::std::is_same<A, DNA6>::value ||
+//                                    ::std::is_same<A, RNA6>::value ||
+//                                    ::std::is_same<A, DNA16>::value) &&
+//                                     ((sizeof(WORD_TYPE) * 8) % bitsPerChar == 0), int>::type = 0>
+//    KMER_INLINE Kmer do_reverse_complement(Kmer const & src) const
+//    {
+//
+//      /* Linear (inefficient) reverse:  because we don't have a specialization that supports TO_COMPLEMENT.  do word by word..*/
+//
+//      // get temporary copy of this
+//      Kmer comp, result(false);
+//
+//      // get lower most bits from the temp copy and push them into the lower bits
+//      // of this
+//      WORD_TYPE tmp, tmp2;
+//
+//      ::std::cout << ::std::hex;
+//
+//      // complement all, then reverse.
+//      for (unsigned int i = 0; i < nWords; ++i)
+//      {
+//        tmp = src.data[i];
+//
+//
+//        for (unsigned int j = 0; j < (sizeof(WORD_TYPE) * 8); j += bitsPerChar) {
+////          ::std::cout << "i " << i << " j " << j << " tmp: " << tmp << " ";
+//          tmp2 = tmp & (getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar) << j);  // get the character
+////          ::std::cout << "tmp2: " << tmp2 << " ";
+//          tmp ^= tmp2;        // zero the character in tmp
+////          ::std::cout << "tmp0: " << tmp << " ";
+//          tmp2 = static_cast<WORD_TYPE>(ALPHABET::TO_COMPLEMENT[tmp2 >> j]) << j;  // get the complement of the character
+////          ::std::cout << "tmp2shift " << (tmp2 >> j) << " tmp2c: " << tmp2 << " ";
+//
+//          tmp ^= tmp2;  // replace the char
+////          ::std::cout << "tmpc: " << tmp << ::std::endl;;
+//        }
+//
+//        comp.data[i] = tmp;  // replace the word
+//      }
+//
+//      // now reverse the whole thing sequentially.
+//      bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SEQ>(result.getData(), comp.getData(), nWords);
+//      result.right_shift_bits(nWords * sizeof(WORD_TYPE) * 8 - nBits);  // shift by remainder/padding.
+//
+//
+//
+////      // NOTE: left shift, pop, complement, then push + right shift is O(k * nWords), essentially O(k^2).
+////      Kmer tmp_copy = src;
+////      for (unsigned int i = 0; i < size; ++i)
+////      {
+////        result.do_left_shift(bitsPerChar);   // shifting the whole thing, inefficient but correct,
+////                                            // especially for char that cross word boundaries.
+////
+////        // TODO: make this more efficient by operating on individual words.
+////        tmp = ALPHABET::TO_COMPLEMENT[tmp_copy.data[0] & getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar)];
+////
+////        // copy `bitsperChar` least significant bits
+////        copyBitsFixed<WORD_TYPE, bitsPerChar>(result.data[0], tmp);
+////        tmp_copy.do_right_shift(bitsPerChar);
+////      }
+//
+//      // result already was 0 to begin with, so no need to sanitize
+//
+//      return result;
+//
+//    }
+
     template <typename A = ALPHABET,
         typename ::std::enable_if<!(::std::is_same<A, DNA>::value ||
                                     ::std::is_same<A, RNA>::value ||
@@ -1295,43 +1375,43 @@ namespace bliss
       /* Linear (inefficient) reverse:  because we don't have a specialization that supports TO_COMPLEMENT.  do word by word..*/
 
       // get temporary copy of this
-      Kmer comp, result(false);
+      Kmer result(false);
 
       // get lower most bits from the temp copy and push them into the lower bits
       // of this
-      WORD_TYPE tmp, tmp2;
-
+      WORD_TYPE tmp, tmp2, tmp3;
       ::std::cout << ::std::hex;
+      unsigned int charsPerWord = (sizeof(WORD_TYPE) * 8) / bitsPerChar;
 
       // complement all, then reverse.
       for (unsigned int i = 0; i < nWords; ++i)
       {
         tmp = src.data[i];
+        tmp3 = 0;
 
-
-        for (unsigned int j = 0; j < (sizeof(WORD_TYPE) * 8); j += bitsPerChar) {
+        for (unsigned int j = 0; j < charsPerWord; ++j) {
+          tmp3 <<= bitsPerChar;
 //          ::std::cout << "i " << i << " j " << j << " tmp: " << tmp << " ";
-          tmp2 = tmp & (getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar) << j);  // get the character
+          tmp2 = tmp & getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar);  // get the character
+          tmp >>= bitsPerChar;
 //          ::std::cout << "tmp2: " << tmp2 << " ";
-          tmp ^= tmp2;        // zero the character in tmp
 //          ::std::cout << "tmp0: " << tmp << " ";
-          tmp2 = static_cast<WORD_TYPE>(ALPHABET::TO_COMPLEMENT[tmp2 >> j]) << j;  // get the complement of the character
+          tmp2 = static_cast<WORD_TYPE>(ALPHABET::TO_COMPLEMENT[tmp2]);  // get the complement of the character
 //          ::std::cout << "tmp2shift " << (tmp2 >> j) << " tmp2c: " << tmp2 << " ";
 
-          tmp ^= tmp2;  // replace the char
+          tmp3 |= tmp2;  // replace the char
 //          ::std::cout << "tmpc: " << tmp << ::std::endl;;
         }
 
-        comp.data[i] = tmp;  // replace the word
+        result.data[nWords - 1 - i] = tmp3;  // replace the word
       }
 
       // now reverse the whole thing sequentially.
-      bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SEQ>(result.getData(), comp.getData(), nWords);
+//      bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SEQ>(result.getData(), comp.getData(), nWords);
       result.right_shift_bits(nWords * sizeof(WORD_TYPE) * 8 - nBits);  // shift by remainder/padding.
 
 
-
-//      // NOTE: left shift, pop, complement, then push + right shift is quadratic in k.
+//      // NOTE: left shift, pop, complement, then push + right shift is O(k * nWords), essentially O(k^2).
 //      Kmer tmp_copy = src;
 //      for (unsigned int i = 0; i < size; ++i)
 //      {
