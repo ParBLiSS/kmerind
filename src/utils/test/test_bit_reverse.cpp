@@ -254,7 +254,7 @@ TYPED_TEST_P(BitReverseTest, reverse_uint8)
 
       WORD_TYPE out = op.reverse(in);
 
-      EXPECT_TRUE(this->is_reverse(in, out));
+      ASSERT_TRUE(this->is_reverse(in, out));
     }
   }  // else too large, so don't do the test.
 
@@ -274,7 +274,7 @@ TYPED_TEST_P(BitReverseTest, reverse_uint16)
 
       WORD_TYPE out = op.reverse(in);
 
-      EXPECT_TRUE(this->is_reverse(in, out));
+      ASSERT_TRUE(this->is_reverse(in, out));
     }
   }  // else too large, so don't do the test.
 
@@ -294,7 +294,7 @@ TYPED_TEST_P(BitReverseTest, reverse_uint32)
 
       WORD_TYPE out = op.reverse(in);
 
-      EXPECT_TRUE(this->is_reverse(in, out));
+      ASSERT_TRUE(this->is_reverse(in, out));
     }
   }  // else too large, so don't do the test.
 
@@ -315,7 +315,7 @@ TYPED_TEST_P(BitReverseTest, reverse_uint64)
 
       WORD_TYPE out = op.reverse(in);
 
-      EXPECT_TRUE(this->is_reverse(in, out));
+      ASSERT_TRUE(this->is_reverse(in, out));
     }
   }  // else too large, so don't do the test.
 
@@ -408,7 +408,6 @@ typedef ::testing::Types<
                  ::bliss::utils::bit_ops::bitgroup_ops<32, ::bliss::utils::bit_ops::BIT_REV_SWAR>
 > BitReverseTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseTest, BitReverseTestTypes);
-
 
 
 #ifdef __SSSE3__
@@ -560,7 +559,7 @@ TYPED_TEST_P(BitReverseAVX2Test, reverse_m256i)
 
     __m256i out = op.reverse(in);
 
-    EXPECT_TRUE(this->is_reverse(in, out));
+    ASSERT_TRUE(this->is_reverse(in, out));
   }  // else too large, so don't do the test.
 
 }
@@ -608,7 +607,7 @@ TYPED_TEST_P(BitReverseAVX2Test, reverse_short_array)
             printf("array size = %d, offset = %d, input byte offset = %d \n", i, j, k);
           }
 
-          EXPECT_TRUE(same);
+          ASSERT_TRUE(same);
         }
       }
     } else {
@@ -623,7 +622,7 @@ TYPED_TEST_P(BitReverseAVX2Test, reverse_short_array)
           printf("array size = %d\n", i);
         }
 
-        EXPECT_TRUE(same);
+        ASSERT_TRUE(same);
       }
     }
   }
@@ -715,4 +714,5 @@ typedef ::testing::Types<
     BitsParam<32>
 > BitReverseLongArrayTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseLongArrayTest, BitReverseLongArrayTestTypes);
+
 

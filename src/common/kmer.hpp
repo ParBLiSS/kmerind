@@ -1380,7 +1380,7 @@ namespace bliss
       // get lower most bits from the temp copy and push them into the lower bits
       // of this
       WORD_TYPE tmp, tmp2, tmp3;
-      ::std::cout << ::std::hex;
+//      ::std::cout << ::std::hex;
       unsigned int charsPerWord = (sizeof(WORD_TYPE) * 8) / bitsPerChar;
 
       // complement all, then reverse.
@@ -1396,11 +1396,11 @@ namespace bliss
           tmp >>= bitsPerChar;
 //          ::std::cout << "tmp2: " << tmp2 << " ";
 //          ::std::cout << "tmp0: " << tmp << " ";
-          tmp2 = static_cast<WORD_TYPE>(ALPHABET::TO_COMPLEMENT[tmp2]);  // get the complement of the character
-//          ::std::cout << "tmp2shift " << (tmp2 >> j) << " tmp2c: " << tmp2 << " ";
+          tmp2 = static_cast<WORD_TYPE>(ALPHABET::to_complement(tmp2));  // get the complement of the character
+//          ::std::cout << "tmp2c: " << tmp2 << " ";
 
           tmp3 |= tmp2;  // replace the char
-//          ::std::cout << "tmpc: " << tmp << ::std::endl;;
+//          ::std::cout << "tmpc: " << tmp3 << ::std::endl;;
         }
 
         result.data[nWords - 1 - i] = tmp3;  // replace the word

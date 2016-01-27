@@ -95,6 +95,9 @@ namespace bliss
         /// complement lookup table
         static constexpr std::array<uint8_t, SIZE> TO_COMPLEMENT = bliss::utils::make_array<uint8_t, 256>();
 
+        static inline uint8_t to_complement(uint8_t const & x) {
+        	return x;
+        }
       };
 
       template <typename DUMMY>
@@ -160,6 +163,11 @@ namespace bliss
           1,  // = 2    g->c
           0   // = 3    t->a
         }};
+
+        static inline uint8_t to_complement(uint8_t const & x) {
+        	return 3 - x;
+        }
+
       };
 
       template <typename DUMMY>
@@ -251,6 +259,11 @@ namespace bliss
         static constexpr uint8_t from_ascii(uint8_t ascii) {
           return FROM_ASCII[ascii];
         }
+
+        static inline uint8_t to_complement(uint8_t const & x) {
+        	return (0x73516240 >> (x * 4)) & 0xF;
+        }
+
       };
 
       template <typename DUMMY>
@@ -384,6 +397,10 @@ namespace bliss
         0   // = 3
       }};
 
+      static inline uint8_t to_complement(uint8_t const & x) {
+      	return 3 - x;
+      }
+
     };
     
     template <typename DUMMY>
@@ -474,6 +491,11 @@ namespace bliss
       static constexpr uint8_t from_ascii(uint8_t ascii) {
         return FROM_ASCII[ascii];
       }
+
+      static inline uint8_t to_complement(uint8_t const & x) {
+      	return (0x73516240 >> (x * 4)) & 0xF;
+      }
+
     };
     
     template <typename DUMMY>
@@ -640,6 +662,10 @@ namespace bliss
         15  // = 15 1111  N      N->N  N            1111
       }};
 
+      static inline uint8_t to_complement(uint8_t const & x) {
+      	return (0xF7B3D591E6A2C481 >> (x*4)) & 0xF;
+      }
+
     };
 
 
@@ -745,6 +771,9 @@ namespace bliss
           15  // = 15 1111  N      N->N  N            1111
         }};// good table of complements: http://www.dnabaser.com/articles/IUPAC%20ambiguity%20codes.html
 
+        static inline uint8_t to_complement(uint8_t const & x) {
+        	return (0xF7B3D591E6A2C480 >> (x*4)) & 0xF;
+        }
 
     };
       template <typename DUMMY>

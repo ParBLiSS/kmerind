@@ -242,6 +242,7 @@ namespace bliss {
 //            static_assert(BIT_GROUP_SIZE == (sizeof(WORD_TYPE) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in WORD_TYPE");
             return v;
           }
+
           template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS < (sizeof(WORD_TYPE) * 8)), int>::type = 1>
           BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & v, uint8_t bit_offset = 0) {
 
@@ -529,7 +530,7 @@ namespace bliss {
           // dispatcher
           template <typename WORD_TYPE>
           BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & u, uint8_t const & bit_offset) {
-            switch ((sizeof(WORD_TYPE) * 8 - bit_offset) % 3) {
+            switch (bit_offset % 3) {
               case 0: return reverse<WORD_TYPE, 0>(::std::forward<WORD_TYPE const>(u)); break;
               case 1: return reverse<WORD_TYPE, 1>(::std::forward<WORD_TYPE const>(u)); break;
               case 2: return reverse<WORD_TYPE, 2>(::std::forward<WORD_TYPE const>(u)); break;
@@ -551,7 +552,7 @@ namespace bliss {
             // note that remainders are at low bits now, so we need 3 patterns for shifting.
 
             // 2 shifts, 2 ors, 3 ands
-            switch (offset) {
+            switch ((sizeof(WORD_TYPE) * 8 - offset) % 3) {
               case 2:
                 // rem == 2:                    mid, hi, lo
                 v = ((v & mask3mid) >>  2) | (v & mask3lo ) | ((v & mask3hi ) << 2);
@@ -933,7 +934,7 @@ namespace bliss {
 
 
           BITS_INLINE __m128i reverse(__m128i const & u, uint8_t bit_offset = 0 ) {
-            switch ((128 - bit_offset) % 3) {
+            switch (bit_offset % 3) {
               case 0: return reverse<0>(::std::forward<__m128i const>(u)); break;
               case 1: return reverse<1>(::std::forward<__m128i const>(u)); break;
               case 2: return reverse<2>(::std::forward<__m128i const>(u)); break;
@@ -963,7 +964,7 @@ namespace bliss {
             __m128i hi = _mm_and_si128(v, mask3hi);
 
             // next shift based on the rem bits.  2 cross boundary shifts = 2 byteshift, 4 shifts, 2 ORs. + 2 ORs.
-            switch (offset) {
+            switch ((128 - offset) % 3) {
               case 2:
                 // rem == 2:                    mid, hi, lo
                 v = _mm_or_si128(srli(mid, 2), _mm_or_si128(lo, slli( hi, 2) ) );
@@ -1045,6 +1046,52 @@ namespace bliss {
         return _mm256_or_si256(_mm256_slli_epi64(v2, 64 - bit64_shift), _mm256_srli_epi64(v1, bit64_shift));
       }
 
+      /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
+      template <uint8_t shift>
+      BITS_INLINE __m256i srli(__m256i val) {
+    	  if (shift == 0) return val;
+    	  if (shift >= 256) return _mm256_setzero_si256();
+
+    	// goal:  get next higher 64 bits to current position.
+    	  // conditionals:  shift byt 0 to 63, 64 to 128, 128 to 192, and 192 to 256
+    	  // code below can be modified to shift up to 64 bits, and with conditional, up to 128 bits?
+    	  // 64, 192: p+alignr is enough
+    	  // 128: permute is enough
+    	  // 0-63:  same as below - 5 instructions
+    	  // 65-127, 129-191: permute + 2 alignr, then or(slli, srli)  total 6 instructions
+    	  // 193-255: permute + alignr, then right shift. 3 instructions
+
+    	  //alternatives:  permute4x64 (all 256bits, but can't zero), s(l/r)li_si256 (128 bit lanes)
+    	 // alternative, do the 64 bit shift, then do remaining.
+
+        // shuffle to get the 8th byte into the 9th position.  shuffle and slli operate on 128 bit lanes only, so do alignr and permute2x128 instead
+        // alternative:  alignr.  2 inputs: a, b.  output composition is lowest shift bytes from the 2 lanes of a become the high bytes in the 2 lanes, in order,
+        //                              and highest 16-shift bytes from b's 2 lanes are the lower bytes in teh 2 lanes of output.
+        //                        to shift right, b = val, N = 1, lower lane of a should be upper lane of val, upper lane of a should be 0.  possibly 2 ops. permute latency is 3
+        __m256i hi = _mm256_permute2x128_si256(val, val, 0x83);  // 1000.0011 higher lane is 0, lower lane is higher lane of val
+        if (shift == 128) return hi;
+
+        constexpr uint_fast8_t byte_shift = (shift & 0xC0) >> 3;  // multiple of 8 bytes, so that we can avoid some ors.
+        __m256i v1 = _mm256_alignr_epi8(hi, val, byte_shift); // alignr:  src1 low OR src2 low, then right shift bytes, put into output low.  same with high
+
+        constexpr uint_fast8_t bit64_shift = shift & 0x3F;        // shift within the 64 bit block
+
+        if (bit64_shift == 0) return v1;  // exact byte alignment.  return it.
+        // together, permute puts the high lane in low of tmp, then tmp and val's low parts are shifted, and high parts are shifted.
+        //    0   hi
+        //    hi  lo    => dest_lo =  hi lo shift
+        //                 dest_hi =   0 hi shift
+        if (byte_shift == 24) return _mm256_srli_epi64(v1, bit64_shift);
+
+        // else we need one more alignr
+        __m256i v2 = _mm256_alignr_epi8(hi, val, byte_shift + 8);
+
+        // then left shift to get the bits in the right place
+        // shift the input value via epi64 by the number of shifts
+        // then or together.
+        return _mm256_or_si256(_mm256_slli_epi64(v2, 64 - bit64_shift), _mm256_srli_epi64(v1, bit64_shift));
+      }
+
 
 
       /// shift left by number of bits less than 8.
@@ -1101,6 +1148,61 @@ namespace bliss {
         return _mm256_or_si256(_mm256_srli_epi64(lv, 64 - shift), _mm256_slli_epi64(rv, bit64_shift));
       }
 
+
+      /// shift left by number of bits less than 8.
+      template <uint8_t shift>
+      BITS_INLINE __m256i slli(__m256i val) {
+    	  if (shift == 0) return val;
+    	  if (shift >= 256) return _mm256_setzero_si256();
+
+    	  // val is  A B C D
+
+        // shuffle to get the 8th byte into the 9th position.  shuffle and slli operate on 128 bit lanes only, so do alignr and permute2x128 instead
+        // alternative:  alignr.  2 inputs: a, b.  output composition is lowest shift bytes from the 2 lanes of a become the high bytes in the 2 lanes, in order,
+        //                              and highest 16-shift bytes from b's 2 lanes are the lower bytes in teh 2 lanes of output.
+        //                        to shift left, a = val, N = 15, lower lane of b should be 0, higher lane of b should be lower lane of val.  possibly 2 ops, permute latency is 3.
+        __m256i lo = _mm256_permute2x128_si256(val, val, 0x08);  // lower lane is 0, higher lane is lower lane of val
+        if (shift == 128) return lo;   // lo is C D 0 0
+
+        // together, permute puts the high lane in low of tmp, then tmp and val's low parts are shifted, and high parts are shifted.
+        //    hi  lo
+        //    lo   0    => dest_lo =  hi lo shift
+        //                 dest_hi =   0 hi shift
+        //uint_fast8_t byte_shift = (shift & 0xC0) >> 3;  // multiple of 8 bytes, so that we can avoid some ors.
+
+        // TODO - left shift is trickier.
+		__m256i v1 = (shift < 128) ? _mm256_alignr_epi8(val, lo, 8) :  // permute essentially shifted by 16
+				//  else shift > 128
+									 _mm256_permute4x64_epi64(lo, 0x80); // permute and shift lo left more.  2 0 0 0 -> 0x80
+		// if shift < 128, v1 is B C D 0.  else v1 is D 0 0 0
+
+        constexpr uint_fast8_t bit64_shift = shift & 0x3F;        // shift within the 64 bit block
+
+        if (bit64_shift == 0) return v1;
+
+        // then left shift to get the bits in the right place
+        // shift the input value via epi64 by the number of shifts
+        // then or together.
+        __m256i lv, rv;
+        switch (shift >> 6) {
+			case 0:
+				rv = val; lv = v1; break;  // shift is < 64.  shift ABCD left and BCD0 right
+			case 1:
+				rv = v1; lv = lo; break;  // shift is < 128.  shift BCD0 left and CD00 right
+			case 2:
+				rv = lo; lv = v1; break;  // shift is < 192.  shift CD00 left and D000 right
+			case 3:
+				return _mm256_slli_epi64(v1, bit64_shift);  // shift is > 192, shift D000 left
+			default:
+				break;
+        };
+
+        // then left shift to get the bits in the right place
+        // shift the input value via epi64 by the number of shifts
+        // then or together.
+        return _mm256_or_si256(_mm256_srli_epi64(lv, 64 - shift), _mm256_slli_epi64(rv, bit64_shift));
+      }
+
       template <>
       BITS_INLINE __m256i negate(__m256i const & u) {
         return _mm256_xor_si256(u, _mm256_cmpeq_epi8(u, u));  // no native negation operator
@@ -1112,36 +1214,6 @@ namespace bliss {
           static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE is 0");
           static_assert(BIT_GROUP_SIZE < 256, "ERROR: BIT_GROUP_SIZE is greater than number of bits in __m256i");
           static_assert((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0, "ERROR: BIT_GROUP_SIZE is has to be powers of 2");
-
-
-
-//          /// index for reversing the bytes in groups of varying size (8: 1 byte; 16: 2 bytes, etc.)
-//          static constexpr uint8_t  BLISS_ALIGNED_ARRAY(rev_idx_lane8, 32, 32) = {0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00,
-//                                                                     0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00};
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx_lane16, 32, 32)  = {0x0E,0x0F,0x0C,0x0D,0x0A,0x0B,0x08,0x09,0x06,0x07,0x04,0x05,0x02,0x03,0x00,0x01,
-//                                                                     0x0E,0x0F,0x0C,0x0D,0x0A,0x0B,0x08,0x09,0x06,0x07,0x04,0x05,0x02,0x03,0x00,0x01};
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx32, 32, 32)  = {0x07,0x00,0x00,0x00,0x06,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x04,0x00,0x00,0x00,
-//                                                                0x03,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-//          //          static constexpr uint8_t BLISS_ALIGNED_ARRAY(rev_idx64, 32, 32) = {0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
-//          //        		  0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07};
-//
-//
-//          /// mask for lower 4 bits
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(mask4, 32, 32) = {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,
-//                                                            0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F};
-//
-//          /// lookup table for reversing bits in a byte in bit groups of 1
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut1_lo, 32, 32) = {0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f,
-//                                                               0x00,0x08,0x04,0x0c,0x02,0x0a,0x06,0x0e,0x01,0x09,0x05,0x0d,0x03,0x0b,0x07,0x0f};
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut1_hi, 32, 32) = {0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0,
-//                                                              0x00,0x80,0x40,0xc0,0x20,0xa0,0x60,0xe0,0x10,0x90,0x50,0xd0,0x30,0xb0,0x70,0xf0};
-//
-//          /// lookup table for reversing bits in a byte in bit groups of 2
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut2_lo, 32, 32) = {0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f,
-//                                                              0x00,0x04,0x08,0x0c,0x01,0x05,0x09,0x0d,0x02,0x06,0x0a,0x0e,0x03,0x07,0x0b,0x0f};
-//          static constexpr uint8_t BLISS_ALIGNED_ARRAY(lut2_hi, 32, 32) = {0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0,
-//                                                              0x00,0x40,0x80,0xc0,0x10,0x50,0x90,0xd0,0x20,0x60,0xa0,0xe0,0x30,0x70,0xb0,0xf0};
-
 
           const __m256i rev_idx_lane8;
           const __m256i rev_idx_lane16;
@@ -1219,14 +1291,67 @@ namespace bliss {
 
 
 
-          template <unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS >= 256), int>::type = 1>
-          BITS_INLINE __m256i reverse(__m256i const & u) {
+          template <unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS >= 256), __m256i>::type
+          reverse(__m256i const & u) {
             static_assert(BIT_GROUP_SIZE == 256, "ERROR: BIT_GROUP_SIZE is greater than number of bits in WORD_TYPE");
 
             return u;
           }
-          template <unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS < 256), int>::type = 1>
-          BITS_INLINE __m256i reverse(__m256i const & u) {
+
+          template <unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS <= 8), __m256i>::type
+          reverse(__m256i const & u) {
+
+            // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
+            // shuffle may be done via register mixing instructions, but may be slower.
+            // shuffle of 32 bit and 64 bit may be done via either byte-wise shuffle, or by shuffle_epi32.  should be same speed except that  1 SO post suggests epi32 has lower latency (1 less load due to imm).
+            // shuffle of 16 bit can be done via byte-wise shuffle or by 2 calls to shuffle_epi16 plus an or.  probably not faster.
+            // CHECK OUT http://www.agner.org/optimize/instruction_tables.pdf for latency and throughput.
+
+            __m256i v = u;
+
+            // if bit group is <= 8, then need to shuffle bytes, and then shuffle bits.
+            v = _mm256_shuffle_epi8(v, rev_idx_lane8);     // reverse 8 in each of 128 bit lane          // AVX2
+            v = _mm256_permute2x128_si256(v, v, 0x03);							    // then swap the lanes                           // AVX2.  latency = 3
+
+            //== now see if we need to shuffle bits.
+            if (BITS == 8) return v;
+			//== next get the lut indices.
+
+			// lower 4 bits
+			__m256i lo = _mm256_and_si256(_mask_lo, v); // no and_si256.  had to cast to ps first.           // AVX2
+			// upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
+			// shift not using si128 - that instruction shifts bytes not bits.
+			__m256i hi = _mm256_srli_epi16(_mm256_andnot_si256(_mask_lo, v), 4);                                // AVX2
+
+			switch (BIT_GROUP_SIZE) {
+			case 1:
+			  //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+			  lo = _mm256_shuffle_epi8(lut1_hi, lo);                        // AVX2
+			  hi = _mm256_shuffle_epi8(lut1_lo, hi);                        // AVX2
+			  break;
+			case 2:
+			  //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+			  lo = _mm256_shuffle_epi8(lut2_hi, lo);                        // AVX2
+			  hi = _mm256_shuffle_epi8(lut2_lo, hi);                        // AVX2
+			  break;
+			case 4:
+			  lo = _mm256_slli_epi16(lo, 4);  // shift lower 4 to upper										//AVX2
+			  break;
+			default:
+			  break;
+			}
+
+			// recombine
+			return _mm256_or_si256(lo, hi);                                                                  // AVX2
+
+          }
+
+
+          template <unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS < 256), __m256i>::type
+          reverse(__m256i const & u) {
 
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
@@ -1235,103 +1360,32 @@ namespace bliss {
             // shuffle of 16 bit can be done via byte-wise shuffle or by 2 calls to shuffle_epi16 plus an or.  probably not faster.
             // CHECK OUT http://www.agner.org/optimize/instruction_tables.pdf for latency and throughput.
 
-            //        print(v, "v");
             __m256i v = u;
 
             //== first reverse the bit groups via 1 shuffle operation
             switch (BIT_GROUP_SIZE) {
-              case 1:
-              case 2:
-              case 4:
-              case 8:
-                // if bit group is <= 8, then need to shuffle bytes, and then shuffle bits.
-                v = _mm256_shuffle_epi8(v, rev_idx_lane8);     // reverse 8 in each of 128 bit lane          // AVX2
-                v = _mm256_permute2x128_si256(v, v, 0x03);							    // then swap the lanes                           // AVX2.  latency = 3
-                break;
               case 16:
                 v = _mm256_shuffle_epi8(v, rev_idx_lane16);     // reverse 16 in each of 128 bit lane         // AVX2
                 v = _mm256_permute2x128_si256(v, v, 0x03);							    // then swap the lanes							 // AVX2  latency = 3
                 break;
               case 32:
-                //v = _mm_shuffle_epi8(v, _mm_load_si128((__m128i*)rev_idx32));                               // SSSE3
                 v = _mm256_permutevar8x32_epi32(v, rev_idx32);                         // AVX2 latency = 3
                 break; // original 11 10 01 00 (high to low) => 00 01 10 11 (high to low) == 0x1B          // AVX2
               case 64:
-                //v = _mm_shuffle_epi8(v, _mm_load_si128((__m128i*)rev_idx64));                               // SSSE3
                 v = _mm256_permute4x64_epi64(v, 0x1B);                                                              // AVX2 latency = 3
                 break; // original 11 10 01 00 (high to low) => 00 01 10 11 (high to low) == 0x1B         // AVX2
               case 128:
-                //v = _mm_shuffle_epi8(v, _mm_load_si128((__m128i*)rev_idx64));                               // SSSE3
                 v = _mm256_permute2x128_si256(v, v, 0x03);                                                         // AVX2 latency = 3
                 break; //  low half of first -> hi, high half of second -> low  (coding is 0 1 2 3 => a_lo, a_hi, b_lo, b_hi)  // AVX2
               default:
                 break;
             }
 
-            //        print(r, "r");
-
-            //== now see if we need to shuffle bits.
-            if (BIT_GROUP_SIZE < 8) {
-
-              //== next get the lut indices.
-              // load constants:
-              //__m256i _mask_lo = _mm256_load_si256((__m256i*)mask4);                                         // AVX
-
-              //        print(mask_lo, "mask_lo");
-
-              // lower 4 bits
-              __m256i lo = _mm256_and_si256(_mask_lo, v); // no and_si256.  had to cast to ps first.           // AVX2
-              // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
-              // shift not using si128 - that instruction shifts bytes not bits.
-              __m256i hi = _mm256_srli_epi16(_mm256_andnot_si256(_mask_lo, v), 4);                                // AVX2
-
-              //        print(lo, "lo");
-              //        print(hi, "hi");
-
-              switch (BIT_GROUP_SIZE) {
-                case 1:
-                  //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
-                  lo = _mm256_shuffle_epi8(lut1_hi, lo);                        // AVX2
-                  hi = _mm256_shuffle_epi8(lut1_lo, hi);                        // AVX2
-                  break;
-                case 2:
-                  //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
-                  lo = _mm256_shuffle_epi8(lut2_hi, lo);                        // AVX2
-                  hi = _mm256_shuffle_epi8(lut2_lo, hi);                        // AVX2
-                  break;
-                case 4:
-                  lo = _mm256_slli_epi16(lo, 4);  // shift lower 4 to upper										//AVX2
-                  break;
-                default:
-                  break;
-              }
-
-              // recombine
-              v =  _mm256_or_si256(lo, hi);                                                                  // AVX2
-
-              //      print(res, "result");
-            }
             return v;
           }
 
       };
 
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(rev_idx_lane8, 32, 32);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(rev_idx_lane16, 32, 32);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(rev_idx32, 32, 32);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask4, 32, 32);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(lut1_lo, 32, 32);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(lut1_hi, 32, 32);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(lut2_lo, 32, 32);
-//      template <unsigned int BIT_GROUP_SIZE, bool POW2>
-//      constexpr uint8_t bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(lut2_hi, 32, 32);
 
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 128bit)
       template <bool POW2>
@@ -1341,9 +1395,6 @@ namespace bliss {
           static constexpr unsigned int bitsPerGroup = 3;
           static constexpr unsigned char simd_type = BIT_REV_AVX2;
 
-//          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3lo, 4, 32) = { 0x9249249249249249, 0x4924924924924924, 0x2492492492492492, 0x9249249249249249 };
-//          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3mid, 4, 32) = { 0x2492492492492492, 0x9249249249249249, 0x4924924924924924, 0x2492492492492492 };
-//          static constexpr uint64_t BLISS_ALIGNED_ARRAY(mask3hi, 4, 32) = { 0x4924924924924924, 0x2492492492492492, 0x9249249249249249, 0x4924924924924924 };
           static constexpr uint8_t BLISS_ALIGNED_ARRAY(mask_all, 64, 32) = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
                                                                 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
                                                                 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -1361,9 +1412,6 @@ namespace bliss {
             mask3mid(_mm256_setr_epi32(0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924)),
             mask3hi( _mm256_setr_epi32(0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249))
           {}
-
-
-
 
 
           static ::std::string toString(__m256i const & v) {
@@ -1432,6 +1480,17 @@ namespace bliss {
           }
 
           BITS_INLINE __m256i reverse(__m256i const & u, uint8_t bit_offset = 0 ) {
+            switch (bit_offset % 3) {
+              case 0: return reverse<0>(::std::forward<__m256i const>(u)); break;
+              case 1: return reverse<1>(::std::forward<__m256i const>(u)); break;
+              case 2: return reverse<2>(::std::forward<__m256i const>(u)); break;
+              default: return _mm256_setzero_si256();
+                break;
+            }
+          }
+
+          template <uint8_t offset = 0>
+          BITS_INLINE __m256i reverse(__m256i const & u) {
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
             // shuffle may be done via register mixing instructions, but may be slower.
@@ -1442,78 +1501,37 @@ namespace bliss {
             //        print(v, "v");
 
             //========================== first reverse bits in groups of 1.
-            //__m256i v = bit_rev_1.reverse(u);  // 4 loads, 3 shuffles, 3 logical ops, 1 shift op
-
-            //== first reverse the bit groups via 1 shuffle operation
-            // if bit group is <= 8, then need to shuffle bytes, and then shuffle bits.
-            __m256i v = _mm256_shuffle_epi8(u, bit_rev_1.rev_idx_lane8);     // reverse 8 in each of 128 bit lane          // AVX2
-            v = _mm256_permute2x128_si256(v, v, 0x03);                  // then swap the lanes                           // AVX2.  latency = 3
-
-            //== next get the lut indices.
-            // load constants:
-            //__m256i _mask_lo = _mm256_load_si256((__m256i*)bitgroup_ops<1, BIT_REV_AVX2, true>::mask4);                                         // AVX
-
-            // lower 4 bits
-            __m256i lo = _mm256_and_si256(bit_rev_1._mask_lo, v); // no and_si256.  had to cast to ps first.           // AVX2
-            // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
-            // shift not using si128 - that instruction shifts bytes not bits.
-            __m256i hi = _mm256_srli_epi16(_mm256_andnot_si256(bit_rev_1._mask_lo, v), 4);                                // AVX2
-
-            //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
-            lo = _mm256_shuffle_epi8(bit_rev_1.lut1_hi, lo);                        // AVX2
-            hi = _mm256_shuffle_epi8(bit_rev_1.lut1_lo, hi);                        // AVX2
-
-            // recombine
-            v =  _mm256_or_si256(lo, hi);                                                                  // AVX2
+            __m256i v = bit_rev_1.reverse(u);
             //=========================== done reverse bits in groups of 1.
 
 
             // then get the individual bits.  3 loads, 3 ORs.
-            lo = _mm256_and_si256(v, mask3lo);
+            __m256i lo = _mm256_and_si256(v, mask3lo);
             __m256i mid = _mm256_and_si256(v, mask3mid);
-            hi = _mm256_and_si256(v, mask3hi);
-
-            __m256i tmp ;
+            __m256i hi = _mm256_and_si256(v, mask3hi);
 
             // next shift based on the rem bits.  2 cross boundary shifts = 2 byteshift, 4 shifts, 2 ORs. + 2 ORs.
-            if (((256 - bit_offset) % 3) == 2) {
+            switch ((256 - offset) % 3) {
+            case 2:
               // rem == 2:                    mid, hi, lo
-              tmp  = srli(mid, 2);
-              mid = lo;
-              lo = tmp;
-              hi  = slli( hi, 2);
-
-            } else if (((256 - bit_offset) % 3) == 1) {
+              v = _mm256_or_si256(srli(mid, 2), _mm256_or_si256(lo, slli(hi, 2)) );
+              break;
+            case 1:
               // rem == 1:                    hi, lo, mid
-              lo  = srli(lo, 2);
-              tmp = slli(mid, 2);
-              mid = hi;
-              hi  = tmp;
-            } else {
+                v = _mm256_or_si256(srli(lo, 2), _mm256_or_si256(hi, slli(mid, 2)) );
+              break;
+            default:
               // rem == 0:  first 3 bits are: lo, mid, hi in order of significant bits
-              tmp  = srli(hi, 2);
-              // mid = mid
-              hi  = slli(lo, 2);
-              lo = tmp;
+                v = _mm256_or_si256(srli(hi, 2), _mm256_or_si256(mid, slli(lo, 2)) );
+              break;
             }
-
-            v = _mm256_or_si256(lo, _mm256_or_si256(mid, hi) );
-
             // alternatively,  for cross-boundary shift, do byte shift, and reverse shift (8-bit_offset), then or. with shifted (offset)->  each CBS is finished in 4 ops w/o load.
-
-
             return v;
           }
 
 
       };
 
-//      template <bool POW2>
-//      constexpr uint64_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3lo, 4, 32);
-//      template <bool POW2>
-//      constexpr uint64_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3mid, 4, 32);
-//      template <bool POW2>
-//      constexpr uint64_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask3hi, 4, 32);
       template <bool POW2>
       constexpr uint8_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask_all, 64, 32);
 
