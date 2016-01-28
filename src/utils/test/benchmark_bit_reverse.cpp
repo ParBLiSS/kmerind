@@ -324,24 +324,6 @@ class BitReverseArrayBenchmark : public ::testing::Test {
       TIMER_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
     }
 
-    template <typename P2 = P>
-    void array_test_seq( std::string name ) {
-      uint8_t BLISS_ALIGNED_ARRAY(out, 384, 32);
-
-      TIMER_START(this->bitrev);
-//      TIMER_LOOP_START(this->bitrev);
-      memcpy(out, this->helper.input, 384);
-
-      for (size_t iter = 0; iter < BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters; ++iter) {
-
-//        TIMER_LOOP_RESUME(this->bitrev);
-        bliss::utils::bit_ops::reverse<P2::bitsPerGroup, bliss::utils::bit_ops::BIT_REV_SEQ>(out + (iter + 119) % 238, out + (iter % 238), 128);
-//        TIMER_LOOP_PAUSE(this->bitrev);
-      }
-//      TIMER_LOOP_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
-      TIMER_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
-
-    }
 
 
   public:
@@ -371,7 +353,7 @@ TYPED_TEST_CASE_P(BitReverseArrayBenchmark);
 
 TYPED_TEST_P(BitReverseArrayBenchmark, reverse_short_array)
 {
-   this->array_test_seq("seq");
+   this->template array_test<::bliss::utils::bit_ops::BIT_REV_SEQ>("seq");
    this->template array_test<::bliss::utils::bit_ops::BIT_REV_SWAR>("swar");
 #ifdef __SSSE3__
    this->template array_test<::bliss::utils::bit_ops::BIT_REV_SSSE3>("ssse3");
@@ -400,6 +382,87 @@ typedef ::testing::Types<
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseArrayBenchmark, BitReverseArrayBenchmarkTypes);
 
 
+
+
+//====================== fix bitgroup size and total number of bytes, check effect of maximum simd type.
+//   this is testing converting the whole array.
+
+template <typename P>
+class BitReverseFixedArrayBenchmark : public ::testing::Test {
+  protected:
+
+    BitReverseBenchmarkHelper<P::bitsPerGroup> helper;
+
+    template <uint8_t MAX_SIMD_TYPE, typename P2 = P>
+    void array_test( std::string name ) {
+      uint8_t data[256][128];
+
+      for (int i = 0; i < 256; ++i) {
+        memcpy(data[i], this->helper.input + i, 128);
+      }
+
+      TIMER_START(this->bitrev);
+      for (size_t iter = 0; iter < BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters; ++iter) {
+        ::bliss::utils::bit_ops::template reverse<P2::bitsPerGroup, MAX_SIMD_TYPE>( data[(iter + 119) % 238], data[(iter % 238)]);  // input from 0 to 256. output from 128-256, then 0 to 128
+      }
+      TIMER_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
+    }
+
+
+  public:
+#if BENCHMARK == 1
+    static TIMER_INIT(bitrev);
+#else
+    TIMER_INIT(bitrev); // does nothing
+#endif
+    static constexpr uint8_t bits = P::bitsPerGroup;
+
+    static void TearDownTestCase() {
+      TIMER_REPORT(BitReverseFixedArrayBenchmark<P>::bitrev, BitReverseFixedArrayBenchmark<P>::bits);
+    }
+
+};
+
+#if BENCHMARK == 1
+template <typename P>
+Timer BitReverseFixedArrayBenchmark<P>::bitrev_timer;
+#endif
+template <typename P>
+constexpr uint8_t BitReverseFixedArrayBenchmark<P>::bits;
+
+// indicate this is a typed test
+TYPED_TEST_CASE_P(BitReverseFixedArrayBenchmark);
+
+
+TYPED_TEST_P(BitReverseFixedArrayBenchmark, reverse_fixed_array)
+{
+   this->template array_test<::bliss::utils::bit_ops::BIT_REV_SEQ>("seq");
+   this->template array_test<::bliss::utils::bit_ops::BIT_REV_SWAR>("swar");
+#ifdef __SSSE3__
+   this->template array_test<::bliss::utils::bit_ops::BIT_REV_SSSE3>("ssse3");
+#endif
+#ifdef __AVX2__
+   this->template array_test<::bliss::utils::bit_ops::BIT_REV_AVX2>("avx2");
+#endif
+}
+
+
+
+// now register the test cases
+REGISTER_TYPED_TEST_CASE_P(BitReverseFixedArrayBenchmark, reverse_fixed_array);
+
+
+//////////////////// RUN the tests with different types.
+typedef ::testing::Types<
+    BitsParam< 1>,
+    BitsParam< 2>,
+    BitsParam< 3>,
+    BitsParam< 4>,
+    BitsParam< 8>,
+    BitsParam<16>,
+    BitsParam<32>
+> BitReverseFixedArrayBenchmarkTypes;
+INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseFixedArrayBenchmark, BitReverseFixedArrayBenchmarkTypes);
 
 
 

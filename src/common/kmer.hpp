@@ -164,7 +164,7 @@ namespace bliss
     /// The actual storage of the k-mer
     WORD_TYPE data[nWords]; // alignas is not compatible with mxx datatype stuff - causes size of std::pair to increase greatly because alignment of elements is based on most resitrictive element.
   
-  public:
+   public:
 
     /**
      * @brief   The default constructor, creates an uninitialized k-mer.
@@ -215,7 +215,10 @@ namespace bliss
     	return data;
     }
 
-  
+    WORD_TYPE (&getDataRef())[nWords] {
+      return data;
+    }
+
     /**
      * FIXME: update documentation for `size => (size-1)`
      * @brief   Fills this k-mer from a packed and padded input sequence.
@@ -1210,9 +1213,11 @@ namespace bliss
 //      // TODO: more efficient right shift.
 //      result.do_right_shift(nBytes * 8 - nBits);
       if (nWords * sizeof(WORD_TYPE) > 32)  // choose based on performance.
-        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data, nWords);
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
+      else if (nWords * sizeof(WORD_TYPE) > 16)
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
       else
-        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data, nWords);
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
 
       result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
@@ -1236,9 +1241,11 @@ namespace bliss
 
       // NOTE: AVX2 is not faster.
       if (nWords * sizeof(WORD_TYPE) > 32)
-        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data, nWords);
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
+      else if (nWords * sizeof(WORD_TYPE) > 16)
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
       else
-        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data, nWords);
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
       //for (uint32_t i = 0; i < nWords; ++i) result.data[i] = ~result.data[i];
       ::bliss::utils::bit_ops::negate(result.data, result.data, nWords);
 
@@ -1263,9 +1270,11 @@ namespace bliss
       //const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
 //      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
       if (nWords * sizeof(WORD_TYPE) > 32)
-      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data, nWords);
+      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
+      else if (nWords * sizeof(WORD_TYPE) > 16)
+      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
       else
-      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data, nWords);
+      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
 
 
       // TODO: MORE EFFICIENT SHIFT

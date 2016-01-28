@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <utility>
 #include <iostream>
+#include <tuple>
 
 // include files to test
 #include "utils/bitgroup_ops.hpp"
@@ -31,6 +32,11 @@
 //TESTS: for each, test different input (drawing from a 32 byte array),
 //       different offsets, different bit group sizes, different word types, and different byte array lengths.
 //TESTS: reverse entire array via multiplel SWAR, SSSE3, and AVX2 calls.
+
+template <unsigned char Bits>
+struct BitsParam { static constexpr unsigned char bitsPerGroup = Bits; };
+
+
 
 // NOTE if the gtest fixture class is missing the trailing semicolon, compile error about "expected initializer..."
 template <unsigned char BITS_PER_GROUP>
@@ -50,7 +56,7 @@ class BitReverseTestHelper {
                            0x0F,0x2E,0x4D,0x6C,0x8B,0xAA,0xC9,0xE8,0xF7,0xD6,0xB5,0x94,0x73,0x52,0x31,0x10};
 
 
-
+    // bit group size larger than byte
     template <unsigned char BITS = BITS_PER_GROUP, typename std::enable_if<(BITS >= 8), int>::type = 1>
     bool is_reverse(uint8_t const * orig, uint8_t const* rev, size_t len, uint8_t bit_offset = 0) {
       bool same = true;
@@ -90,7 +96,7 @@ class BitReverseTestHelper {
       return same;
     }
 
-
+    // power of 2 bit group size, bit group smaller than byte
     template <unsigned char BITS = BITS_PER_GROUP, typename std::enable_if<(BITS < 8) && ((BITS & (BITS - 1)) == 0), int>::type = 1>
     bool is_reverse(uint8_t const * orig, uint8_t const* rev, size_t len, uint8_t bit_offset = 0) {
       bool same = true;
@@ -114,6 +120,7 @@ class BitReverseTestHelper {
       return same;
     }
 
+    // non power of 2 bit group.  bit group size less than 8
     template <unsigned char BITS = BITS_PER_GROUP, typename std::enable_if<(BITS < 8) && ((BITS & (BITS - 1)) != 0), int>::type = 1>
     bool is_reverse(uint8_t const * orig, uint8_t const* rev, size_t len, uint8_t bit_offset = 0) {
       bool same = true;
@@ -157,10 +164,10 @@ class BitReverseTestHelper {
             local_same = ((*(reinterpret_cast<const uint16_t*>(uu)) >> offset) & bits_mask) == ((*(reinterpret_cast<const uint16_t*>(w)) >> k) & bits_mask);
 
             if (!local_same) {
-              std::cout << "diff @ " << std::dec << static_cast<size_t>(i) << ". off=" << static_cast<size_t>(offset) << ", k=" << static_cast<size_t>(k) << ":";
-              std::cout << " full u=" << std::hex << *(reinterpret_cast<const uint16_t*>(uu)) << " full v=" << *(reinterpret_cast<const uint16_t*>(w));
-              std::cout << " u=" << std::hex << static_cast<size_t>(((*(reinterpret_cast<const uint16_t*>(uu)) >> offset) & bits_mask));
-              std::cout << " v=" << static_cast<size_t>(((*(reinterpret_cast<const uint16_t*>(w)) >> k) & bits_mask)) << std::endl;
+              std::cout << "diff @ " << std::dec << static_cast<size_t>(i) << ". u_off=" << static_cast<size_t>(offset) << ", v_offset=" << static_cast<size_t>(k) << ":";
+              std::cout << " full u=" << std::hex << std::setw(2 * sizeof(uint16_t)) << std::setfill('0') << *(reinterpret_cast<const uint16_t*>(uu)) << " full v=" << std::setw(2 * sizeof(uint16_t)) << std::setfill('0') << *(reinterpret_cast<const uint16_t*>(w));
+              std::cout << " u=" << std::hex << std::setw(2 * sizeof(uint16_t)) << std::setfill('0') << static_cast<size_t>(((*(reinterpret_cast<const uint16_t*>(uu)) >> offset) & bits_mask));
+              std::cout << " v=" << std::hex << std::setw(2 * sizeof(uint16_t)) << std::setfill('0') << static_cast<size_t>(((*(reinterpret_cast<const uint16_t*>(w)) >> k) & bits_mask)) << std::endl;
             }
             same &= local_same;
           }
@@ -360,15 +367,15 @@ TYPED_TEST_P(BitReverseTest, reverse_short_array)
         bool same = this->is_reverse(this->helper.input + k, out, i);
 
         if (!same) {
-          std::cout << "in: ";
-          for (size_t j = 0; j < i; ++j) {
+          std::cout << "in (MSB to LSB): ";
+          for (int64_t j = i-1; j >= 0; --j) {
             std::cout << std::hex << static_cast<size_t>(this->helper.input[k + i - 1 - j]) << " ";
 
           }
           std::cout << std::endl;
 
-          std::cout << "out: ";
-          for (size_t j = 0; j < i; ++j) {
+          std::cout << "out (MSB to LSB): ";
+          for (int64_t j = i-1; j >= 0; --j) {
             std::cout << std::hex << static_cast<size_t>(out[i - 1 - j]) << " ";
 
           }
@@ -383,10 +390,13 @@ TYPED_TEST_P(BitReverseTest, reverse_short_array)
   }
 }
 
-
-
 // now register the test cases
-REGISTER_TYPED_TEST_CASE_P(BitReverseTest, reverse_uint8, reverse_uint16, reverse_uint32, reverse_uint64, reverse_short_array);
+REGISTER_TYPED_TEST_CASE_P(BitReverseTest,
+                           reverse_uint8,
+                           reverse_uint16,
+                           reverse_uint32,
+                           reverse_uint64,
+                           reverse_short_array);
 
 
 //////////////////// RUN the tests with different types.
@@ -408,6 +418,8 @@ typedef ::testing::Types<
                  ::bliss::utils::bit_ops::bitgroup_ops<32, ::bliss::utils::bit_ops::BIT_REV_SWAR>
 > BitReverseTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseTest, BitReverseTestTypes);
+
+
 
 
 #ifdef __SSSE3__
@@ -653,8 +665,6 @@ INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseAVX2Test, BitReverseAVX2TestTypes
 
 
 //=========== test long array
-template <unsigned char Bits>
-struct BitsParam { static constexpr unsigned char bitsPerGroup = Bits; };
 
 
 template <typename T>
@@ -715,4 +725,206 @@ typedef ::testing::Types<
 > BitReverseLongArrayTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseLongArrayTest, BitReverseLongArrayTestTypes);
 
+
+
+
+
+template <typename T>
+class BitReverseFixedArrayTest : public ::testing::Test {
+  protected:
+
+    template <uint8_t BIT_GROUP_SIZE>
+    bool is_reverse(uint8_t *out, uint8_t const * in, size_t len)  {
+      BitReverseTestHelper<BIT_GROUP_SIZE> helper;
+
+      return helper.is_reverse(out, in, len, 0);
+//                               (len * 8) % BIT_GROUP_SIZE);  // if BITS = 3, offset needs to be calculated.
+    }
+
+    template <unsigned int BITS, unsigned char MAX_SIMD_TYPE,
+      typename data_type,
+      size_t data_size,
+      typename ::std::enable_if<(((sizeof(data_type) * data_size) % ((BITS + 7) / 8)) != 0), int>::type = 2>
+    void test(data_type (&in)[data_size], data_type (&out)[data_size]) {
+    }
+    template <unsigned int BITS, unsigned char MAX_SIMD_TYPE,
+      typename data_type,
+      size_t data_size,
+      typename ::std::enable_if<(((sizeof(data_type) * data_size) % ((BITS + 7) / 8)) == 0), int>::type = 1>
+    void test(data_type (&in)[data_size], data_type (&out)[data_size]) {
+
+      BitReverseTestHelper<BITS> helper;
+
+      for (unsigned int k = 0; k < (32 - data_size); ++k) {
+        memcpy(in, helper.array + k, data_size * sizeof(data_type));
+        memset(out, 0, data_size * sizeof(data_type));
+
+        ::bliss::utils::bit_ops::template reverse<BITS, MAX_SIMD_TYPE>(out, in);
+
+        bool same =
+            this->is_reverse<BITS>(helper.array + k,
+                                   reinterpret_cast<uint8_t*>(out),
+                                   data_size * sizeof(data_type));
+
+        if (!same) {
+          std::cout << "in (MSB to LSB): ";
+          for (int64_t j = data_size - 1; j >= 0; --j) {
+            std::cout << std::hex << std::setw(2 * sizeof(data_type)) << std::setfill('0') << static_cast<size_t>(in[j]) << " ";
+          }
+          std::cout << std::endl;
+
+          std::cout << "out (MSB to LSB): ";
+          for (int64_t j = data_size - 1; j >= 0; --j) {
+            std::cout << std::hex << std::setw(2 * sizeof(data_type)) << std::setfill('0') << static_cast<size_t>(out[j]) << " ";
+
+          }
+          std::cout << std::endl;
+
+          printf("array size = %lu, sizeof(datatype) = %lu, bits = %u, SIMD = %u, k = %u\n", data_size, sizeof(data_type), BITS, MAX_SIMD_TYPE, k);
+        }
+
+        ASSERT_TRUE(same);
+      }
+    }
+};
+
+TYPED_TEST_CASE_P(BitReverseFixedArrayTest);
+
+TYPED_TEST_P(BitReverseFixedArrayTest, reverse_seq)
+{
+  using data_type = typename ::std::tuple_element<1, TypeParam>::type;
+  constexpr size_t data_size = ::std::tuple_element<0, TypeParam>::type::bitsPerGroup;
+  data_type in[data_size];
+  data_type out[data_size];
+  switch (sizeof(data_type)) {
+    case 8:
+      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
+    case 4:
+      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
+    case 2:
+      this->template test<8, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
+    default:
+      this->template test<4, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
+      this->template test<2, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
+      this->template test<1, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
+      this->template test<3, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
+      break;
+  }
+}
+
+
+TYPED_TEST_P(BitReverseFixedArrayTest, reverse_swar)
+{
+  using data_type = typename ::std::tuple_element<1, TypeParam>::type;
+  constexpr size_t data_size = ::std::tuple_element<0, TypeParam>::type::bitsPerGroup;
+  data_type in[data_size];
+  data_type out[data_size];
+
+  switch (sizeof(data_type)) {
+    case 8:
+      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+    case 4:
+      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+    case 2:
+      this->template test<8, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+    default:
+      this->template test<4, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+      this->template test<2, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+      this->template test<1, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+      this->template test<3, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+      break;
+  }
+}
+
+#ifdef __SSSE3__
+TYPED_TEST_P(BitReverseFixedArrayTest, reverse_ssse3)
+{
+  using data_type = typename ::std::tuple_element<1, TypeParam>::type;
+  constexpr size_t data_size = ::std::tuple_element<0, TypeParam>::type::bitsPerGroup;
+  data_type in[data_size];
+  data_type out[data_size];
+
+  switch (sizeof(data_type)) {
+    case 8:
+      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+    case 4:
+      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+    case 2:
+      this->template test<8, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+    default:
+      this->template test<4, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+      this->template test<2, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+      this->template test<1, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+      this->template test<3, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+      break;
+  }
+}
+#endif
+
+#ifdef __SSSE3__
+TYPED_TEST_P(BitReverseFixedArrayTest, reverse_avx2)
+{
+  using data_type = typename ::std::tuple_element<1, TypeParam>::type;
+  constexpr size_t data_size = ::std::tuple_element<0, TypeParam>::type::bitsPerGroup;
+  data_type in[data_size];
+  data_type out[data_size];
+
+  switch (sizeof(data_type)) {
+    case 8:
+      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+    case 4:
+      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+    case 2:
+      this->template test<8, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+    default:
+      this->template test<4, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+      this->template test<2, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+      this->template test<1, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+      this->template test<3, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+      break;
+  }
+}
+#endif
+
+
+// now register the test cases
+REGISTER_TYPED_TEST_CASE_P(BitReverseFixedArrayTest,
+#ifdef __SSSE3__
+                           reverse_ssse3,
+#endif
+#ifdef __AVX2__
+                           reverse_avx2,
+#endif
+                           reverse_seq, reverse_swar);
+
+
+//////////////////// RUN the tests with different types.
+
+typedef ::testing::Types<
+    ::std::tuple<BitsParam<1>, uint8_t >,
+    ::std::tuple<BitsParam<2>, uint8_t >,
+    ::std::tuple<BitsParam<3>, uint8_t >,
+    ::std::tuple<BitsParam<4>, uint8_t >,
+    ::std::tuple<BitsParam<7>, uint8_t >,
+    ::std::tuple<BitsParam<8>, uint8_t >,
+    ::std::tuple<BitsParam<1>, uint16_t >,
+    ::std::tuple<BitsParam<2>, uint16_t >,
+    ::std::tuple<BitsParam<3>, uint16_t >,
+    ::std::tuple<BitsParam<4>, uint16_t >,
+    ::std::tuple<BitsParam<7>, uint16_t >,
+    ::std::tuple<BitsParam<8>, uint16_t >,
+    ::std::tuple<BitsParam<1>, uint32_t >,
+    ::std::tuple<BitsParam<2>, uint32_t >,
+    ::std::tuple<BitsParam<3>, uint32_t >,
+    ::std::tuple<BitsParam<4>, uint32_t >,
+    ::std::tuple<BitsParam<7>, uint32_t >,
+    ::std::tuple<BitsParam<8>, uint32_t >,
+    ::std::tuple<BitsParam<1>, uint64_t >,
+    ::std::tuple<BitsParam<2>, uint64_t >,
+    ::std::tuple<BitsParam<3>, uint64_t >,
+    ::std::tuple<BitsParam<4>, uint64_t >,
+    ::std::tuple<BitsParam<7>, uint64_t >,
+    ::std::tuple<BitsParam<8>, uint64_t >
+> BitReverseFixedArrayTestTypes;
+INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseFixedArrayTest, BitReverseFixedArrayTestTypes);
 
