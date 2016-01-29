@@ -1,15 +1,16 @@
-# BLISS
+# ParBLiSS kmerind 
+[![Apache 2.0 License](https://img.shields.io/badge/license-Apache%20v2.0-blue.svg)](LICENSE)
 
-Name can stand for:
+Kmerind is a library in the **Par**allel **B**ioinformatics **Li**brary for **S**hort **S**equences project (ParBLiSS).
 
-- **B**asic **Li**fe **S**ciences **S**ubroutines
-- **B**ioinformatics **Li**brary for **S**hort **S**equences
+Kmerind provides **k**-**mer** **ind**exing capability for biological sequence data.
 
-Please take a look at our [Wiki](https://bitbucket.org/AluruLab/bliss/wiki/Home).
+Please take a look at our [Wiki](https://github.com/ParBLiSS/kmerind/wiki).
 
 ## Overview
-BLISS is a C++ library for distributed and multi-core bioinformatics algorithms.  It requires C++ 11 features, as well as OpenMP, and MPI.  The library is implemented as a set of templated classes.  As such, most of the code is in header form, and are incorporated into the user code via `#include`.  
+ParBLiSS is a C++ library for distributed and multi-core bioinformatics algorithms.  It requires C++ 11 features, as well as OpenMP, and MPI.  The library is implemented as a set of templated classes.  As such, most of the code is in header form, and are incorporated into the user code via `#include`.  
 
+K-merind provides basic parallel sequence file access and k-mer index construction and query.  Currently, it supports indices for frequency, position, and quality of kmers from short reads and whole genomes.
 
 ## Build
 
@@ -41,8 +42,8 @@ Optional tools include:
 ### Getting the source
 
 ```sh
-git clone git@bitbucket.org:AluruLab/bliss.git
-cd bliss
+git clone https://github.com/ParBLiSS/kmerind.git
+cd kmerind
 git submodule init
 git submodule update
 ```
@@ -50,15 +51,15 @@ git submodule update
 ### Configuring for build
 
 ```sh
-mkdir bliss-build
-cd bliss-build
-cmake ../bliss
+mkdir kmerind-build
+cd kmerind-build
+cmake ../kmerind
 ```
 
-alternatively, instead of `cmake ../bliss`, you can use
+alternatively, instead of `cmake ../kmerind`, you can use
 
 ```sh
-ccmake ../bliss
+ccmake ../kmerind
 ```
 
 
@@ -104,7 +105,7 @@ make doc
 ```
 
 ### Using Bliss
-Please see  [Wiki](https://bitbucket.org/AluruLab/bliss/wiki/Home).
+Please see  [Wiki](https://github.com/ParBLiSS/kmerind/wiki).
 
 
 
