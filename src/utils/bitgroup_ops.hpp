@@ -91,6 +91,22 @@ namespace bliss {
 
     namespace bit_ops {
 
+//      struct BITREV_SEQ {
+//    	  using MachineWord = uint64_t;
+//      };
+//      struct BITREV_SWAR {
+//    	  using MachineWord = uint64_t;
+//      };
+//      struct BITREV_SSSE3 {
+//#ifdef __SSSE3__
+//    	  using MachineWord = __m128i;
+//#endif
+//      };
+//      struct BITREV_AVX2 {
+//#ifdef __AVX2__
+//    	  using MachineWord = __m256i;
+//#endif
+//      };
       static constexpr unsigned char BIT_REV_SEQ = 0;
       static constexpr unsigned char BIT_REV_SWAR = 1;   // SIMD Within A Register
       static constexpr unsigned char BIT_REV_SSSE3 = 2;
@@ -125,8 +141,22 @@ namespace bliss {
         return ~u;
       }
 
-      /**
-       * @brief base bit reverse type. base template only
+
+      template <unsigned char SIMD_TYPE, typename WORD_TYPE>
+      BITS_INLINE typename ::std::enable_if<
+      	  (SIMD_TYPE == BIT_REV_SEQ) || (SIMD_TYPE == BIT_REV_SWAR),
+      	  uint64_t>::type loadu(WORD_TYPE const * u) {
+        return *(reinterpret_cast<uint64_t const *>(u));
+      }
+      template <unsigned char SIMD_TYPE, typename WORD_TYPE,
+        typename = typename ::std::enable_if<
+    	  (SIMD_TYPE == BIT_REV_SEQ) || (SIMD_TYPE == BIT_REV_SWAR) >::type>
+      BITS_INLINE void storeu(WORD_TYPE * u, uint64_t const & val) {
+    	  *(reinterpret_cast<uint64_t *>(u)) = val;
+      }
+
+
+      /**       * @brief base bit reverse type. base template only
        * @tparam WORD_TYPE          type of input word
        * @tparam BIT_GROUP_SIZE     number of bits in a group to be reversed.  supports any value less than 8, and powers of 2.  tested 3 and powers of 2.  cannot exceed word size.
        * @tparam BIT_REV_SIMD_TYPE  type of algorithm to use based on available hardware
@@ -134,6 +164,7 @@ namespace bliss {
        */
       template <unsigned int BIT_GROUP_SIZE, unsigned char BIT_REV_SIMD_TYPE = BIT_REV_SEQ, bool POW2 = ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0)>
       struct bitgroup_ops {
+
           //  default imple is for SEQuential bit reverse.  this is defined for all bit_group_sizes.
           static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE is 0");
           static_assert(BIT_GROUP_SIZE < (sizeof(uint64_t) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in uint64_t");
@@ -675,6 +706,20 @@ namespace bliss {
       BITS_INLINE __m128i negate(__m128i const & u) {
         return _mm_xor_si128(u, _mm_cmpeq_epi8(u, u));  // no native negation operator, so use xor
       }
+
+      template <unsigned char SIMD_TYPE, typename WORD_TYPE>
+      BITS_INLINE typename ::std::enable_if<
+      	  (SIMD_TYPE == BIT_REV_SSSE3),
+      	  __m128i>::type loadu(WORD_TYPE const * u) {
+    	  return _mm_loadu_si128(reinterpret_cast<__m128i const *>(u));
+      }
+      template <unsigned char SIMD_TYPE, typename WORD_TYPE,
+        typename = typename ::std::enable_if<
+    	  (SIMD_TYPE == BIT_REV_SSSE3) >::type>
+      BITS_INLINE void storeu(WORD_TYPE * u, __m128i const & val) {
+    	  _mm_storeu_si128(reinterpret_cast<__m128i *>(u), val);
+      }
+
 
 
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 128bit)
@@ -1219,6 +1264,21 @@ namespace bliss {
       BITS_INLINE __m256i negate(__m256i const & u) {
         return _mm256_xor_si256(u, _mm256_cmpeq_epi8(u, u));  // no native negation operator
       }
+
+      template <unsigned char SIMD_TYPE, typename WORD_TYPE>
+      BITS_INLINE typename ::std::enable_if<
+      	  (SIMD_TYPE == BIT_REV_AVX2),
+      	  __m256i>::type loadu(WORD_TYPE const * u) {
+    	  return _mm256_loadu_si256(reinterpret_cast<__m256i const *>(u));
+      }
+      template <unsigned char SIMD_TYPE, typename WORD_TYPE,
+        typename = typename ::std::enable_if<
+    	  (SIMD_TYPE == BIT_REV_AVX2) >::type>
+      BITS_INLINE void storeu(WORD_TYPE * u, __m256i const & val) {
+    	  _mm256_storeu_si256(reinterpret_cast<__m256i *>(u), val);
+      }
+
+
 
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 256bit)
       template <unsigned int BIT_GROUP_SIZE, bool POW2>
