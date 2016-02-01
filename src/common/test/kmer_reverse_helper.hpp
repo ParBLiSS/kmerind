@@ -448,7 +448,7 @@ namespace bliss
         if (Kmer::nWords < simd_stride) {
           // allocate space
           WORD_TYPE tmp alignas(16) [simd_stride];
-
+          memset(tmp, 0, (simd_stride - Kmer::nWords) * sizeof(WORD_TYPE));
           // copy then load to register.
           memcpy((tmp + simd_stride - Kmer::nWords), src.getData(), Kmer::nWords * sizeof(WORD_TYPE));
           __m128i in = _mm_loadu_si128((__m128i*)tmp);

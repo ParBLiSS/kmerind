@@ -641,7 +641,7 @@ namespace bliss
      */
     KMER_INLINE bool operator==(const Kmer& rhs) const
     {
-      return memcmp(data, rhs.data, nWords * sizeof(WORD_TYPE)) == 0;
+      return (memcmp(data, rhs.data, nBytes) == 0);
     }
   
     /**
@@ -1200,6 +1200,9 @@ namespace bliss
 
 
     /// reverse the kmer.  only parameter of ALPHABET that matters here is bitsPerChar.
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<::std::is_same<A, DNA6>::value ||
+                                  ::std::is_same<A, RNA6>::value, int>::type = 0>
     KMER_INLINE Kmer do_reverse(Kmer const & src) const
     {
       Kmer result(false);
@@ -1212,9 +1215,9 @@ namespace bliss
 //
 //      // TODO: more efficient right shift.
 //      result.do_right_shift(nBytes * 8 - nBits);
-      if (nWords * sizeof(WORD_TYPE) > 32)  // choose based on performance.
+      if (nWords * sizeof(WORD_TYPE) >= 16)  // choose based on performance.  AVX is faster >256 bit, below it SWAR is faster.
         ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
-      else if (nWords * sizeof(WORD_TYPE) > 16)
+      else if (nWords * sizeof(WORD_TYPE) >= 12)
         ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
       else
         ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
@@ -1223,6 +1226,35 @@ namespace bliss
 
       return result;
     }
+
+    /// reverse the kmer.  only parameter of ALPHABET that matters here is bitsPerChar.
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<!(::std::is_same<A, DNA6>::value ||
+                                    ::std::is_same<A, RNA6>::value), int>::type = 0>
+    KMER_INLINE Kmer do_reverse(Kmer const & src) const
+    {
+      Kmer result(false);
+
+//      //const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
+//      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
+//
+//      // NOTE: AVX2 is not faster.
+//      ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(out, reinterpret_cast<const uint8_t*>(src.data), nBytes);
+//
+//      // TODO: more efficient right shift.
+//      result.do_right_shift(nBytes * 8 - nBits);
+      if (nWords * sizeof(WORD_TYPE) > 32)  // choose based on performance.  AVX is faster >256 bit (and fallback to SSSE3 is okay), below 256 SWAR is faster.
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
+//      else if (nWords * sizeof(WORD_TYPE) > 16)
+//        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
+      else
+        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
+
+      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
+
+      return result;
+    }
+
 
     /// reverse complement of kmer.  specialzied for DNA/RNA, where the complement is the bitwise negation.
     template <typename A = ALPHABET,
@@ -1239,11 +1271,11 @@ namespace bliss
       //const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
 //      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
 
-      // NOTE: AVX2 is not faster.
+      // NOTE: SWAR is faster for size <= 256bit, after which AVX2 (and SSSE3) is faster.
       if (nWords * sizeof(WORD_TYPE) > 32)
         ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
-      else if (nWords * sizeof(WORD_TYPE) > 16)
-        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
+//      else if (nWords * sizeof(WORD_TYPE) > 16)
+//        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
       else
         ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
       //for (uint32_t i = 0; i < nWords; ++i) result.data[i] = ~result.data[i];
@@ -1269,9 +1301,9 @@ namespace bliss
 
       //const uint8_t* in = reinterpret_cast<const uint8_t*>(src.data);
 //      uint8_t* out = reinterpret_cast<uint8_t*>(result.data);
-      if (nWords * sizeof(WORD_TYPE) > 32)
+      if (nWords * sizeof(WORD_TYPE) >= 48)
       ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
-      else if (nWords * sizeof(WORD_TYPE) > 16)
+      else if (nWords * sizeof(WORD_TYPE) >= 32)
       ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
       else
       ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
@@ -1400,16 +1432,11 @@ namespace bliss
 
         for (unsigned int j = 0; j < charsPerWord; ++j) {
           tmp3 <<= bitsPerChar;
-//          ::std::cout << "i " << i << " j " << j << " tmp: " << tmp << " ";
           tmp2 = tmp & getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar);  // get the character
           tmp >>= bitsPerChar;
-//          ::std::cout << "tmp2: " << tmp2 << " ";
-//          ::std::cout << "tmp0: " << tmp << " ";
           tmp2 = static_cast<WORD_TYPE>(ALPHABET::to_complement(tmp2));  // get the complement of the character
-//          ::std::cout << "tmp2c: " << tmp2 << " ";
 
           tmp3 |= tmp2;  // replace the char
-//          ::std::cout << "tmpc: " << tmp3 << ::std::endl;;
         }
 
         result.data[nWords - 1 - i] = tmp3;  // replace the word

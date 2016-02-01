@@ -214,43 +214,6 @@ TYPED_TEST_P(KmerReverseTest, reverse_swar)
 
 }
 
-TYPED_TEST_P(KmerReverseTest, reverse)
-{
-  TypeParam km, rev, revcomp, rev_seq, revcomp_seq;
-  km = this->kmer;
-
-  bool rev_same = true;
-  bool revcomp_same = true;
-  bool local_rev_same = true;
-  bool local_revcomp_same = true;
-
-  for (size_t i = 0; i < this->iterations; ++i) {
-    rev_seq = this->helper.reverse_serial(km);
-    revcomp_seq = this->helper.reverse_complement_serial(km);
-
-    rev = km.reverse();
-    revcomp = km.reverse_complement();
-
-    local_rev_same = (rev == rev_seq);
-    local_revcomp_same = (revcomp == revcomp_seq);
-
-    if (!local_rev_same) {
-      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
-    }
-    if (!local_revcomp_same) {
-      BL_WARNINGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
-    }
-    rev_same &= local_rev_same;
-    revcomp_same &= local_revcomp_same;
-    ASSERT_TRUE(local_rev_same);
-    ASSERT_TRUE(local_revcomp_same);
-
-    km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
-  }
-  EXPECT_TRUE(rev_same);
-  EXPECT_TRUE(revcomp_same);
-
-}
 
 TYPED_TEST_P(KmerReverseTest, reverse_ssse3)
 {
@@ -297,9 +260,48 @@ TYPED_TEST_P(KmerReverseTest, reverse_ssse3)
 
 }
 
+TYPED_TEST_P(KmerReverseTest, reverse)
+{
+  TypeParam km, rev, revcomp, rev_seq, revcomp_seq;
+  km = this->kmer;
+
+  bool rev_same = true;
+  bool revcomp_same = true;
+  bool local_rev_same = true;
+  bool local_revcomp_same = true;
+
+  for (size_t i = 0; i < this->iterations; ++i) {
+    rev_seq = this->helper.reverse_serial(km);
+    revcomp_seq = this->helper.reverse_complement_serial(km);
+
+    rev = km.reverse();
+    revcomp = km.reverse_complement();
+
+    local_rev_same = (rev == rev_seq);
+    local_revcomp_same = (revcomp == revcomp_seq);
+
+    if (!local_rev_same) {
+      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+    }
+    if (!local_revcomp_same) {
+      BL_WARNINGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+    }
+    rev_same &= local_rev_same;
+    revcomp_same &= local_revcomp_same;
+    ASSERT_TRUE(local_rev_same);
+    ASSERT_TRUE(local_revcomp_same);
+
+    km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
+  }
+  EXPECT_TRUE(rev_same);
+  EXPECT_TRUE(revcomp_same);
+
+}
 
 
-REGISTER_TYPED_TEST_CASE_P(KmerReverseTest, reverse_seq_self, reverse_seq, reverse_bswap, reverse_swar, reverse, reverse_ssse3);
+
+
+REGISTER_TYPED_TEST_CASE_P(KmerReverseTest, reverse_seq_self, reverse_seq, reverse_bswap, reverse_swar, reverse_ssse3, reverse);
 
 //////////////////// RUN the tests with different types.
 
@@ -358,3 +360,151 @@ typedef ::testing::Types<
 > KmerReverseTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerReverseTest, KmerReverseTestTypes);
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// include files to test
+
+//TESTS: Sequential, SWAR/BSWAP, SSSE3, AVX2 versions of kmer reverse.
+//TESTS: for each, test kmer size, different word type, and Alphabet (bit group size)
+//       different offsets, different bit group sizes, different word types, and different byte array lengths.
+
+template <typename T>
+class KmerReverseOpTest : public ::testing::Test {
+  protected:
+
+    T kmer;
+    bliss::common::test::KmerReverseHelper<T> helper;
+
+    static const size_t iterations = 10;
+
+    virtual void SetUp()
+    {
+      srand(0);
+      for (unsigned int i = 0; i < T::size; ++i) {
+
+        kmer.nextFromChar(rand() % T::KmerAlphabet::SIZE);
+      }
+
+    }
+
+};
+
+
+// indicate this is a typed test
+TYPED_TEST_CASE_P(KmerReverseOpTest);
+
+TYPED_TEST_P(KmerReverseOpTest, reverse_ops)
+{
+  TypeParam km, rev, revcomp, rev_op, revcomp_op;
+  km = this->kmer;
+
+  bool rev_same = true;
+  bool revcomp_same = true;
+  bool local_rev_same = true;
+  bool local_revcomp_same = true;
+
+  uint64_t temp = 0;
+  constexpr size_t shift = TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits;
+
+//  std::cout << "shift " << shift << std::endl;
+
+  for (size_t i = 0; i < this->iterations; ++i) {
+    rev = km.reverse();
+    revcomp = km.reverse_complement();
+
+	temp = 0;
+    bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR>(rev_op.getDataRef(), km.getDataRef(),
+    		[&shift, &temp](uint64_t const & src) {
+    	bliss::utils::bit_ops::bitgroup_ops<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR> op;
+    	uint64_t rev = op.reverse(src);
+    	if (shift == 0) return rev;
+    	uint64_t res = temp | (rev >> shift);
+    	temp = rev << (sizeof(uint64_t) * 8 - shift);
+    	return res;
+    });
+	temp = 0;
+    bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR>(revcomp_op.getDataRef(), km.getDataRef(),
+    		[&shift, &temp](uint64_t const & src) {
+//    	std::cout << "src: " << std::hex << src << " ";
+    	bliss::utils::bit_ops::bitgroup_ops<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR> op;
+    	uint64_t rev = op.reverse(src);
+//    	std::cout << "rev: " << std::hex << rev << " ";
+    	rev = ~rev;
+//    	std::cout << "~rev: " << std::hex << rev << " ";
+//    	std::cout << "temp: " << std::hex << temp << " ";
+
+    	if (shift == 0) return rev;
+    	uint64_t res = temp | (rev >> shift);
+//    	std::cout << "res: " << std::hex << res << " ";
+
+    	temp = rev << (sizeof(uint64_t) * 8 - shift);  // shift by full size returns unshifted data.
+//    	std::cout << "temp << : " << std::hex << temp << std::endl;
+
+    	return res;
+    });
+
+    local_rev_same = (rev == rev_op);
+    local_revcomp_same = (revcomp == revcomp_op);
+
+    if (!local_rev_same) {
+      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput\t%s\n\toutput\t%s\n\tgold\t%s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_op.toAlphabetString().c_str());
+    }
+    if (!local_revcomp_same) {
+      BL_WARNINGF("ERROR: revcomp diff at iter %lu:\n\tinput\t%s\n\toutput\t%s\n\tgold\t%s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_op.toAlphabetString().c_str());
+    }
+    rev_same &= local_rev_same;
+    revcomp_same &= local_revcomp_same;
+    ASSERT_TRUE(local_rev_same);
+    ASSERT_TRUE(local_revcomp_same);
+
+    km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
+  }
+  EXPECT_TRUE(rev_same);
+  EXPECT_TRUE(revcomp_same);
+
+}
+
+
+
+REGISTER_TYPED_TEST_CASE_P(KmerReverseOpTest, reverse_ops);
+
+//////////////////// RUN the tests with different types.
+
+// max of 50 cases
+typedef ::testing::Types<
+    ::bliss::common::Kmer< 31, bliss::common::DNA,   uint64_t>,  // 1 word, not full
+    ::bliss::common::Kmer< 32, bliss::common::DNA,   uint64_t>,  // 1 word, full
+    ::bliss::common::Kmer< 64, bliss::common::DNA,   uint64_t>,  // 2 words, full
+    ::bliss::common::Kmer< 80, bliss::common::DNA,   uint64_t>,  // 3 words, not full
+    ::bliss::common::Kmer< 96, bliss::common::DNA,   uint64_t>,  // 3 words, full
+    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint32_t>,  // 1 word, not full
+    ::bliss::common::Kmer< 16, bliss::common::DNA,   uint32_t>,  // 1 word, full
+    ::bliss::common::Kmer< 32, bliss::common::DNA,   uint32_t>,  // 2 words, full
+    ::bliss::common::Kmer< 40, bliss::common::DNA,   uint32_t>,  // 3 words, not full
+    ::bliss::common::Kmer< 48, bliss::common::DNA,   uint32_t>,  // 3 words, full
+    ::bliss::common::Kmer<  7, bliss::common::DNA,   uint16_t>,  // 1 word, not full
+    ::bliss::common::Kmer<  8, bliss::common::DNA,   uint16_t>,  // 1 word, full
+    ::bliss::common::Kmer<  9, bliss::common::DNA,   uint16_t>,  // 2 words, not full
+    ::bliss::common::Kmer< 16, bliss::common::DNA,   uint16_t>,  // 2 words, full
+    ::bliss::common::Kmer<  3, bliss::common::DNA,    uint8_t>,  // 1 word, not full
+    ::bliss::common::Kmer<  4, bliss::common::DNA,    uint8_t>,  // 1 word, full
+    ::bliss::common::Kmer<  5, bliss::common::DNA,    uint8_t>,  // 2 words, not full
+    ::bliss::common::Kmer<  8, bliss::common::DNA,    uint8_t>  // 2 words, full
+> KmerReverseOpTestTypes;
+INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerReverseOpTest, KmerReverseOpTestTypes);
