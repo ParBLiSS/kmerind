@@ -41,6 +41,7 @@
 #include "common/test/kmer_reverse_helper.hpp"
 
 
+
 // include files to test
 
 //TESTS: Sequential, SWAR/BSWAP, SSSE3, AVX2 versions of kmer reverse.
@@ -391,7 +392,7 @@ class KmerReverseOpTest : public ::testing::Test {
     T kmer;
     bliss::common::test::KmerReverseHelper<T> helper;
 
-    static const size_t iterations = 10;
+    static const size_t iterations = 100000;
 
     virtual void SetUp()
     {
@@ -400,8 +401,162 @@ class KmerReverseOpTest : public ::testing::Test {
 
         kmer.nextFromChar(rand() % T::KmerAlphabet::SIZE);
       }
+    }
+
+    template <typename WORD_TYPE>
+    static void print(WORD_TYPE const & word) {
+      uint64_t const *ptr = reinterpret_cast<uint64_t const *>(&word);
+      for (int i = (sizeof(WORD_TYPE) / sizeof(uint64_t)) - 1; i >= 0; --i) {
+        std::cout << std::hex << std::setw(16) << std::setfill('0') << ptr[i] << " ";
+      }
+    }
+
+
+    template <typename SIMDType, typename TT = T,
+        typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA16>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA6>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA6>::value, int>::type = 1>
+    void test () {
+      TT km, rev, rev_op;
+      km = this->kmer;
+
+      bool rev_same = true;
+      bool local_rev_same = true;
+
+      using MachWord = typename SIMDType::MachineWord;
+      constexpr unsigned char SIMDVal = SIMDType::SIMDVal;
+
+      constexpr unsigned char shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+
+//      std::cout << "bit pow2 " << (uint64_t)shift << std::endl;
+      bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDVal> op;
+
+
+      for (size_t i = 0; i < this->iterations; ++i) {
+        rev = km.reverse();
+
+        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
+            [&op](MachWord const & src, MachWord & prev) {
+          MachWord rev = op.reverse(src);
+          MachWord res = bliss::utils::bit_ops::bit_or(prev, (bliss::utils::bit_ops::srli<(shift % 8)>(rev)));
+          prev = rev; // bliss::utils::bit_ops::slli<(sizeof(MachWord) * 8 - shift)>(rev);
+          return res;
+        });
+
+        local_rev_same = (rev == rev_op);
+
+        if (!local_rev_same) {
+          BL_WARNING("ERROR: rev diff at iter " << i << ":\n\tinput\t" << km << "\n\toutput\t" << rev << "\n\tgold\t" << rev_op);
+        }
+        rev_same &= local_rev_same;
+        ASSERT_TRUE(local_rev_same);
+
+        km.nextFromChar(rand() % TT::KmerAlphabet::SIZE);
+      }
+      EXPECT_TRUE(rev_same);
 
     }
+
+    template <typename SIMDType, typename TT = T,
+        typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA>::value, int>::type = 1>
+    void testc () {
+      TT km, rev, rev_op;
+      km = this->kmer;
+
+      bool rev_same = true;
+      bool local_rev_same = true;
+
+      using MachWord = typename SIMDType::MachineWord;
+      constexpr unsigned char SIMDVal = SIMDType::SIMDVal;
+
+      constexpr unsigned char shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+
+//      std::cout << "bit pow2 " << (uint64_t)shift << std::endl;
+      bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDVal> op;
+
+
+      for (size_t i = 0; i < this->iterations; ++i) {
+        rev = km.reverse_complement();
+
+
+        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
+            [&op](MachWord const & src, MachWord & prev) {
+          MachWord rev = op.reverse(src);
+          rev = bliss::utils::bit_ops::negate(rev);
+
+          MachWord res = bliss::utils::bit_ops::bit_or(prev, (bliss::utils::bit_ops::srli<(shift % 8)>(rev)));
+
+          prev = rev; //bliss::utils::bit_ops::slli<(sizeof(MachWord) * 8 - shift)>(rev);  // shift by full size returns unshifted data.
+
+          return res;
+        });
+
+        local_rev_same = (rev == rev_op);
+
+        if (!local_rev_same) {
+//          BL_WARNINGF("ERROR: rev diff at iter %lu:\n\tinput\t%s\n\toutput\t%s\n\tgold\t%s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_op.toAlphabetString().c_str());
+            BL_WARNING("ERROR: rev diff at iter " << i << ":\n\tinput\t" << km << "\n\toutput\t" << rev << "\n\tgold\t" << rev_op);
+        }
+        rev_same &= local_rev_same;
+        ASSERT_TRUE(local_rev_same);
+
+        km.nextFromChar(rand() % TT::KmerAlphabet::SIZE);
+      }
+      EXPECT_TRUE(rev_same);
+    }
+
+    template <typename SIMDType, typename TT = T,
+        typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA16>::value ||
+          ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA6>::value ||
+          ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA6>::value, int>::type = 0>
+    void testc () {
+      TT km, rev, rev_op;
+      km = this->kmer;
+
+      bool rev_same = true;
+      bool local_rev_same = true;
+
+      using MachWord = typename SIMDType::MachineWord;
+      constexpr unsigned char SIMDVal = SIMDType::SIMDVal;
+
+      constexpr uint16_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+
+//      std::cout << "bit 3 " << (uint64_t)shift << std::endl;
+      bliss::utils::bit_ops::bitgroup_ops<1, SIMDVal> op1;
+
+      for (size_t i = 0; i < this->iterations; ++i) {
+        rev = km.reverse_complement();
+
+
+        bliss::utils::bit_ops::reverse<1, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
+            [&op1](MachWord const & src, MachWord & prev) {
+          MachWord rev = op1.reverse(src);
+
+          MachWord res = bliss::utils::bit_ops::bit_or(prev, (bliss::utils::bit_ops::srli<(shift % 8)>(rev)));
+
+          prev = rev; //bliss::utils::bit_ops::slli<(sizeof(MachWord) * 8 - shift)>(rev);  // shift by full size returns unshifted data.
+
+          return res;
+        });
+
+        local_rev_same = (rev == rev_op);
+
+        if (!local_rev_same) {
+//          BL_WARNINGF("ERROR: rev diff at iter %lu:\n\tinput\t%s\n\toutput\t%s\n\tgold\t%s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_op.toAlphabetString().c_str());
+            BL_WARNING("ERROR: rev diff at iter " << i << ":\n\tinput\t" << km << "\n\toutput\t" << rev << "\n\tgold\t" << rev_op);
+        }
+        rev_same &= local_rev_same;
+        ASSERT_TRUE(local_rev_same);
+
+        km.nextFromChar(rand() % TT::KmerAlphabet::SIZE);
+      }
+      EXPECT_TRUE(rev_same);
+
+    }
+
 
 };
 
@@ -409,80 +564,54 @@ class KmerReverseOpTest : public ::testing::Test {
 // indicate this is a typed test
 TYPED_TEST_CASE_P(KmerReverseOpTest);
 
-TYPED_TEST_P(KmerReverseOpTest, reverse_ops)
+TYPED_TEST_P(KmerReverseOpTest, reverse_swar)
 {
-  TypeParam km, rev, revcomp, rev_op, revcomp_op;
-  km = this->kmer;
+  this->template test<bliss::utils::bit_ops::BITREV_SWAR>();
+}
 
-  bool rev_same = true;
-  bool revcomp_same = true;
-  bool local_rev_same = true;
-  bool local_revcomp_same = true;
+TYPED_TEST_P(KmerReverseOpTest, reverse_ssse3)
+{
+#ifdef __SSSE3__
+  this->template test<bliss::utils::bit_ops::BITREV_SSSE3>();
+#else
+  BL_WARNINGF("SSSE3 is not enabled or not available.");
+#endif
+}
 
-  uint64_t temp = 0;
-  constexpr size_t shift = TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits;
+TYPED_TEST_P(KmerReverseOpTest, reverse_avx2)
+{
+#ifdef __AVX2__
+  this->template test<bliss::utils::bit_ops::BITREV_AVX2>();
+#else
+  BL_WARNINGF("AVX2 is not enabled or not available.");
+#endif
+}
 
-//  std::cout << "shift " << shift << std::endl;
+TYPED_TEST_P(KmerReverseOpTest, revcomp_swar)
+{
+  this->template testc<bliss::utils::bit_ops::BITREV_SWAR>();
+}
 
-  for (size_t i = 0; i < this->iterations; ++i) {
-    rev = km.reverse();
-    revcomp = km.reverse_complement();
+TYPED_TEST_P(KmerReverseOpTest, revcomp_ssse3)
+{
+#ifdef __SSSE3__
+  this->template testc<bliss::utils::bit_ops::BITREV_SSSE3>();
+#else
+  BL_WARNINGF("SSSE3 is not enabled or not available.");
+#endif
+}
 
-	temp = 0;
-    bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR>(rev_op.getDataRef(), km.getDataRef(),
-    		[&shift, &temp](uint64_t const & src) {
-    	bliss::utils::bit_ops::bitgroup_ops<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR> op;
-    	uint64_t rev = op.reverse(src);
-    	if (shift == 0) return rev;
-    	uint64_t res = temp | (rev >> shift);
-    	temp = rev << (sizeof(uint64_t) * 8 - shift);
-    	return res;
-    });
-	temp = 0;
-    bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR>(revcomp_op.getDataRef(), km.getDataRef(),
-    		[&shift, &temp](uint64_t const & src) {
-//    	std::cout << "src: " << std::hex << src << " ";
-    	bliss::utils::bit_ops::bitgroup_ops<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR> op;
-    	uint64_t rev = op.reverse(src);
-//    	std::cout << "rev: " << std::hex << rev << " ";
-    	rev = ~rev;
-//    	std::cout << "~rev: " << std::hex << rev << " ";
-//    	std::cout << "temp: " << std::hex << temp << " ";
-
-    	if (shift == 0) return rev;
-    	uint64_t res = temp | (rev >> shift);
-//    	std::cout << "res: " << std::hex << res << " ";
-
-    	temp = rev << (sizeof(uint64_t) * 8 - shift);  // shift by full size returns unshifted data.
-//    	std::cout << "temp << : " << std::hex << temp << std::endl;
-
-    	return res;
-    });
-
-    local_rev_same = (rev == rev_op);
-    local_revcomp_same = (revcomp == revcomp_op);
-
-    if (!local_rev_same) {
-      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput\t%s\n\toutput\t%s\n\tgold\t%s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_op.toAlphabetString().c_str());
-    }
-    if (!local_revcomp_same) {
-      BL_WARNINGF("ERROR: revcomp diff at iter %lu:\n\tinput\t%s\n\toutput\t%s\n\tgold\t%s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_op.toAlphabetString().c_str());
-    }
-    rev_same &= local_rev_same;
-    revcomp_same &= local_revcomp_same;
-    ASSERT_TRUE(local_rev_same);
-    ASSERT_TRUE(local_revcomp_same);
-
-    km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
-  }
-  EXPECT_TRUE(rev_same);
-  EXPECT_TRUE(revcomp_same);
-
+TYPED_TEST_P(KmerReverseOpTest, revcomp_avx2)
+{
+#ifdef __AVX2__
+  this->template testc<bliss::utils::bit_ops::BITREV_AVX2>();
+#else
+  BL_WARNINGF("AVX2 is not enabled or not available.");
+#endif
 }
 
 
-
-REGISTER_TYPED_TEST_CASE_P(KmerReverseOpTest, reverse_ops);
+REGISTER_TYPED_TEST_CASE_P(KmerReverseOpTest, reverse_swar, reverse_ssse3, reverse_avx2, revcomp_swar, revcomp_ssse3, revcomp_avx2);
 
 //////////////////// RUN the tests with different types.
 
@@ -505,6 +634,35 @@ typedef ::testing::Types<
     ::bliss::common::Kmer<  3, bliss::common::DNA,    uint8_t>,  // 1 word, not full
     ::bliss::common::Kmer<  4, bliss::common::DNA,    uint8_t>,  // 1 word, full
     ::bliss::common::Kmer<  5, bliss::common::DNA,    uint8_t>,  // 2 words, not full
-    ::bliss::common::Kmer<  8, bliss::common::DNA,    uint8_t>  // 2 words, full
+    ::bliss::common::Kmer<  8, bliss::common::DNA,    uint8_t>,  // 2 words, full
+     ::bliss::common::Kmer< 21, bliss::common::DNA5,  uint64_t>,  // 1 word, not full
+     ::bliss::common::Kmer< 22, bliss::common::DNA5,  uint64_t>,  // 2 word, not full
+     ::bliss::common::Kmer< 42, bliss::common::DNA5,  uint64_t>,  // 2 words, not full
+     ::bliss::common::Kmer< 43, bliss::common::DNA5,  uint64_t>,  // 3 words, not full
+     ::bliss::common::Kmer< 64, bliss::common::DNA5,  uint64_t>,  // 3 words, full
+     ::bliss::common::Kmer<  2, bliss::common::DNA5,   uint8_t>,  // 1 word, not full
+     ::bliss::common::Kmer<  3, bliss::common::DNA5,   uint8_t>,  // 2 word, not full
+     ::bliss::common::Kmer<  5, bliss::common::DNA5,   uint8_t>,  // 2 words, not full
+     ::bliss::common::Kmer<  6, bliss::common::DNA5,   uint8_t>,  // 3 words, not full
+     ::bliss::common::Kmer<  8, bliss::common::DNA5,   uint8_t>,  // 3 words, full
+     ::bliss::common::Kmer< 15, bliss::common::DNA16, uint64_t>,  // 1 word, not full
+     ::bliss::common::Kmer< 16, bliss::common::DNA16, uint64_t>,  // 1 word, full
+     ::bliss::common::Kmer< 32, bliss::common::DNA16, uint64_t>,  // 2 words, full
+     ::bliss::common::Kmer< 40, bliss::common::DNA16, uint64_t>,  // 3 words, not full
+     ::bliss::common::Kmer< 48, bliss::common::DNA16, uint64_t>,  // 3 words, full
+     ::bliss::common::Kmer<  7, bliss::common::DNA16, uint32_t>,  // 1 word, not full
+     ::bliss::common::Kmer<  8, bliss::common::DNA16, uint32_t>,  // 1 word, full
+     ::bliss::common::Kmer< 16, bliss::common::DNA16, uint32_t>,  // 2 words, full
+     ::bliss::common::Kmer< 20, bliss::common::DNA16, uint32_t>,  // 3 words, not full
+     ::bliss::common::Kmer< 24, bliss::common::DNA16, uint32_t>,  // 3 words, full
+     ::bliss::common::Kmer<  3, bliss::common::DNA16, uint16_t>,  // 1 word, not full
+     ::bliss::common::Kmer<  4, bliss::common::DNA16, uint16_t>,  // 1 word, full
+     ::bliss::common::Kmer<  5, bliss::common::DNA16, uint16_t>,  // 2 words, not full
+     ::bliss::common::Kmer<  8, bliss::common::DNA16, uint16_t>,  // 2 words, full
+     ::bliss::common::Kmer<  1, bliss::common::DNA16,  uint8_t>,  // 1 word, not full
+     ::bliss::common::Kmer<  2, bliss::common::DNA16,  uint8_t>,  // 1 word, full
+     ::bliss::common::Kmer<  3, bliss::common::DNA16,  uint8_t>,  // 2 words, not full
+     ::bliss::common::Kmer<  4, bliss::common::DNA16,  uint8_t>   // 2 words, full
+
 > KmerReverseOpTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerReverseOpTest, KmerReverseOpTestTypes);

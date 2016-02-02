@@ -371,7 +371,7 @@ namespace bliss
       // TODO:  can copy directly from stream into kmer, IF data types are same.
       int bitPos = 0;
       // add to lsb iteratively, one packed word at a time
-      for (int i = 0; i < KMER_SIZE; ++i, bitPos += bitsPerChar)
+      for (unsigned int i = 0; i < KMER_SIZE; ++i, bitPos += bitsPerChar)
       {
         setBitsAtPos(*begin >> offset, bitPos, bitsPerChar);
   
@@ -443,7 +443,7 @@ namespace bliss
       // directly put the char where it needs to go.
   
       int bitPos = 0;
-      for (int i = 0; i < KMER_SIZE; ++i, bitPos += bitsPerChar) {
+      for (unsigned int i = 0; i < KMER_SIZE; ++i, bitPos += bitsPerChar) {
   
         setBitsAtPos(*begin, bitPos, bitsPerChar);
   
@@ -909,8 +909,8 @@ namespace bliss
       std::stringstream ss;
       ss << "k-mer of size " << size << " alphabet ";
       ss << typeid(ALPHABET).name();
-      ss << ": [";
-      for (unsigned int i = 0; i < nWords; ++i)
+      ss << ": MSB [";
+      for (int64_t i = nWords - 1; i >=0; --i)
       {
         ss << "0x" << std::hex << data[i] << " ";
       }
@@ -920,7 +920,7 @@ namespace bliss
   
     // for debug purposes
     /**
-     * @brief Returns a string representation of this k-mer.
+     * @brief Returns a string representation of this k-mer.  Order is 5' to 3' (correspond to MSB to LSB)
      *
      * Usage: for debugging and testing.
      *
@@ -934,6 +934,7 @@ namespace bliss
 
       std::stack<size_t> elementsInReverse;
       size_t forBitMask = (1 << bitsPerChar) - 1;
+
 
       for (unsigned int i = 0; i < size; ++i)
       {
@@ -1008,7 +1009,7 @@ namespace bliss
             static_cast<size_t>(bitstream::nWords) :
             ((NumBits + sizeof(WORD_TYPE) * 8 - 1) / (sizeof(WORD_TYPE) * 8) );
         uint64_t result = 0;
-        for (int i = nwords - 1; i >= 0; --i) {
+        for (int64_t i = nwords - 1; i >= 0; --i) {
   
           // this is to avoid GCC compiler warning.  even though the case
           // sizeof (WORD_TYPE) >= sizeof(uint64_t) is already caught earlier, compiler
@@ -1113,7 +1114,7 @@ namespace bliss
     KMER_INLINE void do_left_shift(size_t const & shift)
     {
       // inspired by STL bitset implementation
-      const size_t word_shift = shift / (sizeof(WORD_TYPE)*8);
+      const int64_t word_shift = shift / (sizeof(WORD_TYPE)*8);
       const size_t offset = shift % (sizeof(WORD_TYPE)*8);
   
       // all shifted away.
@@ -1125,7 +1126,7 @@ namespace bliss
       if (offset == 0)
       {
         // no bit shifting, just shift words around.  do in reverse so don't overwrite.
-        for (size_t i = nWords - 1; i >= word_shift; --i)
+        for (int64_t i = nWords - 1; i >= word_shift; --i)
         {
           data[i] = data[i - word_shift];
         }
@@ -1136,7 +1137,7 @@ namespace bliss
         WORD_TYPE t = data[nWords - 1 - word_shift];
         WORD_TYPE t1;
 
-        for (size_t i = nWords - 1, j = nWords - word_shift - 2; i > word_shift; --i, --j)
+        for (int64_t i = nWords - 1, j = nWords - word_shift - 2; i > word_shift; --i, --j)
         {
           t1 = data[j];
           data[i] = ((t << offset) | (t1 >> inv_offset));

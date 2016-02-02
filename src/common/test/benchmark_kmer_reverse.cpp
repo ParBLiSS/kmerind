@@ -40,7 +40,6 @@
 #include "common/alphabet_traits.hpp"
 #include "utils/timer.hpp"
 
-
 // include files to test
 
 //TESTS: Sequential, SWAR/BSWAP, SSSE3, AVX2 versions of kmer reverse.
@@ -273,44 +272,44 @@ typedef ::testing::Types<
     ::bliss::common::Kmer< 64, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 96, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer<128, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer<192, bliss::common::DNA,   uint64_t>
-//    ::bliss::common::Kmer<256, bliss::common::DNA,   uint64_t>,
-//    ::bliss::common::Kmer< 15, bliss::common::DNA5,  uint64_t>,
-//    ::bliss::common::Kmer< 32, bliss::common::DNA5,  uint64_t>,
-//    ::bliss::common::Kmer< 47, bliss::common::DNA5,  uint64_t>,
-//    ::bliss::common::Kmer< 64, bliss::common::DNA5,  uint64_t>,
-//    ::bliss::common::Kmer< 96, bliss::common::DNA5,  uint64_t>,
-//    ::bliss::common::Kmer<128, bliss::common::DNA5,  uint64_t>,
-//    ::bliss::common::Kmer<192, bliss::common::DNA5,  uint64_t>,
-//    ::bliss::common::Kmer<256, bliss::common::DNA5,  uint64_t>,
-//    ::bliss::common::Kmer< 15, bliss::common::DNA16, uint64_t>,
-//    ::bliss::common::Kmer< 16, bliss::common::DNA16, uint64_t>,
-//    ::bliss::common::Kmer< 32, bliss::common::DNA16, uint64_t>,
-//    ::bliss::common::Kmer< 47, bliss::common::DNA16, uint64_t>,
-//    ::bliss::common::Kmer< 64, bliss::common::DNA16, uint64_t>,
-//    ::bliss::common::Kmer< 96, bliss::common::DNA16, uint64_t>,
-//    ::bliss::common::Kmer<128, bliss::common::DNA16, uint64_t>,
-//    ::bliss::common::Kmer<192, bliss::common::DNA16, uint64_t>,
-//    ::bliss::common::Kmer<256, bliss::common::DNA16, uint64_t>,
-//    ::bliss::common::Kmer< 15, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 16, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 32, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 47, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 64, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 96, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer<128, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer<192, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer<256, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 7, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 15, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 16, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 32, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 47, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 64, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 96, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer<128, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer<192, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer<256, bliss::common::ASCII, uint64_t>
+    ::bliss::common::Kmer<192, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer<256, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer< 32, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer< 47, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer< 64, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer< 96, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer<128, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer<192, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer<256, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 16, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 32, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 47, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 64, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 96, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer<128, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer<192, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer<256, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA_IUPAC, uint64_t>,
+    ::bliss::common::Kmer< 16, bliss::common::DNA_IUPAC, uint64_t>,
+    ::bliss::common::Kmer< 32, bliss::common::DNA_IUPAC, uint64_t>,
+    ::bliss::common::Kmer< 47, bliss::common::DNA_IUPAC, uint64_t>,
+    ::bliss::common::Kmer< 64, bliss::common::DNA_IUPAC, uint64_t>,
+    ::bliss::common::Kmer< 96, bliss::common::DNA_IUPAC, uint64_t>,
+    ::bliss::common::Kmer<128, bliss::common::DNA_IUPAC, uint64_t>,
+    ::bliss::common::Kmer<192, bliss::common::DNA_IUPAC, uint64_t>,
+    ::bliss::common::Kmer<256, bliss::common::DNA_IUPAC, uint64_t>,
+    ::bliss::common::Kmer< 7, bliss::common::ASCII, uint64_t>,
+    ::bliss::common::Kmer< 15, bliss::common::ASCII, uint64_t>,
+    ::bliss::common::Kmer< 16, bliss::common::ASCII, uint64_t>,
+    ::bliss::common::Kmer< 32, bliss::common::ASCII, uint64_t>,
+    ::bliss::common::Kmer< 47, bliss::common::ASCII, uint64_t>,
+    ::bliss::common::Kmer< 64, bliss::common::ASCII, uint64_t>,
+    ::bliss::common::Kmer< 96, bliss::common::ASCII, uint64_t>,
+    ::bliss::common::Kmer<128, bliss::common::ASCII, uint64_t>,
+    ::bliss::common::Kmer<192, bliss::common::ASCII, uint64_t>,
+    ::bliss::common::Kmer<256, bliss::common::ASCII, uint64_t>
 > KmerReverseBenchmarkTypes;
 //typedef ::testing::Types<
 //    ::bliss::common::Kmer< 192, bliss::common::DNA,   uint64_t>,
@@ -320,143 +319,6 @@ INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerReverseBenchmark, KmerReverseBenchmarkT
 
 
 
-
-
-
-
-
-// to save some typing.  note that func is not a functor nor lambda function, so using macro is easier than as a templated function.
-#define TEST_REVOP_BITOPS(name, simd, kmertype) do { \
-    TypeParam km, rev, tmp; \
-    km = KmerReverseOpBenchmark<kmertype>::kmer; \
-    \
-    TIMER_START(km); \
-    \
-    for (size_t i = 0; i < KmerReverseOpBenchmark<kmertype>::iterations; ++i) { \
-      \
-      memset(tmp.getData(), 0, TypeParam::nBytes); \
-      \
-      bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, simd>(tmp.getDataRef(), km.getDataRef()); \
-      tmp.right_shift_bits(TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits);  \
-      /* shift by remainder/padding. */ \
-      \
-      rev ^= tmp; \
-      \
-      km.getData()[i % TypeParam::nWords] = static_cast<typename TypeParam::KmerWordType>(KmerReverseOpBenchmark<kmertype>::chars[i % 1001]) ; \
-    } \
-    TIMER_END(km, name, KmerReverseOpBenchmark<kmertype>::iterations); \
-    \
-    if (rev == km) \
-     std::cout << "rev is same as km.  unlikely event." << std::endl; \
-    } while (0)
-
-
-// to save some typing.  note that func is not a functor nor lambda function, so using macro is easier than as a templated function.
-#define TEST_REVCOP_BITOPS(name, simd, kmertype) do { \
-    TypeParam km, rev, tmp; \
-    km = KmerReverseOpBenchmark<kmertype>::kmer; \
-    \
-    TIMER_START(km); \
-    \
-    for (size_t i = 0; i < KmerReverseOpBenchmark<kmertype>::iterations; ++i) { \
-      \
-      memset(tmp.getData(), 0, TypeParam::nBytes); \
-      \
-      switch (TypeParam::bitsPerChar) { \
-        case 2: \
-          bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, simd>(tmp.getDataRef(), km.getDataRef()); \
-          bliss::utils::bit_ops::negate(tmp.getDataRef(), tmp.getDataRef()); \
-          break; \
-        case 3: \
-        case 4: \
-          bliss::utils::bit_ops::reverse<1, simd>(tmp.getDataRef(), km.getDataRef()); \
-          break; \
-        default: \
-          break; \
-      } \
-      \
-      tmp.right_shift_bits(TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits);  \
-      /* shift by remainder/padding. */ \
-      \
-      rev ^= tmp; \
-      \
-      km.getData()[i % TypeParam::nWords] = static_cast<typename TypeParam::KmerWordType>(KmerReverseOpBenchmark<kmertype>::chars[i % 1001]) ; \
-    } \
-    TIMER_END(km, name, KmerReverseOpBenchmark<kmertype>::iterations); \
-    \
-    if (rev == km) \
-     std::cout << "rev is same as km.  unlikely event." << std::endl; \
-    } while (0)
-
-
-// to save some typing.  note that func is not a functor nor lambda function, so using macro is easier than as a templated function.
-#define TEST_REVOP2_BITOPS(name, simd, kmertype) do { \
-    TypeParam km, rev, tmp; \
-    km = KmerReverseOpBenchmark<kmertype>::kmer; \
-    \
-    TIMER_START(km); \
-    \
-    uint64_t temp = 0; \
-    constexpr size_t shift = TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits; \
-    \
-    for (size_t i = 0; i < KmerReverseOpBenchmark<kmertype>::iterations; ++i) { \
-      \
-      temp = 0; \
-      \
-      bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR>(tmp.getDataRef(), km.getDataRef(), \
-      		[&shift, &temp](uint64_t const & src) { \
-      	bliss::utils::bit_ops::bitgroup_ops<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR> op; \
-      	uint64_t rev = op.reverse(src); \
-      	if (shift == 0) return rev; \
-      	uint64_t res = temp | (rev >> shift); \
-      	temp = rev << (sizeof(uint64_t) * 8 - shift); \
-      	return res; \
-      }); \
-      \
-      rev ^= tmp; \
-      \
-      km.getData()[i % TypeParam::nWords] = static_cast<typename TypeParam::KmerWordType>(KmerReverseOpBenchmark<kmertype>::chars[i % 1001]) ; \
-    } \
-    TIMER_END(km, name, KmerReverseOpBenchmark<kmertype>::iterations); \
-    \
-    if (rev == km) \
-     std::cout << "rev is same as km.  unlikely event." << std::endl; \
-    } while (0)
-
-
-// to save some typing.  note that func is not a functor nor lambda function, so using macro is easier than as a templated function.
-#define TEST_REVCOP2_BITOPS(name, simd, kmertype) do { \
-    TypeParam km, rev, tmp; \
-    km = KmerReverseOpBenchmark<kmertype>::kmer; \
-    \
-    TIMER_START(km); \
-    \
-    uint64_t temp = 0; \
-    constexpr size_t shift = TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits; \
-    \
-    for (size_t i = 0; i < KmerReverseOpBenchmark<kmertype>::iterations; ++i) { \
-      \
-      temp = 0; \
-      \
-      bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR>(tmp.getDataRef(), km.getDataRef(), \
-      		[&shift, &temp](uint64_t const & src) { \
-      	bliss::utils::bit_ops::bitgroup_ops<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SWAR> op; \
-      	uint64_t rev = ~(op.reverse(src)); \
-      	if (shift == 0) return rev; \
-      	uint64_t res = temp | (rev >> shift); \
-      	temp = rev << (sizeof(uint64_t) * 8 - shift); \
-      	return res; \
-      }); \
-      \
-      rev ^= tmp; \
-      \
-      km.getData()[i % TypeParam::nWords] = static_cast<typename TypeParam::KmerWordType>(KmerReverseOpBenchmark<kmertype>::chars[i % 1001]) ; \
-    } \
-    TIMER_END(km, name, KmerReverseOpBenchmark<kmertype>::iterations); \
-    \
-    if (rev == km) \
-     std::cout << "revc is same as km.  unlikely event." << std::endl; \
-    } while (0)
 
 
 
@@ -494,6 +356,159 @@ class KmerReverseOpBenchmark : public ::testing::Test {
 
     }
 
+    template <unsigned char SIMDType, typename TT = T>
+    TT benchmark() {
+      TT km, rev, tmp;
+      km = kmer;
+
+
+      for (size_t i = 0; i < iterations; ++i) {
+
+        memset(tmp.getData(), 0, TT::nBytes);
+
+        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType>(tmp.getDataRef(), km.getDataRef());
+        tmp.right_shift_bits(TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits);
+        /* shift by remainder/padding. */
+
+        rev ^= tmp;
+
+        km.getData()[i % TT::nWords] = static_cast<typename TT::KmerWordType>(chars[i % 1001]) ;
+      }
+
+      return rev;
+    }
+
+    template <typename SIMDType, typename TT = T>
+    TT benchmark() {
+      TT km, rev, tmp;
+      km = this->kmer;
+
+      using MachWord = typename SIMDType::MachineWord;
+
+      constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDType::SIMDVal> op;
+
+      for (size_t i = 0; i < iterations; ++i) {
+
+        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(tmp.getDataRef(), km.getDataRef(),
+            [&op](MachWord const & src, MachWord & prev) {
+          MachWord rev = op.reverse(src);
+          MachWord res = bliss::utils::bit_ops::bit_or(prev, (bliss::utils::bit_ops::srli<(shift % 8)>(rev)));
+          prev = rev; // bliss::utils::bit_ops::slli<(sizeof(MachWord) * 8 - shift)>(rev);
+          return res;
+        });
+
+        rev ^= tmp;
+
+        km.getData()[i % TT::nWords] = static_cast<typename TT::KmerWordType>(chars[i % 1001]) ;
+      }
+
+      return rev;
+    }
+
+
+    template <unsigned char SIMDType, typename TT = T>
+    TT benchmark_c() {
+
+
+      TT km, rev, tmp;
+      km = KmerReverseOpBenchmark<TT>::kmer;
+
+      for (size_t i = 0; i < iterations; ++i) {
+
+        memset(tmp.getData(), 0, TT::nBytes);
+
+        switch (TT::bitsPerChar) {
+          case 2:
+            bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType>(tmp.getDataRef(), km.getDataRef());
+            bliss::utils::bit_ops::negate(tmp.getDataRef(), tmp.getDataRef());
+            break;
+          case 3:
+          case 4:
+            bliss::utils::bit_ops::reverse<1, SIMDType>(tmp.getDataRef(), km.getDataRef());
+            break;
+          default:
+            break;
+        }
+
+        tmp.right_shift_bits(TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits);
+        /* shift by remainder/padding. */
+
+        rev ^= tmp;
+
+        km.getData()[i % TT::nWords] = static_cast<typename TT::KmerWordType>(chars[i % 1001]) ;
+      }
+
+      return rev;
+   }
+
+    template <typename SIMDType, typename TT = T,
+        typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA>::value, int>::type = 1>
+    TT benchmark_c() {
+      TT km, rev, tmp;
+      km = KmerReverseOpBenchmark<TT>::kmer;
+      using MachWord = typename SIMDType::MachineWord;
+
+      constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDType::SIMDVal> op;
+
+      for (size_t i = 0; i < KmerReverseOpBenchmark<TT>::iterations; ++i) {
+
+        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(tmp.getDataRef(), km.getDataRef(),
+            [&op](MachWord const & src, MachWord & prev) {
+          MachWord rev = op.reverse(src);
+          rev = bliss::utils::bit_ops::negate(rev);
+
+          MachWord res = bliss::utils::bit_ops::bit_or(prev, (bliss::utils::bit_ops::srli<(shift % 8)>(rev)));
+
+          prev = rev; //bliss::utils::bit_ops::slli<(sizeof(MachWord) * 8 - shift)>(rev);  // shift by full size returns unshifted data.
+
+          return res;
+        });
+
+        rev ^= tmp;
+
+        km.getData()[i % TT::nWords] = static_cast<typename TT::KmerWordType>(chars[i % 1001]) ;
+      }
+
+      return rev;
+    }
+    template <typename SIMDType, typename TT = T,
+        typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA16>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA6>::value ||
+         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA6>::value, int>::type = 1>
+    TT benchmark_c() {
+      TT km, rev, tmp;
+      km = KmerReverseOpBenchmark<TT>::kmer;
+
+      using MachineWord = typename SIMDType::MachineWord;
+
+      constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      bliss::utils::bit_ops::bitgroup_ops<1, SIMDType::SIMDVal> op1;
+
+      for (size_t i = 0; i < KmerReverseOpBenchmark<TT>::iterations; ++i) {
+
+        bliss::utils::bit_ops::reverse<1, SIMDType, shift>(tmp.getDataRef(), km.getDataRef(),
+            [&op1](MachineWord const & src, MachineWord & prev) {
+          MachineWord rev = op1.reverse(src);
+
+          MachineWord res = bliss::utils::bit_ops::bit_or(prev, (bliss::utils::bit_ops::srli<(shift % 8)>(rev)));
+
+          prev = rev; //bliss::utils::bit_ops::slli<(sizeof(MachineWord) * 8 - shift)>(rev);  // shift by full size returns unshifted data.
+
+          return res;
+        });
+
+        rev ^= tmp;
+
+        km.getData()[i % TT::nWords] = static_cast<typename TT::KmerWordType>(chars[i % 1001]) ;
+      }
+
+      return rev;
+    }
+
+
 };
 
 
@@ -515,43 +530,196 @@ std::vector<long> KmerReverseOpBenchmark<T>::chars;
 // indicate this is a typed test
 TYPED_TEST_CASE_P(KmerReverseOpBenchmark);
 
-TYPED_TEST_P(KmerReverseOpBenchmark, reverse_ops)
+TYPED_TEST_P(KmerReverseOpBenchmark, reverse_swar)
 {
   TIMER_INIT(km);
 
-  TEST_REVOP_BITOPS("rev", bliss::utils::bit_ops::BIT_REV_SWAR, TypeParam);
-  TEST_REVOP2_BITOPS("revop", bliss::utils::bit_ops::BIT_REV_SWAR, TypeParam);
+  TIMER_START(km);
+  TypeParam rev = this->template benchmark<bliss::utils::bit_ops::BIT_REV_SWAR>();
+  TIMER_END(km, "rev swar", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "rev is same as kmer.  unlikely event." << std::endl;
+
+
+  TIMER_START(km);
+  rev = this->template benchmark<bliss::utils::bit_ops::BITREV_SWAR>();
+  TIMER_END(km, "revop swar", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "rev is same as kmer.  unlikely event." << std::endl;
+
+
+  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+
+}
+
+TYPED_TEST_P(KmerReverseOpBenchmark, reverse_ssse3)
+{
+  TIMER_INIT(km);
+
+#ifdef __SSSE3__
+
+  TIMER_START(km);
+  TypeParam rev = this->template benchmark<bliss::utils::bit_ops::BIT_REV_SSSE3>();
+  TIMER_END(km, "rev ssse3", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "rev is same as kmer.  unlikely event." << std::endl;
+
+
+  TIMER_START(km);
+  rev = this->template benchmark<bliss::utils::bit_ops::BITREV_SSSE3>();
+  TIMER_END(km, "revop ssse3", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "rev is same as kmer.  unlikely event." << std::endl;
+
+#endif
+
+  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+
+}
+TYPED_TEST_P(KmerReverseOpBenchmark, reverse_avx2)
+{
+  TIMER_INIT(km);
+
+#ifdef __AVX2__
+
+  TIMER_START(km);
+  TypeParam rev = this->template benchmark<bliss::utils::bit_ops::BIT_REV_AVX2>();
+  TIMER_END(km, "rev avx", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "rev is same as kmer.  unlikely event." << std::endl;
+
+
+  TIMER_START(km);
+  rev = this->template benchmark<bliss::utils::bit_ops::BITREV_AVX2>();
+  TIMER_END(km, "revop avx", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "rev is same as kmer.  unlikely event." << std::endl;
+
+#endif
+
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
 
 }
 
 
-TYPED_TEST_P(KmerReverseOpBenchmark, revcomp_ops)
+TYPED_TEST_P(KmerReverseOpBenchmark, revcomp_swar)
 {
   TIMER_INIT(km);
 
-  TEST_REVCOP_BITOPS("revC", bliss::utils::bit_ops::BIT_REV_SWAR, TypeParam);
-  TEST_REVCOP2_BITOPS("revCop", bliss::utils::bit_ops::BIT_REV_SWAR, TypeParam);
+  TIMER_START(km);
+  TypeParam rev = this->template benchmark_c<bliss::utils::bit_ops::BIT_REV_SWAR>();
+  TIMER_END(km, "revc swar", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "revc is same as kmer.  unlikely event." << std::endl;
+
+
+  TIMER_START(km);
+  rev = this->template benchmark_c<bliss::utils::bit_ops::BITREV_SWAR>();
+  TIMER_END(km, "revopc swar", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "revc is same as kmer.  unlikely event." << std::endl;
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
 
 }
 
-REGISTER_TYPED_TEST_CASE_P(KmerReverseOpBenchmark, reverse_ops, revcomp_ops);
+TYPED_TEST_P(KmerReverseOpBenchmark, revcomp_ssse3)
+{
+  TIMER_INIT(km);
+
+
+#ifdef __SSSE3__
+  TIMER_START(km);
+  TypeParam rev = this->template benchmark_c<bliss::utils::bit_ops::BIT_REV_SSSE3>();
+  TIMER_END(km, "revc ssse3", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "revc is same as kmer.  unlikely event." << std::endl;
+
+
+  TIMER_START(km);
+  rev = this->template benchmark_c<bliss::utils::bit_ops::BITREV_SSSE3>();
+  TIMER_END(km, "revopc ssse3", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "revc is same as kmer.  unlikely event." << std::endl;
+
+#endif
+
+
+
+  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+
+}
+
+
+TYPED_TEST_P(KmerReverseOpBenchmark, revcomp_avx2)
+{
+  TIMER_INIT(km);
+
+#ifdef __AVX2__
+  TIMER_START(km);
+  TypeParam rev = this->template benchmark_c<bliss::utils::bit_ops::BIT_REV_AVX2>();
+  TIMER_END(km, "revc avx", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "revc is same as kmer.  unlikely event." << std::endl;
+
+
+  TIMER_START(km);
+  rev = this->template benchmark_c<bliss::utils::bit_ops::BITREV_AVX2>();
+  TIMER_END(km, "revopc avx", KmerReverseOpBenchmark<TypeParam>::iterations);
+
+  if (rev == this->kmer)
+   std::cout << "revc is same as kmer.  unlikely event." << std::endl;
+
+#endif
+
+
+  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+
+}
+
+REGISTER_TYPED_TEST_CASE_P(KmerReverseOpBenchmark, reverse_swar, reverse_ssse3, reverse_avx2, revcomp_swar, revcomp_ssse3, revcomp_avx2);
 
 //////////////////// RUN the tests with different types.
 
 // max of 50 cases
 typedef ::testing::Types<
-	    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint64_t>,
-	    ::bliss::common::Kmer< 32, bliss::common::DNA,   uint64_t>,
-	    ::bliss::common::Kmer< 47, bliss::common::DNA,   uint64_t>,
-	    ::bliss::common::Kmer< 64, bliss::common::DNA,   uint64_t>,
-	    ::bliss::common::Kmer< 96, bliss::common::DNA,   uint64_t>,
-	    ::bliss::common::Kmer<128, bliss::common::DNA,   uint64_t>,
-	    ::bliss::common::Kmer<192, bliss::common::DNA,   uint64_t>,
-	    ::bliss::common::Kmer<256, bliss::common::DNA,   uint64_t>
+    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer< 32, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer< 47, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer< 64, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer< 96, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer<128, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer<192, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer<256, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer< 32, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer< 47, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer< 64, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer< 96, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer<128, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer<192, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer<256, bliss::common::DNA5,  uint64_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 16, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 32, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 47, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 64, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer< 96, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer<128, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer<192, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer<256, bliss::common::DNA16, uint64_t>
 > KmerReverseOpBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerReverseOpBenchmark, KmerReverseOpBenchmarkTypes);
 
