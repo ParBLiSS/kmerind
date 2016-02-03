@@ -131,9 +131,9 @@ void testDeBruijnGraph(const mxx::comm& comm, const std::string & filename, cons
 	auto results = idx.find(query);
 	TIMER_END(test, "query", results.size());
 
-  for (auto result : results) {
-    std::cout << result << std::endl;
-  }
+//  for (auto result : results) {
+//    std::cout << result << std::endl;
+//  }
 
 	TIMER_REPORT_MPI(test, comm.rank(), comm);
 }
