@@ -56,7 +56,7 @@ class KmerReverseBenchmark : public ::testing::Test {
 
     static bliss::common::test::KmerReverseHelper<T> helper;
 
-    static constexpr size_t iterations = 100000000;
+    static constexpr size_t iterations = 10000000;
 
     static std::vector<long> chars;
 
@@ -339,7 +339,7 @@ class KmerReverseOpBenchmark : public ::testing::Test {
 
     static bliss::common::test::KmerReverseHelper<T> helper;
 
-    static constexpr size_t iterations = 100000000;
+    static constexpr size_t iterations = 10000000;
 
     static std::vector<long> chars;
 
