@@ -135,12 +135,12 @@ namespace bliss {
         return val;
       }
       template <uint8_t shift, typename WORD_TYPE>
-      BITS_INLINE typename ::std::enable_if<(shift >= sizeof(WORD_TYPE)), WORD_TYPE>::type
+      BITS_INLINE typename ::std::enable_if<(shift >= (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
       srli(WORD_TYPE const val) {
         return 0;
       }
       template <uint8_t shift, typename WORD_TYPE>
-      BITS_INLINE typename ::std::enable_if<(shift > 0) && (shift < sizeof(WORD_TYPE)), WORD_TYPE>::type
+      BITS_INLINE typename ::std::enable_if<(shift > 0) && (shift < (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
       srli(WORD_TYPE const val) {
         return val >> shift;
       }
@@ -157,12 +157,12 @@ namespace bliss {
         return val;
       }
       template <uint8_t shift, typename WORD_TYPE>
-      BITS_INLINE typename ::std::enable_if<(shift >= sizeof(WORD_TYPE)), WORD_TYPE>::type
+      BITS_INLINE typename ::std::enable_if<(shift >= (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
       slli(WORD_TYPE const val) {
         return 0;
       }
       template <uint8_t shift, typename WORD_TYPE>
-      BITS_INLINE typename ::std::enable_if<(shift > 0) && (shift < sizeof(WORD_TYPE)), WORD_TYPE>::type
+      BITS_INLINE typename ::std::enable_if<(shift > 0) && (shift < (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
       slli(WORD_TYPE const val) {
         return val << shift;
       }
@@ -1725,6 +1725,19 @@ namespace bliss {
 
       // 2 sets of functions:  fixed sized array, and arbitrary length (data via pointer)
 
+      template <typename WORD_TYPE, size_t len>
+      void print(WORD_TYPE const (&words)[len]) {
+        for (int i = len - 1; i >= 0; --i) {
+          std::cout << std::hex << words[i] << " ";
+        }
+      }
+      template <typename WORD_TYPE>
+      void print(WORD_TYPE const & word) {
+        uint64_t const * ptr = reinterpret_cast<uint64_t const *>(&word);
+        for (int i = (sizeof(WORD_TYPE) / sizeof(uint64_t)) - 1; i >= 0; --i) {
+          std::cout << std::hex << ptr[i] << " ";
+        }
+      }
 
       /**
        * @brief
@@ -1771,8 +1784,13 @@ namespace bliss {
           // enough bytes.  do an iteration
           v -= WordsInMachWord;
           storeu<MAX_SIMD_TYPE::SIMDVal>(v, op(loadu<MAX_SIMD_TYPE::SIMDVal>(u), tmp));
+
+//          std::cout << "iter " << i << " prev: "; print(tmp);  std::cout << std::endl;
           tmp = bliss::utils::bit_ops::slli<(sizeof(MachineWord) * 8 - bit_shift)>(tmp);  // if bit_shift == 0, tmp will be set to 0.  if WORD - bit_shift == 0, then tmp will be unchanged
-//          ::std::cout << ::std::dec << i << " " << ::std::hex << *v << " ";
+//          std::cout << "iter " << i << " shift " << shift << " tmp: "; print(tmp);  std::cout << std::endl;
+
+//          std::cout << "iter " << i << " out: "; print(std::forward<WORD_TYPE const (&)[len]>(out));  std::cout << std::endl;
+
           u += WordsInMachWord;
         }
 
@@ -1785,12 +1803,6 @@ namespace bliss {
         return 0;  // return remainder.
       }
 
-      template <typename WORD_TYPE, size_t len>
-      void print(WORD_TYPE const (&words)[len]) {
-        for (int i = len - 1; i >= 0; --i) {
-          std::cout << std::hex << words[i] << " ";
-        }
-      }
 
       template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t shift = 0,
           typename WORD_TYPE, size_t len, typename OP>
@@ -1855,7 +1867,7 @@ namespace bliss {
             tmp = bliss::utils::bit_ops::bit_and(tmp, mask);
 
 
-//            std::cout << "iter " << i << " out: "; print(std::forward<WORD_TYPE const (&)[len]>(out));  std::cout << std::endl;
+            //std::cout << "iter " << i << " out: "; print(std::forward<WORD_TYPE const (&)[len]>(out));  std::cout << std::endl;
             u += nonoverlap;
           }
 
