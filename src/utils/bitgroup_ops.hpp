@@ -130,9 +130,21 @@ namespace bliss {
       }
       /// shift right by number of bits less than 8.
       template <uint8_t shift, typename WORD_TYPE>
-      BITS_INLINE WORD_TYPE srli(WORD_TYPE const val) {
+      BITS_INLINE typename ::std::enable_if<(shift == 0), WORD_TYPE>::type
+      srli(WORD_TYPE const val) {
+        return val;
+      }
+      template <uint8_t shift, typename WORD_TYPE>
+      BITS_INLINE typename ::std::enable_if<(shift >= sizeof(WORD_TYPE)), WORD_TYPE>::type
+      srli(WORD_TYPE const val) {
+        return 0;
+      }
+      template <uint8_t shift, typename WORD_TYPE>
+      BITS_INLINE typename ::std::enable_if<(shift > 0) && (shift < sizeof(WORD_TYPE)), WORD_TYPE>::type
+      srli(WORD_TYPE const val) {
         return val >> shift;
       }
+
       /// shift left by number of bits less than 8.
       template <typename WORD_TYPE>
       BITS_INLINE WORD_TYPE slli(WORD_TYPE const val, uint8_t shift) {
@@ -140,9 +152,21 @@ namespace bliss {
       }
       /// shift left by number of bits less than 8.
       template <uint8_t shift, typename WORD_TYPE>
-      BITS_INLINE WORD_TYPE slli(WORD_TYPE const val) {
+      BITS_INLINE typename ::std::enable_if<(shift == 0), WORD_TYPE>::type
+      slli(WORD_TYPE const val) {
+        return val;
+      }
+      template <uint8_t shift, typename WORD_TYPE>
+      BITS_INLINE typename ::std::enable_if<(shift >= sizeof(WORD_TYPE)), WORD_TYPE>::type
+      slli(WORD_TYPE const val) {
+        return 0;
+      }
+      template <uint8_t shift, typename WORD_TYPE>
+      BITS_INLINE typename ::std::enable_if<(shift > 0) && (shift < sizeof(WORD_TYPE)), WORD_TYPE>::type
+      slli(WORD_TYPE const val) {
         return val << shift;
       }
+
 
       template <typename WORD_TYPE>
       BITS_INLINE WORD_TYPE negate(WORD_TYPE const & u) {
@@ -2100,59 +2124,6 @@ namespace bliss {
         return (len * sizeof(WORD_TYPE) * 8) % 3;  // return remainder.
       }
 
-//      /**
-//       * @brief
-//       * @details   enabled only if BIT_GROUP_SIZE is power of 2, and greater than 0.
-//       * @param out
-//       * @param in
-//       * @param op        operator.  example is one that performs reverse and shifting.  another example is reverse and negate.
-//       * @tparam len      number of words.
-//       * @param bit_offset
-//       * @return
-//       */
-//      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE,
-//      	  typename WORD_TYPE, size_t len, typename OP,
-//          unsigned int WordsInUint64 = sizeof(uint64_t) / sizeof(WORD_TYPE)>
-//      BITS_INLINE typename std::enable_if<((MAX_SIMD_TYPE == BIT_REV_SWAR) ||
-//                                           (MAX_SIMD_TYPE == BIT_REV_SEQ)) &&
-//                                           (BIT_GROUP_SIZE == 3), uint8_t>::type
-//      reverse(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-//
-//        //printf("swar: ");
-//
-//        static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
-//        static_assert(BIT_GROUP_SIZE <= 32, "ERROR: currently reverse does not support 64 BIT_GRUOP_SIZE for SIMD within a register");
-//
-//        //if (bit_offset != 0) throw std::invalid_argument("ERROR: power of 2 BIT_GROUP_SIZE requires bit_offset to be 0.");
-////        if (((len * sizeof(WORD_TYPE)) % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
-////          throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
-//        static_assert(((len * sizeof(WORD_TYPE)) % ((BIT_GROUP_SIZE + 7) / 8)) == 0,
-//                      "ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
-//
-//        //memset(out, 0, len);  // needed because we bitwise OR.
-//
-//        // pointers
-//        uint64_t * v = reinterpret_cast<uint64_t *>(out + len);
-//        uint64_t const * u = reinterpret_cast<uint64_t const *>(in);
-//
-//        for (size_t i = 0; i < (len / WordsInUint64); ++i) {
-//          // enough bytes.  do an iteration
-//          --v;
-//          *v = op(*u);
-//          //::std::cout << ::std::hex << *v << " ";
-//          ++u;
-//        }
-//
-//        constexpr size_t rem = (len % WordsInUint64);
-//        if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
-//  		  uint64_t x = op(*(reinterpret_cast<uint64_t const *>(u)));
-//          memcpy(out, reinterpret_cast<WORD_TYPE *>(&x) + (WordsInUint64 - rem), rem * sizeof(WORD_TYPE));
-//          //::std::cout << "last: " << ::std::hex << x << " ";
-//        }
-//        //std::cout << std::endl;
-//
-//        return 0;  // return remainder.
-//      }
 
 //      template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE, size_t len>
 //      BITS_INLINE typename std::enable_if<(BIT_GROUP_SIZE == 3), uint8_t>::type
@@ -2719,6 +2690,7 @@ namespace bliss {
       template <typename WORD_TYPE>
       BITS_INLINE void
       negate(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len) {
+        static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be 64 bit or less");
 
         constexpr unsigned int WordsInUint64 = sizeof(uint64_t) / sizeof(WORD_TYPE);
 
@@ -2736,6 +2708,7 @@ namespace bliss {
       BITS_INLINE void
       negate(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len]) {
 
+        static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be 64 bit or less");
         constexpr unsigned int WordsInUint64 = sizeof(uint64_t) / sizeof(WORD_TYPE);
 
         // process uint64_t
@@ -2747,23 +2720,6 @@ namespace bliss {
           *(out + i) = ~(*(in + i));
         }
       }
-
-
-
-
-
-      /**
-       * @brief
-       * @details   enabled only if BIT_GROUP_SIZE is power of 2, and greater than 0.
-       * @param out
-       * @param in
-       * @param op        operator.  example is one that performs reverse and shifting.  another example is reverse and negate.
-       * @tparam len      number of words.
-       * @param bit_offset
-       * @return
-       */
-
-
 
 
     } // namespace bit_ops

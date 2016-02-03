@@ -1424,6 +1424,7 @@ namespace bliss
       WORD_TYPE tmp, tmp2, tmp3;
 //      ::std::cout << ::std::hex;
       unsigned int charsPerWord = (sizeof(WORD_TYPE) * 8) / bitsPerChar;
+      constexpr WORD_TYPE mask = getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar);
 
       // complement all, then reverse.
       for (unsigned int i = 0; i < nWords; ++i)
@@ -1433,7 +1434,7 @@ namespace bliss
 
         for (unsigned int j = 0; j < charsPerWord; ++j) {
           tmp3 <<= bitsPerChar;
-          tmp2 = tmp & getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar);  // get the character
+          tmp2 = tmp & mask;  // get the character
           tmp >>= bitsPerChar;
           tmp2 = static_cast<WORD_TYPE>(ALPHABET::to_complement(tmp2));  // get the complement of the character
 
