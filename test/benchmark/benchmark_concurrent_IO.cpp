@@ -94,11 +94,12 @@ struct readMMap {
       int advice =  MADV_SEQUENTIAL | MADV_WILLNEED;
       int flags = MAP_PRIVATE;
       if (populate) flags |= MAP_POPULATE;
-      if (huge) {
-        // ONLY OWKRS FOR PRIVATE, ANONYMOUS mappinig (not backed by file).
-        flags |= MAP_HUGETLB;
-        advice |= MADV_HUGEPAGE;
-      }
+// MADV_HUGEPAGE may not be declared.
+//      if (huge) {
+//        // ONLY OWKRS FOR PRIVATE, ANONYMOUS mappinig (not backed by file).
+//        flags |= MAP_HUGETLB;
+//        advice |= MADV_HUGEPAGE;
+//      }
 
       // mmap
       r = part.getNext(rank);

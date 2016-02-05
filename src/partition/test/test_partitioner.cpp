@@ -151,6 +151,12 @@ TYPED_TEST_P(PartitionTest, blockPartition){
 #ifdef USE_OPENMP
 // test the block partitioning operation. (With openmp threads)
 TYPED_TEST_P(PartitionTest, blockPartition_openmp){
+
+  if (std::is_floating_point<TypeParam>::value) {
+    return;
+  }
+
+
   typedef bliss::partition::range<TypeParam> RangeType;
   typedef bliss::partition::BlockPartitioner<range<TypeParam> > PartitionerType;
 
@@ -195,10 +201,10 @@ TYPED_TEST_P(PartitionTest, blockPartition_openmp){
         r = part.getNext(block);
         e = (rem == 0 ? block * div :
             ( block >= rem ? block * div + rem : block * (div + 1))) + start;
-        EXPECT_EQ(e, r.start);
+        ASSERT_EQ(e, r.start);
         e = (rem == 0 ? (block + 1) * div :
             ( (block + 1) >= rem ? (block + 1) * div + rem : (block + 1) * (div + 1))) + start;
-        EXPECT_EQ(std::min(e,src.end), r.end);
+        ASSERT_EQ(std::min(e,src.end), r.end);
 
       }
     }
