@@ -19,6 +19,8 @@ endif()
 
 if (BUILD_TEST_APPLICATIONS)
 
+if (USE_OPENMP)
+
 # EXECUTABLES
 add_executable(benchmark_concurrent_IO_MMAP benchmark_concurrent_IO.cpp)
 SET_TARGET_PROPERTIES(benchmark_concurrent_IO_MMAP PROPERTIES COMPILE_FLAGS -DTEST_OP_MMAP)
@@ -62,7 +64,6 @@ target_link_libraries(benchmark_concurrent_IO_MMAP_POPULATE_ADVISE ${EXTRA_LIBS}
 #target_link_libraries(benchmark_concurrent_IO_MMAP_POPULATE_HUGEPAGE_ADVISE ${EXTRA_LIBS})
 #
 
-
 # EXECUTABLES
 add_executable(benchmark_concurrent_IO_FILELOADER benchmark_concurrent_IO.cpp)
 SET_TARGET_PROPERTIES(benchmark_concurrent_IO_FILELOADER PROPERTIES COMPILE_FLAGS -DTEST_OP_FILELOADER)
@@ -93,6 +94,7 @@ add_executable(benchmark_concurrent_IO_FASTQIterNoQual benchmark_concurrent_IO.c
 SET_TARGET_PROPERTIES(benchmark_concurrent_IO_FASTQIterNoQual PROPERTIES COMPILE_FLAGS -DTEST_OP_FASTQIterNoQual)
 target_link_libraries(benchmark_concurrent_IO_FASTQIterNoQual ${EXTRA_LIBS})
 
+endif(USE_OPENMP)
 
 
 ## EXECUTABLES
