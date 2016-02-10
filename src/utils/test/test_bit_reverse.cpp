@@ -338,7 +338,7 @@ TYPED_TEST_P(BitReverseTest, reverse_short_array)
   unsigned int max = 8;
 
   for (unsigned int i = 1; i <= max; ++i ) {
-    if ((i % ((TypeParam::bitsPerGroup + 7) / 8)) > 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
+    if (((i * 8) % TypeParam::bitsPerGroup) == 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
 
 
     if (TypeParam::bitsPerGroup == 3) {
@@ -473,7 +473,7 @@ TYPED_TEST_P(BitReverseSSSETest, reverse_short_array)
   int max = 16;
 
   for (int i = 1; i <= max; ++i ) {
-    if ((i % ((TypeParam::bitsPerGroup + 7) / 8)) > 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
+    if (((i * 8) % TypeParam::bitsPerGroup) == 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
 
 
     if (TypeParam::bitsPerGroup == 3) {
@@ -588,7 +588,7 @@ TYPED_TEST_P(BitReverseAVX2Test, reverse_short_array)
 
 
   for (int i = 1; i <= max; ++i ) {
-    if ((i % ((TypeParam::bitsPerGroup + 7) / 8)) > 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
+    if (((i * 8) % TypeParam::bitsPerGroup) == 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
 
 
     if (TypeParam::bitsPerGroup == 3) {
@@ -690,7 +690,7 @@ TYPED_TEST_P(BitReverseLongArrayTest, reverse_long_array)
   unsigned int max = 128;
 
   for (unsigned int i = 1; i <= max; ++i ) {
-    if ((i % ((TypeParam::bitsPerGroup + 7) / 8)) > 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
+    if (((i * 8) % TypeParam::bitsPerGroup) == 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
 
 
       for (unsigned int k = 0; k <= (128 - i); ++k) {
@@ -744,18 +744,24 @@ class BitReverseFixedArrayTest : public ::testing::Test {
     template <unsigned int BITS, unsigned char MAX_SIMD_TYPE,
       typename data_type,
       size_t data_size,
-      typename ::std::enable_if<(((sizeof(data_type) * data_size) % ((BITS + 7) / 8)) != 0), int>::type = 2>
+      typename ::std::enable_if<((data_size * sizeof(data_type) * 8) <= BITS), int>::type = 1>
     void test(data_type (&in)[data_size], data_type (&out)[data_size]) {
+      if ((data_size * sizeof(data_type) * 8) == BITS) {
+        memcpy(out, in, data_size * sizeof(data_type)); return;
+      } else if ((data_size * sizeof(data_type) * 8) < BITS) {
+        return;
+      }
     }
     template <unsigned int BITS, unsigned char MAX_SIMD_TYPE,
       typename data_type,
       size_t data_size,
-      typename ::std::enable_if<(((sizeof(data_type) * data_size) % ((BITS + 7) / 8)) == 0), int>::type = 1>
+      typename ::std::enable_if<((data_size * sizeof(data_type) * 8) > BITS), int>::type = 1>
     void test(data_type (&in)[data_size], data_type (&out)[data_size]) {
 
       BitReverseTestHelper<BITS> helper;
 
       for (unsigned int k = 0; k < (32 - data_size); ++k) {
+
         memcpy(in, helper.array + k, data_size * sizeof(data_type));
         memset(out, 0, data_size * sizeof(data_type));
 
@@ -783,7 +789,7 @@ class BitReverseFixedArrayTest : public ::testing::Test {
           printf("array size = %lu, sizeof(datatype) = %lu, bits = %u, SIMD = %u, k = %u\n", data_size, sizeof(data_type), BITS, MAX_SIMD_TYPE, k);
         }
 
-        ASSERT_TRUE(same);
+        EXPECT_TRUE(same);
       }
     }
 };
@@ -794,20 +800,23 @@ TYPED_TEST_P(BitReverseFixedArrayTest, reverse_seq)
 {
   using data_type = typename ::std::tuple_element<1, TypeParam>::type;
   constexpr size_t data_size = ::std::tuple_element<0, TypeParam>::type::bitsPerGroup;
-  data_type in[data_size];
-  data_type out[data_size];
+  data_type in  [data_size];
+  data_type out [data_size];
+  // NEED TO SPECIFY data_type and data_size for icc.  not needed for clang or gcc.
   switch (sizeof(data_type)) {
     case 8:
-      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
+      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_SEQ, data_type, data_size>(in, out);
     case 4:
-      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
+      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_SEQ, data_type, data_size>(in, out);
     case 2:
-      this->template test<8, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
+      this->template test<8,  ::bliss::utils::bit_ops::BIT_REV_SEQ, data_type, data_size>(in, out);
+    case 1:
+      this->template test<4,  ::bliss::utils::bit_ops::BIT_REV_SEQ, data_type, data_size>(in, out);
+      this->template test<2,  ::bliss::utils::bit_ops::BIT_REV_SEQ, data_type, data_size>(in, out);
+      this->template test<1,  ::bliss::utils::bit_ops::BIT_REV_SEQ, data_type, data_size>(in, out);
+      this->template test<3,  ::bliss::utils::bit_ops::BIT_REV_SEQ, data_type, data_size>(in, out);
+      break;
     default:
-      this->template test<4, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
-      this->template test<2, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
-      this->template test<1, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
-      this->template test<3, ::bliss::utils::bit_ops::BIT_REV_SEQ>(in, out);
       break;
   }
 }
@@ -822,16 +831,16 @@ TYPED_TEST_P(BitReverseFixedArrayTest, reverse_swar)
 
   switch (sizeof(data_type)) {
     case 8:
-      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_SWAR, data_type, data_size>(in, out);
     case 4:
-      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_SWAR, data_type, data_size>(in, out);
     case 2:
-      this->template test<8, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+      this->template test<8,  ::bliss::utils::bit_ops::BIT_REV_SWAR, data_type, data_size>(in, out);
     default:
-      this->template test<4, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
-      this->template test<2, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
-      this->template test<1, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
-      this->template test<3, ::bliss::utils::bit_ops::BIT_REV_SWAR>(in, out);
+      this->template test<4,  ::bliss::utils::bit_ops::BIT_REV_SWAR, data_type, data_size>(in, out);
+      this->template test<2,  ::bliss::utils::bit_ops::BIT_REV_SWAR, data_type, data_size>(in, out);
+      this->template test<1,  ::bliss::utils::bit_ops::BIT_REV_SWAR, data_type, data_size>(in, out);
+      this->template test<3,  ::bliss::utils::bit_ops::BIT_REV_SWAR, data_type, data_size>(in, out);
       break;
   }
 }
@@ -846,22 +855,22 @@ TYPED_TEST_P(BitReverseFixedArrayTest, reverse_ssse3)
 
   switch (sizeof(data_type)) {
     case 8:
-      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_SSSE3, data_type, data_size>(in, out);
     case 4:
-      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_SSSE3, data_type, data_size>(in, out);
     case 2:
-      this->template test<8, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+      this->template test<8,  ::bliss::utils::bit_ops::BIT_REV_SSSE3, data_type, data_size>(in, out);
     default:
-      this->template test<4, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
-      this->template test<2, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
-      this->template test<1, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
-      this->template test<3, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(in, out);
+      this->template test<4,  ::bliss::utils::bit_ops::BIT_REV_SSSE3, data_type, data_size>(in, out);
+      this->template test<2,  ::bliss::utils::bit_ops::BIT_REV_SSSE3, data_type, data_size>(in, out);
+      this->template test<1,  ::bliss::utils::bit_ops::BIT_REV_SSSE3, data_type, data_size>(in, out);
+      this->template test<3,  ::bliss::utils::bit_ops::BIT_REV_SSSE3, data_type, data_size>(in, out);
       break;
   }
 }
 #endif
 
-#ifdef __SSSE3__
+#ifdef __AVX2__
 TYPED_TEST_P(BitReverseFixedArrayTest, reverse_avx2)
 {
   using data_type = typename ::std::tuple_element<1, TypeParam>::type;
@@ -871,16 +880,16 @@ TYPED_TEST_P(BitReverseFixedArrayTest, reverse_avx2)
 
   switch (sizeof(data_type)) {
     case 8:
-      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+      this->template test<32, ::bliss::utils::bit_ops::BIT_REV_AVX2, data_type, data_size>(in, out);
     case 4:
-      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+      this->template test<16, ::bliss::utils::bit_ops::BIT_REV_AVX2, data_type, data_size>(in, out);
     case 2:
-      this->template test<8, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+      this->template test<8,  ::bliss::utils::bit_ops::BIT_REV_AVX2, data_type, data_size>(in, out);
     default:
-      this->template test<4, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
-      this->template test<2, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
-      this->template test<1, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
-      this->template test<3, ::bliss::utils::bit_ops::BIT_REV_AVX2>(in, out);
+      this->template test<4,  ::bliss::utils::bit_ops::BIT_REV_AVX2, data_type, data_size>(in, out);
+      this->template test<2,  ::bliss::utils::bit_ops::BIT_REV_AVX2, data_type, data_size>(in, out);
+      this->template test<1,  ::bliss::utils::bit_ops::BIT_REV_AVX2, data_type, data_size>(in, out);
+      this->template test<3,  ::bliss::utils::bit_ops::BIT_REV_AVX2, data_type, data_size>(in, out);
       break;
   }
 }
@@ -895,7 +904,8 @@ REGISTER_TYPED_TEST_CASE_P(BitReverseFixedArrayTest,
 #ifdef __AVX2__
                            reverse_avx2,
 #endif
-                           reverse_seq, reverse_swar);
+                           reverse_swar,
+                           reverse_seq);
 
 
 //////////////////// RUN the tests with different types.

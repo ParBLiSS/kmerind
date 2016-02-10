@@ -1410,7 +1410,8 @@ namespace bliss
                                     ::std::is_same<A, DNA6>::value ||
                                     ::std::is_same<A, RNA6>::value ||
                                     ::std::is_same<A, DNA16>::value) &&
-                                     ((sizeof(WORD_TYPE) * 8) % bitsPerChar == 0), int>::type = 0>
+                                     ((sizeof(WORD_TYPE) * 8) % bitsPerChar == 0) &&
+                                     ((sizeof(WORD_TYPE) * 8) < bitsPerChar), int>::type = 0>
     KMER_INLINE Kmer do_reverse_complement(Kmer const & src) const
     {
 
@@ -1463,6 +1464,31 @@ namespace bliss
 //        copyBitsFixed<WORD_TYPE, bitsPerChar>(result.data[0], tmp);
 //        tmp_copy.do_right_shift(bitsPerChar);
 //      }
+
+      // result already was 0 to begin with, so no need to sanitize
+
+      return result;
+
+    }
+
+    template <typename W = WORD_TYPE,
+        typename ::std::enable_if<((sizeof(W) * 8) == bitsPerChar), int>::type = 0>
+    KMER_INLINE Kmer do_reverse_complement(Kmer const & src) const
+    {
+
+      /* Linear (inefficient) reverse:  because we don't have a specialization that supports TO_COMPLEMENT.  do word by word..*/
+
+      // get temporary copy of this
+      Kmer result(false);
+
+      // complement all, then reverse.
+      for (unsigned int i = 0; i < nWords; ++i)
+      {
+        result.data[nWords - 1 - i] = static_cast<WORD_TYPE>(ALPHABET::to_complement(src.data[i]));  // replace the word
+      }
+
+      // now reverse the whole thing sequentially.
+      result.right_shift_bits(nWords * sizeof(WORD_TYPE) * 8 - nBits);  // shift by remainder/padding.
 
       // result already was 0 to begin with, so no need to sanitize
 
