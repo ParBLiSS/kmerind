@@ -205,7 +205,7 @@ class BitReverseRemainderBenchmark : public ::testing::Test {
 	
 
 	for (size_t i = 1; i <= step; ++i) {
-	  if ((i % ((P2::bitsPerGroup + 7) / 8)) > 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
+	  if (((i * 8) % P2::bitsPerGroup) != 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
 	  
 	  ss.str(std::string());
   	  ss.clear();

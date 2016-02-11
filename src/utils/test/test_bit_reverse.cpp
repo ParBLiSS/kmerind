@@ -338,7 +338,7 @@ TYPED_TEST_P(BitReverseTest, reverse_short_array)
   unsigned int max = 8;
 
   for (unsigned int i = 1; i <= max; ++i ) {
-    if (((i * 8) % TypeParam::bitsPerGroup) == 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
+    if (((i * 8) % TypeParam::bitsPerGroup) != 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
 
 
     if (TypeParam::bitsPerGroup == 3) {
@@ -473,7 +473,7 @@ TYPED_TEST_P(BitReverseSSSETest, reverse_short_array)
   int max = 16;
 
   for (int i = 1; i <= max; ++i ) {
-    if (((i * 8) % TypeParam::bitsPerGroup) == 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
+    if (((i * 8) % TypeParam::bitsPerGroup) != 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
 
 
     if (TypeParam::bitsPerGroup == 3) {
@@ -588,7 +588,7 @@ TYPED_TEST_P(BitReverseAVX2Test, reverse_short_array)
 
 
   for (int i = 1; i <= max; ++i ) {
-    if (((i * 8) % TypeParam::bitsPerGroup) == 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
+    if (((i * 8) % TypeParam::bitsPerGroup) != 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
 
 
     if (TypeParam::bitsPerGroup == 3) {
@@ -690,7 +690,7 @@ TYPED_TEST_P(BitReverseLongArrayTest, reverse_long_array)
   unsigned int max = 128;
 
   for (unsigned int i = 1; i <= max; ++i ) {
-    if (((i * 8) % TypeParam::bitsPerGroup) == 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
+    if (((i * 8) % TypeParam::bitsPerGroup) != 0) continue;  // i has to be a multiple of bytes for bitsPerGroup.
 
 
       for (unsigned int k = 0; k <= (128 - i); ++k) {
