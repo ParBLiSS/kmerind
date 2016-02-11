@@ -249,6 +249,9 @@ namespace bliss {
 
 //            if ((len % ((BIT_GROUP_SIZE + 7) / 8)) > 0)
 //              throw ::std::invalid_argument("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
+            if((len % ((BIT_GROUP_SIZE + 7) / 8)) != 0) {
+              printf("ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes. len %lu, BITS %u", len, BIT_GROUP_SIZE);
+            }
             assert((len % ((BIT_GROUP_SIZE + 7) / 8)) == 0);
 
             // SHIFTS are NOT NECESSARY.
@@ -795,6 +798,7 @@ namespace bliss {
 #pragma GCC diagnostic pop
 
         return tmp;
+//        return _mm_setzero_si128();
       }
       template <>
       BITS_INLINE __m128i bit_max() {
@@ -1787,8 +1791,10 @@ namespace bliss {
 
         constexpr uint16_t byte_shift = shift / 8;
         constexpr uint16_t bit_shift = shift % 8;
-        constexpr uint16_t word_bits = sizeof(WORD_TYPE) * 8;
+        constexpr uint16_t word_bits = sizeof(MachineWord) * 8;
         constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
+
+
 
         memset(reinterpret_cast<uint8_t *>(out) + byte_len, 0, byte_shift);  // clear the last part
 
@@ -1807,10 +1813,10 @@ namespace bliss {
           v -= WordsInMachWord;
           storeu<MAX_SIMD_TYPE::SIMDVal>(v, op(loadu<MAX_SIMD_TYPE::SIMDVal>(u), tmp));
 
+//          std::cout << std::dec << " shift " << shift << " byte_shift " << byte_shift << " bit_shift " << bit_shift << " wordbits " << word_bits << " bytelen " << byte_len << std::endl;
 //          std::cout << "iter " << i << " prev: "; print(tmp);  std::cout << std::endl;
           tmp = bliss::utils::bit_ops::slli<(word_bits - bit_shift)>(tmp);  // if bit_shift == 0, tmp will be set to 0.  if WORD - bit_shift == 0, then tmp will be unchanged
-//          std::cout << "iter " << i << " shift " << shift << " tmp: "; print(tmp);  std::cout << std::endl;
-
+//          std::cout << "iter " << i << " shift " << std::dec << (word_bits - bit_shift) << " tmp: "; print(tmp);  std::cout << std::endl;
 //          std::cout << "iter " << i << " out: "; print(std::forward<WORD_TYPE const (&)[len]>(out));  std::cout << std::endl;
 
           u += WordsInMachWord;
