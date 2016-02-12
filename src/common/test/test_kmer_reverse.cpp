@@ -438,11 +438,8 @@ class KmerReverseOpTest : public ::testing::Test {
         rev = km.reverse();
 
         bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
-            [&op](MachWord const & src, MachWord & prev) {
-          MachWord rev = op.reverse(src);
-          MachWord res = bliss::utils::bit_ops::bit_or(prev, (bliss::utils::bit_ops::srli<(shift % 8)>(rev)));
-          prev = rev; // bliss::utils::bit_ops::slli<(sizeof(MachWord) * 8 - shift)>(rev);
-          return res;
+            [&op](MachWord const & src) {
+          return op.reverse(src);
         });
 
         local_rev_same = (rev == rev_op);
@@ -483,15 +480,8 @@ class KmerReverseOpTest : public ::testing::Test {
 
 
         bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
-            [&op](MachWord const & src, MachWord & prev) {
-          MachWord rev = op.reverse(src);
-          rev = bliss::utils::bit_ops::negate(rev);
-
-          MachWord res = bliss::utils::bit_ops::bit_or(prev, (bliss::utils::bit_ops::srli<(shift % 8)>(rev)));
-
-          prev = rev; //bliss::utils::bit_ops::slli<(sizeof(MachWord) * 8 - shift)>(rev);  // shift by full size returns unshifted data.
-
-          return res;
+            [&op](MachWord const & src) {
+          return bliss::utils::bit_ops::negate(op.reverse(src));
         });
 
         local_rev_same = (rev == rev_op);
@@ -532,14 +522,9 @@ class KmerReverseOpTest : public ::testing::Test {
 
 
         bliss::utils::bit_ops::reverse<1, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
-            [&op1](MachWord const & src, MachWord & prev) {
-          MachWord rev = op1.reverse(src);
+            [&op1](MachWord const & src) {
+          return op1.reverse(src);
 
-          MachWord res = bliss::utils::bit_ops::bit_or(prev, (bliss::utils::bit_ops::srli<(shift % 8)>(rev)));
-
-          prev = rev; //bliss::utils::bit_ops::slli<(sizeof(MachWord) * 8 - shift)>(rev);  // shift by full size returns unshifted data.
-
-          return res;
         });
 
         local_rev_same = (rev == rev_op);
