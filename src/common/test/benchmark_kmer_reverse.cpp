@@ -72,6 +72,85 @@ class KmerReverseBenchmark : public ::testing::Test {
         }
       }
     }
+
+
+    template <typename SIMDType, typename TT = T,
+        typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA>::value ||
+         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA16>::value ||
+         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA6>::value ||
+          ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA6>::value, int>::type = 1>
+    void benchmark() {
+
+      using MachWord = typename SIMDType::MachineWord;
+
+      constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDType::SIMDVal> op;
+
+      for (size_t i = 0; i < iterations; ++i) {
+
+        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+            [&op](MachWord const & src) {
+          return op.reverse(src);
+        });
+      }
+    }
+    template <typename SIMDType, typename TT = T,
+        typename ::std::enable_if<!(::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA>::value ||
+         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA16>::value ||
+         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA6>::value ||
+          ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA6>::value), int>::type = 1>
+    void benchmark() {
+    }
+
+    template <typename SIMDType, typename TT = T,
+        typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA>::value, int>::type = 1>
+    void benchmark_c() {
+
+      using MachWord = typename SIMDType::MachineWord;
+
+      constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDType::SIMDVal> op;
+
+      for (size_t i = 0; i < iterations; ++i) {
+
+        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+            [&op](MachWord const & src) {
+          return bliss::utils::bit_ops::negate(op.reverse(src));
+        });
+
+      }
+    }
+    template <typename SIMDType, typename TT = T,
+        typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA16>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA6>::value ||
+         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA6>::value, int>::type = 1>
+    void benchmark_c() {
+      using MachineWord = typename SIMDType::MachineWord;
+
+      constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      bliss::utils::bit_ops::bitgroup_ops<1, SIMDType::SIMDVal> op1;
+
+      for (size_t i = 0; i < iterations; ++i) {
+
+        bliss::utils::bit_ops::reverse<1, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+            [&op1](MachineWord const & src) {
+          return op1.reverse(src);
+        });
+
+      }
+    }
+    template <typename SIMDType, typename TT = T,
+        typename ::std::enable_if<!(::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA>::value ||
+        ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA>::value ||
+         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA16>::value ||
+         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA6>::value ||
+          ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA6>::value), int>::type = 1>
+    void benchmark_c() {
+    }
+
 };
 
 
@@ -181,6 +260,26 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
 //  TEST_REV_BITOPS("seq_new", ::bliss::utils::bit_ops::BIT_REV_SEQ, TypeParam);
     TEST_KMER_REV("rev", reverse, TypeParam);
 
+
+
+    TIMER_START(km);
+    this->template benchmark<bliss::utils::bit_ops::BITREV_SWAR>();
+    TIMER_END(km, "revop swar", KmerReverseBenchmark<TypeParam>::iterations);
+
+#ifdef __SSSE3__
+
+    TIMER_START(km);
+    this->template benchmark<bliss::utils::bit_ops::BITREV_SSSE3>();
+    TIMER_END(km, "revop ssse3", KmerReverseBenchmark<TypeParam>::iterations);
+#endif
+#ifdef __AVX2__
+
+    TIMER_START(km);
+    this->template benchmark<bliss::utils::bit_ops::BITREV_AVX2>();
+    TIMER_END(km, "revop avx2", KmerReverseBenchmark<TypeParam>::iterations);
+#endif
+
+
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
 
 }
@@ -215,6 +314,26 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 #endif
     // macro does not support bit_ops::BIT_REV_SEQ
     TEST_KMER_REV("revC", reverse_complement, TypeParam);
+
+
+    TIMER_START(km);
+    this->template benchmark_c<bliss::utils::bit_ops::BITREV_SWAR>();
+    TIMER_END(km, "revopc swar", KmerReverseBenchmark<TypeParam>::iterations);
+
+#ifdef __SSSE3__
+
+    TIMER_START(km);
+    this->template benchmark_c<bliss::utils::bit_ops::BITREV_SSSE3>();
+    TIMER_END(km, "revopc ssse3", KmerReverseBenchmark<TypeParam>::iterations);
+#endif
+#ifdef __AVX2__
+
+    TIMER_START(km);
+    this->template benchmark_c<bliss::utils::bit_ops::BITREV_AVX2>();
+    TIMER_END(km, "revopc avx2", KmerReverseBenchmark<TypeParam>::iterations);
+#endif
+
+
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
 
@@ -298,8 +417,8 @@ typedef ::testing::Types<
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerReverseBenchmark, KmerReverseBenchmarkTypes);
 
 
-
-
+#if 0
+// already integrated into above.
 
 // include files to test
 
@@ -610,4 +729,4 @@ typedef ::testing::Types<
     ::bliss::common::Kmer<256, bliss::common::DNA16, uint64_t>
 > KmerReverseOpBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerReverseOpBenchmark, KmerReverseOpBenchmarkTypes);
-
+#endif
