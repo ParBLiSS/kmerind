@@ -251,33 +251,23 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
   }  // alphabet for DNA, RNA, and DNA16 are the only ones accelerated with simd type operations.
 
   TEST_REV_BITOPS("swar_new", ::bliss::utils::bit_ops::BIT_REV_SWAR, TypeParam);
+  TIMER_START(km);
+  this->template benchmark<bliss::utils::bit_ops::BITREV_SWAR>();
+  TIMER_END(km, "revop swar", KmerReverseBenchmark<TypeParam>::iterations);
 #ifdef __SSSE3__
     TEST_REV_BITOPS("ssse3_new", ::bliss::utils::bit_ops::BIT_REV_SSSE3, TypeParam);
-#endif
-#ifdef __AVX2__
-    TEST_REV_BITOPS("avx2_new", ::bliss::utils::bit_ops::BIT_REV_AVX2, TypeParam);
-#endif
-//  TEST_REV_BITOPS("seq_new", ::bliss::utils::bit_ops::BIT_REV_SEQ, TypeParam);
-    TEST_KMER_REV("rev", reverse, TypeParam);
-
-
-
-    TIMER_START(km);
-    this->template benchmark<bliss::utils::bit_ops::BITREV_SWAR>();
-    TIMER_END(km, "revop swar", KmerReverseBenchmark<TypeParam>::iterations);
-
-#ifdef __SSSE3__
-
     TIMER_START(km);
     this->template benchmark<bliss::utils::bit_ops::BITREV_SSSE3>();
     TIMER_END(km, "revop ssse3", KmerReverseBenchmark<TypeParam>::iterations);
 #endif
 #ifdef __AVX2__
-
+    TEST_REV_BITOPS("avx2_new", ::bliss::utils::bit_ops::BIT_REV_AVX2, TypeParam);
     TIMER_START(km);
     this->template benchmark<bliss::utils::bit_ops::BITREV_AVX2>();
     TIMER_END(km, "revop avx2", KmerReverseBenchmark<TypeParam>::iterations);
 #endif
+//  TEST_REV_BITOPS("seq_new", ::bliss::utils::bit_ops::BIT_REV_SEQ, TypeParam);
+    TEST_KMER_REV("rev", reverse, TypeParam);
 
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
@@ -306,32 +296,30 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 
 
   TEST_REVC_BITOPS("swarC_new", ::bliss::utils::bit_ops::BIT_REV_SWAR, TypeParam);
-#ifdef __SSSE3__
+
+  TIMER_START(km);
+  this->template benchmark_c<bliss::utils::bit_ops::BITREV_SWAR>();
+  TIMER_END(km, "revopc swar", KmerReverseBenchmark<TypeParam>::iterations);
+
+  #ifdef __SSSE3__
     TEST_REVC_BITOPS("ssse3_new", ::bliss::utils::bit_ops::BIT_REV_SSSE3, TypeParam);
-#endif
-#ifdef __AVX2__
-    TEST_REVC_BITOPS("avx2_new", ::bliss::utils::bit_ops::BIT_REV_AVX2, TypeParam);
-#endif
-    // macro does not support bit_ops::BIT_REV_SEQ
-    TEST_KMER_REV("revC", reverse_complement, TypeParam);
-
-
-    TIMER_START(km);
-    this->template benchmark_c<bliss::utils::bit_ops::BITREV_SWAR>();
-    TIMER_END(km, "revopc swar", KmerReverseBenchmark<TypeParam>::iterations);
-
-#ifdef __SSSE3__
 
     TIMER_START(km);
     this->template benchmark_c<bliss::utils::bit_ops::BITREV_SSSE3>();
     TIMER_END(km, "revopc ssse3", KmerReverseBenchmark<TypeParam>::iterations);
 #endif
 #ifdef __AVX2__
-
+    TEST_REVC_BITOPS("avx2_new", ::bliss::utils::bit_ops::BIT_REV_AVX2, TypeParam);
     TIMER_START(km);
     this->template benchmark_c<bliss::utils::bit_ops::BITREV_AVX2>();
     TIMER_END(km, "revopc avx2", KmerReverseBenchmark<TypeParam>::iterations);
 #endif
+
+    // macro does not support bit_ops::BIT_REV_SEQ
+    TEST_KMER_REV("revC", reverse_complement, TypeParam);
+
+
+
 
 
 
@@ -351,11 +339,23 @@ REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, reverse, revcomp);
 
 // max of 50 cases
 typedef ::testing::Types<
+    ::bliss::common::Kmer<  3, bliss::common::DNA,    uint8_t>,
+    ::bliss::common::Kmer<  3, bliss::common::DNA,   uint16_t>,
+    ::bliss::common::Kmer<  3, bliss::common::DNA,   uint32_t>,
+    ::bliss::common::Kmer<  3, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer<  7, bliss::common::DNA,    uint8_t>,
+    ::bliss::common::Kmer<  7, bliss::common::DNA,   uint16_t>,
+    ::bliss::common::Kmer<  7, bliss::common::DNA,   uint32_t>,
+    ::bliss::common::Kmer<  7, bliss::common::DNA,   uint64_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA,    uint8_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint16_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint32_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 31, bliss::common::DNA,    uint8_t>,
     ::bliss::common::Kmer< 31, bliss::common::DNA,   uint16_t>,
     ::bliss::common::Kmer< 31, bliss::common::DNA,   uint32_t>,
     ::bliss::common::Kmer< 31, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint32_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 31, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 63, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 95, bliss::common::DNA,   uint64_t>,
@@ -370,24 +370,21 @@ typedef ::testing::Types<
     ::bliss::common::Kmer< 63, bliss::common::DNA16, uint64_t>,
     ::bliss::common::Kmer< 95, bliss::common::DNA16, uint64_t>,
     ::bliss::common::Kmer<127, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer< 16, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 32, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 64, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 96, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer<128, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer<256, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 16, bliss::common::DNA5,  uint64_t>,
     ::bliss::common::Kmer< 32, bliss::common::DNA5,  uint64_t>,
     ::bliss::common::Kmer< 64, bliss::common::DNA5,  uint64_t>,
     ::bliss::common::Kmer< 96, bliss::common::DNA5,  uint64_t>,
     ::bliss::common::Kmer<128, bliss::common::DNA5,  uint64_t>,
     ::bliss::common::Kmer<256, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer< 16, bliss::common::DNA16, uint64_t>,
     ::bliss::common::Kmer< 32, bliss::common::DNA16, uint64_t>,
     ::bliss::common::Kmer< 64, bliss::common::DNA16, uint64_t>,
     ::bliss::common::Kmer< 96, bliss::common::DNA16, uint64_t>,
     ::bliss::common::Kmer<128, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer<256, bliss::common::DNA16, uint64_t>,
+    ::bliss::common::Kmer<256, bliss::common::DNA16, uint64_t>
 //    ::bliss::common::Kmer< 15, bliss::common::DNA_IUPAC, uint64_t>,
 //    ::bliss::common::Kmer< 16, bliss::common::DNA_IUPAC, uint64_t>,
 //    ::bliss::common::Kmer< 32, bliss::common::DNA_IUPAC, uint64_t>,
@@ -397,18 +394,17 @@ typedef ::testing::Types<
 //    ::bliss::common::Kmer<128, bliss::common::DNA_IUPAC, uint64_t>,
 //    ::bliss::common::Kmer<192, bliss::common::DNA_IUPAC, uint64_t>,
 //    ::bliss::common::Kmer<256, bliss::common::DNA_IUPAC, uint64_t>,
-    ::bliss::common::Kmer<  7, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer< 15, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer< 31, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer< 63, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer< 95, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer<127, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer< 16, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer< 32, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer< 64, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer< 96, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer<128, bliss::common::ASCII, uint64_t>,
-    ::bliss::common::Kmer<256, bliss::common::ASCII, uint64_t>
+//    ::bliss::common::Kmer<  7, bliss::common::ASCII, uint64_t>,
+//    ::bliss::common::Kmer< 15, bliss::common::ASCII, uint64_t>,
+//    ::bliss::common::Kmer< 31, bliss::common::ASCII, uint64_t>,
+//    ::bliss::common::Kmer< 63, bliss::common::ASCII, uint64_t>,
+//    ::bliss::common::Kmer< 95, bliss::common::ASCII, uint64_t>,
+//    ::bliss::common::Kmer<127, bliss::common::ASCII, uint64_t>,
+//    ::bliss::common::Kmer< 32, bliss::common::ASCII, uint64_t>,
+//    ::bliss::common::Kmer< 64, bliss::common::ASCII, uint64_t>,
+//    ::bliss::common::Kmer< 96, bliss::common::ASCII, uint64_t>,
+//    ::bliss::common::Kmer<128, bliss::common::ASCII, uint64_t>,
+//    ::bliss::common::Kmer<256, bliss::common::ASCII, uint64_t>
 > KmerReverseBenchmarkTypes;
 //typedef ::testing::Types<
 //    ::bliss::common::Kmer< 192, bliss::common::DNA,   uint64_t>,
@@ -690,11 +686,15 @@ REGISTER_TYPED_TEST_CASE_P(KmerReverseOpBenchmark, reverse_swar, reverse_ssse3, 
 
 // max of 50 cases
 typedef ::testing::Types<
+    ::bliss::common::Kmer< 3, bliss::common::DNA,    uint8_t>,
+    ::bliss::common::Kmer< 3, bliss::common::DNA,   uint16_t>,
+    ::bliss::common::Kmer< 3, bliss::common::DNA,   uint32_t>,
+    ::bliss::common::Kmer< 3, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 31, bliss::common::DNA,    uint8_t>,
     ::bliss::common::Kmer< 31, bliss::common::DNA,   uint16_t>,
     ::bliss::common::Kmer< 31, bliss::common::DNA,   uint32_t>,
     ::bliss::common::Kmer< 31, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint32_t>,
+    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 31, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 63, bliss::common::DNA,   uint64_t>,
     ::bliss::common::Kmer< 95, bliss::common::DNA,   uint64_t>,
