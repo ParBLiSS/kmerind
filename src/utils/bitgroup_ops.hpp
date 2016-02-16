@@ -105,21 +105,72 @@ namespace bliss {
       };
       struct BITREV_SWAR {
     	  using MachineWord = uint64_t;
-        static constexpr unsigned char SIMDVal = BIT_REV_SWAR;
+          static constexpr unsigned char SIMDVal = BIT_REV_SWAR;
       };
-      struct BITREV_SSSE3 {
 #ifdef __SSSE3__
+      struct BITREV_SSSE3 {
     	  using MachineWord = __m128i;
-        static constexpr unsigned char SIMDVal = BIT_REV_SSSE3;
-#endif
+          static constexpr unsigned char SIMDVal = BIT_REV_SSSE3;
       };
-      struct BITREV_AVX2 {
-#ifdef __AVX2__
-    	  using MachineWord = __m256i;
-        static constexpr unsigned char SIMDVal = BIT_REV_AVX2;
 #endif
-      };
 
+#ifdef __AVX2__
+      struct BITREV_AVX2 {
+    	  using MachineWord = __m256i;
+          static constexpr unsigned char SIMDVal = BIT_REV_AVX2;
+      };
+#endif
+
+      /// automatically choose the most appropriate MachineWord and SIMD type based
+      /// on supported simd capability and number of bytes to be reversed.
+      template <size_t BYTES>
+      struct BITREV_AUTO {
+#if defined(__AVX2__)
+    	  using MachineWord =
+    			  typename ::std::conditional<(BYTES > 16), __m256i,
+    			    typename ::std::conditional<(BYTES > 8),  __m128i,
+    			      typename ::std::conditional<(BYTES > 4),  uint64_t,
+    			        typename ::std::conditional<(BYTES > 2),  uint32_t,
+    			          typename ::std::conditional<(BYTES > 1),  uint16_t,
+    			          	uint8_t
+    			          >::type
+    			        >::type
+  			          >::type
+  			        >::type
+		          >::type;
+
+    	  static constexpr unsigned char SIMDVal =
+    			  (BYTES > 16) ? BIT_REV_AVX2 :
+    			  (BYTES > 8) ? BIT_REV_SSSE3 :
+    					  BIT_REV_SWAR;
+#elif defined(__SSSE3__)
+    	  using MachineWord =
+    			    typename ::std::conditional<(BYTES > 8),  __m128i,
+    			      typename ::std::conditional<(BYTES > 4),  uint64_t,
+    			        typename ::std::conditional<(BYTES > 2),  uint32_t,
+    			          typename ::std::conditional<(BYTES > 1),  uint16_t,
+    			          	uint8_t
+    			          >::type
+    			        >::type
+  			          >::type
+		            >::type;
+
+    	  static constexpr unsigned char SIMDVal =
+    			  (BYTES > 8) ? BIT_REV_SSSE3 :
+    					  BIT_REV_SWAR;
+#else
+    	  using MachineWord =
+    			      typename ::std::conditional<(BYTES > 4),  uint64_t,
+    			        typename ::std::conditional<(BYTES > 2),  uint32_t,
+    			          typename ::std::conditional<(BYTES > 1),  uint16_t,
+    			          	uint8_t
+    			          >::type
+    			        >::type
+		              >::type;
+    	 static constexpr unsigned char SIMDVal =
+    			 BIT_REV_SWAR;
+#endif
+      };
 
 
 
@@ -173,19 +224,18 @@ namespace bliss {
         return ~u;
       }
 
+      template <typename DEST_WORD_TYPE, typename WORD_TYPE>
+      BITS_INLINE typename ::std::enable_if<(sizeof(DEST_WORD_TYPE) <= 8), DEST_WORD_TYPE>::type
+      loadu(WORD_TYPE const * u) {
+        return *(reinterpret_cast<DEST_WORD_TYPE const *>(u));
+      }
+      template <typename SRC_WORD_TYPE, typename WORD_TYPE,
+      typename = typename ::std::enable_if<(sizeof(SRC_WORD_TYPE) <= 8)>::type>
+      BITS_INLINE void storeu(WORD_TYPE * u, SRC_WORD_TYPE const & val) {
+    	  *(reinterpret_cast<SRC_WORD_TYPE *>(u)) = val;
+      }
 
-      template <unsigned char SIMD_TYPE, typename WORD_TYPE>
-      BITS_INLINE typename ::std::enable_if<
-      	  (SIMD_TYPE == BIT_REV_SEQ) || (SIMD_TYPE == BIT_REV_SWAR),
-      	  uint64_t>::type loadu(WORD_TYPE const * u) {
-        return *(reinterpret_cast<uint64_t const *>(u));
-      }
-      template <unsigned char SIMD_TYPE, typename WORD_TYPE,
-        typename = typename ::std::enable_if<
-    	  (SIMD_TYPE == BIT_REV_SEQ) || (SIMD_TYPE == BIT_REV_SWAR) >::type>
-      BITS_INLINE void storeu(WORD_TYPE * u, uint64_t const & val) {
-    	  *(reinterpret_cast<uint64_t *>(u)) = val;
-      }
+
 
       template <typename WORD_TYPE>
       BITS_INLINE WORD_TYPE bit_or(WORD_TYPE const & u, WORD_TYPE const & v) {
@@ -240,7 +290,7 @@ namespace bliss {
            * @param out       pointer into a byte array.  the array should be initialized to 0 before any call to this function.
            * @return number of bits in the last byte that are not swapped (i.e. last 2 bits for 3 bits op.)
            */
-          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) {
+          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) const {
             if ((len * 8) < BIT_GROUP_SIZE) return bit_offset; //throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
 
             // enforce bit_offset to be less than 8, since we are ORing the first and last bytes.
@@ -326,13 +376,13 @@ namespace bliss {
            * @return     bit reversed word.  MSB aligned to end of the originally lowest bit group.
            */
           template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS >= (sizeof(WORD_TYPE) * 8)), int>::type = 1>
-          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & v, uint16_t bit_offset) {
+          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & v, uint16_t bit_offset) const {
 //            static_assert(BIT_GROUP_SIZE == (sizeof(WORD_TYPE) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in WORD_TYPE");
             return v;
           }
 
           template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS < (sizeof(WORD_TYPE) * 8)), int>::type = 1>
-          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & v, uint16_t bit_offset) {
+          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & v, uint16_t bit_offset) const {
 
             // copy the source data
             WORD_TYPE w = 0;
@@ -359,7 +409,7 @@ namespace bliss {
           }
 
           template <uint16_t bit_offset = 0, typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
-          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & v) {
+          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & v) const {
             return reverse(::std::forward<WORD_TYPE const>(v), bit_offset);
           }
 
@@ -385,7 +435,7 @@ namespace bliss {
           static constexpr unsigned char simd_type = BIT_REV_SWAR;
 
           /// reverse function to reverse bits for data types are are not power of 2 number of bytes
-          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) {
+          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) const {
             if ( (len * 8) < BIT_GROUP_SIZE ) return bit_offset; // throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
 
             // enforce bit_offset to be 0, since we are ORing the first and last bytes.
@@ -440,19 +490,19 @@ namespace bliss {
           // bitgroup size is larger than the word type in bits.
           template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS > (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
-          reverse(WORD_TYPE const &u) {
+          reverse(WORD_TYPE const &u) const {
             return u;
           }
           // bitgroup size is same size as the word type in bits.
           template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS == (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
-          reverse(WORD_TYPE const &u) {
+          reverse(WORD_TYPE const &u) const {
             return u;
           }
           // this specialization will work for all WORD_TYPE sizes.
           template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS <= 8), WORD_TYPE>::type
-          reverse(WORD_TYPE const &u) {
+          reverse(WORD_TYPE const &u) const {
             static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
             static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
 
@@ -492,7 +542,7 @@ namespace bliss {
           /// this specialization is for 8 byte words.   16 bit or 32 bit groups are allowed.
           template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS < (sizeof(WORD_TYPE) * 8)) && (sizeof(WORD_TYPE) == 8), WORD_TYPE>::type
-          reverse(WORD_TYPE const &u) {
+          reverse(WORD_TYPE const &u) const {
             static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
             static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
 
@@ -518,7 +568,7 @@ namespace bliss {
           /// separate by word_type size instead of bits so that we don't shift by 32 when word is 4 bytes.
           template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS < (sizeof(WORD_TYPE) * 8)) && (sizeof(WORD_TYPE) == 4), WORD_TYPE>::type
-          reverse(WORD_TYPE const &u) {
+          reverse(WORD_TYPE const &u) const {
             static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
             static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
 
@@ -545,7 +595,7 @@ namespace bliss {
           bitgroup_ops<1, BIT_REV_SWAR, true> bit_rev_1;
 
           /// reverse function to reverse bits for data types are are not power of 2 number of bytes
-          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) {
+          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) const {
             if (len == 0) return bit_offset; //throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
 
             // enforce bit_offset to be less than 8, since we are ORing the first and last bytes.
@@ -615,7 +665,7 @@ namespace bliss {
 
           // dispatcher
           template <typename WORD_TYPE>
-          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & u, uint16_t const & bit_offset) {
+          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & u, uint16_t const & bit_offset) const {
             switch (bit_offset % 3) {
               case 0: return reverse<0, WORD_TYPE>(::std::forward<WORD_TYPE const>(u)); break;
               case 1: return reverse<1, WORD_TYPE>(::std::forward<WORD_TYPE const>(u)); break;
@@ -628,7 +678,7 @@ namespace bliss {
           /// while the high and low bits are zeroed during the reversal.  this makes OR'ing with adjacent
           /// entries simple.
           template <uint16_t offset = 0, typename WORD_TYPE>
-          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const &u) {
+          BITS_INLINE WORD_TYPE reverse(WORD_TYPE const &u) const {
             static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
             static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
 
@@ -763,15 +813,13 @@ namespace bliss {
         return _mm_xor_si128(u, _mm_cmpeq_epi8(u, u));  // no native negation operator, so use xor
       }
 
-      template <unsigned char SIMD_TYPE, typename WORD_TYPE>
-      BITS_INLINE typename ::std::enable_if<
-      	  (SIMD_TYPE == BIT_REV_SSSE3),
-      	  __m128i>::type loadu(WORD_TYPE const * u) {
+      template <typename DEST_WORD_TYPE, typename WORD_TYPE>
+      BITS_INLINE typename ::std::enable_if<::std::is_same<DEST_WORD_TYPE, __m128i>::value, __m128i>::type
+      loadu(WORD_TYPE const * u) {
     	  return _mm_loadu_si128(reinterpret_cast<__m128i const *>(u));
       }
-      template <unsigned char SIMD_TYPE, typename WORD_TYPE,
-        typename = typename ::std::enable_if<
-    	  (SIMD_TYPE == BIT_REV_SSSE3) >::type>
+      template <typename SRC_WORD_TYPE, typename WORD_TYPE,
+       typename = typename ::std::enable_if<::std::is_same<SRC_WORD_TYPE, __m128i>::value>::type >
       BITS_INLINE void storeu(WORD_TYPE * u, __m128i const & val) {
     	  _mm_storeu_si128(reinterpret_cast<__m128i *>(u), val);
       }
@@ -857,7 +905,7 @@ namespace bliss {
           }
 
           /// reverse function to reverse bits for data types are are not __mm128i  (has to be bigger than at least half)
-          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) {
+          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) const {
             if ((len * 8) < BIT_GROUP_SIZE) return bit_offset; // throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
             //if (len > 16) throw std::invalid_argument("ERROR:  length of array should be <= 16.  For longer, use a different bitgroup_ops (AVX2) or break it up.");
             assert ( len <= 16);
@@ -891,7 +939,7 @@ namespace bliss {
 
           template <unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS >= 128), __m128i>::type
-          reverse(__m128i const & u) {
+          reverse(__m128i const & u) const {
             static_assert(BIT_GROUP_SIZE == 128, "ERROR: BIT_GROUP_SIZE is greater than number of bits in WORD_TYPE");
 
             return u;
@@ -900,7 +948,7 @@ namespace bliss {
           // groupsize =1 version:  4 loads, 3 shuffles, 3 logical ops, 1 shift op
           template <unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS <= 8), __m128i>::type
-          reverse(__m128i const & u) {
+          reverse(__m128i const & u) const {
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
             // shuffle may be done via register mixing instructions, but may be slower.
@@ -948,7 +996,7 @@ namespace bliss {
           // groupsize =1 version:  4 loads, 3 shuffles, 3 logical ops, 1 shift op
           template <unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS < 128), __m128i>::type
-          reverse(__m128i const & u) {
+          reverse(__m128i const & u) const {
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
             // shuffle may be done via register mixing instructions, but may be slower.
@@ -1016,7 +1064,7 @@ namespace bliss {
 
 
           /// reverse function to reverse bits for data types are are not __mm128i  (has to be bigger than at least half)
-          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) {
+          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) const {
             if (len == 0) return bit_offset; //throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
             //if (len > 16) throw std::invalid_argument("ERROR:  length of array should be <= 16.  For longer, use a different bitgroup_ops (AVX2) or break it up.");
             assert (len <= 16);
@@ -1070,7 +1118,7 @@ namespace bliss {
           }
 
 
-          BITS_INLINE __m128i reverse(__m128i const & u, uint16_t bit_offset) {
+          BITS_INLINE __m128i reverse(__m128i const & u, uint16_t bit_offset) const {
             switch (bit_offset % 3) {
               case 0: return reverse<0>(::std::forward<__m128i const>(u)); break;
               case 1: return reverse<1>(::std::forward<__m128i const>(u)); break;
@@ -1084,7 +1132,7 @@ namespace bliss {
           /// while the high and low bits are zeroed during the reversal.  this makes OR'ing with adjacent
           /// entries simple.
             template <uint16_t offset = 0>
-            BITS_INLINE __m128i reverse(__m128i const & u ) {
+            BITS_INLINE __m128i reverse(__m128i const & u ) const {
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
             // shuffle may be done via register mixing instructions, but may be slower.
@@ -1355,15 +1403,13 @@ namespace bliss {
         return _mm256_xor_si256(u, _mm256_cmpeq_epi8(u, u));  // no native negation operator
       }
 
-      template <unsigned char SIMD_TYPE, typename WORD_TYPE>
-      BITS_INLINE typename ::std::enable_if<
-      	  (SIMD_TYPE == BIT_REV_AVX2),
-      	  __m256i>::type loadu(WORD_TYPE const * u) {
+      template <typename DEST_WORD_TYPE, typename WORD_TYPE>
+      BITS_INLINE typename ::std::enable_if<::std::is_same<DEST_WORD_TYPE, __m256i>::value, __m256i>::type
+      loadu(WORD_TYPE const * u) {
     	  return _mm256_loadu_si256(reinterpret_cast<__m256i const *>(u));
       }
-      template <unsigned char SIMD_TYPE, typename WORD_TYPE,
-        typename = typename ::std::enable_if<
-    	  (SIMD_TYPE == BIT_REV_AVX2) >::type>
+      template <typename SRC_WORD_TYPE, typename WORD_TYPE,
+       typename = typename ::std::enable_if<::std::is_same<SRC_WORD_TYPE, __m256i>::value>::type >
       BITS_INLINE void storeu(WORD_TYPE * u, __m256i const & val) {
     	  _mm256_storeu_si256(reinterpret_cast<__m256i *>(u), val);
       }
@@ -1444,7 +1490,7 @@ namespace bliss {
 
 
           /// reverse function to reverse bits for data types are are not __mm256i   (has to be bigger than at least half)
-          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) {
+          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) const {
             if ((len * 8) < BIT_GROUP_SIZE) return bit_offset; // throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
             //if (len > 32) throw std::invalid_argument("ERROR:  length of array should be <= 32.  For longer, break it up.");
             assert(len <= 32);
@@ -1486,7 +1532,7 @@ namespace bliss {
 
           template <unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS >= 256), __m256i>::type
-          reverse(__m256i const & u) {
+          reverse(__m256i const & u) const {
             static_assert(BIT_GROUP_SIZE == 256, "ERROR: BIT_GROUP_SIZE is greater than number of bits in WORD_TYPE");
 
             return u;
@@ -1494,7 +1540,7 @@ namespace bliss {
 
           template <unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS <= 8), __m256i>::type
-          reverse(__m256i const & u) {
+          reverse(__m256i const & u) const {
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
             // shuffle may be done via register mixing instructions, but may be slower.
@@ -1544,7 +1590,7 @@ namespace bliss {
 
           template <unsigned int BITS = BIT_GROUP_SIZE>
           BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS < 256), __m256i>::type
-          reverse(__m256i const & u) {
+          reverse(__m256i const & u) const {
 
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
@@ -1620,7 +1666,7 @@ namespace bliss {
 
 
           /// reverse function to reverse bits for data types are are not __mm128i  (has to be bigger than at least half)
-          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) {
+          BITS_INLINE uint16_t reverse(uint8_t * out, uint8_t const * in, size_t const & len, uint16_t const bit_offset = 0) const {
             if (len == 0) return bit_offset;//throw ::std::invalid_argument("ERROR reversing byte array: length is 0");
             //if (len > 32) throw std::invalid_argument("ERROR:  length of array should be <= 32.  For longer, break it up.");
             assert(len <= 32);
@@ -1672,7 +1718,7 @@ namespace bliss {
             return (len * 8 - bit_offset) % 3;
           }
 
-          BITS_INLINE __m256i reverse(__m256i const & u, uint16_t bit_offset) {
+          BITS_INLINE __m256i reverse(__m256i const & u, uint16_t bit_offset) const {
             switch (bit_offset % 3) {
               case 0: return reverse<0>(::std::forward<__m256i const>(u)); break;
               case 1: return reverse<1>(::std::forward<__m256i const>(u)); break;
@@ -1686,7 +1732,7 @@ namespace bliss {
           /// while the high and low bits are zeroed during the reversal.  this makes OR'ing with adjacent
           /// entries simple.
           template <uint16_t offset = 0>
-          BITS_INLINE __m256i reverse(__m256i const & u) {
+          BITS_INLINE __m256i reverse(__m256i const & u) const {
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
             // shuffle may be done via register mixing instructions, but may be slower.
@@ -1766,56 +1812,168 @@ namespace bliss {
 
       /**
        * @brief
-       * @details   enabled only if BIT_GROUP_SIZE is power of 2, and greater than 0.
-       *            works for all SIMD levels.
+       * @details   reverse for a fixed length array.  specialized for the following mutually exclusive cases
+       * 				1. len * sizeof(word_type) == sizeof(machineword_type)  1a. shift = 0, 1b shift > 0
+       * 				2. len * sizeof(word_type) <  sizeof(machineword_type)  2a. shift = 0, 2b shift > 0
+       * 				3. len * sizeof(word_type) >  sizeof(machineword type)  (need to shift bits < sizeof(word_type))
+       * 				   note that len * sizeof(word_type) is greater than sizeof(machineword_type) by at least 1 word_type,
+       * 				   and since shift is smaller than sizeof(word_type), number of data bits is more than sizeof(machineword type)
+       * 				3a.  power of 2 bits and shift%8 == 0  - byte aligned, so no bitwise shift is needed
+       * 				3b.  power of 2 bits and shift%8 > 0   - not byte aligned, so bitwise shift is needed.
+       * 				3c.  bits = 3 - has an overlap, and shift also needed.  easier to save prev machine word and shift and OR? or re-read from mem?
        * @param out
        * @param in
        * @param op        operator.  example is one that performs reverse and shifting.  another example is reverse and negate.
        * @tparam len      number of words.
        * @param bit_offset
-       * @return
+       * @return		number of bits in the first (partial) bitgroup at LSB.  may be 0.
        */
       template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t shift = 0,
           typename WORD_TYPE, size_t len, typename OP>
-      BITS_INLINE typename std::enable_if<(((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0) &&
-                                            ((shift % 8) != 0)), uint16_t>::type
+      BITS_INLINE typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+    		  (shift == 0)), uint16_t>::type  // len is power of 2.
+      reverse(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
+          static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
+
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+          static_assert(BIT_GROUP_SIZE <= (sizeof(MachineWord) * 4), "ERROR: The maximum bit group size should not be larger than 1/2 of machine word type");
+          static_assert(((len * sizeof(WORD_TYPE) * 8 - shift) % BIT_GROUP_SIZE) == 0,
+                        "ERROR reversing byte array:  BIT_GROUP_SIZE should evenly divide the bits with data (non-shift part)");
+
+          storeu<MachineWord>(out, op(loadu<MachineWord>(in)));
+
+          return 0;
+      }
+      template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t shift = 0,
+          typename WORD_TYPE, size_t len, typename OP>
+      BITS_INLINE typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+    		  (shift > 0)), uint16_t>::type  // len is power of 2.
+      reverse(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
+          static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
+
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+          static_assert(BIT_GROUP_SIZE <= (sizeof(MachineWord) * 4), "ERROR: The maximum bit group size should not be larger than 1/2 of machine word type");
+          static_assert(((len * sizeof(WORD_TYPE) * 8 - shift) % BIT_GROUP_SIZE) == 0,
+                        "ERROR reversing byte array:  BIT_GROUP_SIZE should evenly divide the bits with data (non-shift part)");
+
+          storeu<MachineWord>(out, bliss::utils::bit_ops::srli<shift>(op(loadu<MachineWord>(in))));
+
+          return 0;
+      }
+      template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t shift = 0,
+          typename WORD_TYPE, size_t len, typename OP>
+      BITS_INLINE typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+       (shift == 0)), uint16_t>::type  // len is power of 2.
+      reverse(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
+          static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
+
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+          constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+
+          static_assert(BIT_GROUP_SIZE <= (bytes * 4), "ERROR: The maximum bit group size should not be larger than 1/2 of input data length");
+          static_assert(((len * sizeof(WORD_TYPE) * 8 - shift) % BIT_GROUP_SIZE) == 0,
+                        "ERROR reversing byte array:  BIT_GROUP_SIZE should evenly divide the bits with data (non-shift part)");
+
+          MachineWord x = op(loadu<MachineWord>(in));
+          memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - bytes, bytes);
+
+          return 0;
+      }
+      template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t shift = 0,
+          typename WORD_TYPE, size_t len, typename OP>
+      BITS_INLINE typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+    		  (shift > 0)), uint16_t>::type  // len is power of 2.
+      reverse(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
+          static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
+
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+          constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+
+          static_assert(BIT_GROUP_SIZE <= (bytes * 4), "ERROR: The maximum bit group size should not be larger than 1/2 of input data length");
+          static_assert(((len * sizeof(WORD_TYPE) * 8 - shift) % BIT_GROUP_SIZE) == 0,
+                        "ERROR reversing byte array:  BIT_GROUP_SIZE should evenly divide the bits with data (non-shift part)");
+
+          MachineWord x = bliss::utils::bit_ops::srli<shift>(op(loadu<MachineWord>(in)));
+          memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - bytes, bytes);
+
+          return 0;
+      }
+
+      // don't give compiler an opportunity NOT to avoid branching.
+//		template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t shift = 0,
+//			typename WORD_TYPE, size_t len, typename OP>
+//		BITS_INLINE typename std::enable_if<((sizeof(WORD_TYPE) * len) <= sizeof(typename MAX_SIMD_TYPE::MachineWord)), uint16_t>::type  // len is power of 2.
+//		reverse(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
+//			static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
+//
+//			using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+//			constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+//
+//			static_assert(BIT_GROUP_SIZE <= (bytes * 4), "ERROR: The maximum bit group size should not be larger than 1/2 of input data length");
+//			static_assert(((len * sizeof(WORD_TYPE) * 8 - shift) % BIT_GROUP_SIZE) == 0,
+//						  "ERROR reversing byte array:  BIT_GROUP_SIZE should evenly divide the bits with data (non-shift part)");
+//
+//
+//			MachineWord x = op(loadu<MachineWord>(in));
+//			if (shift > 0) x = bliss::utils::bit_ops::srli<shift>(x);
+//
+//			if (bytes == sizeof(MachineWord))
+//				storeu<MachineWord>(out, x);
+//			else
+//				memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - bytes, bytes);
+//
+//			return 0;
+//		}
+
+
+      template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t shift = 0,
+          typename WORD_TYPE, size_t len, typename OP>
+      BITS_INLINE typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+    		  	  	  	  	  	  	  	   ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0) &&
+                                           ((shift % 8) != 0)
+                                           ), uint16_t>::type
       reverse(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
 
-
         static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
-        static_assert(BIT_GROUP_SIZE <= (sizeof(typename MAX_SIMD_TYPE::MachineWord) * 4), "ERROR: The maximum bit group size should not be larger than 1/2 of machine word type");
-
-        static_assert(((len * sizeof(WORD_TYPE) * 8) / BIT_GROUP_SIZE) >= 1,
-                      "ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
 
         using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+        static_assert(BIT_GROUP_SIZE <= (sizeof(MachineWord) * 4), "ERROR: The maximum bit group size should not be larger than 1/2 of machine word type");
+
+
+        static_assert(((len * sizeof(WORD_TYPE) * 8 - shift) % BIT_GROUP_SIZE) == 0,
+                      "ERROR reversing byte array:  BIT_GROUP_SIZE should evenly divide the bits with data (non-shift part)");
+
 
         constexpr uint16_t byte_shift = shift / 8;
         constexpr uint16_t bit_shift = shift % 8;
         constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
         constexpr uint16_t left_bit_shift = sizeof(MachineWord) * 8 - bit_shift;
 
-
-        memset(reinterpret_cast<uint8_t *>(out) + byte_len, 0, byte_shift);  // clear the last part
-
-        constexpr unsigned int WordsInMachWord = sizeof(MachineWord) / sizeof(WORD_TYPE);
+        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
+        constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
+        constexpr unsigned int rem = byte_len % sizeof(MachineWord);
 
         // pointers
-        WORD_TYPE * v = reinterpret_cast<WORD_TYPE *>(reinterpret_cast<uint8_t *>(out) + byte_len);
-        WORD_TYPE const * u = in;
+        uint8_t * v = reinterpret_cast<uint8_t *>(out) + byte_len;
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
+
+        memset(v, 0, byte_shift);  // clear the last part
 
         // no overlap
-
+        MachineWord rev;
         MachineWord prev = bliss::utils::bit_ops::zero<MachineWord>();
-        MachineWord rev = bliss::utils::bit_ops::zero<MachineWord>();
 
-        for (size_t i = 0; i < (byte_len / sizeof(MachineWord)); ++i) {
+        for (unsigned int i = 0; i < nMachWord; ++i) {
           // enough bytes.  do an iteration
-          v -= WordsInMachWord;
-          rev = op(loadu<MAX_SIMD_TYPE::SIMDVal>(u));
-          storeu<MAX_SIMD_TYPE::SIMDVal>(v,
-                                         bliss::utils::bit_ops::bit_or(prev,
-                                                                       bliss::utils::bit_ops::srli<bit_shift>(rev)));
+          v -= sizeof(MachineWord);
+
+          rev = op(loadu<MachineWord>(u));
+          storeu<MachineWord>(v,
+        		  	  	  	  bliss::utils::bit_ops::bit_or(prev,
+                							  	  	  	  	bliss::utils::bit_ops::srli<bit_shift>(rev)));
 
 //          std::cout << std::dec << " shift " << shift << " byte_shift " << byte_shift << " bit_shift " << bit_shift << " wordbits " << word_bits << " bytelen " << byte_len << std::endl;
 //          std::cout << "iter " << i << " prev: "; print(tmp);  std::cout << std::endl;
@@ -1825,66 +1983,67 @@ namespace bliss {
 //          std::cout << "iter " << i << " shift " << std::dec << (word_bits - bit_shift) << " tmp: "; print(tmp);  std::cout << std::endl;
 //          std::cout << "iter " << i << " out: "; print(std::forward<WORD_TYPE const (&)[len]>(out));  std::cout << std::endl;
 
-          u += WordsInMachWord;
+          u += sizeof(MachineWord);
         }
 
-        constexpr size_t rem = (byte_len % sizeof(MachineWord));
         if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
-          rev = op(loadu<MAX_SIMD_TYPE::SIMDVal>(u));
-          MachineWord x = bliss::utils::bit_ops::bit_or(prev,
-                                                        bliss::utils::bit_ops::srli<bit_shift>(rev));
+          rev = op(loadu<MachineWord>(u));
+          rev = bliss::utils::bit_ops::bit_or(prev,
+                                              bliss::utils::bit_ops::srli<bit_shift>(rev));
 
-          memcpy(out, reinterpret_cast<uint8_t *>(&x) + (sizeof(MachineWord) - rem), rem);
+          memcpy(out, reinterpret_cast<uint8_t *>(&rev) + (sizeof(MachineWord) - rem), rem);
         }
-
         return 0;  // return remainder.
       }
+
+
       template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t shift = 0,
           typename WORD_TYPE, size_t len, typename OP>
-      BITS_INLINE typename std::enable_if<(((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0) &&
-                                            ((shift % 8) == 0)), uint16_t>::type
+      BITS_INLINE typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+    		  	  	  	  	  	  	  	   ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0) &&
+                                           ((shift % 8) == 0)
+                                          ), uint16_t>::type
       reverse(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
 
 
         static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
         static_assert(BIT_GROUP_SIZE <= (sizeof(typename MAX_SIMD_TYPE::MachineWord) * 4), "ERROR: The maximum bit group size should not be larger than 1/2 of machine word type");
 
-        static_assert(((len * sizeof(WORD_TYPE) * 8) / BIT_GROUP_SIZE) >= 1,
-                      "ERROR reversing byte array:  if BIT_GROUP_SIZE > 8 bits, len needs to be a multiple of BIT_GROUP_SIZE in bytes");
+        static_assert(((len * sizeof(WORD_TYPE) * 8 - shift) % BIT_GROUP_SIZE) == 0,
+                      "ERROR reversing byte array:  BIT_GROUP_SIZE should evenly divide the bits with data (non-shift part)");
 
         using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
 
         constexpr uint16_t byte_shift = shift / 8;
         constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
 
-
-        memset(reinterpret_cast<uint8_t *>(out) + byte_len, 0, byte_shift);  // clear the last part
-
-        constexpr unsigned int WordsInMachWord = sizeof(MachineWord) / sizeof(WORD_TYPE);
+        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
+        constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
+        constexpr unsigned int rem = byte_len % sizeof(MachineWord);
 
         // pointers
-        WORD_TYPE * v = reinterpret_cast<WORD_TYPE *>(reinterpret_cast<uint8_t *>(out) + byte_len);
-        WORD_TYPE const * u = in;
+        uint8_t * v = reinterpret_cast<uint8_t *>(out) + byte_len;
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
+
+        if (byte_shift > 0) memset(v, 0, byte_shift);  // clear the last part
 
         // no overlap
-
-        for (size_t i = 0; i < (byte_len / sizeof(MachineWord)); ++i) {
+        for (unsigned int i = 0; i < nMachWord; ++i) {
           // enough bytes.  do an iteration
-          v -= WordsInMachWord;
+          v -= sizeof(MachineWord);
 
-          storeu<MAX_SIMD_TYPE::SIMDVal>(v, op(loadu<MAX_SIMD_TYPE::SIMDVal>(u)));
+          storeu<MachineWord>(v, op(loadu<MachineWord>(u)));
 
 //          std::cout << std::dec << " shift " << shift << " byte_shift " << byte_shift << " bit_shift " << bit_shift << " wordbits " << word_bits << " bytelen " << byte_len << std::endl;
 //          std::cout << "iter " << i << " prev: "; print(tmp);  std::cout << std::endl;
 //          std::cout << "iter " << i << " shift " << std::dec << (word_bits - bit_shift) << " tmp: "; print(tmp);  std::cout << std::endl;
 //          std::cout << "iter " << i << " out: "; print(std::forward<WORD_TYPE const (&)[len]>(out));  std::cout << std::endl;
 
-          u += WordsInMachWord;
+          u += sizeof(MachineWord);
         }
 
-        constexpr size_t rem = (byte_len % sizeof(MachineWord));
         if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
-          MachineWord x = op(loadu<MAX_SIMD_TYPE::SIMDVal>(u));
+          MachineWord x = op(loadu<MachineWord>(u));
           memcpy(out, reinterpret_cast<uint8_t *>(&x) + (sizeof(MachineWord) - rem), rem);
         }
 
@@ -1894,8 +2053,13 @@ namespace bliss {
 
       template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t shift = 0,
           typename WORD_TYPE, size_t len, typename OP>
-      BITS_INLINE typename std::enable_if<(BIT_GROUP_SIZE == 3), uint16_t>::type
+      BITS_INLINE typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+    		  	  	  	  	  	  	  	   (BIT_GROUP_SIZE == 3)
+    		  	  	  	  	  	  	  	  ), uint16_t>::type
       reverse(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
+
+        static_assert(((len * sizeof(WORD_TYPE) * 8 - shift) % BIT_GROUP_SIZE) == 0,
+                        "ERROR reversing byte array:  BIT_GROUP_SIZE should evenly divide the bits with data (non-shift part)");
 
         using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
 
@@ -1903,13 +2067,17 @@ namespace bliss {
         constexpr uint16_t bit_shift = shift % 8;
         constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
 
-        // since right bit shift < 8 bits, corresponding left shift is <= 8 (note equal 8)
+        // since right bit shift < 8 bits, corresponding left shift is <= 8 (note equal 8) - only need to do 1 byte since we will extract that later.
         constexpr uint16_t left_bit_shift = 8 - bit_shift;
 
         memset(reinterpret_cast<uint8_t *>(out) + byte_len, 0, byte_shift);  // clear the last part
 
         constexpr size_t overlap = sizeof(MachineWord) % 3;  // never 0 because size of machineWord is power of 2.
         constexpr size_t nonoverlap = sizeof(MachineWord) - overlap;
+
+        static_assert(sizeof(MachineWord) >= 3, "machineword is less than 3 bytes");
+        static_assert(nonoverlap > 0, "overlap is 0 bytes");
+
 
         MachineWord tmp = bliss::utils::bit_ops::zero<MachineWord>();
 
@@ -1918,13 +2086,13 @@ namespace bliss {
         // (3x + 8w) = ((16-z)y + z) * 8; choose y is 1, z = 1, w = 1.  (i.e, use 15 of 16 bytes)
 
         // this means that v = (uint8_t*)(out + len) - w = (uint8_t*)(out + len) - 1
-        if (byte_len <= sizeof(MachineWord)) {
-          //std::cout << "< machine word." << std::endl;
-            // too short
-          MachineWord res = bliss::utils::bit_ops::srli<bit_shift>(op(loadu<MAX_SIMD_TYPE::SIMDVal>(in)));
-          memcpy(out, reinterpret_cast<uint8_t *>(&res) + (sizeof(MachineWord) - byte_len), byte_len);
-
-        } else {
+//        if (byte_len <= sizeof(MachineWord)) {
+//          //std::cout << "< machine word." << std::endl;
+//            // too short
+//          MachineWord res = bliss::utils::bit_ops::srli<bit_shift>(op(loadu<MachineWord>(in)));
+//          memcpy(out, reinterpret_cast<uint8_t *>(&res) + (sizeof(MachineWord) - byte_len), byte_len);
+//
+//        } else {
           constexpr size_t rem = (byte_len - overlap) % nonoverlap;
 
           // set the mask
@@ -1936,7 +2104,7 @@ namespace bliss {
           uint8_t * v = reinterpret_cast<uint8_t *>(out) + byte_len - overlap;
           uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
 
-          MachineWord rev = bliss::utils::bit_ops::zero<MachineWord>();
+          MachineWord rev;
           MachineWord prev = bliss::utils::bit_ops::zero<MachineWord>();
 
           // since we are working with 120 bits, we are always aligned to offset == 0.
@@ -1944,8 +2112,8 @@ namespace bliss {
             // enough bytes.  do an iteration
             v -= nonoverlap;
 
-            rev = op(loadu<MAX_SIMD_TYPE::SIMDVal>(u));
-            storeu<MAX_SIMD_TYPE::SIMDVal>(v,
+            rev = op(loadu<MachineWord>(u));
+            storeu<MachineWord>(v,
                                            bliss::utils::bit_ops::bit_or(prev,
                                                                          bliss::utils::bit_ops::srli<bit_shift>(rev)));
 
@@ -1966,15 +2134,15 @@ namespace bliss {
 
           // take care of remaining bytes.  bytes is >= MachineWord
            if (rem > 0) {   // bytes - 1 + 15
-             rev = op(loadu<MAX_SIMD_TYPE::SIMDVal>(u));
-             MachineWord x = bliss::utils::bit_ops::bit_or(prev,
-                                                           bliss::utils::bit_ops::srli<bit_shift>(rev));
+        	   rev = op(loadu<MachineWord>(u));
+             rev = bliss::utils::bit_ops::bit_or(prev,
+            		 	 	 	 	 	 	 	 bliss::utils::bit_ops::srli<bit_shift>(rev));
 
 
              // do another iteration with all the remaining.
-             memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - (rem + overlap), (rem + overlap));
+             memcpy(out, reinterpret_cast<uint8_t *>(&rev) + sizeof(MachineWord) - (rem + overlap), (rem + overlap));
            }
-        }  // else the last byte is already taken cared of via loop.
+//        }  // else the last byte is already taken cared of via loop.
 
         return (len * sizeof(WORD_TYPE) * 8) % 3;
 

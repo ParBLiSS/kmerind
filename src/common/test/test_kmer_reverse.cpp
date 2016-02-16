@@ -411,6 +411,34 @@ class KmerReverseOpTest : public ::testing::Test {
       }
     }
 
+    template <unsigned int BITS, unsigned char SIMD>
+    struct reverse_op {
+    	::bliss::utils::bit_ops::bitgroup_ops<BITS, SIMD> op;
+
+    	template <typename WORD_TYPE>
+    	inline WORD_TYPE operator()(WORD_TYPE const & src) const {
+    		return op.reverse(src);
+    	}
+    };
+    template <unsigned int BITS, unsigned char SIMD>
+    struct reverse_negate_op {
+    	::bliss::utils::bit_ops::bitgroup_ops<BITS, SIMD> op;
+
+    	template <typename WORD_TYPE>
+    	inline WORD_TYPE operator()(WORD_TYPE const & src) const {
+    		return bliss::utils::bit_ops::negate(op.reverse(src));
+    	}
+    };
+    template <unsigned int BITS, unsigned char SIMD>
+    struct reverse_1bit_op {
+    	::bliss::utils::bit_ops::bitgroup_ops<1, SIMD> op;
+
+    	template <typename WORD_TYPE>
+    	inline WORD_TYPE operator()(WORD_TYPE const & src) const {
+    		return op.reverse(src);
+    	}
+    };
+
 
     template <typename SIMDType, typename TT = T,
         typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA16>::value ||
@@ -425,22 +453,19 @@ class KmerReverseOpTest : public ::testing::Test {
       bool rev_same = true;
       bool local_rev_same = true;
 
-      using MachWord = typename SIMDType::MachineWord;
       constexpr unsigned char SIMDVal = SIMDType::SIMDVal;
 
       constexpr unsigned char shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
 
 //      std::cout << "bit pow2 " << (uint64_t)shift << std::endl;
-      bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDVal> op;
+      reverse_op<TT::bitsPerChar, SIMDVal> op;
 
 
       for (size_t i = 0; i < this->iterations; ++i) {
         rev = km.reverse();
 
         bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
-            [&op](MachWord const & src) {
-          return op.reverse(src);
-        });
+            op);
 
         local_rev_same = (rev == rev_op);
 
@@ -466,13 +491,12 @@ class KmerReverseOpTest : public ::testing::Test {
       bool rev_same = true;
       bool local_rev_same = true;
 
-      using MachWord = typename SIMDType::MachineWord;
       constexpr unsigned char SIMDVal = SIMDType::SIMDVal;
 
       constexpr unsigned char shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
 
 //      std::cout << "bit pow2 " << (uint64_t)shift << std::endl;
-      bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDVal> op;
+      reverse_negate_op<TT::bitsPerChar, SIMDVal> op;
 
 
       for (size_t i = 0; i < this->iterations; ++i) {
@@ -480,9 +504,7 @@ class KmerReverseOpTest : public ::testing::Test {
 
 
         bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
-            [&op](MachWord const & src) {
-          return bliss::utils::bit_ops::negate(op.reverse(src));
-        });
+            op);
 
         local_rev_same = (rev == rev_op);
 
@@ -509,23 +531,19 @@ class KmerReverseOpTest : public ::testing::Test {
       bool rev_same = true;
       bool local_rev_same = true;
 
-      using MachWord = typename SIMDType::MachineWord;
       constexpr unsigned char SIMDVal = SIMDType::SIMDVal;
 
       constexpr uint16_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
 
 //      std::cout << "bit 3 " << (uint64_t)shift << std::endl;
-      bliss::utils::bit_ops::bitgroup_ops<1, SIMDVal> op1;
+      reverse_1bit_op<TT::bitsPerChar, SIMDVal> op1;
 
       for (size_t i = 0; i < this->iterations; ++i) {
         rev = km.reverse_complement();
 
 
         bliss::utils::bit_ops::reverse<1, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
-            [&op1](MachWord const & src) {
-          return op1.reverse(src);
-
-        });
+            op1);
 
         local_rev_same = (rev == rev_op);
 
@@ -572,6 +590,12 @@ TYPED_TEST_P(KmerReverseOpTest, reverse_avx2)
 #endif
 }
 
+TYPED_TEST_P(KmerReverseOpTest, reverse_auto)
+{
+	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
+  this->template test<bliss::utils::bit_ops::BITREV_AUTO<bytes> >();
+}
+
 TYPED_TEST_P(KmerReverseOpTest, revcomp_swar)
 {
   this->template testc<bliss::utils::bit_ops::BITREV_SWAR>();
@@ -595,8 +619,14 @@ TYPED_TEST_P(KmerReverseOpTest, revcomp_avx2)
 #endif
 }
 
+TYPED_TEST_P(KmerReverseOpTest, revcomp_auto)
+{
+	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
+  this->template testc<bliss::utils::bit_ops::BITREV_AUTO<bytes> >();
+}
 
-REGISTER_TYPED_TEST_CASE_P(KmerReverseOpTest, reverse_swar, reverse_ssse3, reverse_avx2, revcomp_swar, revcomp_ssse3, revcomp_avx2);
+
+REGISTER_TYPED_TEST_CASE_P(KmerReverseOpTest, reverse_swar, reverse_ssse3, reverse_avx2, reverse_auto, revcomp_swar, revcomp_ssse3, revcomp_avx2, revcomp_auto);
 
 //////////////////// RUN the tests with different types.
 

@@ -73,6 +73,35 @@ class KmerReverseBenchmark : public ::testing::Test {
       }
     }
 
+    template <unsigned int BITS, unsigned char SIMD>
+    struct reverse_op {
+    	::bliss::utils::bit_ops::bitgroup_ops<BITS, SIMD> op;
+
+    	template <typename WORD_TYPE>
+    	inline WORD_TYPE operator()(WORD_TYPE const & src) const {
+    		return op.reverse(src);
+    	}
+    };
+    template <unsigned int BITS, unsigned char SIMD>
+    struct reverse_negate_op {
+    	::bliss::utils::bit_ops::bitgroup_ops<BITS, SIMD> op;
+
+    	template <typename WORD_TYPE>
+    	inline WORD_TYPE operator()(WORD_TYPE const & src) const {
+    		return bliss::utils::bit_ops::negate(op.reverse(src));
+    	}
+    };
+    template <unsigned int BITS, unsigned char SIMD>
+    struct reverse_1bit_op {
+    	::bliss::utils::bit_ops::bitgroup_ops<1, SIMD> op;
+
+    	template <typename WORD_TYPE>
+    	inline WORD_TYPE operator()(WORD_TYPE const & src) const {
+    		return op.reverse(src);
+    	}
+    };
+
+
 
     template <typename SIMDType, typename TT = T,
         typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA>::value ||
@@ -82,17 +111,13 @@ class KmerReverseBenchmark : public ::testing::Test {
           ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA6>::value, int>::type = 1>
     void benchmark() {
 
-      using MachWord = typename SIMDType::MachineWord;
-
       constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
-      bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDType::SIMDVal> op;
+      reverse_op<TT::bitsPerChar, SIMDType::SIMDVal> op;
 
       for (size_t i = 0; i < iterations; ++i) {
 
         bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
-            [&op](MachWord const & src) {
-          return op.reverse(src);
-        });
+            op);
       }
     }
     template <typename SIMDType, typename TT = T,
@@ -109,17 +134,13 @@ class KmerReverseBenchmark : public ::testing::Test {
         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA>::value, int>::type = 1>
     void benchmark_c() {
 
-      using MachWord = typename SIMDType::MachineWord;
-
       constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
-      bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDType::SIMDVal> op;
+      reverse_negate_op<TT::bitsPerChar, SIMDType::SIMDVal> op;
 
       for (size_t i = 0; i < iterations; ++i) {
 
         bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
-            [&op](MachWord const & src) {
-          return bliss::utils::bit_ops::negate(op.reverse(src));
-        });
+            op);
 
       }
     }
@@ -128,17 +149,13 @@ class KmerReverseBenchmark : public ::testing::Test {
         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA6>::value ||
          ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA6>::value, int>::type = 1>
     void benchmark_c() {
-      using MachineWord = typename SIMDType::MachineWord;
-
       constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
-      bliss::utils::bit_ops::bitgroup_ops<1, SIMDType::SIMDVal> op1;
+      reverse_1bit_op<TT::bitsPerChar, SIMDType::SIMDVal> op1;
 
       for (size_t i = 0; i < iterations; ++i) {
 
         bliss::utils::bit_ops::reverse<1, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
-            [&op1](MachineWord const & src) {
-          return op1.reverse(src);
-        });
+            op1);
 
       }
     }
@@ -269,6 +286,10 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
 //  TEST_REV_BITOPS("seq_new", ::bliss::utils::bit_ops::BIT_REV_SEQ, TypeParam);
     TEST_KMER_REV("rev", reverse, TypeParam);
 
+TIMER_START(km);
+	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
+this->template benchmark<bliss::utils::bit_ops::BITREV_AUTO<bytes> >();
+TIMER_END(km, "revop auto", KmerReverseBenchmark<TypeParam>::iterations);
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
 
@@ -301,7 +322,7 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
   this->template benchmark_c<bliss::utils::bit_ops::BITREV_SWAR>();
   TIMER_END(km, "revopc swar", KmerReverseBenchmark<TypeParam>::iterations);
 
-  #ifdef __SSSE3__
+#ifdef __SSSE3__
     TEST_REVC_BITOPS("ssse3_new", ::bliss::utils::bit_ops::BIT_REV_SSSE3, TypeParam);
 
     TIMER_START(km);
@@ -319,8 +340,10 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
     TEST_KMER_REV("revC", reverse_complement, TypeParam);
 
 
-
-
+  TIMER_START(km);
+	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
+  this->template benchmark_c<bliss::utils::bit_ops::BITREV_AUTO<bytes> >();
+  TIMER_END(km, "revopc auto", KmerReverseBenchmark<TypeParam>::iterations);
 
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
@@ -333,7 +356,9 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 
 //REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, rev_seq, rev_seq2, revcomp_seq, rev_bswap, revcomp_bswap, rev_swar, revcomp_swar, rev, revcomp, rev_ssse3, revcomp_ssse3);
 
-REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark, reverse, revcomp);
+REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark,
+		reverse,
+		revcomp);
 
 //////////////////// RUN the tests with different types.
 
