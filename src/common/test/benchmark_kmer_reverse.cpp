@@ -198,7 +198,7 @@ std::vector<T> KmerReverseBenchmark<T>::outputs;
 #define TEST_KMER_REV(name, func, kmertype) do { \
     TIMER_START(km); \
     for (size_t i = 0; i < KmerReverseBenchmark<kmertype>::iterations; ++i) { \
-      KmerReverseBenchmark<kmertype>::outputs[i] = KmerReverseBenchmark<kmertype>::kmers[i].func(); \
+      KmerReverseBenchmark<kmertype>::kmers[i].func(KmerReverseBenchmark<kmertype>::outputs[i]); \
     } \
     TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
   } while (0)
@@ -252,7 +252,7 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
 {
   TIMER_INIT(km);
 
-  //TEST_REV("oldseq", KmerReverseBenchmark<TypeParam>::helper.reverse_serial(km), TypeParam, rev_gold);
+//  TEST_REV("oldseq", KmerReverseBenchmark<TypeParam>::helper.reverse_serial(km), TypeParam, rev_gold);
 
   if (((TypeParam::bitsPerChar & (TypeParam::bitsPerChar - 1)) == 0) &&
       (::std::is_same<typename TypeParam::KmerAlphabet, bliss::common::DNA>::value ||
