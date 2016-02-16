@@ -344,7 +344,10 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
   this->template benchmark_c<bliss::utils::bit_ops::BITREV_AUTO<bytes> >();
   TIMER_END(km, "revopc auto", KmerReverseBenchmark<TypeParam>::iterations);
-
+  printf("AUTO chose SIMD %u and MachineWord size %lu for kmer k %u, wordsize %lu, bitsPerChar %u, bytes %lu\n",
+         bliss::utils::bit_ops::BITREV_AUTO<bytes>::SIMDVal,
+         sizeof(typename bliss::utils::bit_ops::BITREV_AUTO<bytes>::MachineWord),
+         TypeParam::size, sizeof(typename TypeParam::KmerWordType), TypeParam::bitsPerChar, bytes);
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
 
