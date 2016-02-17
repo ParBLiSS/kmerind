@@ -182,6 +182,47 @@ namespace bliss
       if (clear) do_clear();
     }
   
+    /**
+     *
+     * @brief   Create a new k-mer from the given sequence.
+     *
+     * The iterators base type has to be the same as the k-mers base type.
+     * This function merely initializes the internal data with the values
+     * from the iterator. There is no processing done on these values, which
+     * especially means that there is no padding removed.
+     *
+     * The use of this function is mostly for testing purposes (creating the
+     * expected reference (true) k-mers).
+     *
+     * @tparam InputIterator  An input iterator which is at least a forward
+     *                        iterator.
+     * @param begin           An interator pointing to the beginning of the
+     *                        sequence to be used for initializing the k-mer
+     *                        data structure.
+     */
+    template<typename InputIterator>
+    explicit Kmer(InputIterator begin)
+    {
+      // assert that the iterator's value type is the same as this k-mers base
+      // type
+      static_assert(std::is_same<
+          typename std::iterator_traits<InputIterator>::value_type,
+          WORD_TYPE>::value,
+          "Input iterator must have same value type as the Kmer storage");
+
+      // copy all the data into this kmer
+      WORD_TYPE* out = data;
+      for (unsigned int i = 0; i < nWords; ++i)
+      {
+//        std::cout << " 0x" << std::hex << *begin;
+        *(out++) = *(begin++);
+      }
+//      std::cout << std::endl;
+
+      // set unused bits to zero to make this a valid kmer
+      do_sanitize();
+    }
+
     /// copy constructor  - want result of iterator to be copiable here so no "explicit"
     Kmer(Kmer const& other) {
       memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
@@ -189,7 +230,6 @@ namespace bliss
   
     /// copy assignment operator
     Kmer& operator=(Kmer const &other) {
-
       memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
       return *this;
     }
@@ -1118,7 +1158,8 @@ namespace bliss
     KMER_INLINE void do_clear()
     {
       //std::fill(data, data + nWords, static_cast<WORD_TYPE>(0));
-      memset(data, 0, nWords * sizeof(WORD_TYPE));
+      if (nWords > 1) memset(data, 0, nWords * sizeof(WORD_TYPE));
+      else data[0] = 0;
     }
   
     /**
@@ -1301,8 +1342,7 @@ namespace bliss
       using SIMDType = bliss::utils::bit_ops::BITREV_AUTO<bytes>;
   	  ::bliss::utils::bit_ops::bitgroup_ops<bitsPerChar, SIMDType::SIMDVal> op;
 
-      bliss::utils::bit_ops::reverse<bitsPerChar,
-                                     SIMDType,
+      bliss::utils::bit_ops::reverse_transform<SIMDType,
                                      (bytes * 8 - nBits)
         >(result.data, src.data,
         		[&op](typename SIMDType::MachineWord const & src){
@@ -1437,47 +1477,6 @@ namespace bliss
     }
 
 
-  public:
-    /**
-     *
-     * @brief   Create a new k-mer from the given sequence.
-     *
-     * The iterators base type has to be the same as the k-mers base type.
-     * This function merely initializes the internal data with the values
-     * from the iterator. There is no processing done on these values, which
-     * especially means that there is no padding removed.
-     *
-     * The use of this function is mostly for testing purposes (creating the
-     * expected reference (true) k-mers).
-     *
-     * @tparam InputIterator  An input iterator which is at least a forward
-     *                        iterator.
-     * @param begin           An interator pointing to the beginning of the
-     *                        sequence to be used for initializing the k-mer
-     *                        data structure.
-     */
-    template<typename InputIterator>
-    explicit Kmer(InputIterator begin)
-    {
-      // assert that the iterator's value type is the same as this k-mers base
-      // type
-      static_assert(std::is_same<
-          typename std::iterator_traits<InputIterator>::value_type,
-          WORD_TYPE>::value,
-          "Input iterator must have same value type as the Kmer storage");
-  
-      // copy all the data into this kmer
-      WORD_TYPE* out = data;
-      for (unsigned int i = 0; i < nWords; ++i)
-      {
-//        std::cout << " 0x" << std::hex << *begin;
-        *(out++) = *(begin++);
-      }
-//      std::cout << std::endl;
-
-      // set unused bits to zero to make this a valid kmer
-      do_sanitize();
-    }
 
   };
 

@@ -112,11 +112,13 @@ class KmerReverseBenchmark : public ::testing::Test {
     void benchmark() {
 
       constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      constexpr uint16_t overlap = sizeof(typename SIMDType::MachineWord) % TT::bitsPerChar;
+
       reverse_op<TT::bitsPerChar, SIMDType::SIMDVal> op;
 
       for (size_t i = 0; i < iterations; ++i) {
 
-        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap>(outputs[i].getDataRef(), kmers[i].getDataRef(),
             op);
       }
     }
@@ -135,11 +137,13 @@ class KmerReverseBenchmark : public ::testing::Test {
     void benchmark_c() {
 
       constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      constexpr uint16_t overlap = sizeof(typename SIMDType::MachineWord) % TT::bitsPerChar;
+
       reverse_negate_op<TT::bitsPerChar, SIMDType::SIMDVal> op;
 
       for (size_t i = 0; i < iterations; ++i) {
 
-        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap>(outputs[i].getDataRef(), kmers[i].getDataRef(),
             op);
 
       }
@@ -150,11 +154,12 @@ class KmerReverseBenchmark : public ::testing::Test {
          ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::RNA6>::value, int>::type = 1>
     void benchmark_c() {
       constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+
       reverse_1bit_op<TT::bitsPerChar, SIMDType::SIMDVal> op1;
 
       for (size_t i = 0; i < iterations; ++i) {
 
-        bliss::utils::bit_ops::reverse<1, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, 0>(outputs[i].getDataRef(), kmers[i].getDataRef(),
             op1);
 
       }
@@ -344,10 +349,10 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
   this->template benchmark_c<bliss::utils::bit_ops::BITREV_AUTO<bytes> >();
   TIMER_END(km, "revopc auto", KmerReverseBenchmark<TypeParam>::iterations);
-  printf("AUTO chose SIMD %u and MachineWord size %lu for kmer k %u, wordsize %lu, bitsPerChar %u, bytes %lu\n",
-         bliss::utils::bit_ops::BITREV_AUTO<bytes>::SIMDVal,
-         sizeof(typename bliss::utils::bit_ops::BITREV_AUTO<bytes>::MachineWord),
-         TypeParam::size, sizeof(typename TypeParam::KmerWordType), TypeParam::bitsPerChar, bytes);
+//  printf("AUTO chose SIMD %u and MachineWord size %lu for kmer k %u, wordsize %lu, bitsPerChar %u, bytes %lu\n",
+//         bliss::utils::bit_ops::BITREV_AUTO<bytes>::SIMDVal,
+//         sizeof(typename bliss::utils::bit_ops::BITREV_AUTO<bytes>::MachineWord),
+//         TypeParam::size, sizeof(typename TypeParam::KmerWordType), TypeParam::bitsPerChar, bytes);
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
 
@@ -488,12 +493,13 @@ class KmerReverseOpBenchmark : public ::testing::Test {
 
       using MachWord = typename SIMDType::MachineWord;
 
-      constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      constexpr uint16_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      constexpr uint16_t overlap = sizeof(MachineWord) % TT::bitsPerChar;
       bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDType::SIMDVal> op;
 
       for (size_t i = 0; i < iterations; ++i) {
 
-        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap>(outputs[i].getDataRef(), kmers[i].getDataRef(),
             [&op](MachWord const & src) {
           return op.reverse(src);
         });
@@ -535,11 +541,13 @@ class KmerReverseOpBenchmark : public ::testing::Test {
       using MachWord = typename SIMDType::MachineWord;
 
       constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      constexpr uint16_t overlap = sizeof(MachineWord) % TT::bitsPerChar;
+
       bliss::utils::bit_ops::bitgroup_ops<TT::bitsPerChar, SIMDType::SIMDVal> op;
 
       for (size_t i = 0; i < iterations; ++i) {
 
-        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap>(outputs[i].getDataRef(), kmers[i].getDataRef(),
             [&op](MachWord const & src) {
           return bliss::utils::bit_ops::negate(op.reverse(src));
         });
@@ -554,11 +562,12 @@ class KmerReverseOpBenchmark : public ::testing::Test {
       using MachineWord = typename SIMDType::MachineWord;
 
       constexpr size_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+
       bliss::utils::bit_ops::bitgroup_ops<1, SIMDType::SIMDVal> op1;
 
       for (size_t i = 0; i < iterations; ++i) {
 
-        bliss::utils::bit_ops::reverse<1, SIMDType, shift>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, 0>(outputs[i].getDataRef(), kmers[i].getDataRef(),
             [&op1](MachineWord const & src) {
           return op1.reverse(src);
         });

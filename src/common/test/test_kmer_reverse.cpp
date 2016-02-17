@@ -455,7 +455,8 @@ class KmerReverseOpTest : public ::testing::Test {
 
       constexpr unsigned char SIMDVal = SIMDType::SIMDVal;
 
-      constexpr unsigned char shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      constexpr uint16_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      constexpr uint16_t overlap = sizeof(typename SIMDType::MachineWord) % TT::bitsPerChar;
 
 //      std::cout << "bit pow2 " << (uint64_t)shift << std::endl;
       reverse_op<TT::bitsPerChar, SIMDVal> op;
@@ -464,7 +465,7 @@ class KmerReverseOpTest : public ::testing::Test {
       for (size_t i = 0; i < this->iterations; ++i) {
         rev = km.reverse();
 
-        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap>(rev_op.getDataRef(), km.getDataRef(),
             op);
 
         local_rev_same = (rev == rev_op);
@@ -493,7 +494,8 @@ class KmerReverseOpTest : public ::testing::Test {
 
       constexpr unsigned char SIMDVal = SIMDType::SIMDVal;
 
-      constexpr unsigned char shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      constexpr uint16_t shift = TT::nWords * sizeof(typename TT::KmerWordType) * 8 - TT::nBits;
+      constexpr uint16_t overlap = sizeof(typename SIMDType::MachineWord) % TT::bitsPerChar;
 
 //      std::cout << "bit pow2 " << (uint64_t)shift << std::endl;
       reverse_negate_op<TT::bitsPerChar, SIMDVal> op;
@@ -503,7 +505,7 @@ class KmerReverseOpTest : public ::testing::Test {
         rev = km.reverse_complement();
 
 
-        bliss::utils::bit_ops::reverse<TT::bitsPerChar, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap>(rev_op.getDataRef(), km.getDataRef(),
             op);
 
         local_rev_same = (rev == rev_op);
@@ -542,7 +544,7 @@ class KmerReverseOpTest : public ::testing::Test {
         rev = km.reverse_complement();
 
 
-        bliss::utils::bit_ops::reverse<1, SIMDType, shift>(rev_op.getDataRef(), km.getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, 0>(rev_op.getDataRef(), km.getDataRef(),
             op1);
 
         local_rev_same = (rev == rev_op);
