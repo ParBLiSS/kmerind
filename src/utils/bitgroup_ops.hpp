@@ -48,6 +48,8 @@
 #include <sstream>  // stringstream
 #include <cstdint>       // uint8_t
 
+#include <atomic>    // for ensuring memory ordering.
+
 #include "utils/logging.h"
 #include "bliss-config.hpp"
 #ifdef USE_SIMD
@@ -80,10 +82,12 @@
 #define _bliss_bswap_32(x)  _bswap(x)
 #endif
 
-#define _bliss_bswap_16(x)  ((x >>  8) &  0xFF) | ((x &  0xFF) <<  8);
+#define _bliss_bswap_16(x)  (((x >>  8) &  0xFF) | ((x &  0xFF) <<  8))
+
+#define _bliss_abs(x)  ((x < 0) ? -x : x)
 
 // TODO: reverse_groups vs reverse_in_group
-
+#define MEM_ORDER ::std::memory_order_seq_cst
 
 namespace bliss {
 
@@ -227,60 +231,64 @@ namespace bliss {
       /// shift right by number of bits less than 8.
       template <typename WORD_TYPE>
       BITS_INLINE WORD_TYPE
-      srli(WORD_TYPE const val, uint16_t shift) {
+      srli(WORD_TYPE const & val, uint16_t shift) {
         return val >> shift;
       }
       /// shift right by number of bits less than 8.
       template <uint16_t SHIFT, typename WORD_TYPE>
       BITS_INLINE typename ::std::enable_if<(SHIFT == 0), WORD_TYPE>::type
-      srli(WORD_TYPE const val) {
+      srli(WORD_TYPE const & val) {
         return val;
       }
       template <uint16_t SHIFT, typename WORD_TYPE>
       BITS_INLINE typename ::std::enable_if<(SHIFT >= (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
-      srli(WORD_TYPE const val) {
+      srli(WORD_TYPE const & val) {
         return 0;
       }
       template <uint16_t SHIFT, typename WORD_TYPE>
       BITS_INLINE typename ::std::enable_if<(SHIFT > 0) && (SHIFT < (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
-      srli(WORD_TYPE const val) {
+      srli(WORD_TYPE const & val) {
         return val >> SHIFT;
       }
 
       /// shift left by number of bits less than 8.
       template <typename WORD_TYPE>
       BITS_INLINE WORD_TYPE
-      slli(WORD_TYPE const val, uint16_t shift) {
+      slli(WORD_TYPE const & val, uint16_t shift) {
         return val << shift;
       }
       /// shift left by number of bits less than 8.
       template <uint16_t SHIFT, typename WORD_TYPE>
       BITS_INLINE typename ::std::enable_if<(SHIFT == 0), WORD_TYPE>::type
-      slli(WORD_TYPE const val) {
+      slli(WORD_TYPE const & val) {
         return val;
       }
       template <uint16_t SHIFT, typename WORD_TYPE>
       BITS_INLINE typename ::std::enable_if<(SHIFT >= (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
-      slli(WORD_TYPE const val) {
+      slli(WORD_TYPE const & val) {
         return 0;
       }
       template <uint16_t SHIFT, typename WORD_TYPE>
       BITS_INLINE typename ::std::enable_if<(SHIFT > 0) && (SHIFT < (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
-      slli(WORD_TYPE const val) {
+      slli(WORD_TYPE const & val) {
         return val << SHIFT;
       }
-
-      // dispatches shift operation
-      template <int16_t SHIFT, typename WORD_TYPE>
-      BITS_INLINE WORD_TYPE
-      shift(WORD_TYPE const val) {
-        return (SHIFT >= 0) ? slli<SHIFT>(val) : srli<(-SHIFT)>(val);
-      }
-
-      template <typename WORD_TYPE>
-      BITS_INLINE WORD_TYPE negate(WORD_TYPE const & u) {
-        return ~u;
-      }
+// these cause tests to fail. explicit calls to slli and srli works, however.
+//      template <int16_t SHIFT, typename WORD_TYPE>
+//      BITS_INLINE typename ::std::enable_if<(SHIFT == 0), WORD_TYPE>::type
+//      shift(WORD_TYPE const & val) {
+//        return val;
+//      }
+//      template <int16_t SHIFT, typename WORD_TYPE>
+//      BITS_INLINE typename ::std::enable_if<(SHIFT > 0), WORD_TYPE>::type
+//      shift(WORD_TYPE const & val) {
+//        return slli<SHIFT>(val);
+//      }
+//      template <int16_t SHIFT, typename WORD_TYPE>
+//      BITS_INLINE typename ::std::enable_if<(SHIFT < 0), WORD_TYPE>::type
+//      shift(WORD_TYPE const & val) {
+//        return srli<(-SHIFT)>(val);
+//      }
 
       template <typename DEST_WORD_TYPE, typename WORD_TYPE>
       BITS_INLINE typename ::std::enable_if<(sizeof(DEST_WORD_TYPE) <= 8), DEST_WORD_TYPE>::type
@@ -292,6 +300,24 @@ namespace bliss {
       typename = typename ::std::enable_if<(sizeof(SRC_WORD_TYPE) <= 8)>::type>
       BITS_INLINE void storeu(WORD_TYPE * u, SRC_WORD_TYPE const & val) {
     	  *(reinterpret_cast<SRC_WORD_TYPE *>(u)) = val;
+      }
+
+      template <size_t nbytes, uint8_t byte_offset = 0, typename DEST_WORD_TYPE, typename WORD_TYPE,
+       	   typename ::std::enable_if<((nbytes + byte_offset) <= sizeof(DEST_WORD_TYPE)), int>::type = 1>
+      BITS_INLINE void load_part(DEST_WORD_TYPE & x, WORD_TYPE const *u) {
+    	  memmove(reinterpret_cast<uint8_t*>(&x) + byte_offset, u, nbytes);
+      }
+
+      template <size_t nbytes, uint8_t byte_offset = 0, typename WORD_TYPE, typename SRC_WORD_TYPE,
+      	  typename ::std::enable_if<((nbytes + byte_offset) <= sizeof(SRC_WORD_TYPE)), int>::type = 1>
+      BITS_INLINE void store_part(WORD_TYPE *u, SRC_WORD_TYPE const & val) {
+    	  memmove(u, reinterpret_cast<uint8_t const *>(&val) + byte_offset, nbytes);
+      }
+
+
+      template <typename WORD_TYPE>
+      BITS_INLINE WORD_TYPE bit_not(WORD_TYPE const & u) {
+        return ~u;
       }
 
       template <typename WORD_TYPE>
@@ -321,7 +347,7 @@ namespace bliss {
       }
       template <typename WORD_TYPE>
       BITS_INLINE WORD_TYPE bit_max() {
-        return negate(zero<WORD_TYPE>());
+        return bit_not(zero<WORD_TYPE>());
       }
 
 
@@ -783,7 +809,7 @@ namespace bliss {
       /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
       /// DO THIS BECAUSE BITWISE SHIFT does not cross the epi64 boundary.
       template <>
-      BITS_INLINE __m128i srli(__m128i val, uint16_t shift) {
+      BITS_INLINE __m128i srli(__m128i const & val, uint16_t shift) {
         if (shift == 0) return val;
         if (shift >=128) return _mm_setzero_si128();
 
@@ -791,23 +817,25 @@ namespace bliss {
         // shift by 1 byte.  avoids a mask load + shuffle, and is friendly with epi16, epi32, and epi64 versions of shifts.
         __m128i tmp = _mm_srli_si128(val, 8);  //(bytes level shift only)
 
+
         // then left shift TMP to get the bits that crosses the 64 bit boundary.
         // shift the input value via epi64 by the number of shifts
         // then or together.
         if (shift < 64)
         	return _mm_or_si128(_mm_slli_epi64(tmp, 64 - shift), _mm_srli_epi64(val, shift));
 
-        if (shift > 64)
+        // 64 bit exactly
+        if (shift == 64) return tmp;
+
+//        if (shift > 64)
         	return _mm_srli_epi64(tmp, shift - 64);
 
-        // 64 bit exactly
-        return tmp;
       }
 
       /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
       /// DO THIS BECAUSE BITWISE SHIFT does not cross the epi64 boundary.
       template <uint16_t SHIFT>
-      BITS_INLINE __m128i srli(__m128i val) {
+      BITS_INLINE __m128i srli(__m128i const & val) {
         if (SHIFT == 0) return val;
         if (SHIFT >=128) return _mm_setzero_si128();
 
@@ -820,17 +848,17 @@ namespace bliss {
         // then or together.
         if (SHIFT < 64)
           return _mm_or_si128(_mm_slli_epi64(tmp, 64 - SHIFT), _mm_srli_epi64(val, SHIFT));
+        // 64 bit exactly
+        if (SHIFT == 64) return tmp;
 
-        if (SHIFT > 64)
+//        if (SHIFT > 64)
           return _mm_srli_epi64(tmp, SHIFT - 64);
 
-        // 64 bit exactly
-        return tmp;
       }
 
       /// shift left by number of bits less than 8.
       template <>
-      BITS_INLINE __m128i slli(__m128i val, uint16_t shift) {
+      BITS_INLINE __m128i slli(__m128i const & val, uint16_t shift) {
         if (shift == 0) return val;
         if (shift >=128) return _mm_setzero_si128();
 
@@ -852,7 +880,7 @@ namespace bliss {
       }
       /// shift left by number of bits less than 8.
       template <uint16_t SHIFT>
-      BITS_INLINE __m128i slli(__m128i val) {
+      BITS_INLINE __m128i slli(__m128i const & val) {
       	if (SHIFT == 0) return val;
       	if (SHIFT >=128) return _mm_setzero_si128();
 
@@ -865,17 +893,17 @@ namespace bliss {
         // then or together.
         if (SHIFT < 64)
         	return _mm_or_si128(_mm_srli_epi64(tmp, 64 - SHIFT), _mm_slli_epi64(val, SHIFT));
-
-        if (SHIFT > 64)
-        	return _mm_slli_epi64(tmp, SHIFT - 64);
-
         // 64 bit exactly
-        return tmp;
+        if (SHIFT == 64) return tmp;
+
+        // if (SHIFT > 64)
+        return _mm_slli_epi64(tmp, SHIFT - 64);
+
       }
 
 
       template <>
-      BITS_INLINE __m128i negate(__m128i const & u) {
+      BITS_INLINE __m128i bit_not(__m128i const & u) {
         return _mm_xor_si128(u, _mm_cmpeq_epi8(u, u));  // no native negation operator, so use xor
       }
 
@@ -1256,7 +1284,7 @@ namespace bliss {
 //      /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
 //      /// only support shift <= 1 byte at the moment, since alignr has to take an 8 bit immediate (i.e. const)
 //      template <>
-//      BITS_INLINE __m256i srli(__m256i val, uint16_t shift) {
+//      BITS_INLINE __m256i srli(__m256i const & val, uint16_t shift) {
 //    	  if (shift == 0) return val;
 //    	  if (shift >= 256) return _mm256_setzero_si256();
 //
@@ -1301,7 +1329,7 @@ namespace bliss {
 
       /// shift right by number of bits less than 8.  1 load, 1 shuffle, 2 shifts, 1 or:  5 operations.
       template <uint16_t SHIFT>
-      BITS_INLINE __m256i srli(__m256i val) {
+      BITS_INLINE __m256i srli(__m256i const & val) {
     	  if (SHIFT == 0) return val;
     	  if (SHIFT >= 256) return _mm256_setzero_si256();
 
@@ -1359,7 +1387,7 @@ namespace bliss {
 
 //      /// shift left by number of bits less than 8.
 //      template <>
-//      BITS_INLINE __m256i slli(__m256i val, uint16_t shift) {
+//      BITS_INLINE __m256i slli(__m256i const & val, uint16_t shift) {
 //    	  if (shift == 0) return val;
 //    	  if (shift >= 256) return _mm256_setzero_si256();
 //
@@ -1414,7 +1442,7 @@ namespace bliss {
 
       /// shift left by number of bits less than 8.
       template <uint16_t SHIFT>
-      BITS_INLINE __m256i slli(__m256i val) {
+      BITS_INLINE __m256i slli(__m256i const & val) {
     	  if (SHIFT == 0) return val;
     	  if (SHIFT >= 256) return _mm256_setzero_si256();
 
@@ -1466,7 +1494,7 @@ namespace bliss {
       }
 
       template <>
-      BITS_INLINE __m256i negate(__m256i const & u) {
+      BITS_INLINE __m256i bit_not(__m256i const & u) {
         return _mm256_xor_si256(u, _mm256_cmpeq_epi8(u, u));  // no native negation operator
       }
 
@@ -1866,14 +1894,14 @@ namespace bliss {
       template <typename WORD_TYPE, size_t len>
       void print(WORD_TYPE const (&words)[len]) {
         for (int i = len - 1; i >= 0; --i) {
-          std::cout << std::hex << words[i] << " ";
+          std::cout << std::hex << std::setfill('0') << std::setw(sizeof(WORD_TYPE) * 2) << words[i] << " ";
         }
       }
       template <typename WORD_TYPE>
       void print(WORD_TYPE const & word) {
         uint64_t const * ptr = reinterpret_cast<uint64_t const *>(&word);
-        for (int i = (sizeof(WORD_TYPE) / sizeof(uint64_t)) - 1; i >= 0; --i) {
-          std::cout << std::hex << ptr[i] << " ";
+        for (int i = ((sizeof(WORD_TYPE) + sizeof(uint64_t) - 1) / sizeof(uint64_t)) - 1; i >= 0; --i) {
+          std::cout << std::hex << std::setfill('0') << std::setw(std::min(sizeof(WORD_TYPE), sizeof(uint64_t)) * 2) << ptr[i] << " ";
         }
       }
 
@@ -1894,71 +1922,52 @@ namespace bliss {
       //    of padding bits.
       // TODO: we will ignore the case when we reverse and do true shift, for now.
 
-      //========= unary transofrm ======================
+      //========= unary transform - no shift======================
 
-//      // WORD orders bit bitwise transforms should be same between input and output
-//      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-//              (BIT_SHIFT == 0)), int>::type = 1>
-//      BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-//
-//          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//          storeu<MachineWord>(out, op(loadu<MachineWord>(in)));
-//      }
-//      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-//          (BIT_SHIFT == 0)), int>::type = 1>
-//      BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-//
-//        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
-//
-//          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//          MachineWord x = op(loadu<MachineWord>(in));
-//          memcpy(out, &x, bytes);
-//      }
-      // WORD orders bit bitwise transforms should be same between input and output, just shifted
-      // positive shift increase value, so shift left.  negative shift shifts right. 0 shift returns original value, not sure if it's no-op.
-      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+      // WORD orders bit bitwise transforms should be same between input and output
+      template <typename MAX_SIMD_TYPE,
           typename WORD_TYPE, size_t len, typename OP,
-          typename std::enable_if<((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
+          typename std::enable_if<((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) , int>::type = 1>
       BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-
+//    	  printf("0 bit transform exact. %lu x %lu byte words, machine word size %lu\n", len, sizeof(WORD_TYPE), sizeof(MachineWord));
           using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-          storeu<MachineWord>(out, ::bliss::utils::bit_ops::shift<BIT_SHIFT>(op(loadu<MachineWord>(in))));
+          storeu<MachineWord>(out, op(loadu<MachineWord>(in)));
       }
-      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+      template <typename MAX_SIMD_TYPE,
           typename WORD_TYPE, size_t len, typename OP,
           typename std::enable_if<((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
       BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-
-        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
-
           using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-          MachineWord x = ::bliss::utils::bit_ops::shift<BIT_SHIFT>(op(loadu<MachineWord>(in)));
-          memcpy(out, &x, bytes);
+
+          //printf("0 bit transform smaller. %lu x %lu byte words, machine word size %lu\n", len, sizeof(WORD_TYPE), sizeof(MachineWord));
+
+//        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+//    	  printf("0 bit transform by smaller \n");
+//          MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//          load_part<(sizeof(WORD_TYPE) * len), 0>(x, in);
+          MachineWord x = loadu<MachineWord>(in);
+          x = op(x);
+          store_part<(sizeof(WORD_TYPE) * len), 0>(out, x);
+//          MachineWord x = op(loadu<MachineWord>(in));
+//          memcpy(out, &x, bytes);
       }
-
-      // no shift
-      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+      // no shift.
+      template <typename MAX_SIMD_TYPE,
           typename WORD_TYPE, size_t len, typename OP,
-          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-          ((BIT_SHIFT % 8) == 0)), int>::type = 1>
+          typename std::enable_if<((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
       BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-
+//    	  printf("0 bit transform by large\n");
         using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
 
-        constexpr uint16_t byte_shift = BIT_SHIFT / 8;
-        constexpr size_t bytes = sizeof(WORD_TYPE) * len - byte_shift;
+        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
 
         // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
         constexpr unsigned int nMachWord = bytes / sizeof(MachineWord);
         constexpr unsigned int rem = bytes % sizeof(MachineWord);
 
         // pointers
-        uint8_t * w = reinterpret_cast<uint8_t *>(out) + (BIT_SHIFT > 0 ? byte_shift : 0);
-        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + (BIT_SHIFT < 0 ? byte_shift : 0);
+        uint8_t * w = reinterpret_cast<uint8_t *>(out);
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
 
         // no overlap
         for (unsigned int i = 0; i < nMachWord; ++i) {
@@ -1969,179 +1978,64 @@ namespace bliss {
         }
 
         if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
+        	// type punned pointer!
+//          MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//          load_part<rem, 0>(x, u);
+//          x = op(x);
           MachineWord x = op(loadu<MachineWord>(u));
-          memcpy(w, &x, rem);
+//          memcpy(w, &x, rem);
+          store_part<rem, 0>(w, x);
+
         }
       }
 
-      // left shift.  logic slightly different from right shift
-      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
-          typename WORD_TYPE, size_t len, typename OP,
-          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-              ((BIT_SHIFT % 8) != 0) && (BIT_SHIFT > 0)), int>::type = 1>
-      BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
+      //=================== binary transform - no shift. ===========================
 
-        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-
-        constexpr uint16_t byte_shift = BIT_SHIFT / 8;
-        constexpr uint16_t bit_shift = BIT_SHIFT % 8;
-        constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
-        constexpr uint16_t inv_shift = sizeof(MachineWord) * 8 - bit_shift;
-
-        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
-        constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
-        constexpr unsigned int rem = byte_len % sizeof(MachineWord);
-
-        // pointers
-        uint8_t * w = reinterpret_cast<uint8_t *>(out) + byte_shift;
-        uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
-
-        memset(out, 0, byte_shift);  // clear the first part
-
-        // no overlap
-        MachineWord curr;
-        MachineWord prev = bliss::utils::bit_ops::zero<MachineWord>();
-
-        for (unsigned int i = 0; i < nMachWord; ++i) {
-          // enough bytes.  do an iteration
-          curr = op(loadu<MachineWord>(u));
-          storeu<MachineWord>(w,
-                          bliss::utils::bit_ops::bit_or(prev,
-                                              bliss::utils::bit_ops::slli<bit_shift>(curr)));
-
-          prev = bliss::utils::bit_ops::srli<inv_shift>(curr);  // if bit_shift == 0, tmp will be set to 0.  if WORD - bit_shift == 0, then tmp will be unchanged
-
-          u += sizeof(MachineWord);
-          w += sizeof(MachineWord);
-
-        }
-
-        if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
-          curr = op(loadu<MachineWord>(u));
-          curr = bliss::utils::bit_ops::bit_or(prev,
-                                              bliss::utils::bit_ops::slli<bit_shift>(curr));
-
-          memcpy(w, &curr, rem);
-        }
-      }
-      // right shift. logic slightly different from left shift.
-      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
-          typename WORD_TYPE, size_t len, typename OP,
-          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-              ((BIT_SHIFT % 8) != 0) && (BIT_SHIFT < 0)), int>::type = 1>
-      BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-
-        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-
-        constexpr uint16_t byte_shift = (-BIT_SHIFT) / 8;
-        constexpr uint16_t bit_shift = (-BIT_SHIFT) % 8;
-        constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
-        constexpr uint16_t inv_shift = sizeof(MachineWord) * 8 - bit_shift;
-
-        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
-        constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
-        constexpr unsigned int rem = byte_len % sizeof(MachineWord);
-
-        // pointers
-        uint8_t * w = reinterpret_cast<uint8_t *>(out) + byte_len;
-        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + len * sizeof(WORD_TYPE);
-
-        memset(w, 0, byte_shift);  // clear the last part
-
-        // no overlap
-        MachineWord curr;
-        MachineWord prev = bliss::utils::bit_ops::zero<MachineWord>();
-
-        for (unsigned int i = 0; i < nMachWord; ++i) {
-          u -= sizeof(MachineWord);
-          w -= sizeof(MachineWord);
-          // enough bytes.  do an iteration
-          curr = op(loadu<MachineWord>(u));
-          storeu<MachineWord>(w,
-                          bliss::utils::bit_ops::bit_or(prev,
-                                              bliss::utils::bit_ops::srli<bit_shift>(curr)));
-
-          prev = bliss::utils::bit_ops::slli<inv_shift>(curr);  // if bit_shift == 0, tmp will be set to 0.  if WORD - bit_shift == 0, then tmp will be unchanged
-
-        }
-
-        if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
-          // rem < sizeof(machineword), if read 1 machineword starting at rem, it would overlap with by at least 1 byte.
-          // bit_shift is less than 1 byte, also all the rem bytes will have valid values, unless
-          // rem + byteshift == len*sizeof(WORD_TYPE), in which case we need to shift in zeros.
-          u -= rem;
-          curr = op(loadu<MachineWord>(u));
-          if ((rem + byte_shift) >= (len * sizeof(WORD_TYPE)))  // at boundary, set next byte to 0
-            *(reinterpret_cast<uint8_t*>(curr) + rem) = 0;
-
-          curr = bliss::utils::bit_ops::srli<bit_shift>(curr);
-
-          memcpy(out, &curr, rem);
-        }
-      }
-
-      //=================== binary transform ===========================
-
-//      // WORD orders bit bitwise transforms should be same between input and output
-//      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
-//      BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
-//
-//          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//          storeu<MachineWord>(out, op(loadu<MachineWord>(lhs), loadu<MachineWord>(rhs)));
-//      }
-//      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
-//      BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
-//
-//        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
-//
-//          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//          MachineWord x = op(loadu<MachineWord>(lhs), loadu<MachineWord>(rhs));
-//          memcpy(out, &x, bytes);
-//      }
       // WORD orders bit bitwise transforms should be same between input and output, just shifted
       // positive shift increase value, so shift left.  negative shift shifts right. 0 shift returns original value, not sure if it's no-op.
-      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+      template <typename MAX_SIMD_TYPE,
           typename WORD_TYPE, size_t len, typename OP,
           typename std::enable_if<((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
       BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
 
           using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-          storeu<MachineWord>(out, ::bliss::utils::bit_ops::shift<BIT_SHIFT>(op(loadu<MachineWord>(lhs), loadu<MachineWord>(rhs))));
+          storeu<MachineWord>(out, op(loadu<MachineWord>(lhs), loadu<MachineWord>(rhs)));
       }
-      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+      template <typename MAX_SIMD_TYPE,
           typename WORD_TYPE, size_t len, typename OP,
-          typename std::enable_if<((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
+          typename std::enable_if<((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) , int>::type = 1>
       BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
 
         constexpr size_t bytes = sizeof(WORD_TYPE) * len;
 
           using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-          MachineWord x = ::bliss::utils::bit_ops::shift<BIT_SHIFT>(op(loadu<MachineWord>(lhs), loadu<MachineWord>(rhs)));
-          memcpy(out, &x, bytes);
+//          MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//          MachineWord y = ::bliss::utils::bit_ops::zero<MachineWord>();
+//          load_part<bytes, 0>(x, lhs);
+//          load_part<bytes, 0>(y, rhs);
+//          x = op(x, y);
+          MachineWord x = op(loadu<MachineWord>(lhs), loadu<MachineWord>(rhs));
+          store_part<bytes, 0>(out, x);
+//          memcpy(out, &x, bytes);
       }
-      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+      template <typename MAX_SIMD_TYPE,
           typename WORD_TYPE, size_t len, typename OP,
-          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-          ((BIT_SHIFT % 8) == 0)), int>::type = 1>
+          typename std::enable_if<((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
       BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
 
         using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
 
-        constexpr uint16_t byte_shift = BIT_SHIFT / 8;
-        constexpr size_t bytes = sizeof(WORD_TYPE) * len - byte_shift;
+
+        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
 
         // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
         constexpr unsigned int nMachWord = bytes / sizeof(MachineWord);
         constexpr unsigned int rem = bytes % sizeof(MachineWord);
 
         // pointers
-        uint8_t * w = reinterpret_cast<uint8_t *>(out) + (BIT_SHIFT > 0 ? byte_shift : 0);
-        uint8_t const * u = reinterpret_cast<uint8_t const *>(lhs) + (BIT_SHIFT < 0 ? byte_shift : 0);
-        uint8_t const * v = reinterpret_cast<uint8_t const *>(rhs) + (BIT_SHIFT < 0 ? byte_shift : 0);
+        uint8_t * w = reinterpret_cast<uint8_t *>(out);
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(lhs);
+        uint8_t const * v = reinterpret_cast<uint8_t const *>(rhs);
 
         // no overlap
         for (unsigned int i = 0; i < nMachWord; ++i) {
@@ -2155,18 +2049,116 @@ namespace bliss {
         }
 
         if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
+        	// don't touch previously computed, so we can allow in and out to be same array.
+
+        	// type punned pointer!
+//            MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//            MachineWord y = ::bliss::utils::bit_ops::zero<MachineWord>();
+//            load_part<rem, 0>(x, u);
+//            load_part<rem, 0>(y, v);
+//            x = op(x, y);
           MachineWord x = op(loadu<MachineWord>(u), loadu<MachineWord>(v));
-          memcpy(w, &x, rem);
+//          memcpy(w, &x, rem);
+          store_part<rem, 0>(w, x);
         }
       }
 
-      // left shift.  logic slightly different from right shift
+#if 0
+      // ========== just shift. =============================
+      // WORD orders bit bitwise transforms should be same between input and output, just shifted
+      // positive shift increase value, so shift left.  negative shift shifts right. 0 shift returns original value, not sure if it's no-op.
+
+      // bit_shift is byte aligned.  memmove.
       template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
-          typename WORD_TYPE, size_t len, typename OP,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<((BIT_SHIFT % 8) == 0), int>::type = 1>
+      BITS_INLINE void shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
+    	  constexpr int16_t byte_shift = _bliss_abs(BIT_SHIFT) / 8;
+    	  constexpr size_t bytes = sizeof(WORD_TYPE) * len - byte_shift;
+
+    	  if (BIT_SHIFT >= 0) {  //left
+    		  memmove(reinterpret_cast<uint8_t*>(out) + byte_shift, in, bytes);
+    		  memset(out, 0, byte_shift);
+    	  } else {
+    		  memmove(out, reinterpret_cast<uint8_t*>(in) + byte_shift, bytes);
+    		  memset(out + bytes, 0, byte_shift);
+    	  }
+      }
+
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+          (BIT_SHIFT % 8 != 0) && (BIT_SHIFT > 0)), int>::type = 1>
+      BITS_INLINE void shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
+//    	  printf("left shift transform, exact, by %d\n", BIT_SHIFT);
+    	  using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+          storeu<MachineWord>(out, ::bliss::utils::bit_ops::slli<BIT_SHIFT>(loadu<MachineWord>(in)));
+      }
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+        		  (BIT_SHIFT % 8 != 0) && (BIT_SHIFT < 0)), int>::type = 1>
+      BITS_INLINE void shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
+    	  using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+//    	  printf("right shift transform, exact, by %d, machineword bytes %lu\n", BIT_SHIFT, sizeof(MachineWord));
+    	  MachineWord x = loadu<MachineWord>(in);
+//    	  std::cout << " in: "; print(x); std::cout << std::endl;
+    	  x = ::bliss::utils::bit_ops::srli<(0 - BIT_SHIFT)>(x);
+//    	  std::cout << " out: "; print(x); std::cout << std::endl;
+          storeu<MachineWord>(out, x);
+      }
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+        		  (BIT_SHIFT % 8 != 0) && (BIT_SHIFT > 0)), int>::type = 1>
+      BITS_INLINE void shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
+//    	  printf("left shift transform, small, by %d\n", BIT_SHIFT);
+        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+
+        // left shift.  okay.
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+          // MachineWord is bigger than input, so there are extra bytes.  if reading from in, then right shift would result in junk on the left.
+          // instead, for right shift, read so that the input are at high bytes of machine word.
+
+//          MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//          load_part<bytes, 0>(x, in);
+//          x = ::bliss::utils::bit_ops::slli<BIT_SHIFT>(x);
+
+
+          MachineWord x = ::bliss::utils::bit_ops::slli<BIT_SHIFT>(op(loadu<MachineWord>(in)));
+//          memcpy(out, &x, bytes);
+          store_part<bytes, 0>(out, x);
+      }
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+        		  (BIT_SHIFT % 8 != 0) && (BIT_SHIFT < 0)), int>::type = 1>
+      BITS_INLINE void shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
+//    	  printf("right shift transform, small, by %d\n", BIT_SHIFT);
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+    	  constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+          // right shift, load to upper bits.
+          constexpr size_t offset = sizeof(MachineWord) - bytes;
+          // MachineWord is bigger than input, so there are extra bytes.  if reading from in, then right shift would result in junk on the left.
+          // instead, for right shift, read so that the input are at high bytes of machine word.
+
+//          MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//          load_part<bytes, offset>(x, in);
+//          x = ::bliss::utils::bit_ops::srli<(-BIT_SHIFT)>(x);
+
+          MachineWord x =
+        		  ::bliss::utils::bit_ops::srli<(-BIT_SHIFT)>(op(loadu<MachineWord>(reinterpret_cast<uint8_t const *>(in) - offset)));
+//          memcpy(out, reinterpret_cast<uint8_t*>(&x) + offset, bytes);  // extract high bits and store
+          store_part<bytes, offset>(out, x);
+      }
+
+      // left shift.  logic slightly different from right shift.  inplace support
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len,
           typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
               ((BIT_SHIFT % 8) != 0) && (BIT_SHIFT > 0)), int>::type = 1>
-      BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
-
+      BITS_INLINE void shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
+//    	  printf("left shift transform, large, by %d\n", BIT_SHIFT);
         using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
 
         constexpr uint16_t byte_shift = BIT_SHIFT / 8;
@@ -2178,49 +2170,72 @@ namespace bliss {
         constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
         constexpr unsigned int rem = byte_len % sizeof(MachineWord);
 
+        // left shift, inplace, so from MSB to LSB
+
         // pointers
-        uint8_t * w = reinterpret_cast<uint8_t *>(out) + byte_shift;
-        uint8_t const * u = reinterpret_cast<uint8_t const *>(lhs);
-        uint8_t const * v = reinterpret_cast<uint8_t const *>(rhs);
+        uint8_t * w = reinterpret_cast<uint8_t *>(out) + len * sizeof(WORD_TYPE);
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + byte_len;
 
-        memset(out, 0, byte_shift);  // clear the first part
+        MachineWord x = bliss::utils::bit_ops::zero<MachineWord>();
+        MachineWord left;
+        MachineWord right;
 
-        // no overlap
-        MachineWord curr;
-        MachineWord prev = bliss::utils::bit_ops::zero<MachineWord>();
+        // first handle remainders
+        if (rem > 0) {
+        	u -= rem;
+//        	load_part<rem, 0>(x, u);
+//        	left = bliss::utils::bit_ops::slli<bit_shift>(x);
 
-        for (unsigned int i = 0; i < nMachWord; ++i) {
-          // enough bytes.  do an iteration
-          curr = op(loadu<MachineWord>(u), loadu<MachineWord>(v));
-          storeu<MachineWord>(w,
-                          bliss::utils::bit_ops::bit_or(prev,
-                                              bliss::utils::bit_ops::slli<bit_shift>(curr)));
+        	left = bliss::utils::bit_ops::slli<bit_shift>(op(loadu<MachineWord>(u)));
 
-          prev = bliss::utils::bit_ops::srli<inv_shift>(curr);  // if bit_shift == 0, tmp will be set to 0.  if WORD - bit_shift == 0, then tmp will be unchanged
+        	// calc x and right
+        	u -= sizeof(MachineWord);
+        	x = loadu<MachineWord>(u);
 
-          u += sizeof(MachineWord);
-          v += sizeof(MachineWord);
-          w += sizeof(MachineWord);
+        	// or and store.
+        	right = bliss::utils::bit_ops::bit_or(left, bliss::utils::bit_ops::srli<inv_shift>(x));
+        	w -= rem;
+//        	memcpy(w, &right, rem);
+        	store_part<rem, 0>(w, right);
+        } else {
+        	u -= sizeof(MachineWord);
+        	x = loadu<MachineWord>(u);
+        }
+        left = bliss::utils::bit_ops::slli<bit_shift>(x);
 
+
+        // now loop over all remaining full words.  (loop may not execute...)
+        for (unsigned int i = 1; i < nMachWord; ++i) {
+        	// now get current right shifted
+        	u -= sizeof(MachineWord);
+        	x = loadu<MachineWord>(u);
+            right = bliss::utils::bit_ops::srli<inv_shift>(x);
+
+            // or and save into previous output position
+            w -= sizeof(MachineWord);
+            storeu<MachineWord>(w, bliss::utils::bit_ops::bit_or(left, right));
+
+            // update left
+            left = bliss::utils::bit_ops::slli<bit_shift>(x);
         }
 
-        if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
-          curr = op(loadu<MachineWord>(u), loadu<MachineWord>(v));
-          curr = bliss::utils::bit_ops::bit_or(prev,
-                                              bliss::utils::bit_ops::slli<bit_shift>(curr));
+        // last part to store:  there is at least 1 full machine word
+        w -= sizeof(MachineWord);
+        storeu<MachineWord>(w, left);
 
-          memcpy(w, &curr, rem);
-        }
+        // finally, clear the LSB.
+        if (byte_shift > 0) memset(out, 0, byte_shift);
       }
-      // right shift. logic slightly different from left shift.
-      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
-          typename WORD_TYPE, size_t len, typename OP,
-          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-              ((BIT_SHIFT % 8) != 0) && (BIT_SHIFT < 0) ), int>::type = 1>
-      BITS_INLINE void bit_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
 
+      // right shift. logic slightly different from left shift, inplace support
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+              ((BIT_SHIFT % 8) != 0) && (BIT_SHIFT < 0)), int>::type = 1>
+      BITS_INLINE void shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
         using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
 
+//  	  printf("right shift transform, large,  by %d, bytes %lu, machineword size %lu\n", BIT_SHIFT, len * sizeof(WORD_TYPE), sizeof(MachineWord));
         constexpr uint16_t byte_shift = (-BIT_SHIFT) / 8;
         constexpr uint16_t bit_shift = (-BIT_SHIFT) % 8;
         constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
@@ -2230,100 +2245,534 @@ namespace bliss {
         constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
         constexpr unsigned int rem = byte_len % sizeof(MachineWord);
 
-        // pointers
-        uint8_t * w = reinterpret_cast<uint8_t *>(out) + byte_len;
-        uint8_t const * u = reinterpret_cast<uint8_t const *>(lhs) + len * sizeof(WORD_TYPE);
-        uint8_t const * v = reinterpret_cast<uint8_t const *>(rhs) + len * sizeof(WORD_TYPE);
+        // right shift, inplace, so from LSB to MSB
 
-        memset(w, 0, byte_shift);  // clear the last part
+        // pointers
+        uint8_t * w = reinterpret_cast<uint8_t *>(out);
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + byte_shift;
+
+//        printf("reminders\n");
+        MachineWord x = bliss::utils::bit_ops::zero<MachineWord>();
+        MachineWord left;
+        MachineWord right;
+
+        // first handle remainders
+        if (rem > 0) {
+//            printf("right load\n");
+        	load_part<rem, sizeof(MachineWord) - rem>(x, u);
+//            memcpy(reinterpret_cast<uint8_t *>(&right) + sizeof(MachineWord) - rem, u, rem);
+        	u += rem;
+            //right = loadu<MachineWord>(u - sizeof(MachineWord));   // segv right here!?
+//            printf("transform \n");
+//            printf("srli\n");
+        	right = bliss::utils::bit_ops::srli<bit_shift>(x);
+//            printf("right done.  left\n");
+
+        	// calc x and right
+        	x = loadu<MachineWord>(u);
+        	u += sizeof(MachineWord);
+//        	printf("next done.  left\n");
+
+        	// or and store.
+        	left = bliss::utils::bit_ops::bit_or(right, bliss::utils::bit_ops::slli<inv_shift>(x));
+//        	printf("left done.  left\n");
+
+//        	memcpy(out, reinterpret_cast<uint8_t*>(&left) + sizeof(MachineWord) - rem, rem);
+        	store_part<rem, sizeof(MachineWord) - rem>(w, left);
+//        	printf("save done.\n");
+
+        	w += rem;
+        } else {
+        	x = loadu<MachineWord>(u);
+        	u += sizeof(MachineWord);
+        }
+        right = bliss::utils::bit_ops::srli<bit_shift>(x);
+//        printf("reminders done.  main\n");
+
+
+        // now loop over all remaining full words.  (loop may not execute...)
+        for (unsigned int i = 1; i < nMachWord; ++i) {
+        	// now get current right shifted
+        	x = loadu<MachineWord>(u);
+            u += sizeof(MachineWord);
+            left = bliss::utils::bit_ops::slli<inv_shift>(x);
+
+            // or and save into previous output position
+            storeu<MachineWord>(w, bliss::utils::bit_ops::bit_or(left, right));
+            w += sizeof(MachineWord);
+
+            // update left
+            right = bliss::utils::bit_ops::srli<bit_shift>(x);
+        }
+//        printf("main done.  last\n");
+
+        // last part to store:  there is at least 1 full machine word
+        storeu<MachineWord>(w, right);
+        w += sizeof(MachineWord);
+
+        if (byte_shift > 0) memset(w, 0, byte_shift);  // clear the last part
+
+//        printf("last done. \n");
+      }
+
+
+
+
+#else
+      // ========== unary transform with shift. =============================
+      // WORD orders bit bitwise transforms should be same between input and output, just shifted
+      // positive shift increase value, so shift left.  negative shift shifts right. 0 shift returns original value, not sure if it's no-op.
+
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(BIT_SHIFT == 0), int>::type = 1>
+      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
+//    	  printf("0 shift transform by %d\n", BIT_SHIFT);
+
+    	  std::atomic_thread_fence(std::memory_order_seq_cst);
+    	  //  		  std::cout << "in x: "; print(in); std::cout << std::endl;
+    	  bit_transform<MAX_SIMD_TYPE>(out, in, op);
+//          std::cout << "shifted x: "; print(out); std::cout << std::endl;
+      }
+
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+          (BIT_SHIFT > 0)), int>::type = 1>
+      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
+//    	  printf("left shift transform, exact, by %d\n", BIT_SHIFT);
+    	  using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+          storeu<MachineWord>(out, ::bliss::utils::bit_ops::slli<BIT_SHIFT>(op(loadu<MachineWord>(in))));
+      }
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+          (BIT_SHIFT < 0)), int>::type = 1>
+      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
+    	  using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+//    	  printf("right shift transform, exact, by %d, machineword bytes %lu\n", BIT_SHIFT, sizeof(MachineWord));
+    	  MachineWord x = loadu<MachineWord>(in);
+    	  x = op(x);
+//    	  std::cout << " in: "; print(x); std::cout << std::endl;
+    	  x = ::bliss::utils::bit_ops::srli<(0 - BIT_SHIFT)>(op(x));
+          storeu<MachineWord>(out, x);
+      }
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+                  (BIT_SHIFT > 0)), int>::type = 1>
+      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
+//    	  printf("left shift transform, small, by %d\n", BIT_SHIFT);
+        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+
+        // left shift.  okay.
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+          // MachineWord is bigger than input, so there are extra bytes.  if reading from in, then right shift would result in junk on the left.
+          // instead, for right shift, read so that the input are at high bytes of machine word.
+
+//          MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//          load_part<bytes, 0>(x, in);
+//          x = ::bliss::utils::bit_ops::slli<BIT_SHIFT>(op(x));
+
+
+          MachineWord x = ::bliss::utils::bit_ops::slli<BIT_SHIFT>(op(loadu<MachineWord>(in)));
+//          memcpy(out, &x, bytes);
+          store_part<bytes, 0>(out, x);
+      }
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+                  (BIT_SHIFT < 0)), int>::type = 1>
+      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
+//    	  printf("right shift transform, small, by %d\n", BIT_SHIFT);
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+    	  constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+          // right shift, load to upper bits.
+          constexpr size_t offset = sizeof(MachineWord) - bytes;
+          // MachineWord is bigger than input, so there are extra bytes.  if reading from in, then right shift would result in junk on the left.
+          // instead, for right shift, read so that the input are at high bytes of machine word.
+
+//          MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//          load_part<bytes, offset>(x, in);
+////          std::cout << "in x: "; print(x); std::cout << std::endl;
+//          x = ::bliss::utils::bit_ops::srli<(-BIT_SHIFT)>(op(x));
+
+          MachineWord x =
+        		  ::bliss::utils::bit_ops::srli<(-BIT_SHIFT)>(op(loadu<MachineWord>(reinterpret_cast<uint8_t const *>(in) - offset)));
+//          std::cout << "shifted " << BIT_SHIFT <<  " bits x: " ; print(x); std::cout << std::endl;
+//          memcpy(out, reinterpret_cast<uint8_t*>(&x) + offset, bytes);  // extract high bits and store
+          store_part<bytes, offset>(out, x);
+      }
+
+      // left shift byte aligned.  safe for in and out to be same.
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+          ((BIT_SHIFT % 8) == 0) && (BIT_SHIFT > 0)), int>::type = 1>
+      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
+//    	  printf("left shift transform, large, bytealigned, by %d\n", BIT_SHIFT);
+        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+        constexpr uint16_t byte_shift = BIT_SHIFT / 8;
+        constexpr size_t bytes = sizeof(WORD_TYPE) * len - byte_shift;
+
+        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
+        constexpr unsigned int nMachWord = bytes / sizeof(MachineWord);
+        constexpr unsigned int rem = bytes % sizeof(MachineWord);
+
+        // left shift, byte aligned, copy from MSB to LSB
+
+        // pointers
+        uint8_t * w = reinterpret_cast<uint8_t *>(out) + sizeof(WORD_TYPE) * len;
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + bytes;
 
         // no overlap
-        MachineWord curr;
-        MachineWord prev = bliss::utils::bit_ops::zero<MachineWord>();
-
         for (unsigned int i = 0; i < nMachWord; ++i) {
-          u -= sizeof(MachineWord);
-          v -= sizeof(MachineWord);
-          w -= sizeof(MachineWord);
+            u -= sizeof(MachineWord);
+            w -= sizeof(MachineWord);
           // enough bytes.  do an iteration
-          curr = op(loadu<MachineWord>(u), loadu<MachineWord>(v));
-          storeu<MachineWord>(w,
-                          bliss::utils::bit_ops::bit_or(prev,
-                                              bliss::utils::bit_ops::srli<bit_shift>(curr)));
-
-          prev = bliss::utils::bit_ops::slli<inv_shift>(curr);  // if bit_shift == 0, tmp will be set to 0.  if WORD - bit_shift == 0, then tmp will be unchanged
-
+          storeu<MachineWord>(w, op(loadu<MachineWord>(u)));
         }
 
         if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
-          // rem < sizeof(machineword), if read 1 machineword starting at rem, it would overlap with by at least 1 byte.
-          // bit_shift is less than 1 byte, also all the rem bytes will have valid values, unless
-          // rem + byteshift == len*sizeof(WORD_TYPE), in which case we need to shift in zeros.
-          u -= rem;
-          curr = op(loadu<MachineWord>(u), loadu<MachineWord>(v));
-          if ((rem + byte_shift) >= (len * sizeof(WORD_TYPE)))  // at boundary, set next byte to 0
-            *(reinterpret_cast<uint8_t*>(curr) + rem) = 0;
+          MachineWord x = op(loadu<MachineWord>(u - sizeof(MachineWord)));
+//        	u -= rem;
+//        	MachineWord x = bliss::utils::bit_ops::zero<MachineWord>();
+//        	load_part<rem, sizeof(MachineWord) - rem>(x, u);
+//        	x = op(x);
 
-          curr = bliss::utils::bit_ops::srli<bit_shift>(curr);
-
-          memcpy(out, &curr, rem);
+          w -= rem;
+//          memcpy(w, reinterpret_cast<uint8_t*>(&x) + sizeof(MachineWord) - rem, rem);
+        	store_part<rem, sizeof(MachineWord) - rem>(w, x);
         }
+
+        // finally,
+        if (byte_shift > 0) memset(out, 0, byte_shift);  // clear the first part
+
+      }
+      // right shift byte aligned.  safe for in and out to be same
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+          ((BIT_SHIFT % 8) == 0) && (BIT_SHIFT < 0)), int>::type = 1>
+      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
+//    	  printf("right shift transform, large, bytealigned, by %d\n", BIT_SHIFT);
+        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+        constexpr uint16_t byte_shift = (-BIT_SHIFT) / 8;
+        constexpr size_t bytes = sizeof(WORD_TYPE) * len - byte_shift;
+
+        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
+        constexpr unsigned int nMachWord = bytes / sizeof(MachineWord);
+        constexpr unsigned int rem = bytes % sizeof(MachineWord);
+
+        // shift from LSB to MSB
+
+        // pointers
+        uint8_t * w = reinterpret_cast<uint8_t *>(out);
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + byte_shift;
+
+        // no overlap
+        for (unsigned int i = 0; i < nMachWord; ++i) {
+          // enough bytes.  do an iteration
+          storeu<MachineWord>(w, op(loadu<MachineWord>(u)));
+          u += sizeof(MachineWord);
+          w += sizeof(MachineWord);
+        }
+
+        if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
+          MachineWord x = op(loadu<MachineWord>(u));
+//			MachineWord x = bliss::utils::bit_ops::zero<MachineWord>();
+//			load_part<rem, 0>(x, u);
+//			x = op(x);
+			//          memcpy(w, &x, rem);
+			store_part<rem, 0>(w, x);
+        }
+        // finally,
+        if (byte_shift > 0) memset(reinterpret_cast<uint8_t *>(out) + bytes, 0, byte_shift);  // clear the last part
       }
 
+      // left shift.  logic slightly different from right shift.  inplace support
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+              ((BIT_SHIFT % 8) != 0) && (BIT_SHIFT > 0)), int>::type = 1>
+      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
+//    	  printf("left shift transform, large, by %d\n", BIT_SHIFT);
+        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+        constexpr uint16_t byte_shift = BIT_SHIFT / 8;
+        constexpr uint16_t bit_shift = BIT_SHIFT % 8;
+        constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
+        constexpr uint16_t inv_shift = sizeof(MachineWord) * 8 - bit_shift;
+
+        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
+        constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
+        constexpr unsigned int rem = byte_len % sizeof(MachineWord);
+
+        // left shift, inplace, so from MSB to LSB
+
+        // pointers
+        uint8_t * w = reinterpret_cast<uint8_t *>(out) + len * sizeof(WORD_TYPE);
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + byte_len;
+
+        MachineWord x = bliss::utils::bit_ops::zero<MachineWord>();
+        MachineWord left;
+        MachineWord right;
+
+        // first handle remainders
+        if (rem > 0) {
+        	u -= rem;
+//        	load_part<rem, 0>(x, u);
+//        	left = bliss::utils::bit_ops::slli<bit_shift>(op(x));
+
+        	left = bliss::utils::bit_ops::slli<bit_shift>(op(loadu<MachineWord>(u)));
+
+        	// calc x and right
+        	u -= sizeof(MachineWord);
+        	x = op(loadu<MachineWord>(u));
+
+        	// or and store.
+        	right = bliss::utils::bit_ops::bit_or(left, bliss::utils::bit_ops::srli<inv_shift>(x));
+        	w -= rem;
+//        	memcpy(w, &right, rem);
+        	store_part<rem, 0>(w, right);
+        } else {
+        	u -= sizeof(MachineWord);
+        	x = op(loadu<MachineWord>(u));
+        }
+        left = bliss::utils::bit_ops::slli<bit_shift>(x);
+
+
+        // now loop over all remaining full words.  (loop may not execute...)
+        for (unsigned int i = 1; i < nMachWord; ++i) {
+        	// now get current right shifted
+        	u -= sizeof(MachineWord);
+        	x = op(loadu<MachineWord>(u));
+            right = bliss::utils::bit_ops::srli<inv_shift>(x);
+
+            // or and save into previous output position
+            w -= sizeof(MachineWord);
+            storeu<MachineWord>(w, bliss::utils::bit_ops::bit_or(left, right));
+
+            // update left
+            left = bliss::utils::bit_ops::slli<bit_shift>(x);
+        }
+
+        // last part to store:  there is at least 1 full machine word
+        w -= sizeof(MachineWord);
+        storeu<MachineWord>(w, left);
+
+        // finally, clear the LSB.
+        if (byte_shift > 0) memset(out, 0, byte_shift);
+      }
+
+//      // right shift. logic slightly different from left shift, inplace support
+//      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+//          typename WORD_TYPE, size_t len, typename OP,
+//          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+//              ((BIT_SHIFT % 8) != 0) && (BIT_SHIFT < 0)), int>::type = 1>
+//      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
+//        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+//
+////  	  printf("right shift transform, large,  by %d, bytes %lu, machineword size %lu\n", BIT_SHIFT, len * sizeof(WORD_TYPE), sizeof(MachineWord));
+//        constexpr uint16_t byte_shift = (-BIT_SHIFT) / 8;
+//        constexpr uint16_t bit_shift = (-BIT_SHIFT) % 8;
+//        constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
+//        constexpr size_t overlap = 1;
+//        constexpr size_t nonoverlap = sizeof(MachineWord) - overlap;  //machine word is larger than 1 because of the conditionals
+//
+//        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
+//        constexpr unsigned int nMachWord = (byte_len - overlap) / nonoverlap;
+//        constexpr unsigned int rem = (byte_len - overlap) % nonoverlap;
+//
+//        // right shift, inplace, so from LSB to MSB
+//
+//        // pointers
+//        uint8_t * w = reinterpret_cast<uint8_t *>(out);
+//        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + byte_shift;
+//
+//        MachineWord x = bliss::utils::bit_ops::zero<MachineWord>();
+//        MachineWord s;
+//
+//        // handle remainders first
+//        if (rem > 0) {
+//        	x = loadu<MachineWord>(u);  // faster than memcpy
+//        	u += rem;
+//        	s = bliss::utils::bit_ops::srli<bit_shift>(op(x));
+//
+//        	// read next before write - for in-place shift.
+//        	x = loadu<MachineWord>(u);
+//        	u += nonoverlap;
+//
+//            storeu<MachineWord>(w, s);
+//        	w += rem;
+//        } else {
+//        	// read next before write
+//        	x = loadu<MachineWord>(u);
+//        	u += nonoverlap;
+//        }
+//        s = bliss::utils::bit_ops::srli<bit_shift>(op(x));
+//
+//
+//        // now loop over all remaining full words.  (loop may not execute...)
+//        for (unsigned int i = 1; i < nMachWord; ++i) {
+//        	// now get current right shifted
+//
+//        	x = loadu<MachineWord>(u);
+//        	u += nonoverlap;
+//
+//            storeu<MachineWord>(w, s);
+//            w += nonoverlap;
+//
+//            s = bliss::utils::bit_ops::srli<bit_shift>(op(x));
+//        }
+//        storeu<MachineWord>(w, s);
+//        w += nonoverlap;
+//
+//
+//        if (byte_shift > 0) memset(w + overlap, 0, byte_shift);  // clear the last part
+//
+//      }
+
+      // right shift. logic slightly different from left shift, inplace support
+      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+              ((BIT_SHIFT % 8) != 0) && (BIT_SHIFT < 0)), int>::type = 1>
+      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
+        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+//  	  printf("right shift transform, large,  by %d, bytes %lu, machineword size %lu\n", BIT_SHIFT, len * sizeof(WORD_TYPE), sizeof(MachineWord));
+        constexpr uint16_t byte_shift = (-BIT_SHIFT) / 8;
+        constexpr uint16_t bit_shift = (-BIT_SHIFT) % 8;
+        constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
+        constexpr uint16_t inv_shift = sizeof(MachineWord) * 8 - bit_shift;
+
+        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
+        constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
+        constexpr unsigned int rem = byte_len % sizeof(MachineWord);
+
+        // right shift, inplace, so from LSB to MSB
+
+        // pointers
+        uint8_t * w = reinterpret_cast<uint8_t *>(out);
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + byte_shift;
+
+//        printf("reminders\n");
+        MachineWord x = bliss::utils::bit_ops::zero<MachineWord>();
+        MachineWord left;
+        MachineWord right;
+
+        // first handle remainders
+        if (rem > 0) {
+//            printf("right load\n");
+//        	load_part<rem, sizeof(MachineWord) - rem>(x, u);
+//            memcpy(reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - rem, u, rem);
+        	u += rem;
+            x = loadu<MachineWord>(u - sizeof(MachineWord));   // segv right here!?
+//            printf("transform \n");
+//            printf("srli\n");
+        	right = bliss::utils::bit_ops::srli<bit_shift>(op(x));
+//            printf("right done.  left\n");
+
+        	// calc x and right
+        	x = op(loadu<MachineWord>(u));
+        	u += sizeof(MachineWord);
+//        	printf("next done.  left\n");
+
+        	// or and store.
+        	left = bliss::utils::bit_ops::bit_or(right, bliss::utils::bit_ops::slli<inv_shift>(x));
+//        	printf("left done.  left\n");
+
+//        	memcpy(out, reinterpret_cast<uint8_t*>(&left) + sizeof(MachineWord) - rem, rem);
+        	store_part<rem, sizeof(MachineWord) - rem>(w, left);
+//        	printf("save done.\n");
+
+        	w += rem;
+        } else {
+        	x = op(loadu<MachineWord>(u));
+        	u += sizeof(MachineWord);
+        }
+        right = bliss::utils::bit_ops::srli<bit_shift>(x);
+//        printf("reminders done.  main\n");
+
+
+        // now loop over all remaining full words.  (loop may not execute...)
+        for (unsigned int i = 1; i < nMachWord; ++i) {
+        	// now get current right shifted
+        	x = op(loadu<MachineWord>(u));
+            u += sizeof(MachineWord);
+            left = bliss::utils::bit_ops::slli<inv_shift>(x);
+
+            // or and save into previous output position
+            storeu<MachineWord>(w, bliss::utils::bit_ops::bit_or(left, right));
+            w += sizeof(MachineWord);
+
+            // update left
+            right = bliss::utils::bit_ops::srli<bit_shift>(x);
+        }
+//        printf("main done.  last\n");
+
+        // last part to store:  there is at least 1 full machine word
+        storeu<MachineWord>(w, right);
+        w += sizeof(MachineWord);
+
+        if (byte_shift > 0) memset(w, 0, byte_shift);  // clear the last part
+
+//        printf("last done. \n");
+      }
+
+
+#endif
 
       //=================== binary comparison ===========================
 
-//      // WORD orders bit bitwise transforms should be same between input and output
-//      template <typename MAX_SIMD_TYPE,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
-//      BITS_INLINE bool bit_compare(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
-//
-//          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//          storeu<MachineWord>(out, op(loadu<MachineWord>(lhs), loadu<MachineWord>(rhs)));
-//      }
-//      template <typename MAX_SIMD_TYPE,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
-//      BITS_INLINE bool bit_compare( WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
-//
-//        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
-//
-//          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//          MachineWord x = op(loadu<MachineWord>(lhs), loadu<MachineWord>(rhs));
-//          memcpy(out, &x, bytes);
-//      }
       // WORD orders bit bitwise transforms should be same between input and output, just shifted
       // positive shift increase value, so shift left.  negative shift shifts right. 0 shift returns original value, not sure if it's no-op.
       template <typename MAX_SIMD_TYPE,
-          typename WORD_TYPE, size_t len, typename OP,
+          typename WORD_TYPE, size_t len,
           typename std::enable_if<((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
-      BITS_INLINE bool bit_compare(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
+      BITS_INLINE int8_t bit_compare(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
+
+//    	  printf("binary bit compare exact\n");
+    	  static_assert(MAX_SIMD_TYPE::SIMDVal < BIT_REV_SSSE3, "ERROR bit_compare does not support SSSE3 or AVX2");
 
           using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-          return op(loadu<MachineWord>(lhs), loadu<MachineWord>(rhs));
+          MachineWord x = loadu<MachineWord>(lhs);
+          MachineWord y = loadu<MachineWord>(rhs);
+          return (x == y) ? 0 : ((x < y) ? -1 : 1);
       }
       template <typename MAX_SIMD_TYPE,
-          typename WORD_TYPE, size_t len, typename OP,
+          typename WORD_TYPE, size_t len,
           typename std::enable_if<((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
-      BITS_INLINE bool bit_compare(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
+      BITS_INLINE int8_t bit_compare(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
 
-        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+    	  static_assert(MAX_SIMD_TYPE::SIMDVal < BIT_REV_SSSE3, "ERROR bit_compare does not support SSSE3 or AVX2");
+
+    	  constexpr size_t bytes = sizeof(WORD_TYPE) * len;
 
         using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
 
-        MachineWord x, y;
-        memcpy(&x, lhs, bytes);
-        memcpy(&y, rhs, bytes);
-        return op(x, y);
+        MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+        MachineWord y = ::bliss::utils::bit_ops::zero<MachineWord>();
+        load_part<bytes, 0>(x, lhs);
+        load_part<bytes, 0>(y, rhs);
+
+
+//        MachineWord x = 0, y = 0;
+//        memcpy(&x, lhs, bytes);
+//        memcpy(&y, rhs, bytes);
+        return (x == y) ? 0 : ((x < y) ? -1 : 1);
       }
 
       template <typename MAX_SIMD_TYPE,
-          typename WORD_TYPE, size_t len, typename OP,
+          typename WORD_TYPE, size_t len,
           typename std::enable_if<((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)),
               int>::type = 1>
-      BITS_INLINE bool bit_compare(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len], OP const & op) {
+      BITS_INLINE int8_t bit_compare(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
 
+    	  static_assert(MAX_SIMD_TYPE::SIMDVal < BIT_REV_SSSE3, "ERROR bit_compare does not support SSSE3 or AVX2");
         using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
 
         constexpr size_t bytes = sizeof(WORD_TYPE) * len;
@@ -2332,27 +2781,35 @@ namespace bliss {
         constexpr unsigned int nMachWord = bytes / sizeof(MachineWord);
         constexpr unsigned int rem = bytes % sizeof(MachineWord);
 
-        // pointers
-        uint8_t const * u = reinterpret_cast<uint8_t const *>(lhs);
-        uint8_t const * v = reinterpret_cast<uint8_t const *>(rhs);
+        // pointers.  from MSB to LSB.
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(lhs) + bytes;
+        uint8_t const * v = reinterpret_cast<uint8_t const *>(rhs) + bytes;
 
-        bool result = true;
+        MachineWord x, y;
 
         // no overlap
         for (unsigned int i = 0; i < nMachWord; ++i) {
           // enough bytes.  do an iteration
+            u -= sizeof(MachineWord);
+            v -= sizeof(MachineWord);
 
-         result &= op(loadu<MachineWord>(u), loadu<MachineWord>(v));
+          x = loadu<MachineWord>(u);
+          y = loadu<MachineWord>(v);
 
-          u += sizeof(MachineWord);
-          v += sizeof(MachineWord);
+          if (x != y) return (x < y) ? -1 : 1;
         }
 
         if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
-          result &= op(loadu<MachineWord>(u + (rem - sizeof(MachineWord))),
-                       loadu<MachineWord>(v + (rem - sizeof(MachineWord))));
+            x = loadu<MachineWord>(lhs);
+            y = loadu<MachineWord>(rhs);
+//            x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//            y = ::bliss::utils::bit_ops::zero<MachineWord>();
+//            load_part<rem, 0>(x, lhs);
+//            load_part<rem, 0>(y, rhs);
+
+            if (x != y) return (x < y) ? -1 : 1;
         }
-        return result;
+        return 0;  // all equal.
       }
 
 
@@ -2376,47 +2833,18 @@ namespace bliss {
        * @param op        operator.  example is one that performs reverse and shifting.  another example is reverse and negate.
        * @tparam len      number of words.
        */
-//      template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-//    		  (PAD_BITS == 0)), uint16_t>::type = 1>  // len is power of 2.
-//      BITS_INLINE void reverse_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-//          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//          storeu<MachineWord>(out, op(loadu<MachineWord>(in)));
-//      }
-//      template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-//    		  (PAD_BITS > 0)), uint16_t>::type = 1>  // len is power of 2.
-//      BITS_INLINE void reverse_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-//          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//          storeu<MachineWord>(out, bliss::utils::bit_ops::srli<PAD_BITS>(op(loadu<MachineWord>(in))));
-//      }
-//      template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-//       (PAD_BITS == 0)), uint16_t>::type = 1>  // len is power of 2.
-//      BITS_INLINE void reverse_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-//          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//          constexpr size_t bytes = sizeof(WORD_TYPE) * len;
-//
-//          MachineWord x = op(loadu<MachineWord>(in));
-//          memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - bytes, bytes);
-//      }
-//      template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-//    		  (PAD_BITS > 0)), uint16_t>::type = 1>  // len is power of 2.
-//      BITS_INLINE void reverse_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-//          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//          constexpr size_t bytes = sizeof(WORD_TYPE) * len;
-//
-//          MachineWord x = bliss::utils::bit_ops::srli<PAD_BITS>(op(loadu<MachineWord>(in)));
-//          memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - bytes, bytes);
-//      }
       template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
           typename WORD_TYPE, size_t len, typename OP,
-          typename std::enable_if<((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)), uint16_t>::type = 1>  // len is power of 2.
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+        		  (PAD_BITS == 0)), uint16_t>::type = 1>  // len is power of 2.
+      BITS_INLINE void reverse_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+          storeu<MachineWord>(out, op(loadu<MachineWord>(in)));
+      }
+      template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+        		  (PAD_BITS > 0)), uint16_t>::type = 1>  // len is power of 2.
       BITS_INLINE void reverse_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
           using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
           storeu<MachineWord>(out, bliss::utils::bit_ops::srli<PAD_BITS>(op(loadu<MachineWord>(in))));
@@ -2424,13 +2852,36 @@ namespace bliss {
 
       template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
           typename WORD_TYPE, size_t len, typename OP,
-          typename std::enable_if<((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)), uint16_t>::type = 1>  // len is power of 2.
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+        		  (PAD_BITS == 0)), uint16_t>::type = 1>  // len is power of 2.
       BITS_INLINE void reverse_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
           using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
           constexpr size_t bytes = sizeof(WORD_TYPE) * len;
 
+//          MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//          load_part<bytes, 0>(x, in);
+//          x = op(x);
+
+          MachineWord x = op(loadu<MachineWord>(in));
+//          memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - bytes, bytes);
+          store_part<bytes, (sizeof(MachineWord) - bytes)>(out, x);
+      }
+
+      template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
+          typename WORD_TYPE, size_t len, typename OP,
+          typename std::enable_if<(((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
+        		  (PAD_BITS > 0)), uint16_t>::type = 1>  // len is power of 2.
+      BITS_INLINE void reverse_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+          constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+
+//          MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//          load_part<bytes, 0>(x, in);
+//          x = bliss::utils::bit_ops::srli<PAD_BITS>(op(x));
+
           MachineWord x = bliss::utils::bit_ops::srli<PAD_BITS>(op(loadu<MachineWord>(in)));
-          memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - bytes, bytes);
+//          memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - bytes, bytes);
+          store_part<bytes, (sizeof(MachineWord) - bytes)>(out, x);
       }
 
       template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
@@ -2481,9 +2932,13 @@ namespace bliss {
         // take care of remaining bytes.  bytes is >= MachineWord
          if (rem > 0) {   // bytes - 1 + 15
            MachineWord x = op(loadu<MachineWord>(u));
+//             MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+//             load_part<(rem + BYTE_OVERLAP), 0>(x, u);
+//             x = op(x);
 
            // do another iteration with all the remaining.
-           memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - (rem + BYTE_OVERLAP), (rem + BYTE_OVERLAP));
+//           memcpy(out, reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - (rem + BYTE_OVERLAP), (rem + BYTE_OVERLAP));
+             store_part<(rem + BYTE_OVERLAP), sizeof(MachineWord) - (rem + BYTE_OVERLAP)>(out, x);
          }
       }
 
@@ -2491,8 +2946,7 @@ namespace bliss {
       template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
           typename WORD_TYPE, size_t len, typename OP,
           typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-                                           ((PAD_BITS % 8) != 0) &&
-    		  	  	  	  	  	  	  	       (BYTE_OVERLAP == 0)
+                                           ((PAD_BITS % 8) > 0)
                                            ), uint16_t>::type = 1>
       BITS_INLINE void reverse_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
 
@@ -2501,17 +2955,23 @@ namespace bliss {
         constexpr uint16_t byte_shift = PAD_BITS / 8;
         constexpr uint16_t bit_shift = PAD_BITS % 8;
         constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
-        constexpr uint16_t left_bit_shift = sizeof(MachineWord) * 8 - bit_shift;
+
+        constexpr size_t nonoverlap = sizeof(MachineWord) - BYTE_OVERLAP;
+        static_assert(sizeof(MachineWord) >= 3, "machineword is less than 3 bytes");
+        static_assert(nonoverlap > 0, "overlap is 0 bytes");
+
+        constexpr uint16_t left_bit_shift = nonoverlap * 8 - bit_shift;
+
 
         // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
-        constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
-        constexpr unsigned int rem = byte_len % sizeof(MachineWord);
+        constexpr unsigned int nMachWord = (byte_len - BYTE_OVERLAP) / nonoverlap;
+        constexpr unsigned int rem = (byte_len - BYTE_OVERLAP) % nonoverlap;
 
         // pointers
-        uint8_t * w = reinterpret_cast<uint8_t *>(out) + byte_len;
+        uint8_t * w = reinterpret_cast<uint8_t *>(out) + byte_len - BYTE_OVERLAP;
         uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
 
-        memset(w, 0, byte_shift);  // clear the last part
+        if (byte_shift > 0) memset(w + BYTE_OVERLAP, 0, byte_shift);  // clear the last part
 
         // no overlap
         MachineWord rev;
@@ -2519,7 +2979,7 @@ namespace bliss {
 
         for (unsigned int i = 0; i < nMachWord; ++i) {
           // enough bytes.  do an iteration
-          w -= sizeof(MachineWord);
+          w -= nonoverlap;
 
           rev = op(loadu<MachineWord>(u));
           storeu<MachineWord>(w,
@@ -2532,101 +2992,21 @@ namespace bliss {
 //          std::cout << "iter " << i << " shift " << std::dec << (word_bits - bit_shift) << " tmp: "; print(tmp);  std::cout << std::endl;
 //          std::cout << "iter " << i << " out: "; print(std::forward<WORD_TYPE const (&)[len]>(out));  std::cout << std::endl;
 
-          u += sizeof(MachineWord);
-        }
-
-        if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
-          rev = op(loadu<MachineWord>(u));
-          rev = bliss::utils::bit_ops::bit_or(prev,
-                                              bliss::utils::bit_ops::srli<bit_shift>(rev));
-
-          memcpy(out, reinterpret_cast<uint8_t *>(&rev) + (sizeof(MachineWord) - rem), rem);
-        }
-      }
-
-
-
-      template <typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0, uint16_t BYTE_OVERLAP = 0,
-          typename WORD_TYPE, size_t len, typename OP,
-          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-                                            ((PAD_BITS % 8) != 0) &&
-                                           (BYTE_OVERLAP > 0)  ), uint16_t>::type = 1>
-      BITS_INLINE void reverse_transform(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len], OP const & op) {
-
-        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-
-        constexpr uint16_t byte_shift = PAD_BITS / 8;
-        constexpr uint16_t bit_shift = PAD_BITS % 8;
-        constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
-
-        // since right bit PAD_BITS < 8 bits, corresponding left PAD_BITS is <= 8 (note equal 8) - only need to do 1 byte since we will extract that later.
-        constexpr uint16_t left_bit_shift = 8 - bit_shift;
-
-        memset(reinterpret_cast<uint8_t *>(out) + byte_len, 0, byte_shift);  // clear the last part
-
-        constexpr size_t nonoverlap = sizeof(MachineWord) - BYTE_OVERLAP;
-
-        static_assert(sizeof(MachineWord) >= 3, "machineword is less than 3 bytes");
-        static_assert(nonoverlap > 0, "overlap is 0 bytes");
-
-
-        MachineWord tmp = bliss::utils::bit_ops::zero<MachineWord>();
-
-        // want to unroll a few iterations (y) (small is better for smaller data), max x (so little waste)
-        // so that there is minimal discarded bytes (w) and small overlap bytes (z)
-        // (3x + 8w) = ((16-z)y + z) * 8; choose y is 1, z = 1, w = 1.  (i.e, use 15 of 16 bytes)
-
-        // this means that v = (uint8_t*)(out + len) - w = (uint8_t*)(out + len) - 1
-        constexpr size_t rem = (byte_len - BYTE_OVERLAP) % nonoverlap;
-
-        // set the mask
-
-//          std::cout << std::dec << ">= machine word. size " << byte_len << " overlap: " << overlap << " non overlap " << nonoverlap << " rem " << rem << std::endl;
-
-        // BIT_GROUP_SIZE is an accelerated one.  so decide based on len and available instruction sets.
-        // pointers
-        uint8_t * w = reinterpret_cast<uint8_t *>(out) + byte_len - BYTE_OVERLAP;
-        uint8_t const * u = reinterpret_cast<uint8_t const *>(in);
-
-        MachineWord rev;
-        MachineWord prev = bliss::utils::bit_ops::zero<MachineWord>();
-
-        // since we are working with 120 bits, we are always aligned to offset == 0.
-        for (size_t i = 0; i < ((byte_len - BYTE_OVERLAP) / nonoverlap); ++i) {
-          // enough bytes.  do an iteration
-          w -= nonoverlap;
-
-          rev = op(loadu<MachineWord>(u));
-          storeu<MachineWord>(w, bliss::utils::bit_ops::bit_or(prev,
-                                                               bliss::utils::bit_ops::srli<bit_shift>(rev)));
-
-//          std::cout << std::dec << " shift " << PAD_BITS << " byte_shift " << byte_shift << " bit_shift " << bit_shift << " wordbits " << word_bits << " bytelen " << byte_len << std::endl;
-//          std::cout << "iter " << i << " prev: "; print(tmp);  std::cout << std::endl;
-
-          // since bit_shift is less than 8 bits, we can operate with just 1 bytes.
-          // note that we need to to left shift the byte to the left of the overlap region,
-          // then put it into the top byte
-          *(reinterpret_cast<uint8_t *>(&prev) + sizeof(MachineWord) - 1) =
-              bliss::utils::bit_ops::slli<left_bit_shift>(*(reinterpret_cast<uint8_t *>(&rev) + BYTE_OVERLAP));  // if bit_shift == 0, tmp will be set to 0.  if WORD - bit_shift == 0, then tmp will be unchanged
-//          std::cout << "iter " << i << " shift " << std::dec << (word_bits - bit_shift) << " tmp: "; print(tmp);  std::cout << std::endl;
-//          std::cout << "iter " << i << " out: "; print(std::forward<WORD_TYPE const (&)[len]>(out));  std::cout << std::endl;
-
-          //std::cout << "iter " << i << " out: "; print(std::forward<WORD_TYPE const (&)[len]>(out));  std::cout << std::endl;
           u += nonoverlap;
         }
 
-        // take care of remaining bytes.  bytes is >= MachineWord
-         if (rem > 0) {   // bytes - 1 + 15
-           rev = op(loadu<MachineWord>(u));
-           rev = bliss::utils::bit_ops::bit_or(prev,
-                             bliss::utils::bit_ops::srli<bit_shift>(rev));
+        if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
+            rev = op(loadu<MachineWord>(u));
+//            rev = ::bliss::utils::bit_ops::zero<MachineWord>();
+//            load_part<(rem + BYTE_OVERLAP), 0>(rev, u);
+//            rev = op(rev);
+          rev = bliss::utils::bit_ops::bit_or(prev,
+                                              bliss::utils::bit_ops::srli<bit_shift>(rev));
 
-
-           // do another iteration with all the remaining.
-           memcpy(out, reinterpret_cast<uint8_t *>(&rev) + sizeof(MachineWord) - (rem + BYTE_OVERLAP), (rem + BYTE_OVERLAP));
-         }
+//          memcpy(out, reinterpret_cast<uint8_t *>(&rev) + (sizeof(MachineWord) - (rem + BYTE_OVERLAP)), (rem + BYTE_OVERLAP));
+                       store_part<(rem + BYTE_OVERLAP), sizeof(MachineWord) - (rem + BYTE_OVERLAP)>(out, rev);
+        }
       }
-
 
 
 
@@ -3453,7 +3833,7 @@ namespace bliss {
        */
       template <typename WORD_TYPE>
       BITS_INLINE void
-      negate(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len) {
+      bit_not(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len) {
         static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be 64 bit or less");
 
         constexpr unsigned int WordsInUint64 = sizeof(uint64_t) / sizeof(WORD_TYPE);
@@ -3471,7 +3851,7 @@ namespace bliss {
 
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE void
-      negate(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len]) {
+      bit_not(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len]) {
 
         static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be 64 bit or less");
         constexpr unsigned int WordsInUint64 = sizeof(uint64_t) / sizeof(WORD_TYPE);
@@ -3491,11 +3871,11 @@ namespace bliss {
       /**
        * @brief
        * @details   reverse for a fixed length array.  specialized for the following mutually exclusive cases
-       * @param out
-       * @param in
+       * @param out		in and out should NOT be the same array.
+       * @param in		in and out should NOT be the same array.
        * @param op        operator.  example is one that performs reverse and shifting.  another example is reverse and negate.
        * @tparam len      number of words.
-       * @param bit_offset
+       * @tparam PAD_BITS  number of 0 padding bits (at MSB end, last word)
        * @return       if the first bitgroup at LSB is a partial group, the number of bits in that partial group.  may be 0.
        */
       template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0,
@@ -3507,6 +3887,8 @@ namespace bliss {
           using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
 
           static_assert(BIT_GROUP_SIZE <= (sizeof(MachineWord) * 4), "ERROR: The maximum bit group size should not be larger than 1/2 of machine word type");
+          static_assert(
+        		  (((sizeof(WORD_TYPE) * len * 8 - PAD_BITS) % BIT_GROUP_SIZE) == 0) , "ERROR: bit_group_size needs to divide all bits evenly.");
 
           ::bliss::utils::bit_ops::bitgroup_ops<BIT_GROUP_SIZE, MAX_SIMD_TYPE::SIMDVal> op;
           // if power of 2 BIT_GROUP_SIZE, then overlap is 0. else there is overlap between successive machineword reverses
@@ -3524,42 +3906,46 @@ namespace bliss {
 
       // bitwise negation
       template <typename MAX_SIMD_TYPE, typename WORD_TYPE, size_t len>
-      BITS_INLINE void negate(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len]) {
-        bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE, 0>(out, in,
-          [](typename MAX_SIMD_TYPE::MachineWord const & src) { return bliss::utils::bit_ops::negate(src); });
+      BITS_INLINE void bit_not(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len]) {
+        bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE>(out, in,
+          [](typename MAX_SIMD_TYPE::MachineWord const & src) { return bliss::utils::bit_ops::bit_not(src); });
       }
       // bitwise and
       template <typename MAX_SIMD_TYPE, typename WORD_TYPE, size_t len>
       BITS_INLINE void bit_and(WORD_TYPE (&out)[len], WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
-        bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE, 0>(out, lhs, rhs,
+        bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE>(out, lhs, rhs,
           [](typename MAX_SIMD_TYPE::MachineWord const & l,
               typename MAX_SIMD_TYPE::MachineWord const & r ) { return bliss::utils::bit_ops::bit_and(l, r); });
       }
       // bitwise or
       template <typename MAX_SIMD_TYPE, typename WORD_TYPE, size_t len>
       BITS_INLINE void bit_or(WORD_TYPE (&out)[len], WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
-        bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE, 0>(out, lhs, rhs,
+        bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE>(out, lhs, rhs,
           [](typename MAX_SIMD_TYPE::MachineWord const & l,
               typename MAX_SIMD_TYPE::MachineWord const & r ) { return bliss::utils::bit_ops::bit_or(l, r); });
       }
       // bitwise xor
       template <typename MAX_SIMD_TYPE, typename WORD_TYPE, size_t len>
       BITS_INLINE void bit_xor(WORD_TYPE (&out)[len], WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
-        bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE, 0>(out, lhs, rhs,
+        bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE>(out, lhs, rhs,
           [](typename MAX_SIMD_TYPE::MachineWord const & l,
               typename MAX_SIMD_TYPE::MachineWord const & r ) { return bliss::utils::bit_ops::bit_xor(l, r); });
       }
 
 
       //========================== shift operations ============
-      template <typename MAX_SIMD_TYPE, uint16_t BIT_SHIFT, typename WORD_TYPE, size_t len>
-      BITS_INLINE void left_shift(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len]) {
-        bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE, BIT_SHIFT>(out, in,
+      template <typename MAX_SIMD_TYPE, uint16_t BIT_SHIFT, typename WORD_TYPE, size_t len> //,
+//       typename ::std::enable_if<(MAX_SIMD_TYPE::SIMDVal <= BIT_REV_SWAR), int>::type = 1 >
+      BITS_INLINE void left_shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
+//    	  printf("left shifting by %u\n", BIT_SHIFT);
+        bliss::utils::bit_ops::shift_transform<MAX_SIMD_TYPE, BIT_SHIFT>(out, in,
           [](typename MAX_SIMD_TYPE::MachineWord const & src) { return src; });
       }
-      template <typename MAX_SIMD_TYPE, uint16_t BIT_SHIFT, typename WORD_TYPE, size_t len>
-      BITS_INLINE void right_shift(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len]) {
-        bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE, (-BIT_SHIFT)>(out, in,
+      template <typename MAX_SIMD_TYPE, uint16_t BIT_SHIFT, typename WORD_TYPE, size_t len> //,
+//      	  typename ::std::enable_if<(MAX_SIMD_TYPE::SIMDVal <= BIT_REV_SWAR), int>::type = 1 >
+      BITS_INLINE void right_shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
+//    	  printf("right shifting %lu x %lu byte words by %u\n", len, sizeof(WORD_TYPE), BIT_SHIFT);
+        bliss::utils::bit_ops::shift_transform<MAX_SIMD_TYPE, (0 - (static_cast<int16_t>(BIT_SHIFT)))>(out, in,
           [](typename MAX_SIMD_TYPE::MachineWord const & src) { return src; });
       }
 
@@ -3567,32 +3953,32 @@ namespace bliss {
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
         using MAX_SIMD_TYPE = BITREV_AUTO_MAX_SWAR<(len * sizeof(WORD_TYPE))>;
-        return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs,
-          [](typename MAX_SIMD_TYPE::MachineWord const & l,
-              typename MAX_SIMD_TYPE::MachineWord const & r ) { return bliss::utils::bit_ops::equal(l, r); });
+        return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) == 0;
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool less(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
         using MAX_SIMD_TYPE = BITREV_AUTO_MAX_SWAR<(len * sizeof(WORD_TYPE))>;
-        return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs,
-          [](typename MAX_SIMD_TYPE::MachineWord const & l,
-              typename MAX_SIMD_TYPE::MachineWord const & r ) { return bliss::utils::bit_ops::less(l, r); });
+        return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) < 0;
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool greater(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
-        return less(rhs, lhs);
+          using MAX_SIMD_TYPE = BITREV_AUTO_MAX_SWAR<(len * sizeof(WORD_TYPE))>;
+          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) > 0;
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool not_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
-        return !equal(lhs, rhs);
+          using MAX_SIMD_TYPE = BITREV_AUTO_MAX_SWAR<(len * sizeof(WORD_TYPE))>;
+          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) != 0;
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool less_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
-        return !greater(lhs, lhs);
+          using MAX_SIMD_TYPE = BITREV_AUTO_MAX_SWAR<(len * sizeof(WORD_TYPE))>;
+          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) <= 0;
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool greater_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
-        return !less(lhs, rhs);
+          using MAX_SIMD_TYPE = BITREV_AUTO_MAX_SWAR<(len * sizeof(WORD_TYPE))>;
+          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) >= 0;
       }
 
     } // namespace bit_ops
