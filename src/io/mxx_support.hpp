@@ -242,16 +242,16 @@ namespace mxx {
     };
 }
 
-std::ostream &operator<<(std::ostream &os, uint8_t const &t) {
-  return os << static_cast<uint32_t>(t);
-}
-std::ostream &operator<<(std::ostream &os, int8_t const &t) {
-  return os << static_cast<int32_t>(t);
-}
-
-template <typename T1, typename T2>
-std::ostream &operator<<(std::ostream &os, std::pair<T1, T2> const &t) {
-  return os << t.first << ":" << t.second;
-}
+//std::ostream &operator<<(std::ostream &os, uint8_t const &t) {
+//  return os << static_cast<uint32_t>(t);
+//}
+//std::ostream &operator<<(std::ostream &os, int8_t const &t) {
+//  return os << static_cast<int32_t>(t);
+//}
+//
+//template <typename T1, typename T2>
+//std::ostream &operator<<(std::ostream &os, std::pair<T1, T2> const &t) {
+//  return os << t.first << ":" << t.second;
+//}
 
 #endif /* SRC_IO_MXX_SUPPORT_HPP_ */
