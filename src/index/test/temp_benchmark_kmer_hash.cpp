@@ -151,7 +151,7 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
   TypeParam km, rev, tmp;
   km = KmerReverseBenchmark<TypeParam>::kmer;
 
-  uint8_t* out = reinterpret_cast<uint8_t*>(tmp.getData());
+  uint8_t* out = reinterpret_cast<uint8_t*>(tmp.getDataRef());
   const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getConstData());
 
   TIMER_START(km);
@@ -161,7 +161,7 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
     memset(out, 0, TypeParam::nBytes);
 
     bliss::utils::bit_ops::reverse_seq<TypeParam::bitsPerChar>(out, in, TypeParam::nBytes);
-    tmp.right_shift_bits(TypeParam::nBytes * 8 - TypeParam::nBits);  // shift by remainder/padding.
+    tmp.template right_shift_bits<(TypeParam::nBytes * 8 - TypeParam::nBits)>();  // shift by remainder/padding.
 
     rev ^= tmp;
 

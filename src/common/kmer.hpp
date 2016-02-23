@@ -252,10 +252,12 @@ namespace bliss
       return data;
     }
 
-    WORD_TYPE* getData() {
-    	return data;
-    }
-
+//  not safe to modify via a pointer.  compiler may not know that pointer
+// is used to access the data and either reorder reads before write, or optimize out some statements.
+//    WORD_TYPE* getData() {
+//    	return data;
+//    }
+//
     WORD_TYPE (&getDataRef())[nWords] {
       return data;
     }
@@ -542,7 +544,7 @@ namespace bliss
         offset -= input_data_bits;
       }
   
-      nextFromWordInternal(*begin >> offset, bitsPerChar);
+      nextFromWordInternal(*begin >> offset);
   
       // set unused bits to 0
       do_sanitize();
@@ -601,7 +603,7 @@ namespace bliss
         offset -= input_data_bits;
       }
   
-      nextReverseFromWordInternal(*begin >> offset, bitsPerChar);
+      nextReverseFromWordInternal(*begin >> offset);
   
       // set unused bits to 0
       do_sanitize();
@@ -637,7 +639,7 @@ namespace bliss
       // TODO: replace this by a call that does exactly bitsPerChar right shift
       // (better compiler optimization)
   
-      nextFromWordInternal(c, bitsPerChar);
+      nextFromWordInternal(c);
 
       // clean up
       do_sanitize();
@@ -664,7 +666,7 @@ namespace bliss
       // TODO: replace this by a call that does exactly bitsPerChar right shift
       // (better compiler optimization)
   
-      nextReverseFromWordInternal(c, bitsPerChar);
+      nextReverseFromWordInternal(c);
   
       // clean up  - not needed - internally shifting to the right.
       do_sanitize();
@@ -683,9 +685,9 @@ namespace bliss
      */
     KMER_INLINE bool operator==(const Kmer& rhs) const
     {
-      return (memcmp(data, rhs.data, nBytes) == 0);
+    	return ::bliss::utils::bit_ops::equal(data, rhs.data);
     }
-  
+
     /**
      * @brief Compares this k-mer with the given k-mer for in-equality.
      *
@@ -712,25 +714,7 @@ namespace bliss
      */
     KMER_INLINE bool operator<(const Kmer& rhs) const
     {
-      auto first = this->data + nWords - 1;
-      auto second = rhs.data + nWords - 1;
-
-      for (size_t i = 0; i < nWords; ++i, --first, --second) {
-        if (*first != *second) return (*first < *second);  // if equal, keep comparing. else decide.
-      }
-      return false;  // all equal
-//      std::pair<const WORD_TYPE*, const WORD_TYPE*> unequal = std::mismatch(this->data, this->data + nWords, rhs.data);
-//      if (unequal.first == this->data + nWords)
-//      {
-//        // all elements are equal
-//        return false;
-//      }
-//      else
-//      {
-//        // the comparison of the first unequal element will determine the result
-//        return *(unequal.first) < *(unequal.second);
-//      }
-//      return memcmp(data, rhs.data, nWords * sizeof(WORD_TYPE)) < 0;
+    	return ::bliss::utils::bit_ops::less(data, rhs.data);
     }
   
     /**
@@ -777,8 +761,9 @@ namespace bliss
      */
     KMER_INLINE Kmer& operator^=(const Kmer& rhs)
     {
-      for (uint32_t i = 0; i < nWords; ++i) this->data[i] ^= rhs.data[i];
-//      std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_xor<WORD_TYPE>());
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	::bliss::utils::bit_ops::bit_xor<SIMD>(data, data, rhs.data);
+    	do_sanitize();
       return *this;
     }
     /**
@@ -786,18 +771,28 @@ namespace bliss
      */
     KMER_INLINE Kmer operator^(const Kmer& rhs) const
     {
-      Kmer result = *this;
-      result ^= rhs;
+      Kmer result(false);
+		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+		::bliss::utils::bit_ops::bit_xor<SIMD>(result.data, data, rhs.data);
+		result.do_sanitize();
       return result;
     }
-  
+
+    KMER_INLINE void bit_xor(const Kmer& lhs, const Kmer& rhs)
+    {
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	::bliss::utils::bit_ops::bit_xor<SIMD>(data, lhs.data, rhs.data);
+    	do_sanitize();
+    }
+
     /**
      * @brief AND
      */
     KMER_INLINE Kmer& operator&=(const Kmer& rhs)
     {
-      for (uint32_t i = 0; i < nWords; ++i) this->data[i] &= rhs.data[i];
-//      std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_and<WORD_TYPE>());
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	::bliss::utils::bit_ops::bit_and<SIMD>(data, data, rhs.data);
+    	do_sanitize();
       return *this;
     }
     /**
@@ -806,17 +801,28 @@ namespace bliss
     KMER_INLINE Kmer operator&(const Kmer& rhs) const
     {
       Kmer result = *this;
-      result &= rhs;
+		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+		::bliss::utils::bit_ops::bit_and<SIMD>(result.data, data, rhs.data);
+		result.do_sanitize();
       return result;
     }
-  
+
+    KMER_INLINE void bit_and(const Kmer& lhs, const Kmer& rhs)
+    {
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	::bliss::utils::bit_ops::bit_and<SIMD>(data, lhs.data, rhs.data);
+    	do_sanitize();
+    }
+
+
     /**
      * @brief OR
      */
     KMER_INLINE Kmer& operator|=(const Kmer& rhs)
     {
-      for (uint32_t i = 0; i < nWords; ++i) this->data[i] |= rhs.data[i];
-//      std::transform(this->data, this->data + nWords, rhs.data, this->data, std::bit_or<WORD_TYPE>());
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	::bliss::utils::bit_ops::bit_or<SIMD>(data, data, rhs.data);
+    	do_sanitize();
       return *this;
     }
     /**
@@ -824,12 +830,20 @@ namespace bliss
      */
     KMER_INLINE Kmer operator|(const Kmer& rhs) const
     {
-      Kmer result = *this;
-      result |= rhs;
+      Kmer result(false);
+		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+		::bliss::utils::bit_ops::bit_or<SIMD>(result.data, data, rhs.data);
+		result.do_sanitize();
       return result;
     }
-  
-  
+
+    KMER_INLINE void bit_or(const Kmer& lhs, const Kmer& rhs)
+    {
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	::bliss::utils::bit_ops::bit_or<SIMD>(data, lhs.data, rhs.data);
+    	do_sanitize();
+    }
+
     /**
      * @brief Shifts the k-mer left by the given number of CHARACTERS.
      *
@@ -868,6 +882,21 @@ namespace bliss
       return *this;
     }
 
+    template <uint16_t shift = bitsPerChar>
+    KMER_INLINE void left_shift_bits()
+    {
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	::bliss::utils::bit_ops::left_shift<SIMD, shift>(data, data);
+    	do_sanitize();
+    }
+    template <uint16_t shift = bitsPerChar>
+    KMER_INLINE void left_shift_bits(Kmer const & src)
+    {
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	::bliss::utils::bit_ops::left_shift<SIMD, shift>(data, src.data);
+    	do_sanitize();
+    }
+
     /**
      * @brief Shifts the k-mer right by the given number of CHARACTERS.
      *
@@ -904,10 +933,21 @@ namespace bliss
      */
     KMER_INLINE Kmer right_shift_bits(const std::size_t shift_by) {
       this->do_right_shift(shift_by);
-      this->do_sanitize();
       return *this;
     }
 
+    template <uint16_t shift = bitsPerChar>
+    KMER_INLINE void right_shift_bits()
+    {
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	::bliss::utils::bit_ops::right_shift<SIMD, shift>(data, data);
+    }
+    template <uint16_t shift = bitsPerChar>
+    KMER_INLINE void right_shift_bits(Kmer const & src)
+    {
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	::bliss::utils::bit_ops::right_shift<SIMD, shift>(data, src.data);
+    }
   
     /**
      * @brief Returns a reversed k-mer.
@@ -996,7 +1036,7 @@ namespace bliss
       for (unsigned int i = 0; i < size; ++i)
       {
         elementsInReverse.push(static_cast<size_t>(forBitMask & cpy.data[0]));
-        cpy.do_right_shift(bitsPerChar);
+        cpy.template right_shift_bits<bitsPerChar>();
       }
 
       //Pop stack elements to string stream
@@ -1114,12 +1154,12 @@ namespace bliss
      * @brief internal method to add one more character to the kmer at the LSB side
      * @param c     character to add.
      */
-    template <typename WType>
-    KMER_INLINE void nextFromWordInternal(WType w, unsigned int shift)
+    template <unsigned int shift = bitsPerChar, typename WType>
+    KMER_INLINE void nextFromWordInternal(WType w)
     {
       // left shift k-mer
       // TODO: replace by single shift operation
-      do_left_shift(shift);
+      this->template left_shift_bits<shift>();
   
       // add character to least significant end (requires least shifting)
       *data |= static_cast<WORD_TYPE>(w) &
@@ -1130,12 +1170,12 @@ namespace bliss
      * @brief internal method to add one more character to the kmer at the MSB side
      * @param c     character to add.
      */
-    template <typename WType>
-    KMER_INLINE void nextReverseFromWordInternal(WType w, unsigned int shift)
+    template <unsigned int shift = bitsPerChar, typename WType>
+    KMER_INLINE void nextReverseFromWordInternal(WType w)
     {
       // left shift k-mer
       // TODO: replace by single shift operation
-      do_right_shift(shift);
+      this->template right_shift_bits<shift>();
   
       // add character to least significant end (requires least shifting)
       data[nWords - 1] |= (static_cast<WORD_TYPE>(w) &
@@ -1346,7 +1386,7 @@ namespace bliss
                                      (bytes * 8 - nBits)
         >(result.data, src.data,
         		[&op](typename SIMDType::MachineWord const & src){
-    	  return bliss::utils::bit_ops::negate(op.reverse(src));
+    	  return bliss::utils::bit_ops::bit_not(op.reverse(src));
       });
 
     }
@@ -1444,8 +1484,8 @@ namespace bliss
       }
 
       // now reverse the whole thing sequentially.
-//      bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SEQ>(result.getData(), comp.getData(), nWords);
-      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);  // shift by remainder/padding.
+//      bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SEQ>(result.getDataRef(), comp.getData(), nWords);
+      result.template right_shift_bits<nWords * sizeof(WORD_TYPE) * 8 - nBits>();  // shift by remainder/padding.
 
       // result already was 0 to begin with, so no need to sanitize
 
@@ -1470,7 +1510,7 @@ namespace bliss
       }
 
       // now reverse the whole thing sequentially.
-      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);  // shift by remainder/padding.
+      result.template right_shift_bits<nWords * sizeof(WORD_TYPE) * 8 - nBits>();  // shift by remainder/padding.
 
       // result already was 0 to begin with, so no need to sanitize
 

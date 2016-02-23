@@ -34,6 +34,8 @@
 #include <random>
 #include <cstdint>
 
+#include <atomic>
+
 #include "common/kmer.hpp"
 #include "common/alphabets.hpp"
 #include "common/alphabet_traits.hpp"
@@ -61,10 +63,19 @@ class KmerReverseTest : public ::testing::Test {
     {
       srand(0);
       for (unsigned int i = 0; i < T::size; ++i) {
-
+//    	  printf(" setup next from char\n");
         kmer.nextFromChar(rand() % T::KmerAlphabet::SIZE);
       }
 
+    }
+
+	template <typename data_type, size_t data_size>
+    void print(data_type (&w)[data_size]) {
+      std::cout << "data type size " << std::dec << sizeof(data_type) << " len " << data_size << ": ";
+      for (int k = data_size -1 ; k >= 0; --k) {
+        std::cout << std::hex << std::setfill('0') << std::setw(sizeof(data_type) * 2) << static_cast<size_t>(w[k]) << " ";
+      }
+      std::cout << std::endl;
     }
 
 };
@@ -93,7 +104,11 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq_self)
 
     if (!local_same) {
       BL_DEBUGF("ERROR: seq rev-revcomp-rev-revcomp diff at iter %lu:\n\tinput %s\n\toutput %s", i, gold.toAlphabetString().c_str(), km.toAlphabetString().c_str());
+      std::cout << "output: ";  this->print(km.getDataRef());
+      std::cout << "gold: ";  this->print(gold.getDataRef());
     }
+    ASSERT_TRUE(local_same);
+
     same &= local_same;
 
     gold.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
@@ -106,33 +121,53 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq_self)
 
 TYPED_TEST_P(KmerReverseTest, reverse_seq)
 {
-  TypeParam km, rev, rev_seq;
+  TypeParam km, rev, rev_seq, rev2;
   km = this->kmer;
 
   bool rev_same = true;
   bool local_rev_same = true;
 
-  uint8_t* out = reinterpret_cast<uint8_t*>(rev.getData());
+  uint8_t* out = reinterpret_cast<uint8_t*>(rev.getDataRef());
   const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getData());
 
   for (size_t i = 0; i < this->iterations; ++i) {
+//	printf("rev_seq serial %lu\n", i);
     rev_seq = this->helper.reverse_serial(km);
 
+//	printf("rev_seq BITSEQ reverse %lu\n", i);
     bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SEQ>(out, in, TypeParam::nBytes);
-    rev.right_shift_bits(TypeParam::nBytes * 8 - TypeParam::nBits);  // shift by remainder bits..
+//    bliss::utils::bit_ops::right_shift<bliss::utils::bit_ops::BITREV_AUTO<TypeParam::nWords * sizeof(typename TypeParam::KmerWordType)>,
+//    		>(rev2.getDataRef(), rev.getDataRef());
+//	printf("rev_seq shift %lu\n", i);
+
+    ::std::atomic_thread_fence(::std::memory_order_seq_cst);
+    rev.template right_shift_bits<(TypeParam::nBytes * 8 - TypeParam::nBits)>();  // shift by remainder bits..
 
     local_rev_same = (rev == rev_seq);
 
     if (!local_rev_same) {
-      BL_ERROR("ERROR: rev diff at iter " << i << ":\n\tinput " << km.toAlphabetString().c_str() << "\n\toutput " << rev.toAlphabetString().c_str() << "\n\tgold " << rev_seq.toAlphabetString().c_str());
+    	printf("nwords %u word size %lu, shift by %lu\n",
+    			TypeParam::nWords,
+    			sizeof(typename TypeParam::KmerWordType),
+    			(TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits));
+      BL_ERROR("ERROR: rev diff at iter " << i << ":");
+//      printf("printing km\n");
+      BL_ERROR("\tinput " << km.toAlphabetString().c_str());
+//      printf("printing rev2\n");
+      BL_ERROR("\toutput " << rev.toAlphabetString().c_str());
+//      printf("printing rev\n");
+      BL_ERROR("\tgold " << rev_seq.toAlphabetString().c_str());
+      std::cout << "output: ";  this->print(rev.getDataRef());
+      std::cout << "gold: ";  this->print(rev_seq.getDataRef());
     }
+    ASSERT_TRUE(local_rev_same);
 
     rev_same &= local_rev_same;
 
-
+//	printf("rev_seq BITSEQ next from char %lu\n", i);
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
-  EXPECT_TRUE(rev_same);
+  ASSERT_TRUE(rev_same);
 
 }
 
@@ -149,26 +184,47 @@ TYPED_TEST_P(KmerReverseTest, reverse_bswap)
   bool local_revcomp_same = true;
 
   for (size_t i = 0; i < this->iterations; ++i) {
+//		printf("rev_bswap rev-seq %lu\n", i);
     rev_seq = this->helper.reverse_serial(km);
+//	printf("rev_bswap revcomp-seq %lu\n", i);
     revcomp_seq = this->helper.reverse_complement_serial(km);
 
+//	printf("rev_bswap rev-bswap %lu\n", i);
     rev = this->helper.reverse_bswap(km);
+//	printf("rev_bswap revcomp-bswap %lu\n", i);
     revcomp = this->helper.reverse_complement_bswap(km);
 
     local_rev_same = (rev == rev_seq);
     local_revcomp_same = (revcomp == revcomp_seq);
 
     if (!local_rev_same) {
-      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+//    	printf("rev_bswap printing %lu\n", i);
+
+      BL_ERRORF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i,
+    		  km.toAlphabetString().c_str(),
+    		  rev.toAlphabetString().c_str(),
+    		  rev_seq.toAlphabetString().c_str());
+      std::cout << "output: ";  this->print(rev.getDataRef());
+      std::cout << "gold: ";  this->print(rev_seq.getDataRef());
+//      printf("rev_bswap printing done %lu\n", i);
     }
     if (!local_revcomp_same) {
-      BL_DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+//    	printf("rev_bswap printing %lu\n", i);
+      BL_ERRORF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i,
+    		  km.toAlphabetString().c_str(),
+    		  revcomp.toAlphabetString().c_str(),
+    		  revcomp_seq.toAlphabetString().c_str());
+      std::cout << "output: ";  this->print(revcomp.getDataRef());
+      std::cout << "gold: ";  this->print(revcomp_seq.getDataRef());
+//  	printf("rev_bswap printing done %lu\n", i);
     }
+    ASSERT_TRUE(local_rev_same);
+    ASSERT_TRUE(local_revcomp_same);
 
     rev_same &= local_rev_same;
     revcomp_same &= local_revcomp_same;
 
-
+//	printf("rev_bswap next char %lu\n", i);
     km.nextFromChar(rand() % TypeParam::KmerAlphabet::SIZE);
   }
   EXPECT_TRUE(rev_same);
@@ -199,11 +255,17 @@ TYPED_TEST_P(KmerReverseTest, reverse_swar)
     local_revcomp_same = (revcomp == revcomp_seq);
 
     if (!local_rev_same) {
-      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      BL_ERRORF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      std::cout << "output: ";  this->print(rev.getDataRef());
+      std::cout << "gold: ";  this->print(rev_seq.getDataRef());
     }
     if (!local_revcomp_same) {
-      BL_DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+        BL_ERRORF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+        std::cout << "output: ";  this->print(revcomp.getDataRef());
+        std::cout << "gold: ";  this->print(revcomp_seq.getDataRef());
     }
+    ASSERT_TRUE(local_rev_same);
+    ASSERT_TRUE(local_revcomp_same);
 
     rev_same &= local_rev_same;
     revcomp_same &= local_revcomp_same;
@@ -241,11 +303,17 @@ TYPED_TEST_P(KmerReverseTest, reverse_ssse3)
     local_revcomp_same = (revcomp == revcomp_seq);
 
     if (!local_rev_same) {
-      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      BL_ERRORF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      std::cout << "output: ";  this->print(rev.getDataRef());
+      std::cout << "gold: ";  this->print(rev_seq.getDataRef());
     }
     if (!local_revcomp_same) {
-      BL_DEBUGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+        BL_ERRORF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+        std::cout << "output: ";  this->print(revcomp.getDataRef());
+        std::cout << "gold: ";  this->print(revcomp_seq.getDataRef());
     }
+    ASSERT_TRUE(local_rev_same);
+    ASSERT_TRUE(local_revcomp_same);
 
     rev_same &= local_rev_same;
     revcomp_same &= local_revcomp_same;
@@ -282,10 +350,14 @@ TYPED_TEST_P(KmerReverseTest, reverse)
     local_revcomp_same = (revcomp == revcomp_seq);
 
     if (!local_rev_same) {
-      BL_DEBUGF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      BL_ERRORF("ERROR: rev diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str(), rev_seq.toAlphabetString().c_str());
+      std::cout << "output: ";  this->print(rev.getDataRef());
+      std::cout << "gold: ";  this->print(rev_seq.getDataRef());
     }
     if (!local_revcomp_same) {
-      BL_WARNINGF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+        BL_ERRORF("ERROR: revcomp diff at iter %lu:\n\tinput %s\n\toutput %s\n\tgold %s", i, km.toAlphabetString().c_str(), revcomp.toAlphabetString().c_str(), revcomp_seq.toAlphabetString().c_str());
+        std::cout << "output: ";  this->print(revcomp.getDataRef());
+        std::cout << "gold: ";  this->print(revcomp_seq.getDataRef());
     }
     rev_same &= local_rev_same;
     revcomp_same &= local_revcomp_same;
@@ -426,7 +498,7 @@ class KmerReverseOpTest : public ::testing::Test {
 
     	template <typename WORD_TYPE>
     	inline WORD_TYPE operator()(WORD_TYPE const & src) const {
-    		return bliss::utils::bit_ops::negate(op.reverse(src));
+    		return bliss::utils::bit_ops::bit_not(op.reverse(src));
     	}
     };
     template <unsigned int BITS, unsigned char SIMD>
