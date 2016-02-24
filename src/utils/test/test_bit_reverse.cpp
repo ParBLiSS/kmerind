@@ -911,7 +911,7 @@ class BitReverseTransformTest : public ::testing::Test {
       BitReverseTestHelper<BIT_GROUP_SIZE> helper;
 
       // shift input left by padbits
-      using SIMD = bliss::utils::bit_ops::BITREV_AUTO_MAX_SWAR<(sizeof(data_type) * data_size)>;
+      using SIMD = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(sizeof(data_type) * data_size), bliss::utils::bit_ops::BITREV_SWAR>;
 
       data_type tmp[data_size];
       bliss::utils::bit_ops::left_shift<SIMD, pad_bits>(tmp, out);

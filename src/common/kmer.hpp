@@ -761,7 +761,7 @@ namespace bliss
      */
     KMER_INLINE Kmer& operator^=(const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::bit_xor<SIMD>(data, data, rhs.data);
     	do_sanitize();
       return *this;
@@ -772,7 +772,7 @@ namespace bliss
     KMER_INLINE Kmer operator^(const Kmer& rhs) const
     {
       Kmer result(false);
-		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
 		::bliss::utils::bit_ops::bit_xor<SIMD>(result.data, data, rhs.data);
 		result.do_sanitize();
       return result;
@@ -780,7 +780,7 @@ namespace bliss
 
     KMER_INLINE void bit_xor(const Kmer& lhs, const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::bit_xor<SIMD>(data, lhs.data, rhs.data);
     	do_sanitize();
     }
@@ -790,7 +790,7 @@ namespace bliss
      */
     KMER_INLINE Kmer& operator&=(const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::bit_and<SIMD>(data, data, rhs.data);
     	do_sanitize();
       return *this;
@@ -801,7 +801,7 @@ namespace bliss
     KMER_INLINE Kmer operator&(const Kmer& rhs) const
     {
       Kmer result = *this;
-		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
 		::bliss::utils::bit_ops::bit_and<SIMD>(result.data, data, rhs.data);
 		result.do_sanitize();
       return result;
@@ -809,7 +809,7 @@ namespace bliss
 
     KMER_INLINE void bit_and(const Kmer& lhs, const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::bit_and<SIMD>(data, lhs.data, rhs.data);
     	do_sanitize();
     }
@@ -820,7 +820,7 @@ namespace bliss
      */
     KMER_INLINE Kmer& operator|=(const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::bit_or<SIMD>(data, data, rhs.data);
     	do_sanitize();
       return *this;
@@ -831,7 +831,7 @@ namespace bliss
     KMER_INLINE Kmer operator|(const Kmer& rhs) const
     {
       Kmer result(false);
-		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
 		::bliss::utils::bit_ops::bit_or<SIMD>(result.data, data, rhs.data);
 		result.do_sanitize();
       return result;
@@ -839,7 +839,7 @@ namespace bliss
 
     KMER_INLINE void bit_or(const Kmer& lhs, const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::bit_or<SIMD>(data, lhs.data, rhs.data);
     	do_sanitize();
     }
@@ -885,14 +885,14 @@ namespace bliss
     template <uint16_t shift = bitsPerChar>
     KMER_INLINE void left_shift_bits()
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::left_shift<SIMD, shift>(data, data);
     	do_sanitize();
     }
     template <uint16_t shift = bitsPerChar>
     KMER_INLINE void left_shift_bits(Kmer const & src)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::left_shift<SIMD, shift>(data, src.data);
     	do_sanitize();
     }
@@ -939,13 +939,13 @@ namespace bliss
     template <uint16_t shift = bitsPerChar>
     KMER_INLINE void right_shift_bits()
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::right_shift<SIMD, shift>(data, data);
     }
     template <uint16_t shift = bitsPerChar>
     KMER_INLINE void right_shift_bits(Kmer const & src)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::right_shift<SIMD, shift>(data, src.data);
     }
   
@@ -1322,7 +1322,7 @@ namespace bliss
 
       constexpr size_t bytes = nWords * sizeof(WORD_TYPE);
 
-      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO<bytes>;
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
 
       bliss::utils::bit_ops::reverse<bitsPerChar,
                                      SIMDType,
@@ -1379,7 +1379,7 @@ namespace bliss
 
       constexpr size_t bytes = nWords * sizeof(WORD_TYPE);
 
-      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO<bytes>;
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
   	  ::bliss::utils::bit_ops::bitgroup_ops<bitsPerChar, SIMDType::SIMDVal> op;
 
       bliss::utils::bit_ops::reverse_transform<SIMDType,
@@ -1414,7 +1414,7 @@ namespace bliss
 
       constexpr size_t bytes = nWords * sizeof(WORD_TYPE);
 
-      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO<bytes>;
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
 
       // reverse 1 bit groups
       bliss::utils::bit_ops::reverse<1,

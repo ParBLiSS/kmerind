@@ -293,7 +293,7 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
 
 TIMER_START(km);
 	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
-this->template benchmark<bliss::utils::bit_ops::BITREV_AUTO<bytes> >();
+this->template benchmark<bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes> >();
 TIMER_END(km, "revop auto", KmerReverseBenchmark<TypeParam>::iterations);
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
@@ -347,11 +347,11 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 
   TIMER_START(km);
 	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
-  this->template benchmark_c<bliss::utils::bit_ops::BITREV_AUTO<bytes> >();
+  this->template benchmark_c<bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes> >();
   TIMER_END(km, "revopc auto", KmerReverseBenchmark<TypeParam>::iterations);
 //  printf("AUTO chose SIMD %u and MachineWord size %lu for kmer k %u, wordsize %lu, bitsPerChar %u, bytes %lu\n",
-//         bliss::utils::bit_ops::BITREV_AUTO<bytes>::SIMDVal,
-//         sizeof(typename bliss::utils::bit_ops::BITREV_AUTO<bytes>::MachineWord),
+//         bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>::SIMDVal,
+//         sizeof(typename bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>::MachineWord),
 //         TypeParam::size, sizeof(typename TypeParam::KmerWordType), TypeParam::bitsPerChar, bytes);
 
   TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
@@ -418,6 +418,7 @@ typedef ::testing::Types<
     ::bliss::common::Kmer< 96, bliss::common::DNA16, uint64_t>,
     ::bliss::common::Kmer<128, bliss::common::DNA16, uint64_t>,
     ::bliss::common::Kmer<256, bliss::common::DNA16, uint64_t>
+
 //    ::bliss::common::Kmer< 15, bliss::common::DNA_IUPAC, uint64_t>,
 //    ::bliss::common::Kmer< 16, bliss::common::DNA_IUPAC, uint64_t>,
 //    ::bliss::common::Kmer< 32, bliss::common::DNA_IUPAC, uint64_t>,

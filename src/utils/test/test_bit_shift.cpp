@@ -212,29 +212,25 @@ class BitShiftFixedArrayTest : public ::testing::Test {
       }
     }
 
-    template <typename SIMDType, typename data_type, size_t data_size, bool inplace>
+    template <typename SIMDType, typename data_type, size_t data_size, bool inplace,
+     typename ::std::enable_if<(sizeof(data_type) >= 8), int>::type = 1>
     void run_tests() {
 
     	  data_type in[data_size];
     	  data_type out[data_size];
 
-    	  switch (sizeof(data_type)) {
-    	    case 8:
     	      test<63, SIMDType, inplace>(in, out);
     	      test<48, SIMDType, inplace>(in, out);
     	      test<33, SIMDType, inplace>(in, out);
     	      test<32, SIMDType, inplace>(in, out);
-    	    case 4:
     	  	  test<31, SIMDType, inplace>(in, out);
     	      test<24, SIMDType, inplace>(in, out);
     	      test<17, SIMDType, inplace>(in, out);
     	      test<16, SIMDType, inplace>(in, out);
-    	    case 2:
     	      test<15, SIMDType, inplace>(in, out);
     	      test<12, SIMDType, inplace>(in, out);
     	      test< 9, SIMDType, inplace>(in, out);
     	      test< 8, SIMDType, inplace>(in, out);
-    	    case 1:
     	      test< 7, SIMDType, inplace>(in, out);
     	      test< 6, SIMDType, inplace>(in, out);
     	      test< 5, SIMDType, inplace>(in, out);
@@ -242,10 +238,67 @@ class BitShiftFixedArrayTest : public ::testing::Test {
     	      test< 3, SIMDType, inplace>(in, out);
     	      test< 2, SIMDType, inplace>(in, out);
     	      test< 1, SIMDType, inplace>(in, out);
-    	    default:
     	      test< 0, SIMDType, inplace>(in, out);
-    	      break;
-    	  }
+    }
+    template <typename SIMDType, typename data_type, size_t data_size, bool inplace,
+    	typename ::std::enable_if<(sizeof(data_type) >= 4) && (sizeof(data_type) < 8), int>::type = 1>
+    void run_tests() {
+
+    	  data_type in[data_size];
+    	  data_type out[data_size];
+
+    	  	  test<31, SIMDType, inplace>(in, out);
+    	      test<24, SIMDType, inplace>(in, out);
+    	      test<17, SIMDType, inplace>(in, out);
+    	      test<16, SIMDType, inplace>(in, out);
+    	      test<15, SIMDType, inplace>(in, out);
+    	      test<12, SIMDType, inplace>(in, out);
+    	      test< 9, SIMDType, inplace>(in, out);
+    	      test< 8, SIMDType, inplace>(in, out);
+    	      test< 7, SIMDType, inplace>(in, out);
+    	      test< 6, SIMDType, inplace>(in, out);
+    	      test< 5, SIMDType, inplace>(in, out);
+    	      test< 4, SIMDType, inplace>(in, out);
+    	      test< 3, SIMDType, inplace>(in, out);
+    	      test< 2, SIMDType, inplace>(in, out);
+    	      test< 1, SIMDType, inplace>(in, out);
+    	      test< 0, SIMDType, inplace>(in, out);
+    }
+    template <typename SIMDType, typename data_type, size_t data_size, bool inplace,
+	typename ::std::enable_if<(sizeof(data_type) >= 2) && (sizeof(data_type) < 4), int>::type = 1>
+    void run_tests() {
+
+    	  data_type in[data_size];
+    	  data_type out[data_size];
+
+    	      test<15, SIMDType, inplace>(in, out);
+    	      test<12, SIMDType, inplace>(in, out);
+    	      test< 9, SIMDType, inplace>(in, out);
+    	      test< 8, SIMDType, inplace>(in, out);
+    	      test< 7, SIMDType, inplace>(in, out);
+    	      test< 6, SIMDType, inplace>(in, out);
+    	      test< 5, SIMDType, inplace>(in, out);
+    	      test< 4, SIMDType, inplace>(in, out);
+    	      test< 3, SIMDType, inplace>(in, out);
+    	      test< 2, SIMDType, inplace>(in, out);
+    	      test< 1, SIMDType, inplace>(in, out);
+    	      test< 0, SIMDType, inplace>(in, out);
+    }
+    template <typename SIMDType, typename data_type, size_t data_size, bool inplace,
+	typename ::std::enable_if<(sizeof(data_type) < 2), int>::type = 1>
+    void run_tests() {
+
+    	  data_type in[data_size];
+    	  data_type out[data_size];
+
+    	      test< 7, SIMDType, inplace>(in, out);
+    	      test< 6, SIMDType, inplace>(in, out);
+    	      test< 5, SIMDType, inplace>(in, out);
+    	      test< 4, SIMDType, inplace>(in, out);
+    	      test< 3, SIMDType, inplace>(in, out);
+    	      test< 2, SIMDType, inplace>(in, out);
+    	      test< 1, SIMDType, inplace>(in, out);
+    	      test< 0, SIMDType, inplace>(in, out);
     }
 };
 

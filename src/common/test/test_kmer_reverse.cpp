@@ -136,7 +136,7 @@ TYPED_TEST_P(KmerReverseTest, reverse_seq)
 
 //	printf("rev_seq BITSEQ reverse %lu\n", i);
     bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, bliss::utils::bit_ops::BIT_REV_SEQ>(out, in, TypeParam::nBytes);
-//    bliss::utils::bit_ops::right_shift<bliss::utils::bit_ops::BITREV_AUTO<TypeParam::nWords * sizeof(typename TypeParam::KmerWordType)>,
+//    bliss::utils::bit_ops::right_shift<bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<TypeParam::nWords * sizeof(typename TypeParam::KmerWordType)>,
 //    		>(rev2.getDataRef(), rev.getDataRef());
 //	printf("rev_seq shift %lu\n", i);
 
@@ -667,7 +667,7 @@ TYPED_TEST_P(KmerReverseOpTest, reverse_avx2)
 TYPED_TEST_P(KmerReverseOpTest, reverse_auto)
 {
 	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
-  this->template test<bliss::utils::bit_ops::BITREV_AUTO<bytes> >();
+  this->template test<bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes> >();
 }
 
 TYPED_TEST_P(KmerReverseOpTest, revcomp_swar)
@@ -696,7 +696,7 @@ TYPED_TEST_P(KmerReverseOpTest, revcomp_avx2)
 TYPED_TEST_P(KmerReverseOpTest, revcomp_auto)
 {
 	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
-  this->template testc<bliss::utils::bit_ops::BITREV_AUTO<bytes> >();
+  this->template testc<bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes> >();
 }
 
 
