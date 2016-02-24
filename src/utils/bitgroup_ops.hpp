@@ -2498,142 +2498,63 @@ namespace bliss {
           typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
               ((BIT_SHIFT % 8) != 0) && (BIT_SHIFT > 0)), int>::type = 1>
       BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
-//    	  printf("left shift transform, large, by %d\n", BIT_SHIFT);
         using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
 
+        //  	  printf("left shift transform, large,  by %d, bytes %lu, machineword size %lu\n", BIT_SHIFT, len * sizeof(WORD_TYPE), sizeof(MachineWord));
         constexpr uint16_t byte_shift = BIT_SHIFT / 8;
         constexpr uint16_t bit_shift = BIT_SHIFT % 8;
         constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
-        constexpr uint16_t inv_shift = sizeof(MachineWord) * 8 - bit_shift;
+        constexpr size_t overlap = 1;
+        constexpr size_t nonoverlap = sizeof(MachineWord) - overlap;  //machine word is larger than 1 because of the conditionals
+
 
         // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
-        constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
-        constexpr unsigned int rem = byte_len % sizeof(MachineWord);
+        constexpr unsigned int nMachWord = (byte_len - overlap) / nonoverlap;
+        constexpr unsigned int rem = (byte_len - overlap) % nonoverlap;
 
-        // left shift, inplace, so from MSB to LSB
+        // left shift, inplace, from MSB to LSB.  need to make sure real data is
+        // on the LSB side of the word, so left shift shifts in 0's.  take care of rem last on LSB side.
 
         // pointers
-        uint8_t * w = reinterpret_cast<uint8_t *>(out) + len * sizeof(WORD_TYPE);
-        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + byte_len;
+        uint8_t * w = reinterpret_cast<uint8_t *>(out) + len * sizeof(WORD_TYPE) - overlap;
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + byte_len - overlap;
 
-        MachineWord x = bliss::utils::bit_ops::zero<MachineWord>();
-        MachineWord left;
-        MachineWord right;
-
-        // first handle remainders
-        if (rem > 0) {
-        	u -= rem;
-//        	load_part<rem, 0>(x, u);
-//        	left = bliss::utils::bit_ops::slli<bit_shift>(op(x));
-
-        	left = bliss::utils::bit_ops::slli<bit_shift>(op(loadu<MachineWord>(u)));
-
-        	// calc x and right
-        	u -= sizeof(MachineWord);
-        	x = op(loadu<MachineWord>(u));
-
-        	// or and store.
-        	right = bliss::utils::bit_ops::bit_or(left, bliss::utils::bit_ops::srli<inv_shift>(x));
-        	w -= rem;
-//        	memcpy(w, &right, rem);
-        	store_part<rem, 0>(w, right);
-        } else {
-        	u -= sizeof(MachineWord);
-        	x = op(loadu<MachineWord>(u));
-        }
-        left = bliss::utils::bit_ops::slli<bit_shift>(x);
-
+		u -= nonoverlap;
+        MachineWord x = loadu<MachineWord>(u);
+        MachineWord s = bliss::utils::bit_ops::slli<bit_shift>(op(x));
 
         // now loop over all remaining full words.  (loop may not execute...)
         for (unsigned int i = 1; i < nMachWord; ++i) {
-        	// now get current right shifted
-        	u -= sizeof(MachineWord);
-        	x = op(loadu<MachineWord>(u));
-            right = bliss::utils::bit_ops::srli<inv_shift>(x);
 
-            // or and save into previous output position
-            w -= sizeof(MachineWord);
-            storeu<MachineWord>(w, bliss::utils::bit_ops::bit_or(left, right));
+        	// read next before write - for in-place shift.
+        	u -= nonoverlap;
+        	x = loadu<MachineWord>(u);
 
-            // update left
-            left = bliss::utils::bit_ops::slli<bit_shift>(x);
+        	// write
+        	w -= nonoverlap;
+            storeu<MachineWord>(w, s);
+
+
+        	s = bliss::utils::bit_ops::slli<bit_shift>(op(x));
         }
 
-        // last part to store:  there is at least 1 full machine word
-        w -= sizeof(MachineWord);
-        storeu<MachineWord>(w, left);
+        // now take care of remainder.
+        if (rem > 0) {
+        	// read from beginning
+        	x = loadu<MachineWord>(in);
+
+        	// write
+        	w -= nonoverlap;
+            storeu<MachineWord>(w, s);
+
+        	s = bliss::utils::bit_ops::slli<bit_shift>(op(x));
+        }
+        // write out at beginning.
+        storeu<MachineWord>(reinterpret_cast<uint8_t*>(out) + byte_shift, s);
 
         // finally, clear the LSB.
         if (byte_shift > 0) memset(out, 0, byte_shift);
       }
-
-//      // right shift. logic slightly different from left shift, inplace support
-//      template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
-//          typename WORD_TYPE, size_t len, typename OP,
-//          typename std::enable_if<(((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)) &&
-//              ((BIT_SHIFT % 8) != 0) && (BIT_SHIFT < 0)), int>::type = 1>
-//      BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
-//        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
-//
-////  	  printf("right shift transform, large,  by %d, bytes %lu, machineword size %lu\n", BIT_SHIFT, len * sizeof(WORD_TYPE), sizeof(MachineWord));
-//        constexpr uint16_t byte_shift = (-BIT_SHIFT) / 8;
-//        constexpr uint16_t bit_shift = (-BIT_SHIFT) % 8;
-//        constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
-//        constexpr size_t overlap = 1;
-//        constexpr size_t nonoverlap = sizeof(MachineWord) - overlap;  //machine word is larger than 1 because of the conditionals
-//
-//        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
-//        constexpr unsigned int nMachWord = (byte_len - overlap) / nonoverlap;
-//        constexpr unsigned int rem = (byte_len - overlap) % nonoverlap;
-//
-//        // right shift, inplace, so from LSB to MSB
-//
-//        // pointers
-//        uint8_t * w = reinterpret_cast<uint8_t *>(out);
-//        uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + byte_shift;
-//
-//        MachineWord x = bliss::utils::bit_ops::zero<MachineWord>();
-//        MachineWord s;
-//
-//        // handle remainders first
-//        if (rem > 0) {
-//        	x = loadu<MachineWord>(u);  // faster than memcpy
-//        	u += rem;
-//        	s = bliss::utils::bit_ops::srli<bit_shift>(op(x));
-//
-//        	// read next before write - for in-place shift.
-//        	x = loadu<MachineWord>(u);
-//        	u += nonoverlap;
-//
-//            storeu<MachineWord>(w, s);
-//        	w += rem;
-//        } else {
-//        	// read next before write
-//        	x = loadu<MachineWord>(u);
-//        	u += nonoverlap;
-//        }
-//        s = bliss::utils::bit_ops::srli<bit_shift>(op(x));
-//
-//
-//        // now loop over all remaining full words.  (loop may not execute...)
-//        for (unsigned int i = 1; i < nMachWord; ++i) {
-//        	// now get current right shifted
-//
-//        	x = loadu<MachineWord>(u);
-//        	u += nonoverlap;
-//
-//            storeu<MachineWord>(w, s);
-//            w += nonoverlap;
-//
-//            s = bliss::utils::bit_ops::srli<bit_shift>(op(x));
-//        }
-//        storeu<MachineWord>(w, s);
-//        w += nonoverlap;
-//
-//
-//        if (byte_shift > 0) memset(w + overlap, 0, byte_shift);  // clear the last part
-//
-//      }
 
       // right shift. logic slightly different from left shift, inplace support
       template <typename MAX_SIMD_TYPE, int16_t BIT_SHIFT = 0,
@@ -2647,81 +2568,63 @@ namespace bliss {
         constexpr uint16_t byte_shift = (-BIT_SHIFT) / 8;
         constexpr uint16_t bit_shift = (-BIT_SHIFT) % 8;
         constexpr size_t byte_len = len * sizeof(WORD_TYPE) - byte_shift;
-        constexpr uint16_t inv_shift = sizeof(MachineWord) * 8 - bit_shift;
+        constexpr size_t overlap = 1;
+        constexpr size_t nonoverlap = sizeof(MachineWord) - overlap;  //machine word is larger than 1 because of the conditionals
 
         // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
-        constexpr unsigned int nMachWord = byte_len / sizeof(MachineWord);
-        constexpr unsigned int rem = byte_len % sizeof(MachineWord);
+        constexpr unsigned int nMachWord = (byte_len - overlap) / nonoverlap;
+        constexpr unsigned int rem = (byte_len - overlap) % nonoverlap;
 
-        // right shift, inplace, so from LSB to MSB
+        // right shift, inplace, from LSB to MSB.  need to make sure real data is on the MSB side of the word
+        // so right shift shifts in 0s, so take care of rem first on LSB side
 
         // pointers
         uint8_t * w = reinterpret_cast<uint8_t *>(out);
         uint8_t const * u = reinterpret_cast<uint8_t const *>(in) + byte_shift;
 
-//        printf("reminders\n");
         MachineWord x = bliss::utils::bit_ops::zero<MachineWord>();
-        MachineWord left;
-        MachineWord right;
+        MachineWord s;
 
-        // first handle remainders
+        // handle remainders first
         if (rem > 0) {
-//            printf("right load\n");
-//        	load_part<rem, sizeof(MachineWord) - rem>(x, u);
-//            memcpy(reinterpret_cast<uint8_t *>(&x) + sizeof(MachineWord) - rem, u, rem);
+        	x = loadu<MachineWord>(u);  // faster than memcpy
         	u += rem;
-            x = loadu<MachineWord>(u - sizeof(MachineWord));   // segv right here!?
-//            printf("transform \n");
-//            printf("srli\n");
-        	right = bliss::utils::bit_ops::srli<bit_shift>(op(x));
-//            printf("right done.  left\n");
+        	s = bliss::utils::bit_ops::srli<bit_shift>(op(x));
 
-        	// calc x and right
-        	x = op(loadu<MachineWord>(u));
-        	u += sizeof(MachineWord);
-//        	printf("next done.  left\n");
+        	// read next before write - for in-place shift.
+        	x = loadu<MachineWord>(u);
+        	u += nonoverlap;
 
-        	// or and store.
-        	left = bliss::utils::bit_ops::bit_or(right, bliss::utils::bit_ops::slli<inv_shift>(x));
-//        	printf("left done.  left\n");
-
-//        	memcpy(out, reinterpret_cast<uint8_t*>(&left) + sizeof(MachineWord) - rem, rem);
-        	store_part<rem, sizeof(MachineWord) - rem>(w, left);
-//        	printf("save done.\n");
-
+            storeu<MachineWord>(w, s);
         	w += rem;
         } else {
-        	x = op(loadu<MachineWord>(u));
-        	u += sizeof(MachineWord);
+        	// read next before write
+        	x = loadu<MachineWord>(u);
+        	u += nonoverlap;
         }
-        right = bliss::utils::bit_ops::srli<bit_shift>(x);
-//        printf("reminders done.  main\n");
+        s = bliss::utils::bit_ops::srli<bit_shift>(op(x));
 
 
         // now loop over all remaining full words.  (loop may not execute...)
         for (unsigned int i = 1; i < nMachWord; ++i) {
         	// now get current right shifted
-        	x = op(loadu<MachineWord>(u));
-            u += sizeof(MachineWord);
-            left = bliss::utils::bit_ops::slli<inv_shift>(x);
 
-            // or and save into previous output position
-            storeu<MachineWord>(w, bliss::utils::bit_ops::bit_or(left, right));
-            w += sizeof(MachineWord);
+        	x = loadu<MachineWord>(u);
+        	u += nonoverlap;
 
-            // update left
-            right = bliss::utils::bit_ops::srli<bit_shift>(x);
+            storeu<MachineWord>(w, s);
+            w += nonoverlap;
+
+            s = bliss::utils::bit_ops::srli<bit_shift>(op(x));
         }
-//        printf("main done.  last\n");
+        storeu<MachineWord>(w, s);
+        w += nonoverlap;
 
-        // last part to store:  there is at least 1 full machine word
-        storeu<MachineWord>(w, right);
-        w += sizeof(MachineWord);
 
-        if (byte_shift > 0) memset(w, 0, byte_shift);  // clear the last part
+        if (byte_shift > 0) memset(w + overlap, 0, byte_shift);  // clear the last part
 
-//        printf("last done. \n");
       }
+
 
 
 #endif
