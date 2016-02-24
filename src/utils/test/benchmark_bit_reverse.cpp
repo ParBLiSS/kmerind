@@ -394,7 +394,7 @@ class BitReverseFixedArrayBenchmark : public ::testing::Test {
 
     BitReverseBenchmarkHelper<P::bitsPerGroup> helper;
 
-    template <uint8_t MAX_SIMD_TYPE, typename P2 = P>
+    template <typename MAX_SIMD_TYPE, typename P2 = P>
     void array_test( std::string name ) {
       uint8_t data[256][128];
 
@@ -402,9 +402,11 @@ class BitReverseFixedArrayBenchmark : public ::testing::Test {
         memcpy(data[i], this->helper.input + i, 128);
       }
 
+      constexpr uint16_t pad_bits = ((P2::bitsPerGroup & (P2::bitsPerGroup - 1)) == 0) ? 0 : ((128 * 8) % P2::bitsPerGroup);
+
       TIMER_START(this->bitrev);
       for (size_t iter = 0; iter < BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters; ++iter) {
-        ::bliss::utils::bit_ops::template reverse<P2::bitsPerGroup, MAX_SIMD_TYPE>( data[(iter + 119) % 238], data[(iter % 238)]);  // input from 0 to 256. output from 128-256, then 0 to 128
+        ::bliss::utils::bit_ops::template reverse<P2::bitsPerGroup, MAX_SIMD_TYPE, pad_bits>( data[(iter + 119) % 238], data[(iter % 238)]);  // input from 0 to 256. output from 128-256, then 0 to 128
       }
       TIMER_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
     }
@@ -437,13 +439,13 @@ TYPED_TEST_CASE_P(BitReverseFixedArrayBenchmark);
 
 TYPED_TEST_P(BitReverseFixedArrayBenchmark, reverse_fixed_array)
 {
-   this->template array_test<::bliss::utils::bit_ops::BIT_REV_SEQ>("seq");
-   this->template array_test<::bliss::utils::bit_ops::BIT_REV_SWAR>("swar");
+   this->template array_test<::bliss::utils::bit_ops::BITREV_SEQ>("seq");
+   this->template array_test<::bliss::utils::bit_ops::BITREV_SWAR>("swar");
 #ifdef __SSSE3__
-   this->template array_test<::bliss::utils::bit_ops::BIT_REV_SSSE3>("ssse3");
+   this->template array_test<::bliss::utils::bit_ops::BITREV_SSSE3>("ssse3");
 #endif
 #ifdef __AVX2__
-   this->template array_test<::bliss::utils::bit_ops::BIT_REV_AVX2>("avx2");
+   this->template array_test<::bliss::utils::bit_ops::BITREV_AVX2>("avx2");
 #endif
 }
 
