@@ -1,7 +1,7 @@
 # ParBLiSS kmerind 
-[![Build Status](https://img.shields.io/travis/tcpan/kmerind.svg)](https://travis-ci.org/tcpan/kmerind)
-[![Build Status](https://travis-ci.org/tcpan/kmerind.svg?branch=master)](https://travis-ci.org/tcpan/kmerind)
-[![Test Coverage](https://img.shields.io/codecov/c/github/tcpan/kmerind.svg)](http://codecov.io/github/tcpan/kmerind?branch=master)
+[![Build Status](https://img.shields.io/travis/ParBLiSS/kmerind.svg)](https://travis-ci.org/ParBLiSS/kmerind)
+[![Build Status](https://travis-ci.org/ParBLiSS/kmerind.svg?branch=master)](https://travis-ci.org/ParBLiSS/kmerind)
+[![Test Coverage](https://img.shields.io/codecov/c/github/ParBLiSS/kmerind.svg)](http://codecov.io/github/ParBLiSS/kmerind?branch=master)
 [![Apache 2.0 License](https://img.shields.io/badge/license-Apache%20v2.0-blue.svg)](LICENSE)
 
 `Kmerind` is a library in the **Par**allel **B**ioinformatics **Li**brary for **S**hort **S**equences project (ParBLiSS).
