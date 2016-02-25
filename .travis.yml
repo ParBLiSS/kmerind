@@ -9,13 +9,13 @@ compiler:
     - clang
 
 #different compilers
-env:
-    - envCXX=g++-4.8 envCC=gcc-4.8
-    - envCXX=g++-4.9 envCC=gcc-4.9
-    - envCXX=g++-5 envCC=gcc-5
-    - envCXX=clang++-3.5 envCC=clang-3.5
-    - envCXX=clang++-3.6 envCC=clang-3.6
-    - envCXX=clang++-3.7 envCC=clang-3.7
+#env:
+#    - envCXX=g++-4.8 envCC=gcc-4.8
+#    - envCXX=g++-4.9 envCC=gcc-4.9
+#    - envCXX=g++-5 envCC=gcc-5
+#    - envCXX=clang++-3.5 envCC=clang-3.5
+#    - envCXX=clang++-3.6 envCC=clang-3.6
+#    - envCXX=clang++-3.7 envCC=clang-3.7
 
 # exclude combinations
 matrix:
