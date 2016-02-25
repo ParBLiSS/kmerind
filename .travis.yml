@@ -38,6 +38,7 @@ matrix:
               - ubuntu-toolchain-r-test
             packages:
               - openmpi
+              - libopenmpi-dev
               - gcc-4.8
               - g++-4.8
         env: envCXX=g++-4.8 envCC=gcc-4.8
@@ -47,7 +48,8 @@ matrix:
             sources:
               - ubuntu-toolchain-r-test
             packages:
-              - openmpi
+              - openmpi-bin
+              - libopenmpi-dev
               - gcc-4.9
               - g++-4.9
         env: envCXX=g++-4.9 envCC=gcc-4.9
@@ -57,7 +59,8 @@ matrix:
             sources:
               - ubuntu-toolchain-r-test
             packages:
-              - openmpi
+              - openmpi-bin
+              - libopenmpi-dev
               - gcc-5
               - g++-5
         env: envCXX=g++-5 envCC=gcc-5
@@ -68,7 +71,8 @@ matrix:
               - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.5
             packages:
-              - openmpi
+              - openmpi-bin
+              - libopenmpi-dev
               - clang-3.5
         env: envCXX=clang++-3.5 envCC=clang-3.5
       - compiler: clang
@@ -78,7 +82,8 @@ matrix:
               - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.6
             packages:
-              - openmpi
+              - openmpi-bin
+              - libopenmpi-dev
               - clang-3.6
         env: envCXX=clang++-3.6 envCC=clang-3.6
       - compiler: clang
@@ -88,7 +93,8 @@ matrix:
               - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.7
             packages:
-              - openmpi
+              - openmpi-bin
+              - libopenmpi-dev
               - clang-3.7
         env: envCXX=clang++-3.7 envCC=clang-3.7
       
