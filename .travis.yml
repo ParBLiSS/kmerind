@@ -1,0 +1,105 @@
+# https://travis-ci.org/tcpan/kmerind
+
+language: cpp
+
+sudo: false
+
+compiler:
+    - gcc
+    - clang
+
+#different compilers
+env:
+    - envCXX=g++-4.8 envCC=gcc-4.8
+    - envCXX=g++-4.9 envCC=gcc-4.9
+    - envCXX=g++-5 envCC=gcc-5
+    - envCXX=clang++-3.5 envCC=clang-3.5
+    - envCXX=clang++-3.6 envCC=clang-3.6
+    - envCXX=clang++-3.7 envCC=clang-3.7
+
+# exclude combinations
+matrix:
+    exclude:
+      - compiler: gcc
+	env: envCXX=clang++-3.5 envCC=clang-3.5
+      - compiler: gcc
+	env: envCXX=clang++-3.6 envCC=clang-3.6
+      - compiler: gcc
+	env: envCXX=clang++-3.7 envCC=clang-3.7
+      - compiler: clang
+	env: envCXX=g++-4.8 envCC=gcc-4.8
+      - compiler: clang
+	env: envCXX=g++-4.9 envCC=gcc-4.9
+      - compiler: clang
+	env: envCXX=g++-5 envCC=gcc-5
+
+before_install:
+    - pip install --user codecov
+
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    - llvm-toolchain-precise
+    - llvm-toolchain-precise-3.5
+    - llvm-toolchain-precise-3.6
+    - llvm-toolchain-precise-3.7
+    packages:
+    - gcc-4.8
+    - g++-4.8
+    - gcc-4.9
+    - g++-4.9
+    - gcc-5
+    - g++-5
+    - clang-3.5
+    - clang-3.6
+    - clang-3.7
+
+# caching of the whole `local` directory. Can't cache only the one for this
+# `env`, because otherwise the different instances will overwrite the cache.
+# For the first test-run, the build has to be run sequentially (limit parallel
+# workers to 1) so that the cache can be correctly initialized. Once the cache
+# is build, parallel workers can be re-enabled.
+cache:
+  directories:
+    - $HOME/local
+
+before_script:
+    # check if gcc or clang
+    - if [ "$CXX" = "clang++" ]; then export COMPILER="clang"; else export COMPILER="gnu"; fi
+    # install MPI - only 1 configuration for each compiler does this
+    - export MPI=mpich2
+    - if [ "$envCXX" = "clang++-3.5" ] || [ "$envCXX" = "g++-4.8" ]; then mkdir -p $HOME/local && sh ./conf/travis-install-mpi.sh $MPI && ls -r $HOME/local; fi
+    # set compiler to newer versions
+    - export CXX="$envCXX" CC="$envCC" OMPI_CC="$envCC" OMPI_CXX="$envCXX"
+    # set up MPI location
+    - export PATH=$PATH:$HOME/local/$MPI/bin
+    - export LIBRARY_PATH=$LIBRARY_PATH:$HOME/local/$MPI/lib
+    - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/local/$MPI/lib
+    # print out version information
+    - $CXX --version
+    - mpiexec --version
+    # prepare build kmerind
+    - mkdir build
+    - cd build
+    - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_EXAMPLE_APPLICATIONS=ON -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=OFF -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=OFF ../;
+	else cmake -DBUILD_EXAMPLE_APPLICATIONS=ON -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=ON -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=ON ../; fi
+
+script:
+    # build kmerind and run tests
+    - make -j
+    - make test 
+    - ./bin/testKmerIndex_read
+    - mpiexec -np 4 ./bin/testKmerIndex_read
+    - ./bin/testKmerIndex_read_fasta
+    - mpiexec -np 4 ./bin/testKmerIndex_read_fasta
+    - ./bin/test_de_bruijn_graph_construction
+    - mpiexec -np 4 ./bin/test_de_bruijn_graph_construction
+    - ./bin/testKmerIndex_ST2
+    - mpiexec -np 4 ./bin/testKmerIndex_ST2
+
+after_success:
+  # only collect coverage if compiled with gcc
+  - if [ "$CXX" = "g++-4.8" ]; then codecov --gcov-exec gcov-4.8; fi
+  - if [ "$CXX" = "g++-4.9" ]; then codecov --gcov-exec gcov-4.9; fi
+  - if [ "$CXX" = "g++-5" ]; then codecov --gcov-exec gcov-5; fi
