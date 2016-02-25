@@ -17,12 +17,12 @@ sudo: false
 #    - envCXX=clang++-3.6 envCC=clang-3.6
 #    - envCXX=clang++-3.7 envCC=clang-3.7
 
-addons:
-  apt:
-    sources:
-      - ubuntu-toolchain-r-test
-    packages:
-      - openmpi
+#addons:
+#  apt:
+#    sources:
+#      - ubuntu-toolchain-r-test
+#    packages:
+#      - openmpi
 #    - llvm-toolchain-precise-3.5
 #    - llvm-toolchain-precise-3.6
 #    - llvm-toolchain-precise-3.7
@@ -34,21 +34,30 @@ matrix:
       - compiler: gcc
         addons:
           apt:
+            sources:
+              - ubuntu-toolchain-r-test
             packages:
+              - openmpi
               - gcc-4.8
               - g++-4.8
         env: envCXX=g++-4.8 envCC=gcc-4.8
       - compiler: gcc
         addons:
           apt:
+            sources:
+              - ubuntu-toolchain-r-test
             packages:
+              - openmpi
               - gcc-4.9
               - g++-4.9
         env: envCXX=g++-4.9 envCC=gcc-4.9
       - compiler: gcc
         addons:
           apt:
+            sources:
+              - ubuntu-toolchain-r-test
             packages:
+              - openmpi
               - gcc-5
               - g++-5
         env: envCXX=g++-5 envCC=gcc-5
@@ -56,24 +65,30 @@ matrix:
         addons:
           apt:
             sources:
+              - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.5
             packages:
+              - openmpi
               - clang-3.5
         env: envCXX=clang++-3.5 envCC=clang-3.5
       - compiler: clang
         addons:
           apt:
             sources:
+              - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.6
             packages:
+              - openmpi
               - clang-3.6
         env: envCXX=clang++-3.6 envCC=clang-3.6
       - compiler: clang
         addons:
           apt:
             sources:
+              - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.7
             packages:
+              - openmpi
               - clang-3.7
         env: envCXX=clang++-3.7 envCC=clang-3.7
       
@@ -122,12 +137,14 @@ before_script:
     - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/local/$MPI/lib
     # print out version information
     - $CXX --version
+    - which mpiexec
     - mpiexec --version
     # prepare build kmerind
     - mkdir build
     - cd build
-    - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_EXAMPLE_APPLICATIONS=ON -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=OFF -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=OFF ../;
-        else cmake -DBUILD_EXAMPLE_APPLICATIONS=ON -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=ON -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=ON ../; fi
+    - pwd
+    - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=OFF -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=OFF ../;
+        else cmake -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=ON -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=ON ../; fi
 
 script:
     # build kmerind and run tests
