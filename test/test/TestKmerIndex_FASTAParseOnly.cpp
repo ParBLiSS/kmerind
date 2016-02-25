@@ -254,8 +254,9 @@ int main(int argc, char** argv) {
 
   //////////////// parse parameters
 
-  //std::string filename("/home/tpan/src/bliss/test/data/test.medium.fastq");
-  std::string filename("/home/tpan/src/bliss/test/data/test.fasta");
+  std::string filename;
+      filename.assign(PROJ_SRC_DIR);
+      filename.append("/test/data/test.fasta");
 
   if (argc > 1)
   {

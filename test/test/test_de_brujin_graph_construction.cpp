@@ -166,7 +166,9 @@ int main(int argc, char** argv) {
 
 	//////////////// parse parameters
 
-	std::string filename("/home/tpan/src/bliss/test/data/test.debruijn.small.fastq");
+  std::string filename;
+      filename.assign(PROJ_SRC_DIR);
+      filename.append("/test/data/test.debruijn.small.fastq");
 	if (argc > 1) {
 		filename.assign(argv[1]);
 	}

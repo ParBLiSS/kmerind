@@ -323,9 +323,9 @@ int main(int argc, char** argv) {
 	LOG_INIT();
 
 	//////////////// parse parameters
-
-	//std::string filename("/home/tpan/src/bliss/test/data/test.medium.fastq");
-	std::string filename("/home/tpan/src/bliss/test/data/test.fastq");
+  std::string filename;
+      filename.assign(PROJ_SRC_DIR);
+      filename.append("/test/data/test.fastq");
 
 	if (argc > 2) {
 		filename.assign(argv[2]);
