@@ -178,7 +178,6 @@ typedef ::testing::Types<
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseWordBenchmark, BitReverseWordBenchmarkTypes);
 
 
-
 //====================== fix bitgroup size and number of iters, check effect of array size (1 up to max) and simd type.
 //   this is basically testing the remainder when converting a byte array.
 
@@ -408,6 +407,7 @@ class BitReverseFixedArrayBenchmark : public ::testing::Test {
       for (size_t iter = 0; iter < BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters; ++iter) {
         ::bliss::utils::bit_ops::template reverse<P2::bitsPerGroup, MAX_SIMD_TYPE, pad_bits>( data[(iter + 119) % 238], data[(iter % 238)]);  // input from 0 to 256. output from 128-256, then 0 to 128
       }
+
       TIMER_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
     }
 
@@ -440,6 +440,7 @@ TYPED_TEST_CASE_P(BitReverseFixedArrayBenchmark);
 TYPED_TEST_P(BitReverseFixedArrayBenchmark, reverse_fixed_array)
 {
    this->template array_test<::bliss::utils::bit_ops::BITREV_SEQ>("seq");
+
    this->template array_test<::bliss::utils::bit_ops::BITREV_SWAR>("swar");
 #ifdef __SSSE3__
    this->template array_test<::bliss::utils::bit_ops::BITREV_SSSE3>("ssse3");
@@ -447,6 +448,8 @@ TYPED_TEST_P(BitReverseFixedArrayBenchmark, reverse_fixed_array)
 #ifdef __AVX2__
    this->template array_test<::bliss::utils::bit_ops::BITREV_AVX2>("avx2");
 #endif
+
+
 }
 
 
@@ -466,7 +469,6 @@ typedef ::testing::Types<
     BitsParam<32>
 > BitReverseFixedArrayBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseFixedArrayBenchmark, BitReverseFixedArrayBenchmarkTypes);
-
 
 
 

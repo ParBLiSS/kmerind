@@ -2068,7 +2068,7 @@ namespace bliss {
 
     	  std::atomic_thread_fence(std::memory_order_seq_cst);
     	  //  		  std::cout << "in x: "; print(in); std::cout << std::endl;
-    	  bit_transform<MAX_SIMD_TYPE>(out, in, op);
+    	  bit_transform<MAX_SIMD_TYPE, WORD_TYPE, len>(out, in, op);
 //          std::cout << "shifted x: "; print(out); std::cout << std::endl;
       }
 
@@ -3087,6 +3087,9 @@ namespace bliss {
         }
       }
 
+
+      // NEED TO SPECIFY WORD_TYPE and len as template parameters for function when using icc.  auto type deduction has a bug for fixed size arrays..
+
       //========================== reverse with shift ================
 
       /**
@@ -3116,12 +3119,11 @@ namespace bliss {
           constexpr uint16_t byte_overlap =
               ((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0) ? 0 : sizeof(MachineWord) % BIT_GROUP_SIZE;
 
-          bliss::utils::bit_ops::reverse_transform<MAX_SIMD_TYPE, PAD_BITS, byte_overlap>(out, in,
+          bliss::utils::bit_ops::reverse_transform<MAX_SIMD_TYPE, PAD_BITS, byte_overlap, WORD_TYPE, len>(out, in,
                            [&op](MachineWord const & src){ return op.reverse(src); });
 
           return (sizeof(WORD_TYPE) * len * 8 - PAD_BITS) % BIT_GROUP_SIZE;
       }
-
 
       //========================== bitwise operations ============
       // no difference between conservative and aggressive.  use specified.
@@ -3131,7 +3133,7 @@ namespace bliss {
       BITS_INLINE void bit_not(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len]) {
 //    	  using SIMD_TYPE = BITREV_AUTO_CONSERVATIVE<(len * sizeof(WORD_TYPE)), MAX_SIMD_TYPE>;
     	  using SIMD_TYPE = MAX_SIMD_TYPE;
-    	bliss::utils::bit_ops::bit_transform<SIMD_TYPE>(out, in,
+    	bliss::utils::bit_ops::bit_transform<SIMD_TYPE, WORD_TYPE, len>(out, in,
           [](typename SIMD_TYPE::MachineWord const & src) { return bliss::utils::bit_ops::bit_not(src); });
       }
       // bitwise and
@@ -3140,7 +3142,7 @@ namespace bliss {
 //    	  using SIMD_TYPE = BITREV_AUTO_CONSERVATIVE<(len * sizeof(WORD_TYPE)), MAX_SIMD_TYPE>;
     	  using SIMD_TYPE = MAX_SIMD_TYPE;
 
-    	  bliss::utils::bit_ops::bit_transform<SIMD_TYPE>(out, lhs, rhs,
+    	  bliss::utils::bit_ops::bit_transform<SIMD_TYPE, WORD_TYPE, len>(out, lhs, rhs,
           [](typename SIMD_TYPE::MachineWord const & l,
               typename SIMD_TYPE::MachineWord const & r ) { return bliss::utils::bit_ops::bit_and(l, r); });
       }
@@ -3150,7 +3152,7 @@ namespace bliss {
 //    	  using SIMD_TYPE = BITREV_AUTO_CONSERVATIVE<(len * sizeof(WORD_TYPE)), MAX_SIMD_TYPE>;
     	  using SIMD_TYPE = MAX_SIMD_TYPE;
 
-        bliss::utils::bit_ops::bit_transform<SIMD_TYPE>(out, lhs, rhs,
+        bliss::utils::bit_ops::bit_transform<SIMD_TYPE, WORD_TYPE, len>(out, lhs, rhs,
           [](typename SIMD_TYPE::MachineWord const & l,
               typename SIMD_TYPE::MachineWord const & r ) { return bliss::utils::bit_ops::bit_or(l, r); });
       }
@@ -3160,7 +3162,7 @@ namespace bliss {
 //    	  using SIMD_TYPE = BITREV_AUTO_CONSERVATIVE<(len * sizeof(WORD_TYPE)), MAX_SIMD_TYPE>;
     	  using SIMD_TYPE = MAX_SIMD_TYPE;
 
-        bliss::utils::bit_ops::bit_transform<SIMD_TYPE>(out, lhs, rhs,
+        bliss::utils::bit_ops::bit_transform<SIMD_TYPE, WORD_TYPE, len>(out, lhs, rhs,
           [](typename SIMD_TYPE::MachineWord const & l,
               typename SIMD_TYPE::MachineWord const & r ) { return bliss::utils::bit_ops::bit_xor(l, r); });
       }
@@ -3173,7 +3175,7 @@ namespace bliss {
       BITS_INLINE void left_shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
 //    	  printf("left shifting by %u\n", BIT_SHIFT);
     	  using SIMD_TYPE = BITREV_AUTO_CONSERVATIVE<(len * sizeof(WORD_TYPE)), MAX_SIMD_TYPE>;
-    	  bliss::utils::bit_ops::shift_transform<SIMD_TYPE, BIT_SHIFT>(out, in,
+    	  bliss::utils::bit_ops::shift_transform<SIMD_TYPE, BIT_SHIFT, WORD_TYPE, len>(out, in,
           [](typename SIMD_TYPE::MachineWord const & src) { return src; });
     	  }
       template <typename MAX_SIMD_TYPE, uint16_t BIT_SHIFT, typename WORD_TYPE, size_t len> //,
@@ -3181,7 +3183,7 @@ namespace bliss {
       BITS_INLINE void right_shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
 //    	  printf("right shifting %lu x %lu byte words by %u\n", len, sizeof(WORD_TYPE), BIT_SHIFT);
     	  using SIMD_TYPE = BITREV_AUTO_CONSERVATIVE<(len * sizeof(WORD_TYPE)), MAX_SIMD_TYPE>;
-        bliss::utils::bit_ops::shift_transform<SIMD_TYPE, (0 - (static_cast<int16_t>(BIT_SHIFT)))>(out, in,
+        bliss::utils::bit_ops::shift_transform<SIMD_TYPE, (0 - (static_cast<int16_t>(BIT_SHIFT))), WORD_TYPE, len>(out, in,
           [](typename SIMD_TYPE::MachineWord const & src) { return src; });
         }
 
@@ -3190,32 +3192,32 @@ namespace bliss {
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
         using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-        return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) == 0;
+        return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) == 0;
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool less(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
         using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-        return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) < 0;
+        return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) < 0;
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool greater(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) > 0;
+          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) > 0;
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool not_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) != 0;
+          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) != 0;
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool less_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) <= 0;
+          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) <= 0;
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool greater_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE>(lhs, rhs) >= 0;
+          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) >= 0;
       }
 
     } // namespace bit_ops

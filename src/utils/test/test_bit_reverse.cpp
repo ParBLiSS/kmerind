@@ -986,24 +986,24 @@ class BitReverseTransformTest : public ::testing::Test {
     	  // NEED TO SPECIFY data_type and data_size for icc.  not needed for clang or gcc.
     	  switch (sizeof(data_type)) {
     	    case 8:
-    	      test<32, SIMDType,  0>(in, out);
-    	      test<32, SIMDType, 32>(in, out);
+    	      test<32, SIMDType,  0, data_type, data_size>(in, out);
+    	      test<32, SIMDType, 32, data_type, data_size>(in, out);
     	    case 4:
-    	      test<16, SIMDType,  0>(in, out);
-    	      test<16, SIMDType, 16>(in, out);
+    	      test<16, SIMDType,  0, data_type, data_size>(in, out);
+    	      test<16, SIMDType, 16, data_type, data_size>(in, out);
     	    case 2:
-    	      test<8,  SIMDType, 0>(in, out);
-    	      test<8,  SIMDType, 8>(in, out);
+    	      test< 8, SIMDType,  0, data_type, data_size>(in, out);
+    	      test< 8, SIMDType,  8, data_type, data_size>(in, out);
     	    case 1:
-    	      test<4,  SIMDType,  0>(in, out);
-    	      test<4,  SIMDType,  4>(in, out);
-    	      test<2,  SIMDType,  0>(in, out);
-    	      test< 2, SIMDType,  2>(in, out);
-    	      test< 2, SIMDType,  6>(in, out);
-    	      test<1,  SIMDType,  0>(in, out);
-    	      test< 1, SIMDType,  1>(in, out);
-    	      test< 1, SIMDType,  7>(in, out);
-    	      test< 3, SIMDType,  ((sizeof(data_type) * data_size * 8) % 3 )>(in, out);
+    	      test< 4, SIMDType,  0, data_type, data_size>(in, out);
+    	      test< 4, SIMDType,  4, data_type, data_size>(in, out);
+    	      test< 2, SIMDType,  0, data_type, data_size>(in, out);
+    	      test< 2, SIMDType,  2, data_type, data_size>(in, out);
+    	      test< 2, SIMDType,  6, data_type, data_size>(in, out);
+    	      test< 1, SIMDType,  0, data_type, data_size>(in, out);
+    	      test< 1, SIMDType,  1, data_type, data_size>(in, out);
+    	      test< 1, SIMDType,  7, data_type, data_size>(in, out);
+    	      test< 3, SIMDType,  ((sizeof(data_type) * data_size * 8) % 3 ), data_type, data_size>(in, out);
     	      break;
     	    default:
     	      break;

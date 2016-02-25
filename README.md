@@ -85,6 +85,9 @@ It is highly recommended that `ccmake` be used until you've become familiar with
 make
 ```
 
+Important for developers using Intel Compilers, please see the "Intel Compiler Specific Issues" section at the end of the document. 
+
+
 ### Running the tests
 
 ```sh
@@ -118,3 +121,25 @@ Cmake typically uses a out-of-source build.  to generate eclipse compatible `.pr
 to cmake.
 
 Recommend that `ptp`, `egit`, and `cmake ed` also be installed.
+
+
+### Intel Compiler Specific Issues
+With Intel C Compiler (icc) version 15, the following compilation error is observed:
+```sh
+Internal error: assertion failed at: "shared/cfe/edgcpfe/il.c", line 18295
+```
+
+While there is very little information to be found the internet related to this error, we have determined that this is a compiler bug related to auto type deduction in templated function instantiation.  It appears that ICC is unable to deduce the data type and size of a statically sized array of the form
+```sh
+datatype x[len]
+```
+which is function parameter is specified as
+```sh
+datatype (&x)[len]
+```
+with datatype and len being template parameters for the function.
+
+The workaround is to fully specify the template parameters for the function so to avoid automatic type deduction in this case.
+
+It is not clear if other function parameter forms also cause this error.
+ 

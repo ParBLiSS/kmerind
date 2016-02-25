@@ -53,6 +53,9 @@
 
 #define KMER_INLINE inline
 
+// NEED TO SPECIFY WORD_TYPE and len as function template parameters for bit_ops function calls
+// when using icc due to auto type deduction bug for fixed size arrays.  not needed for clang or gcc.
+
 namespace bliss
 {
 
@@ -685,7 +688,7 @@ namespace bliss
      */
     KMER_INLINE bool operator==(const Kmer& rhs) const
     {
-    	return ::bliss::utils::bit_ops::equal(data, rhs.data);
+    	return ::bliss::utils::bit_ops::equal<WORD_TYPE, nWords>(data, rhs.data);
     }
 
     /**
@@ -714,7 +717,7 @@ namespace bliss
      */
     KMER_INLINE bool operator<(const Kmer& rhs) const
     {
-    	return ::bliss::utils::bit_ops::less(data, rhs.data);
+    	return ::bliss::utils::bit_ops::less<WORD_TYPE, nWords>(data, rhs.data);
     }
   
     /**
@@ -762,7 +765,7 @@ namespace bliss
     KMER_INLINE Kmer& operator^=(const Kmer& rhs)
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-    	::bliss::utils::bit_ops::bit_xor<SIMD>(data, data, rhs.data);
+    	::bliss::utils::bit_ops::bit_xor<SIMD, WORD_TYPE, nWords>(data, data, rhs.data);
     	do_sanitize();
       return *this;
     }
@@ -773,7 +776,7 @@ namespace bliss
     {
       Kmer result(false);
 		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-		::bliss::utils::bit_ops::bit_xor<SIMD>(result.data, data, rhs.data);
+		::bliss::utils::bit_ops::bit_xor<SIMD, WORD_TYPE, nWords>(result.data, data, rhs.data);
 		result.do_sanitize();
       return result;
     }
@@ -781,7 +784,7 @@ namespace bliss
     KMER_INLINE void bit_xor(const Kmer& lhs, const Kmer& rhs)
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-    	::bliss::utils::bit_ops::bit_xor<SIMD>(data, lhs.data, rhs.data);
+    	::bliss::utils::bit_ops::bit_xor<SIMD, WORD_TYPE, nWords>(data, lhs.data, rhs.data);
     	do_sanitize();
     }
 
@@ -791,7 +794,7 @@ namespace bliss
     KMER_INLINE Kmer& operator&=(const Kmer& rhs)
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-    	::bliss::utils::bit_ops::bit_and<SIMD>(data, data, rhs.data);
+    	::bliss::utils::bit_ops::bit_and<SIMD, WORD_TYPE, nWords>(data, data, rhs.data);
     	do_sanitize();
       return *this;
     }
@@ -802,7 +805,7 @@ namespace bliss
     {
       Kmer result = *this;
 		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-		::bliss::utils::bit_ops::bit_and<SIMD>(result.data, data, rhs.data);
+		::bliss::utils::bit_ops::bit_and<SIMD, WORD_TYPE, nWords>(result.data, data, rhs.data);
 		result.do_sanitize();
       return result;
     }
@@ -810,7 +813,7 @@ namespace bliss
     KMER_INLINE void bit_and(const Kmer& lhs, const Kmer& rhs)
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-    	::bliss::utils::bit_ops::bit_and<SIMD>(data, lhs.data, rhs.data);
+    	::bliss::utils::bit_ops::bit_and<SIMD, WORD_TYPE, nWords>(data, lhs.data, rhs.data);
     	do_sanitize();
     }
 
@@ -821,7 +824,7 @@ namespace bliss
     KMER_INLINE Kmer& operator|=(const Kmer& rhs)
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-    	::bliss::utils::bit_ops::bit_or<SIMD>(data, data, rhs.data);
+    	::bliss::utils::bit_ops::bit_or<SIMD, WORD_TYPE, nWords>(data, data, rhs.data);
     	do_sanitize();
       return *this;
     }
@@ -832,7 +835,7 @@ namespace bliss
     {
       Kmer result(false);
 		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-		::bliss::utils::bit_ops::bit_or<SIMD>(result.data, data, rhs.data);
+		::bliss::utils::bit_ops::bit_or<SIMD, WORD_TYPE, nWords>(result.data, data, rhs.data);
 		result.do_sanitize();
       return result;
     }
@@ -840,7 +843,7 @@ namespace bliss
     KMER_INLINE void bit_or(const Kmer& lhs, const Kmer& rhs)
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-    	::bliss::utils::bit_ops::bit_or<SIMD>(data, lhs.data, rhs.data);
+    	::bliss::utils::bit_ops::bit_or<SIMD, WORD_TYPE, nWords>(data, lhs.data, rhs.data);
     	do_sanitize();
     }
 
@@ -886,14 +889,14 @@ namespace bliss
     KMER_INLINE void left_shift_bits()
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-    	::bliss::utils::bit_ops::left_shift<SIMD, shift>(data, data);
+    	::bliss::utils::bit_ops::left_shift<SIMD, shift, WORD_TYPE, nWords>(data, data);
     	do_sanitize();
     }
     template <uint16_t shift = bitsPerChar>
     KMER_INLINE void left_shift_bits(Kmer const & src)
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-    	::bliss::utils::bit_ops::left_shift<SIMD, shift>(data, src.data);
+    	::bliss::utils::bit_ops::left_shift<SIMD, shift, WORD_TYPE, nWords>(data, src.data);
     	do_sanitize();
     }
 
@@ -940,13 +943,13 @@ namespace bliss
     KMER_INLINE void right_shift_bits()
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-    	::bliss::utils::bit_ops::right_shift<SIMD, shift>(data, data);
+    	::bliss::utils::bit_ops::right_shift<SIMD, shift, WORD_TYPE, nWords>(data, data);
     }
     template <uint16_t shift = bitsPerChar>
     KMER_INLINE void right_shift_bits(Kmer const & src)
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
-    	::bliss::utils::bit_ops::right_shift<SIMD, shift>(data, src.data);
+    	::bliss::utils::bit_ops::right_shift<SIMD, shift, WORD_TYPE, nWords>(data, src.data);
     }
   
     /**
@@ -1346,7 +1349,8 @@ namespace bliss
 
       bliss::utils::bit_ops::reverse<bitsPerChar,
                                      SIMDType,
-                                     (bytes * 8 - nBits)
+                                     (bytes * 8 - nBits),
+                                     WORD_TYPE, nWords
         >(result.data, src.data);
 
     }
@@ -1366,7 +1370,8 @@ namespace bliss
   	  ::bliss::utils::bit_ops::bitgroup_ops<bitsPerChar, SIMDType::SIMDVal> op;
 
       bliss::utils::bit_ops::reverse_transform<SIMDType,
-                                     (bytes * 8 - nBits)
+                                     (bytes * 8 - nBits), 0,
+                                     WORD_TYPE, nWords
         >(result.data, src.data,
         		[&op](typename SIMDType::MachineWord const & src){
     	  return bliss::utils::bit_ops::bit_not(op.reverse(src));
@@ -1390,7 +1395,8 @@ namespace bliss
       // reverse 1 bit groups
       bliss::utils::bit_ops::reverse<1,
                                      SIMDType,
-                                     (bytes * 8 - nBits)
+                                     (bytes * 8 - nBits),
+                                     WORD_TYPE, nWords
         >(result.data, src.data);
 
 
