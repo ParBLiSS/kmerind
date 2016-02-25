@@ -62,7 +62,7 @@ TYPED_TEST_P(FileLoaderTest, open)
 
   // get fileName
 
-  FileLoaderType loader(this->fileName, 1, 0, 1, 2048, 2048);
+  FileLoaderType loader(this->fileName, 1, 0, 1, 64 * 1024, 64 * 1024);   // NOTE: larger block is MUCH faster.  2 * threads * 2048 bytes take a LONG time because of mmap each time...
   RangeType fr = loader.getFileRange();
 
   auto block = loader.getNextL1Block();
@@ -104,7 +104,7 @@ TYPED_TEST_P(FileLoaderTest, open_mpi)
 
   // get this->fileName
 
-  FileLoaderType loader(this->fileName, MPI_COMM_WORLD, 1, 2048, 2048 );
+  FileLoaderType loader(this->fileName, MPI_COMM_WORLD, 1, 64 * 1024, 64 * 1024 );
 
   auto block = loader.getNextL1Block();
   RangeType r = block.getRange();
@@ -143,44 +143,49 @@ TYPED_TEST_P(FileLoaderTest, open_omp)
   typedef typename FileLoaderType::RangeType RangeType;
   using BaseValueType = typename FileLoaderTest<TypeParam>::ValueType;
 
-  int nthreads = 4;
+  constexpr int nthreads = 4;
 
-  FileLoaderType loader(this->fileName, 1, 0, nthreads, 2048, 2048 * 2 * nthreads );
+
+  FileLoaderType loader(this->fileName, 1, 0, nthreads, 64 * 1024, 1024 * 1024);
 
   auto l1block = loader.getNextL1Block();
   RangeType r1 = l1block.getRange();
+
+  bool local_same[nthreads];
   bool same = true;
 
   while (r1.size() > 0) {
 
-#pragma omp parallel num_threads(nthreads) shared(loader, same)
+#pragma omp parallel num_threads(nthreads) shared(loader, local_same)
    {
-
     int tid = omp_get_thread_num();
+//	   printf("thread %d start ", tid);
 
     auto l2block = loader.getNextL2Block(tid);
     RangeType r2 = l2block.getRange();
 
-    bool localsame = true;
+    local_same[tid] = true;
 
     while (r2.size() > 0) {
       BaseValueType* gold = new BaseValueType[r2.size() + 1];
       FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, r2.size(), gold);
-      localsame &= std::equal(gold, gold + r2.size(), l2block.begin());
+      local_same[tid] &= std::equal(gold, gold + r2.size(), l2block.begin());
 
       delete [] gold;
 
       l2block = loader.getNextL2Block(tid);
       r2 = l2block.getRange();
     }
-
-#pragma omp critical
-    same &= localsame;
+//	   printf("thread %d end ", tid);
 
    } // end omp parallel
 
    l1block = loader.getNextL1Block();
     r1 = l1block.getRange();
+  }
+
+  for (int i = 0; i < nthreads; ++i) {
+	  same &= local_same[i];
   }
 
   ASSERT_TRUE(same);
@@ -199,40 +204,42 @@ TYPED_TEST_P(FileLoaderTest, open_mpi_omp)
   typedef typename FileLoaderType::RangeType RangeType;
   using BaseValueType = typename FileLoaderTest<TypeParam>::ValueType;
 
-  int nthreads = 4;
+  constexpr int nthreads = 4;
 
-  FileLoaderType loader(this->fileName, MPI_COMM_WORLD, nthreads, 2048, 2048 * 2 * nthreads);
+  FileLoaderType loader(this->fileName, MPI_COMM_WORLD, nthreads, 64 * 1024, 1024 * 1024);
 
   auto l1block = loader.getNextL1Block();
   RangeType r1 = l1block.getRange();
+
+  bool local_same[nthreads];
   bool same = true;
 
   while (r1.size() > 0) {
 
-#pragma omp parallel num_threads(nthreads) shared(loader, same)
+#pragma omp parallel num_threads(nthreads) shared(loader, local_same)
    {
 
     int tid = omp_get_thread_num();
+    local_same[tid] = true;
 
     auto l2block = loader.getNextL2Block(tid);
     RangeType r2 = l2block.getRange();
 
-    bool localsame = true;
-
     while (r2.size() > 0) {
       BaseValueType* gold = new BaseValueType[r2.size() + 1];
       FileLoaderTest<TypeParam>::readFilePOSIX(this->fileName, r2.start, r2.size(), gold);
-      localsame &= std::equal(gold, gold + r2.size(), l2block.begin());
+      local_same[tid] &= std::equal(gold, gold + r2.size(), l2block.begin());
       delete [] gold;
 
       l2block = loader.getNextL2Block(tid);
       r2 = l2block.getRange();
     }
 
-#pragma omp critical
-    same &= localsame;
-
    } // end omp parallel
+
+   for (int i = 0; i < nthreads; ++i) {
+	   same &= local_same[i];
+   }
 
    l1block = loader.getNextL1Block();
     r1 = l1block.getRange();
@@ -245,26 +252,19 @@ TYPED_TEST_P(FileLoaderTest, open_mpi_omp)
 #endif
 
 
-
+// now register the test cases
+REGISTER_TYPED_TEST_CASE_P(FileLoaderTest,
+#ifdef USE_OPENMP
+		open_omp,
+#endif
 #ifdef USE_MPI
+		open_mpi,
 #ifdef USE_OPENMP
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(FileLoaderTest, open, open_mpi, open_omp, open_mpi_omp);
-#else
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(FileLoaderTest, open, open_mpi);
+		open_mpi_omp,
 #endif
-#else
-#ifdef USE_OPENMP
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(FileLoaderTest, open, open_omp);
+#endif
+		open);
 
-#else
-// now register the test cases
-REGISTER_TYPED_TEST_CASE_P(FileLoaderTest, open);
-
-#endif
-#endif
 
 // TODO: need to test mmap with multibyte elements.
 

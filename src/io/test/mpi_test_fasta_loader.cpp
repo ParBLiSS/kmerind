@@ -21,7 +21,6 @@
  *      Author: cjain
  */
 
-
 #include "bliss-config.hpp"    // for location of data.
 
 #if defined(USE_MPI)
@@ -117,7 +116,7 @@ TEST_P(FASTAParserTest, parse_omp)
   using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
 
-  int nthreads = 4;
+  constexpr int nthreads = 4;
 
   FASTALoaderType loader(this->fileName, 1, 0, nthreads, block_size, block_size * nthreads * 2 );
 
@@ -133,6 +132,7 @@ TEST_P(FASTAParserTest, parse_omp)
     localKmerCount = 0;
 #pragma omp parallel num_threads(nthreads) shared(loader, l1parser) reduction(+:localKmerCount)
    {
+
     	  bliss::io::FASTAParser<typename FASTALoaderType::L2BlockType::iterator> l2parser = l1parser;
 
       int tid = omp_get_thread_num();
@@ -234,7 +234,7 @@ TEST_P(FASTAParserTest, parse_mpi_omp)
   using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
 
-  int nthreads = 4;
+  constexpr int nthreads = 4;
 
   FASTALoaderType loader(this->fileName, MPI_COMM_WORLD, nthreads, block_size, block_size * nthreads * 2);
 
