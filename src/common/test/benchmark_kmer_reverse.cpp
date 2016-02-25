@@ -118,7 +118,8 @@ class KmerReverseBenchmark : public ::testing::Test {
 
       for (size_t i = 0; i < iterations; ++i) {
 
-        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap, TT::KmerWordType, TT::nWords>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap,
+          typename TT::KmerWordType, TT::nWords>(outputs[i].getDataRef(), kmers[i].getDataRef(),
             op);
       }
     }
@@ -143,7 +144,8 @@ class KmerReverseBenchmark : public ::testing::Test {
 
       for (size_t i = 0; i < iterations; ++i) {
 
-        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap, TT::KmerWordType, TT::nWords>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap,
+          typename TT::KmerWordType, TT::nWords>(outputs[i].getDataRef(), kmers[i].getDataRef(),
             op);
 
       }
@@ -159,7 +161,8 @@ class KmerReverseBenchmark : public ::testing::Test {
 
       for (size_t i = 0; i < iterations; ++i) {
 
-        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, 0, TT::KmerWordType, TT::nWords>(outputs[i].getDataRef(), kmers[i].getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, 0,
+          typename TT::KmerWordType, TT::nWords>(outputs[i].getDataRef(), kmers[i].getDataRef(),
             op1);
 
       }
@@ -217,7 +220,7 @@ std::vector<T> KmerReverseBenchmark<T>::outputs;
     \
     for (size_t i = 0; i < KmerReverseBenchmark<kmertype>::iterations; ++i) { \
       bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, simd, pad_bits, \
-        kmertype::KmerWordType, kmertype::nWords>(KmerReverseBenchmark<kmertype>::outputs[i].getDataRef(), \
+        typename kmertype::KmerWordType, kmertype::nWords>(KmerReverseBenchmark<kmertype>::outputs[i].getDataRef(), \
     		  KmerReverseBenchmark<kmertype>::kmers[i].getDataRef()); \
       KmerReverseBenchmark<kmertype>::outputs[i].template right_shift_bits<(TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits)>();  \
       /* shift by remainder/padding. */ \
@@ -236,16 +239,16 @@ std::vector<T> KmerReverseBenchmark<T>::outputs;
       switch (TypeParam::bitsPerChar) { \
       case 2: \
           bliss::utils::bit_ops::reverse<TypeParam::bitsPerChar, simd, pad_bits, \
-            kmertype::KmerWordType, kmertype::nWords>(KmerReverseBenchmark<kmertype>::outputs[i].getDataRef(), \
+            typename kmertype::KmerWordType, kmertype::nWords>(KmerReverseBenchmark<kmertype>::outputs[i].getDataRef(), \
                                                                        KmerReverseBenchmark<kmertype>::kmers[i].getDataRef()); \
           bliss::utils::bit_ops::bit_not<simd, \
-            kmertype::KmerWordType, kmertype::nWords>(KmerReverseBenchmark<kmertype>::outputs[i].getDataRef(), \
+            typename kmertype::KmerWordType, kmertype::nWords>(KmerReverseBenchmark<kmertype>::outputs[i].getDataRef(), \
                                         	   KmerReverseBenchmark<kmertype>::outputs[i].getDataRef()); \
           break; \
         case 3: \
         case 4: \
           bliss::utils::bit_ops::reverse<1, simd, 0, \
-            kmertype::KmerWordType, kmertype::nWords>(KmerReverseBenchmark<kmertype>::outputs[i].getDataRef(), \
+            typename kmertype::KmerWordType, kmertype::nWords>(KmerReverseBenchmark<kmertype>::outputs[i].getDataRef(), \
                                                   KmerReverseBenchmark<kmertype>::kmers[i].getDataRef()); \
           break; \
         default: \

@@ -537,7 +537,8 @@ class KmerReverseOpTest : public ::testing::Test {
       for (size_t i = 0; i < this->iterations; ++i) {
         rev = km.reverse();
 
-        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap, TT::KmerWordType, TT::nWords>(rev_op.getDataRef(), km.getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap,
+          typename TT::KmerWordType, TT::nWords >(rev_op.getDataRef(), km.getDataRef(),
             op);
 
         local_rev_same = (rev == rev_op);
@@ -577,7 +578,7 @@ class KmerReverseOpTest : public ::testing::Test {
         rev = km.reverse_complement();
 
 
-        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap, TT::KmerWordType, TT::nWords>(rev_op.getDataRef(), km.getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, overlap, typename TT::KmerWordType, TT::nWords>(rev_op.getDataRef(), km.getDataRef(),
             op);
 
         local_rev_same = (rev == rev_op);
@@ -616,7 +617,7 @@ class KmerReverseOpTest : public ::testing::Test {
         rev = km.reverse_complement();
 
 
-        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, 0, TT::KmerWordType, TT::nWords>(rev_op.getDataRef(), km.getDataRef(),
+        bliss::utils::bit_ops::reverse_transform<SIMDType, shift, 0, typename TT::KmerWordType, TT::nWords>(rev_op.getDataRef(), km.getDataRef(),
             op1);
 
         local_rev_same = (rev == rev_op);
