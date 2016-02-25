@@ -447,11 +447,14 @@ public:
 		TIMER_END(build, "insert", this->map.local_size());
 
 
+#if (BENCHMARK == 1)
 		TIMER_START(build);
 		size_t m = 0;
-    m = this->map.update_multiplicity();
+    m = this->map.update_multiplicity()
 		TIMER_END(build, "multiplicity", m);
-
+#else
+    (void) (this->map.update_multiplicity());
+#endif
 		TIMER_REPORT_MPI(build, this->comm.rank(), this->comm);
 
 	 }
