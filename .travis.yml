@@ -17,10 +17,12 @@ sudo: false
 #    - envCXX=clang++-3.6 envCC=clang-3.6
 #    - envCXX=clang++-3.7 envCC=clang-3.7
 
-#addons:
-#  apt:
-#    sources:
-#    - ubuntu-toolchain-r-test
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - openmpi
 #    - llvm-toolchain-precise-3.5
 #    - llvm-toolchain-precise-3.6
 #    - llvm-toolchain-precise-3.7
@@ -32,8 +34,6 @@ matrix:
       - compiler: gcc
         addons:
           apt:
-            sources:
-              - ubuntu-toolchain-r-test
             packages:
               - gcc-4.8
               - g++-4.8
@@ -41,8 +41,6 @@ matrix:
       - compiler: gcc
         addons:
           apt:
-            sources:
-              - ubuntu-toolchain-r-test
             packages:
               - gcc-4.9
               - g++-4.9
@@ -50,8 +48,6 @@ matrix:
       - compiler: gcc
         addons:
           apt:
-            sources:
-              - ubuntu-toolchain-r-test
             packages:
               - gcc-5
               - g++-5
@@ -60,7 +56,6 @@ matrix:
         addons:
           apt:
             sources:
-              - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.5
             packages:
               - clang-3.5
@@ -69,7 +64,6 @@ matrix:
         addons:
           apt:
             sources:
-              - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.6
             packages:
               - clang-3.6
@@ -78,7 +72,6 @@ matrix:
         addons:
           apt:
             sources:
-              - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.7
             packages:
               - clang-3.7
@@ -118,9 +111,9 @@ cache:
 before_script:
     # check if gcc or clang
     - if [ "$CXX" = "clang++" ]; then export COMPILER="clang"; else export COMPILER="gnu"; fi
-    # install MPI - only 1 configuration for each compiler does this
-    - export MPI=mpich2
-    - if [ "$envCXX" = "clang++-3.5" ] || [ "$envCXX" = "g++-4.8" ]; then mkdir -p $HOME/local && sh ./conf/travis-install-mpi.sh $MPI && ls -r $HOME/local; fi
+#    # install MPI - only 1 configuration for each compiler does this
+    - export MPI=openmpi
+#    - if [ "$envCXX" = "clang++-3.5" ] || [ "$envCXX" = "g++-4.8" ]; then mkdir -p $HOME/local && sh ./conf/travis-install-mpi.sh $MPI && ls -r $HOME/local; fi
     # set compiler to newer versions
     - export CXX="$envCXX" CC="$envCC" OMPI_CC="$envCC" OMPI_CXX="$envCXX"
     # set up MPI location
