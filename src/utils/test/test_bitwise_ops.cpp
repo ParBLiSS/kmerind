@@ -53,7 +53,7 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
 	template <typename data_type, size_t data_size>
     void print(data_type (&w)[data_size]) {
       std::cout << "data type size " << std::dec << sizeof(data_type) << " len " << data_size << ": ";
-      for (int k = data_size -1 ; k >= 0; --k) {
+      for (int64_t k = data_size -1 ; k >= 0; --k) {
         std::cout << std::hex << static_cast<size_t>(w[k]) << " ";
       }
       std::cout << std::endl;
@@ -65,7 +65,7 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
 
 		bool result = true;
 
-		for (int i = 0; i < data_size; ++i) {
+		for (size_t i = 0; i < data_size; ++i) {
 			result &= (out[i] == static_cast<data_type>(~(in[i])));
 
 			if (!result) {
@@ -84,7 +84,7 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
 
 		bool result = true;
 
-		for (int i = 0; i < data_size; ++i) {
+		for (size_t i = 0; i < data_size; ++i) {
 			result &= (out[i] == static_cast<data_type>(lhs[i] & rhs[i]));
 
 			if (!result) {
@@ -105,7 +105,7 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
 
 		bool result = true;
 
-		for (int i = 0; i < data_size; ++i) {
+		for (size_t i = 0; i < data_size; ++i) {
 			result &= (out[i] == static_cast<data_type>(lhs[i] | rhs[i]));
 
 			if (!result) {
@@ -125,7 +125,7 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
 
 		bool result = true;
 
-		for (int i = 0; i < data_size; ++i) {
+		for (size_t i = 0; i < data_size; ++i) {
 			result &= (out[i] == static_cast<data_type>(lhs[i] ^ rhs[i]));
 
 			if (!result) {
@@ -147,7 +147,9 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
       size_t data_size>
     void test(data_type (&lhs)[data_size], data_type (&rhs)[data_size], data_type (&out)[data_size], data_type (&out2)[data_size]) {
 
-      for (unsigned int k = 0; k < (32 - data_size - 1); ++k) {
+      static_assert(data_size < 32, "ERROR: testing only allows data size less than 32 elements");
+
+      for (size_t k = 0; k < (32 - data_size - 1); ++k) {
 
         memcpy(lhs, this->array + k, data_size * sizeof(data_type));
         memcpy(rhs, this->array + k + 1, data_size * sizeof(data_type));

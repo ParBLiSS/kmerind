@@ -74,7 +74,7 @@ class BitReverseTestHelper {
       uint8_t bytesPerChar = BITS / 8;
       uint8_t max = len / bytesPerChar;
 
-      for (uint8_t i = 0; i < max; ++i) {
+      for (size_t i = 0; i < max; ++i) {
         w -= bytesPerChar;
         local_same = (memcmp(uu, w, bytesPerChar) == 0);
 
@@ -108,7 +108,7 @@ class BitReverseTestHelper {
 
       uint8_t bits_mask = static_cast<uint8_t>(~(0xFF << BITS));
 
-      for (uint8_t i = 0; i < len; ++i) {
+      for (size_t i = 0; i < len; ++i) {
         --w;
 
         for (uint8_t j = 0, k = 8 - BITS; j < 8; j += BITS, k -= BITS) {
@@ -161,7 +161,7 @@ class BitReverseTestHelper {
 
           size_t rem = (16 - offset) % BITS;  // remainder within the current short.
 
-          for (uint8_t k = 16 - offset - BITS; offset < (16 - rem); offset += BITS, k -= BITS) {
+          for (size_t k = 16 - offset - BITS; offset < (16 - rem); offset += BITS, k -= BITS) {
             local_same = ((*(reinterpret_cast<const uint16_t*>(uu)) >> offset) & bits_mask) == ((*(reinterpret_cast<const uint16_t*>(w)) >> k) & bits_mask);
 
             if (!local_same) {

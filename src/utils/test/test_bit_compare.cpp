@@ -53,7 +53,7 @@ class BitCompareFixedArrayTest : public ::testing::Test {
 	template <typename data_type, size_t data_size>
     void print(data_type (&w)[data_size]) {
       std::cout << "data type size " << std::dec << sizeof(data_type) << " len " << data_size << ": ";
-      for (int k = data_size -1 ; k >= 0; --k) {
+      for (int64_t k = data_size -1 ; k >= 0; --k) {
         std::cout << std::hex << static_cast<size_t>(w[k]) << " ";
       }
       std::cout << std::endl;
@@ -63,7 +63,7 @@ class BitCompareFixedArrayTest : public ::testing::Test {
 	template <typename data_type, size_t data_size>
     bool are_equal(data_type (&lhs)[data_size], data_type (&rhs)[data_size])  {
 
-		for (int i = 0; i < data_size; ++i) {
+		for (size_t i = 0; i < data_size; ++i) {
 			if (lhs[i] != rhs[i]) return false;
 		}
 		return true;
@@ -72,7 +72,7 @@ class BitCompareFixedArrayTest : public ::testing::Test {
 	template <typename data_type, size_t data_size>
     bool is_less(data_type (&lhs)[data_size], data_type (&rhs)[data_size])  {
 
-		for (int i = data_size - 1; i >= 0; --i) {
+		for (int64_t i = data_size - 1; i >= 0; --i) {
 			if (lhs[i] != rhs[i]) return (lhs[i] < rhs[i]);
 		}
 		return false;
@@ -80,7 +80,7 @@ class BitCompareFixedArrayTest : public ::testing::Test {
 	template <typename data_type, size_t data_size>
     bool is_greater(data_type (&lhs)[data_size], data_type (&rhs)[data_size])  {
 
-		for (int i = data_size - 1; i >= 0; --i) {
+		for (int64_t i = data_size - 1; i >= 0; --i) {
 			if (lhs[i] != rhs[i]) return (lhs[i] > rhs[i]);
 		}
 		return false;
@@ -92,7 +92,9 @@ class BitCompareFixedArrayTest : public ::testing::Test {
       size_t data_size>
     void test(data_type (&lhs)[data_size], data_type (&rhs)[data_size]) {
 
-      for (unsigned int k = 0; k < (32 - data_size - 1); ++k) {
+      static_assert(data_size < 32, "ERROR: testing only allows data size less than 32 elements");
+
+      for (size_t k = 0; k < (32 - data_size - 1); ++k) {
 
         memcpy(lhs, this->array + k, data_size * sizeof(data_type));
         memcpy(rhs, this->array + k + 1, data_size * sizeof(data_type));
@@ -223,6 +225,9 @@ TYPED_TEST_P(BitCompareFixedArrayTest, bit_compare)
 {
   using data_type = typename ::std::tuple_element<1, TypeParam>::type;
   constexpr size_t data_size = ::std::tuple_element<0, TypeParam>::type::bitsPerGroup;
+
+
+
   data_type in  [data_size];
   data_type in2 [data_size];
   // NEED TO SPECIFY data_type and data_size for icc.  not needed for clang or gcc.

@@ -59,7 +59,7 @@ class BitShiftFixedArrayTest : public ::testing::Test {
 	template <typename data_type, size_t data_size>
     void print(data_type (&w)[data_size]) {
       std::cout << "data type size " << std::dec << sizeof(data_type) << " len " << data_size << ": ";
-      for (int k = data_size -1 ; k >= 0; --k) {
+      for (int64_t k = data_size -1 ; k >= 0; --k) {
         std::cout << std::hex << static_cast<size_t>(w[k]) << " ";
       }
       std::cout << std::endl;
@@ -78,7 +78,7 @@ class BitShiftFixedArrayTest : public ::testing::Test {
 
 		bool result = true;
 
-		for (int i = data_size - 1; i >= 0; --i) {
+		for (int64_t i = data_size - 1; i >= 0; --i) {
 			result &= (out[i] == static_cast<data_type>((in[i] >> shift) | prev));
 
 			if (!result) {
@@ -128,8 +128,9 @@ class BitShiftFixedArrayTest : public ::testing::Test {
       typename data_type,
       size_t data_size, typename std::enable_if<inplace, int>::type = 1>
     void test(data_type (&in)[data_size], data_type (&out)[data_size]) {
+      static_assert(data_size < 32, "ERROR: testing only allows data size less than 32 elements");
 
-      for (unsigned int k = 0; k < (32 - data_size); ++k) {
+      for (size_t k = 0; k < (32 - data_size); ++k) {
 
         memcpy(in, this->array + k, data_size * sizeof(data_type));
         bool same = true;
@@ -174,7 +175,9 @@ class BitShiftFixedArrayTest : public ::testing::Test {
       size_t data_size, typename std::enable_if<!inplace, int>::type = 1>
     void test(data_type (&in)[data_size], data_type (&out)[data_size]) {
 
-      for (unsigned int k = 0; k < (32 - data_size); ++k) {
+      static_assert(data_size < 32, "ERROR: testing only allows data size less than 32 elements");
+
+      for (size_t k = 0; k < (32 - data_size); ++k) {
 
         memcpy(in, this->array + k, data_size * sizeof(data_type));
         bool same = true;

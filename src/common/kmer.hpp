@@ -1317,20 +1317,6 @@ namespace bliss
 //
 //    }
 //
-    KMER_INLINE void do_reverse(Kmer const & src, Kmer & result) const
-    {
-
-      constexpr size_t bytes = nWords * sizeof(WORD_TYPE);
-
-      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
-
-      bliss::utils::bit_ops::reverse<bitsPerChar,
-                                     SIMDType,
-                                     (bytes * 8 - nBits)
-        >(result.data, src.data);
-
-    }
-
 //    /// reverse the kmer.  only parameter of ALPHABET that matters here is bitsPerChar.
 //    template <typename A = ALPHABET,
 //        typename ::std::enable_if<!(::std::is_same<A, DNA6>::value ||
@@ -1351,7 +1337,19 @@ namespace bliss
 //
 //      return result;
 //    }
+    KMER_INLINE void do_reverse(Kmer const & src, Kmer & result) const
+    {
 
+      constexpr size_t bytes = nWords * sizeof(WORD_TYPE);
+
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
+
+      bliss::utils::bit_ops::reverse<bitsPerChar,
+                                     SIMDType,
+                                     (bytes * 8 - nBits)
+        >(result.data, src.data);
+
+    }
 
     /// reverse complement of kmer.  specialzied for DNA/RNA, where the complement is the bitwise negation.
     template <typename A = ALPHABET,
@@ -1362,21 +1360,6 @@ namespace bliss
       // repeat code from do_reverse to avoid separate do_sanitize.
 
       // DNA and RNA complement is via negation.
-      // working with words here since we want to speed up negation.
-
-//      // NOTE: SWAR is faster for size <= 256bit, after which AVX2 (and SSSE3) is faster.
-//      if (nWords * sizeof(WORD_TYPE) > 32)
-//        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
-////      else if (nWords * sizeof(WORD_TYPE) > 16)
-////        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
-//      else
-//        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
-//      //for (uint32_t i = 0; i < nWords; ++i) result.data[i] = ~result.data[i];
-//      ::bliss::utils::bit_ops::negate(result.data, result.data, nWords);
-//
-//      // TODO: more efficient right shift.
-//      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
-
       constexpr size_t bytes = nWords * sizeof(WORD_TYPE);
 
       using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
@@ -1393,24 +1376,12 @@ namespace bliss
 
     /// reverse complement of kmer.  specialzied for DNA5/DNA6/RNA5/RNA6/DNA16, where the complement is the bitwise reverse.
     template <typename A = ALPHABET,
-        typename ::std::enable_if< ::std::is_same<A, DNA6>::value ||
+        typename ::std::enable_if<::std::is_same<A, DNA6>::value ||
                                   ::std::is_same<A, RNA6>::value ||
                                   ::std::is_same<A, DNA16>::value, int>::type = 0>
     KMER_INLINE void do_reverse_complement(Kmer const& src, Kmer & result) const
     {
       // DNA6, RNA6, and DNA16 use 1 bit reverse.   DNA5 and RNA5 are aliased to DNA6 and RNA6
-
-////      result.data[nWords - 1] = 0;
-//
-//      if (nWords * sizeof(WORD_TYPE) >= 48)
-//      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
-//      else if (nWords * sizeof(WORD_TYPE) >= 32)
-//      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
-//      else
-//      ::bliss::utils::bit_ops::reverse<1, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
-//
-//      // TODO: MORE EFFICIENT SHIFT
-//      result.do_right_shift(nWords * sizeof(WORD_TYPE) * 8 - nBits);
 
       constexpr size_t bytes = nWords * sizeof(WORD_TYPE);
 
@@ -1433,7 +1404,7 @@ namespace bliss
                                     ::std::is_same<A, DNA6>::value ||
                                     ::std::is_same<A, RNA6>::value ||
                                     ::std::is_same<A, DNA16>::value) &&
-                                     ((sizeof(WORD_TYPE) * 8) % bitsPerChar != 0), int>::type = 0>
+                                     (((sizeof(WORD_TYPE) * 8) % bitsPerChar) != 0), int>::type = 0>
     KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result) const
     {
       static_assert(!(::std::is_same<A, DNA>::value ||
@@ -1451,7 +1422,7 @@ namespace bliss
                                     ::std::is_same<A, DNA6>::value ||
                                     ::std::is_same<A, RNA6>::value ||
                                     ::std::is_same<A, DNA16>::value) &&
-                                     ((sizeof(WORD_TYPE) * 8) % bitsPerChar == 0) &&
+                                     (((sizeof(WORD_TYPE) * 8) % bitsPerChar) == 0) &&
                                      ((sizeof(WORD_TYPE) * 8) > bitsPerChar), int>::type = 0>
     KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result) const
     {
@@ -1497,11 +1468,12 @@ namespace bliss
                                     ::std::is_same<A, DNA6>::value ||
                                     ::std::is_same<A, RNA6>::value ||
                                     ::std::is_same<A, DNA16>::value) &&
+                                     (((sizeof(WORD_TYPE) * 8) % bitsPerChar) == 0) &&
                                      ((sizeof(WORD_TYPE) * 8) == bitsPerChar), int>::type = 0>
     KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result) const
     {
 
-      /* Linear (inefficient) reverse:  because we don't have a specialization that supports TO_COMPLEMENT.  do word by word..*/
+      // shuffle words.
 
       // complement all, then reverse.
       for (unsigned int i = 0; i < nWords; ++i)
@@ -1513,7 +1485,6 @@ namespace bliss
       result.template right_shift_bits<nWords * sizeof(WORD_TYPE) * 8 - nBits>();  // shift by remainder/padding.
 
       // result already was 0 to begin with, so no need to sanitize
-
     }
 
 
