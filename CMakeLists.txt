@@ -515,11 +515,16 @@ if (ENABLE_TESTING)
     if (ENABLE_COVERAGE)
       # set flags for coverage test
       message(STATUS "Code coverage reporting enabled")
-      add_definitions(-fprofile-arcs -ftest-coverage -g)
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
-      set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
-      set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
-      set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
+#      add_definitions(-fprofile-arcs -ftest-coverage -g)
+	  add_definitions(--coverage -g)
+#      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
+#      set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
+#      set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
+#      set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -g")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage -g")
+      set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} --coverage -g")
+      set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} --coverage -g")
+      set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} --coverage -g")
     endif()
 
   # GTEST use of pthreads does not appear to mix well with openmp code.
@@ -546,7 +551,33 @@ if (ENABLE_TESTING)
   #   set path for output of test reports (XML format)
   set(TEST_XML_OUTPUT_DIR ${CMAKE_BINARY_DIR}/Testing)
 
+endif(ENABLE_TESTING)
 
+OPTION(ENABLE_BENCHMARKING "Enable timing measurements for benchmarking." OFF)
+# set here since timer needs to have this defined allways.
+if (ENABLE_BENCHMARKING)
+  SET(BENCHMARK 1)
+else(ENABLE_BENCHMARKING)
+  SET(BENCHMARK 0)
+endif(ENABLE_BENCHMARKING)
+
+  
+  
+# Check if the user want to build test applications
+CMAKE_DEPENDENT_OPTION(BUILD_TEST_APPLICATIONS "Inform whether test applications should be built" ON
+                        "ENABLE_TESTING" OFF)
+# Check if the user want to build sample applications
+OPTION(BUILD_EXAMPLE_APPLICATIONS "Inform whether sample applications should be built" OFF)
+
+
+
+###### Executable and Libraries
+# Save libs and executables in the same place
+set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib CACHE PATH "Output directory for libraries" )
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
+
+
+if (ENABLE_TESTING)
   function(bliss_add_test module_name module_link)
     # set the name for the test target and executable
     set(test_target_name test-${module_name})
@@ -579,6 +610,8 @@ if (ENABLE_TESTING)
     # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
     add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
   endfunction(bliss_add_test)
+
+if (BENCHMARK)
 
   function(bliss_add_benchmark module_name module_link)
     # set the name for the test target and executable
@@ -618,6 +651,7 @@ if (ENABLE_TESTING)
     add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
   endfunction(bliss_add_benchmark)
 
+endif(BENCHMARK)
 
 
 
@@ -752,28 +786,6 @@ if (ENABLE_TESTING)
 endif (ENABLE_TESTING)
 
 
-###### Executable and Libraries
-# Save libs and executables in the same place
-set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib CACHE PATH "Output directory for libraries" )
-set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
-
-#link_directories( ${LIBRARY_OUTPUT_PATH} )
-
-
-
-# Check if the user want to build test applications
-CMAKE_DEPENDENT_OPTION(BUILD_TEST_APPLICATIONS "Inform whether test applications should be built" ON
-                        "ENABLE_TESTING" OFF)
-# Check if the user want to build sample applications
-OPTION(BUILD_EXAMPLE_APPLICATIONS "Inform whether sample applications should be built" OFF)
-
-OPTION(ENABLE_BENCHMARKING "Enable timing measurements for benchmarking." OFF)
-if (ENABLE_BENCHMARKING)
-  SET(BENCHMARK 1)
-else(ENABLE_BENCHMARKING)
-  SET(BENCHMARK 0)
-endif(ENABLE_BENCHMARKING)
-  
 
 # configure a header file to pass some of the CMake settings to the source code
 configure_file(
