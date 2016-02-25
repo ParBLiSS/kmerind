@@ -4,9 +4,9 @@ language: cpp
 
 sudo: false
 
-compiler:
-    - gcc
-    - clang
+#compiler:
+#    - gcc
+#    - clang
 
 #different compilers
 #env:
@@ -17,73 +17,72 @@ compiler:
 #    - envCXX=clang++-3.6 envCC=clang-3.6
 #    - envCXX=clang++-3.7 envCC=clang-3.7
 
-# exclude combinations
+#addons:
+#  apt:
+#    sources:
+#    - ubuntu-toolchain-r-test
+#    - llvm-toolchain-precise-3.5
+#    - llvm-toolchain-precise-3.6
+#    - llvm-toolchain-precise-3.7
+
+
+# include specific compiler combinations combinations
 matrix:
-#    exclude:
-#      - compiler: gcc
-#        env: envCXX=clang++-3.5 envCC=clang-3.5
-#      - compiler: gcc
-#        env: envCXX=clang++-3.6 envCC=clang-3.6
-#      - compiler: gcc
-#        env: envCXX=clang++-3.7 envCC=clang-3.7
-#      - compiler: clang
-#        env: envCXX=g++-4.8 envCC=gcc-4.8
-#      - compiler: clang
-#        env: envCXX=g++-4.9 envCC=gcc-4.9
-#      - compiler: clang
-#        env: envCXX=g++-5 envCC=gcc-5
     include:
       - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-4.8
+              - g++-4.8
         env: envCXX=g++-4.8 envCC=gcc-4.8
+      - compiler: gcc
         addons:
           apt:
-            source:
-            - ubuntu-toolchain-r-test
+            sources:
+              - ubuntu-toolchain-r-test
             packages:
-            - gcc-4.8
-            - g++-4.8
-      - compiler: gcc
+              - gcc-4.9
+              - g++-4.9
         env: envCXX=g++-4.9 envCC=gcc-4.9
-        addons:
-          apt:
-            source:
-            - ubuntu-toolchain-r-test
-            packages:
-            - gcc-4.9
-            - g++-4.9
       - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-5
+              - g++-5
         env: envCXX=g++-5 envCC=gcc-5
+      - compiler: clang
         addons:
           apt:
-            source:
-            - ubuntu-toolchain-r-test
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.5
             packages:
-            - gcc-5
-            - g++-5
-      - compiler: clang
+              - clang-3.5
         env: envCXX=clang++-3.5 envCC=clang-3.5
+      - compiler: clang
         addons:
           apt:
-            source:
-            - llvm-toolchain-precise-3.5
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.6
             packages:
-            - clang-3.5
-      - compiler: clang
+              - clang-3.6
         env: envCXX=clang++-3.6 envCC=clang-3.6
-        addons:
-          apt:
-            source:
-            - llvm-toolchain-precise-3.6
-            packages:
-            - clang-3.6
       - compiler: clang
-        env: envCXX=clang++-3.7 envCC=clang-3.7
         addons:
           apt:
-            source:
-            - llvm-toolchain-precise-3.7
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.7
             packages:
-            - clang-3.7
+              - clang-3.7
+        env: envCXX=clang++-3.7 envCC=clang-3.7
       
 
 before_install:
