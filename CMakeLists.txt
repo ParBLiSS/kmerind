@@ -838,6 +838,7 @@ add_subdirectory(src/io)
 add_subdirectory(src/index)
 #add_subdirectory(src/debruijn)
 add_subdirectory(test/test)
+add_subdirectory(test/compiler_tests)
 add_subdirectory(test/benchmark)
 add_subdirectory(utils)
 

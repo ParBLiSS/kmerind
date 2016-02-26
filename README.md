@@ -1,5 +1,8 @@
 # ParBLiSS kmerind 
 [![Apache 2.0 License](https://img.shields.io/badge/license-Apache%20v2.0-blue.svg)](LICENSE)
+[![Build Status](https://img.shields.io/travis/ParBLiSS/kmerind.svg)](https://travis-ci.org/ParBLiSS/kmerind)
+[![Build Status](https://travis-ci.org/ParBLiSS/kmerind.svg?branch=master)](https://travis-ci.org/ParBLiSS/kmerind)
+[![Test Coverage](https://img.shields.io/codecov/c/github/ParBLiSS/kmerind.svg)](http://codecov.io/github/ParBLiSS/kmerind?branch=master)
 
 `Kmerind` is a library in the **Par**allel **B**ioinformatics **Li**brary for **S**hort **S**equences project (ParBLiSS).
 
@@ -18,7 +21,7 @@ K-merind provides basic parallel sequence file access and k-mer index constructi
 
 Required:
 
-- `g++` (version 4.8.1+ due to "decltype" and other c++11 features), `icpc` (version 14+ due to constexpr and initializers), `clang` (version 3.5+ - cmake generated make file has problems. or 3.7+ if openmp is used)
+- `g++` (version 4.8.1+ due to "decltype" and other c++11 features), `icpc` (version 16+ due to constexpr functions and initializers), `clang` (version 3.5+ - cmake generated make file has problems. or 3.7+ if openmp is used)
 - `cmake` (version 2.8+)
 - `openmpi` or `mpich2` or `mvapich` or `intel mpi library`
 

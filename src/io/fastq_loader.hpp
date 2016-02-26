@@ -247,7 +247,8 @@ namespace bliss
          * @return            position of the start of next read sequence (@).  if there is no complete sequence within the parentRange, return end of parentRange.
          * @throws            if no start is found, and search range does not cover the parent's end, then the search range does not include a complete record, throws IOException
          */
-        virtual std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange)
+        virtual std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange,
+                                              const RangeType &inMemRange, const RangeType &searchRange)
         {
 
           typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
@@ -280,7 +281,9 @@ namespace bliss
 
 
           //== if at beginning of parent partition, treat as if previous line was EOL
-          if ((t.start > parentRange.start) && ((*iter != ::bliss::io::BaseFileParser<Iterator>::eol) && (*iter != ::bliss::io::BaseFileParser<Iterator>::cr))) { // at beginning of parent range, treat specially, since there is no preceding \n for the @
+          if ((t.start > parentRange.start) &&
+              ((*iter != ::bliss::io::BaseFileParser<Iterator>::eol) &&
+               (*iter != ::bliss::io::BaseFileParser<Iterator>::cr))) { // at beginning of parent range, treat specially, since there is no preceding \n for the @
             // all other partitions will lose the part before the first "\n@" (will be caught by the previous partition)
             // if this is called to generate L1Block, then parentRange is the whole file, with first part start with @ (implicit \n prior).
             // if this is called to generate L2Block, then parentRange is the loaded L1 Block, already aligned to @, so previous is \n.
@@ -299,15 +302,15 @@ namespace bliss
           first[0] = *iter;
           offsets[0] = i;
 
-          // lines 2 through 4
+
+          // lines 2 through 4.  reorganized so that O3 optimization by gcc 5.2.1 does not skip over the whole loop (compiler bug?)
           for (int j = 1; j < 4; ++j) {
             iter = this->findEOL(iter, end, i);
-            if (i == t.end) return t.end;
             iter = this->findNonEOL(iter, end, i);
-            if (i == t.end) return t.end;
-            first[j] = *iter;
             offsets[j] = i;
+            if (i != t.end) first[j] = *iter;
           }
+          if (i == t.end) return t.end;
 
           //=== determine the position of a read by looking for @...+ or +...@
           // at this point, first[0] is pointing to first char after first newline, or in the case of first block, the first char.
@@ -328,7 +331,9 @@ namespace bliss
           std::stringstream ss;
           ss << "ERROR in file processing: file segment \n" << "\t\t"
               << t << "\n\t\t(original " << searchRange << ")\n"
-              << "\t\tdoes not contain valid FASTQ markers.\n String:";
+              << "\t\t(actual search " << t << ")\n"
+              << "\t\tdoes not contain valid FASTQ markers.\n String:"
+              << "first chars are " << first[0] << "," << first[1] << "," << first[2] << "," << first[3];
           std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
           Iterator s(_data);
           std::advance(s, (t.start - inMemRange.start));

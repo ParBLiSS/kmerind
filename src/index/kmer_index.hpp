@@ -450,7 +450,7 @@ public:
 #if (BENCHMARK == 1)
 		TIMER_START(build);
 		size_t m = 0;
-    m = this->map.update_multiplicity()
+    m = this->map.update_multiplicity();
 		TIMER_END(build, "multiplicity", m);
 #else
     (void) (this->map.update_multiplicity());
