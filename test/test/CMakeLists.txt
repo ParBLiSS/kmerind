@@ -20,8 +20,8 @@ SET_TARGET_PROPERTIES(testKmerIndex_read_fasta PROPERTIES COMPILE_FLAGS -DKMERIN
 target_link_libraries(testKmerIndex_read_fasta ${EXTRA_LIBS})
 
 
-add_executable(test_de_brujin_graph_construction test_de_brujin_graph_construction.cpp)
-target_link_libraries(test_de_brujin_graph_construction ${EXTRA_LIBS})
+add_executable(test_de_bruijn_graph_construction test_de_bruijn_graph_construction.cpp)
+target_link_libraries(test_de_bruijn_graph_construction ${EXTRA_LIBS})
 
 add_executable(test_get_file_size test_get_file_size.cpp)
 target_link_libraries(test_get_file_size ${EXTRA_LIBS})

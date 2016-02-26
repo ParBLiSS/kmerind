@@ -37,7 +37,7 @@ matrix:
             sources:
               - ubuntu-toolchain-r-test
             packages:
-              - openmpi
+              - openmpi-bin
               - libopenmpi-dev
               - gcc-4.8
               - g++-4.8
@@ -125,9 +125,9 @@ before_install:
 # For the first test-run, the build has to be run sequentially (limit parallel
 # workers to 1) so that the cache can be correctly initialized. Once the cache
 # is build, parallel workers can be re-enabled.
-cache:
-  directories:
-    - $HOME/local
+#cache:
+#  directories:
+#    - $HOME/local
 
 before_script:
     # check if gcc or clang
@@ -145,10 +145,15 @@ before_script:
     - $CXX --version
     - which mpiexec
     - mpiexec --version
+    # check to make sure code has been downloaded
+    - ls ext/*
     # prepare build kmerind
     - mkdir build
     - cd build
     - pwd
+    - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=OFF -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=OFF ../;
+        else cmake -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=ON -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=ON ../; fi
+    # do it again.
     - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=OFF -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=OFF ../;
         else cmake -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=ON -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=ON ../; fi
 

@@ -581,8 +581,10 @@ if (ENABLE_TESTING)
   function(bliss_add_test module_name module_link)
     # set the name for the test target and executable
     set(test_target_name test-${module_name})
+
     # add all give files
-    message(STATUS ${ARGN})
+    message(STATUS "adding gtest ${test_target_name} with files ${ARGN}) 
+
     add_executable(${test_target_name} ${ARGN})
     # add the googletest dependency
     # commented out because there is no googletest dependency    add_dependencies(${test_target_name} googletest)
@@ -617,7 +619,8 @@ if (BENCHMARK)
     # set the name for the test target and executable
     set(test_target_name benchmark-${module_name})
     # add all give files
-    message(STATUS ${ARGN})
+    message(STATUS "adding gtest benchmark ${test_target_name} with files ${ARGN}) 
+
     add_executable(${test_target_name} ${ARGN})
     
     # add the googletest dependency
@@ -656,6 +659,8 @@ endif(BENCHMARK)
 
 
   function(bliss_add_mpi_test module_name module_link)
+      message(STATUS "adding gtest mpi tests ${module_name} with files ${ARGN}) 
+
     # set the name for the test target and executable
     foreach(CPP_FILE ${ARGN})
       # assume filename is of the format mpi_test_NAME.cpp -> extract NAME as the name for the executable
@@ -664,6 +669,8 @@ endif(BENCHMARK)
       string(REPLACE ".cpp" "" MPI_TEST_NAME ${CPP_FILE_SUFF})
       message(STATUS "MPI test module found: ${MPI_TEST_NAME}")
       set(test_target_name test-mpi-${module_name}-${MPI_TEST_NAME})
+      
+      
       # add all give files
       add_executable(${test_target_name} ${CPP_FILE})
 
@@ -712,12 +719,16 @@ endif(BENCHMARK)
   endfunction(bliss_add_mpi_test)
 
   function(bliss_add_non_google_test module_names module_link)
+        message(STATUS "adding non google test ${module_names} with files ${ARGN}) 
+
       foreach(f ${ARGN})
         get_filename_component(test_name ${f} NAME_WE)
   
         # set the name for the test target and executable
         set(test_target_name ${test_name})
+        
         # add all give files
+        
         add_executable(${test_target_name} ${f})
         # set binary output path for tests
         set_target_properties(${test_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
@@ -746,6 +757,9 @@ endif(BENCHMARK)
 
     function(bliss_add_metaprog_test module_names module_link filename)
       get_filename_component(test_name ${filename} NAME_WE)
+      
+      message(STATUS "adding metaprog gtest ${test_name} for file ${filename} and definitions ${ARGN}) 
+      
       
       foreach(metadef ${ARGN})
   
