@@ -67,13 +67,6 @@ matrix:
       - compiler: clang
         addons:
           apt:
-            packages:
-              - openmpi-bin
-              - libopenmpi-dev
-        env: envCXX=clang++ envCC=clang
-      - compiler: clang
-        addons:
-          apt:
             sources:
               - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.5

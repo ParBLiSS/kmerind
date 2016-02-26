@@ -820,10 +820,10 @@ include_directories("${EXT_PROJECTS_DIR}/mxx/include")
 
 
 #for when the linker (ld) has problem finding librt, e.g. error: undefined referecne clock_gettime@@GLIBC_2.2.5.  this needs to be close to the end of the ld list.
-SET( CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -lrt" )
-SET( CMAKE_MODULE_LINKER_FLAGS  "${CMAKE_MODULE_LINKER_FLAGS} -lrt" )
-SET( CMAKE_STATIC_LINKER_FLAGS  "${CMAKE_STATIC_LINKER_FLAGS} -lrt" )
-SET( CMAKE_SHARED_LINKER_FLAGS  "${CMAKE_SHARED_LINKER_FLAGS} -lrt" )
+#SET( CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -lrt" )
+#SET( CMAKE_MODULE_LINKER_FLAGS  "${CMAKE_MODULE_LINKER_FLAGS} -lrt" )
+#SET( CMAKE_STATIC_LINKER_FLAGS  "${CMAKE_STATIC_LINKER_FLAGS} -lrt" )
+#SET( CMAKE_SHARED_LINKER_FLAGS  "${CMAKE_SHARED_LINKER_FLAGS} -lrt" )
 
 
 add_subdirectory(src/utils)

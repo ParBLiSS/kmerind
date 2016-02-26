@@ -24,8 +24,6 @@
 
  */
 
-#include <time.h>
-
 #include <ctime>
 #include <iostream>
 #include <cstring>

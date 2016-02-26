@@ -106,7 +106,7 @@ add_executable(hash_vs_sort hash_vs_sort.cpp)
 target_link_libraries(hash_vs_sort ${EXTRA_LIBS})
 
 add_executable(chrono_vs_time chrono_vs_time.cpp)
-target_link_libraries(chrono_vs_time ${EXTRA_LIBS})
+target_link_libraries(chrono_vs_time ${EXTRA_LIBS} -lrt)
 
 
 if (Boost_FOUND)
