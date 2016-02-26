@@ -583,7 +583,7 @@ if (ENABLE_TESTING)
     set(test_target_name test-${module_name})
 
     # add all give files
-    message(STATUS "adding gtest ${test_target_name} with files ${ARGN}) 
+    message(STATUS "adding gtest ${test_target_name} with files ${ARGN}") 
 
     add_executable(${test_target_name} ${ARGN})
     # add the googletest dependency
@@ -619,7 +619,7 @@ if (BENCHMARK)
     # set the name for the test target and executable
     set(test_target_name benchmark-${module_name})
     # add all give files
-    message(STATUS "adding gtest benchmark ${test_target_name} with files ${ARGN}) 
+    message(STATUS "adding gtest benchmark ${test_target_name} with files ${ARGN}") 
 
     add_executable(${test_target_name} ${ARGN})
     
@@ -659,7 +659,7 @@ endif(BENCHMARK)
 
 
   function(bliss_add_mpi_test module_name module_link)
-      message(STATUS "adding gtest mpi tests ${module_name} with files ${ARGN}) 
+      message(STATUS "adding gtest mpi tests ${module_name} with files ${ARGN}") 
 
     # set the name for the test target and executable
     foreach(CPP_FILE ${ARGN})
@@ -719,7 +719,7 @@ endif(BENCHMARK)
   endfunction(bliss_add_mpi_test)
 
   function(bliss_add_non_google_test module_names module_link)
-        message(STATUS "adding non google test ${module_names} with files ${ARGN}) 
+        message(STATUS "adding non google test ${module_names} with files ${ARGN}") 
 
       foreach(f ${ARGN})
         get_filename_component(test_name ${f} NAME_WE)
@@ -758,7 +758,7 @@ endif(BENCHMARK)
     function(bliss_add_metaprog_test module_names module_link filename)
       get_filename_component(test_name ${filename} NAME_WE)
       
-      message(STATUS "adding metaprog gtest ${test_name} for file ${filename} and definitions ${ARGN}) 
+      message(STATUS "adding metaprog gtest ${test_name} for file ${filename} and definitions ${ARGN}") 
       
       
       foreach(metadef ${ARGN})
