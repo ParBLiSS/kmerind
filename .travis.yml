@@ -158,6 +158,7 @@ before_script:
 
 script:
     # run tests.
+    - ./test/test-mpi-bliss-io-fastq_loader
     - make test 
     - ./bin/testKmerIndex_read
     - mpiexec -np 4 ./bin/testKmerIndex_read
