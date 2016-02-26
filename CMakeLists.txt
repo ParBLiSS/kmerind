@@ -20,12 +20,6 @@ set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
 #set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH}) 
 
-#for when the linker (ld) has problem finding librt, e.g. error: undefined referecne clock_gettime@@GLIBC_2.2.5
-SET( CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -lrt" )
-SET( CMAKE_MODULE_LINKER_FLAGS  "${CMAKE_MODULE_LINKER_FLAGS} -lrt" )
-SET( CMAKE_STATIC_LINKER_FLAGS  "${CMAKE_STATIC_LINKER_FLAGS} -lrt" )
-SET( CMAKE_SHARED_LINKER_FLAGS  "${CMAKE_SHARED_LINKER_FLAGS} -lrt" )
-
 
 # Compiler-specific C++11 activation.
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
@@ -822,6 +816,14 @@ include_directories("${PROJECT_SOURCE_DIR}/src")
 include_directories("${EXT_PROJECTS_DIR}")
 include_directories("${EXT_PROJECTS_DIR}/mxx/include")
 #include_directories("${EXT_PROJECTS_DIR}/tclap-1.2.1/include")
+
+
+
+#for when the linker (ld) has problem finding librt, e.g. error: undefined referecne clock_gettime@@GLIBC_2.2.5.  this needs to be close to the end of the ld list.
+SET( CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -lrt" )
+SET( CMAKE_MODULE_LINKER_FLAGS  "${CMAKE_MODULE_LINKER_FLAGS} -lrt" )
+SET( CMAKE_STATIC_LINKER_FLAGS  "${CMAKE_STATIC_LINKER_FLAGS} -lrt" )
+SET( CMAKE_SHARED_LINKER_FLAGS  "${CMAKE_SHARED_LINKER_FLAGS} -lrt" )
 
 
 add_subdirectory(src/utils)

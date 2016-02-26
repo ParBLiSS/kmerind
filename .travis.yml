@@ -159,10 +159,11 @@ before_script:
     # do it again else the gtests will not be built
     - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=OFF -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=OFF ../;
         else cmake -DCMAKE_VERBOSE_MAKEFILE=ON -DBUILD_TEST_APPLICATIONS=ON -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=ON -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF -DENABLE_COVERAGE=ON ../; fi
+    # build kmerind.  here so that if build fails, the tests are not run.
+    - make -j
 
 script:
-    # build kmerind and run tests
-    - make -j
+    # run tests.
     - make test 
     - ./bin/testKmerIndex_read
     - mpiexec -np 4 ./bin/testKmerIndex_read
