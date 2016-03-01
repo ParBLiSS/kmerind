@@ -206,7 +206,7 @@ public:
 			TIMER_END(file, "open", partition.getRange().size());
 
 
-			std::cout << "partition range: " << partition.getRange() << std::endl;
+			//std::cout << "partition range: " << partition.getRange() << std::endl;
 
 			//== reserve
 			TIMER_START(file);
@@ -299,7 +299,7 @@ public:
 				ranges.resize(group.size());
 				send_counts.resize(group.size());
 				for (int i = 0; i < group.size(); ++i) {
-					ranges[i] = loader.getNextL2BlockRange(i);
+					ranges[i] = loader.getNextL2Block(i).getRange();
 					send_counts[i] = ranges[i].size();
 				}
 

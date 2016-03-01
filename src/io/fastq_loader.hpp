@@ -368,6 +368,10 @@ namespace bliss
          */
         SequenceType get_next_record(Iterator &iter, const Iterator &end, size_t &offset)
         {
+
+          if ((iter != end) && (*iter != '@'))
+            this->handleError("missing @ on first line. ", iter, end, offset, offset + ::std::distance(iter, end));
+
           //== first make a copy of iter so we can later use the original in exception handling.
           Iterator orig_iter = iter;
           size_t orig_offset = offset;
