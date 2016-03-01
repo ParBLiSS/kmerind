@@ -187,10 +187,10 @@ public:
 	static size_t read_file(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
 
 
-		constexpr size_t overlap = KP::kmer_type::size;
+//		constexpr size_t overlap = KP::kmer_type::size;  specify as 0 - which allows overlap to be computed.
 
 		// TODO: check if prefetch makes a difference.
-		using FileLoaderType = bliss::io::FileLoader<CharType, overlap, SeqParser, false, true>; // raw data type :  use CharType
+		using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, true>; // raw data type :  use CharType
 
 		//====  now process the file, one L1 block (block partition by MPI Rank) at a time
 
@@ -204,6 +204,9 @@ public:
 			FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
 			typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 			TIMER_END(file, "open", partition.getRange().size());
+
+
+			std::cout << "partition range: " << partition.getRange() << std::endl;
 
 			//== reserve
 			TIMER_START(file);
@@ -258,10 +261,10 @@ public:
 		mxx::comm group = comm.split_shared();
 		mxx::comm group_leaders = comm.split(group.rank() == 0);
 
-		constexpr size_t overlap = KP::kmer_type::size;
+//		constexpr size_t overlap = KP::kmer_type::size;  specify as 0 - which allows overlap to be computed.
 
 		// raw data type :  use CharType.   block partition at L1 and L2.  no buffering at all, since we will be copying data to the group members anyways.
-		using FileLoaderType = bliss::io::FileLoader<CharType, overlap, SeqParser, false, true,
+		using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, true,
 				bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >,  bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >>;
 
 		size_t before = result.size();
@@ -383,8 +386,8 @@ public:
 		constexpr size_t overlap = KP::kmer_type::size;
 
 
-		// TODO: check if prefetch makes a difference.
-		using FileLoaderType = bliss::io::FileLoader<CharType, overlap, SeqParser, false, false>; // raw data type :  use CharType
+		// TODO: check if prefetch makes a difference.  specify overlap as 0 - which allows overlap to be computed.
+		using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, false>; // raw data type :  use CharType
 
 		size_t before = result.size();
 
