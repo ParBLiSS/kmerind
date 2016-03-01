@@ -480,7 +480,9 @@ INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseFixedArrayBenchmark, BitReverseFi
 
 
 
-// special test for bit revrese within a byte.
+// special test for bit revrese within a byte.  compare to http://stackoverflow.com/questions/746171/best-algorithm-for-bit-reversal-from-msb-lsb-to-lsb-msb-in-c
+// where best time is 0.05 for 400M bytes.  this code does 0.026s for 400M bytes (inrements of 1M) on a i5-4200U laptop.
+// 0.39s in increments of 4M  (can't go higher without changing stack size (about 8M)
 TEST(BitReverseInFixedByteArrayBenchmark, rev_byte)
 {
 	constexpr uint8_t bitsPerGroup = 1;
@@ -488,7 +490,7 @@ TEST(BitReverseInFixedByteArrayBenchmark, rev_byte)
     BitReverseBenchmarkHelper<bitsPerGroup> helper;
 
     constexpr size_t iters = 400000000;
-    constexpr size_t s = 1000000;
+    constexpr size_t s = 4000000;
 
     uint8_t data[s];
 
