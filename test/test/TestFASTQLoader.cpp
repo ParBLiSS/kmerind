@@ -170,12 +170,16 @@
         ranges.resize(group.size());
         send_counts.resize(group.size());
         for (int i = 0; i < group.size(); ++i) {
-          ranges[i] = loader.getNextL2Block(i).getRange();
+          auto b = loader.getNextL2Block(i);
+          ranges[i] = b.getRange();
           send_counts[i] = ranges[i].size();
+
+          std::cout << "rank " << i << " block begins with " << *(b.begin()) << " at " << ranges[i] << " len " << ranges[i].size()
+              << " send counts " << send_counts[i] << std::endl;
+
         }
 
         // scatter the data .  this call here relies on FileLoader still having the memory mapped.
-        // TODO; use iterators!
         data = mxx::scatterv(&(*partition.begin()), send_counts, 0, group);
 
         // send the file range.
@@ -187,7 +191,9 @@
         // scatter the data.  this is the receiver end of the thing.
         data = mxx::scatterv(&(*partition.begin()), send_counts, 0, group);
 
+
       }
+      std::cout << "rank " << _comm.rank() << " mxx data begins with " << data[0];
 
       // send the file range to rest of group
       mxx::datatype range_dt = mxx::get_datatype<typename FileLoaderType::RangeType >();
@@ -209,10 +215,15 @@
 
       readFilePOSIX(filename, offset, len, gold);
 
-      bool same = ::std::equal(block.begin(), block.end(), gold);
+      if (std::distance(block.begin(), block.end()) != len)
+        std::cout << "ERROR: block size is not same as range size." << std::endl;
 
-      if (!same) std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! first chars " << *(partition.begin()) << " gold " << (*gold)
-              << " range " << partition.getRange() << std::endl;
+      auto diff_iters = ::std::mismatch(block.begin(), block.end(), gold);
+
+      if (diff_iters.first != block.end())
+        std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! diff at offset " << (offset + std::distance(block.begin(), diff_iters.first))
+            << " val " << *(diff_iters.first) << " gold " << *(diff_iters.second)
+            << " range " << partition.getRange() << std::endl;
 
       delete [] gold;
 
@@ -291,18 +302,10 @@
 template <template <typename> class SeqParser>
 void testIndex(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
-  TIMER_INIT(test);
 
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  TIMER_START(test);
   size_t result = read_file<SeqParser>(filename, comm);
-  TIMER_END(test, "build", result);
-
-
-
-
-  TIMER_REPORT_MPI(test, comm.rank(), comm);
 
 }
 
@@ -310,38 +313,19 @@ void testIndex(const mxx::comm& comm, const std::string & filename, std::string 
 template <template <typename> class SeqParser>
 void testIndexSubComm(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
-  TIMER_INIT(test);
 
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  TIMER_START(test);
   size_t result = read_file_mpi_subcomm<SeqParser>(filename, comm);
-  TIMER_END(test, "build", result);
-
-
-
-
-  TIMER_REPORT_MPI(test, comm.rank(), comm);
-
 }
 
 
 template <template <typename> class SeqParser, typename KmerType>
 void testIndexDirect(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
-  TIMER_INIT(test);
-
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  TIMER_START(test);
   size_t result = read_file_direct<SeqParser, KmerType::size>(filename, comm);
-  TIMER_END(test, "build", result);
-
-
-
-
-  TIMER_REPORT_MPI(test, comm.rank(), comm);
-
 }
 
 /**
@@ -415,6 +399,11 @@ int main(int argc, char** argv) {
   testIndex<bliss::io::FASTQParser > (comm, filename, "ST, hash, all read, count index.");
     MPI_Barrier(comm);
 }
+  if (which == -1 || which == 3)
+  {
+  testIndexDirect<bliss::io::FASTQParser , KmerType> (comm, filename, "ST, hash, read_and_dist, count index.");
+    MPI_Barrier(comm);
+}
 
   if (which == -1 || which == 2)
   {
@@ -422,11 +411,6 @@ int main(int argc, char** argv) {
     MPI_Barrier(comm);
 }
 
-  if (which == -1 || which == 3)
-  {
-  testIndexDirect<bliss::io::FASTQParser , KmerType> (comm, filename, "ST, hash, read_and_dist, count index.");
-    MPI_Barrier(comm);
-}
 
   //////////////  clean up MPI.
   MPI_Finalize();
