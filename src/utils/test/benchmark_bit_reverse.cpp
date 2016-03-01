@@ -395,20 +395,23 @@ class BitReverseFixedArrayBenchmark : public ::testing::Test {
 
     template <typename MAX_SIMD_TYPE, typename P2 = P>
     void array_test( std::string name ) {
-      uint8_t data[256][128];
 
-      for (int i = 0; i < 256; ++i) {
-        memcpy(data[i], this->helper.input + i, 128);
+    	constexpr size_t iters = BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters;
+
+      uint8_t data[10240][128];
+
+      for (int i = 0; i < 10240; ++i) {
+        memcpy(data[i], this->helper.input + (i % 256), 128);
       }
 
       constexpr uint16_t pad_bits = ((P2::bitsPerGroup & (P2::bitsPerGroup - 1)) == 0) ? 0 : ((128 * 8) % P2::bitsPerGroup);
 
       TIMER_START(this->bitrev);
-      for (size_t iter = 0; iter < BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters; ++iter) {
-        ::bliss::utils::bit_ops::template reverse<P2::bitsPerGroup, MAX_SIMD_TYPE, pad_bits>( data[(iter + 119) % 238], data[(iter % 238)]);  // input from 0 to 256. output from 128-256, then 0 to 128
+      for (size_t iter = 0; iter < iters; ++iter) {
+        ::bliss::utils::bit_ops::template reverse<P2::bitsPerGroup, MAX_SIMD_TYPE, pad_bits>( data[iter % 10240], data[((iter + 1) % 10240)]);  // input from 0 to 256. output from 128-256, then 0 to 128
       }
 
-      TIMER_END(this->bitrev, name, BitReverseBenchmarkHelper<P2::bitsPerGroup>::iters * 128);
+      TIMER_END(this->bitrev, name, iters * 128);
     }
 
 
@@ -473,3 +476,48 @@ INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseFixedArrayBenchmark, BitReverseFi
 
 
 
+
+
+
+
+// special test for bit revrese within a byte.
+TEST(BitReverseInFixedByteArrayBenchmark, rev_byte)
+{
+	constexpr uint8_t bitsPerGroup = 1;
+
+    BitReverseBenchmarkHelper<bitsPerGroup> helper;
+
+    constexpr size_t iters = 400000000;
+    constexpr size_t s = 1000000;
+
+    uint8_t data[s];
+
+    for (size_t i = 0; i < s; i+=100) {
+      memcpy(data + i, helper.input + (i % 256), 100);
+    }
+//    size_t rem = iters % 100;
+//    memcpy(data + (iters - iters % 128), helper.input, rem);
+
+    TIMER_INIT(bitrev); // does nothing
+
+    TIMER_START(bitrev);
+    for (size_t iter = 0; iter < iters; iter += s) {
+      ::bliss::utils::bit_ops::template reverse_bits_in_byte<1, ::bliss::utils::bit_ops::BITREV_SWAR, 0>(data, data);  // input from 0 to 256. output from 128-256, then 0 to 128
+    }
+    TIMER_END(bitrev, "swar", iters);
+
+    TIMER_START(bitrev);
+    for (size_t iter = 0; iter < iters; iter += s) {
+      ::bliss::utils::bit_ops::template reverse_bits_in_byte<1, ::bliss::utils::bit_ops::BITREV_SSSE3, 0>(data, data);  // input from 0 to 256. output from 128-256, then 0 to 128
+    }
+    TIMER_END(bitrev, "ssse3", iters);
+
+    TIMER_START(bitrev);
+    for (size_t iter = 0; iter < iters; iter += s) {
+      ::bliss::utils::bit_ops::template reverse_bits_in_byte<1, ::bliss::utils::bit_ops::BITREV_AVX2, 0>(data, data);  // input from 0 to 256. output from 128-256, then 0 to 128
+    }
+    TIMER_END(bitrev, "avx2", iters);
+
+
+    TIMER_REPORT(bitrev, 1);
+}

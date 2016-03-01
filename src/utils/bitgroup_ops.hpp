@@ -445,13 +445,13 @@ namespace bliss {
            * @param v    input word.  LSB aligned to start of a bit group.
            * @return     bit reversed word.  MSB aligned to end of the originally lowest bit group.
            */
-          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS >= (sizeof(WORD_TYPE) * 8)), int>::type = 1>
+          template <unsigned int BITS = BIT_GROUP_SIZE, typename WORD_TYPE, typename std::enable_if<(BITS >= (sizeof(WORD_TYPE) * 8)), int>::type = 1>
           BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & v, uint16_t bit_offset) const {
 //            static_assert(BIT_GROUP_SIZE == (sizeof(WORD_TYPE) * 8), "ERROR: BIT_GROUP_SIZE is greater than number of bits in WORD_TYPE");
             return v;
           }
 
-          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE, typename std::enable_if<(BITS < (sizeof(WORD_TYPE) * 8)), int>::type = 1>
+          template <unsigned int BITS = BIT_GROUP_SIZE, typename WORD_TYPE, typename std::enable_if<(BITS < (sizeof(WORD_TYPE) * 8)), int>::type = 1>
           BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & v, uint16_t bit_offset) const {
 
             // copy the source data
@@ -478,7 +478,7 @@ namespace bliss {
             return w;
           }
 
-          template <uint16_t bit_offset = 0, typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          template <unsigned int BITS = BIT_GROUP_SIZE, uint16_t bit_offset = 0, typename WORD_TYPE>
           BITS_INLINE WORD_TYPE reverse(WORD_TYPE const & v) const {
             return reverse(::std::forward<WORD_TYPE const>(v), bit_offset);
           }
@@ -558,19 +558,19 @@ namespace bliss {
           }
 
           // bitgroup size is larger than the word type in bits.
-          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          template <unsigned int BITS = BIT_GROUP_SIZE, typename WORD_TYPE>
           BITS_INLINE typename std::enable_if<(BITS > (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
           reverse(WORD_TYPE const &u) const {
             return u;
           }
           // bitgroup size is same size as the word type in bits.
-          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          template <unsigned int BITS = BIT_GROUP_SIZE, typename WORD_TYPE>
           BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS == (sizeof(WORD_TYPE) * 8)), WORD_TYPE>::type
           reverse(WORD_TYPE const &u) const {
             return u;
           }
           // this specialization will work for all WORD_TYPE sizes.
-          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          template <unsigned int BITS = BIT_GROUP_SIZE, typename WORD_TYPE>
           BITS_INLINE typename std::enable_if<(BITS <= 8), WORD_TYPE>::type
           reverse(WORD_TYPE const &u) const {
             static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
@@ -610,7 +610,7 @@ namespace bliss {
           }
 
           /// this specialization is for 8 byte words.   16 bit or 32 bit groups are allowed.
-          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          template <unsigned int BITS = BIT_GROUP_SIZE, typename WORD_TYPE>
           BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS < (sizeof(WORD_TYPE) * 8)) && (sizeof(WORD_TYPE) == 8), WORD_TYPE>::type
           reverse(WORD_TYPE const &u) const {
             static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
@@ -636,13 +636,38 @@ namespace bliss {
 
           /// this specialization is for 4 byte words.  only 16 bit group is allowed/needed here.
           /// separate by word_type size instead of bits so that we don't shift by 32 when word is 4 bytes.
-          template <typename WORD_TYPE, unsigned int BITS = BIT_GROUP_SIZE>
+          template <unsigned int BITS = BIT_GROUP_SIZE, typename WORD_TYPE>
           BITS_INLINE typename std::enable_if<(BITS > 8) && (BITS < (sizeof(WORD_TYPE) * 8)) && (sizeof(WORD_TYPE) == 4), WORD_TYPE>::type
           reverse(WORD_TYPE const &u) const {
             static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
             static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
 
             return ((u >> 16) & mask16) | ((u & mask16) << 16);
+          }
+
+
+          // for performance testing of the reverse_transform framework
+          template <unsigned int BITS = BIT_GROUP_SIZE, typename WORD_TYPE>
+          BITS_INLINE typename std::enable_if<(BITS < 8) && (BITS && (BITS - 1) == 0), WORD_TYPE>::type
+          reverse_bits_in_byte(WORD_TYPE const &u) const {
+            static_assert((::std::is_integral<WORD_TYPE>::value) && (!::std::is_signed<WORD_TYPE>::value), "ERROR: WORD_TYPE has to be unsigned integral type.");
+            static_assert(sizeof(WORD_TYPE) <= 8, "ERROR: WORD_TYPE should be primitive and smaller than 8 bytes for SWAR");
+
+            WORD_TYPE v = u;
+
+            // now swap if requested group size is 4, 2, or 1.  only execute if bit group is <= to current swap size.
+            switch (BITS) {
+              case 1:
+                v = ((v >>  1) &  mask1) | ((v &  mask1) <<  1);  // swap 1 bits
+              case 2:
+                v = ((v >>  2) &  mask2) | ((v &  mask2) <<  2);  // swap 2 bits
+              case 4:
+                v = ((v >>  4) &  mask4) | ((v &  mask4) <<  4);  // swap nibbles
+              default:
+                break;
+            }
+
+            return v;
           }
 
       };
@@ -1097,6 +1122,48 @@ namespace bliss {
             return v;
           }
 
+          // groupsize =1 version:  4 loads, 3 shuffles, 3 logical ops, 1 shift op
+          template <unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS < 8) && (BITS & (BITS - 1) == 0), __m128i>::type
+          reverse_bits_in_byte(__m128i const & u) const {
+
+            // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
+            // shuffle may be done via register mixing instructions, but may be slower.
+            // shuffle of 32 bit and 64 bit may be done via either byte-wise shuffle, or by shuffle_epi32.  should be same speed except that  1 SO post suggests epi32 has lower latency (1 less load due to imm).
+            // shuffle of 16 bit can be done via byte-wise shuffle or by 2 calls to shuffle_epi16 plus an or.  probably not faster.
+            // CHECK OUT http://www.agner.org/optimize/instruction_tables.pdf for latency and throughput.
+
+        	__m128i v = u;
+            //== next get the lut indices.
+
+            // lower 4 bits
+            __m128i lo = _mm_and_si128(_mask_lo, v);                                                      // SSE2
+            // upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
+            // shift not using si128 - that instruction shifts bytes not bits.
+            __m128i hi = _mm_srli_epi16(_mm_andnot_si128(_mask_lo, v), 4);                                // SSE2
+
+            switch (BIT_GROUP_SIZE) {
+              case 1:
+                //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+                lo = _mm_shuffle_epi8(lut1_hi, lo);                        // SSSE3
+                hi = _mm_shuffle_epi8(lut1_lo, hi);                        // SSSE3
+                break;
+              case 2:
+                //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+                lo = _mm_shuffle_epi8(lut2_hi, lo);                        // SSSE3
+                hi = _mm_shuffle_epi8(lut2_lo, hi);                        // SSSE3
+                break;
+              case 4:
+                lo = _mm_slli_epi16(lo, 4);  // shift lower 4 to upper
+                break;
+              default:
+                break;
+
+            }
+
+            // recombine
+            return _mm_or_si128(lo, hi);                                                                  // SSE2
+          }
       };
 
 
@@ -1625,7 +1692,7 @@ namespace bliss {
 
             // if bit group is <= 8, then need to shuffle bytes, and then shuffle bits.
             v = _mm256_shuffle_epi8(v, rev_idx_lane8);     // reverse 8 in each of 128 bit lane          // AVX2
-            v = _mm256_permute2x128_si256(v, v, 0x03);							    // then swap the lanes                           // AVX2.  latency = 3
+            v = _mm256_permute2x128_si256(v, v, 0x03);		// then swap the lanes                           // AVX2.  latency = 3
 
             //== now see if we need to shuffle bits.
             if (BITS == 8) return v;
@@ -1695,6 +1762,49 @@ namespace bliss {
 
             return v;
           }
+
+          template <unsigned int BITS = BIT_GROUP_SIZE>
+          BITS_INLINE typename std::enable_if<(BITS < 8) && (BITS && (BITS - 1) == 0), __m256i>::type
+          reverse_bits_in_byte(__m256i const & u) const {
+
+            // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
+            // shuffle may be done via register mixing instructions, but may be slower.
+            // shuffle of 32 bit and 64 bit may be done via either byte-wise shuffle, or by shuffle_epi32.  should be same speed except that  1 SO post suggests epi32 has lower latency (1 less load due to imm).
+            // shuffle of 16 bit can be done via byte-wise shuffle or by 2 calls to shuffle_epi16 plus an or.  probably not faster.
+            // CHECK OUT http://www.agner.org/optimize/instruction_tables.pdf for latency and throughput.
+
+            __m256i v = u;
+			//== next get the lut indices.
+
+			// lower 4 bits
+			__m256i lo = _mm256_and_si256(_mask_lo, v); // no and_si256.  had to cast to ps first.           // AVX2
+			// upper 4 bits.  note that after mask, we shift by 4 bits int by int.  each int will have the high 4 bits set to 0 from the shift, but they were going to be 0 anyways.
+			// shift not using si128 - that instruction shifts bytes not bits.
+			__m256i hi = _mm256_srli_epi16(_mm256_andnot_si256(_mask_lo, v), 4);                                // AVX2
+
+			switch (BIT_GROUP_SIZE) {
+			case 1:
+			  //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+			  lo = _mm256_shuffle_epi8(lut1_hi, lo);                        // AVX2
+			  hi = _mm256_shuffle_epi8(lut1_lo, hi);                        // AVX2
+			  break;
+			case 2:
+			  //== now use shuffle.  hi and lo are now indices. and lut2_lo/hi are lookup tables.  remember that hi/lo are swapped.
+			  lo = _mm256_shuffle_epi8(lut2_hi, lo);                        // AVX2
+			  hi = _mm256_shuffle_epi8(lut2_lo, hi);                        // AVX2
+			  break;
+			case 4:
+			  lo = _mm256_slli_epi16(lo, 4);  // shift lower 4 to upper										//AVX2
+			  break;
+			default:
+			  break;
+			}
+
+			// recombine
+			return _mm256_or_si256(lo, hi);                                                                  // AVX2
+
+          }
+
 
       };
 
@@ -3124,6 +3234,28 @@ namespace bliss {
 
           return (sizeof(WORD_TYPE) * len * 8 - PAD_BITS) % BIT_GROUP_SIZE;
       }
+
+
+      template <unsigned int BIT_GROUP_SIZE, typename MAX_SIMD_TYPE, uint16_t PAD_BITS = 0,
+          typename WORD_TYPE, size_t len>
+      BITS_INLINE uint16_t  // len is power of 2.
+      reverse_bits_in_byte(WORD_TYPE (&out)[len], WORD_TYPE const (&in)[len]) {
+          static_assert(BIT_GROUP_SIZE > 0, "ERROR: BIT_GROUP_SIZE cannot be 0");
+
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+          static_assert(BIT_GROUP_SIZE <= (sizeof(MachineWord) * 4), "ERROR: The maximum bit group size should not be larger than 1/2 of machine word type");
+          static_assert(
+        		  (((sizeof(WORD_TYPE) * len * 8 - PAD_BITS) % BIT_GROUP_SIZE) == 0) , "ERROR: bit_group_size needs to divide all bits evenly.");
+
+          ::bliss::utils::bit_ops::bitgroup_ops<BIT_GROUP_SIZE, MAX_SIMD_TYPE::SIMDVal> op;
+
+          bliss::utils::bit_ops::bit_transform<MAX_SIMD_TYPE, WORD_TYPE, len>(out, in,
+                           [&op](MachineWord const & src){ return op.reverse_bits_in_byte(src); });
+
+          return (sizeof(WORD_TYPE) * len * 8 - PAD_BITS) % BIT_GROUP_SIZE;
+      }
+
 
       //========================== bitwise operations ============
       // no difference between conservative and aggressive.  use specified.
