@@ -94,6 +94,7 @@ namespace bliss
       using edge_type = typename std::conditional<std::is_same<EdgeEncoder, bliss::common::ASCII>::value,
                                                   uint16_t, uint8_t>::type;
       using value_type = std::pair<KmerType, edge_type>;
+      using kmer_type = KmerType;
 
       using Alphabet = typename KmerType::KmerAlphabet;
 

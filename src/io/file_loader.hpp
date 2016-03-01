@@ -261,12 +261,12 @@ namespace io
        /// reset any parser internal state so the parser can be reused on a different data range.  overridden in subclass.
        virtual void reset() {}
 
-       /// initializes parser for a particular data range.  overridden in subclass.  returns start of first record.
+       /// initializes parser for a particular data range.  overridden in subclass.  returns start of first record.  _data points to first element in mem.
        virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) {
          return this->find_first_record(_data, parentRange, inMemRange, searchRange);
        }
 #ifdef USE_MPI
-       /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.
+       /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.   _data points to first element in mem.
        virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm)
        {
          return this->find_first_record(_data, parentRange, inMemRange, searchRange);
@@ -905,7 +905,6 @@ namespace io
         }
 
 
-      protected:
 
 
         /**
@@ -1008,7 +1007,7 @@ namespace io
           // just FileLoader calls this.
           return getNextL1BlockRange(loaderId);
         }
-
+protected:
         /**
          * @brief Loads the file by memory maps the specified range for reading,
          * @details  Optionally buffers the data into memory
@@ -1123,7 +1122,7 @@ namespace io
         }
 
 
-
+public:
         /**
          * @brief get the next L2 Partition Block given a thread id.
          * @details  for derived File Loader classes, their implementation methods are called.
@@ -1199,7 +1198,7 @@ namespace io
 
         }
 
-
+protected:
 
 
         /**
@@ -1403,7 +1402,7 @@ namespace io
 
          size_t numRecords = (this->getFileRange().size() + record_size - 1) / record_size;
 
-         size_t kmersPerRecord = seqSizeInRecord == 0 ? seqSizeInRecord - k + 1 : 0;  // fastq has quality.
+         size_t kmersPerRecord = seqSizeInRecord == 0 ? 0 : seqSizeInRecord - k + 1;  // fastq has quality.
 
 
           BL_DEBUGF("file range [%lu, %lu], record_size = %lu, kmersPerRecord = %lu, numRecords = %lu",
