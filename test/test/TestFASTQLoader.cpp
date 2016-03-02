@@ -174,8 +174,8 @@
           ranges[i] = b.getRange();
           send_counts[i] = ranges[i].size();
 
-          std::cout << "rank " << i << " block begins with " << *(b.begin()) << " at " << ranges[i] << " len " << ranges[i].size()
-              << " send counts " << send_counts[i] << std::endl;
+//          std::cout << "rank " << i << " block begins with " << *(b.begin()) << " at " << ranges[i] << " len " << ranges[i].size()
+//              << " send counts " << send_counts[i] << std::endl;
 
         }
 
@@ -193,7 +193,7 @@
 
 
       }
-      std::cout << "rank " << _comm.rank() << " mxx data begins with " << data[0];
+      if (data[0] != '@') std::cout << "rank " << _comm.rank() << " mxx data begins with " << data[0];
 
       // send the file range to rest of group
       mxx::datatype range_dt = mxx::get_datatype<typename FileLoaderType::RangeType >();
