@@ -633,7 +633,7 @@ namespace dsc  // distributed std container
               count_results.clear();
               auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), start, end, true);
               Intersect<false>::process(overlap.first, overlap.second, start, end, count_emplace_iter, count_element, true, pred);
-              send_counts[i] = ::std::accumulate(count_results.begin(), count_results.end(), 0,
+              send_counts[i] = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                                  [](size_t v, ::std::pair<Key, size_t> const & x) {
                              return v + x.second;
                            });
@@ -733,7 +733,7 @@ namespace dsc  // distributed std container
             // count now.
             auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), keys.begin(), keys.end(), sorted_input);
             Intersect<false>::process(overlap.first, overlap.second, keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
-            size_t count = ::std::accumulate(count_results.begin(), count_results.end(), 0,
+            size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                           [](size_t v, ::std::pair<Key, size_t> const & x) {
                       return v + x.second;
                     });
@@ -776,7 +776,7 @@ namespace dsc  // distributed std container
 
           // count now.
           Intersect<false>::process(this->c.begin(), this->c.end(), keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
-          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), 0,
+          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                            [](size_t v, ::std::pair<Key, size_t> const & x) {
                        return v + x.second;
                      });

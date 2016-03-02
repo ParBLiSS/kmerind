@@ -501,7 +501,7 @@ namespace dsc  // distributed std container
             count_results.clear();
             QueryProcessor::process(c, start, end, count_emplace_iter, count_element, true, pred);
             send_counts[i] =
-                ::std::accumulate(count_results.begin(), count_results.end(), 0,
+                ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                   [](size_t v, ::std::pair<Key, size_t> const & x) {
               return v + x.second;
             });
@@ -595,7 +595,7 @@ namespace dsc  // distributed std container
 
           // count now.
           QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
-          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), 0,
+          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                             [](size_t v, ::std::pair<Key, size_t> const & x) {
                         return v + x.second;
                       });
@@ -633,7 +633,7 @@ namespace dsc  // distributed std container
 
         // count now.
         QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
-        size_t count = ::std::accumulate(count_results.begin(), count_results.end(), 0,
+        size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                       [](size_t v, ::std::pair<Key, size_t> const & x) {
                   return v + x.second;
                 });
