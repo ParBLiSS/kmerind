@@ -305,7 +305,7 @@ void testIndex(const mxx::comm& comm, const std::string & filename, std::string 
 
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  size_t result = read_file<SeqParser>(filename, comm);
+  read_file<SeqParser>(filename, comm);
 
 }
 
@@ -316,7 +316,7 @@ void testIndexSubComm(const mxx::comm& comm, const std::string & filename, std::
 
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  size_t result = read_file_mpi_subcomm<SeqParser>(filename, comm);
+  read_file_mpi_subcomm<SeqParser>(filename, comm);
 }
 
 
@@ -325,7 +325,7 @@ void testIndexDirect(const mxx::comm& comm, const std::string & filename, std::s
 
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  size_t result = read_file_direct<SeqParser, KmerType::size>(filename, comm);
+  read_file_direct<SeqParser, KmerType::size>(filename, comm);
 }
 
 /**
