@@ -76,16 +76,17 @@
    * @tparam SeqParser    parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
    * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
    */
-  template <template <typename> class SeqParser>
+  template <template <typename> class SeqParser, bool prefetch = false>
   size_t read_file(const std::string & filename, const mxx::comm & _comm) {
 
 
 //    constexpr size_t overlap = KP::kmer_type::size;  specify as 0 - which allows overlap to be computed.
 
     // TODO: check if prefetch makes a difference.
-    using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, true>; // raw data type :  use CharType
+    using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, prefetch>; // raw data type :  use CharType
 
     //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+    printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
 
     typename FileLoaderType::L1BlockType partition;
     TIMER_INIT(file);
@@ -101,14 +102,26 @@
       // check partition is same
       size_t len = partition.getRange().size();
       size_t offset = partition.getRange().start;
+
+      TIMER_START(file);
       unsigned char * gold = new unsigned char[len + 1];
-
       readFilePOSIX(filename, offset, len, gold);
+      TIMER_END(file, "posix", len);
 
-      bool same = ::std::equal(partition.begin(), partition.end(), gold);
 
-      if (!same) std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (fileloader)! first chars " << *(partition.begin()) << " gold " << (*gold)
-              << " range " << partition.getRange() << std::endl;
+      TIMER_START(file);
+      auto diff_iters = ::std::mismatch(partition.begin(), partition.end(), gold);
+      TIMER_END(file, "compare", len);
+
+
+      if (std::distance(partition.begin(), partition.end()) != len)
+        std::cout << "ERROR: block size is not same as range size." << std::endl;
+
+      if (diff_iters.first != partition.end())
+        std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! diff at offset " << (offset + std::distance(partition.begin(), diff_iters.first))
+            << " val " << *(diff_iters.first) << " gold " << *(diff_iters.second)
+            << " range " << partition.getRange() << std::endl;
+
 
       delete [] gold;
 
@@ -130,7 +143,7 @@
    * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
    * @tparam SeqParser    parser type for extracting sequences.  supports FASTQ and FASTA.  template template parameter, param is iterator
    */
-  template <template <typename> class SeqParser>
+  template <template <typename> class SeqParser, bool prefetch = false>
   static size_t read_file_mpi_subcomm(const std::string & filename, const mxx::comm& _comm) {
 
     // split the communcator so 1 proc from each host does the read, then redistribute.
@@ -138,16 +151,17 @@
     mxx::comm group_leaders = _comm.split(group.rank() == 0);
 
 //    constexpr size_t overlap = KP::kmer_type::size;  specify as 0 - which allows overlap to be computed.
+    printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
 
     // raw data type :  use CharType.   block partition at L1 and L2.  no buffering at all, since we will be copying data to the group members anyways.
-    using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, true,
+    using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, prefetch,
         bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >,  bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >>;
     using L2BlockType = bliss::io::DataBlock<unsigned char*, ::bliss::partition::range<size_t>, bliss::io::NoBuffer>;
 
     typename FileLoaderType::RangeType file_range;
     L2BlockType block;
 
-    TIMER_INIT(file);
+    TIMER_INIT(file_subcomm);
     {
 
       typename FileLoaderType::RangeType range;
@@ -158,29 +172,30 @@
       typename FileLoaderType::L1BlockType partition;
 
       // first load the file using the group loader's communicator.
-      TIMER_START(file);
       if (group.rank() == 0) {  // ensure file loader is closed properly.
+          TIMER_START(file_subcomm);
         //==== create file Loader. this handle is alive through the entire building process.
         FileLoaderType loader(filename, group_leaders, group.size());  // for member of group_leaders, each create g_size L2blocks.
 
         // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
         partition = loader.getNextL1Block();
+        TIMER_END(file_subcomm, "L1 block", data.size());
 
         //====  now compute the send counts and ranges to be scattered.
+        TIMER_START(file_subcomm);
         ranges.resize(group.size());
         send_counts.resize(group.size());
         for (int i = 0; i < group.size(); ++i) {
           auto b = loader.getNextL2Block(i);
           ranges[i] = b.getRange();
           send_counts[i] = ranges[i].size();
-
-//          std::cout << "rank " << i << " block begins with " << *(b.begin()) << " at " << ranges[i] << " len " << ranges[i].size()
-//              << " send counts " << send_counts[i] << std::endl;
-
         }
+        TIMER_END(file_subcomm, "L2 range", data.size());
 
+        TIMER_START(file_subcomm);
         // scatter the data .  this call here relies on FileLoader still having the memory mapped.
         data = mxx::scatterv(&(*partition.begin()), send_counts, 0, group);
+        TIMER_END(file_subcomm, "scatter", data.size());
 
         // send the file range.
         file_range = loader.getFileRange();
@@ -188,12 +203,22 @@
       } else {
         // replicated here because the root's copy needs to be inside the if clause - requires FileLoader to be open for the sender.
 
+
+          TIMER_START(file_subcomm);
+          TIMER_END(file_subcomm, "L1 block", data.size());
+          TIMER_START(file_subcomm);
+          TIMER_END(file_subcomm, "L2 range", data.size());
+
         // scatter the data.  this is the receiver end of the thing.
+          TIMER_START(file_subcomm);
         data = mxx::scatterv(&(*partition.begin()), send_counts, 0, group);
+        TIMER_END(file_subcomm, "scatter", data.size());
 
 
       }
       if (data[0] != '@') std::cout << "rank " << _comm.rank() << " mxx data begins with " << data[0];
+
+      TIMER_START(file_subcomm);
 
       // send the file range to rest of group
       mxx::datatype range_dt = mxx::get_datatype<typename FileLoaderType::RangeType >();
@@ -205,25 +230,30 @@
       range = mxx::scatter_one(ranges, 0, group);
       // now create the L2Blocks from the data  (reuse block)
       block.assign(&(data[0]), &(data[0]) + range.size(), range);
-      TIMER_END(file, "open", data.size());
+      TIMER_END(file_subcomm, "createL2", data.size());
 
 
       // check partition is same
       size_t len = block.getRange().size();
       size_t offset = block.getRange().start;
-      unsigned char * gold = new unsigned char[len + 1];
 
+      TIMER_START(file_subcomm);
+      unsigned char * gold = new unsigned char[len + 1];
       readFilePOSIX(filename, offset, len, gold);
+      TIMER_END(file_subcomm, "posix", len);
+
+
+      TIMER_START(file_subcomm);
+      auto diff_iters = ::std::mismatch(block.begin(), block.end(), gold);
+      TIMER_END(file_subcomm, "compare", len);
 
       if (std::distance(block.begin(), block.end()) != len)
         std::cout << "ERROR: block size is not same as range size." << std::endl;
 
-      auto diff_iters = ::std::mismatch(block.begin(), block.end(), gold);
-
       if (diff_iters.first != block.end())
         std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! diff at offset " << (offset + std::distance(block.begin(), diff_iters.first))
             << " val " << *(diff_iters.first) << " gold " << *(diff_iters.second)
-            << " range " << partition.getRange() << std::endl;
+            << " range " << block.getRange() << std::endl;
 
       delete [] gold;
 
@@ -237,7 +267,7 @@
 
     }
 
-    TIMER_REPORT_MPI(file, _comm.rank(), _comm);
+    TIMER_REPORT_MPI(file_subcomm, _comm.rank(), _comm);
 
     return block.getRange().size();
   }
@@ -262,25 +292,37 @@
     partition.valid_range.end = 0;
 
 
-    TIMER_INIT(file);
+    TIMER_INIT(file_direct);
     {  // ensure that fileloader is closed at the end.
 
-      TIMER_START(file);
+      TIMER_START(file_direct);
       //==== create file Loader
       partition = ::bliss::io::parallel::memmap::load_file<SeqParser<unsigned char*> >(filename, _comm, overlap);
-      TIMER_END(file, "open", partition.getRange().size());
+      TIMER_END(file_direct, "open", partition.getRange().size());
 
       // check partition is same
       size_t len = partition.getRange().size();
       size_t offset = partition.getRange().start;
+
+      TIMER_START(file_direct);
       unsigned char * gold = new unsigned char[len + 1];
-
       readFilePOSIX(filename, offset, len, gold);
+      TIMER_END(file_direct, "posix", len);
 
-      bool same = ::std::equal(partition.begin(), partition.end(), gold);
 
-      if (!same) std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (direct)! first chars " << *(partition.begin()) << " gold " << (*gold)
-          << " range " << partition.getRange() << std::endl;
+      TIMER_START(file_direct);
+      auto diff_iters = ::std::mismatch(partition.begin(), partition.end(), gold);
+      TIMER_END(file_direct, "compare", len);
+
+
+      if (std::distance(partition.begin(), partition.end()) != len)
+        std::cout << "ERROR: block size is not same as range size." << std::endl;
+
+      if (diff_iters.first != partition.end())
+        std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! diff at offset " << (offset + std::distance(partition.begin(), diff_iters.first))
+            << " val " << *(diff_iters.first) << " gold " << *(diff_iters.second)
+            << " range " << partition.getRange() << std::endl;
+
 
       delete [] gold;
 
@@ -293,7 +335,7 @@
 
     }
 
-    TIMER_REPORT_MPI(file, _comm.rank(), _comm);
+    TIMER_REPORT_MPI(file_direct, _comm.rank(), _comm);
     return partition.valid_range.size();
   }
 
@@ -305,7 +347,9 @@ void testIndex(const mxx::comm& comm, const std::string & filename, std::string 
 
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  read_file<SeqParser>(filename, comm);
+  read_file<SeqParser, true>(filename, comm);
+
+  read_file<SeqParser, false>(filename, comm);
 
 }
 
@@ -316,7 +360,8 @@ void testIndexSubComm(const mxx::comm& comm, const std::string & filename, std::
 
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  read_file_mpi_subcomm<SeqParser>(filename, comm);
+  read_file_mpi_subcomm<SeqParser, true>(filename, comm);
+  read_file_mpi_subcomm<SeqParser, false>(filename, comm);
 }
 
 
