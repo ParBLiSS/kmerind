@@ -52,19 +52,12 @@ typedef FASTQParser<unsigned char *> ParserType;
 
 
 class FASTQParseProcedureTest : public FileParserTest<FileLoaderType >
-{};
-
-
-TEST_P(FASTQParseProcedureTest, parse)
 {
-#ifdef USE_MPI
-	int rank = 0;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	if (rank == 0) {
-#endif
+	// can't compare the sequences directly since offsets may be different.
+protected:
 
-
-		  constexpr size_t overlap = FileLoaderType::get_overlap_size();
+	template <typename file_loader>
+	void parse_seq(file_loader & fobj ) {
 		  typedef typename FileLoaderType::RangeType RangeType;
 
 		  // get fileName
@@ -80,9 +73,9 @@ TEST_P(FASTQParseProcedureTest, parse)
 		  ASSERT_EQ(fr.end, r.end);
 
 
-		  ::bliss::io::MemData data = ::bliss::io::memmap::load_file<ParserType >(this->fileName, overlap);
+			bliss::io::file_data fdata = fobj.read_file();
 
-		  ASSERT_TRUE(data.data[data.valid_range.start - data.mem_range.start] == '@');
+		  ASSERT_TRUE(fdata.data[fdata.valid_range_bytes.start - fdata.in_mem_range_bytes.start] == '@');
 
 			this->elemCount = 0;
 
@@ -93,26 +86,119 @@ TEST_P(FASTQParseProcedureTest, parse)
 			ParserType l1parser = loader.getSeqParser();
 
 
-			size_t offset = l1parser.init_parser(data.data, loader.getFileRange(), data.mem_range, data.valid_range);
+			size_t offset = l1parser.init_parser(fdata.data.data(), loader.getFileRange(), fdata.in_mem_range_bytes, fdata.valid_range_bytes);
 
 			  //==  and wrap the chunk inside an iterator that emits Reads.
-			  SeqIterType seqs_start(l1parser, data.data + (data.valid_range.start - data.mem_range.start),
-					  data.data + (data.valid_range.end - data.mem_range.start), offset);
-			  SeqIterType seqs_end(data.data + (data.valid_range.end - data.mem_range.start));
+			  SeqIterType seqs_start(l1parser, fdata.data.data() + (fdata.valid_range_bytes.start - fdata.in_mem_range_bytes.start),
+					  fdata.data.data() + (fdata.valid_range_bytes.end - fdata.in_mem_range_bytes.start), offset);
+			  SeqIterType seqs_end(fdata.data.data() + (fdata.valid_range_bytes.end - fdata.in_mem_range_bytes.start));
 
 			  //== loop over the reads
 			  for (; seqs_start != seqs_end; ++seqs_start)
 			  {
-				if (data.valid_range.start <= (*seqs_start).id.get_pos()) ++(this->elemCount);
+				if (fdata.valid_range_bytes.start <= (*seqs_start).id.get_pos()) ++(this->elemCount);
 		  //            std::cout << *seqs_start << ", ";
 		  //            std::cout << std::distance((*seqs_start).seq_begin, (*seqs_start).seq_end) << std::endl;
 				//      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
 			  }
 
 
-		  ::bliss::io::unload_data(data);
+
+	}
 
 
+	template <typename file_loader>
+	void parse_mpi(file_loader & fobj, MPI_Comm comm) {
+
+		  // get this->fileName
+
+		  FileLoaderType loader(this->fileName, comm, 1, 64 * 1024, 64 * 1024 );
+
+		  auto block = loader.getNextL1Block();
+
+
+			::bliss::io::file_data fdata = fobj.read_file();
+
+		  if (fdata.valid_range_bytes.size() > 0) {
+			  if (fdata.data[fdata.valid_range_bytes.start - fdata.in_mem_range_bytes.start] != '@') {
+				  std::cout << "data at pos " << (fdata.valid_range_bytes.start - fdata.in_mem_range_bytes.start) << " for "
+						  << fdata.valid_range_bytes << " in mem " << fdata.in_mem_range_bytes << " is "
+						  << fdata.data[fdata.valid_range_bytes.start - fdata.in_mem_range_bytes.start] << std::endl;
+			  }
+
+			  ASSERT_TRUE(fdata.data[fdata.valid_range_bytes.start - fdata.in_mem_range_bytes.start] == '@');
+		  }
+
+	//	  std::cout << " orig mem " << fdata.in_mem_range_bytes << " valid " << fdata.valid_range_bytes << std::endl;
+
+		  this->elemCount = 0;
+
+		// from FileLoader type, get the block iter type and range type
+		using BlockIterType = unsigned char *;
+		using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTQParser >;
+
+		ParserType l1parser = loader.getSeqParser();
+
+		size_t offset = l1parser.init_parser(fdata.data.data(), loader.getFileRange(), fdata.in_mem_range_bytes, fdata.valid_range_bytes, comm);
+
+		  //==  and wrap the chunk inside an iterator that emits Reads.
+		  SeqIterType seqs_start(l1parser, fdata.data.data() + (fdata.valid_range_bytes.start - fdata.in_mem_range_bytes.start),
+				  fdata.data.data() + (fdata.valid_range_bytes.end - fdata.in_mem_range_bytes.start), offset);
+		  SeqIterType seqs_end(fdata.data.data() + (fdata.valid_range_bytes.end - fdata.in_mem_range_bytes.start));
+
+		  //== loop over the reads
+		  for (; seqs_start != seqs_end; ++seqs_start)
+		  {
+			if (fdata.valid_range_bytes.start <= (*seqs_start).id.get_pos()) ++(this->elemCount);
+	  //            std::cout << *seqs_start << ", ";
+	  //            std::cout << std::distance((*seqs_start).seq_begin, (*seqs_start).seq_end) << std::endl;
+			//      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
+		  }
+	//	  int rank;
+	//	  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	//	  std::cout << "rank " << rank << " elem count " << this->elemCount << std::endl;
+
+	//	  if (this->elemCount == 0) {
+	//		  std::cout << " mem " << fdata.in_mem_range_bytes << " valid " << fdata.valid_range_bytes << std::endl;
+	//	  }
+
+
+	}
+
+};
+
+
+TEST_P(FASTQParseProcedureTest, parse_mmap)
+{
+#ifdef USE_MPI
+	int rank = 0;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	if (rank == 0) {
+#endif
+
+
+		bliss::io::mmap_file fobj(this->fileName);
+
+		this->parse_seq(fobj);
+
+#ifdef USE_MPI
+	}
+#endif
+
+}
+
+TEST_P(FASTQParseProcedureTest, parse_stdio)
+{
+#ifdef USE_MPI
+	int rank = 0;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	if (rank == 0) {
+#endif
+
+
+		bliss::io::stdio_file fobj(this->fileName);
+
+		this->parse_seq(fobj);
 
 #ifdef USE_MPI
 	}
@@ -121,66 +207,44 @@ TEST_P(FASTQParseProcedureTest, parse)
 }
 
 
-
-
 #ifdef USE_MPI
-TEST_P(FASTQParseProcedureTest, parse_mpi)
+TEST_P(FASTQParseProcedureTest, parse_mmap_mpi)
 {
 	  constexpr size_t overlap = FileLoaderType::get_overlap_size();
 
-	  // get this->fileName
+	::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
 
-	  FileLoaderType loader(this->fileName, MPI_COMM_WORLD, 1, 64 * 1024, 64 * 1024 );
+	this->parse_mpi(fobj, MPI_COMM_WORLD);
 
-	  auto block = loader.getNextL1Block();
-
-	  ::bliss::io::MemData data = ::bliss::io::parallel::memmap::load_file<ParserType >(this->fileName, MPI_COMM_WORLD,  overlap);
-
-	  if (data.valid_range.size() > 0) {
-		  if (data.data[data.valid_range.start - data.mem_range.start] != '@') {
-			  std::cout << "data at pos " << (data.valid_range.start - data.mem_range.start) << " for "
-					  << data.valid_range << " in mem " << data.mem_range << " is "
-					  << data.data[data.valid_range.start - data.mem_range.start] << std::endl;
-		  }
-
-		  ASSERT_TRUE(data.data[data.valid_range.start - data.mem_range.start] == '@');
-	  }
-
-//	  std::cout << " orig mem " << data.mem_range << " valid " << data.valid_range << std::endl;
-
-	  this->elemCount = 0;
-
-	// from FileLoader type, get the block iter type and range type
-	using BlockIterType = unsigned char *;
-	using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTQParser >;
-
-	ParserType l1parser = loader.getSeqParser();
+	  MPI_Barrier(MPI_COMM_WORLD);
+}
+#endif
 
 
-	size_t offset = l1parser.init_parser(data.data, loader.getFileRange(), data.mem_range, data.valid_range, MPI_COMM_WORLD);
 
-	  //==  and wrap the chunk inside an iterator that emits Reads.
-	  SeqIterType seqs_start(l1parser, data.data + (data.valid_range.start - data.mem_range.start),
-			  data.data + (data.valid_range.end - data.mem_range.start), offset);
-	  SeqIterType seqs_end(data.data + (data.valid_range.end - data.mem_range.start));
+#ifdef USE_MPI
+TEST_P(FASTQParseProcedureTest, parse_stdio_mpi)
+{
+	  constexpr size_t overlap = FileLoaderType::get_overlap_size();
 
-	  //== loop over the reads
-	  for (; seqs_start != seqs_end; ++seqs_start)
-	  {
-		if (data.valid_range.start <= (*seqs_start).id.get_pos()) ++(this->elemCount);
-  //            std::cout << *seqs_start << ", ";
-  //            std::cout << std::distance((*seqs_start).seq_begin, (*seqs_start).seq_end) << std::endl;
-		//      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
-	  }
-//	  int rank;
-//	  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-//	  std::cout << "rank " << rank << " elem count " << this->elemCount << std::endl;
+	::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
 
-//	  if (this->elemCount == 0) {
-//		  std::cout << " mem " << data.mem_range << " valid " << data.valid_range << std::endl;
-//	  }
+	this->parse_mpi(fobj, MPI_COMM_WORLD);
 
-	  ::bliss::io::unload_data(data);
+	  MPI_Barrier(MPI_COMM_WORLD);
+}
+#endif
+
+
+
+#ifdef USE_MPI
+TEST_P(FASTQParseProcedureTest, parse_mpiio_mpi)
+{
+	  constexpr size_t overlap = FileLoaderType::get_overlap_size();
+
+	::bliss::io::parallel::mpiio_file<ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
+
+	this->parse_mpi(fobj, MPI_COMM_WORLD);
 
 	  MPI_Barrier(MPI_COMM_WORLD);
 }

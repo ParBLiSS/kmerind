@@ -88,6 +88,17 @@ TYPED_TEST_P(FileLoadProcedureTest, open)
 
     ASSERT_TRUE(same);
 
+    same = true;
+    data = ::bliss::io::stdio::load_file(this->fileName, overlap);
+
+    ASSERT_TRUE(data.mem_range.size() == r.size());
+
+    same = std::equal(block.begin(), block.end(), data.data);
+
+    ::bliss::io::unload_data(data);
+
+      ASSERT_TRUE(same);
+
 #ifdef USE_MPI
 	}
 #endif
@@ -124,6 +135,24 @@ TYPED_TEST_P(FileLoadProcedureTest, open_mpi)
   ::bliss::io::unload_data(data);
 
   ASSERT_TRUE(same);
+
+
+  data = ::bliss::io::parallel::mpi_io::load_file(this->fileName, MPI_COMM_WORLD,  overlap);
+
+  if (data.valid_range.size() != r.size()) {
+	  std::cout << "file open: " << data.mem_range << ::std::endl;
+	  std::cout << "file open: " << data.valid_range << ::std::endl;
+	  std::cout << "file loader: " << r << ::std::endl;
+  }
+
+  ASSERT_TRUE(data.valid_range.size() == r.size());
+
+  same = std::equal(block.begin(), block.end(), data.data);
+
+  ::bliss::io::unload_data(data);
+
+  ASSERT_TRUE(same);
+
 
 
   MPI_Barrier(MPI_COMM_WORLD);
