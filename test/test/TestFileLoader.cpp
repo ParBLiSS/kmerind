@@ -326,8 +326,10 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
       TIMER_END(file_direct, "compare", len);
 
 
-      if (partition.data.size() != len)
-        std::cout << "ERROR: block size is not same as range size." << std::endl;
+      if (partition.data.size() != partition.in_mem_range_bytes.size())
+        std::cout << "ERROR rank " << _comm.rank() << ": block size " << partition.data.size() << " is not same as range size "
+        << partition.valid_range_bytes.size()
+        << " in mem range size is " << partition.in_mem_range_bytes.size() << std::endl;
 
       if (diff_iters.first != partition.end())
         std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! diff at offset " << (offset + std::distance(partition.begin(), diff_iters.first))
