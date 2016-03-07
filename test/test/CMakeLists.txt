@@ -8,20 +8,20 @@ if (BUILD_TEST_APPLICATIONS)
 
 
 add_executable(testKmerIndex_ST2 TestKmerIndexAndQuerySingleThread_DistMap.cpp)
-SET_TARGET_PROPERTIES(testKmerIndex_ST2 PROPERTIES COMPILE_FLAGS -DKMERINDEX)
 target_link_libraries(testKmerIndex_ST2 ${EXTRA_LIBS})
 
-add_executable(testFASTQ_load TestFASTQLoader.cpp)
-SET_TARGET_PROPERTIES(testFASTQ_load PROPERTIES COMPILE_FLAGS -DKMERINDEX)
+add_executable(testFASTQ_load TestFileLoader.cpp)
+SET_TARGET_PROPERTIES(testFASTQ_load PROPERTIES COMPILE_FLAGS -DUSE_FASTQ_PARSER)
 target_link_libraries(testFASTQ_load ${EXTRA_LIBS})
 
+add_executable(testFASTA_load TestFileLoader.cpp)
+SET_TARGET_PROPERTIES(testFASTA_load PROPERTIES COMPILE_FLAGS -DUSE_FASTA_PARSER)
+target_link_libraries(testFASTA_load ${EXTRA_LIBS})
 
 add_executable(testKmerIndex_read TestKmerIndex_ParseOnly.cpp)
-SET_TARGET_PROPERTIES(testKmerIndex_read PROPERTIES COMPILE_FLAGS -DKMERINDEX)
 target_link_libraries(testKmerIndex_read ${EXTRA_LIBS})
 
 add_executable(testKmerIndex_read_fasta TestKmerIndex_FASTAParseOnly.cpp)
-SET_TARGET_PROPERTIES(testKmerIndex_read_fasta PROPERTIES COMPILE_FLAGS -DKMERINDEX)
 target_link_libraries(testKmerIndex_read_fasta ${EXTRA_LIBS})
 
 

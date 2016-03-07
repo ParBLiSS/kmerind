@@ -176,7 +176,6 @@ TEST_P(FASTQParseProcedureTest, parse_mmap)
 	if (rank == 0) {
 #endif
 
-
 		bliss::io::mmap_file fobj(this->fileName);
 
 		this->parse_seq(fobj);

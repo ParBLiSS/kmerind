@@ -56,17 +56,23 @@
 
 
 
-    void readFilePOSIX(const std::string &fileName, const size_t offset,
-                              const size_t length, unsigned char* result)
-    {
-      FILE *fp = fopen(fileName.c_str(), "r");
-      fseek(fp, offset , SEEK_SET);
-      size_t read = fread_unlocked(result, 1, length, fp);
-      fclose(fp);
+void readFilePOSIX(const std::string &fileName, const size_t offset,
+						  const size_t length, unsigned char* result)
+{
+  FILE *fp = fopen(fileName.c_str(), "r");
+  fseek(fp, offset , SEEK_SET);
+  size_t read = fread_unlocked(result, 1, length, fp);
+  fclose(fp);
 
-      if (read < 0) throw std::logic_error("ERROR: fread_unlocked failed.");
-    }
+  if (read < 0) throw std::logic_error("ERROR: fread_unlocked failed.");
+}
 
+
+#if defined(USE_FASTQ_PARSER)
+#define PARSER_TYPE ::bliss::io::FASTQParser
+#elif defined(USE_FASTA_PARSER)
+#define PARSER_TYPE ::bliss::io::FASTAParser
+#endif
 
 
 
@@ -86,7 +92,7 @@
     using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, prefetch>; // raw data type :  use CharType
 
     //====  now process the file, one L1 block (block partition by MPI Rank) at a time
-    printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
+    if (_comm.rank() == 0) printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
 
     typename FileLoaderType::L1BlockType partition;
     TIMER_INIT(file);
@@ -151,7 +157,7 @@
     mxx::comm group_leaders = _comm.split(group.rank() == 0);
 
 //    constexpr size_t overlap = KP::kmer_type::size;  specify as 0 - which allows overlap to be computed.
-    printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
+    if (_comm.rank() == 0) printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
 
     // raw data type :  use CharType.   block partition at L1 and L2.  no buffering at all, since we will be copying data to the group members anyways.
     using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, prefetch,
@@ -216,7 +222,7 @@
 
 
       }
-      if (data[0] != '@') std::cout << "rank " << _comm.rank() << " mxx data begins with " << data[0];
+      if (data[0] != '@') std::cout << "rank " << _comm.rank() << " mxx data begins with " << data[0] << std::endl;
 
       TIMER_START(file_subcomm);
 
@@ -280,16 +286,15 @@
    * @tparam SeqParser    parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
    * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
    */
-  template <template <typename> class SeqParser, size_t overlap = 0>
-  static size_t read_file_direct(const std::string & filename, const mxx::comm & _comm) {
+  template <typename FileLoader, size_t overlap = 0>
+  static size_t read_file_mpi_direct(const std::string & filename, const mxx::comm & _comm) {
 
 
     //====  now process the file, one L1 block (block partition by MPI Rank) at a time
 
-    // TODO: check if prefetch makes a difference.  specify overlap as 0 - which allows overlap to be computed.
-    ::bliss::io::MemData partition;
-    partition.valid_range.start = 0;
-    partition.valid_range.end = 0;
+    ::bliss::io::file_data partition;
+    partition.valid_range_bytes.start = 0;
+    partition.valid_range_bytes.end = 0;
 
 
     TIMER_INIT(file_direct);
@@ -297,8 +302,14 @@
 
       TIMER_START(file_direct);
       //==== create file Loader
-      partition = ::bliss::io::parallel::memmap::load_file<SeqParser<unsigned char*> >(filename, _comm, overlap);
+      FileLoader loader(filename, overlap, _comm);
       TIMER_END(file_direct, "open", partition.getRange().size());
+
+      TIMER_START(file_direct);
+      //==== create file Loader
+      partition = loader.read_file();
+      TIMER_END(file_direct, "load", partition.getRange().size());
+
 
       // check partition is same
       size_t len = partition.getRange().size();
@@ -336,7 +347,7 @@
     }
 
     TIMER_REPORT_MPI(file_direct, _comm.rank(), _comm);
-    return partition.valid_range.size();
+    return partition.valid_range_bytes.size();
   }
 
 
@@ -345,7 +356,7 @@ template <template <typename> class SeqParser>
 void testIndex(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
 
-  if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
   read_file<SeqParser, true>(filename, comm);
 
@@ -358,19 +369,20 @@ template <template <typename> class SeqParser>
 void testIndexSubComm(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
 
-  if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
   read_file_mpi_subcomm<SeqParser, true>(filename, comm);
+
   read_file_mpi_subcomm<SeqParser, false>(filename, comm);
 }
 
 
-template <template <typename> class SeqParser, typename KmerType>
+template <typename FileLoader, typename KmerType>
 void testIndexDirect(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
-  if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  read_file_direct<SeqParser, KmerType::size>(filename, comm);
+  read_file_mpi_direct<FileLoader, KmerType::size>(filename, comm);
 }
 
 /**
@@ -388,7 +400,12 @@ int main(int argc, char** argv) {
 
   std::string filename;
       filename.assign(PROJ_SRC_DIR);
+
+#if defined(USE_FASTQ_PARSER)
       filename.append("/test/data/test.fastq");
+#elif defined(USE_FASTA_PARSER)
+      filename.append("/test/data/test.fasta");
+#endif
 
   if (argc > 1)
   {
@@ -441,18 +458,30 @@ int main(int argc, char** argv) {
 
   if (which == -1 || which == 1)
   {
-  testIndex<bliss::io::FASTQParser > (comm, filename, "ST, hash, all read, count index.");
+  testIndex<PARSER_TYPE > (comm, filename, "file loader.");
     MPI_Barrier(comm);
 }
   if (which == -1 || which == 3)
   {
-  testIndexDirect<bliss::io::FASTQParser , KmerType> (comm, filename, "ST, hash, read_and_dist, count index.");
+  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi mmap");
     MPI_Barrier(comm);
 }
 
+  if (which == -1 || which == 4)
+  {
+	  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::stdio_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi stdio");
+    MPI_Barrier(comm);
+}
+  if (which == -1 || which == 5)
+  {
+	  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi-io");
+    MPI_Barrier(comm);
+}
+
+
   if (which == -1 || which == 2)
   {
-  testIndexSubComm< bliss::io::FASTQParser > (comm, filename, "ST, hash, read_and_dist, count index.");
+  testIndexSubComm< PARSER_TYPE > (comm, filename, "fileloader with mpi subcomm.");
     MPI_Barrier(comm);
 }
 

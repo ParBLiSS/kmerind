@@ -44,6 +44,71 @@
 using namespace bliss::io;
 
 
+typedef BaseFileParser<unsigned char *> ParserType;
+
+
+template <typename FileLoaderType>
+class FileLoadProcedureTest : public FileLoaderTest<FileLoaderType>
+{
+protected:
+	~FileLoadProcedureTest() {};
+
+	template <typename file_loader>
+	void open_seq(file_loader & fobj) {
+
+		  typedef typename FileLoaderType::RangeType RangeType;
+
+		  // get fileName
+
+		  FileLoaderType loader(this->fileName, 1, 0, 1, 64 * 1024, 64 * 1024);   // NOTE: larger block is MUCH faster.  2 * threads * 2048 bytes take a LONG time because of mmap each time...
+		  RangeType fr = loader.getFileRange();
+
+		  auto block = loader.getNextL1Block();
+		  RangeType r = block.getRange();
+
+		  // start at file starting point
+		  ASSERT_EQ(fr.start, r.start);
+		  ASSERT_EQ(fr.end, r.end);
+
+		  bool same = true;
+
+			bliss::io::file_data fdata = fobj.read_file();
+
+		  ASSERT_TRUE(fdata.in_mem_range_bytes.size() == r.size());
+
+		  same = std::equal(block.begin(), block.end(), fdata.begin());
+
+		    ASSERT_TRUE(same);
+	}
+
+	template <typename file_loader>
+	void open_mpi(file_loader & fobj, MPI_Comm comm) {
+		  typedef typename FileLoaderType::RangeType RangeType;
+
+		  // get this->fileName
+
+		  FileLoaderType loader(this->fileName, MPI_COMM_WORLD, 1, 64 * 1024, 64 * 1024 );
+
+		  auto block = loader.getNextL1Block();
+		  RangeType r = block.getRange();
+		  bool same = true;
+
+			::bliss::io::file_data fdata = fobj.read_file();
+
+		  if (fdata.valid_range_bytes.size() != r.size()) {
+			  std::cout << "file open: " << fdata.in_mem_range_bytes << ::std::endl;
+			  std::cout << "file open: " << fdata.valid_range_bytes << ::std::endl;
+			  std::cout << "file loader: " << r << ::std::endl;
+		  }
+
+		  ASSERT_TRUE(fdata.valid_range_bytes.size() == r.size());
+
+		  same = std::equal(block.begin(), block.end(), fdata.begin());
+
+		  ASSERT_TRUE(same);
+
+	}
+};
 
 
 // indicate this is a typed test
@@ -51,53 +116,35 @@ TYPED_TEST_CASE_P(FileLoadProcedureTest);
 
 
 // normal test cases
-TYPED_TEST_P(FileLoadProcedureTest, open)
+TYPED_TEST_P(FileLoadProcedureTest, open_mmap)
 {
-
 #ifdef USE_MPI
 	int rank = 0;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	if (rank == 0) {
 #endif
 
-  typedef TypeParam FileLoaderType;
-  constexpr size_t overlap = FileLoaderType::get_overlap_size();
-  typedef typename FileLoaderType::RangeType RangeType;
+		bliss::io::mmap_file fobj(this->fileName);
 
-  // get fileName
+		this->open_seq(fobj);
 
-  FileLoaderType loader(this->fileName, 1, 0, 1, 64 * 1024, 64 * 1024);   // NOTE: larger block is MUCH faster.  2 * threads * 2048 bytes take a LONG time because of mmap each time...
-  RangeType fr = loader.getFileRange();
+#ifdef USE_MPI
+	}
+#endif
+}
 
-  auto block = loader.getNextL1Block();
-  RangeType r = block.getRange();
+// normal test cases
+TYPED_TEST_P(FileLoadProcedureTest, open_stdio)
+{
+#ifdef USE_MPI
+	int rank = 0;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	if (rank == 0) {
+#endif
 
-  // start at file starting point
-  ASSERT_EQ(fr.start, r.start);
-  ASSERT_EQ(fr.end, r.end);
+		bliss::io::stdio_file fobj(this->fileName);
 
-  bool same = true;
-
-  ::bliss::io::MemData data = ::bliss::io::memmap::load_file(this->fileName, overlap);
-
-  ASSERT_TRUE(data.mem_range.size() == r.size());
-
-  same = std::equal(block.begin(), block.end(), data.data);
-
-  ::bliss::io::unload_data(data);
-
-    ASSERT_TRUE(same);
-
-    same = true;
-    data = ::bliss::io::stdio::load_file(this->fileName, overlap);
-
-    ASSERT_TRUE(data.mem_range.size() == r.size());
-
-    same = std::equal(block.begin(), block.end(), data.data);
-
-    ::bliss::io::unload_data(data);
-
-      ASSERT_TRUE(same);
+		this->open_seq(fobj);
 
 #ifdef USE_MPI
 	}
@@ -106,57 +153,37 @@ TYPED_TEST_P(FileLoadProcedureTest, open)
 
 
 #ifdef USE_MPI
-TYPED_TEST_P(FileLoadProcedureTest, open_mpi)
+TYPED_TEST_P(FileLoadProcedureTest, open_mmap_mpi)
 {
-  typedef TypeParam                          FileLoaderType;
-  constexpr size_t overlap = FileLoaderType::get_overlap_size();
-  typedef typename FileLoaderType::RangeType RangeType;
+	  constexpr size_t overlap = TypeParam::get_overlap_size();
 
-  // get this->fileName
+	::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
 
-  FileLoaderType loader(this->fileName, MPI_COMM_WORLD, 1, 64 * 1024, 64 * 1024 );
+	this->open_mpi(fobj, MPI_COMM_WORLD);
 
-  auto block = loader.getNextL1Block();
-  RangeType r = block.getRange();
-  bool same = true;
+	  MPI_Barrier(MPI_COMM_WORLD);
+}
 
-  ::bliss::io::MemData data = ::bliss::io::parallel::memmap::load_file(this->fileName, MPI_COMM_WORLD,  overlap);
+TYPED_TEST_P(FileLoadProcedureTest, open_stdio_mpi)
+{
+	  constexpr size_t overlap = TypeParam::get_overlap_size();
 
-  if (data.valid_range.size() != r.size()) {
-	  std::cout << "file open: " << data.mem_range << ::std::endl;
-	  std::cout << "file open: " << data.valid_range << ::std::endl;
-	  std::cout << "file loader: " << r << ::std::endl;
-  }
+	::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
 
-  ASSERT_TRUE(data.valid_range.size() == r.size());
+	this->open_mpi(fobj, MPI_COMM_WORLD);
 
-  same = std::equal(block.begin(), block.end(), data.data);
+	  MPI_Barrier(MPI_COMM_WORLD);
+}
 
-  ::bliss::io::unload_data(data);
+TYPED_TEST_P(FileLoadProcedureTest, open_mpiio_mpi)
+{
+	  constexpr size_t overlap = TypeParam::get_overlap_size();
 
-  ASSERT_TRUE(same);
+	::bliss::io::parallel::mpiio_file<ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
 
+	this->open_mpi(fobj, MPI_COMM_WORLD);
 
-  data = ::bliss::io::parallel::mpi_io::load_file(this->fileName, MPI_COMM_WORLD,  overlap);
-
-  if (data.valid_range.size() != r.size()) {
-	  std::cout << "file open: " << data.mem_range << ::std::endl;
-	  std::cout << "file open: " << data.valid_range << ::std::endl;
-	  std::cout << "file loader: " << r << ::std::endl;
-  }
-
-  ASSERT_TRUE(data.valid_range.size() == r.size());
-
-  same = std::equal(block.begin(), block.end(), data.data);
-
-  ::bliss::io::unload_data(data);
-
-  ASSERT_TRUE(same);
-
-
-
-  MPI_Barrier(MPI_COMM_WORLD);
-
+	  MPI_Barrier(MPI_COMM_WORLD);
 }
 #endif
 
@@ -166,9 +193,12 @@ TYPED_TEST_P(FileLoadProcedureTest, open_mpi)
 // now register the test cases
 REGISTER_TYPED_TEST_CASE_P(FileLoadProcedureTest,
 #ifdef USE_MPI
-		open_mpi,
+		open_mmap_mpi,
+		open_stdio_mpi,
+		open_mpiio_mpi,
 #endif
- open
+ open_mmap,
+ open_stdio
 );
 
 

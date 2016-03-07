@@ -71,55 +71,16 @@ bool equal(const Iter1 &i1, const Iter2 &i2, size_t len, bool print = false) {
 
 
 /**
- * @brief test fixture for file parsers, which segments file into sequences.
+ * @brief test for FileLoader, with various template parameters controlling the behavior (caching, overlapping, etc)
  */
 template <typename Loader>
-class FileParserTest : public ::testing::TestWithParam<TestFileInfo>
+class FileLoadTypeParamTest : public ::testing::Test
 {
   protected:
     typedef typename Loader::InputIteratorType                        InputIterType;
     typedef typename std::iterator_traits<InputIterType>::value_type  ValueType;
 
-    virtual ~FileParserTest() {};
-
-    virtual void SetUp()
-    {
-      TestFileInfo const & p = GetParam();
-
-      elemCount = 0;
-
-      fileName.assign(PROJ_SRC_DIR);
-      fileName.append(p.filename);
-
-      // get file size
-      struct stat filestat;
-      stat(fileName.c_str(), &filestat);
-      size_t fileSize = static_cast<size_t>(filestat.st_size);
-
-      if (p.fileSize != fileSize) printf("filename : %s\n", fileName.c_str());
-
-      ASSERT_EQ(p.fileSize, fileSize);
-#if defined(USE_MPI)
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-
-    }
-
-    virtual void TearDown() {
-
-      if (this->elemCount < std::numeric_limits<size_t>::max() ) {
-
-        TestFileInfo const & p = GetParam();
-
-#ifdef USE_MPI
-        MPI_Barrier(MPI_COMM_WORLD);
-        size_t totalElemCount = mxx::allreduce(elemCount);
-#else
-        size_t totalElemCount = elemCount;
-#endif
-        EXPECT_EQ(p.elemCount, totalElemCount);
-      }
-    }
+    virtual ~FileLoadTypeParamTest() {};
 
     virtual void readFilePOSIX(const std::string &fileName, const size_t offset,
                               const size_t length, ValueType* result)
@@ -133,8 +94,95 @@ class FileParserTest : public ::testing::TestWithParam<TestFileInfo>
     }
 
     std::string fileName;
-    size_t elemCount;
+};
 
+/**
+ * @brief test fixture for file parsers, which segments file into sequences.
+ */
+template <typename Loader>
+class FileLoadValueParamTest : public ::testing::TestWithParam<TestFileInfo>
+{
+  protected:
+    typedef typename Loader::InputIteratorType                        InputIterType;
+    typedef typename std::iterator_traits<InputIterType>::value_type  ValueType;
+
+    virtual ~FileLoadValueParamTest() {};
+
+    virtual void SetUp()
+    {
+      TestFileInfo const & p = GetParam();
+
+      fileName.assign(PROJ_SRC_DIR);
+      fileName.append(p.filename);
+
+      // get file size
+      struct stat filestat;
+      stat(fileName.c_str(), &filestat);
+      size_t fileSize = static_cast<size_t>(filestat.st_size);
+
+      if (p.fileSize != fileSize) printf("filename : %s\n", fileName.c_str());
+
+      ASSERT_EQ(p.fileSize, fileSize);
+    }
+
+
+    virtual void readFilePOSIX(const std::string &fileName, const size_t offset,
+                              const size_t length, ValueType* result)
+    {
+      FILE *fp = fopen(fileName.c_str(), "r");
+      fseek(fp, offset * sizeof(ValueType), SEEK_SET);
+      size_t read = fread_unlocked(result, sizeof(ValueType), length, fp);
+      fclose(fp);
+
+      ASSERT_GT(read, 0UL);
+    }
+
+    std::string fileName;
+
+};
+
+
+/**
+ * @brief test fixture for file parsers, which segments file into sequences.
+ */
+template <typename Loader>
+class FileParserTest : public FileLoadValueParamTest<Loader>
+{
+  protected:
+    typedef typename Loader::InputIteratorType                        InputIterType;
+    typedef typename std::iterator_traits<InputIterType>::value_type  ValueType;
+
+    virtual ~FileParserTest() {};
+
+    virtual void SetUp()
+    {
+    	FileLoadValueParamTest<Loader>::SetUp();
+
+      elemCount = 0;
+
+#if defined(USE_MPI)
+      MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
+    }
+
+    virtual void TearDown() {
+
+      if (this->elemCount < std::numeric_limits<size_t>::max() ) {
+
+        TestFileInfo const & p = this->GetParam();
+
+#ifdef USE_MPI
+        MPI_Barrier(MPI_COMM_WORLD);
+        size_t totalElemCount = mxx::allreduce(elemCount);
+#else
+        size_t totalElemCount = elemCount;
+#endif
+        EXPECT_EQ(p.elemCount, totalElemCount);
+      }
+    }
+
+    size_t elemCount;
 };
 
 /**
@@ -195,7 +243,7 @@ class KmerReaderTest : public FileParserTest<Loader>
  * @brief test for FileLoader, with various template parameters controlling the behavior (caching, overlapping, etc)
  */
 template <typename Loader>
-class FileLoaderTest : public ::testing::Test
+class FileLoaderTest : public FileLoadTypeParamTest<Loader>
 {
   protected:
     typedef typename Loader::InputIteratorType                        InputIterType;
@@ -205,120 +253,21 @@ class FileLoaderTest : public ::testing::Test
 
     virtual void SetUp()
     {
-      fileName.assign(PROJ_SRC_DIR);
-      fileName.append("/test/data/test.fastq");  // does not matter which file to use.
+      this->fileName.assign(PROJ_SRC_DIR);
+      this->fileName.append("/test/data/test.fastq");  // does not matter which file to use.
 
       // get file size
       struct stat filestat;
-      stat(fileName.c_str(), &filestat);
+      stat(this->fileName.c_str(), &filestat);
       size_t fileSize = static_cast<size_t>(filestat.st_size);
 
       ASSERT_EQ(34111308UL, fileSize);
 
     }
 
-    virtual void readFilePOSIX(const std::string &fileName, const size_t offset,
-                              const size_t length, ValueType* result)
-    {
-      FILE *fp = fopen(fileName.c_str(), "r");
-      fseek(fp, offset * sizeof(ValueType), SEEK_SET);
-      size_t read = fread_unlocked(result, sizeof(ValueType), length, fp);
-      fclose(fp);
-
-      ASSERT_GT(read, 0UL);
-    }
-
-    std::string fileName;
-
-};
-
-
-/**
- * @brief test for FileLoader, with various template parameters controlling the behavior (caching, overlapping, etc)
- */
-template <typename Loader>
-class FileLoadProcedureTest : public ::testing::Test
-{
-  protected:
-    typedef typename Loader::InputIteratorType                        InputIterType;
-    typedef typename std::iterator_traits<InputIterType>::value_type  ValueType;
-
-    virtual ~FileLoadProcedureTest() {};
-
-    virtual void SetUp()
-    {
-      fileName.assign(PROJ_SRC_DIR);
-      fileName.append("/test/data/test.fastq");  // does not matter which file to use.
-
-      // get file size
-      struct stat filestat;
-      stat(fileName.c_str(), &filestat);
-      size_t fileSize = static_cast<size_t>(filestat.st_size);
-
-      ASSERT_EQ(34111308UL, fileSize);
-
-    }
-
-    virtual void readFilePOSIX(const std::string &fileName, const size_t offset,
-                              const size_t length, ValueType* result)
-    {
-      FILE *fp = fopen(fileName.c_str(), "r");
-      fseek(fp, offset * sizeof(ValueType), SEEK_SET);
-      size_t read = fread_unlocked(result, sizeof(ValueType), length, fp);
-      fclose(fp);
-
-      ASSERT_GT(read, 0UL);
-    }
-
-    std::string fileName;
-
 };
 
 
 
-/**
- * @brief test fixture for file parsers, which segments file into sequences.
- */
-template <typename Loader>
-class FileParseProcedureTest : public ::testing::TestWithParam<TestFileInfo>
-{
-  protected:
-    typedef typename Loader::InputIteratorType                        InputIterType;
-    typedef typename std::iterator_traits<InputIterType>::value_type  ValueType;
-
-    virtual ~FileParseProcedureTest() {};
-
-    virtual void SetUp()
-    {
-      TestFileInfo const & p = GetParam();
-
-      fileName.assign(PROJ_SRC_DIR);
-      fileName.append(p.filename);
-
-      // get file size
-      struct stat filestat;
-      stat(fileName.c_str(), &filestat);
-      size_t fileSize = static_cast<size_t>(filestat.st_size);
-
-      if (p.fileSize != fileSize) printf("filename : %s\n", fileName.c_str());
-
-      ASSERT_EQ(p.fileSize, fileSize);
-    }
-
-
-    virtual void readFilePOSIX(const std::string &fileName, const size_t offset,
-                              const size_t length, ValueType* result)
-    {
-      FILE *fp = fopen(fileName.c_str(), "r");
-      fseek(fp, offset * sizeof(ValueType), SEEK_SET);
-      size_t read = fread_unlocked(result, sizeof(ValueType), length, fp);
-      fclose(fp);
-
-      ASSERT_GT(read, 0UL);
-    }
-
-    std::string fileName;
-
-};
 
 #endif /* SRC_IO_TEST_FILE_LOADER_TEST_FIXTURES_HPP_ */
