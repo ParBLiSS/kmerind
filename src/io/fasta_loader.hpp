@@ -438,6 +438,8 @@ namespace bliss
 
             }
             //=====DONE===== NOW SPREAD THE LAST ENTRY FORWARD.  empty range (r) does not participate
+            size_t total_sequences = mxx::allreduce(sequences.size(), comm);
+            if (total_sequences == 0) throw std::logic_error("ERROR: no sequences found.  wrong input file type?");
 
             //if (in_comm != MPI_COMM_NULL) MPI_Comm_free(&in_comm);
 
@@ -573,6 +575,7 @@ namespace bliss
 
             //=====DONE===== CONVERT FROM LINE START POSITION TO RANGE FOR HEADERS
 
+              if (sequences.size() == 0) throw std::logic_error("ERROR: no sequences found.  wrong input file type?");
 
 //            for (auto x : sequences)
 //              BL_DEBUGF("R 0 header range [%lu, %lu, %lu), id %lu\n", std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
