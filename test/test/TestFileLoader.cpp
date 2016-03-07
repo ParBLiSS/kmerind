@@ -120,7 +120,7 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
       TIMER_END(file, "compare", len);
 
 
-      if (std::distance(partition.begin(), partition.end()) != len)
+      if (static_cast<size_t>(std::distance(partition.begin(), partition.end())) != len)
         std::cout << "ERROR: block size is not same as range size." << std::endl;
 
       if (diff_iters.first != partition.end())
@@ -252,9 +252,9 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
       TIMER_START(file_subcomm);
       auto diff_iters = ::std::mismatch(block.begin(), block.end(), gold);
       TIMER_END(file_subcomm, "compare", len);
-
-      if (std::distance(block.begin(), block.end()) != len)
-        std::cout << "ERROR: block size is not same as range size." << std::endl;
+//
+//      if (std::distance(block.begin(), block.end()) != len)
+//        std::cout << "ERROR: block size is not same as range size." << std::endl;
 
       if (diff_iters.first != block.end())
         std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! diff at offset " << (offset + std::distance(block.begin(), diff_iters.first))
@@ -326,7 +326,7 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
       TIMER_END(file_direct, "compare", len);
 
 
-      if (std::distance(partition.begin(), partition.end()) != len)
+      if (partition.data.size() != len)
         std::cout << "ERROR: block size is not same as range size." << std::endl;
 
       if (diff_iters.first != partition.end())
