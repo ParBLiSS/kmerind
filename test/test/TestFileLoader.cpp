@@ -59,8 +59,8 @@
 void readFilePOSIX(const std::string &fileName, const size_t offset,
 						  const size_t length, unsigned char* result)
 {
-  FILE *fp = fopen(fileName.c_str(), "r");
-  fseek(fp, offset , SEEK_SET);
+  FILE *fp = fopen64(fileName.c_str(), "r");
+  fseeko64(fp, offset , SEEK_SET);
   size_t read = fread_unlocked(result, 1, length, fp);
   fclose(fp);
 
@@ -332,7 +332,8 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
         << " in mem range size is " << partition.in_mem_range_bytes.size() << std::endl;
 
       if (diff_iters.first != partition.end())
-        std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! diff at offset " << (offset + std::distance(partition.begin(), diff_iters.first))
+        std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! start at " << offset 
+		<< " diff at offset " << (offset + std::distance(partition.begin(), diff_iters.first))
             << " val " << *(diff_iters.first) << " gold " << *(diff_iters.second)
             << " range " << partition.getRange() << std::endl;
 
@@ -450,7 +451,7 @@ int main(int argc, char** argv) {
   static_assert(false, "MPI used although compilation is not set to use MPI");
 #endif
   
-  if (which != -1) std::cin.get();
+  //if (which != -1) std::cin.get();
 
 
   using Alphabet = bliss::common::DNA;

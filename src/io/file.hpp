@@ -863,14 +863,52 @@ protected:
 	/// partitioner to use.
 	::bliss::partition::BlockPartitioner<range_type> partitioner;
 
+	std::string get_error_string(std::string const & op_name, int const & return_val) {
+		char error_string[BUFSIZ];
+		int length_of_error_string, error_class;
+		std::stringstream ss;
+
+		MPI_Error_class(return_val, &error_class);
+		MPI_Error_string(error_class, error_string, &length_of_error_string);
+
+		ss << "ERROR in mpiio: rank " << comm.rank() << " " << op_name << " " << this->filename << " error: " << error_string << std::endl;
+		return ss.str();
+	}
+
+	std::string get_error_string(std::string const & op_name, int const & return_val, MPI_Status const & stat) {
+		char error_string[BUFSIZ];
+		int length_of_error_string, error_class;
+		std::stringstream ss;
+
+		MPI_Error_class(return_val, &error_class);
+		MPI_Error_string(error_class, error_string, &length_of_error_string);
+
+		ss << "ERROR in mpiio: rank " << comm.rank() << " " << op_name << " " << this->filename << " error: " << return_val << " [" << error_string << "]";
+
+//		// status.MPI_ERROR does not appear to be decodable by error_class.  google search did not find how to decode it.
+//		MPI_Error_class(stat.MPI_ERROR, &error_class);
+//		MPI_Error_string(error_class, error_string, &length_of_error_string);
+
+		ss << " MPI_Status error: [" << stat.MPI_ERROR << "]" << std::endl;
+
+		return ss.str();
+	}
+
+
 	/// MPI_IO get file size
 	size_t get_file_size() {
-		if (fh == MPI_FILE_NULL)
-			throw ::std::ios_base::failure("ERROR: map: file is not yet open.");
+		if (fh == MPI_FILE_NULL) {
+			std::stringstream ss;
+			ss << "ERROR in mpiio: rank " << comm.rank() << " file " << this->filename << " not yet open " << std::endl;
+			throw ::std::ios_base::failure(ss.str());
+		}
 
 		MPI_Offset s;
 
-		MPI_File_get_size(fh, &s);
+		int res = MPI_File_get_size(fh, &s);
+		if (res != MPI_SUCCESS) {
+			throw ::std::ios_base::failure(get_error_string("get_size", res));
+		}
 
 		return static_cast<size_t>(s);
 	}
@@ -884,16 +922,7 @@ protected:
 		int res = MPI_File_open(this->comm, const_cast<char *>(this->filename.c_str()), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
 
 		if (res != MPI_SUCCESS) {
-
-			char error_string[BUFSIZ];
-			int length_of_error_string, error_class;
-
-			MPI_Error_class(res, &error_class);
-			MPI_Error_string(error_class, error_string, &length_of_error_string);
-
-			std::stringstream ss;
-			ss << "ERROR in mpiio: rank " << comm.rank() << " error: " << error_string << std::endl;
-			throw ::std::ios_base::failure(ss.str());
+			throw ::std::ios_base::failure(get_error_string("open", res));
 		}
 
 		// ensure atomicity is turned off
@@ -903,7 +932,10 @@ protected:
 	/// funciton for closing a file
 	void close_file() {
 		if (fh != MPI_FILE_NULL) {
-			MPI_File_close(&fh);
+			int res = MPI_File_close(&fh);
+			if (res != MPI_SUCCESS) {
+				throw ::std::ios_base::failure(get_error_string("close", res));
+			}
 			fh = MPI_FILE_NULL;
 		}
 	}
@@ -922,8 +954,11 @@ public:
 	 */
 	virtual range_type read_range(std::vector<unsigned char> & output,
 				range_type const & range_bytes) {
-		if (fh == MPI_FILE_NULL)
-			throw ::std::ios_base::failure("ERROR: map: file is not yet open.");
+		if (fh == MPI_FILE_NULL) {
+			std::stringstream ss;
+			ss << "ERROR in mpiio: rank " << comm.rank() << " file " << this->filename << " not yet open " << std::endl;
+			throw ::std::ios_base::failure(ss.str());
+		}
 
 		// ensure valid range is used.
 		range_type target =
@@ -946,7 +981,112 @@ public:
 
 		// then read the file using mpiio
 		MPI_Status stat;
-		MPI_File_read_at_all(fh, read_range.start, output.data(), read_range.size(), MPI_BYTE, &stat);
+
+		// NOTE:  file offset is in units of byte (up to size_t).  number of elements to read has type int.
+
+		size_t step_size = 1UL << 30 ;  // using 2^30 vs 2^31-2^15 does not make a huge performance difference (will only matter for low proc count anyways)
+		size_t rem = read_range.size() % step_size;
+//		size_t steps = read_range.size() / step_size;
+		int count = 0;
+		int res = MPI_SUCCESS;
+
+
+// ======= DOES NOT WORK. number of elements has type int.
+//		res =MPI_File_read_at_all(fh, read_range.start, output.data(), read_range.size(), MPI_BYTE, &stat);
+//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+
+
+// ======= DOES NOT WORK to read rem first as BYTES, then read rest as 1GB blocks.  rem reads okay, but the first byte for big type fails.
+//		res = MPI_File_read_at_all(fh, read_range.start, output.data(), rem, MPI_BYTE, &stat);
+//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+//		// count is okay here.
+//		res = MPI_Get_count(&stat, MPI_BYTE, &count);
+//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("count", res));
+//		if (static_cast<size_t>(count) != rem) {
+//			std::stringstream ss;
+//			ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << rem << " bytes got " << count << " bytes" << std::endl;
+//			throw ::std::ios_base::failure(ss.str());
+//		}
+//
+//		// now read the big data type (size of 1GB)
+//		if (steps > 0) {
+//			mxx::datatype dt = mxx::get_datatype<unsigned char>().contiguous(step_size);  // make element  2^30 in size.
+//		    res = MPI_File_read_at_all(fh, read_range.start + rem, output.data() + rem,
+//	                         steps, dt.type(), &stat);
+//			if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+//			// count comes back as -32677.
+//			res = MPI_Get_count(&stat, dt.type(), &count);
+//			if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res));
+//			if (static_cast<size_t>(count) != steps) {
+//				std::stringstream ss;
+//				ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << steps << " 2^30 byte blocks got " << count << " blocks" << std::endl;
+//				throw ::std::ios_base::failure(ss.str());
+//			}
+//		}
+
+
+// ============== does not work to read big data type first then rem.
+//		if (steps > 0) {
+//			// first blocks failed - reads a vector of 0's
+//			mxx::datatype dt = mxx::get_datatype<unsigned char>().contiguous(step_size);  // make element  2^30 in size.
+//		    res = MPI_File_read_at_all(fh, read_range.start, output.data(),
+//	                         steps, dt.type(), &stat);
+//	   	    if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+//			// get count got -32766.
+//		    res = MPI_Get_count(&stat, dt.type(), &count);
+//        		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res));
+//			if (static_cast<size_t>(count) != steps) {
+//				std::stringstream ss;
+//				ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << steps << " 2^30 byte blocks got " << count << " blocks" << std::endl;
+//				throw ::std::ios_base::failure(ss.str());
+//			}
+//		}
+//		res = MPI_File_read_at_all(fh, read_range.start + steps * step_size, output.data() + steps * step_size, rem, MPI_BYTE, &stat);
+//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+
+//		res = MPI_Get_count(&stat, MPI_BYTE, &count);
+//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res));
+//		if (static_cast<size_t>(count) != rem) {
+//			std::stringstream ss;
+//			ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << rem << " bytes got " << count << " bytes" << std::endl;
+//			throw ::std::ios_base::failure(ss.str());
+//		}
+
+
+// ========= Single big data type that is the whole size does not work.  hangs when nprocs = 1 and for nprocs = 2, does not appear to populate data at all
+//		mxx::datatype dt = mxx::get_datatype<unsigned char>().contiguous(read_range.size());  // make element the whole range in size.
+//		res = MPI_File_read_at_all(fh, read_range.start, output.data(),  1, dt.type(), &stat);
+//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+//
+// 		// getCount returns -32766, so cannot be used.
+//		res = MPI_Get_count(&stat, dt.type(), &count);
+//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res));
+//		if (static_cast<size_t>(count) != read_range.size()) {
+//			std::stringstream ss;
+//			ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << read_range.size() << " bytes got " << count << " bytes" << std::endl;
+//			throw ::std::ios_base::failure(ss.str());
+//		}
+
+// ===========  iterative works
+		size_t iter_step_size;
+		for (size_t s = 0; s < read_range.size(); s += step_size, rem -= step_size) {
+			iter_step_size = std::min(step_size, read_range.size() - s);
+			res = MPI_File_read_at_all(fh, read_range.start + s, output.data() + s,
+					iter_step_size, MPI_BYTE, &stat);
+			if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+
+			res = MPI_Get_count(&stat, MPI_BYTE, &count);
+			if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+
+			if (static_cast<size_t>(count) != iter_step_size) {
+				std::stringstream ss;
+				ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << iter_step_size << " bytes got " << count << " bytes" << std::endl;
+				throw ::std::ios_base::failure(ss.str());
+			}
+
+		}
+
+		std::cout << "rank " << comm.rank() << " done reading " << read_range << std::endl;
 
 		return target;
 	}
@@ -1001,9 +1141,7 @@ public:
 			// then read the range via sequential version
 			output.valid_range_bytes = read_range(output.data, this->file_range_bytes);
 
-//			// now move the overlap around the overlap
-//			mxx::left_shift(output.data.data(), overlap,
-//					output.data.data() + output.data.size(), comm);
+			// overlap is part of the read so there is no left shift needed.
 
 			// set up the ranges.
 			output.in_mem_range_bytes = output.valid_range_bytes;
@@ -1055,8 +1193,16 @@ public:
 			// then read the range via sequential version
 			range_type block_range = read_range(output.data, this->file_range_bytes);
 
+//			std::cout << "rank " << this->comm.rank() << " read " << block_range << std::endl;
+//			std::ostream_iterator<unsigned char> oit(std::cout, "");
+//			std::copy(output.data.begin(), output.data.begin() + 100, oit);
+//			std::cout << std::endl;
+
 			range_type in_mem = block_range;
 			in_mem.end = in_mem.start + output.data.size();
+
+//			std::cout << "rank " << this->comm.rank() << " in mem " << in_mem << std::endl;
+
 
 			// now search for the true start.
 			::bliss::io::FASTQParser<unsigned char *> parser;
@@ -1067,47 +1213,62 @@ public:
 			size_t real_start = parser.find_first_record(output.data.data(),
 					this->file_range_bytes, in_mem, in_mem);
 
-			// now clear the region outside of the block range
+//			std::cout << "rank " << this->comm.rank() << " real start " << real_start << std::endl;
+
+//			std::cout << "rank " << this->comm.rank() << " data size before remove overlap " << output.data.size() << std::endl;
+
+			// now clear the region outside of the block range  (the overlap portion)
 			if (output.data.size() > block_range.size()) {
 				output.data.erase(output.data.begin() + block_range.size(), output.data.end());
 			}
 
+//			std::cout << "rank " << this->comm.rank() << " data size after remove overlap " << output.data.size() << std::endl;
+
 			// ==== shift values to the left (as vector?)
 			// actually, not shift. need to do all to all - if a rank found no internal starts
 			// first compute the target proc id via exscan
-			bool not_found = real_start >= block_range.end;  // if real start is outside of partition, not found
+			bool not_found = (real_start >= block_range.end);  // if real start is outside of partition, not found
 			real_start = std::min(real_start, block_range.end);
 			int target_rank = not_found ? 0 : comm.rank();
 			target_rank = mxx::exscan(target_rank, [](int const & x, int const & y) {
 				return (x < y) ? y : x;
 			}, comm);
 
+//			std::cout << "rank " << this->comm.rank() << " adjusted real start " << real_start << std::endl;
+//			std::cout << "rank " << this->comm.rank() << " target rank " << target_rank << std::endl;
+
+
 			// MPI 2 does not have neighbor_ collective operations, so we can't create
 			// graph with sparse edges.  in any case, the amount of data we send should be
 			// small so alltoallv should be enough
 			std::vector<size_t> send_counts(comm.size(), 0);
-			send_counts[target_rank] = real_start - block_range.start;
+			if (comm.rank() > 0) send_counts[target_rank] = real_start - block_range.start;
 
 			// copy the region to shift
 			std::vector<unsigned char> shifted =
 					mxx::all2allv(output.data, send_counts, comm);
 			output.data.insert(output.data.end(), shifted.begin(), shifted.end());
 
+//			std::cout << "rank " << this->comm.rank() << " shifted " << shifted.size() << std::endl;
+//			std::cout << "rank " << this->comm.rank() << " new data size " << output.data.size() << std::endl;
+
 			// adjust the ranges.
 			output.in_mem_range_bytes = block_range;
 			output.in_mem_range_bytes.end = block_range.start + output.data.size();
+
+//			std::cout << "rank " << this->comm.rank() << " final in mem " << output.in_mem_range_bytes << std::endl;
+
 
 			output.valid_range_bytes.start = real_start;
 			output.valid_range_bytes.end =
 					not_found ? block_range.end : output.in_mem_range_bytes.end;
 
+//			std::cout << "rank " << this->comm.rank() << " final valid " << output.valid_range_bytes << std::endl;
+
 			output.parent_range_bytes = file_range_bytes;
 
-//			if (output.valid_range_bytes.size() > 0)
-//				std::cout << "rank " << comm.rank() << " valid " << output.valid_range_bytes <<
-//					" in mem " << output.in_mem_range_bytes << std::endl;
-//			else
-//				std::cout << "rank " << comm.rank() << " empty " << std::endl;
+//			std::cout << "rank " << this->comm.rank() << " file  " << output.parent_range_bytes << std::endl;
+
 		}
 };
 
