@@ -442,6 +442,58 @@ namespace bliss
                               sstart, send, lstart, lend);
         }
 
+
+
+        /**
+         * @brief   get the average record size in the supplied range
+         * @return  return the records size and the internal data size
+         */
+        virtual ::std::pair<size_t, size_t> get_record_size(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, size_t const count = 10) {
+
+          if (searchRange.size() == 0) throw std::logic_error("calling FASTQParser get_record_size with 0 sized searchRange for iterator.");
+          if (inMemRange.size() == 0) throw std::logic_error("calling FASTQParser get_record_size with 0 sized inMemRange for iterator.");
+
+          if (count == 0) throw std::invalid_argument("ERROR: called FASTQParser get_record_size with count == 0");
+
+          if (!(parentRange.contains(inMemRange))) throw std::invalid_argument("ERROR: parentRange does not container inMemRange");
+          if (!(inMemRange.contains(searchRange)))  throw std::invalid_argument("ERROR: inMemRange does not container searchRange");
+
+          Iterator local_data = _data + searchRange.start - inMemRange.start;
+
+          if (*local_data != '@') throw std::logic_error("calling FASTQParser get_record_size with _data not pointing to start of a record.  call init_parser first.");
+
+          Iterator local_end = _data + searchRange.end - inMemRange.start;
+          size_t local_offset = searchRange.start;
+
+          // now initialize the search.  no need to call the first increment separately since we know that we have to start from seq id 0.
+          size_t seq_data_len = 0;
+          size_t record_size = 0;
+
+
+          size_t i = 0;
+          while ((i < count) && (local_data != local_end)) {
+            // repeat for iterations or until no more sequences (empty sequence is returned).
+
+            // get the next sequence
+            auto seq = this->get_next_record(local_data, local_end, local_offset);
+
+            record_size += seq.record_size;
+            // get the char count in a record
+            seq_data_len += std::distance(seq.seq_begin, seq.seq_end);
+
+            ++i;
+          }
+          if (i == 0) throw std::logic_error("ERROR: no record found");
+
+          record_size /= i;
+          seq_data_len /= i;
+
+          if (record_size == 0) throw std::logic_error("ERROR: estimated sequence data size is 0");
+          if (seq_data_len == 0) throw std::logic_error("ERROR: estimated record size is 0");
+
+          return std::make_pair(record_size, seq_data_len);
+        }
+
     };
 
 

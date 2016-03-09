@@ -90,6 +90,24 @@ std::vector<KmerType> readForQuery_subcomm(const std::string & filename, MPI_Com
   return query;
 }
 
+
+template <typename IndexType, typename KmerType = typename IndexType::KmerType>
+std::vector<KmerType> readForQuery_direct(const std::string & filename, MPI_Comm comm) {
+
+  ::std::vector<KmerType> query;
+
+  std::string extension = ::bliss::utils::file::get_file_extension(filename);
+  std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+  if (extension.compare("fastq") == 0) {
+    // default to including quality score iterators.
+    IndexType::template read_file_direct<::bliss::io::FASTQParser, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  } else {
+    throw std::invalid_argument("input filename extension is not supported.");
+  }
+
+  return query;
+}
+
 //template <typename KmerType>
 //std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
 //  using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false, false>; // raw data type :  use CharType
@@ -256,7 +274,7 @@ void testIndexDirect(const mxx::comm& comm, const std::string & filename, std::s
 
 
   TIMER_START(test);
-  auto query = readForQuery<IndexType>(filename, comm);
+  auto query = readForQuery_direct<IndexType>(filename, comm);
   TIMER_END(test, "read query", query.size());
 
 
@@ -362,7 +380,7 @@ int main(int argc, char** argv) {
       KmerType, uint32_t, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndexDirect<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser > (comm, filename, "ST, hash, read_and_dist, count index.");
+  testIndexDirect<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTQParser > (comm, filename, "ST, hash, read_direct, count index.");
     MPI_Barrier(comm);
 }
 

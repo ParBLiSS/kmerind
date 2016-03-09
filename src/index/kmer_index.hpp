@@ -208,15 +208,15 @@ public:
 
 			//std::cout << "partition range: " << partition.getRange() << std::endl;
 
-			//== reserve
-			TIMER_START(file);
-			// modifying the local index directly here causes a thread safety issue, since callback thread is already running.
-			// index reserve internally sends a message to itself.
+      //== reserve
+      TIMER_START(file);
+      // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
+      // index reserve internally sends a message to itself.
 
-			// call after getting first L1Block to ensure that file is loaded.  (rank 0 reads and broadcast)
+      // call after getting first L1Block to ensure that file is loaded.  (rank 0 reads and broadcast)
 			size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + _comm.size() - 1) / _comm.size();
-			result.reserve(est_size);
-			TIMER_END(file, "reserve", est_size);
+      result.reserve(est_size);
+      TIMER_END(file, "reserve", est_size);
 
 			// not reusing the SeqParser in loader.  instead, reinitializing one.
 			TIMER_START(file);
@@ -382,64 +382,66 @@ public:
 	static size_t read_file_direct(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
 
 
-		//====  now process the file, one L1 block (block partition by MPI Rank) at a time
-		constexpr size_t overlap = KP::kmer_type::size;
+	    // TODO: check if prefetch makes a difference.
+	    //using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, true>; // raw data type :  use CharType
+	    using FileType = ::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, SeqParser<unsigned char *> >;
+	    //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+
+	    size_t before = result.size();
+
+	    TIMER_INIT(file);
+	    {  // ensure that fileloader is closed at the end.
+
+	      TIMER_START(file);
+	      //==== create file Loader
+	//      FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+	//      typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
+
+	      FileType fobj(filename, KmerType::size, _comm);
+	      ::bliss::io::file_data partition = fobj.read_file();
+	      TIMER_END(file, "open", partition.getRange().size());
 
 
-		// TODO: check if prefetch makes a difference.  specify overlap as 0 - which allows overlap to be computed.
-		using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, false>; // raw data type :  use CharType
+	      // not reusing the SeqParser in loader.  instead, reinitializing one.
+	      TIMER_START(file);
+	      SeqParser<unsigned char *> l1parser;
+	      l1parser.init_parser(partition.data.data(), partition.parent_range_bytes, partition.in_mem_range_bytes, partition.getRange(), _comm);
+	      TIMER_END(file, "mark_seqs", partition.getRange().size());
 
-		size_t before = result.size();
+	      //== reserve
+	      TIMER_START(file);
+	      // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
+	      // index reserve internally sends a message to itself.
 
-		TIMER_INIT(file);
-		{  // ensure that fileloader is closed at the end.
+	      // call after getting first L1Block to ensure that file is loaded.  (rank 0 reads and broadcast)
+	      size_t record_size = 0;
+	      size_t seq_len = 0;
+	      std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.in_mem_range_bytes, partition.getRange());
+	      size_t est_size = (record_size == 0) ? 0 : (partition.getRange().size() + record_size - 1) / record_size;  // number of records
+	      est_size *= (seq_len < KmerType::size) ? 0 : (seq_len - KmerType::size + 1) ;  // number of kmers in a record
+	      result.reserve(est_size);
+	      TIMER_END(file, "reserve", est_size);
 
-			TIMER_START(file);
-			//==== create file Loader
-			::bliss::io::MemData partition = ::bliss::io::parallel::memmap::load_file<SeqParser<unsigned char*> >(filename, _comm, overlap);
-			TIMER_END(file, "open", partition.getRange().size());
+	      TIMER_START(file);
+	      //=== copy into array
+	      if (partition.getRange().size() > 0) {
+	        read_block<KP>(partition, l1parser, result);
+	      }
+	      TIMER_END(file, "read", result.size());
+	      // std::cout << "Last: pos - kmer " << result.back() << std::endl;
+	    }
 
-			//== reserve
-			TIMER_START(file);
-			// modifying the local index directly here causes a thread safety issue, since callback thread is already running.
-			// index reserve internally sends a message to itself.
+	    if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
+	      TIMER_START(file);
 
-			// call after getting first L1Block to ensure that file is loaded.
-			// TODO: do this part.
-			FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
-			if (_comm.rank() == 0) {
-				loader.getNextL1Block();
-			}
-			size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + _comm.size() - 1) / _comm.size();
-			result.reserve(est_size);
-			TIMER_END(file, "reserve", est_size);
+	      ::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
+	      ::std::for_each(result.begin(), result.end(), tuple_trans);
 
-			// not reusing the SeqParser in loader.  instead, reinitializing one.
-			TIMER_START(file);
-			SeqParser<bliss::io::DataType*> l1parser;
-			l1parser.init_parser(partition.data, partition.parent_range, partition.mem_range, partition.valid_range, _comm);
-			TIMER_END(file, "mark_seqs", est_size);
+	      TIMER_END(file, "canonicalize", result.size());
+	    }
 
-			TIMER_START(file);
-			//=== copy into array
-
-			read_block<KP>(partition, l1parser, result);
-
-			TIMER_END(file, "read", result.size());
-			// std::cout << "Last: pos - kmer " << result.back() << std::endl;
-		}
-
-		if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
-			TIMER_START(file);
-
-			::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
-			::std::for_each(result.begin(), result.end(), tuple_trans);
-
-			TIMER_END(file, "canonicalize", result.size());
-		}
-
-		TIMER_REPORT_MPI(file, _comm.rank(), _comm);
-		return result.size() - before;
+	    TIMER_REPORT_MPI(file, _comm.rank(), _comm);
+	    return result.size() - before;
 	}
 
 

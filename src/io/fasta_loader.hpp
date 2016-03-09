@@ -690,6 +690,39 @@ namespace bliss
 
         }
 
+        /**
+         * @brief   get the average record size in the supplied range
+         * @return  return the records size and the internal data size
+         */
+        virtual ::std::pair<size_t, size_t> get_record_size(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, size_t const count = 10) {
+          if (sequences.size() == 0) throw std::logic_error("calling FASTAParser get_record_size without first initializing for iterator.");
+
+          if (count == 0) throw std::invalid_argument("ERROR: called FASTAParser get_record_size with count == 0");
+
+          // now initialize the search.  no need to call the first increment separately since we know that we have to start from seq id 0.
+          size_t seq_data_len = 0;
+          size_t record_size = 0;
+
+          size_t max = ::std::min(sequences.size(), count);
+
+          auto seq = sequences[0];
+
+          size_t i = 0;
+          for (; i < max; ++i) {
+            seq = sequences[i];
+            record_size += ::std::get<2>(seq) - ::std::get<0>(seq);
+            seq_data_len += ::std::get<2>(seq) - ::std::get<1>(seq);
+          }
+
+          seq_data_len /= i;
+          record_size /= i;
+
+          if (seq_data_len == 0) throw std::logic_error("ERROR: estimated sequence data size is 0");
+          if (record_size == 0) throw std::logic_error("ERROR: estimated record size is 0");
+
+          return std::make_pair(record_size, seq_data_len);
+
+        }
 
     };
 

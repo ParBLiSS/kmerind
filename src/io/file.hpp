@@ -44,6 +44,8 @@ namespace io {
  * @brief loaded file data.
  */
 struct file_data {
+  using iterator = unsigned char*;
+
 	// type of ranges
 	using range_type = ::bliss::partition::range<size_t>;
 
@@ -316,7 +318,7 @@ public:
 
 	    // NOT using MAP_POPULATE. (SLOW)  no need to prefault the entire range - use read ahead from madvice.
 	    // NOTE HUGETLB not supported for file mapping, only anonymous.  also, kernel has to enable it and system has to have it reserved,
-	    // MAP_SHARED so that we don't have CoW (no private instance) (potential sharing between processes?)
+	    // MAP_SHARED so that we don't have CoW (no private instance) (potential sharing between processes?)  slightly slower by 1%?
 	    // MAP_NORESERVE so that swap is not allocated.
 	    mapped_data = (unsigned char*)mmap64(nullptr, mapped_range_bytes.size(),
 	                                 	 PROT_READ,
@@ -333,7 +335,7 @@ public:
 			throw ::std::ios_base::failure(ss.str());
 	    }
 
-		// set the madvice info.
+		// set the madvice info.  SEQUENTIAL vs RANDOM does not appear to make a difference in running time.
 		int madv_result = madvise(mapped_data, mapped_range_bytes.size(),
 				MADV_SEQUENTIAL | MADV_WILLNEED);
 		if ( madv_result == -1 ) {
@@ -1086,7 +1088,7 @@ public:
 
 		}
 
-		std::cout << "rank " << comm.rank() << " done reading " << read_range << std::endl;
+//		std::cout << "rank " << comm.rank() << " done reading " << read_range << std::endl;
 
 		return target;
 	}

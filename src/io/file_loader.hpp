@@ -303,6 +303,15 @@ namespace io
          return SequenceType(SequenceIdType(orig_offset), dist, 0, orig_iter, end);
        }
 
+
+       /**
+        * @brief   get the average record size in the supplied range
+        * @return  return the records size and the internal data size
+        */
+       virtual ::std::pair<size_t, size_t> get_record_size(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &validRange, size_t const count = 10) {
+         size_t dist = validRange.size();
+         return ::std::pair<size_t, size_t>(dist,dist);
+       }
    };
    /// template class' static variable definition (declared and initialized in class)
   template <typename Iterator>

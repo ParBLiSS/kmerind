@@ -90,6 +90,25 @@ std::vector<KmerType> readForQuery_subcomm(const std::string & filename, MPI_Com
   return query;
 }
 
+
+template <typename IndexType, typename KmerType = typename IndexType::KmerType>
+std::vector<KmerType> readForQuery_direct(const std::string & filename, MPI_Comm comm) {
+
+  ::std::vector<KmerType> query;
+
+  std::string extension = ::bliss::utils::file::get_file_extension(filename);
+  std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+  if (extension.compare("fasta") == 0) {
+    // default to including quality score iterators.
+    IndexType::template read_file_direct<::bliss::io::FASTAParser, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  } else {
+    throw std::invalid_argument("input filename extension is not supported.");
+  }
+
+  return query;
+}
+
+
 //template <typename KmerType>
 //std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
 //  using FileLoaderType = bliss::io::FASTQLoader<CharType, true, false, false>; // raw data type :  use CharType
@@ -210,7 +229,7 @@ void testIndex(const mxx::comm& comm, const std::string & filename, std::string 
 
 
 template <typename IndexType, template <typename> class SeqParser>
-void testIndex2(const mxx::comm& comm, const std::string & filename, std::string test ) {
+void testIndexSubComm(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
   IndexType idx(comm);
 
@@ -239,6 +258,36 @@ void testIndex2(const mxx::comm& comm, const std::string & filename, std::string
 
 }
 
+
+template <typename IndexType, template <typename> class SeqParser>
+void testIndexDirect(const mxx::comm& comm, const std::string & filename, std::string test ) {
+
+  IndexType idx(comm);
+
+  TIMER_INIT(test);
+
+  if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+
+  TIMER_START(test);
+  idx.template build_direct<SeqParser>(filename, comm);
+  TIMER_END(test, "build", idx.local_size());
+
+
+
+  TIMER_START(test);
+  auto query = readForQuery_direct<IndexType>(filename, comm);
+  TIMER_END(test, "read query", query.size());
+
+
+  // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
+  TIMER_START(test);
+  unsigned seed = comm.rank() * 23;
+  sample(query, query.size() / 100, seed);
+  TIMER_END(test, "select 1%", query.size());
+
+  TIMER_REPORT_MPI(test, comm.rank(), comm);
+
+}
 
 
 /**
@@ -323,10 +372,19 @@ int main(int argc, char** argv) {
       KmerType, uint32_t, int,
       bliss::kmer::transform::lex_less,
       bliss::kmer::hash::farm >;
-  testIndex2<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTAParser > (comm, filename, "ST, hash, read_and_dist, count index.");
+  testIndexSubComm<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTAParser > (comm, filename, "ST, hash, read_and_dist, count index.");
     MPI_Barrier(comm);
 }
 
+  if (which == -1 || which == 3)
+  {
+  using MapType = ::dsc::counting_unordered_map<
+      KmerType, uint32_t, int,
+      bliss::kmer::transform::lex_less,
+      bliss::kmer::hash::farm >;
+  testIndexDirect<bliss::index::kmer::CountIndex<MapType>, bliss::io::FASTAParser > (comm, filename, "ST, hash, read_direct, count index.");
+    MPI_Barrier(comm);
+}
 
   //////////////  clean up MPI.
   MPI_Finalize();
