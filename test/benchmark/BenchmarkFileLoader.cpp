@@ -355,28 +355,23 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
 
 
 
-template <template <typename> class SeqParser>
+template <template <typename> class SeqParser, bool prefetch>
 void testIndex(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
 
   if (comm.rank() == 0) printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  read_file<SeqParser, true>(filename, comm);
-
-  read_file<SeqParser, false>(filename, comm);
-
+  read_file<SeqParser, prefetch>(filename, comm);
 }
 
 
-template <template <typename> class SeqParser>
+template <template <typename> class SeqParser, bool prefetch>
 void testIndexSubComm(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
 
   if (comm.rank() == 0) printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  read_file_mpi_subcomm<SeqParser, true>(filename, comm);
-
-  read_file_mpi_subcomm<SeqParser, false>(filename, comm);
+  read_file_mpi_subcomm<SeqParser, prefetch>(filename, comm);
 }
 
 
@@ -461,33 +456,46 @@ int main(int argc, char** argv) {
 
   if (which == -1 || which == 1)
   {
-  testIndex<PARSER_TYPE > (comm, filename, "file loader.");
+  testIndex<PARSER_TYPE, true > (comm, filename, "file loader.");
     MPI_Barrier(comm);
-}
+  }
+
+  if (which == -1 || which == 2)
+  {
+  testIndex<PARSER_TYPE, false > (comm, filename, "file loader.");
+    MPI_Barrier(comm);
+  }
+
+
   if (which == -1 || which == 3)
   {
   testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi mmap");
     MPI_Barrier(comm);
-}
+  }
 
   if (which == -1 || which == 4)
   {
 	  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::stdio_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi stdio");
     MPI_Barrier(comm);
-}
+  }
   if (which == -1 || which == 5)
   {
 	  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi-io");
     MPI_Barrier(comm);
-}
+  }
 
 
-  if (which == -1 || which == 2)
+  if (which == -1 || which == 6)
   {
-  testIndexSubComm< PARSER_TYPE > (comm, filename, "fileloader with mpi subcomm.");
+  testIndexSubComm< PARSER_TYPE, true > (comm, filename, "fileloader with mpi subcomm.");
     MPI_Barrier(comm);
-}
+  }
 
+  if (which == -1 || which == 7)
+  {
+  testIndexSubComm< PARSER_TYPE, false > (comm, filename, "fileloader with mpi subcomm.");
+    MPI_Barrier(comm);
+  }
 
   //////////////  clean up MPI.
   MPI_Finalize();

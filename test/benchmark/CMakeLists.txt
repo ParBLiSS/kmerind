@@ -19,6 +19,16 @@ endif()
 
 if (BUILD_TEST_APPLICATIONS)
 
+
+add_executable(testFASTQ_load BenchmarkFileLoader.cpp)
+SET_TARGET_PROPERTIES(testFASTQ_load PROPERTIES COMPILE_FLAGS -DUSE_FASTQ_PARSER)
+target_link_libraries(testFASTQ_load ${EXTRA_LIBS})
+
+add_executable(testFASTA_load BenchmarkFileLoader.cpp)
+SET_TARGET_PROPERTIES(testFASTA_load PROPERTIES COMPILE_FLAGS -DUSE_FASTA_PARSER)
+target_link_libraries(testFASTA_load ${EXTRA_LIBS})
+
+
 if (USE_OPENMP)
 
 # EXECUTABLES
