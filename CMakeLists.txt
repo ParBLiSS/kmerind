@@ -385,9 +385,9 @@ find_package(Doxygen)
 
 if(DOXYGEN_FOUND)
   message(STATUS "Found Doxygen")
-  message(STATUS "    use `make doc` to build documentation")
+  message(STATUS "    use `make kmerind-doc` to build documentation")
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/docs/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile @ONLY)
-  add_custom_target(doc
+  add_custom_target(kmerind-doc
     ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/docs
     COMMENT "Generating API documentation with Doxygen" VERBATIM
@@ -843,6 +843,7 @@ add_subdirectory(test/compiler_tests)
 add_subdirectory(test/benchmark)
 add_subdirectory(utils)
 
+add_subdirectory(ext/mxx)
 
 # Install Settings
 
