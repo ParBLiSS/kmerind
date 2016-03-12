@@ -39,6 +39,7 @@
 #include "io/file.hpp"
 
 #include "io/test/file_loader_test_fixtures.hpp"
+#include "mxx/env.hpp"
 
 
 using namespace bliss::io;
@@ -82,12 +83,12 @@ protected:
 	}
 
 	template <typename file_loader>
-	void open_mpi(file_loader & fobj, MPI_Comm comm) {
+	void open_mpi(file_loader & fobj, mxx::comm const & comm) {
 		  typedef typename FileLoaderType::RangeType RangeType;
 
 		  // get this->fileName
 
-		  FileLoaderType loader(this->fileName, MPI_COMM_WORLD, 1, 64 * 1024, 64 * 1024 );
+		  FileLoaderType loader(this->fileName, comm, 1, 64 * 1024, 64 * 1024 );
 
 		  auto block = loader.getNextL1Block();
 		  RangeType r = block.getRange();
@@ -96,9 +97,15 @@ protected:
 			::bliss::io::file_data fdata = fobj.read_file();
 
 		  if (fdata.valid_range_bytes.size() != r.size()) {
-			  std::cout << "file open: " << fdata.in_mem_range_bytes << ::std::endl;
-			  std::cout << "file open: " << fdata.valid_range_bytes << ::std::endl;
-			  std::cout << "file loader: " << r << ::std::endl;
+			  std::cout << "file filename: " << fobj.get_filename() << std::endl;
+			  std::cout << "file open in_mem: " << fdata.in_mem_range_bytes << ::std::endl;
+			  std::cout << "file open valid: " << fdata.valid_range_bytes << ::std::endl;
+			  std::cout << "file open parent: " << fdata.parent_range_bytes << ::std::endl;
+
+			  std::cout << "this filename: " << this->fileName << ::std::endl;
+			  std::cout << "fileloader filename: " << loader.getFilename() << ::std::endl;
+			  std::cout << "fileloader block: " << r << ::std::endl;
+
 		  }
 
 		  ASSERT_TRUE(fdata.valid_range_bytes.size() == r.size());
@@ -119,9 +126,8 @@ TYPED_TEST_CASE_P(FileLoadProcedureTest);
 TYPED_TEST_P(FileLoadProcedureTest, open_mmap)
 {
 #ifdef USE_MPI
-	int rank = 0;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	if (rank == 0) {
+	::mxx::comm comm;
+	if (comm.rank() == 0) {
 #endif
 
 		bliss::io::mmap_file fobj(this->fileName);
@@ -137,9 +143,8 @@ TYPED_TEST_P(FileLoadProcedureTest, open_mmap)
 TYPED_TEST_P(FileLoadProcedureTest, open_stdio)
 {
 #ifdef USE_MPI
-	int rank = 0;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	if (rank == 0) {
+	::mxx::comm comm;
+	if (comm.rank() == 0) {
 #endif
 
 		bliss::io::stdio_file fobj(this->fileName);
@@ -155,35 +160,39 @@ TYPED_TEST_P(FileLoadProcedureTest, open_stdio)
 #ifdef USE_MPI
 TYPED_TEST_P(FileLoadProcedureTest, open_mmap_mpi)
 {
+//	::mxx::comm comm;
 	  constexpr size_t overlap = TypeParam::get_overlap_size();
 
 	::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
 
 	this->open_mpi(fobj, MPI_COMM_WORLD);
 
-	  MPI_Barrier(MPI_COMM_WORLD);
+	MPI_Barrier(MPI_COMM_WORLD);
+//	comm.barrier();
 }
 
 TYPED_TEST_P(FileLoadProcedureTest, open_stdio_mpi)
 {
+	::mxx::comm comm;
 	  constexpr size_t overlap = TypeParam::get_overlap_size();
 
-	::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
+	::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ParserType> fobj(this->fileName, overlap, comm);
 
-	this->open_mpi(fobj, MPI_COMM_WORLD);
+	this->open_mpi(fobj, comm);
 
-	  MPI_Barrier(MPI_COMM_WORLD);
+	comm.barrier();
 }
 
 TYPED_TEST_P(FileLoadProcedureTest, open_mpiio_mpi)
 {
+	::mxx::comm comm;
 	  constexpr size_t overlap = TypeParam::get_overlap_size();
 
-	::bliss::io::parallel::mpiio_file<ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
+	::bliss::io::parallel::mpiio_file<ParserType> fobj(this->fileName, overlap, comm);
 
-	this->open_mpi(fobj, MPI_COMM_WORLD);
+	this->open_mpi(fobj, comm);
 
-	  MPI_Barrier(MPI_COMM_WORLD);
+	comm.barrier();
 }
 #endif
 
@@ -229,14 +238,15 @@ int main(int argc, char* argv[])
 
 
 #if defined(USE_MPI)
-  MPI_Init(&argc, &argv);
+  ::mxx::env e(argc, argv);
+  ::mxx::comm comm;
+
 #endif
 
   result = RUN_ALL_TESTS();
 
 #if defined(USE_MPI)
-  MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Finalize();
+  comm.barrier();
 #endif
 
   return result;

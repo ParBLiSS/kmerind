@@ -571,6 +571,9 @@ namespace io
         L2BlockType *L2Blocks;
 
 
+        /// filename
+        ::std::string filename;
+
         Parser<typename L1BlockType::iterator> L1parser;
 
       public:
@@ -610,7 +613,7 @@ namespace io
             : pageSize(sysconf(_SC_PAGE_SIZE)),
               loaded(false), fileHandle(-1), fileRange(), comm(_comm),
               L1Partitioner(), mmapData(nullptr), L1Block(),
-              nConsumingThreads(_nThreads), L2Partitioner(), L2Blocks(nullptr)
+              nConsumingThreads(_nThreads), L2Partitioner(), L2Blocks(nullptr), filename(_filename)
         {
           if (_filename.length() <= 0) throw std::invalid_argument("ERROR: Filename Length is less than 1");
           if (_nThreads <= 0) throw std::invalid_argument("ERROR: Number of threads is less than 1");
@@ -679,7 +682,7 @@ namespace io
               comm(MPI_COMM_SELF),   // still needs to initialize this.
 #endif
               loaderId(_loaderId), L1Partitioner(), mmapData(nullptr), L1Block(),
-              nConsumingThreads(_nThreads), L2Partitioner(), L2Blocks(nullptr)
+              nConsumingThreads(_nThreads), L2Partitioner(), L2Blocks(nullptr), filename(_filename)
         {
 
           if (_filename.length() <= 0) throw std::invalid_argument("ERROR: Filename Length is less than 1");
@@ -725,7 +728,7 @@ namespace io
           fileHandle(other.fileHandle), fileRange(other.fileRange),
           loaderId(other.loaderId), L1BlockSize(other.L1BlockSize), L1Partitioner(other.L1Partitioner), mmapData(other.mmapData),
           L1Block(std::move(other.L1Block)), nConsumingThreads(other.nConsumingThreads), L2BlockSize(other.L2BlockSize),
-          L2Partitioner(other.L2Partitioner), L2Blocks(other.L2Blocks)
+          L2Partitioner(other.L2Partitioner), L2Blocks(other.L2Blocks), filename(other.filename)
         {
           other.pageSize = 1;
           other.fileHandle = -1;
@@ -780,6 +783,8 @@ namespace io
             L1Partitioner = other.L1Partitioner;                       other.L1Partitioner = bliss::partition::BlockPartitioner<RangeType>();
             L2Partitioner = other.L2Partitioner;             other.L2Partitioner = L2PartitionerT();
             recordSize = other.recordSize;
+
+            filename = other.filename;
           }
           return *this;
         }
@@ -795,6 +800,10 @@ namespace io
           unloadL1Data();
 
           closeFile(fileHandle);
+        }
+
+        ::std::string const & getFilename() const {
+        	return filename;
         }
 
         Parser<typename L1BlockType::iterator> getSeqParser() {

@@ -177,6 +177,9 @@ public:
 
 	/// get file size
 	size_t size() { return file_range_bytes.end; };
+
+	/// get file name
+	::std::string const & get_filename() const { return filename; };
 };
 
 
@@ -499,8 +502,8 @@ class base_file : public ::bliss::io::base_file {
 protected:
 	using BASE = ::bliss::io::base_file;
 
-	/// communicator used
-	const mxx::comm & comm;
+	/// communicator used.  object instead of being a reference - lifetime of a src comm temp object in constructor is just that of the constructor call.
+	const ::mxx::comm comm;
 
 		/// compute file size in parallel (1 proc, then broadcast.
 	size_t get_file_size() {
@@ -524,11 +527,15 @@ public:
 
 	/**
 	 * @brief constructor
+	 * @note	_comm could be a temporary constructed from MPI_Comm.  in which case, the lifetime is the call of the constructor.
+	 * 			to save it, we cannot just save the reference - the underlying object would go out of scope and die.
+	 * 			we have to copy it.  ::mxx::comm does not have copy constructor, but has explict copy function and move constructor.  so use them.
+	 * 			note that copy function is collective.  move constructor is not collective, so it could cause deadlock.
 	 * @param _filename 		name of file to open
 	 * @param _comm				MPI communicator to use.
 	 */
-	base_file(std::string const & _filename, mxx::comm const & _comm) :
-		::bliss::io::base_file(_filename), comm(_comm) {
+	base_file(std::string const & _filename, ::mxx::comm const & _comm = ::mxx::comm()) :
+		::bliss::io::base_file(_filename), comm(::std::move(_comm.copy())) {  // _comm could be a temporary constructed from MPI_Comm.
 		this->file_range_bytes.end = this->get_file_size();
 	};
 
@@ -569,13 +576,13 @@ protected:
 		range_type target =
 				BASE::range_type::intersect(range_bytes, this->file_range_bytes);
 
-		if (comm.size() == 1) {
+		if (this->comm.size() == 1) {
 			return target;
 		}
 
-		partitioner.configure(target, comm.size());
+		partitioner.configure(target, this->comm.size());
 
-		return partitioner.getNext(comm.rank());
+		return partitioner.getNext(this->comm.rank());
 	}
 
 	/**
@@ -587,6 +594,10 @@ protected:
 	::std::pair<range_type, range_type>
 	partition(range_type const & in_mem_range_bytes,
 			range_type const & valid_range_bytes) {
+		::std::cout << "rank " << this->comm.rank() << " partition comm_size " << this->comm.size() << ::std::endl;
+		std::cout << " partition comm object at " << &(this->comm) << " for this " << this << std::endl;
+        std::cout << "partition base comm is set to world ? " <<  (MPI_COMM_WORLD == comm ? "y" : "n") << std::endl;
+
 		range_type in_mem =
 				BASE::range_type::intersect(in_mem_range_bytes, this->file_range_bytes);
 
@@ -595,14 +606,14 @@ protected:
 				BASE::range_type::intersect(valid_range_bytes, in_mem);
 
 		// single process, just return
-		if (comm.size() == 1) {
+		if (this->comm.size() == 1) {
 			return ::std::make_pair(in_mem, valid);
 		}
 		// === multi process.
 
 		// partition valid range
-		partitioner.configure(valid, comm.size());
-		valid = partitioner.getNext(comm.rank());
+		partitioner.configure(valid, this->comm.size());
+		valid = partitioner.getNext(this->comm.rank());
 
 		// compute the in mem range.  extend by overlap
 		range_type in_mem_valid = valid;
@@ -625,7 +636,6 @@ public:
 	 */
 	virtual range_type read_range(std::vector<unsigned char> & output,
 				range_type const & range_bytes) {
-
 		// first get rough partition
 		range_type target = partition(range_bytes);
 
@@ -640,7 +650,7 @@ public:
 	 * @param _filename 		name of file to open
 	 * @param _comm				MPI communicator to use.
 	 */
-	partitioned_file(std::string const & _filename, size_t const & _overlap, mxx::comm const & _comm) :
+	partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
 		::bliss::io::parallel::base_file(_filename, _comm), reader(_filename), overlap(_overlap) {};
 
 	/// destructor
@@ -656,6 +666,7 @@ public:
 	 * @param output 		file_data object containing data and various ranges.
 	 */
 	virtual void read_file(::bliss::io::file_data & output) {
+
 		range_type in_mem_partitioned;
 		range_type valid_partitioned;
 
@@ -693,6 +704,7 @@ protected:
 	 * @note  assumes input parameter is in memory and inside file.
 	 */
 	range_type partition(range_type const & range_bytes) {
+
 		// ensure that the search range is inside the file
 		// restrict in_mem to within file
 		range_type target =
@@ -705,8 +717,8 @@ protected:
 		::bliss::io::mmap_file record_finder(this->filename);
 
 		// configure the partitioner and get the local partition.
-		partitioner.configure(target, comm.size());
-		range_type hint = partitioner.getNext(comm.rank());
+		partitioner.configure(target, this->comm.size());
+		range_type hint = partitioner.getNext(this->comm.rank());
 
 		// now define the search ranges.  for case when partition is smaller than a record,
 		// we need to search more, so make the end of search range (page_size + end).
@@ -747,10 +759,10 @@ protected:
 
 		// not using comm split because the subcommunicator may be constructed in worse than log p time.
 		// next we do reverse exclusive scan with rev communicator
-		found.end = mxx::exscan(found.start, [](size_t const & x, size_t const & y) {
+		found.end = ::mxx::exscan(found.start, [](size_t const & x, size_t const & y) {
 			return ::std::min(x, y);
-		}, comm.reverse());
-		if (comm.rank() == (comm.size() - 1)) found.end = target.end;   // last process.
+		}, this->comm.reverse());
+		if (this->comm.rank() == (this->comm.size() - 1)) found.end = target.end;   // last process.
 
 		// finally, check final_start again, and if start is pointing to end of file, let it point to the current range's end.
 		//if (found.start == target.end) found.start = found.end;
@@ -770,6 +782,7 @@ protected:
 	::std::pair<range_type, range_type>
 	partition(range_type const & in_mem_range_bytes,
 				range_type const & valid_range_bytes) {
+
 		// search for starting point using valid_range_bytes
 
 		// restrict in_mem to within file
@@ -813,7 +826,7 @@ public:
 	 * @param _filename 		name of file to open
 	 * @param _comm				MPI communicator to use.
 	 */
-	partitioned_file(std::string const & _filename, size_t const & _overlap, mxx::comm const & _comm) :
+	partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
 		::bliss::io::parallel::base_file(_filename, _comm), reader(_filename), overlap(_overlap) {};
 
 	/// destructor
@@ -834,6 +847,7 @@ public:
 
 		::std::tie(in_mem_partitioned, valid_partitioned) =
 				partition(this->file_range_bytes, this->file_range_bytes);
+
 
 		// then read the range via sequential version
 		output.in_mem_range_bytes = reader.read_range(output.data, in_mem_partitioned);
@@ -1012,7 +1026,7 @@ public:
 //
 //		// now read the big data type (size of 1GB)
 //		if (steps > 0) {
-//			mxx::datatype dt = mxx::get_datatype<unsigned char>().contiguous(step_size);  // make element  2^30 in size.
+//			::mxx::datatype dt = ::mxx::get_datatype<unsigned char>().contiguous(step_size);  // make element  2^30 in size.
 //		    res = MPI_File_read_at_all(fh, read_range.start + rem, output.data() + rem,
 //	                         steps, dt.type(), &stat);
 //			if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
@@ -1030,7 +1044,7 @@ public:
 // ============== does not work to read big data type first then rem.
 //		if (steps > 0) {
 //			// first blocks failed - reads a vector of 0's
-//			mxx::datatype dt = mxx::get_datatype<unsigned char>().contiguous(step_size);  // make element  2^30 in size.
+//			::mxx::datatype dt = ::mxx::get_datatype<unsigned char>().contiguous(step_size);  // make element  2^30 in size.
 //		    res = MPI_File_read_at_all(fh, read_range.start, output.data(),
 //	                         steps, dt.type(), &stat);
 //	   	    if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
@@ -1056,7 +1070,7 @@ public:
 
 
 // ========= Single big data type that is the whole size does not work.  hangs when nprocs = 1 and for nprocs = 2, does not appear to populate data at all
-//		mxx::datatype dt = mxx::get_datatype<unsigned char>().contiguous(read_range.size());  // make element the whole range in size.
+//		::mxx::datatype dt = ::mxx::get_datatype<unsigned char>().contiguous(read_range.size());  // make element the whole range in size.
 //		res = MPI_File_read_at_all(fh, read_range.start, output.data(),  1, dt.type(), &stat);
 //		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
 //
@@ -1094,7 +1108,7 @@ public:
 	}
 
 
-	mpiio_base_file(::std::string const & _filename, size_t const _overlap,  mxx::comm const & _comm) :
+	mpiio_base_file(::std::string const & _filename, size_t const _overlap = 0UL,  ::mxx::comm const & _comm = ::mxx::comm()) :
 		::bliss::io::parallel::base_file(_filename, _comm), overlap(_overlap), fh(MPI_FILE_NULL) {
 		open_file();
 		this->file_range_bytes.end = get_file_size();
@@ -1124,7 +1138,7 @@ public:
 		using BASE::read_range;
 
 
-		mpiio_file(::std::string const & _filename, size_t const & _overlap, mxx::comm const & _comm) :
+		mpiio_file(::std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
 			::bliss::io::parallel::mpiio_base_file(_filename, _overlap, _comm) {};
 
 		~mpiio_file() {};
@@ -1170,7 +1184,7 @@ public:
 		using BASE::read_range;
 
 
-		mpiio_file(::std::string const & _filename, size_t const & _overlap, mxx::comm const & _comm) :
+		mpiio_file(::std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
 			::bliss::io::parallel::mpiio_base_file(_filename, sysconf(_SC_PAGE_SIZE), _comm) {
 			// specify 1 page worth as overlap
 		};
@@ -1232,7 +1246,7 @@ public:
 			bool not_found = (real_start >= block_range.end);  // if real start is outside of partition, not found
 			real_start = std::min(real_start, block_range.end);
 			int target_rank = not_found ? 0 : comm.rank();
-			target_rank = mxx::exscan(target_rank, [](int const & x, int const & y) {
+			target_rank = ::mxx::exscan(target_rank, [](int const & x, int const & y) {
 				return (x < y) ? y : x;
 			}, comm);
 
@@ -1248,7 +1262,7 @@ public:
 
 			// copy the region to shift
 			std::vector<unsigned char> shifted =
-					mxx::all2allv(output.data, send_counts, comm);
+					::mxx::all2allv(output.data, send_counts, comm);
 			output.data.insert(output.data.end(), shifted.begin(), shifted.end());
 
 //			std::cout << "rank " << this->comm.rank() << " shifted " << shifted.size() << std::endl;
@@ -1391,7 +1405,7 @@ namespace memmap {
 // get start and end.
 template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
 typename ::std::enable_if<(::std::is_same<FileParser, ::bliss::io::FASTQParser<DataType *> >::value), MemData>::type
-load_file(::std::string const & filename, mxx::comm const & comm, size_t overlap = 0) {
+load_file(::std::string const & filename, ::mxx::comm const & comm, size_t overlap = 0) {
 
 
 	::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, FileParser> fobj(filename, 0, comm);
@@ -1415,7 +1429,7 @@ load_file(::std::string const & filename, mxx::comm const & comm, size_t overlap
 // for FASTA sequences (short).  multiple processes reading different parts of a file
 template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
 typename ::std::enable_if<!(::std::is_same<FileParser, ::bliss::io::FASTQParser<DataType *> >::value), MemData>::type
-load_file(::std::string const & filename, mxx::comm const & comm, size_t overlap = 0) {
+load_file(::std::string const & filename, ::mxx::comm const & comm, size_t overlap = 0) {
 
 
 	bliss::io::parallel::partitioned_file<bliss::io::mmap_file, FileParser> fobj(filename, 0, comm);
@@ -1442,7 +1456,7 @@ namespace mpi_io {
 // for FASTA sequences (short).  multiple processes reading different parts of a file
 template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
 typename ::std::enable_if<!(::std::is_same<FileParser, ::bliss::io::FASTQParser<DataType *> >::value), MemData>::type
-load_file(::std::string const & filename, mxx::comm const & comm, size_t overlap = 0) {
+load_file(::std::string const & filename, ::mxx::comm const & comm, size_t overlap = 0) {
 
 
 	bliss::io::parallel::mpiio_file<FileParser> fobj(filename, 0, comm);
