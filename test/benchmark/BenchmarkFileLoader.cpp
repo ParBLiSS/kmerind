@@ -462,7 +462,7 @@ int main(int argc, char** argv) {
   bool is_fast = true;
   if (nnodes < comm_world.size()) {
 	  is_fast = ::bliss::mxx::get_fast_nodes(comm_world, e, nnodes);
-	  comm = comm_world.split(is_fast ? 1 : MPI_UNDEFINED);
+	  comm = comm_world.split(is_fast ? 1 : 0);
   }
 
   // only run on fast nodes.
