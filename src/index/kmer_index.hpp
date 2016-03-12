@@ -258,7 +258,7 @@ public:
 	static size_t read_file_mpi_subcomm(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm& comm) {
 
 		if (comm.size() == 1) {
-			return read_file(filename, result, comm);
+			return read_file<SeqParser, KP, PreCanonicalizer>(filename, result, comm);
 		}
 
 		// split the communcator so 1 proc from each host does the read, then redistribute.
