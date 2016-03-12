@@ -817,7 +817,7 @@ include_directories("${PROJECT_SOURCE_DIR}/src")
 include_directories("${EXT_PROJECTS_DIR}")
 include_directories("${EXT_PROJECTS_DIR}/mxx/include")
 include_directories("${EXT_PROJECTS_DIR}/mxx/ext")
-#include_directories("${EXT_PROJECTS_DIR}/tclap-1.2.1/include")
+include_directories("${EXT_PROJECTS_DIR}/tclap-1.2.1/include")
 
 
 

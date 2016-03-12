@@ -54,6 +54,9 @@
 
 #include "utils/timer.hpp"
 
+#include "utils/mxx_fast_comm.hpp"
+
+#include "tclap/CmdLine.h"
 
 
 void readFilePOSIX(const std::string &fileName, const size_t offset,
@@ -394,114 +397,129 @@ int main(int argc, char** argv) {
   //////////////// init logging
   LOG_INIT();
 
+  //////////////// initialize MPI and openMP
+
+  mxx::env e(argc, argv);
+  mxx::comm comm_world;
+
+  MPI_Barrier(comm_world);
+
   //////////////// parse parameters
 
   std::string filename;
-      filename.assign(PROJ_SRC_DIR);
-
+  filename.assign(PROJ_SRC_DIR);
 #if defined(USE_FASTQ_PARSER)
       filename.append("/test/data/test.fastq");
 #elif defined(USE_FASTA_PARSER)
       filename.append("/test/data/test.fasta");
 #endif
 
-  if (argc > 1)
-  {
-    filename.assign(argv[1]);
-  }
-
   int which = -1;
-  if (argc > 2)
-	which = atoi(argv[2]);
+  int nnodes = -1;
 
 
-  int rank = 0;
-	int nthreads = 1;
-  //////////////// initialize MPI and openMP
-#ifdef USE_MPI
+  // Wrap everything in a try block.  Do this every time,
+  // because exceptions will be thrown for problems.
+  try {
 
-  if (nthreads > 1) {
+    // Define the command line object, and insert a message
+    // that describes the program. The "Command description message"
+    // is printed last in the help text. The second argument is the
+    // delimiter (usually space) and the last one is the version number.
+    // The CmdLine object parses the argv array based on the Arg objects
+    // that it contains.
+    TCLAP::CmdLine cmd("Benchmark parallel file loading", ' ', "0.1");
 
-    int provided;
+    // Define a value argument and add it to the command line.
+    // A value arg defines a flag and a type of value that it expects,
+    // such as "-n Bishop".
+    TCLAP::ValueArg<std::string> fileArg("F", "file", "FASTQ file path", false, filename, "string", cmd);
 
-    // one thread will be making all MPI calls.
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
+    TCLAP::ValueArg<int> algoArg("A", "algo", "Algorithm id.  If absent, all.", false, -1, "int", cmd);
+    TCLAP::ValueArg<int> nnodesArg("N", "nnodes", "Number of target nodes.  If absent, all.", false, comm_world.size(), "int", cmd);
 
-    if (provided < MPI_THREAD_FUNNELED) {
-      BL_ERRORF("The MPI Library Does not have thread support.");
-      MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-  } else {
-    MPI_Init(&argc, &argv);
+
+    // Parse the argv array.
+    cmd.parse( argc, argv );
+
+    // Get the value parsed by each arg.
+    filename = fileArg.getValue();
+    which = algoArg.getValue();
+    nnodes = nnodesArg.getValue();
+
+    // Do what you intend.
+
+  } catch (TCLAP::ArgException &e)  // catch any exceptions
+  {
+    std::cerr << "error: " << e.error() << " for arg " << e.argId() << std::endl;
+    exit(-1);
   }
 
-  MPI_Comm comm = MPI_COMM_WORLD;
+  // if nnodes is too large, then set to max.
+  nnodes = std::min(comm_world.size(), nnodes);
 
-  MPI_Comm_rank(comm, &rank);
+  ::mxx::comm comm = comm_world.copy();
+  bool is_fast = true;
+  if (nnodes < comm_world.size()) {
+	  is_fast = ::bliss::mxx::get_fast_nodes(comm_world, e, nnodes);
+	  comm = comm_world.split(is_fast ? 1 : MPI_UNDEFINED);
+  }
 
-  MPI_Barrier(comm);
-
-  if (rank == 0) BL_INFOF("USE_MPI is set");
-#else
-  static_assert(false, "MPI used although compilation is not set to use MPI");
-#endif
+  // only run on fast nodes.
+  if (is_fast) {
   
-  //if (which != -1) std::cin.get();
+	  using Alphabet = bliss::common::DNA;
+	  using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
 
 
-  using Alphabet = bliss::common::DNA;
-  using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
+	  if (which == -1 || which == 1)
+	  {
+		  testIndex<PARSER_TYPE, true > (comm, filename, "file loader.");
+		  comm.barrier();
+	  }
 
+	  if (which == -1 || which == 2)
+	  {
+		  testIndex<PARSER_TYPE, false > (comm, filename, "file loader.");
+		  comm.barrier();
+	  }
 
+	  if (which == -1 || which == 3)
+	  {
+		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi mmap");
+		  comm.barrier();
+	  }
 
-  if (which == -1 || which == 1)
-  {
-  testIndex<PARSER_TYPE, true > (comm, filename, "file loader.");
-    MPI_Barrier(comm);
+	  if (which == -1 || which == 4)
+	  {
+		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::stdio_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi stdio");
+		  comm.barrier();
+	  }
+	  if (which == -1 || which == 5)
+	  {
+		  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi-io");
+		  comm.barrier();
+	  }
+
+	  if (which == -1 || which == 6)
+	  {
+		  testIndexSubComm< PARSER_TYPE, true > (comm, filename, "fileloader with mpi subcomm.");
+		  comm.barrier();
+	  }
+
+	  if (which == -1 || which == 7)
+	  {
+		  testIndexSubComm< PARSER_TYPE, false > (comm, filename, "fileloader with mpi subcomm.");
+		  comm.barrier();
+	  }
+
   }
-
-  if (which == -1 || which == 2)
-  {
-  testIndex<PARSER_TYPE, false > (comm, filename, "file loader.");
-    MPI_Barrier(comm);
-  }
-
-
-  if (which == -1 || which == 3)
-  {
-  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi mmap");
-    MPI_Barrier(comm);
-  }
-
-  if (which == -1 || which == 4)
-  {
-	  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::stdio_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi stdio");
-    MPI_Barrier(comm);
-  }
-  if (which == -1 || which == 5)
-  {
-	  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi-io");
-    MPI_Barrier(comm);
-  }
-
-
-  if (which == -1 || which == 6)
-  {
-  testIndexSubComm< PARSER_TYPE, true > (comm, filename, "fileloader with mpi subcomm.");
-    MPI_Barrier(comm);
-  }
-
-  if (which == -1 || which == 7)
-  {
-  testIndexSubComm< PARSER_TYPE, false > (comm, filename, "fileloader with mpi subcomm.");
-    MPI_Barrier(comm);
-  }
-
-  //////////////  clean up MPI.
-  MPI_Finalize();
 
   //BL_INFOF("M Rank %d called MPI_Finalize", rank);
+  comm_world.barrier();
 
+  //////////////  clean up MPI.
+  //MPI_Finalize();
 
 
   return 0;

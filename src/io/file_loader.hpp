@@ -497,7 +497,7 @@ namespace io
         //==== L1 Partitioning.
 #if defined(USE_MPI)
         /// MPI communication object.  for use when we use 1 loader per MPI process.
-        MPI_Comm comm;
+        mxx::comm comm;
 #endif
 
         /**
