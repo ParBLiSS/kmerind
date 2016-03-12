@@ -257,6 +257,10 @@ public:
 	template <template <typename> class SeqParser, typename KP = KmerParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
 	static size_t read_file_mpi_subcomm(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm& comm) {
 
+		if (comm.size() == 1) {
+			return read_file(filename, result, comm);
+		}
+
 		// split the communcator so 1 proc from each host does the read, then redistribute.
 		mxx::comm group = comm.split_shared();
 		mxx::comm group_leaders = comm.split(group.rank() == 0);
@@ -289,7 +293,6 @@ public:
 				FileLoaderType loader(filename, group_leaders, group.size());  // for member of group_leaders, each create g_size L2blocks.
 
 				// modifying the local index directly here causes a thread safety issue, since callback thread is already running.
-
 				partition = loader.getNextL1Block();
 
 				// call after getting first L1Block to ensure that file is loaded.  group loaders all have this via bcast
