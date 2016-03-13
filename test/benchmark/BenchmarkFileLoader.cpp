@@ -474,7 +474,7 @@ int main(int argc, char** argv) {
 
 	  if (which == -1 || which == 1)
 	  {
-		  testIndex<PARSER_TYPE, true > (comm, filename, "file loader.");
+		  testIndex<PARSER_TYPE, true > (comm, filename, "file loader, preload.");
 		  comm.barrier();
 	  }
 
@@ -503,7 +503,7 @@ int main(int argc, char** argv) {
 
 	  if (which == -1 || which == 6)
 	  {
-		  testIndexSubComm< PARSER_TYPE, true > (comm, filename, "fileloader with mpi subcomm.");
+		  testIndexSubComm< PARSER_TYPE, true > (comm, filename, "fileloader with mpi subcomm, preload.");
 		  comm.barrier();
 	  }
 
