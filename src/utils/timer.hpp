@@ -110,12 +110,14 @@ struct Timer {
           int p; \
           MPI_Comm_size(comm, &p); \
           \
+          printf("durations size = %lu\n", timing##_timer.durations.size());\
           auto dur_mins = mxx::min_element(timing##_timer.durations, comm); \
           auto dur_maxs = mxx::max_element(timing##_timer.durations, comm); \
           auto dur_means = ::mxx::reduce(timing##_timer.durations, 0, ::std::plus<double>(),comm); \
           ::std::for_each(timing##_timer.durations.begin(), timing##_timer.durations.end(), [](double &x) { x = x*x; }); \
           auto dur_stdevs = ::mxx::reduce(timing##_timer.durations, 0, ::std::plus<double>(), comm); \
           \
+          printf("count size = %lu\n", timing##_timer.durations.size());\
           auto cnt_mins = ::mxx::min_element(timing##_timer.counts, comm); \
           auto cnt_maxs = ::mxx::max_element(timing##_timer.counts, comm); \
           auto cnt_means = ::mxx::reduce(timing##_timer.counts, 0, ::std::plus<double>(), comm); \
