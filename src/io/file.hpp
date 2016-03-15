@@ -34,6 +34,8 @@
 #include <io/fasta_loader.hpp>
 #include <partition/range.hpp>
 
+#include <utils/exception_handling.hpp>
+
 
 
 namespace bliss {
@@ -104,7 +106,7 @@ protected:
 			::std::stringstream ss;
 			int myerr = errno;
 			ss << "ERROR in file size calc: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
-			throw new ::std::ios_base::failure(ss.str());
+			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 		}
 
 		return static_cast<size_t>(filestat.st_size);
@@ -222,7 +224,7 @@ protected:
 			::std::stringstream ss;
 			int myerr = errno;
 			ss << "ERROR in file open: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
-			throw new ::std::ios_base::failure(ss.str());
+			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 		}
 	}
 
@@ -302,9 +304,9 @@ public:
 		unmap();
 
 		// if no file
-		if (this->fd == -1)
-			throw ::std::ios_base::failure("ERROR: map: file is not yet open.");
-
+		if (this->fd == -1) {
+		  throw ::bliss::utils::make_exception<::std::ios_base::failure>("ERROR: map: file is not yet open.");
+		}
 		typename BASE::range_type target =
 				BASE::range_type::intersect(this->file_range_bytes, range_bytes);
 
@@ -335,7 +337,7 @@ public:
 			std::stringstream ss;
 			int myerr = errno;
 			ss << "ERROR in mmap: " << myerr << ": " << strerror(myerr);
-			throw ::std::ios_base::failure(ss.str());
+			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 	    }
 
 		// set the madvice info.  SEQUENTIAL vs RANDOM does not appear to make a difference in running time.
@@ -345,7 +347,8 @@ public:
 			std::stringstream ss;
 			int myerr = errno;
 			ss << "ERROR in madvise: " << myerr << ": " << strerror(myerr);
-			throw std::ios_base::failure(ss.str());
+
+			throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 		}
 	}
 
@@ -408,7 +411,8 @@ protected:
 			::std::stringstream ss;
 			int myerr = errno;
 			ss << "ERROR in file open: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
-			throw new ::std::ios_base::failure(ss.str());
+
+			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 
 		}
 	}
@@ -434,7 +438,7 @@ public:
 	 */
 	virtual range_type read_range(std::vector<unsigned char> & output, range_type const & range_bytes) {
 		if (fp == nullptr) {
-			throw std::logic_error("ERROR: read_range: file pointer is null");
+			throw ::bliss::utils::make_exception<std::logic_error>("ERROR: read_range: file pointer is null");
 		}
 
 		// ensure the portion to copy is within the mapped region.
@@ -448,13 +452,14 @@ public:
 			return target;
 		}
 
-		// use fseek instead lseak to preserve buffering.
+		// use fseek instead lseek to preserve buffering.
 		int res = fseeko64(fp, target.start, SEEK_SET);
 		if ( res == -1 ) {
 			std::stringstream ss;
 			int myerr = errno;
 			ss << "ERROR: fseeko64: file " << this->filename << " error " << myerr << ": " << strerror(myerr);
-			throw std::ios_base::failure(ss.str());
+
+			throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 		}
 
 		// resize output's capacity
@@ -466,7 +471,8 @@ public:
 			std::stringstream ss;
 			int myerr = errno;
 			ss << "ERROR: fread: file " << this->filename << " error " << myerr << ": " << strerror(myerr);
-			throw std::ios_base::failure(ss.str());
+
+			throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 		}
 
 		return target;
@@ -916,14 +922,15 @@ protected:
 		if (fh == MPI_FILE_NULL) {
 			std::stringstream ss;
 			ss << "ERROR in mpiio: rank " << comm.rank() << " file " << this->filename << " not yet open " << std::endl;
-			throw ::std::ios_base::failure(ss.str());
+
+			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 		}
 
 		MPI_Offset s;
 
 		int res = MPI_File_get_size(fh, &s);
 		if (res != MPI_SUCCESS) {
-			throw ::std::ios_base::failure(get_error_string("get_size", res));
+			throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("get_size", res));
 		}
 
 		return static_cast<size_t>(s);
@@ -938,7 +945,7 @@ protected:
 		int res = MPI_File_open(this->comm, const_cast<char *>(this->filename.c_str()), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
 
 		if (res != MPI_SUCCESS) {
-			throw ::std::ios_base::failure(get_error_string("open", res));
+			throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("open", res));
 		}
 
 		// ensure atomicity is turned off
@@ -950,7 +957,7 @@ protected:
 		if (fh != MPI_FILE_NULL) {
 			int res = MPI_File_close(&fh);
 			if (res != MPI_SUCCESS) {
-				throw ::std::ios_base::failure(get_error_string("close", res));
+				throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("close", res));
 			}
 			fh = MPI_FILE_NULL;
 		}
@@ -973,7 +980,8 @@ public:
 		if (fh == MPI_FILE_NULL) {
 			std::stringstream ss;
 			ss << "ERROR in mpiio: rank " << comm.rank() << " file " << this->filename << " not yet open " << std::endl;
-			throw ::std::ios_base::failure(ss.str());
+
+			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 		}
 
 		// ensure valid range is used.
@@ -1009,19 +1017,19 @@ public:
 
 // ======= DOES NOT WORK. number of elements has type int.
 //		res =MPI_File_read_at_all(fh, read_range.start, output.data(), read_range.size(), MPI_BYTE, &stat);
-//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+//		if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res, stat));
 
 
 // ======= DOES NOT WORK to read rem first as BYTES, then read rest as 1GB blocks.  rem reads okay, but the first byte for big type fails.
 //		res = MPI_File_read_at_all(fh, read_range.start, output.data(), rem, MPI_BYTE, &stat);
-//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+//		if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res, stat));
 //		// count is okay here.
 //		res = MPI_Get_count(&stat, MPI_BYTE, &count);
-//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("count", res));
+//		if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("count", res));
 //		if (static_cast<size_t>(count) != rem) {
 //			std::stringstream ss;
 //			ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << rem << " bytes got " << count << " bytes" << std::endl;
-//			throw ::std::ios_base::failure(ss.str());
+//			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 //		}
 //
 //		// now read the big data type (size of 1GB)
@@ -1029,14 +1037,14 @@ public:
 //			::mxx::datatype dt = ::mxx::get_datatype<unsigned char>().contiguous(step_size);  // make element  2^30 in size.
 //		    res = MPI_File_read_at_all(fh, read_range.start + rem, output.data() + rem,
 //	                         steps, dt.type(), &stat);
-//			if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+//			if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res, stat));
 //			// count comes back as -32677.
 //			res = MPI_Get_count(&stat, dt.type(), &count);
-//			if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res));
+//			if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res));
 //			if (static_cast<size_t>(count) != steps) {
 //				std::stringstream ss;
 //				ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << steps << " 2^30 byte blocks got " << count << " blocks" << std::endl;
-//				throw ::std::ios_base::failure(ss.str());
+//				throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 //			}
 //		}
 
@@ -1047,40 +1055,40 @@ public:
 //			::mxx::datatype dt = ::mxx::get_datatype<unsigned char>().contiguous(step_size);  // make element  2^30 in size.
 //		    res = MPI_File_read_at_all(fh, read_range.start, output.data(),
 //	                         steps, dt.type(), &stat);
-//	   	    if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+//	   	    if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res, stat));
 //			// get count got -32766.
 //		    res = MPI_Get_count(&stat, dt.type(), &count);
-//        		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res));
+//        		if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res));
 //			if (static_cast<size_t>(count) != steps) {
 //				std::stringstream ss;
 //				ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << steps << " 2^30 byte blocks got " << count << " blocks" << std::endl;
-//				throw ::std::ios_base::failure(ss.str());
+//				throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 //			}
 //		}
 //		res = MPI_File_read_at_all(fh, read_range.start + steps * step_size, output.data() + steps * step_size, rem, MPI_BYTE, &stat);
-//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+//		if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res, stat));
 
 //		res = MPI_Get_count(&stat, MPI_BYTE, &count);
-//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res));
+//		if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res));
 //		if (static_cast<size_t>(count) != rem) {
 //			std::stringstream ss;
 //			ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << rem << " bytes got " << count << " bytes" << std::endl;
-//			throw ::std::ios_base::failure(ss.str());
+//			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 //		}
 
 
 // ========= Single big data type that is the whole size does not work.  hangs when nprocs = 1 and for nprocs = 2, does not appear to populate data at all
 //		::mxx::datatype dt = ::mxx::get_datatype<unsigned char>().contiguous(read_range.size());  // make element the whole range in size.
 //		res = MPI_File_read_at_all(fh, read_range.start, output.data(),  1, dt.type(), &stat);
-//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+//		if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res, stat));
 //
 // 		// getCount returns -32766, so cannot be used.
 //		res = MPI_Get_count(&stat, dt.type(), &count);
-//		if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res));
+//		if (res != MPI_SUCCESS) throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res));
 //		if (static_cast<size_t>(count) != read_range.size()) {
 //			std::stringstream ss;
 //			ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << read_range.size() << " bytes got " << count << " bytes" << std::endl;
-//			throw ::std::ios_base::failure(ss.str());
+//			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 //		}
 
 // ===========  iterative works
@@ -1089,15 +1097,18 @@ public:
 			iter_step_size = std::min(step_size, read_range.size() - s);
 			res = MPI_File_read_at_all(fh, read_range.start + s, output.data() + s,
 					iter_step_size, MPI_BYTE, &stat);
-			if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+			if (res != MPI_SUCCESS)
+			  throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read", res, stat));
 
 			res = MPI_Get_count(&stat, MPI_BYTE, &count);
-			if (res != MPI_SUCCESS) throw ::std::ios_base::failure(get_error_string("read", res, stat));
+			if (res != MPI_SUCCESS)
+			  throw ::bliss::utils::make_exception<::std::ios_base::failure>(get_error_string("read count", res, stat));
 
 			if (static_cast<size_t>(count) != iter_step_size) {
 				std::stringstream ss;
 				ss << "ERROR in mpiio: rank " << comm.rank() << " remainder read error. request " << iter_step_size << " bytes got " << count << " bytes" << std::endl;
-				throw ::std::ios_base::failure(ss.str());
+
+				throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 			}
 
 		}

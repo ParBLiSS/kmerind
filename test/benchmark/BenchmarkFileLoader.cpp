@@ -58,6 +58,8 @@
 
 #include "tclap/CmdLine.h"
 
+#include "utils/exception_handling.hpp"
+
 
 void readFilePOSIX(const std::string &fileName, const size_t offset,
 						  const size_t length, unsigned char* result)
@@ -67,7 +69,7 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
   size_t read = fread_unlocked(result, 1, length, fp);
   fclose(fp);
 
-  if (read < 0) throw std::logic_error("ERROR: fread_unlocked failed.");
+  if (read < 0) throw ::bliss::utils::make_exception<std::logic_error>("ERROR: fread_unlocked failed.");
 }
 
 
