@@ -1,6 +1,16 @@
 /*
  * file.hpp
  *
+ * @note  special notes for Lustre:
+ *  from http://www.nas.nasa.gov/hecc/support/kb/lustre-best-practices_226.html
+ *  from http://www.opensfs.org/wp-content/uploads/2014/04/D1_S8_Lustre2.5PerformanceEvaluation.pdf.  IOPS limited.
+ *  1. avoid repeated stat - e.g. used for getting file size.  lustre IOS is limited.  possible symptom: some processes may not find the file
+ *  2. avoid multiple processes opening same file at the same time. symptom:  some processes may not find the file. aggregating is better
+ *  3. open once, close once, instead of repeated open
+ *  4. stripe align IO requests (default page size is 4K for mmap, so is already aligned, but need to prefetch)
+ *  5. unlocked read.
+ *
+ *
  *  Created on: Feb 28, 2016
  *      Author: tpan
  */
@@ -13,7 +23,7 @@
 
 #include <ios>          // ios_base::failure
 #include <iostream>     // ios_base::failure
-#include <unistd.h>     // sysconf
+#include <unistd.h>     // sysconf, usleep
 #include <sys/mman.h>   // mmap
 #include <fcntl.h>      // for open64 and close
 #include <sstream>      // stringstream
@@ -36,6 +46,8 @@
 
 #include <utils/exception_handling.hpp>
 
+
+// TODO: possible a variant for mmap itself.
 
 
 namespace bliss {
@@ -365,6 +377,8 @@ public:
 
 			throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 		}
+		// for testing
+//		std::cout << "serial mapped region = " << mapped_range_bytes << " pointer is " << (const void*)mapped_data << std::endl;
 	}
 
 	void unmap() {
@@ -390,6 +404,11 @@ public:
     this->file_range_bytes.end = get_file_size();
 
     this->open_file();
+
+    // for testing:  multiple processes on the same node maps to the same ptr address
+//    map(this->file_range_bytes);
+//    std::cout << "serial mapped region = " << mapped_range_bytes << " pointer is " << (const void*)mapped_data << std::endl;
+//    unmap();
 	};
 
   /**
@@ -397,9 +416,13 @@ public:
    * @param _filename   name of file to open
    * @param _file_size  previously determined file size.
    */
-  mmap_file(std::string const & _filename, size_t const & _file_size) :
-    ::bliss::io::base_file(_filename, _file_size), fd(-1), mapped_data(nullptr), mapped_range_bytes(0, 0),
-    page_size(sysconf(_SC_PAGE_SIZE)) {
+  mmap_file(std::string const & _filename, size_t const & _file_size, size_t const & delay_ms = 0) :
+    ::bliss::io::base_file(_filename, _file_size), fd(-1),
+     mapped_data(nullptr), mapped_range_bytes(0, 0),
+     page_size(sysconf(_SC_PAGE_SIZE)) {
+
+    if (delay_ms > 0) usleep(delay_ms * 1000);
+
     this->open_file();
   };
 
@@ -526,8 +549,11 @@ public:
    * @param _filename   name of file to open
    * @param _file_size  previously computed file size.
    */
-  stdio_file(std::string const & _filename, size_t const & _file_size) :
+  stdio_file(std::string const & _filename, size_t const & _file_size, size_t const & delay_ms) :
     ::bliss::io::base_file(_filename, _file_size), fp(nullptr) {
+
+    if (delay_ms > 0) usleep(delay_ms * 1000);
+
     this->open_file();
   };
 
@@ -551,6 +577,8 @@ public:
 namespace parallel {
 
 
+
+
 class base_file : public ::bliss::io::base_file {
 protected:
 	using BASE = ::bliss::io::base_file;
@@ -563,7 +591,7 @@ protected:
 
 		size_t file_size = 0;
 
-		// rank 0 gets the size
+		// rank 0 gets the size.
 		if (comm.rank() == 0) {
 //		  printf("parallel base file get_file_size\n");
 		  file_size = BASE::get_file_size();
@@ -706,7 +734,8 @@ public:
 	 * @param _comm				MPI communicator to use.
 	 */
 	partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-		::bliss::io::parallel::base_file(_filename, _comm), reader(_filename, this->file_range_bytes.end), overlap(_overlap) {};
+		::bliss::io::parallel::base_file(_filename, _comm),
+		 reader(_filename, this->file_range_bytes.end, _comm.rank() % 16), overlap(_overlap) {};
 
 	/// destructor
 	virtual ~partitioned_file() {};  // will call super's unmap.
@@ -882,7 +911,8 @@ public:
 	 * @param _comm				MPI communicator to use.
 	 */
 	partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-		::bliss::io::parallel::base_file(_filename, _comm), reader(_filename, this->file_range_bytes.end), overlap(_overlap) {};
+		::bliss::io::parallel::base_file(_filename, _comm),
+		 reader(_filename, this->file_range_bytes.end, _comm.rank() % 16), overlap(_overlap) {};
 
 	/// destructor
 	virtual ~partitioned_file() {};  // will call super's unmap.
