@@ -76,7 +76,6 @@ struct file_data {
 };
 
 
-
 /// base class to wrap a file object with structured data or bytes
 class base_file {
 
@@ -96,6 +95,8 @@ protected:
 	/// virtual function for computing the size of a file.
 	size_t get_file_size() {
 
+//	  printf("base file get_file_size\n");
+
 		// get the file size.
 		struct stat64 filestat;
 		// get the file state
@@ -105,13 +106,23 @@ protected:
 		if (ret < 0) {
 			::std::stringstream ss;
 			int myerr = errno;
-			ss << "ERROR in file size calc: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
+			ss << "ERROR : bliss::io::base_file::get_file_size: ["  << filename << "] " << myerr << ": " << strerror(myerr);
 			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 		}
 
 		return static_cast<size_t>(filestat.st_size);
 	}
-
+  /**
+   * @brief initializes a file for reading/writing.  for use when the size is already obtained, as in the compositional parallel file case.
+   * @note  do not call get_file_size here because
+   *      parallel_file inherits this class and defines a parallel get_file_size.
+   *      we want to call this constructor from subclass.
+   *
+   * @param _filename   name of file to open
+   * @param _file_size  size of file, previously obtained.
+   */
+  base_file(std::string const & _filename, size_t const & _file_size) :
+    filename(_filename), file_range_bytes(0, _file_size) {};
 
 public:
 
@@ -191,6 +202,7 @@ public:
  */
 class mmap_file : public ::bliss::io::base_file {
 
+
 	// share open and close with file class.
 protected:
 	/// BASE type
@@ -223,7 +235,7 @@ protected:
 			// if open failed, throw exception.
 			::std::stringstream ss;
 			int myerr = errno;
-			ss << "ERROR in file open: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
+			ss << "ERROR in mmap_file open: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
 			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 		}
 	}
@@ -237,6 +249,9 @@ protected:
 			this->file_range_bytes.end = 0;
 		}
 	}
+
+
+
 public:
 
 	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
@@ -367,12 +382,26 @@ public:
 	 * @param _filename 	name of file to open
 	 */
 	mmap_file(std::string const & _filename) :
-		::bliss::io::base_file(_filename), fd(-1), mapped_data(nullptr), mapped_range_bytes(0, 0),
+		::bliss::io::base_file(_filename),
+		 fd(-1),
+		 mapped_data(nullptr), mapped_range_bytes(0, 0),
 		page_size(sysconf(_SC_PAGE_SIZE)) {
-		this->open_file();
 
-		this->file_range_bytes.end = this->get_file_size();
+    this->file_range_bytes.end = get_file_size();
+
+    this->open_file();
 	};
+
+  /**
+   * initializes a file for reading/writing via memmap.  for use by parallel file (composition)
+   * @param _filename   name of file to open
+   * @param _file_size  previously determined file size.
+   */
+  mmap_file(std::string const & _filename, size_t const & _file_size) :
+    ::bliss::io::base_file(_filename, _file_size), fd(-1), mapped_data(nullptr), mapped_range_bytes(0, 0),
+    page_size(sysconf(_SC_PAGE_SIZE)) {
+    this->open_file();
+  };
 
 	/// default destructor
 	virtual ~mmap_file() {
@@ -390,6 +419,7 @@ public:
  * @brief    file wrapper that uses c stdio calls.  has buffering.
  */
 class stdio_file : public ::bliss::io::base_file {
+
 
 protected:
 
@@ -410,7 +440,7 @@ protected:
 			// if open failed, throw exception.
 			::std::stringstream ss;
 			int myerr = errno;
-			ss << "ERROR in file open: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
+			ss << "ERROR in stdio_file open: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
 
 			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 
@@ -425,6 +455,9 @@ protected:
 			this->file_range_bytes.end = 0;
 		}
 	}
+
+
+
 public:
 
 	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
@@ -477,14 +510,26 @@ public:
 
 		return target;
 	}
+
 	/**
 	 * initializes a file for reading/writing
 	 * @param _filename 	name of file to open
 	 */
 	stdio_file(std::string const & _filename) : ::bliss::io::base_file(_filename), fp(nullptr) {
-		this->file_range_bytes.end = this->get_file_size();
+		this->file_range_bytes.end = get_file_size();
 		this->open_file();
 	};
+
+
+  /**
+   * initializes a file for reading/writing.  for use by a parallel file (composition pattern)
+   * @param _filename   name of file to open
+   * @param _file_size  previously computed file size.
+   */
+  stdio_file(std::string const & _filename, size_t const & _file_size) :
+    ::bliss::io::base_file(_filename, _file_size), fp(nullptr) {
+    this->open_file();
+  };
 
 	/// destructor
 	virtual ~stdio_file() {
@@ -493,6 +538,8 @@ public:
 
 	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
 	using BASE::read_file;
+
+
 
 };
 
@@ -517,15 +564,17 @@ protected:
 		size_t file_size = 0;
 
 		// rank 0 gets the size
-		if (comm.rank() == 0)
-			file_size = BASE::get_file_size();
-
+		if (comm.rank() == 0) {
+//		  printf("parallel base file get_file_size\n");
+		  file_size = BASE::get_file_size();
+		}
 		// then broadcast.
 		if (comm.size() > 1)
 			MPI_Bcast(&file_size, 1, MPI_UNSIGNED_LONG, 0, comm);
 
 		return file_size;
 	}
+
 public:
 
 	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
@@ -542,7 +591,7 @@ public:
 	 */
 	base_file(std::string const & _filename, ::mxx::comm const & _comm = ::mxx::comm()) :
 		::bliss::io::base_file(_filename), comm(::std::move(_comm.copy())) {  // _comm could be a temporary constructed from MPI_Comm.
-		this->file_range_bytes.end = this->get_file_size();
+		this->file_range_bytes.end = this->::bliss::io::parallel::base_file::get_file_size();
 	};
 
 	/// destructor
@@ -600,9 +649,9 @@ protected:
 	::std::pair<range_type, range_type>
 	partition(range_type const & in_mem_range_bytes,
 			range_type const & valid_range_bytes) {
-		::std::cout << "rank " << this->comm.rank() << " partition comm_size " << this->comm.size() << ::std::endl;
-		std::cout << " partition comm object at " << &(this->comm) << " for this " << this << std::endl;
-        std::cout << "partition base comm is set to world ? " <<  (MPI_COMM_WORLD == comm ? "y" : "n") << std::endl;
+//		::std::cout << "rank " << this->comm.rank() << " partition comm_size " << this->comm.size() << ::std::endl;
+//		std::cout << " partition comm object at " << &(this->comm) << " for this " << this << std::endl;
+//        std::cout << " partition comm is set to world ? " <<  (MPI_COMM_WORLD == this->comm ? "y" : "n") << std::endl;
 
 		range_type in_mem =
 				BASE::range_type::intersect(in_mem_range_bytes, this->file_range_bytes);
@@ -657,7 +706,7 @@ public:
 	 * @param _comm				MPI communicator to use.
 	 */
 	partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-		::bliss::io::parallel::base_file(_filename, _comm), reader(_filename), overlap(_overlap) {};
+		::bliss::io::parallel::base_file(_filename, _comm), reader(_filename, this->file_range_bytes.end), overlap(_overlap) {};
 
 	/// destructor
 	virtual ~partitioned_file() {};  // will call super's unmap.
@@ -833,7 +882,7 @@ public:
 	 * @param _comm				MPI communicator to use.
 	 */
 	partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-		::bliss::io::parallel::base_file(_filename, _comm), reader(_filename), overlap(_overlap) {};
+		::bliss::io::parallel::base_file(_filename, _comm), reader(_filename, this->file_range_bytes.end), overlap(_overlap) {};
 
 	/// destructor
 	virtual ~partitioned_file() {};  // will call super's unmap.
@@ -919,6 +968,9 @@ protected:
 
 	/// MPI_IO get file size
 	size_t get_file_size() {
+
+//	  if (comm.rank() == 0) printf("mpiio base file get_file_size\n");
+
 		if (fh == MPI_FILE_NULL) {
 			std::stringstream ss;
 			ss << "ERROR in mpiio: rank " << comm.rank() << " file " << this->filename << " not yet open " << std::endl;
@@ -1122,7 +1174,7 @@ public:
 	mpiio_base_file(::std::string const & _filename, size_t const _overlap = 0UL,  ::mxx::comm const & _comm = ::mxx::comm()) :
 		::bliss::io::parallel::base_file(_filename, _comm), overlap(_overlap), fh(MPI_FILE_NULL) {
 		open_file();
-		this->file_range_bytes.end = get_file_size();
+		this->file_range_bytes.end = this->::bliss::io::parallel::mpiio_base_file::get_file_size();  // call after opening file
 	};
 
 	~mpiio_base_file() { close_file(); };
@@ -1196,9 +1248,7 @@ public:
 
 
 		mpiio_file(::std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-			::bliss::io::parallel::mpiio_base_file(_filename, sysconf(_SC_PAGE_SIZE), _comm) {
-			// specify 1 page worth as overlap
-		};
+			::bliss::io::parallel::mpiio_base_file(_filename, sysconf(_SC_PAGE_SIZE), _comm) {};      // specify 1 page worth as overlap
 
 		~mpiio_file() { };
 
@@ -1305,190 +1355,190 @@ public:
 
 //======================================
 
-
-using RangeType = bliss::partition::range<size_t>;
-using DataType = unsigned char;
-
-struct MemData {
-	using iterator = DataType*;
-	DataType * data;
-	RangeType mem_range;
-	RangeType valid_range;
-	RangeType parent_range;
-
-	DataType * begin() {
-		return data + valid_range.start - mem_range.start;
-	}
-	DataType * end() {
-		return data + valid_range.end - mem_range.start;
-	}
-	RangeType getRange() {
-		return valid_range;
-	}
-};
-
-
-
-
-/**
- * @brief unmaps a file region from memory
- * @note      AGNOSTIC of overlaps
- */
-void unload_data(MemData & data) {
-
-	if (data.data != nullptr) {
-		delete [] data.data;
-		data.data = nullptr;
-		data.mem_range.start = data.mem_range.end;
-		data.valid_range.start = data.valid_range.end;
-	}
-}
-
-
-
-namespace memmap {
-
-
-
-
-
-// load a file.  single process reading entire file.
-template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
-MemData load_file(::std::string const & filename, size_t overlap = 0) {
-
-	bliss::io::mmap_file fobj(filename);
-	bliss::io::file_data fdata = fobj.read_file();
-
-	MemData mdata;
-
-	mdata.mem_range = fdata.in_mem_range_bytes;
-	mdata.valid_range = fdata.valid_range_bytes;
-	mdata.parent_range = fdata.parent_range_bytes;
-	mdata.data = new unsigned char[fdata.in_mem_range_bytes.size()];
-
-	memmove(mdata.data, fdata.data.data(), fdata.in_mem_range_bytes.size());
-
-	// return the data
-	return mdata;
-}
-
-
-
-
-
-} // namespace memmap
-
-namespace stdio {
-
-
-
-// load a file.  single process reading entire file.
-template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
-MemData load_file(::std::string const & filename, size_t overlap = 0) {
-
-	bliss::io::stdio_file fobj(filename);
-	bliss::io::file_data fdata = fobj.read_file();
-
-	MemData mdata;
-
-	mdata.mem_range = fdata.in_mem_range_bytes;
-	mdata.valid_range = fdata.valid_range_bytes;
-	mdata.parent_range = fdata.parent_range_bytes;
-	mdata.data = new unsigned char[fdata.in_mem_range_bytes.size()];
-
-	memmove(mdata.data, fdata.data.data(), fdata.in_mem_range_bytes.size());
-
-	// return the data
-	return mdata;
-}
-
-
-} // namespace stdio
-
-namespace parallel {
-
-#if defined(USE_MPI)
-
-
-namespace memmap {
-
-// for FASTQ sequences (short).  multiple processes reading different parts of a file.  use mpi communicator to
-// get start and end.
-template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
-typename ::std::enable_if<(::std::is_same<FileParser, ::bliss::io::FASTQParser<DataType *> >::value), MemData>::type
-load_file(::std::string const & filename, ::mxx::comm const & comm, size_t overlap = 0) {
-
-
-	::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, FileParser> fobj(filename, 0, comm);
-	::bliss::io::file_data fdata = fobj.read_file();
-
-	MemData mdata;
-
-	mdata.mem_range = fdata.in_mem_range_bytes;
-	mdata.valid_range = fdata.valid_range_bytes;
-	mdata.parent_range = fdata.parent_range_bytes;
-	mdata.data = new unsigned char[fdata.in_mem_range_bytes.size()];
-
-	memmove(mdata.data, fdata.data.data(), fdata.in_mem_range_bytes.size());
-
-
-	// return the data
-	return mdata;
-}
-
-
-// for FASTA sequences (short).  multiple processes reading different parts of a file
-template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
-typename ::std::enable_if<!(::std::is_same<FileParser, ::bliss::io::FASTQParser<DataType *> >::value), MemData>::type
-load_file(::std::string const & filename, ::mxx::comm const & comm, size_t overlap = 0) {
-
-
-	bliss::io::parallel::partitioned_file<bliss::io::mmap_file, FileParser> fobj(filename, 0, comm);
-	bliss::io::file_data fdata = fobj.read_file();
-
-	MemData mdata;
-
-	mdata.mem_range = fdata.in_mem_range_bytes;
-	mdata.valid_range = fdata.valid_range_bytes;
-	mdata.parent_range = fdata.parent_range_bytes;
-	mdata.data = new unsigned char[fdata.in_mem_range_bytes.size()];
-
-	memmove(mdata.data, fdata.data.data(), fdata.in_mem_range_bytes.size());
-
-	// return the data
-	return mdata;
-}
-
-// TODO: load multiple files concurrently, via subcommunicator.
-} // namespace memmap
-
-
-namespace mpi_io {
-// for FASTA sequences (short).  multiple processes reading different parts of a file
-template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
-typename ::std::enable_if<!(::std::is_same<FileParser, ::bliss::io::FASTQParser<DataType *> >::value), MemData>::type
-load_file(::std::string const & filename, ::mxx::comm const & comm, size_t overlap = 0) {
-
-
-	bliss::io::parallel::mpiio_file<FileParser> fobj(filename, 0, comm);
-	bliss::io::file_data fdata = fobj.read_file();
-
-	MemData mdata;
-
-	mdata.mem_range = fdata.in_mem_range_bytes;
-	mdata.valid_range = fdata.valid_range_bytes;
-	mdata.parent_range = fdata.parent_range_bytes;
-	mdata.data = new unsigned char[fdata.in_mem_range_bytes.size()];
-
-	memmove(mdata.data, fdata.data.data(), fdata.in_mem_range_bytes.size());
-
-	// return the data
-	return mdata;
-}
-}  // namespace mpi_io
-
-#endif
-} // parallel
+//
+//using RangeType = bliss::partition::range<size_t>;
+//using DataType = unsigned char;
+//
+//struct MemData {
+//	using iterator = DataType*;
+//	DataType * data;
+//	RangeType mem_range;
+//	RangeType valid_range;
+//	RangeType parent_range;
+//
+//	DataType * begin() {
+//		return data + valid_range.start - mem_range.start;
+//	}
+//	DataType * end() {
+//		return data + valid_range.end - mem_range.start;
+//	}
+//	RangeType getRange() {
+//		return valid_range;
+//	}
+//};
+//
+//
+//
+//
+///**
+// * @brief unmaps a file region from memory
+// * @note      AGNOSTIC of overlaps
+// */
+//void unload_data(MemData & data) {
+//
+//	if (data.data != nullptr) {
+//		delete [] data.data;
+//		data.data = nullptr;
+//		data.mem_range.start = data.mem_range.end;
+//		data.valid_range.start = data.valid_range.end;
+//	}
+//}
+//
+//
+//
+//namespace memmap {
+//
+//
+//
+//
+//
+//// load a file.  single process reading entire file.
+//template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
+//MemData load_file(::std::string const & filename, size_t overlap = 0) {
+//
+//	bliss::io::mmap_file fobj(filename);
+//	bliss::io::file_data fdata = fobj.read_file();
+//
+//	MemData mdata;
+//
+//	mdata.mem_range = fdata.in_mem_range_bytes;
+//	mdata.valid_range = fdata.valid_range_bytes;
+//	mdata.parent_range = fdata.parent_range_bytes;
+//	mdata.data = new unsigned char[fdata.in_mem_range_bytes.size()];
+//
+//	memmove(mdata.data, fdata.data.data(), fdata.in_mem_range_bytes.size());
+//
+//	// return the data
+//	return mdata;
+//}
+//
+//
+//
+//
+//
+//} // namespace memmap
+//
+//namespace stdio {
+//
+//
+//
+//// load a file.  single process reading entire file.
+//template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
+//MemData load_file(::std::string const & filename, size_t overlap = 0) {
+//
+//	bliss::io::stdio_file fobj(filename);
+//	bliss::io::file_data fdata = fobj.read_file();
+//
+//	MemData mdata;
+//
+//	mdata.mem_range = fdata.in_mem_range_bytes;
+//	mdata.valid_range = fdata.valid_range_bytes;
+//	mdata.parent_range = fdata.parent_range_bytes;
+//	mdata.data = new unsigned char[fdata.in_mem_range_bytes.size()];
+//
+//	memmove(mdata.data, fdata.data.data(), fdata.in_mem_range_bytes.size());
+//
+//	// return the data
+//	return mdata;
+//}
+//
+//
+//} // namespace stdio
+//
+//namespace parallel {
+//
+//#if defined(USE_MPI)
+//
+//
+//namespace memmap {
+//
+//// for FASTQ sequences (short).  multiple processes reading different parts of a file.  use mpi communicator to
+//// get start and end.
+//template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
+//typename ::std::enable_if<(::std::is_same<FileParser, ::bliss::io::FASTQParser<DataType *> >::value), MemData>::type
+//load_file(::std::string const & filename, ::mxx::comm const & comm, size_t overlap = 0) {
+//
+//
+//	::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, FileParser> fobj(filename, 0, comm);
+//	::bliss::io::file_data fdata = fobj.read_file();
+//
+//	MemData mdata;
+//
+//	mdata.mem_range = fdata.in_mem_range_bytes;
+//	mdata.valid_range = fdata.valid_range_bytes;
+//	mdata.parent_range = fdata.parent_range_bytes;
+//	mdata.data = new unsigned char[fdata.in_mem_range_bytes.size()];
+//
+//	memmove(mdata.data, fdata.data.data(), fdata.in_mem_range_bytes.size());
+//
+//
+//	// return the data
+//	return mdata;
+//}
+//
+//
+//// for FASTA sequences (short).  multiple processes reading different parts of a file
+//template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
+//typename ::std::enable_if<!(::std::is_same<FileParser, ::bliss::io::FASTQParser<DataType *> >::value), MemData>::type
+//load_file(::std::string const & filename, ::mxx::comm const & comm, size_t overlap = 0) {
+//
+//
+//	bliss::io::parallel::partitioned_file<bliss::io::mmap_file, FileParser> fobj(filename, 0, comm);
+//	bliss::io::file_data fdata = fobj.read_file();
+//
+//	MemData mdata;
+//
+//	mdata.mem_range = fdata.in_mem_range_bytes;
+//	mdata.valid_range = fdata.valid_range_bytes;
+//	mdata.parent_range = fdata.parent_range_bytes;
+//	mdata.data = new unsigned char[fdata.in_mem_range_bytes.size()];
+//
+//	memmove(mdata.data, fdata.data.data(), fdata.in_mem_range_bytes.size());
+//
+//	// return the data
+//	return mdata;
+//}
+//
+//// TODO: load multiple files concurrently, via subcommunicator.
+//} // namespace memmap
+//
+//
+//namespace mpi_io {
+//// for FASTA sequences (short).  multiple processes reading different parts of a file
+//template <typename FileParser = ::bliss::io::BaseFileParser<DataType *> >
+//typename ::std::enable_if<!(::std::is_same<FileParser, ::bliss::io::FASTQParser<DataType *> >::value), MemData>::type
+//load_file(::std::string const & filename, ::mxx::comm const & comm, size_t overlap = 0) {
+//
+//
+//	bliss::io::parallel::mpiio_file<FileParser> fobj(filename, 0, comm);
+//	bliss::io::file_data fdata = fobj.read_file();
+//
+//	MemData mdata;
+//
+//	mdata.mem_range = fdata.in_mem_range_bytes;
+//	mdata.valid_range = fdata.valid_range_bytes;
+//	mdata.parent_range = fdata.parent_range_bytes;
+//	mdata.data = new unsigned char[fdata.in_mem_range_bytes.size()];
+//
+//	memmove(mdata.data, fdata.data.data(), fdata.in_mem_range_bytes.size());
+//
+//	// return the data
+//	return mdata;
+//}
+//}  // namespace mpi_io
+//
+//#endif
+//} // parallel
 
 
 } // io

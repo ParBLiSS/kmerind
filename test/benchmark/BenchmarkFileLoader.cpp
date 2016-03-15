@@ -364,7 +364,7 @@ template <template <typename> class SeqParser, bool prefetch>
 void testIndex(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
 
-  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s\n", comm.rank(), comm.size(), test.c_str());
 
   read_file<SeqParser, prefetch>(filename, comm);
 }
@@ -374,7 +374,7 @@ template <template <typename> class SeqParser, bool prefetch>
 void testIndexSubComm(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
 
-  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s\n", comm.rank(), comm.size(), test.c_str());
 
   read_file_mpi_subcomm<SeqParser, prefetch>(filename, comm);
 }
@@ -383,7 +383,7 @@ void testIndexSubComm(const mxx::comm& comm, const std::string & filename, std::
 template <typename FileLoader, typename KmerType>
 void testIndexDirect(const mxx::comm& comm, const std::string & filename, std::string test ) {
 
-  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
+  if (comm.rank() == 0) printf("RANK %d / %d: Testing %s\n", comm.rank(), comm.size(), test.c_str());
 
   read_file_mpi_direct<FileLoader, KmerType::size>(filename, comm);
 }
@@ -461,8 +461,10 @@ int main(int argc, char** argv) {
   nnodes = std::min(comm_world.size(), nnodes);
 
   ::mxx::comm comm = comm_world.copy();
+
   bool is_fast = true;
   if (nnodes < comm_world.size()) {
+    std::cout << "NOTE: comm_world is being split by bandwidth." << std::endl;
 	  is_fast = ::bliss::mxx::get_fast_nodes(comm_world, e, nnodes);
 	  comm = comm_world.split(is_fast ? 1 : 0);
   }
