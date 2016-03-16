@@ -547,13 +547,28 @@ if (ENABLE_TESTING)
 
 endif(ENABLE_TESTING)
 
-OPTION(ENABLE_BENCHMARKING "Enable timing measurements for benchmarking." OFF)
+OPTION(ENABLE_BENCHMARKING "Enable benchmarking." OFF)
 # set here since timer needs to have this defined allways.
 if (ENABLE_BENCHMARKING)
-  SET(BENCHMARK 1)
+  SET(BL_BENCHMARK 1)
 else(ENABLE_BENCHMARKING)
-  SET(BENCHMARK 0)
+  SET(BL_BENCHMARK 0)
 endif(ENABLE_BENCHMARKING)
+
+CMAKE_DEPENDENT_OPTION(ENABLE_TIME_BENCHMARK "Enable Time Benchmarking" ON
+                        "ENABLE_BENCHMARKING" OFF)
+if (ENABLE_TIME_BENCHMARK)
+  SET(BL_BENCHMARK_TIME 1)
+else(ENABLE_TIME_BENCHMARK)
+  SET(BL_BENCHMARK_TIME 0)
+endif(ENABLE_TIME_BENCHMARK)
+CMAKE_DEPENDENT_OPTION(ENABLE_MEMORY_USAGE_BENCHMARK "Enable Memory Usage Benchmarking" ON
+                        "ENABLE_BENCHMARKING" OFF)
+if (ENABLE_MEMORY_USAGE_BENCHMARKING)
+  SET(BL_BENCHMARK_MEM 1)
+else(ENABLE_MEMORY_USAGE_BENCHMARKING)
+  SET(BL_BENCHMARK_MEM 0)
+endif(ENABLE_MEMORY_USAGE_BENCHMARKING)
 
   
   
@@ -815,6 +830,7 @@ include_directories("${CMAKE_BINARY_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/src")
 # this below gets the smhasher (murmur hash)
 include_directories("${EXT_PROJECTS_DIR}")
+include_directories("${EXT_PROJECTS_DIR}/Nadeau")
 include_directories("${EXT_PROJECTS_DIR}/mxx/include")
 include_directories("${EXT_PROJECTS_DIR}/mxx/ext")
 include_directories("${EXT_PROJECTS_DIR}/tclap-1.2.1/include")

@@ -60,6 +60,8 @@
 
 #include "utils/exception_handling.hpp"
 
+#include "utils/memory_usage.hpp"
+
 
 void readFilePOSIX(const std::string &fileName, const size_t offset,
 						  const size_t length, unsigned char* result)
@@ -100,29 +102,29 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
     if (_comm.rank() == 0) printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
 
     typename FileLoaderType::L1BlockType partition;
-    TIMER_INIT(file);
+    BL_BENCH_INIT(file);
     {  // ensure that fileloader is closed at the end.
 
-      TIMER_START(file);
+      BL_BENCH_START(file);
       //==== create file Loader
       FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
       partition = loader.getNextL1Block();
-      TIMER_END(file, "open", partition.getRange().size());
+      BL_BENCH_END(file, "open", partition.getRange().size());
 
 
       // check partition is same
       size_t len = partition.getRange().size();
       size_t offset = partition.getRange().start;
 
-      TIMER_START(file);
+      BL_BENCH_START(file);
       unsigned char * gold = new unsigned char[len + 1];
       readFilePOSIX(filename, offset, len, gold);
-      TIMER_END(file, "posix", len);
+      BL_BENCH_END(file, "posix", len);
 
 
-      TIMER_START(file);
+      BL_BENCH_START(file);
       auto diff_iters = ::std::mismatch(partition.begin(), partition.end(), gold);
-      TIMER_END(file, "compare", len);
+      BL_BENCH_END(file, "compare", len);
 
 
       if (static_cast<size_t>(std::distance(partition.begin(), partition.end())) != len)
@@ -137,15 +139,15 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
       delete [] gold;
 
 //      // not reusing the SeqParser in loader.  instead, reinitializing one.
-//      TIMER_START(file);
+//      BL_BENCH_START(file);
 //      auto l1parser = loader.getSeqParser();
 //      l1parser.init_parser(partition.begin(), loader.getFileRange(), partition.getRange(), partition.getRange(), _comm);
-//      TIMER_END(file, "mark_seqs", est_size);
+//      BL_BENCH_END(file, "mark_seqs", est_size);
 
     }
 
 
-    TIMER_REPORT_MPI(file, _comm.rank(), _comm);
+    BL_BENCH_REPORT_MPI(file, _comm.rank(), _comm);
     return partition.getRange().size();
   }
 
@@ -172,7 +174,8 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
     typename FileLoaderType::RangeType file_range;
     L2BlockType block;
 
-    TIMER_INIT(file_subcomm);
+
+    BL_BENCH_INIT(file_subcomm);
     {
 
       typename FileLoaderType::RangeType range;
@@ -182,18 +185,24 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
       ::std::vector<size_t> send_counts;
       typename FileLoaderType::L1BlockType partition;
 
+
+
       // first load the file using the group loader's communicator.
       if (group.rank() == 0) {  // ensure file loader is closed properly.
-          TIMER_START(file_subcomm);
+
+
+        BL_BENCH_START(file_subcomm);
         //==== create file Loader. this handle is alive through the entire building process.
         FileLoaderType loader(filename, group_leaders, group.size());  // for member of group_leaders, each create g_size L2blocks.
 
         // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
         partition = loader.getNextL1Block();
-        TIMER_END(file_subcomm, "L1 block", data.size());
+        BL_BENCH_END(file_subcomm, "L1 block", data.size());
+
 
         //====  now compute the send counts and ranges to be scattered.
-        TIMER_START(file_subcomm);
+
+        BL_BENCH_START(file_subcomm);
         ranges.resize(group.size());
         send_counts.resize(group.size());
         for (int i = 0; i < group.size(); ++i) {
@@ -201,12 +210,15 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
           ranges[i] = b.getRange();
           send_counts[i] = ranges[i].size();
         }
-        TIMER_END(file_subcomm, "L2 range", data.size());
+        BL_BENCH_END(file_subcomm, "L2 range", data.size());
 
-        TIMER_START(file_subcomm);
+
+
+        BL_BENCH_START(file_subcomm);
         // scatter the data .  this call here relies on FileLoader still having the memory mapped.
         data = mxx::scatterv(&(*partition.begin()), send_counts, 0, group);
-        TIMER_END(file_subcomm, "scatter", data.size());
+        BL_BENCH_END(file_subcomm, "scatter", data.size());
+
 
         // send the file range.
         file_range = loader.getFileRange();
@@ -215,21 +227,25 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
         // replicated here because the root's copy needs to be inside the if clause - requires FileLoader to be open for the sender.
 
 
-          TIMER_START(file_subcomm);
-          TIMER_END(file_subcomm, "L1 block", data.size());
-          TIMER_START(file_subcomm);
-          TIMER_END(file_subcomm, "L2 range", data.size());
+    	  BL_BENCH_START(file_subcomm);
+          BL_BENCH_END(file_subcomm, "L1 block", data.size());
+
+
+          BL_BENCH_START(file_subcomm);
+          BL_BENCH_END(file_subcomm, "L2 range", data.size());
+
 
         // scatter the data.  this is the receiver end of the thing.
-          TIMER_START(file_subcomm);
+          BL_BENCH_START(file_subcomm);
         data = mxx::scatterv(&(*partition.begin()), send_counts, 0, group);
-        TIMER_END(file_subcomm, "scatter", data.size());
+        BL_BENCH_END(file_subcomm, "scatter", data.size());
+
 
 
       }
       if (data[0] != '@') std::cout << "rank " << _comm.rank() << " mxx data begins with " << data[0] << std::endl;
 
-      TIMER_START(file_subcomm);
+      BL_BENCH_START(file_subcomm);
 
       // send the file range to rest of group
       mxx::datatype range_dt = mxx::get_datatype<typename FileLoaderType::RangeType >();
@@ -241,22 +257,26 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
       range = mxx::scatter_one(ranges, 0, group);
       // now create the L2Blocks from the data  (reuse block)
       block.assign(&(data[0]), &(data[0]) + range.size(), range);
-      TIMER_END(file_subcomm, "createL2", data.size());
+      BL_BENCH_END(file_subcomm, "createL2", data.size());
+
 
 
       // check partition is same
       size_t len = block.getRange().size();
       size_t offset = block.getRange().start;
 
-      TIMER_START(file_subcomm);
+      BL_BENCH_START(file_subcomm);
       unsigned char * gold = new unsigned char[len + 1];
       readFilePOSIX(filename, offset, len, gold);
-      TIMER_END(file_subcomm, "posix", len);
+      BL_BENCH_END(file_subcomm, "posix", len);
 
 
-      TIMER_START(file_subcomm);
+
+      BL_BENCH_START(file_subcomm);
       auto diff_iters = ::std::mismatch(block.begin(), block.end(), gold);
-      TIMER_END(file_subcomm, "compare", len);
+      BL_BENCH_END(file_subcomm, "compare", len);
+
+
 //
 //      if (std::distance(block.begin(), block.end()) != len)
 //        std::cout << "ERROR: block size is not same as range size." << std::endl;
@@ -271,14 +291,15 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
 
 
 //      // not reusing the SeqParser in loader.  instead, reinitializing one.
-//      TIMER_START(file);
+//      BL_BENCH_START(file);
 //      SeqParser<typename L2BlockType::iterator> l2parser;
 //      l2parser.init_parser(block.begin(), file_range, range, range, comm);
-//      TIMER_END(file, "mark_seqs", est_size);
+//      BL_BENCH_END(file, "mark_seqs", est_size);
 
     }
 
-    TIMER_REPORT_MPI(file_subcomm, _comm.rank(), _comm);
+    BL_BENCH_REPORT_MPI(file_subcomm, _comm.rank(), _comm);
+
 
     return block.getRange().size();
   }
@@ -302,33 +323,39 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
     partition.valid_range_bytes.end = 0;
 
 
-    TIMER_INIT(file_direct);
+
+    BL_BENCH_INIT(file_direct);
     {  // ensure that fileloader is closed at the end.
 
-      TIMER_START(file_direct);
+
+      BL_BENCH_START(file_direct);
       //==== create file Loader
       FileLoader loader(filename, overlap, _comm);
-      TIMER_END(file_direct, "open", partition.getRange().size());
+      BL_BENCH_END(file_direct, "open", partition.getRange().size());
 
-      TIMER_START(file_direct);
+
+      BL_BENCH_START(file_direct);
       //==== create file Loader
       partition = loader.read_file();
-      TIMER_END(file_direct, "load", partition.getRange().size());
+      BL_BENCH_END(file_direct, "load", partition.getRange().size());
+
 
 
       // check partition is same
       size_t len = partition.getRange().size();
       size_t offset = partition.getRange().start;
 
-      TIMER_START(file_direct);
+      BL_BENCH_START(file_direct);
       unsigned char * gold = new unsigned char[len + 1];
       readFilePOSIX(filename, offset, len, gold);
-      TIMER_END(file_direct, "posix", len);
+      BL_BENCH_END(file_direct, "posix", len);
 
 
-      TIMER_START(file_direct);
+
+      BL_BENCH_START(file_direct);
       auto diff_iters = ::std::mismatch(partition.begin(), partition.end(), gold);
-      TIMER_END(file_direct, "compare", len);
+      BL_BENCH_END(file_direct, "compare", len);
+
 
 
       if (partition.data.size() != partition.in_mem_range_bytes.size())
@@ -347,14 +374,16 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
 
 
 //      // not reusing the SeqParser in loader.  instead, reinitializing one.
-//      TIMER_START(file);
+//      BL_BENCH_START(file);
 //      SeqParser<bliss::io::DataType*> l1parser;
 //      l1parser.init_parser(partition.data, partition.parent_range, partition.mem_range, partition.valid_range, _comm);
-//      TIMER_END(file, "mark_seqs", est_size);
+//      BL_BENCH_END(file, "mark_seqs", est_size);
 
     }
 
-    TIMER_REPORT_MPI(file_direct, _comm.rank(), _comm);
+    BL_BENCH_REPORT_MPI(file_direct, _comm.rank(), _comm);
+
+
     return partition.valid_range_bytes.size();
   }
 
