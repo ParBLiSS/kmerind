@@ -10,10 +10,10 @@ if (IS_DIRECTORY ./test)
     FILE(GLOB TEST_FILES test/test_*.cpp)
     bliss_add_test(${TEST_NAME} FALSE ${TEST_FILES})
 
-if (BENCHMARK)
+if (BL_BENCHMARK)
     FILE(GLOB BENCHMARK_FILES test/benchmark_*.cpp)
     bliss_add_benchmark(${TEST_NAME} FALSE ${BENCHMARK_FILES})
-endif(BENCHMARK)
+endif(BL_BENCHMARK)
 
 endif()
 

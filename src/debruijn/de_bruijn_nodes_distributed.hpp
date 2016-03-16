@@ -41,7 +41,7 @@
 #include "containers/distributed_unordered_map.hpp"
 #include "containers/unordered_vecmap.hpp"
 
-#include "utils/timer.hpp"  // for timing.
+#include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
 
 
@@ -228,39 +228,39 @@ namespace bliss{
 			   template <typename InputEdgeType, typename Predicate = ::dsc::Identity>
 			   size_t insert(std::vector<::std::pair<Key, InputEdgeType> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
 				 // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-				 TIMER_INIT(insert);
+				 BL_BENCH_INIT(insert);
 
-				 TIMER_START(insert);
-				 TIMER_END(insert, "start", input.size());
+				 BL_BENCH_START(insert);
+				 BL_BENCH_END(insert, "start", input.size());
 
 
 				 // communication part
 				 if (this->comm_size > 1) {
-				   TIMER_START(insert);
+				   BL_BENCH_START(insert);
 				   // get mapping to proc
 				   ::std::vector<size_t> send_counts = mxx::bucketing(input, this->key_to_rank, this->comm_size);
-				   TIMER_END(insert, "bucket", input.size());
+				   BL_BENCH_END(insert, "bucket", input.size());
 
-		 //          TIMER_START(insert);
+		 //          BL_BENCH_START(insert);
 		 //          // keep unique only.  may not be needed - comm speed may be faster than we can compute unique.
 		 //          mxx2::retain_unique<local_container_type, typename Base::TransformedEqual>(input, send_counts, sorted_input);
-		 //          TIMER_END(insert, "uniq1", input.size());
+		 //          BL_BENCH_END(insert, "uniq1", input.size());
 
-				   TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
+				   BL_BENCH_COLLECTIVE_START(insert, "a2a", this->comm);
 				   input = mxx::all2allv(input, send_counts, this->comm);
-				   TIMER_END(insert, "a2a", input.size());
+				   BL_BENCH_END(insert, "a2a", input.size());
 				 }
 
-				 TIMER_START(insert);
+				 BL_BENCH_START(insert);
 				 // local compute part.  called by the communicator.
 				 size_t count = 0;
 				 if (!::std::is_same<Predicate, ::dsc::Identity>::value)
 				   count = this->local_insert(input.begin(), input.end(), pred);
 				 else
 				   count = this->local_insert(input.begin(), input.end());
-				 TIMER_END(insert, "insert", this->c.size());
+				 BL_BENCH_END(insert, "insert", this->c.size());
 
-				 TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
+				 BL_BENCH_REPORT_MPI(insert, this->comm.rank(), this->comm);
 
 				 return count;
 			   }

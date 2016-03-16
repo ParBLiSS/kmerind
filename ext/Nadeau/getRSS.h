@@ -3,7 +3,15 @@
  * Site:    http://NadeauSoftware.com/
  * License: Creative Commons Attribution 3.0 Unported License
  *          http://creativecommons.org/licenses/by/3.0/deed.en_US
+ *
+ * Author:  Tony Pan
+ * Modifications:
+ * 			convert to header.
+ * 			inline functions to allow multiple translation units to use the functions concurrently.
  */
+
+#ifndef _NADEAU_GET_RSS_
+#define _NADEAU_GET_RSS_
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -38,7 +46,7 @@
  * memory use) measured in bytes, or zero if the value cannot be
  * determined on this OS.
  */
-size_t getPeakRSS( )
+inline size_t getPeakRSS( )
 {
 #if defined(_WIN32)
 	/* Windows -------------------------------------------------- */
@@ -84,7 +92,7 @@ size_t getPeakRSS( )
  * Returns the current resident set size (physical memory use) measured
  * in bytes, or zero if the value cannot be determined on this OS.
  */
-size_t getCurrentRSS( )
+inline size_t getCurrentRSS( )
 {
 #if defined(_WIN32)
 	/* Windows -------------------------------------------------- */
@@ -120,3 +128,6 @@ size_t getCurrentRSS( )
 	return (size_t)0L;			/* Unsupported. */
 #endif
 }
+
+
+#endif

@@ -39,7 +39,7 @@
 
 #include "common/alphabets.hpp"
 #include "common/alphabet_traits.hpp"
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 
 
 // include files to test
@@ -110,7 +110,7 @@ std::vector<uint8_t> KmerReverseBenchmark<T>::chars;
     TypeParam km, rev, tmp; \
     km = KmerReverseBenchmark<kmertype>::kmer; \
     \
-    TIMER_START(km); \
+    BL_TIMER_START(km); \
     \
     for (size_t i = 0; i < KmerReverseBenchmark<kmertype>::iterations; ++i) { \
       \
@@ -120,7 +120,7 @@ std::vector<uint8_t> KmerReverseBenchmark<T>::chars;
       \
       km.nextFromChar(KmerReverseBenchmark<kmertype>::chars[i]); \
     } \
-    TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
+    BL_TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
     \
     EXPECT_TRUE(rev == KmerReverseBenchmark<kmertype>::gold); \
     } while (0)
@@ -132,7 +132,7 @@ TYPED_TEST_CASE_P(KmerReverseBenchmark);
 
 TYPED_TEST_P(KmerReverseBenchmark, reverse)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
   TEST_REV("rev", km.reverse(), TypeParam, rev_gold);
 //  TEST_REV("seq", KmerReverseBenchmark<TypeParam>::helper.reverse_serial(km), TypeParam, rev_gold);
@@ -154,7 +154,7 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
   uint8_t* out = reinterpret_cast<uint8_t*>(tmp.getDataRef());
   const uint8_t* in = reinterpret_cast<uint8_t const *>(km.getConstData());
 
-  TIMER_START(km);
+  BL_TIMER_START(km);
 
   for (size_t i = 0; i < KmerReverseBenchmark<TypeParam>::iterations; ++i) {
 
@@ -167,7 +167,7 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
 
     km.nextFromChar(KmerReverseBenchmark<TypeParam>::chars[i]);
   }
-  TIMER_END(km, "seqnew", KmerReverseBenchmark<TypeParam>::iterations);
+  BL_TIMER_END(km, "seqnew", KmerReverseBenchmark<TypeParam>::iterations);
 
   if (rev != KmerReverseBenchmark<TypeParam>::rev_gold) {
     std::cout << "rev: " << rev.toAlphabetString() << std::endl;
@@ -177,7 +177,7 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
   EXPECT_TRUE(rev == KmerReverseBenchmark<TypeParam>::rev_gold);
   }
 
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
 
 
 }
@@ -185,7 +185,7 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
 
 TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
   TEST_REV("revC", km.reverse_complement(), TypeParam, revcomp_gold);
 //  TEST_REV("seqC", KmerReverseBenchmark<TypeParam>::helper.reverse_complement_serial(km), TypeParam, revcomp_gold);
@@ -199,7 +199,7 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 #endif
 
   }
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
 
 }
 

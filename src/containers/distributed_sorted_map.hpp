@@ -57,7 +57,7 @@
 #include <mxx/collective.hpp>
 #include <mxx/reduction.hpp>
 #include <mxx/sort.hpp>
-#include "utils/timer.hpp"  // for timing.
+#include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
 #include "containers/distributed_map_base.hpp"
 
@@ -476,36 +476,36 @@ namespace dsc  // distributed std container
       template <class LocalFind, class Predicate = Identity >
       ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind const & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate() ) const {
-          TIMER_INIT(find);
+          BL_BENCH_INIT(find);
 
 //          for (int j = 0; j < keys.size(); ++j) {
 //            printf("fa2a rank %d originally has key %s\n", this->comm.rank(), keys[j].toAlphabetString().c_str());
 //          }
 
-          TIMER_START(find);
+          BL_BENCH_START(find);
           ::std::vector<::std::pair<Key, T> > results;
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
-          TIMER_END(find, "begin", keys.size());
+          BL_BENCH_END(find, "begin", keys.size());
 
           this->assert_sorted_locally();
 
           // keep unique keys
-          TIMER_START(find);
+          BL_BENCH_START(find);
           this->retain_unique(keys, sorted_input);
-          TIMER_END(find, "uniq1", keys.size());
+          BL_BENCH_END(find, "uniq1", keys.size());
 
           if (this->comm_size > 1) {
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
             // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
             ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(keys, this->key_to_rank.map, Base::less);  // keys are sorted
-            TIMER_END(find, "bucket", keys.size());
+            BL_BENCH_END(find, "bucket", keys.size());
 
-            TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
+            BL_BENCH_COLLECTIVE_START(find, "a2a1", this->comm);
             std::vector<size_t> recv_counts = mxx::all2all(send_counts, this->comm);
             keys = mxx::all2allv(keys, send_counts, this->comm);
-            TIMER_END(find, "a2a1", keys.size());
+            BL_BENCH_END(find, "a2a1", keys.size());
 
 //            for (int j = 0; j < keys.size(); ++j) {
 //              printf("fa2a rank %d after a2a has key %s\n", this->comm.rank(), keys[j].toAlphabetString().c_str());
@@ -514,11 +514,11 @@ namespace dsc  // distributed std container
             // local find. memory utilization a potential problem.
             // do for each src proc one at a time.
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
             results.reserve(keys.size() );
-            TIMER_END(find, "reserve", keys.size() );
+            BL_BENCH_END(find, "reserve", keys.size() );
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
             auto start = keys.begin();
             auto end = start;
             for (int i = 0; i < this->comm_size; ++i) {
@@ -534,16 +534,16 @@ namespace dsc  // distributed std container
 
               start = end;
             }
-            TIMER_END(find, "local_find", results.size());
+            BL_BENCH_END(find, "local_find", results.size());
 
 //            for (int j = 0; j < results.size(); ++j) {
 //              printf("rank %d found %s\n", this->comm.rank(), results[j].first.toAlphabetString().c_str());
 //            }
 
             // send back using the constructed recv count
-            TIMER_COLLECTIVE_START(find, "a2a2", this->comm);
+            BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
             results = mxx::all2allv(results, send_counts, this->comm);
-            TIMER_END(find, "a2a2", results.size());
+            BL_BENCH_END(find, "a2a2", results.size());
 
 //            for (int j = 0; j < results.size(); ++j) {
 //              printf("rank %d moved results %s\n", this->comm.rank(), results[j].first.toAlphabetString().c_str());
@@ -551,22 +551,22 @@ namespace dsc  // distributed std container
 
           } else {
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
             results.reserve(keys.size());  // 1 result per key.
-            TIMER_END(find, "reserve", keys.size() );
+            BL_BENCH_END(find, "reserve", keys.size() );
 
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
             auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), keys.begin(), keys.end(), true);
 
             // within start-end, values are unique, so don't need to set unique to true.
             Intersect<false>::process(overlap.first, overlap.second, keys.begin(), keys.end(), emplace_iter, local_find, true, pred);
 
-            TIMER_END(find, "local_find", results.size());
+            BL_BENCH_END(find, "local_find", results.size());
 
           }
 
-          TIMER_REPORT_MPI(find, this->comm.rank(), this->comm);
+          BL_BENCH_REPORT_MPI(find, this->comm.rank(), this->comm);
 
           return results;
       }
@@ -580,43 +580,43 @@ namespace dsc  // distributed std container
       template <class LocalFind, class Predicate = Identity >
       ::std::vector<::std::pair<Key, T> > find(LocalFind const & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate() ) const {
-          TIMER_INIT(find);
+          BL_BENCH_INIT(find);
 //
 //          for (int j = 0; j < keys.size(); ++j) {
 //            printf("rank %d originally has key %s\n", this->comm.rank(), keys[j].toAlphabetString().c_str());
 //          }
 
-          TIMER_START(find);
+          BL_BENCH_START(find);
           ::std::vector<::std::pair<Key, T> > results;
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
           ::std::vector<::std::pair<Key, T> > local_results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
-          TIMER_END(find, "begin", keys.size());
+          BL_BENCH_END(find, "begin", keys.size());
 
           this->assert_sorted_locally();
 
           // keep unique keys
-          TIMER_START(find);
+          BL_BENCH_START(find);
           this->retain_unique(keys, sorted_input);
-          TIMER_END(find, "uniq1", keys.size());
+          BL_BENCH_END(find, "uniq1", keys.size());
 
           if (this->comm_size > 1) {
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
             // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
             ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(keys, this->key_to_rank.map, Base::less);
-            TIMER_END(find, "bucket", keys.size());
+            BL_BENCH_END(find, "bucket", keys.size());
 
-            TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
+            BL_BENCH_COLLECTIVE_START(find, "a2a1", this->comm);
             std::vector<size_t> recv_counts = mxx::all2all(send_counts, this->comm);
             keys = mxx::all2allv(keys, send_counts, this->comm);
-            TIMER_END(find, "a2a1", keys.size());
+            BL_BENCH_END(find, "a2a1", keys.size());
 
 
             // local count to determine amount of memory to allocate at destination.
-            TIMER_START(find);
+            BL_BENCH_START(find);
 
             ::std::vector<::std::pair<Key, size_t> > count_results;
             size_t max_key_count = *(::std::max_element(recv_counts.begin(), recv_counts.end()));
@@ -646,25 +646,25 @@ namespace dsc  // distributed std container
               //printf("Rank %d local count for src rank %d:  recv %d send %d\n", this->comm.rank(), i, recv_counts[i], send_counts[i]);
             }
             ::std::vector<::std::pair<Key, size_t> >().swap(count_results);
-            TIMER_END(find, "local_count", total);
+            BL_BENCH_END(find, "local_count", total);
 
 
-            TIMER_COLLECTIVE_START(find, "a2a_count", this->comm);
+            BL_BENCH_COLLECTIVE_START(find, "a2a_count", this->comm);
             std::vector<size_t> resp_counts = mxx::all2all(send_counts, this->comm);  // compute counts of response to receive
-            TIMER_END(find, "a2a_count", keys.size());
+            BL_BENCH_END(find, "a2a_count", keys.size());
 
 
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
             auto resp_displs = mxx::impl::get_displacements(resp_counts);  // compute response displacements.
 
             auto resp_total = resp_displs[this->comm_size - 1] + resp_counts[this->comm_size - 1];
             auto max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
             results.resize(resp_total);   // allocate, not just reserve
             local_results.reserve(max_send_count);
-            TIMER_END(find, "reserve", resp_total);
+            BL_BENCH_END(find, "reserve", resp_total);
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
             auto recv_displs = mxx::impl::get_displacements(recv_counts);  // compute response displacements.
             int recv_from, send_to;
             size_t found;
@@ -714,17 +714,17 @@ namespace dsc  // distributed std container
 
             }
 
-            TIMER_END(find, "local_find", results.size());
+            BL_BENCH_END(find, "local_find", results.size());
 //
 //            // send back using the constructed recv count
-//            TIMER_COLLECTIVE_START(find, "a2a2", this->comm);
+//            BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
 //            mxx2::all2all(results, send_counts, this->comm);
-//            TIMER_END(find, "a2a2", results.size());
+//            BL_BENCH_END(find, "a2a2", results.size());
 //
 
           } else {
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
 
             ::std::vector<::std::pair<Key, size_t> > count_results;
             count_results.reserve(keys.size());
@@ -740,23 +740,23 @@ namespace dsc  // distributed std container
 //            for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
 //              count += it->second;
 //            }
-            TIMER_END(find, "local_count", count);
+            BL_BENCH_END(find, "local_count", count);
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
             results.reserve(count);  // 1 result per key.
-            TIMER_END(find, "reserve", count);
+            BL_BENCH_END(find, "reserve", count);
 
 
-            TIMER_START(find);
+            BL_BENCH_START(find);
 
             // within start-end, values are unique, so don't need to set unique to true.
             Intersect<false>::process(overlap.first, overlap.second, keys.begin(), keys.end(), emplace_iter, local_find, true, pred);
 
-            TIMER_END(find, "local_find", results.size());
+            BL_BENCH_END(find, "local_find", results.size());
 
           }
 
-          TIMER_REPORT_MPI(find, this->comm.rank(), this->comm);
+          BL_BENCH_REPORT_MPI(find, this->comm.rank(), this->comm);
 
           return results;
       }
@@ -893,9 +893,9 @@ namespace dsc  // distributed std container
     		  Predicate const & pred = Predicate()) const {
 
 
-        TIMER_INIT(count);
+        BL_BENCH_INIT(count);
 
-        TIMER_START(count);
+        BL_BENCH_START(count);
 
                   // keep unique keys
         ::std::vector<::std::pair<Key, size_type> > results;
@@ -903,34 +903,34 @@ namespace dsc  // distributed std container
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
 
         this->assert_sorted_locally();
-        TIMER_END(count, "begin", keys.size());
+        BL_BENCH_END(count, "begin", keys.size());
 
         if (this->comm_size > 1) {
-          TIMER_START(count);
+          BL_BENCH_START(count);
           // keep unique keys
           retain_unique(keys, sorted_input);
-          TIMER_END(count, "uniq1", keys.size());
+          BL_BENCH_END(count, "uniq1", keys.size());
 
-          TIMER_START(count);
+          BL_BENCH_START(count);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
           ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(keys, this->key_to_rank.map, Base::less);
-          TIMER_END(count, "bucket", keys.size());
+          BL_BENCH_END(count, "bucket", keys.size());
 
-          TIMER_COLLECTIVE_START(count, "a2a1", this->comm);
+          BL_BENCH_COLLECTIVE_START(count, "a2a1", this->comm);
           std::vector<size_t> recv_counts = mxx::all2all(send_counts, this->comm);
           keys = mxx::all2allv(keys, send_counts, this->comm);
-          TIMER_END(count, "a2a1", keys.size());
+          BL_BENCH_END(count, "a2a1", keys.size());
 
 
-          TIMER_START(count);
+          BL_BENCH_START(count);
           // local find. memory utilization a potential problem.
           // do for each src proc one at a time.
 
           results.reserve(keys.size());                   // TODO:  should estimate coverage.
 
-          TIMER_END(count, "reserve", keys.size());
+          BL_BENCH_END(count, "reserve", keys.size());
 
-          TIMER_START(count);
+          BL_BENCH_START(count);
 
           auto start = keys.begin();
           auto end = start;
@@ -948,32 +948,32 @@ namespace dsc  // distributed std container
 
             start = end;
           }
-          TIMER_END(count, "local_count", results.size());
+          BL_BENCH_END(count, "local_count", results.size());
 
-          TIMER_COLLECTIVE_START(count, "a2a2", this->comm);
+          BL_BENCH_COLLECTIVE_START(count, "a2a2", this->comm);
 
           // send back using the constructed recv count
           results = mxx::all2allv(results, recv_counts, this->comm);
-          TIMER_END(count, "a2a2", results.size());
+          BL_BENCH_END(count, "a2a2", results.size());
 
 
         } else {
 
-          TIMER_START(count);
+          BL_BENCH_START(count);
 
           results.reserve(keys.size());
-          TIMER_END(count, "reserve", keys.size());
+          BL_BENCH_END(count, "reserve", keys.size());
 
-          TIMER_START(count);
+          BL_BENCH_START(count);
           // work on query from process i.
           auto overlap = Intersect<true>::intersect(this->c.begin(), this->c.end(), keys.begin(), keys.end(), sorted_input);
 
           // within key, values may not be unique,
           Intersect<true>::process(overlap.first, overlap.second, keys.begin(), keys.end(), emplace_iter, count_element, true, pred);
-          TIMER_END(count, "local_count", results.size());
+          BL_BENCH_END(count, "local_count", results.size());
 
         }
-        TIMER_REPORT_MPI(count, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI(count, this->comm.rank(), this->comm);
 
         return results;
 
@@ -1004,9 +1004,9 @@ namespace dsc  // distributed std container
 //      template <class InputIter, class Predicate = Identity>
 //      size_t insert(InputIter src_begin, InputIter src_end, bool sorted_input = false, Predicate const &pred = Predicate()) {
 //          if (src_begin == src_end) return 0;
-//          TIMER_INIT(insert);
+//          BL_BENCH_INIT(insert);
 //
-//          TIMER_START(insert);
+//          BL_BENCH_START(insert);
 //
 //          this->sorted = false; this->balanced = false; this->globally_sorted = false;
 //          ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
@@ -1015,10 +1015,10 @@ namespace dsc  // distributed std container
 //          else ::std::copy_if(src_begin, src_end, emplace_iter, pred);
 //
 //          size_t count = ::std::distance(src_begin, src_end);
-//          TIMER_END(insert, "insert", count);
+//          BL_BENCH_END(insert, "insert", count);
 //
 //
-//          TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
+//          BL_BENCH_REPORT_MPI(insert, this->comm.rank(), this->comm);
 //
 //          return count;
 //      }
@@ -1031,11 +1031,11 @@ namespace dsc  // distributed std container
       template <class Predicate = Identity>
       size_t insert(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
           if (input.size() == 0) return 0;
-          TIMER_INIT(insert);
+          BL_BENCH_INIT(insert);
           this->sorted = false; this->balanced = false; this->globally_sorted = false;
 
           size_t before = c.size();
-          TIMER_START(insert);
+          BL_BENCH_START(insert);
 
           ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
           if (::std::is_same<Predicate, Identity>::value) {
@@ -1053,10 +1053,10 @@ namespace dsc  // distributed std container
           }
 
           size_t count = c.size() - before;
-          TIMER_END(insert, "insert", count);
+          BL_BENCH_END(insert, "insert", count);
 
 
-          TIMER_REPORT_MPI(insert, this->comm.rank(), this->comm);
+          BL_BENCH_REPORT_MPI(insert, this->comm.rank(), this->comm);
 
           return count;
       }
@@ -1283,40 +1283,40 @@ namespace dsc  // distributed std container
 
       // default is for map
       virtual void rehash() {
-        TIMER_INIT(rehash);
+        BL_BENCH_INIT(rehash);
 
         //printf("c size before: %lu\n", this->c.size());
-        TIMER_START(rehash);
-        TIMER_END(rehash, "begin", this->c.size());
+        BL_BENCH_START(rehash);
+        BL_BENCH_END(rehash, "begin", this->c.size());
 
         if (this->comm_size > 1) {
           // first balance
 
 
           if (!this->balanced) {
-            TIMER_START(rehash);
+            BL_BENCH_START(rehash);
             this->c = ::mxx::stable_distribute(this->c, this->comm);
-            TIMER_END(rehash, "block1", this->c.size());
+            BL_BENCH_END(rehash, "block1", this->c.size());
           }
 
 
           // sort if needed
 //          if (!this->globally_sorted) {
-//          TIMER_START(rehash);
+//          BL_BENCH_START(rehash);
 //          // kway merge / sort
 //          Base::Base::sort_ascending(this->c.begin(), this->c.end());
-//          TIMER_END(rehash, "sort1", this->c.size());
+//          BL_BENCH_END(rehash, "sort1", this->c.size());
 //
           // sort if needed
-          TIMER_START(rehash);
+          BL_BENCH_START(rehash);
           if (!this->globally_sorted) ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm);
-          TIMER_END(rehash, "mxxsort", this->c.size());
+          BL_BENCH_END(rehash, "mxxsort", this->c.size());
 
 
-            TIMER_START(rehash);
+            BL_BENCH_START(rehash);
             // local unique
             this->local_reduction(this->c, true);
-            TIMER_END(rehash, "reduc1", this->c.size());
+            BL_BENCH_END(rehash, "reduc1", this->c.size());
 
             // check to see if any value cross the boundary:
             // get the values from both sides of the boundaries, gather to rank 0
@@ -1324,7 +1324,7 @@ namespace dsc  // distributed std container
             // use a vector to indicate which to delete and which to keep.  (keep entry at start of a partition)
             // apply to remote.
 
-            TIMER_START(rehash);
+            BL_BENCH_START(rehash);
             // allgather the left and right elements.  then each proc makes own decision.  relies on uniqueness within a proc.
             ::std::vector<value_type > boundary_values;
             ::std::vector<int > boundary_ids;
@@ -1370,7 +1370,7 @@ namespace dsc  // distributed std container
                 }
               }  // back entry is unique.  keep.
             }
-            TIMER_END(rehash, "reduced boundaries", this->c.size());
+            BL_BENCH_END(rehash, "reduced boundaries", this->c.size());
 
             // then reblock.
 
@@ -1387,11 +1387,11 @@ namespace dsc  // distributed std container
 //            // so we can just let the some procs idle (after their size 1 partitions are moved entirely.)
 //
 //            // rebalance block first
-//            TIMER_START(rehash);
+//            BL_BENCH_START(rehash);
 //            this->c = ::mxx::stable_block_decompose(this->c, this->comm);
-//            TIMER_END(rehash, "block1", this->c.size());
+//            BL_BENCH_END(rehash, "block1", this->c.size());
 //
-// //            TIMER_START(rehash);
+// //            BL_BENCH_START(rehash);
 // //            // sample
 // //            mxx::datatype<::std::pair<Key, T> > dt;
 // //            MPI_Datatype mpi_dt = dt.type();
@@ -1401,49 +1401,49 @@ namespace dsc  // distributed std container
 // //              //printf("R %d splitters %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
 // //              this->key_to_rank.map[i].second = i;
 // //            }
-// //            TIMER_END(rehash, "splitter1", this->key_to_rank.map.size());
+// //            BL_BENCH_END(rehash, "splitter1", this->key_to_rank.map.size());
 //
 //            // get pivots using the last elements.
-//            TIMER_START(rehash);
+//            BL_BENCH_START(rehash);
 //            this->key_to_rank.map.clear();
 //            if ((this->comm.rank() > 0) && (this->c.size() > 0)) {  // splitters need to be the first entry of the next partition.
 //              // only send for the first p-1 proc, and only if they have a kmer to split with.
 //              this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
 //            }
 //            this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
-//            TIMER_END(rehash, "splitter1", this->c.size());
+//            BL_BENCH_END(rehash, "splitter1", this->c.size());
 //
 //            // rebucket by pivots, so no value crosses boundaries
-//            TIMER_START(rehash);
+//            BL_BENCH_START(rehash);
 //            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(this->c, this->key_to_rank.map, Base::Base::less);
-//            TIMER_END(rehash, "bucket", this->c.size());
+//            BL_BENCH_END(rehash, "bucket", this->c.size());
 //
-//            TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
+//            BL_BENCH_COLLECTIVE_START(rehash, "a2a", this->comm);
 //            mxx2::all2all(this->c, send_counts, this->comm);
-//            TIMER_END(rehash, "a2a", this->c.size());
+//            BL_BENCH_END(rehash, "a2a", this->c.size());
 //
 //
-////          TIMER_START(rehash);
+////          BL_BENCH_START(rehash);
 ////          // kway merge / sort
 ////          Base::Base::sort_ascending(this->c.begin(), this->c.end());
-////          TIMER_END(rehash, "sort2", this->c.size());
+////          BL_BENCH_END(rehash, "sort2", this->c.size());
 ////
 //
 //            // final reduction - nothing crosses boundaries now.
-//            TIMER_START(rehash);
+//            BL_BENCH_START(rehash);
 //            // local unique
 //            this->local_reduction(this->c, true);
-//            TIMER_END(rehash, "reduc2", this->c.size());
+//            BL_BENCH_END(rehash, "reduc2", this->c.size());
 
             // and final rebalance
-            TIMER_START(rehash);
+            BL_BENCH_START(rehash);
             // rebalance
             this->c = ::mxx::stable_distribute(this->c, this->comm);
-            TIMER_END(rehash, "block2", this->c.size());
+            BL_BENCH_END(rehash, "block2", this->c.size());
 
 //          }
 //
-          TIMER_START(rehash);
+          BL_BENCH_START(rehash);
           // get new pivots
           // next compute the splitters.
           this->key_to_rank.map.clear();
@@ -1460,20 +1460,20 @@ namespace dsc  // distributed std container
 //          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
 //            printf("R %d key to rank %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
 //          }
-          TIMER_END(rehash, "splitter2", this->c.size());
+          BL_BENCH_END(rehash, "splitter2", this->c.size());
           // no need to redistribute - each entry is unique so nothing is going to span processor boundaries.
 
         } else {
-          TIMER_START(rehash);
+          BL_BENCH_START(rehash);
           // local unique
           this->local_reduction(this->c, this->sorted);
 
-          TIMER_END(rehash, "reduc", this->c.size());
+          BL_BENCH_END(rehash, "reduc", this->c.size());
         }
         this->sorted = true; this->balanced = true; this->globally_sorted = true;
         //printf("c size after: %lu\n", this->c.size());
 
-        TIMER_REPORT_MPI(rehash, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI(rehash, this->comm.rank(), this->comm);
 
       }
   };
@@ -1598,7 +1598,7 @@ namespace dsc  // distributed std container
 
       // default is for multimap
       virtual void rehash() {
-        TIMER_INIT(rehash);
+        BL_BENCH_INIT(rehash);
 
 
         if (this->comm_size > 1) {
@@ -1606,21 +1606,21 @@ namespace dsc  // distributed std container
 
           // TODO: stable_block_decompose uses all2all internally.  is it better to move the deltas ourselves?
           if (!this->balanced) {
-            TIMER_START(rehash);
+            BL_BENCH_START(rehash);
             ::mxx::stable_distribute(this->c, this->comm).swap(this->c);
 
-            TIMER_END(rehash, "block1", this->c.size());
+            BL_BENCH_END(rehash, "block1", this->c.size());
           }
 
           // sort if needed
           if (!this->globally_sorted) {
-            TIMER_START(rehash);
+            BL_BENCH_START(rehash);
             ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm);
-            TIMER_END(rehash, "mxxsort", this->c.size());
+            BL_BENCH_END(rehash, "mxxsort", this->c.size());
           }
 
           // get new pivots
-          TIMER_START(rehash);
+          BL_BENCH_START(rehash);
           this->key_to_rank.map.clear();
           if ((this->comm.rank() > 0) && (this->c.size() > 0)) {
             // only send for the first p-1 proc, and only if they have a kmer to split with.
@@ -1647,16 +1647,16 @@ namespace dsc  // distributed std container
 //          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
 //            printf("R %d key to rank %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
 //          }
-          TIMER_END(rehash, "splitter1", this->key_to_rank.map.size());
+          BL_BENCH_END(rehash, "splitter1", this->key_to_rank.map.size());
 
           //			  mxx::datatype<::std::pair<Key, T> > dt;
           //			  MPI_Datatype mpi_dt = dt.type();
           //			  this->key_to_rank.map = ::mxx::sample_block_decomp(d.begin(), d.end(), Base::Base::less, this->comm_size - 1, this->comm, mpi_dt);
 
           // redistribute.  in trouble if we have a value that takes up a large part of the partition.
-          TIMER_START(rehash);
+          BL_BENCH_START(rehash);
           ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(this->c, this->key_to_rank.map, Base::Base::less);
-          TIMER_END(rehash, "bucket", this->c.size());
+          BL_BENCH_END(rehash, "bucket", this->c.size());
 
           // this should always be true.
           assert(send_counts.size() == static_cast<size_t>(this->comm_size));
@@ -1665,19 +1665,19 @@ namespace dsc  // distributed std container
             BL_DEBUGF("R %d send_counts[%lu] = %lu", this->comm.rank(), i, send_counts[i]);
           }
 
-          TIMER_COLLECTIVE_START(rehash, "a2a", this->comm);
+          BL_BENCH_COLLECTIVE_START(rehash, "a2a", this->comm);
           // TODO: readjust boundaries using all2all.  is it better to move the deltas ourselves?
           this->c = mxx::all2allv(this->c, send_counts, this->comm);
-          TIMER_END(rehash, "a2a", this->c.size());
+          BL_BENCH_END(rehash, "a2a", this->c.size());
 
         } else {
-          TIMER_START(rehash);
+          BL_BENCH_START(rehash);
           this->local_sort();
-          TIMER_END(rehash, "stdsort", this->c.size());
+          BL_BENCH_END(rehash, "stdsort", this->c.size());
         }
         this->sorted = true; this->balanced = true; this->globally_sorted = true;
 
-        TIMER_REPORT_MPI(rehash, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI(rehash, this->comm.rank(), this->comm);
 
       }
 
@@ -1994,25 +1994,25 @@ namespace dsc  // distributed std container
       size_t insert(::std::vector<Key> &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
 
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        TIMER_INIT(count_insert);
+        BL_BENCH_INIT(count_insert);
 
-        TIMER_START(count_insert);
+        BL_BENCH_START(count_insert);
         ::std::vector<::std::pair<Key, T> > temp;
         temp.reserve(input.size());
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
         ::std::transform(input.begin(), input.end(), emplace_iter, [](Key const & x) { return ::std::make_pair(x, T(1)); });
-        TIMER_END(count_insert, "convert", input.size());
+        BL_BENCH_END(count_insert, "convert", input.size());
 
         // distribute
-        TIMER_START(count_insert);
+        BL_BENCH_START(count_insert);
         // local compute part.  called by the communicator.
         size_t count = this->Base::insert(temp, sorted_input, pred);
         ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
 
-        TIMER_END(count_insert, "insert", this->c.size());
+        BL_BENCH_END(count_insert, "insert", this->c.size());
 
         // distribute
-        TIMER_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
         return count;
       }
 
@@ -2025,17 +2025,17 @@ namespace dsc  // distributed std container
       size_t insert(::std::vector<std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
 
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        TIMER_INIT(count_insert);
+        BL_BENCH_INIT(count_insert);
 
         // distribute
-        TIMER_START(count_insert);
+        BL_BENCH_START(count_insert);
         // local compute part.  called by the communicator.
         size_t count = this->Base::insert(input, sorted_input, pred);
 
-        TIMER_END(count_insert, "insert", this->c.size());
+        BL_BENCH_END(count_insert, "insert", this->c.size());
 
         // distribute
-        TIMER_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
         return count;
       }
 

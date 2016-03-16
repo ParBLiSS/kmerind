@@ -60,7 +60,7 @@
 
 #include <mxx/collective.hpp>
 #include <mxx/reduction.hpp>
-#include "utils/timer.hpp"  // for timing.
+#include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
 #include "containers/distributed_map_base.hpp"
 
@@ -353,35 +353,35 @@ namespace dsc  // distributed std container
        */
       template <class LocalFind, typename Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(LocalFind const & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
-        TIMER_INIT(find);
+        BL_BENCH_INIT(find);
 
-        TIMER_START(find);
+        BL_BENCH_START(find);
         ::std::vector<::std::pair<Key, T> > results;
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-        TIMER_END(find, "begin", keys.size());
+        BL_BENCH_END(find, "begin", keys.size());
 
-        TIMER_START(find);
+        BL_BENCH_START(find);
         // keep unique keys
         this->retain_unique(keys, sorted_input);
-        TIMER_END(find, "uniq1", keys.size());
+        BL_BENCH_END(find, "uniq1", keys.size());
 
         if (this->comm_size > 1) {
-          TIMER_COLLECTIVE_START(find, "a2a1", this->comm);
+          BL_BENCH_COLLECTIVE_START(find, "a2a1", this->comm);
           // distribute (communication part)
           std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
-          TIMER_END(find, "a2a1", keys.size());
+          BL_BENCH_END(find, "a2a1", keys.size());
 
           // local find. memory utilization a potential problem.
           // do for each src proc one at a time.
 
-          TIMER_START(find);
+          BL_BENCH_START(find);
           std::vector<int> send_counts(this->comm_size, 0);
           results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
-          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+          BL_BENCH_END(find, "reserve", (keys.size() * this->key_multiplicity));
 
-          TIMER_START(find);
+          BL_BENCH_START(find);
           auto start = keys.begin();
           auto end = start;
           for (int i = 0; i < this->comm_size; ++i) {
@@ -393,25 +393,25 @@ namespace dsc  // distributed std container
 
             start = end;
           }
-          TIMER_END(find, "local_find", results.size());
+          BL_BENCH_END(find, "local_find", results.size());
 
-          TIMER_COLLECTIVE_START(find, "a2a2", this->comm);
+          BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
           // send back using the constructed recv count
           mxx2::all2all(results, send_counts, this->comm);
-          TIMER_END(find, "a2a2", results.size());
+          BL_BENCH_END(find, "a2a2", results.size());
 
         } else {
-          TIMER_START(find);
+          BL_BENCH_START(find);
           results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
-          TIMER_END(find, "reserve", (keys.size() * this->key_multiplicity));
+          BL_BENCH_END(find, "reserve", (keys.size() * this->key_multiplicity));
 
-          TIMER_START(find);
+          BL_BENCH_START(find);
           QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, true, pred);
-          TIMER_END(find, "local_find", results.size());
+          BL_BENCH_END(find, "local_find", results.size());
         }
 
-        TIMER_REPORT_MPI(find, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI(find, this->comm_rank, this->comm);
 
         return results;
 
@@ -532,33 +532,33 @@ namespace dsc  // distributed std container
       template <class Predicate = Identity>
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
                                                         Predicate const& pred = Predicate() ) const {
-        TIMER_INIT(count);
+        BL_BENCH_INIT(count);
 
-        TIMER_START(count);
+        BL_BENCH_START(count);
         ::std::vector<::std::pair<Key, size_type> > results;
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-        TIMER_END(count, "begin", keys.size());
+        BL_BENCH_END(count, "begin", keys.size());
 
-        TIMER_START(count);
+        BL_BENCH_START(count);
         // keep unique keys
         retain_unique(keys, sorted_input);
-        TIMER_END(count, "uniq1", keys.size());
+        BL_BENCH_END(count, "uniq1", keys.size());
 
 
         if (this->comm_size > 1) {
-          TIMER_COLLECTIVE_START(count, "a2a1", this->comm);
+          BL_BENCH_COLLECTIVE_START(count, "a2a1", this->comm);
           // distribute (communication part)
           std::vector<int> recv_counts = mxx2::msgs_all2all(keys, this->key_to_rank, this->comm);
-          TIMER_END(count, "a2a1", keys.size());
+          BL_BENCH_END(count, "a2a1", keys.size());
 
           // local count. memory utilization a potential problem.
           // do for each src proc one at a time.
-          TIMER_START(count);
+          BL_BENCH_START(count);
           results.reserve(keys.size());                   // TODO:  should estimate coverage.
-          TIMER_END(count, "reserve", keys.size());
+          BL_BENCH_END(count, "reserve", keys.size());
 
-          TIMER_START(count);
+          BL_BENCH_START(count);
           auto start = keys.begin();
           auto end = start;
           for (int i = 0; i < this->comm_size; ++i) {
@@ -571,25 +571,25 @@ namespace dsc  // distributed std container
 
             start = end;
           }
-          TIMER_END(count, "local_count", results.size());
+          BL_BENCH_END(count, "local_count", results.size());
 
           // send back using the constructed recv count
-          TIMER_COLLECTIVE_START(count, "a2a2", this->comm);
+          BL_BENCH_COLLECTIVE_START(count, "a2a2", this->comm);
           mxx2::all2all(results, recv_counts, this->comm);
-          TIMER_END(count, "a2a2", results.size());
+          BL_BENCH_END(count, "a2a2", results.size());
         } else {
-          TIMER_START(count);
+          BL_BENCH_START(count);
           results.reserve(keys.size());                   // TODO:  should estimate coverage.
-          TIMER_END(count, "reserve", keys.size());
+          BL_BENCH_END(count, "reserve", keys.size());
 
 
-          TIMER_START(count);
+          BL_BENCH_START(count);
           // within start-end, values are unique, so don't need to set unique to true.
           QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, count_element, true, pred);
-          TIMER_END(count, "local_count", results.size());
+          BL_BENCH_END(count, "local_count", results.size());
         }
 
-        TIMER_REPORT_MPI(count, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI(count, this->comm_rank, this->comm);
 
         return results;
 
@@ -777,35 +777,35 @@ namespace dsc  // distributed std container
       template <typename Predicate = Identity>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        TIMER_INIT(insert);
+        BL_BENCH_INIT(insert);
 
-        TIMER_START(insert);
-        TIMER_END(insert, "start", input.size());
+        BL_BENCH_START(insert);
+        BL_BENCH_END(insert, "start", input.size());
 
 
         // communication part
         if (this->comm_size > 1) {
-          TIMER_START(insert);
+          BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
           local_reduction(input, sorted_input);
-          TIMER_END(insert, "uniq1", input.size());
+          BL_BENCH_END(insert, "uniq1", input.size());
 
-          TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
+          BL_BENCH_COLLECTIVE_START(insert, "a2a", this->comm);
           mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
-          TIMER_END(insert, "a2a", input.size());
+          BL_BENCH_END(insert, "a2a", input.size());
         }
 
 
-        TIMER_START(insert);
+        BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
         size_t count = 0;
         if (!::std::is_same<Predicate, Identity>::value)
           count = this->Base::local_insert(input.begin(), input.end(), pred);
         else
           count = this->Base::local_insert(input.begin(), input.end());
-        TIMER_END(insert, "insert", this->c.size());
+        BL_BENCH_END(insert, "insert", this->c.size());
 
-        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI(insert, this->comm_rank, this->comm);
 
         return count;
       }
@@ -1069,9 +1069,9 @@ namespace dsc  // distributed std container
       template <typename Predicate = Identity>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        TIMER_INIT(insert);
+        BL_BENCH_INIT(insert);
 
-        TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
+        BL_BENCH_COLLECTIVE_START(insert, "a2a", this->comm);
 
         //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm_rank, sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
         //        count_unique(input);
@@ -1081,20 +1081,20 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
           mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
         }
-        TIMER_END(insert, "a2a", input.size());
+        BL_BENCH_END(insert, "a2a", input.size());
 
         //        count_unique(input);
 
-        TIMER_START(insert);
+        BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
         size_t count = 0;
         if (!::std::is_same<Predicate, Identity>::value)
           count = this->Base::local_insert(input.begin(), input.end(), pred);
         else
           count = this->Base::local_insert(input.begin(), input.end());
-        TIMER_END(insert, "insert", this->c.size());
+        BL_BENCH_END(insert, "insert", this->c.size());
 
-        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI(insert, this->comm_rank, this->comm);
         return count;
       }
 
@@ -1198,25 +1198,25 @@ namespace dsc  // distributed std container
         if (input.size() == 0) return;
 
         // sort is slower.  use unordered map.
-        TIMER_INIT(reduce_tuple);
+        BL_BENCH_INIT(reduce_tuple);
 
-        TIMER_START(reduce_tuple);
+        BL_BENCH_START(reduce_tuple);
         local_container_type temp;
-        TIMER_END(reduce_tuple, "reserve", input.size());
+        BL_BENCH_END(reduce_tuple, "reserve", input.size());
 
-        TIMER_START(reduce_tuple);
+        BL_BENCH_START(reduce_tuple);
         auto end = input.end();
         for (auto it = input.begin(); it != end; ++it) {
           if (temp.count(it->first) == 0) temp[it->first] = it->second;  // don't rely on initialization to set T to 0.
           else temp[it->first] = r(temp[it->first], it->second);
         }
-        TIMER_END(reduce_tuple, "reduce", temp.size());
+        BL_BENCH_END(reduce_tuple, "reduce", temp.size());
 
-        TIMER_START(reduce_tuple);
+        BL_BENCH_START(reduce_tuple);
         input.assign(temp.begin(), temp.end());
-        TIMER_END(reduce_tuple, "copy", input.size());
+        BL_BENCH_END(reduce_tuple, "copy", input.size());
 
-        TIMER_REPORT_MPI(reduce_tuple, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI(reduce_tuple, this->comm_rank, this->comm);
       }
 
 
@@ -1237,22 +1237,22 @@ namespace dsc  // distributed std container
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        TIMER_INIT(insert);
+        BL_BENCH_INIT(insert);
 
-        TIMER_START(insert);
-        TIMER_END(insert, "begin", input.size());
+        BL_BENCH_START(insert);
+        BL_BENCH_END(insert, "begin", input.size());
 
         // communication part
         if (this->comm_size > 1) {
 
-          TIMER_START(insert);
+          BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
           this->local_reduction(input);
-          TIMER_END(insert, "local_reduce", input.size());
+          BL_BENCH_END(insert, "local_reduce", input.size());
 
-          TIMER_COLLECTIVE_START(insert, "a2a", this->comm);
+          BL_BENCH_COLLECTIVE_START(insert, "a2a", this->comm);
           mxx2::msgs_all2all(input, this->key_to_rank, this->comm);
-          TIMER_END(insert, "a2a", input.size());
+          BL_BENCH_END(insert, "a2a", input.size());
 
         }
         //
@@ -1260,15 +1260,15 @@ namespace dsc  // distributed std container
         //        local_reduction(input);
 
         // local compute part.  called by the communicator.
-        TIMER_START(insert);
+        BL_BENCH_START(insert);
         size_t count = 0;
         if (!::std::is_same<Predicate, Identity>::value)
           count = this->local_insert(input.begin(), input.end(), pred);
         else
           count = this->local_insert(input.begin(), input.end());
-        TIMER_END(insert, "local_insert", this->local_size());
+        BL_BENCH_END(insert, "local_insert", this->local_size());
 
-        TIMER_REPORT_MPI(insert, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI(insert, this->comm_rank, this->comm);
 
         return count;
 
@@ -1353,25 +1353,25 @@ namespace dsc  // distributed std container
       template <typename Predicate = Identity>
       size_t insert(std::vector< Key >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        TIMER_INIT(count_insert);
+        BL_BENCH_INIT(count_insert);
 
-        TIMER_START(count_insert);
+        BL_BENCH_START(count_insert);
         ::std::vector<::std::pair<Key, T> > temp;
         temp.reserve(input.size());
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
         ::std::transform(input.begin(), input.end(), emplace_iter, [](Key const & x) { return ::std::make_pair(x, T(1)); });
-        TIMER_END(count_insert, "convert", input.size());
+        BL_BENCH_END(count_insert, "convert", input.size());
 
 
-        TIMER_START(count_insert);
+        BL_BENCH_START(count_insert);
         // local compute part.  called by the communicator.
         size_t count = this->Base::insert(temp, sorted_input, pred);
         ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
-        TIMER_END(count_insert, "insert", this->c.size());
+        BL_BENCH_END(count_insert, "insert", this->c.size());
 
 
         // distribute
-        TIMER_REPORT_MPI(count_insert, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI(count_insert, this->comm_rank, this->comm);
 
         return count;
 
@@ -1387,16 +1387,16 @@ namespace dsc  // distributed std container
       template <typename Predicate = Identity>
       size_t insert(std::vector< std::pair< Key, T> >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        TIMER_INIT(count_insert);
+        BL_BENCH_INIT(count_insert);
 
-        TIMER_START(count_insert);
+        BL_BENCH_START(count_insert);
         // local compute part.  called by the communicator.
         size_t count = this->Base::insert(input, sorted_input, pred);
-        TIMER_END(count_insert, "insert", this->c.size());
+        BL_BENCH_END(count_insert, "insert", this->c.size());
 
 
         // distribute
-        TIMER_REPORT_MPI(count_insert, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI(count_insert, this->comm_rank, this->comm);
 
         return count;
 

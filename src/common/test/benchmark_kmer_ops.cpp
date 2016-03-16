@@ -37,7 +37,7 @@
 
 #include "common/alphabets.hpp"
 #include "common/alphabet_traits.hpp"
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 
 // include files to test
 
@@ -76,7 +76,7 @@ class KmerOpsBenchmark : public ::testing::Test {
     inline bool old_equal(const T& lhs, const T& rhs) const {
 		// slower.  for testing only
     	std::atomic_thread_fence(::std::memory_order_seq_cst);
-		return (memcmp(rhs.getData(), rhs.getData(), T::nBytes) == 0);
+		return (memcmp(lhs.getData(), rhs.getData(), T::nBytes) == 0);
     }
 
     inline bool old_less(const T& lhs, const T& rhs) const
@@ -127,149 +127,154 @@ TYPED_TEST_CASE_P(KmerOpsBenchmark);
 
 TYPED_TEST_P(KmerOpsBenchmark, left_shift)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
-  TIMER_START(km);
+  BL_TIMER_START(km);
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 	  this->outputs[i].left_shift_bits();
   }
-	TIMER_END(km, "bit<< auto", KmerOpsBenchmark<TypeParam>::iterations);
+	BL_TIMER_END(km, "bit<< auto", KmerOpsBenchmark<TypeParam>::iterations);
 
-	TIMER_START(km);
+	BL_TIMER_START(km);
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 	  this->outputs[i].left_shift_bits(TypeParam::bitsPerChar);
   }
-  TIMER_END(km, "<<", KmerOpsBenchmark<TypeParam>::iterations);
+  BL_TIMER_END(km, "<<", KmerOpsBenchmark<TypeParam>::iterations);
 
 
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
 }
 
 TYPED_TEST_P(KmerOpsBenchmark, right_shift)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
-    TIMER_START(km);
+    BL_TIMER_START(km);
     for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
     	  this->outputs[i].right_shift_bits();
     }
-	TIMER_END(km, "bit>> auto", KmerOpsBenchmark<TypeParam>::iterations);
+	BL_TIMER_END(km, "bit>> auto", KmerOpsBenchmark<TypeParam>::iterations);
 
-	TIMER_START(km);
+	BL_TIMER_START(km);
 	  for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 		  this->outputs[i].right_shift_bits(TypeParam::bitsPerChar);
 	  }
-	  TIMER_END(km, ">>", KmerOpsBenchmark<TypeParam>::iterations);
+	  BL_TIMER_END(km, ">>", KmerOpsBenchmark<TypeParam>::iterations);
 
 
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
 }
 
 
 TYPED_TEST_P(KmerOpsBenchmark, bit_and)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
-    TIMER_START(km);
+    BL_TIMER_START(km);
     for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
     	  this->outputs[i].bit_and(this->kmers[i], this->kmers2[i]);
 
     }
-	TIMER_END(km, "bit& auto", KmerOpsBenchmark<TypeParam>::iterations);
+	BL_TIMER_END(km, "bit& auto", KmerOpsBenchmark<TypeParam>::iterations);
 
-	  TIMER_START(km);
+	  BL_TIMER_START(km);
 	  for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 		  this->old_and(this->outputs[i], this->kmers[i], this->kmers2[i]);
 	  }
-	  TIMER_END(km, "&", KmerOpsBenchmark<TypeParam>::iterations);
+	  BL_TIMER_END(km, "&", KmerOpsBenchmark<TypeParam>::iterations);
 
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
 }
 
 TYPED_TEST_P(KmerOpsBenchmark, bit_or)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
-  TIMER_START(km);
+  BL_TIMER_START(km);
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
   	  this->outputs[i].bit_or(this->kmers[i], this->kmers2[i]);
 
   }
-	TIMER_END(km, "bit| auto", KmerOpsBenchmark<TypeParam>::iterations);
+	BL_TIMER_END(km, "bit| auto", KmerOpsBenchmark<TypeParam>::iterations);
 
-  TIMER_START(km);
+  BL_TIMER_START(km);
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 	  this->old_or(this->outputs[i], this->kmers[i], this->kmers2[i]);
   }
-  TIMER_END(km, "|", KmerOpsBenchmark<TypeParam>::iterations);
+  BL_TIMER_END(km, "|", KmerOpsBenchmark<TypeParam>::iterations);
 
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
 }
 
 TYPED_TEST_P(KmerOpsBenchmark, bit_xor)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
-  TIMER_START(km);
+  BL_TIMER_START(km);
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 	  this->outputs[i].bit_xor(this->kmers[i], this->kmers2[i]);
   }
-	TIMER_END(km, "bit^ auto", KmerOpsBenchmark<TypeParam>::iterations);
+	BL_TIMER_END(km, "bit^ auto", KmerOpsBenchmark<TypeParam>::iterations);
 
-  TIMER_START(km);
+  BL_TIMER_START(km);
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 	  this->old_xor(this->outputs[i], this->kmers[i], this->kmers2[i]);
   }
-  TIMER_END(km, "^", KmerOpsBenchmark<TypeParam>::iterations);
+  BL_TIMER_END(km, "^", KmerOpsBenchmark<TypeParam>::iterations);
 
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
 }
 
 TYPED_TEST_P(KmerOpsBenchmark, equal)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
   bool result = true;
-  TIMER_START(km);
+  BL_TIMER_START(km);
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 	  result &= (this->kmers[i] == this->kmers2[i]);
   }
-  TIMER_END(km, "bit equal", KmerOpsBenchmark<TypeParam>::iterations);
-  printf("equal? %s\n", (result ? "true" : "false"));
+  BL_TIMER_END(km, "bit equal", KmerOpsBenchmark<TypeParam>::iterations);
+   printf("equal? %s\n", (result ? "true" : "false"));
 
-  result = true;
-    TIMER_START(km);
+  bool result2 = true;
+    BL_TIMER_START(km);
     for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
-    	result &= (this->old_equal(this->kmers[i], this->kmers2[i]));
+    	result2 &= (this->old_equal(this->kmers[i], this->kmers2[i]));
     }
-	TIMER_END(km, "equal", KmerOpsBenchmark<TypeParam>::iterations);
-	  printf("less? %s\n", (result ? "true" : "false"));
+	BL_TIMER_END(km, "equal", KmerOpsBenchmark<TypeParam>::iterations);
+	  printf("equal? %s\n", (result2 ? "true" : "false"));
 
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
+
+  ASSERT_TRUE(result == result2);
+
 }
 
 
 TYPED_TEST_P(KmerOpsBenchmark, less)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
   bool result = true;
-  TIMER_START(km);
+  BL_TIMER_START(km);
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 	  result &= this->kmers[i] < this->kmers2[i];
   }
-  TIMER_END(km, "bit less", KmerOpsBenchmark<TypeParam>::iterations);
-  printf("less? %s\n", (result ? "true" : "false"));
+  BL_TIMER_END(km, "bit less", KmerOpsBenchmark<TypeParam>::iterations);
+  // printf("less? %s\n", (result ? "true" : "false"));
 
-  result = true;
-    TIMER_START(km);
+  bool result2 = true;
+    BL_TIMER_START(km);
     for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
-    	result &= this->old_less(this->kmers[i], this->kmers2[i]);
+    	result2 &= this->old_less(this->kmers[i], this->kmers2[i]);
     }
-	TIMER_END(km, "less", KmerOpsBenchmark<TypeParam>::iterations);
-	  printf("less? %s\n", (result ? "true" : "false"));
+	BL_TIMER_END(km, "less", KmerOpsBenchmark<TypeParam>::iterations);
+	//  printf("less? %s\n", (result2 ? "true" : "false"));
 
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
+
+  ASSERT_TRUE(result == result2);
 }
 
 
@@ -337,5 +342,3 @@ typedef ::testing::Types<
     ::bliss::common::Kmer<256, bliss::common::DNA16, uint64_t>
 > KmerOpsBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerOpsBenchmark, KmerOpsBenchmarkTypes);
-
-

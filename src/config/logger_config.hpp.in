@@ -11,7 +11,7 @@ file comment
 
 // benchmarking
 #define BL_BENCHMARK @BL_BENCHMARK@
-#define BL_BENCHMARK_MEM @BL_BENCHMAR_MEMK@
+#define BL_BENCHMARK_MEM @BL_BENCHMARK_MEM@
 #define BL_BENCHMARK_TIME @BL_BENCHMARK_TIME@
 
 #endif /* CONFIG_H */

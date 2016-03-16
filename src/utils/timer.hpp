@@ -93,7 +93,13 @@ class Timer {
 		durations.push_back(time_span.count());
 		counts.push_back(n_elem);
     }
+    void collective_end(::std::string const & name, double const & n_elem, ::mxx::comm const & comm) {
 
+		// time a barrier.
+		comm.barrier();
+
+		end(name, n_elem);
+    }
     void report(::std::string const & title) {
         std::stringstream output;
 
@@ -319,8 +325,9 @@ class Timer {
 #define BL_TIMER_LOOP_END(title, name, n_elem) do { title##_timer.loop_end(name, n_elem); } while (0)
 
 #define BL_TIMER_START(title)     do { title##_timer.start(); } while (0)
-#define BL_TIMER_COLLECTIVE_START(title, name, comm) do { title##_timer.collective_start(name, comm); } while (0)
 #define BL_TIMER_END(title, name, n_elem) do { title##_timer.end(name, n_elem); } while (0)
+#define BL_TIMER_COLLECTIVE_START(title, name, comm) do { title##_timer.collective_start(name, comm); } while (0)
+#define BL_TIMER_COLLECTIVE_END(title, name, n_elem, comm) do { title##_timer.collective_end(name, n_elem, comm); } while (0)
 #define BL_TIMER_REPORT(title) do { title##_timer.report(#title); } while (0)
 
 #if 0
@@ -340,8 +347,9 @@ class Timer {
 #define BL_TIMER_LOOP_PAUSE(title)
 #define BL_TIMER_LOOP_END(title, name, n_elem)
 #define BL_TIMER_START(title)
-#define BL_TIMER_COLLECTIVE_START(title, name, comm)
 #define BL_TIMER_END(title, name, n_elem)
+#define BL_TIMER_COLLECTIVE_START(title, name, comm)
+#define BL_TIMER_COLLECTIVE_end(title, name, n_elem, comm)
 #define BL_TIMER_REPORT(title)
 #define BL_TIMER_REPORT_MPI(title, comm)
 

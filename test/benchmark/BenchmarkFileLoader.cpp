@@ -52,7 +52,7 @@
 
 #include "index/kmer_index.hpp"
 
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 
 #include "utils/mxx_fast_comm.hpp"
 
@@ -62,16 +62,41 @@
 
 #include "utils/memory_usage.hpp"
 
-
-void readFilePOSIX(const std::string &fileName, const size_t offset,
-						  const size_t length, unsigned char* result)
+template <typename ITER>
+bool validate(const std::string &fileName, const size_t offset,
+						  const size_t length, ITER const & first, ITER const & last)
 {
   FILE *fp = fopen64(fileName.c_str(), "r");
   fseeko64(fp, offset , SEEK_SET);
-  size_t read = fread_unlocked(result, 1, length, fp);
+
+  if (static_cast<size_t>(std::distance(first, last)) != length)
+    std::cout << "ERROR: block size is not same as range size." << std::endl;
+
+
+  using valtype = typename std::iterator_traits<ITER>::value_type;
+  constexpr size_t tmp_size = 1024 * 1024;
+
+  valtype tmp[tmp_size];
+  int count;
+  ITER iter = first;
+
+  for (size_t l = 0; l < length; l += tmp_size) {
+	  count = fread_unlocked(tmp, 1, tmp_size, fp);
+
+	  if (count <= 0) break;
+
+	  auto diff_iters = ::std::mismatch(tmp, tmp + count, iter);
+	  iter += count;
+
+	  if (diff_iters.first != (tmp + count))
+		  std::cout << "ERROR: diff at offset " << (offset + std::distance(tmp, diff_iters.first))
+		  	  << " val " << *(diff_iters.second) << " gold " << *(diff_iters.first) << std::endl;
+
+  }
+
   fclose(fp);
 
-  if (read < 0) throw ::bliss::utils::make_exception<std::logic_error>("ERROR: fread_unlocked failed.");
+  return (iter == last);
 }
 
 
@@ -117,26 +142,13 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
       size_t offset = partition.getRange().start;
 
       BL_BENCH_START(file);
-      unsigned char * gold = new unsigned char[len + 1];
-      readFilePOSIX(filename, offset, len, gold);
-      BL_BENCH_END(file, "posix", len);
-
-
-      BL_BENCH_START(file);
-      auto diff_iters = ::std::mismatch(partition.begin(), partition.end(), gold);
+      bool same = validate(filename, offset, len, partition.begin(), partition.end());
       BL_BENCH_END(file, "compare", len);
 
+      if (!same)
+    	  std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! "
+          	  << " range " << partition.getRange() << std::endl;
 
-      if (static_cast<size_t>(std::distance(partition.begin(), partition.end())) != len)
-        std::cout << "ERROR: block size is not same as range size." << std::endl;
-
-      if (diff_iters.first != partition.end())
-        std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! diff at offset " << (offset + std::distance(partition.begin(), diff_iters.first))
-            << " val " << *(diff_iters.first) << " gold " << *(diff_iters.second)
-            << " range " << partition.getRange() << std::endl;
-
-
-      delete [] gold;
 
 //      // not reusing the SeqParser in loader.  instead, reinitializing one.
 //      BL_BENCH_START(file);
@@ -266,27 +278,12 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
       size_t offset = block.getRange().start;
 
       BL_BENCH_START(file_subcomm);
-      unsigned char * gold = new unsigned char[len + 1];
-      readFilePOSIX(filename, offset, len, gold);
-      BL_BENCH_END(file_subcomm, "posix", len);
-
-
-
-      BL_BENCH_START(file_subcomm);
-      auto diff_iters = ::std::mismatch(block.begin(), block.end(), gold);
+      bool same = validate(filename, offset, len, block.begin(), block.end());
       BL_BENCH_END(file_subcomm, "compare", len);
 
-
-//
-//      if (std::distance(block.begin(), block.end()) != len)
-//        std::cout << "ERROR: block size is not same as range size." << std::endl;
-
-      if (diff_iters.first != block.end())
-        std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! diff at offset " << (offset + std::distance(block.begin(), diff_iters.first))
-            << " val " << *(diff_iters.first) << " gold " << *(diff_iters.second)
-            << " range " << block.getRange() << std::endl;
-
-      delete [] gold;
+      if (!same)
+    	  std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! "
+          	  << " range " << block.getRange() << std::endl;
 
 
 
@@ -345,32 +342,20 @@ void readFilePOSIX(const std::string &fileName, const size_t offset,
       size_t len = partition.getRange().size();
       size_t offset = partition.getRange().start;
 
-      BL_BENCH_START(file_direct);
-      unsigned char * gold = new unsigned char[len + 1];
-      readFilePOSIX(filename, offset, len, gold);
-      BL_BENCH_END(file_direct, "posix", len);
-
-
-
-      BL_BENCH_START(file_direct);
-      auto diff_iters = ::std::mismatch(partition.begin(), partition.end(), gold);
-      BL_BENCH_END(file_direct, "compare", len);
-
-
 
       if (partition.data.size() != partition.in_mem_range_bytes.size())
         std::cout << "ERROR rank " << _comm.rank() << ": block size " << partition.data.size() << " is not same as range size "
         << partition.valid_range_bytes.size()
         << " in mem range size is " << partition.in_mem_range_bytes.size() << std::endl;
 
-      if (diff_iters.first != partition.end())
-        std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! start at " << offset 
-		<< " diff at offset " << (offset + std::distance(partition.begin(), diff_iters.first))
-            << " val " << *(diff_iters.first) << " gold " << *(diff_iters.second)
-            << " range " << partition.getRange() << std::endl;
 
+      BL_BENCH_START(file_direct);
+      bool same = validate(filename, offset, len, partition.begin(), partition.end());
+      BL_BENCH_END(file_direct, "compare", len);
 
-      delete [] gold;
+      if (!same)
+    	  std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! "
+          	  << " range " << partition.getRange() << std::endl;
 
 
 //      // not reusing the SeqParser in loader.  instead, reinitializing one.

@@ -84,7 +84,7 @@
 #include "iterators/constant_iterator.hpp"
 #include "index/quality_score_iterator.hpp"
 
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 #include "utils/file_utils.hpp"
 
 #include <fstream> // debug only
@@ -196,35 +196,35 @@ public:
 
 		size_t before = result.size();
 
-		TIMER_INIT(file);
+		BL_BENCH_INIT(file);
 		{  // ensure that fileloader is closed at the end.
 
-			TIMER_START(file);
+			BL_BENCH_START(file);
 			//==== create file Loader
 			FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
 			typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
-			TIMER_END(file, "open", partition.getRange().size());
+			BL_BENCH_END(file, "open", partition.getRange().size());
 
 
 			//std::cout << "partition range: " << partition.getRange() << std::endl;
 
       //== reserve
-      TIMER_START(file);
+      BL_BENCH_START(file);
       // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
       // index reserve internally sends a message to itself.
 
       // call after getting first L1Block to ensure that file is loaded.  (rank 0 reads and broadcast)
 			size_t est_size = (loader.getKmerCountEstimate(KmerType::size) + _comm.size() - 1) / _comm.size();
       result.reserve(est_size);
-      TIMER_END(file, "reserve", est_size);
+      BL_BENCH_END(file, "reserve", est_size);
 
 			// not reusing the SeqParser in loader.  instead, reinitializing one.
-			TIMER_START(file);
+			BL_BENCH_START(file);
 			auto l1parser = loader.getSeqParser();
 			l1parser.init_parser(partition.begin(), loader.getFileRange(), partition.getRange(), partition.getRange(), _comm);
-			TIMER_END(file, "mark_seqs", est_size);
+			BL_BENCH_END(file, "mark_seqs", est_size);
 
-			TIMER_START(file);
+			BL_BENCH_START(file);
 			//=== copy into array
 			while (partition.getRange().size() > 0) {
 
@@ -232,20 +232,20 @@ public:
 
 				partition = loader.getNextL1Block();
 			}
-			TIMER_END(file, "read", result.size());
+			BL_BENCH_END(file, "read", result.size());
 			// std::cout << "Last: pos - kmer " << result.back() << std::endl;
 		}
 
 		if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
-			TIMER_START(file);
+			BL_BENCH_START(file);
 
 			::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
 			::std::for_each(result.begin(), result.end(), tuple_trans);
 
-			TIMER_END(file, "canonicalize", result.size());
+			BL_BENCH_END(file, "canonicalize", result.size());
 		}
 
-		TIMER_REPORT_MPI(file, _comm.rank(), _comm);
+		BL_BENCH_REPORT_MPI(file, _comm.rank(), _comm);
 		return result.size() - before;
 	}
 
@@ -275,7 +275,7 @@ public:
 
 		typename FileLoaderType::RangeType file_range;
 
-		TIMER_INIT(file);
+		BL_BENCH_INIT(file);
 		{
 
 			typename FileLoaderType::RangeType range;
@@ -286,7 +286,7 @@ public:
 			typename FileLoaderType::L1BlockType partition;
 
 			// first load the file using the group loader's communicator.
-			TIMER_START(file);
+			BL_BENCH_START(file);
 			size_t est_size = 1;
 			if (group.rank() == 0) {  // ensure file loader is closed properly.
 				//==== create file Loader. this handle is alive through the entire building process.
@@ -335,40 +335,40 @@ public:
 			range = mxx::scatter_one(ranges, 0, group);
 			// now create the L2Blocks from the data  (reuse block)
 			block.assign(&(data[0]), &(data[0]) + range.size(), range);
-			TIMER_END(file, "open", data.size());
+			BL_BENCH_END(file, "open", data.size());
 
 			// not reusing the SeqParser in loader.  instead, reinitializing one.
-			TIMER_START(file);
+			BL_BENCH_START(file);
 			SeqParser<typename L2BlockType::iterator> l2parser;
 			l2parser.init_parser(block.begin(), file_range, range, range, comm);
-			TIMER_END(file, "mark_seqs", est_size);
+			BL_BENCH_END(file, "mark_seqs", est_size);
 
 			//== reserve
-			TIMER_START(file);
+			BL_BENCH_START(file);
 			// broadcast the estimated size to rest of group
 			mxx::datatype size_dt = mxx::get_datatype<size_t>();
 			MPI_Bcast(&est_size, 1, size_dt.type(), 0, group);
 			result.reserve(est_size);
-			TIMER_END(file, "reserve", est_size);
+			BL_BENCH_END(file, "reserve", est_size);
 
 
 			// == parse kmer/tuples iterator
-			TIMER_START(file);
+			BL_BENCH_START(file);
 			read_block<KP>(block, l2parser, result);
-			TIMER_END(file, "read", result.size());
+			BL_BENCH_END(file, "read", result.size());
 			BL_INFO("Last: pos - kmer " << result.back());
 		}
 
 		if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
-			TIMER_START(file);
+			BL_BENCH_START(file);
 
 			::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
 			::std::for_each(result.begin(), result.end(), tuple_trans);
 
-			TIMER_END(file, "canonicalize", result.size());
+			BL_BENCH_END(file, "canonicalize", result.size());
 		}
 
-		TIMER_REPORT_MPI(file, comm.rank(), comm);
+		BL_BENCH_REPORT_MPI(file, comm.rank(), comm);
 
 		return result.size() - before;
 	}
@@ -392,27 +392,27 @@ public:
 
 	    size_t before = result.size();
 
-	    TIMER_INIT(file);
+	    BL_BENCH_INIT(file);
 	    {  // ensure that fileloader is closed at the end.
 
-	      TIMER_START(file);
+	      BL_BENCH_START(file);
 	      //==== create file Loader
 	//      FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
 	//      typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 
 	      FileType fobj(filename, KmerType::size, _comm);
 	      ::bliss::io::file_data partition = fobj.read_file();
-	      TIMER_END(file, "open", partition.getRange().size());
+	      BL_BENCH_END(file, "open", partition.getRange().size());
 
 
 	      // not reusing the SeqParser in loader.  instead, reinitializing one.
-	      TIMER_START(file);
+	      BL_BENCH_START(file);
 	      SeqParser<unsigned char *> l1parser;
 	      l1parser.init_parser(partition.data.data(), partition.parent_range_bytes, partition.in_mem_range_bytes, partition.getRange(), _comm);
-	      TIMER_END(file, "mark_seqs", partition.getRange().size());
+	      BL_BENCH_END(file, "mark_seqs", partition.getRange().size());
 
 	      //== reserve
-	      TIMER_START(file);
+	      BL_BENCH_START(file);
 	      // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
 	      // index reserve internally sends a message to itself.
 
@@ -423,27 +423,27 @@ public:
 	      size_t est_size = (record_size == 0) ? 0 : (partition.getRange().size() + record_size - 1) / record_size;  // number of records
 	      est_size *= (seq_len < KmerType::size) ? 0 : (seq_len - KmerType::size + 1) ;  // number of kmers in a record
 	      result.reserve(est_size);
-	      TIMER_END(file, "reserve", est_size);
+	      BL_BENCH_END(file, "reserve", est_size);
 
-	      TIMER_START(file);
+	      BL_BENCH_START(file);
 	      //=== copy into array
 	      if (partition.getRange().size() > 0) {
 	        read_block<KP>(partition, l1parser, result);
 	      }
-	      TIMER_END(file, "read", result.size());
+	      BL_BENCH_END(file, "read", result.size());
 	      // std::cout << "Last: pos - kmer " << result.back() << std::endl;
 	    }
 
 	    if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
-	      TIMER_START(file);
+	      BL_BENCH_START(file);
 
 	      ::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
 	      ::std::for_each(result.begin(), result.end(), tuple_trans);
 
-	      TIMER_END(file, "canonicalize", result.size());
+	      BL_BENCH_END(file, "canonicalize", result.size());
 	    }
 
-	    TIMER_REPORT_MPI(file, _comm.rank(), _comm);
+	    BL_BENCH_REPORT_MPI(file, _comm.rank(), _comm);
 	    return result.size() - before;
 	}
 
@@ -501,28 +501,28 @@ public:
 	 */
 	 template <typename T>
 	void insert(std::vector<T> &temp) {
-		TIMER_INIT(build);
+		BL_BENCH_INIT(build);
 
 		// do not reserve until insertion - less transient memory used.
-//		TIMER_START(build);
+//		BL_BENCH_START(build);
 //		this->map.reserve(this->map.size() + temp.size());
-//		TIMER_END(build, "reserve", temp.size());
+//		BL_BENCH_END(build, "reserve", temp.size());
 
 		// distribute
-		TIMER_START(build);
+		BL_BENCH_START(build);
 		this->map.insert(temp);
-		TIMER_END(build, "insert", this->map.local_size());
+		BL_BENCH_END(build, "insert", this->map.local_size());
 
 
 #if (BENCHMARK == 1)
-		TIMER_START(build);
+		BL_BENCH_START(build);
 		size_t m = 0;
     m = this->map.update_multiplicity();
-		TIMER_END(build, "multiplicity", m);
+		BL_BENCH_END(build, "multiplicity", m);
 #else
     (void) (this->map.update_multiplicity());
 #endif
-		TIMER_REPORT_MPI(build, this->comm.rank(), this->comm);
+		BL_BENCH_REPORT_MPI(build, this->comm.rank(), this->comm);
 
 	 }
 

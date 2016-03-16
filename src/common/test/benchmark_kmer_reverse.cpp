@@ -38,7 +38,7 @@
 
 #include "common/alphabets.hpp"
 #include "common/alphabet_traits.hpp"
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 
 // include files to test
 
@@ -49,6 +49,7 @@
 template <typename T>
 class KmerReverseBenchmark : public ::testing::Test {
   protected:
+
 
 
     static bliss::common::test::KmerReverseHelper<T> helper;
@@ -194,27 +195,27 @@ std::vector<T> KmerReverseBenchmark<T>::outputs;
 
 // to save some typing.  note that func is not a functor nor lambda function, so using macro is easier than as a templated function.
 #define TEST_REV(name, func, kmertype) do { \
-    TIMER_START(km); \
+    BL_TIMER_START(km); \
     for (size_t i = 0; i < KmerReverseBenchmark<kmertype>::iterations; ++i) { \
       KmerReverseBenchmark<kmertype>::outputs[i] = func(KmerReverseBenchmark<kmertype>::kmers[i]); \
     } \
-    TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
+    BL_TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
   } while (0)
 
 
 // to save some typing.  note that func is not a functor nor lambda function, so using macro is easier than as a templated function.
 #define TEST_KMER_REV(name, func, kmertype) do { \
-    TIMER_START(km); \
+    BL_TIMER_START(km); \
     for (size_t i = 0; i < KmerReverseBenchmark<kmertype>::iterations; ++i) { \
       KmerReverseBenchmark<kmertype>::kmers[i].func(KmerReverseBenchmark<kmertype>::outputs[i]); \
     } \
-    TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
+    BL_TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
   } while (0)
 
 
 // to save some typing.  note that func is not a functor nor lambda function, so using macro is easier than as a templated function.
 #define TEST_REV_BITOPS(name, simd, kmertype) do { \
-    TIMER_START(km); \
+    BL_TIMER_START(km); \
     \
     constexpr uint16_t pad_bits = (kmertype::nWords * sizeof(typename kmertype::KmerWordType) * 8) - kmertype::nBits; \
     \
@@ -225,13 +226,13 @@ std::vector<T> KmerReverseBenchmark<T>::outputs;
       KmerReverseBenchmark<kmertype>::outputs[i].template right_shift_bits<(TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits)>();  \
       /* shift by remainder/padding. */ \
     } \
-    TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
+    BL_TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
     } while (0)
 
 
 // to save some typing.  note that func is not a functor nor lambda function, so using macro is easier than as a templated function.
 #define TEST_REVC_BITOPS(name, simd, kmertype) do { \
-    TIMER_START(km); \
+    BL_TIMER_START(km); \
     \
     constexpr uint16_t pad_bits = (kmertype::nWords * sizeof(typename kmertype::KmerWordType) * 8) - kmertype::nBits; \
     \
@@ -258,7 +259,7 @@ std::vector<T> KmerReverseBenchmark<T>::outputs;
       KmerReverseBenchmark<kmertype>::outputs[i].template right_shift_bits<(TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits)>();  \
       /* shift by remainder/padding. */ \
     } \
-    TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
+    BL_TIMER_END(km, name, KmerReverseBenchmark<kmertype>::iterations); \
     } while (0)
 
 
@@ -268,7 +269,7 @@ TYPED_TEST_CASE_P(KmerReverseBenchmark);
 
 TYPED_TEST_P(KmerReverseBenchmark, reverse)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
 //  TEST_REV("oldseq", KmerReverseBenchmark<TypeParam>::helper.reverse_serial(km), TypeParam, rev_gold);
 
@@ -286,37 +287,37 @@ TYPED_TEST_P(KmerReverseBenchmark, reverse)
   }  // alphabet for DNA, RNA, and DNA16 are the only ones accelerated with simd type operations.
 
   TEST_REV_BITOPS("swar_new", ::bliss::utils::bit_ops::BITREV_SWAR, TypeParam);
-  TIMER_START(km);
+  BL_TIMER_START(km);
   this->template benchmark<bliss::utils::bit_ops::BITREV_SWAR>();
-  TIMER_END(km, "revop swar", KmerReverseBenchmark<TypeParam>::iterations);
+  BL_TIMER_END(km, "revop swar", KmerReverseBenchmark<TypeParam>::iterations);
 #ifdef __SSSE3__
     TEST_REV_BITOPS("ssse3_new", ::bliss::utils::bit_ops::BITREV_SSSE3, TypeParam);
-    TIMER_START(km);
+    BL_TIMER_START(km);
     this->template benchmark<bliss::utils::bit_ops::BITREV_SSSE3>();
-    TIMER_END(km, "revop ssse3", KmerReverseBenchmark<TypeParam>::iterations);
+    BL_TIMER_END(km, "revop ssse3", KmerReverseBenchmark<TypeParam>::iterations);
 #endif
 #ifdef __AVX2__
     TEST_REV_BITOPS("avx2_new", ::bliss::utils::bit_ops::BITREV_AVX2, TypeParam);
-    TIMER_START(km);
+    BL_TIMER_START(km);
     this->template benchmark<bliss::utils::bit_ops::BITREV_AVX2>();
-    TIMER_END(km, "revop avx2", KmerReverseBenchmark<TypeParam>::iterations);
+    BL_TIMER_END(km, "revop avx2", KmerReverseBenchmark<TypeParam>::iterations);
 #endif
 //  TEST_REV_BITOPS("seq_new", ::bliss::utils::bit_ops::BIT_REV_SEQ, TypeParam);
     TEST_KMER_REV("rev", reverse, TypeParam);
 
-TIMER_START(km);
+BL_TIMER_START(km);
 	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
 this->template benchmark<bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes> >();
-TIMER_END(km, "revop auto", KmerReverseBenchmark<TypeParam>::iterations);
+BL_TIMER_END(km, "revop auto", KmerReverseBenchmark<TypeParam>::iterations);
 
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
 
 }
 
 
 TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 {
-  TIMER_INIT(km);
+  BL_TIMER_INIT(km);
 
   //TEST_REV("oldseqC", KmerReverseBenchmark<TypeParam>::helper.reverse_complement_serial(km), TypeParam, revcomp_gold);
 
@@ -336,38 +337,38 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 
   TEST_REVC_BITOPS("swarC_new", ::bliss::utils::bit_ops::BITREV_SWAR, TypeParam);
 
-  TIMER_START(km);
+  BL_TIMER_START(km);
   this->template benchmark_c<bliss::utils::bit_ops::BITREV_SWAR>();
-  TIMER_END(km, "revopc swar", KmerReverseBenchmark<TypeParam>::iterations);
+  BL_TIMER_END(km, "revopc swar", KmerReverseBenchmark<TypeParam>::iterations);
 
 #ifdef __SSSE3__
     TEST_REVC_BITOPS("ssse3_new", ::bliss::utils::bit_ops::BITREV_SSSE3, TypeParam);
 
-    TIMER_START(km);
+    BL_TIMER_START(km);
     this->template benchmark_c<bliss::utils::bit_ops::BITREV_SSSE3>();
-    TIMER_END(km, "revopc ssse3", KmerReverseBenchmark<TypeParam>::iterations);
+    BL_TIMER_END(km, "revopc ssse3", KmerReverseBenchmark<TypeParam>::iterations);
 #endif
 #ifdef __AVX2__
     TEST_REVC_BITOPS("avx2_new", ::bliss::utils::bit_ops::BITREV_AVX2, TypeParam);
-    TIMER_START(km);
+    BL_TIMER_START(km);
     this->template benchmark_c<bliss::utils::bit_ops::BITREV_AVX2>();
-    TIMER_END(km, "revopc avx2", KmerReverseBenchmark<TypeParam>::iterations);
+    BL_TIMER_END(km, "revopc avx2", KmerReverseBenchmark<TypeParam>::iterations);
 #endif
 
     // macro does not support bit_ops::BIT_REV_SEQ
     TEST_KMER_REV("revC", reverse_complement, TypeParam);
 
 
-  TIMER_START(km);
+  BL_TIMER_START(km);
 	constexpr size_t bytes = sizeof(typename TypeParam::KmerWordType) * TypeParam::nWords;
   this->template benchmark_c<bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes> >();
-  TIMER_END(km, "revopc auto", KmerReverseBenchmark<TypeParam>::iterations);
+  BL_TIMER_END(km, "revopc auto", KmerReverseBenchmark<TypeParam>::iterations);
 //  printf("AUTO chose SIMD %u and MachineWord size %lu for kmer k %u, wordsize %lu, bitsPerChar %u, bytes %lu\n",
 //         bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>::SIMDVal,
 //         sizeof(typename bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>::MachineWord),
 //         TypeParam::size, sizeof(typename TypeParam::KmerWordType), TypeParam::bitsPerChar, bytes);
 
-  TIMER_REPORT(km, TypeParam::KmerAlphabet::SIZE);
+  BL_TIMER_REPORT(km);
 
 }
 

@@ -25,16 +25,20 @@
 #ifndef SRC_WIP_SYSTEM_UTILS_HPP_
 #define SRC_WIP_SYSTEM_UTILS_HPP_
 
+#include "utils/timer.hpp"
+#include "utils/memory_usage.hpp"
+
 //#if BL_BENCHMARK == 1
 
-  #define BL_BENCH_INIT(title)                            do { BL_TIMER_INIT(title);  BL_MEMUSE_INIT(title); BL_MEMUSE_MARK(title, "begin");  } while (0)
+  #define BL_BENCH_INIT(title)                            BL_TIMER_INIT(title);  BL_MEMUSE_INIT(title); do { BL_MEMUSE_MARK(title, "begin");  } while (0)
   #define BL_BENCH_RESET(title)                           do { BL_TIMER_RESET(title); BL_MEMUSE_RESET(title); } while (0)
   #define BL_BENCH_LOOP_START(title)                      do { BL_TIMER_LOOP_START(title); } while (0)
   #define BL_BENCH_LOOP_RESUME(title)                     do { BL_TIMER_LOOP_RESUME(title); } while (0)
   #define BL_BENCH_LOOP_PAUSE(title)                      do { BL_TIMER_LOOP_PAUSE(title); } while (0)
   #define BL_BENCH_LOOP_END(title, name, n_elem)          do { BL_TIMER_LOOP_END(title, name, n_elem); BL_MEMUSE_MARK(title, name); } while (0)
   #define BL_BENCH_START(title)                           do { BL_TIMER_START(title); } while (0)
-  #define BL_BENCH_COLLECTIVE_START(title, name, comm)    do { BL_TIMER_COLLECTIVE_START(title, name, comm); BL_MEMUSE_COLLECTIVE_START(title, name, comm); } while (0)
+  #define BL_BENCH_COLLECTIVE_START(title, name, comm)    do { BL_TIMER_COLLECTIVE_START(title, name, comm); } while (0)
+  #define BL_BENCH_COLLECTIVE_END(title, name, n_elem, comm)    do { BL_TIMER_COLLECTIVE_END(title, name, n_elem, comm); BL_MEMUSE_MARK(title, name); } while (0)
   #define BL_BENCH_END(title, name, n_elem)               do { BL_TIMER_END(title, name, n_elem); BL_MEMUSE_MARK(title, name); } while (0)
   #define BL_BENCH_REPORT(title, rank)                    do { BL_TIMER_REPORT(title); BL_MEMUSE_REPORT(title); } while (0)
   #define BL_BENCH_REPORT_MPI(title, rank, comm)          do { BL_TIMER_REPORT_MPI(title, comm); BL_MEMUSE_REPORT_MPI(title, comm); } while (0)

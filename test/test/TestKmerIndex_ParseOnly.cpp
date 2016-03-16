@@ -52,7 +52,7 @@
 
 #include "index/kmer_index.hpp"
 
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 
 
 template <typename IndexType, typename KmerType = typename IndexType::KmerType>
@@ -201,28 +201,28 @@ void testIndex(const mxx::comm& comm, const std::string & filename, std::string 
 
   IndexType idx(comm);
 
-  TIMER_INIT(test);
+  BL_BENCH_INIT(test);
 
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  TIMER_START(test);
+  BL_BENCH_START(test);
   idx.template build<SeqParser>(filename, comm);
-  TIMER_END(test, "build", idx.local_size());
+  BL_BENCH_END(test, "build", idx.local_size());
 
 
 
-  TIMER_START(test);
+  BL_BENCH_START(test);
   auto query = readForQuery<IndexType>(filename, comm);
-  TIMER_END(test, "read query", query.size());
+  BL_BENCH_END(test, "read query", query.size());
 
 
   // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
-  TIMER_START(test);
+  BL_BENCH_START(test);
   unsigned seed = comm.rank() * 23;
   sample(query, query.size() / 100, seed);
-  TIMER_END(test, "select 1%", query.size());
+  BL_BENCH_END(test, "select 1%", query.size());
 
-  TIMER_REPORT_MPI(test, comm.rank(), comm);
+  BL_BENCH_REPORT_MPI(test, comm.rank(), comm);
 
 }
 
@@ -232,28 +232,28 @@ void testIndexSubComm(const mxx::comm& comm, const std::string & filename, std::
 
   IndexType idx(comm);
 
-  TIMER_INIT(test);
+  BL_BENCH_INIT(test);
 
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  TIMER_START(test);
+  BL_BENCH_START(test);
   idx.template build_with_mpi_subcomm<SeqParser>(filename, comm);
-  TIMER_END(test, "build", idx.local_size());
+  BL_BENCH_END(test, "build", idx.local_size());
 
 
 
-  TIMER_START(test);
+  BL_BENCH_START(test);
   auto query = readForQuery_subcomm<IndexType>(filename, comm);
-  TIMER_END(test, "read query", query.size());
+  BL_BENCH_END(test, "read query", query.size());
 
 
   // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
-  TIMER_START(test);
+  BL_BENCH_START(test);
   unsigned seed = comm.rank() * 23;
   sample(query, query.size() / 100, seed);
-  TIMER_END(test, "select 1%", query.size());
+  BL_BENCH_END(test, "select 1%", query.size());
 
-  TIMER_REPORT_MPI(test, comm.rank(), comm);
+  BL_BENCH_REPORT_MPI(test, comm.rank(), comm);
 
 }
 
@@ -263,28 +263,28 @@ void testIndexDirect(const mxx::comm& comm, const std::string & filename, std::s
 
   IndexType idx(comm);
 
-  TIMER_INIT(test);
+  BL_BENCH_INIT(test);
 
   if (comm.rank() == 0) BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-  TIMER_START(test);
+  BL_BENCH_START(test);
   idx.template build_direct<SeqParser>(filename, comm);
-  TIMER_END(test, "build", idx.local_size());
+  BL_BENCH_END(test, "build", idx.local_size());
 
 
 
-  TIMER_START(test);
+  BL_BENCH_START(test);
   auto query = readForQuery_direct<IndexType>(filename, comm);
-  TIMER_END(test, "read query", query.size());
+  BL_BENCH_END(test, "read query", query.size());
 
 
   // for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
-  TIMER_START(test);
+  BL_BENCH_START(test);
   unsigned seed = comm.rank() * 23;
   sample(query, query.size() / 100, seed);
-  TIMER_END(test, "select 1%", query.size());
+  BL_BENCH_END(test, "select 1%", query.size());
 
-  TIMER_REPORT_MPI(test, comm.rank(), comm);
+  BL_BENCH_REPORT_MPI(test, comm.rank(), comm);
 
 }
 

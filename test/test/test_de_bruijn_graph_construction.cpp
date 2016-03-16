@@ -51,7 +51,7 @@
 #include "debruijn/de_bruijn_construct_engine.hpp"
 #include "debruijn/de_bruijn_nodes_distributed.hpp"
 
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 
 
 
@@ -104,38 +104,38 @@ void testDeBruijnGraph(const mxx::comm& comm, const std::string & filename, cons
 
 	NodeMapType idx(comm);
 
-	TIMER_INIT(test);
+	BL_BENCH_INIT(test);
 
 	if (comm.rank() == 0)
 		BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	idx.template build<SeqParser>(filename, comm);
-	TIMER_END(test, "build", idx.local_size());
+	BL_BENCH_END(test, "build", idx.local_size());
 
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto query = readForQuery<NodeMapType>(filename, comm);
-	TIMER_END(test, "read query", query.size());
+	BL_BENCH_END(test, "read query", query.size());
 
 	// for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
 	if (idx.local_size() > 1000) {
-		TIMER_START(test);
+		BL_BENCH_START(test);
 		unsigned seed = comm.rank() * 23;
 		sample(query, query.size() / 100, seed);
-		TIMER_END(test, "select 1%", query.size());
+		BL_BENCH_END(test, "select 1%", query.size());
 	}
 
 	// process query
 	// query
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto results = idx.find(query);
-	TIMER_END(test, "query", results.size());
+	BL_BENCH_END(test, "query", results.size());
 
 //  for (auto result : results) {
 //    std::cout << result << std::endl;
 //  }
 
-	TIMER_REPORT_MPI(test, comm.rank(), comm);
+	BL_BENCH_REPORT_MPI(test, comm.rank(), comm);
 }
 
 using Alphabet = bliss::common::DNA;

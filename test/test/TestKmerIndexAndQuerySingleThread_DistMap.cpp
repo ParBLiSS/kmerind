@@ -51,7 +51,7 @@
 
 #include "index/kmer_index.hpp"
 
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 
 template<typename IndexType, typename KmerType = typename IndexType::KmerType,
 		template<typename > class PreCanonicalizer = bliss::kmer::transform::identity>
@@ -189,25 +189,25 @@ void testIndex(const mxx::comm& comm, const std::string & filename,
 
 	IndexType idx(comm);
 
-	TIMER_INIT(test);
+	BL_BENCH_INIT(test);
 
 	if (comm.rank() == 0)
 		printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(),
 				test.c_str());
 
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	idx.template build<SeqParser>(filename, comm);
-	TIMER_END(test, "build", idx.local_size());
+	BL_BENCH_END(test, "build", idx.local_size());
 
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto query = readForQuery<IndexType>(filename, comm);
-	TIMER_END(test, "read query", query.size());
+	BL_BENCH_END(test, "read query", query.size());
 
 	// for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	unsigned seed = comm.rank() * 23;
 	sample(query, query.size() / 100, seed);
-	TIMER_END(test, "select 1%", query.size());
+	BL_BENCH_END(test, "select 1%", query.size());
 
 	auto query_orig = query;
 
@@ -215,34 +215,34 @@ void testIndex(const mxx::comm& comm, const std::string & filename,
 	query1.resize(1);
 
 	// query 1
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto results3 = idx.find(query1);
-	TIMER_END(test, "query 1", results3.size());
+	BL_BENCH_END(test, "query 1", results3.size());
 
 	query1 = query_orig;
 	query1.resize(1);
 
 	// query 1
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto results4 = idx.count(query1);
-	TIMER_END(test, "count 1", results4.size());
+	BL_BENCH_END(test, "count 1", results4.size());
 
 	query = query_orig;
 
 	// process query
 	// query
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto results = idx.find(query);
-	TIMER_END(test, "query 1%", results.size());
+	BL_BENCH_END(test, "query 1%", results.size());
 
 	query = query_orig;
 
 	// count
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto results2 = idx.count(query);
-	TIMER_END(test, "count 1%", results2.size());
+	BL_BENCH_END(test, "count 1%", results2.size());
 
-	TIMER_REPORT_MPI(test, comm.rank(), comm);
+	BL_BENCH_REPORT_MPI(test, comm.rank(), comm);
 
 }
 
@@ -253,26 +253,26 @@ void testIndexPrecomputeCanonical(const mxx::comm& comm,
 
 	IndexType idx(comm);
 
-	TIMER_INIT(test);
+	BL_BENCH_INIT(test);
 
 	if (comm.rank() == 0)
 		printf("RANK %d / %d: Testing %s", comm.rank(), comm.size(),
 				test.c_str());
 
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	idx.template build<SeqParser, PreCanonicalizer>(filename, comm);
-	TIMER_END(test, "build", idx.local_size());
+	BL_BENCH_END(test, "build", idx.local_size());
 
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto query = readForQuery<IndexType, typename IndexType::KmerType,
 			PreCanonicalizer>(filename, comm);
-	TIMER_END(test, "read query", query.size());
+	BL_BENCH_END(test, "read query", query.size());
 
 	// for testing, query 1% (else could run out of memory.  if a kmer exists r times, then we may need r^2/p total storage.
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	unsigned seed = comm.rank() * 23;
 	sample(query, query.size() / 100, seed);
-	TIMER_END(test, "select 1%", query.size());
+	BL_BENCH_END(test, "select 1%", query.size());
 
 	auto query_orig = query;
 
@@ -280,34 +280,34 @@ void testIndexPrecomputeCanonical(const mxx::comm& comm,
 	query1.resize(1);
 
 	// query 1
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto results3 = idx.find(query1);
-	TIMER_END(test, "query 1", results3.size());
+	BL_BENCH_END(test, "query 1", results3.size());
 
 	query1 = query_orig;
 	query1.resize(1);
 
 	// query 1
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto results4 = idx.count(query1);
-	TIMER_END(test, "count 1", results4.size());
+	BL_BENCH_END(test, "count 1", results4.size());
 
 	query = query_orig;
 
 	// process query
 	// query
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto results = idx.find(query);
-	TIMER_END(test, "query 1%", results.size());
+	BL_BENCH_END(test, "query 1%", results.size());
 
 	query = query_orig;
 
 	// count
-	TIMER_START(test);
+	BL_BENCH_START(test);
 	auto results2 = idx.count(query);
-	TIMER_END(test, "count 1%", results2.size());
+	BL_BENCH_END(test, "count 1%", results2.size());
 
-	TIMER_REPORT_MPI(test, comm.rank(), comm);
+	BL_BENCH_REPORT_MPI(test, comm.rank(), comm);
 
 }
 

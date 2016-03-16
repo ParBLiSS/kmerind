@@ -30,7 +30,7 @@
 
 #include "boost/pool/pool_alloc.hpp"
 
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 
 
 using Kmer = bliss::common::Kmer<21, bliss::common::DNA, uint64_t>;
@@ -152,11 +152,11 @@ int main(int argc, char** argv) {
 
 	KmerHelper helper;
 
-	TIMER_INIT(vector);
+	BL_BENCH_INIT(vector);
 
 	Kmer result;
 
-	TIMER_START(vector);
+	BL_BENCH_START(vector);
 	{
 		vector_stl_alloc<KmerPos> stlvec;
 		for (int i = 0; i < iterations; ++i) {
@@ -167,11 +167,11 @@ int main(int argc, char** argv) {
 			result ^= stlvec[i].first.reverse_complement();
 		}
 	}
-	TIMER_END(vector, "stl", iterations);
+	BL_BENCH_END(vector, "stl", iterations);
 	printf("result : %s\n", result.toAlphabetString().c_str());
 
 
-	TIMER_START(vector);
+	BL_BENCH_START(vector);
 	{
 		vector_boost_pool<KmerPos> boostvec;
 		for (int i = 0; i < iterations; ++i) {
@@ -185,17 +185,17 @@ int main(int argc, char** argv) {
 
 		// could be 4x slower than stl allocator.
 	}
-	TIMER_END(vector, "boost", iterations);
+	BL_BENCH_END(vector, "boost", iterations);
 	printf("result : %s\n", result.toAlphabetString().c_str());
 
 
-	TIMER_REPORT(vector, 0);
+	BL_BENCH_REPORT(vector);
 
 
 
-	TIMER_INIT(map);
+	BL_BENCH_INIT(map);
 
-	TIMER_START(map);
+	BL_BENCH_START(map);
 	{
 		umap_stl_alloc<Kmer, uint64_t> stlumap;
 		for (int i = 0; i < iterations; ++i) {
@@ -206,12 +206,12 @@ int main(int argc, char** argv) {
 			result ^= it->first.reverse_complement();
 		}
 	}
-	TIMER_END(map, "stl", iterations);
+	BL_BENCH_END(map, "stl", iterations);
 	printf("result : %s\n", result.toAlphabetString().c_str());
 
 
 	// cannot get this to work...
-//	TIMER_START(map);
+//	BL_BENCH_START(map);
 //	{
 //		umap_boost_pool<Kmer, uint64_t> boostumap;
 //		for (int i = 0; i < iterations; ++i) {
@@ -226,11 +226,11 @@ int main(int argc, char** argv) {
 //
 //		// could be 4x slower than stl allocator.
 //	}
-//	TIMER_END(map, "boost", iterations);
+//	BL_BENCH_END(map, "boost", iterations);
 //	printf("result : %s\n", result.toAlphabetString().c_str());
 
 
-	TIMER_REPORT(map, 0);
+	BL_BENCH_REPORT(map);
 
 
 }

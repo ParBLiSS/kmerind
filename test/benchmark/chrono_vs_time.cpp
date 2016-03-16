@@ -27,7 +27,7 @@
 #include <ctime>
 #include <iostream>
 #include <cstring>
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 
 timespec operator-(timespec end, timespec start)
 {
@@ -72,19 +72,19 @@ int main(int argc, char** argv) {
   if (chron) {
 
 
-    TIMER_INIT(test);
+    BL_TIMER_INIT(test);
 
-    TIMER_LOOP_START(test);
+    BL_TIMER_LOOP_START(test);
     for (int i = 0; i < iters; ++i) {
-      TIMER_LOOP_RESUME(test);
+      BL_TIMER_LOOP_RESUME(test);
 
       dummy += 0.00001;
 
-      TIMER_LOOP_PAUSE(test);
+      BL_TIMER_LOOP_PAUSE(test);
     }
 
-    TIMER_LOOP_END(test, "chrono in loop", iters);
-    TIMER_REPORT(test, 0);
+    BL_TIMER_LOOP_END(test, "chrono in loop", iters);
+    BL_TIMER_REPORT(test);
 
   } else {
 

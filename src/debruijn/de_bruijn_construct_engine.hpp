@@ -69,7 +69,7 @@
 #include "iterators/edge_iterator.hpp"
 #include "index/kmer_index.hpp"
 
-#include "utils/timer.hpp"
+#include "utils/benchmark_utils.hpp"
 
 namespace bliss
 {

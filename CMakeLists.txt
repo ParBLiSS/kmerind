@@ -562,13 +562,13 @@ if (ENABLE_TIME_BENCHMARK)
 else(ENABLE_TIME_BENCHMARK)
   SET(BL_BENCHMARK_TIME 0)
 endif(ENABLE_TIME_BENCHMARK)
-CMAKE_DEPENDENT_OPTION(ENABLE_MEMORY_USAGE_BENCHMARK "Enable Memory Usage Benchmarking" ON
+CMAKE_DEPENDENT_OPTION(ENABLE_MEMUSE_BENCHMARK "Enable Memory Usage Benchmarking" ON
                         "ENABLE_BENCHMARKING" OFF)
-if (ENABLE_MEMORY_USAGE_BENCHMARKING)
+if (ENABLE_MEMUSE_BENCHMARK)
   SET(BL_BENCHMARK_MEM 1)
-else(ENABLE_MEMORY_USAGE_BENCHMARKING)
+else(ENABLE_MEMUSE_BENCHMARK)
   SET(BL_BENCHMARK_MEM 0)
-endif(ENABLE_MEMORY_USAGE_BENCHMARKING)
+endif(ENABLE_MEMUSE_BENCHMARK)
 
   
   
@@ -622,7 +622,7 @@ if (ENABLE_TESTING)
     add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
   endfunction(bliss_add_test)
 
-if (BENCHMARK)
+if (BL_BENCHMARK)
 
   function(bliss_add_benchmark module_name module_link)
     # set the name for the test target and executable
@@ -663,7 +663,7 @@ if (BENCHMARK)
     add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
   endfunction(bliss_add_benchmark)
 
-endif(BENCHMARK)
+endif(BL_BENCHMARK)
 
 
 
