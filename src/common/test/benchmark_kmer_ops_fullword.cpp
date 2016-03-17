@@ -23,7 +23,7 @@
  */
 
 
-#include "common/test/template_benchmark_kmer_ops.cpp"
+#include "common/test/kmer_ops_benchmark_fixture.cpp"
 //////////////////// RUN the tests with different types.
 
 // max of 50 cases

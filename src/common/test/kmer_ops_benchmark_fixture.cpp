@@ -53,15 +53,13 @@ class KmerOpsBenchmark : public ::testing::Test {
 
     static std::vector<T> kmers;
     static std::vector<T> kmers2;
-    static std::vector<T> outputs;
+    std::vector<T> outputs;
 
   public:
     static void SetUpTestCase()
     {
       kmers.resize(iterations);
       kmers2.resize(iterations);
-      outputs.resize(iterations);
-
 
       srand(23);
       for (size_t i = 0; i < iterations; ++i) {
@@ -70,6 +68,19 @@ class KmerOpsBenchmark : public ::testing::Test {
           kmers2[i].getDataRef()[j] = static_cast<typename T::KmerWordType>(static_cast<long>(rand()) << 32) | static_cast<long>(rand());
         }
       }
+    }
+
+    static void TearDownTestCase() {
+    	std::vector<T>().swap(kmers);
+    	std::vector<T>().swap(kmers2);
+    }
+
+    virtual void SetUp() {
+    	outputs.resize(iterations);
+    }
+
+    virtual void TearDown() {
+    	std::vector<T>().swap(outputs);
     }
 
 
@@ -118,8 +129,6 @@ template <typename T>
 std::vector<T> KmerOpsBenchmark<T>::kmers;
 template <typename T>
 std::vector<T> KmerOpsBenchmark<T>::kmers2;
-template <typename T>
-std::vector<T> KmerOpsBenchmark<T>::outputs;
 
 
 // indicate this is a typed test

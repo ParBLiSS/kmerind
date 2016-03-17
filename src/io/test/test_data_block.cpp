@@ -55,6 +55,11 @@ class DataBlockTest : public ::testing::Test
 
       dlen = (slen / 2 < 1000) ? slen / 2 : 1000;
     }
+
+    virtual void TearDown() {
+    	std::vector<T>().swap(src);
+    }
+
 };
 
 // indicate this is a typed test

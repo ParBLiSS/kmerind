@@ -68,14 +68,12 @@ class KmerReverseBenchmark : public ::testing::Test {
     static constexpr size_t iterations = 1000000;
 
     static std::vector<T> kmers;
-    static std::vector<T> outputs;
+    std::vector<T> outputs;
 
   public:
     static void SetUpTestCase()
     {
       kmers.resize(iterations);
-      outputs.resize(iterations);
-
 
       srand(23);
       for (size_t i = 0; i < iterations; ++i) {
@@ -84,6 +82,20 @@ class KmerReverseBenchmark : public ::testing::Test {
         }
       }
     }
+
+    static void TearDownTestCase()
+    {
+      std::vector<T>().swap(kmers);
+    }
+
+    virtual void SetUp() {
+    	outputs.resize(iterations);
+    }
+
+    virtual void TearDown() {
+    	std::vector<T>().swap(outputs);
+    }
+
 
     template <unsigned int BITS, unsigned char SIMD>
     struct reverse_op {
@@ -200,8 +212,6 @@ constexpr size_t KmerReverseBenchmark<T>::iterations;
 
 template <typename T>
 std::vector<T> KmerReverseBenchmark<T>::kmers;
-template <typename T>
-std::vector<T> KmerReverseBenchmark<T>::outputs;
 
 
 // to save some typing.  note that func is not a functor nor lambda function, so using macro is easier than as a templated function.

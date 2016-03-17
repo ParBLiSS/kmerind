@@ -23,7 +23,7 @@
  */
 
 
-#include "common/test/template_benchmark_kmer_reverse.cpp"
+#include "common/test/kmer_reverse_benchmark_fixture.cpp"
 
 //////////////////// RUN the tests with different types.
 

@@ -52,14 +52,16 @@ template <typename T>
 class KmerHashTest : public ::testing::Test {
   protected:
 
-    std::vector<T> kmers;
-    std::set<T> unique_kmers;
-    T kmer;
+    static std::vector<T> kmers;
+    static std::set<T> unique_kmers;   // using set, since we are testing hash functions.
 
-    static const size_t iterations = 100000;
+    static constexpr size_t iterations = 100000;
 
-    virtual void SetUp()
+  public:
+    static void SetUpTestCase()
     {
+        T kmer;
+
       srand(0);
       for (unsigned int i = 0; i < T::size; ++i) {
 
@@ -74,6 +76,12 @@ class KmerHashTest : public ::testing::Test {
       }
     }
 
+    static void TearDownTestCase() {
+    	unique_kmers.clear();
+    	std::vector<T>().swap(kmers);
+    }
+
+  protected:
     template <template <typename, bool> class H>
     void hash_vector(std::string name) {
     	std::unordered_set<size_t> hashes;
@@ -100,6 +108,14 @@ class KmerHashTest : public ::testing::Test {
 
     }
 };
+
+template <typename T>
+constexpr size_t KmerHashTest<T>::iterations;
+
+template <typename T>
+std::vector<T> KmerHashTest<T>::kmers;
+template <typename T>
+std::set<T> KmerHashTest<T>::unique_kmers;
 
 
 // indicate this is a typed test

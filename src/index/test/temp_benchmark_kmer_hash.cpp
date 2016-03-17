@@ -84,7 +84,9 @@ class KmerReverseBenchmark : public ::testing::Test {
         km.nextFromChar(chars[i]);
       }
      }
-
+    static void TearDownTestCast() {
+    	std::vector<uint8_t>().swap(chars);
+    }
 };
 
 
