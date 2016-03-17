@@ -30,6 +30,7 @@
 #include "utils/bitgroup_ops.hpp"
 
 #include "utils/benchmark_utils.hpp"
+#include "utils/test/bit_test_common.hpp"
 
 
 //TESTS: Sequential, SWAR/BSWAP, SSSE3, AVX2 versions of bit reverse.
@@ -69,9 +70,6 @@ class BitReverseBenchmarkHelper {
     static constexpr size_t iters = 250000;
 //    static constexpr size_t iters = 250;
 };
-
-template <unsigned char Bits>
-struct BitsParam { static constexpr unsigned char bitsPerGroup = Bits; };
 
 
 //================== benchmark speed of SIMD_type + WORD_TPYE, fixing the bitgroup size and amount of data.
@@ -166,15 +164,15 @@ REGISTER_TYPED_TEST_CASE_P(BitReverseWordBenchmark, reverse_word);
 
 //////////////////// RUN the tests with different types.
 typedef ::testing::Types<
-    BitsParam< 1>,
-    BitsParam< 2>,
-    BitsParam< 3>,
-    BitsParam< 4>,
-    BitsParam< 8>,
-    BitsParam<16>,
-    BitsParam<32>,
-    BitsParam<64>,
-    BitsParam<128>
+    ::bliss::utils::bit_ops::test::BitsParam< 1>,
+    ::bliss::utils::bit_ops::test::BitsParam< 2>,
+    ::bliss::utils::bit_ops::test::BitsParam< 3>,
+    ::bliss::utils::bit_ops::test::BitsParam< 4>,
+    ::bliss::utils::bit_ops::test::BitsParam< 8>,
+    ::bliss::utils::bit_ops::test::BitsParam<16>,
+    ::bliss::utils::bit_ops::test::BitsParam<32>,
+    ::bliss::utils::bit_ops::test::BitsParam<64>,
+    ::bliss::utils::bit_ops::test::BitsParam<128>
 > BitReverseWordBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseWordBenchmark, BitReverseWordBenchmarkTypes);
 
@@ -282,15 +280,15 @@ REGISTER_TYPED_TEST_CASE_P(BitReverseRemainderBenchmark, reverse_remainder);
 
 //////////////////// RUN the tests with different types.
 typedef ::testing::Types<
-    BitsParam< 1>,
-    BitsParam< 2>,
-    BitsParam< 3>,
-    BitsParam< 4>,
-    BitsParam< 8>,
-    BitsParam<16>,
-    BitsParam<32>,
-    BitsParam<64>,
-    BitsParam<128>
+    ::bliss::utils::bit_ops::test::BitsParam< 1>,
+    ::bliss::utils::bit_ops::test::BitsParam< 2>,
+    ::bliss::utils::bit_ops::test::BitsParam< 3>,
+    ::bliss::utils::bit_ops::test::BitsParam< 4>,
+    ::bliss::utils::bit_ops::test::BitsParam< 8>,
+    ::bliss::utils::bit_ops::test::BitsParam<16>,
+    ::bliss::utils::bit_ops::test::BitsParam<32>,
+    ::bliss::utils::bit_ops::test::BitsParam<64>,
+    ::bliss::utils::bit_ops::test::BitsParam<128>
 > BitReverseRemainderBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseRemainderBenchmark, BitReverseRemainderBenchmarkTypes);
 
@@ -374,13 +372,13 @@ REGISTER_TYPED_TEST_CASE_P(BitReverseArrayBenchmark, reverse_short_array);
 
 //////////////////// RUN the tests with different types.
 typedef ::testing::Types<
-    BitsParam< 1>,
-    BitsParam< 2>,
-    BitsParam< 3>,
-    BitsParam< 4>,
-    BitsParam< 8>,
-    BitsParam<16>,
-    BitsParam<32>
+    ::bliss::utils::bit_ops::test::BitsParam< 1>,
+    ::bliss::utils::bit_ops::test::BitsParam< 2>,
+    ::bliss::utils::bit_ops::test::BitsParam< 3>,
+    ::bliss::utils::bit_ops::test::BitsParam< 4>,
+    ::bliss::utils::bit_ops::test::BitsParam< 8>,
+    ::bliss::utils::bit_ops::test::BitsParam<16>,
+    ::bliss::utils::bit_ops::test::BitsParam<32>
 > BitReverseArrayBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseArrayBenchmark, BitReverseArrayBenchmarkTypes);
 
@@ -467,13 +465,13 @@ REGISTER_TYPED_TEST_CASE_P(BitReverseFixedArrayBenchmark, reverse_fixed_array);
 
 //////////////////// RUN the tests with different types.
 typedef ::testing::Types<
-    BitsParam< 1>,
-    BitsParam< 2>,
-    BitsParam< 3>,
-    BitsParam< 4>,
-    BitsParam< 8>,
-    BitsParam<16>,
-    BitsParam<32>
+    ::bliss::utils::bit_ops::test::BitsParam< 1>,
+    ::bliss::utils::bit_ops::test::BitsParam< 2>,
+    ::bliss::utils::bit_ops::test::BitsParam< 3>,
+    ::bliss::utils::bit_ops::test::BitsParam< 4>,
+    ::bliss::utils::bit_ops::test::BitsParam< 8>,
+    ::bliss::utils::bit_ops::test::BitsParam<16>,
+    ::bliss::utils::bit_ops::test::BitsParam<32>
 > BitReverseFixedArrayBenchmarkTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseFixedArrayBenchmark, BitReverseFixedArrayBenchmarkTypes);
 

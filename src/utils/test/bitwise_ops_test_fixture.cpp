@@ -27,14 +27,13 @@
 
 // include files to test
 #include "utils/bitgroup_ops.hpp"
+#include "utils/test/bit_test_common.hpp"
 
 //TESTS: Sequential, SWAR/BSWAP, SSSE3, AVX2 versions of bitwise operations.
 //TESTS: for each, test different input (drawing from a 32 byte array),
 //       different offsets, different bit group sizes, different word types, and different byte array lengths.
 //TESTS: reverse entire array via multiplel SWAR, SSSE3, and AVX2 calls.
 
-template <unsigned char Bits>
-struct BitsParam { static constexpr unsigned char bitsPerGroup = Bits; };
 
 
 template <typename T>
@@ -50,14 +49,6 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
                            0x1F,0x3E,0x5D,0x7C,0x9B,0xBA,0xD9,0xF8,0xE7,0xC6,0xA5,0x84,0x63,0x42,0x21,0x00,
                            0x0F,0x2E,0x4D,0x6C,0x8B,0xAA,0xC9,0xE8,0xF7,0xD6,0xB5,0x94,0x73,0x52,0x31,0x10};
 
-	template <typename data_type, size_t data_size>
-    void print(data_type (&w)[data_size]) {
-      std::cout << "data type size " << std::dec << sizeof(data_type) << " len " << data_size << ": ";
-      for (int64_t k = data_size -1 ; k >= 0; --k) {
-        std::cout << std::hex << static_cast<size_t>(w[k]) << " ";
-      }
-      std::cout << std::endl;
-    }
 
 
 	template <typename data_type, size_t data_size>
@@ -166,9 +157,9 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
         if (!same) {
         	std::cout << "SIMD type " << std::dec << MAX_SIMD_TYPE::SIMDVal << std::endl;
         	std::cout << "iter " << std::dec << k << " negate in: ";
-        	print(lhs);
+        	::bliss::utils::bit_ops::test::print(lhs);
         	std::cout << "iter " << std::dec << k << " negate out: ";
-        	print(out);
+        	::bliss::utils::bit_ops::test::print(out);
         }
         ASSERT_TRUE(same);
 
@@ -181,11 +172,11 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
         if (!same) {
         	std::cout << "SIMD type " << std::dec << MAX_SIMD_TYPE::SIMDVal << std::endl;
         	std::cout << "iter " << std::dec << k << " and lhs: ";
-        	print(lhs);
+        	::bliss::utils::bit_ops::test::print(lhs);
         	std::cout << "iter " << std::dec << k << " and rhs: ";
-        	print(rhs);
+        	::bliss::utils::bit_ops::test::print(rhs);
         	std::cout << "iter " << std::dec << k << " and out: ";
-        	print(out);
+        	::bliss::utils::bit_ops::test::print(out);
         }
         ASSERT_TRUE(same);
 
@@ -200,11 +191,11 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
         if (!same) {
         	std::cout << "SIMD type " << std::dec << MAX_SIMD_TYPE::SIMDVal << std::endl;
         	std::cout << "iter " << std::dec << k << " or lhs: ";
-        	print(lhs);
+        	::bliss::utils::bit_ops::test::print(lhs);
         	std::cout << "iter " << std::dec << k << " or rhs: ";
-        	print(rhs);
+        	::bliss::utils::bit_ops::test::print(rhs);
         	std::cout << "iter " << std::dec << k << " or out: ";
-        	print(out);
+        	::bliss::utils::bit_ops::test::print(out);
         }
         ASSERT_TRUE(same);
 
@@ -218,11 +209,11 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
         if (!same) {
         	std::cout << "SIMD type " << std::dec << MAX_SIMD_TYPE::SIMDVal << std::endl;
         	std::cout << "iter " << std::dec << k << " xor lhs: ";
-        	print(lhs);
+        	::bliss::utils::bit_ops::test::print(lhs);
         	std::cout << "iter " << std::dec << k << " xor rhs: ";
-        	print(rhs);
+        	::bliss::utils::bit_ops::test::print(rhs);
         	std::cout << "iter " << std::dec << k << " xor out: ";
-        	print(out);
+        	::bliss::utils::bit_ops::test::print(out);
         }
         ASSERT_TRUE(same);
 
@@ -237,9 +228,9 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
         if (!same) {
         	std::cout << "SIMD type " << std::dec << MAX_SIMD_TYPE::SIMDVal << std::endl;
         	std::cout << "iter " << std::dec << k << " negate in: ";
-        	print(lhs);
+        	::bliss::utils::bit_ops::test::print(lhs);
         	std::cout << "iter " << std::dec << k << " negate out: ";
-        	print(out2);
+        	::bliss::utils::bit_ops::test::print(out2);
         }
         ASSERT_TRUE(same);
 
@@ -252,11 +243,11 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
         if (!same) {
         	std::cout << "SIMD type " << std::dec << MAX_SIMD_TYPE::SIMDVal << std::endl;
         	std::cout << "iter " << std::dec << k << " and lhs: ";
-        	print(lhs);
+        	::bliss::utils::bit_ops::test::print(lhs);
         	std::cout << "iter " << std::dec << k << " and rhs: ";
-        	print(rhs);
+        	::bliss::utils::bit_ops::test::print(rhs);
         	std::cout << "iter " << std::dec << k << " and out: ";
-        	print(out2);
+        	::bliss::utils::bit_ops::test::print(out2);
         }
         ASSERT_TRUE(same);
 
@@ -271,11 +262,11 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
         if (!same) {
         	std::cout << "SIMD type " << std::dec << MAX_SIMD_TYPE::SIMDVal << std::endl;
         	std::cout << "iter " << std::dec << k << " or lhs: ";
-        	print(lhs);
+        	::bliss::utils::bit_ops::test::print(lhs);
         	std::cout << "iter " << std::dec << k << " or rhs: ";
-        	print(rhs);
+        	::bliss::utils::bit_ops::test::print(rhs);
         	std::cout << "iter " << std::dec << k << " or out: ";
-        	print(out2);
+        	::bliss::utils::bit_ops::test::print(out2);
         }
         ASSERT_TRUE(same);
 
@@ -289,11 +280,11 @@ class BitwiseOpsFixedArrayTest : public ::testing::Test {
         if (!same) {
         	std::cout << "SIMD type " << std::dec << MAX_SIMD_TYPE::SIMDVal << std::endl;
         	std::cout << "iter " << std::dec << k << " xor lhs: ";
-        	print(lhs);
+        	::bliss::utils::bit_ops::test::print(lhs);
         	std::cout << "iter " << std::dec << k << " xor rhs: ";
-        	print(rhs);
+        	::bliss::utils::bit_ops::test::print(rhs);
         	std::cout << "iter " << std::dec << k << " xor out: ";
-        	print(out2);
+        	::bliss::utils::bit_ops::test::print(out2);
         }
         ASSERT_TRUE(same);
 
@@ -372,19 +363,19 @@ REGISTER_TYPED_TEST_CASE_P(BitwiseOpsFixedArrayTest,
 
 //////////////////// RUN the tests with different types.
 
-typedef ::testing::Types<
-	    ::std::tuple<BitsParam< 1>, uint8_t >,    //  1  (uint8_t)
-		::std::tuple<BitsParam< 1>, uint16_t >,   //  2  (uint16_t)
-		::std::tuple<BitsParam< 3>, uint8_t >,    //  3  1.5 uint16_t
-		::std::tuple<BitsParam< 1>, uint32_t >,   //  4  (uint32_t)
-		::std::tuple<BitsParam< 3>, uint16_t >,   //  6  1.5 uint32_t
-		::std::tuple<BitsParam< 1>, uint64_t >,   //  8   (uint64_t)
-		::std::tuple<BitsParam< 3>, uint32_t >,   //  12  1.5 uint64_t
-		::std::tuple<BitsParam< 2>, uint64_t >,   //  16  (__m128i)
-		::std::tuple<BitsParam< 3>, uint64_t >,   //  24  1.5 __m128i
-		::std::tuple<BitsParam< 4>, uint64_t >,   //  32  (__m256i)
-		::std::tuple<BitsParam< 5>, uint64_t >,   //  40  1.5 __m256i
-		::std::tuple<BitsParam< 8>, uint64_t >    //  64  (512 bits)
-> BitwiseOpsFixedArrayTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitwiseOpsFixedArrayTest, BitwiseOpsFixedArrayTestTypes);
+//typedef ::testing::Types<
+//	    ::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 1>, uint8_t >,    //  1  (uint8_t)
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 1>, uint16_t >,   //  2  (uint16_t)
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 3>, uint8_t >,    //  3  1.5 uint16_t
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 1>, uint32_t >,   //  4  (uint32_t)
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 3>, uint16_t >,   //  6  1.5 uint32_t
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 1>, uint64_t >,   //  8   (uint64_t)
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 3>, uint32_t >,   //  12  1.5 uint64_t
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 2>, uint64_t >,   //  16  (__m128i)
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 3>, uint64_t >,   //  24  1.5 __m128i
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 4>, uint64_t >,   //  32  (__m256i)
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 5>, uint64_t >,   //  40  1.5 __m256i
+//		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 8>, uint64_t >    //  64  (512 bits)
+//> BitwiseOpsFixedArrayTestTypes;
+//INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitwiseOpsFixedArrayTest, BitwiseOpsFixedArrayTestTypes);
 

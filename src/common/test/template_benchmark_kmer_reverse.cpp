@@ -15,11 +15,18 @@
  */
 
 /**
- * @file    test_kmer_reverse.cpp
+ * @file    template_benchmark_kmer_reverse.cpp
  * @ingroup
  * @author  tpan
- * @brief
- * @details
+ * @brief   this file is meant to be included in another cpp file, where the types being tested are defined and the test instantiated.
+ * @details This allows us to create sets of types using the same test logic, and instantiate them separately.
+ * 			to accomplish, the including cpp file must define the types, and instantiate with a test group name that is unique
+ * 			for each set.
+ *
+ * 			The primary purpose of this is to
+ *
+ * 			1. get past the 50 type limit and
+ * 			2. increase compilation performance and reduce compile memory requirement by breaking up the compilation units.
  */
 
 
@@ -39,6 +46,10 @@
 #include "common/alphabets.hpp"
 #include "common/alphabet_traits.hpp"
 #include "utils/benchmark_utils.hpp"
+
+
+
+
 
 // include files to test
 
@@ -381,83 +392,4 @@ TYPED_TEST_P(KmerReverseBenchmark, revcomp)
 REGISTER_TYPED_TEST_CASE_P(KmerReverseBenchmark,
 		reverse,
 		revcomp);
-
-//////////////////// RUN the tests with different types.
-
-// max of 50 cases
-typedef ::testing::Types<
-    ::bliss::common::Kmer<  3, bliss::common::DNA,    uint8_t>,
-    ::bliss::common::Kmer<  3, bliss::common::DNA,   uint16_t>,
-    ::bliss::common::Kmer<  3, bliss::common::DNA,   uint32_t>,
-    ::bliss::common::Kmer<  3, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer<  7, bliss::common::DNA,    uint8_t>,
-    ::bliss::common::Kmer<  7, bliss::common::DNA,   uint16_t>,
-    ::bliss::common::Kmer<  7, bliss::common::DNA,   uint32_t>,
-    ::bliss::common::Kmer<  7, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 15, bliss::common::DNA,    uint8_t>,
-    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint16_t>,
-    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint32_t>,
-    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 31, bliss::common::DNA,    uint8_t>,
-    ::bliss::common::Kmer< 31, bliss::common::DNA,   uint16_t>,
-    ::bliss::common::Kmer< 31, bliss::common::DNA,   uint32_t>,
-    ::bliss::common::Kmer< 31, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 15, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 31, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 63, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 95, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer<127, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 15, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer< 31, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer< 63, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer< 95, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer<127, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer< 15, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer< 31, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer< 63, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer< 95, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer<127, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer< 32, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 64, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 96, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer<128, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer<256, bliss::common::DNA,   uint64_t>,
-    ::bliss::common::Kmer< 32, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer< 64, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer< 96, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer<128, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer<256, bliss::common::DNA5,  uint64_t>,
-    ::bliss::common::Kmer< 32, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer< 64, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer< 96, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer<128, bliss::common::DNA16, uint64_t>,
-    ::bliss::common::Kmer<256, bliss::common::DNA16, uint64_t>
-
-//    ::bliss::common::Kmer< 15, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 16, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 32, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 47, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 64, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer< 96, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer<128, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer<192, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer<256, bliss::common::DNA_IUPAC, uint64_t>,
-//    ::bliss::common::Kmer<  7, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 15, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 31, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 63, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 95, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer<127, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 32, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 64, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer< 96, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer<128, bliss::common::ASCII, uint64_t>,
-//    ::bliss::common::Kmer<256, bliss::common::ASCII, uint64_t>
-> KmerReverseBenchmarkTypes;
-//typedef ::testing::Types<
-//    ::bliss::common::Kmer< 192, bliss::common::DNA,   uint64_t>,
-//     ::bliss::common::Kmer< 96, bliss::common::DNA16,   uint64_t>
-//> KmerReverseBenchmarkTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerReverseBenchmark, KmerReverseBenchmarkTypes);
-
 
