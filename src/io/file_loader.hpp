@@ -1055,23 +1055,25 @@ protected:
           size_t mmap_start = RangeType::align_to_page(overlappedRange.start, pageSize);
 
 
-          // check to see if there is enough memory for preloading.
-          // if not, then we can't use Buffering even if L1Block chooses Buffering, so throw exception
-          if (L1Buffering) {
-            // check if we can buffer.  use at most 1/20 of the available memory because of kmer data size expansion.
-            struct sysinfo memInfo;
-            sysinfo (&memInfo);
+// no convenient way to check cacheram (total free = freeram + bufferram + cacheram).  also this would only work if there is 1 process per node.
+//          // check to see if there is enough memory for preloading.
+//          // if not, then we can't use Buffering even if L1Block chooses Buffering, so throw exception
+//          if (L1Buffering) {
+//            // check if we can buffer.  use at most 1/20 of the available memory because of kmer data size expansion.
+//            struct sysinfo memInfo;
+//            sysinfo (&memInfo);
+//
+//            // linux freeram is limited to 10 to 15 % of physical, hence we just divide by 2, and that gives us 1/20 of the available memory
+//            if ((overlappedRange.size() * sizeof(T)) > (memInfo.freeram * memInfo.mem_unit / 2)) {
+//              // not enough memory available
+//              std::stringstream ss;
+//              ss << "ERROR in file buffering: requires " << (overlappedRange.size() * sizeof(T)) <<
+//                  " bytes; but (1/20th) available: " << (memInfo.freeram * memInfo.mem_unit / 2) <<
+//                  " free: " << memInfo.freeram << " unit " << memInfo.mem_unit;
+//              throw IOException(ss.str());
+//            }
+//          }
 
-            // linux freeram is limited to 10 to 15 % of physical, hence we just divide by 2, and that gives us 1/20 of the available memory
-            if ((overlappedRange.size() * sizeof(T)) > (memInfo.freeram * memInfo.mem_unit / 2)) {
-              // not enough memory available
-              std::stringstream ss;
-              ss << "ERROR in file buffering: requires " << (overlappedRange.size() * sizeof(T)) <<
-                  " bytes; but (1/20th) available: " << (memInfo.freeram * memInfo.mem_unit / 2) <<
-                  " free: " << memInfo.freeram << " unit " << memInfo.mem_unit;
-              throw IOException(ss.str());
-            }
-          }
 
           // map the region of file to memory
           mmapData = map(overlappedRange);

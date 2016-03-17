@@ -67,7 +67,7 @@ bool validate(const std::string &fileName, const size_t offset,
 						  const size_t length, ITER const & first, ITER const & last)
 {
   FILE *fp = fopen64(fileName.c_str(), "r");
-  fseeko64(fp, offset , SEEK_SET);
+  fseeko64(fp, offset, SEEK_SET);
 
   if (static_cast<size_t>(std::distance(first, last)) != length)
     std::cout << "ERROR: block size is not same as range size." << std::endl;
@@ -77,20 +77,31 @@ bool validate(const std::string &fileName, const size_t offset,
   constexpr size_t tmp_size = 1024 * 1024;
 
   valtype tmp[tmp_size];
-  int count;
+  size_t count = 0;
   ITER iter = first;
+  size_t read_size = tmp_size;
 
   for (size_t l = 0; l < length; l += tmp_size) {
-	  count = fread_unlocked(tmp, 1, tmp_size, fp);
+    read_size = std::min(tmp_size, length - l);
 
-	  if (count <= 0) break;
+	  count = fread_unlocked(tmp, sizeof(valtype), read_size , fp);  // pointer is advanced.
 
+
+		if (count < read_size) {
+		  if (feof(fp)) {
+		    // no problem here
+		  }  else if (ferror(fp)) {
+		    printf("ERROR during read.  read %ld, less than requested size %ld\n", count, read_size);
+		  }
+		} else if (count > read_size) {
+		  printf("ERROR during read.  read %ld, more than requested size %ld\n", count, read_size);
+		}
 	  auto diff_iters = ::std::mismatch(tmp, tmp + count, iter);
 	  iter += count;
 
 	  if (diff_iters.first != (tmp + count))
-		  std::cout << "ERROR: diff at offset " << (offset + std::distance(tmp, diff_iters.first))
-		  	  << " val " << *(diff_iters.second) << " gold " << *(diff_iters.first) << std::endl;
+		  std::cout << "ERROR: diff at offset " << (offset + l + std::distance(tmp, diff_iters.first))
+		  	  << " val " << *(diff_iters.second) << " gold " << *(diff_iters.first) << " count " << count << std::endl;
 
   }
 
