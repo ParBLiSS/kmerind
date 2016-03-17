@@ -139,6 +139,9 @@ CMAKE_DEPENDENT_OPTION(COMPILER_WARNINGS_ENABLE_SUGGESTIONS "Enable compiler to 
 include("${PROJECT_SOURCE_DIR}/cmake/GCCFilter.cmake")
 
 
+include("${PROJECT_SOURCE_DIR}/cmake/CompilerProfiling.cmake")
+
+
 ###### LOGGING ENGINE configuration
 SET(LOGGER_VERBOSITY "WARNING" CACHE STRING "Logger verbosity.  Valid entries are ERROR, WARNING, INFO, DEBUG, TRACE.  Each level includes all levels with smaller value")  
 #function(update_logger_verbosity varname cacheaccess varval) 
