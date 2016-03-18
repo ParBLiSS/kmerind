@@ -156,6 +156,24 @@ TYPED_TEST_P(FileLoadProcedureTest, open_stdio)
 #endif
 }
 
+// normal test cases
+TYPED_TEST_P(FileLoadProcedureTest, open_posix)
+{
+#ifdef USE_MPI
+  ::mxx::comm comm;
+  if (comm.rank() == 0) {
+#endif
+
+    bliss::io::posix_file fobj(this->fileName);
+
+    this->open_seq(fobj);
+
+#ifdef USE_MPI
+  }
+#endif
+}
+
+
 
 #ifdef USE_MPI
 TYPED_TEST_P(FileLoadProcedureTest, open_mmap_mpi)
@@ -183,6 +201,20 @@ TYPED_TEST_P(FileLoadProcedureTest, open_stdio_mpi)
 	comm.barrier();
 }
 
+
+TYPED_TEST_P(FileLoadProcedureTest, open_posix_mpi)
+{
+  ::mxx::comm comm;
+    constexpr size_t overlap = TypeParam::get_overlap_size();
+
+  ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ParserType> fobj(this->fileName, overlap, comm);
+
+  this->open_mpi(fobj, comm);
+
+  comm.barrier();
+}
+
+
 TYPED_TEST_P(FileLoadProcedureTest, open_mpiio_mpi)
 {
 	::mxx::comm comm;
@@ -204,10 +236,12 @@ REGISTER_TYPED_TEST_CASE_P(FileLoadProcedureTest,
 #ifdef USE_MPI
 		open_mmap_mpi,
 		open_stdio_mpi,
+    open_posix_mpi,
 		open_mpiio_mpi,
 #endif
  open_mmap,
- open_stdio
+ open_stdio,
+ open_posix
 );
 
 

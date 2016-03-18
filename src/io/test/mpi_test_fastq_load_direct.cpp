@@ -206,6 +206,25 @@ TEST_P(FASTQParseProcedureTest, parse_stdio)
 }
 
 
+TEST_P(FASTQParseProcedureTest, parse_posix)
+{
+#ifdef USE_MPI
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  if (rank == 0) {
+#endif
+
+
+    bliss::io::posix_file fobj(this->fileName);
+
+    this->parse_seq(fobj);
+
+#ifdef USE_MPI
+  }
+#endif
+
+}
+
 #ifdef USE_MPI
 TEST_P(FASTQParseProcedureTest, parse_mmap_mpi)
 {
@@ -235,6 +254,19 @@ TEST_P(FASTQParseProcedureTest, parse_stdio_mpi)
 #endif
 
 
+
+#ifdef USE_MPI
+TEST_P(FASTQParseProcedureTest, parse_posix_mpi)
+{
+    constexpr size_t overlap = FileLoaderType::get_overlap_size();
+
+  ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
+
+  this->parse_mpi(fobj, MPI_COMM_WORLD);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+}
+#endif
 
 #ifdef USE_MPI
 TEST_P(FASTQParseProcedureTest, parse_mpiio_mpi)
