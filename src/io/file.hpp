@@ -93,6 +93,7 @@
 //          since offset is shared, need to use pread, which does not modify the file descriptor
 //          http://stackoverflow.com/questions/1997622/can-i-open-a-socket-and-pass-it-to-another-process-in-linux
 //          http://blog.varunajayasiri.com/passing-file-descriptors-between-processes-using-sendmsg-and-recvmsg
+//          http://www.thomasstover.com/uds.html
 //      testing with 4096 procs still appears to work correctly for mmap.  2 possibilities :
 //        1. kernel is aggregating the "open files" - perhaps at inode level?
 //        2. lustre allows more concurrent file descriptors (from open64) than FILE streams (from fopen)?  untested and unlikely.
