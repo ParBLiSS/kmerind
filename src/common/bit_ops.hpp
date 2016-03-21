@@ -148,7 +148,7 @@ constexpr unsigned Log2(const unsigned int n, const unsigned p = 0) {
 
 constexpr unsigned ceilLog2(const unsigned n_chars)
 {
-    return Log2(n_chars - 1) + 1;
+    return (n_chars <= 1) ? 0 : Log2(n_chars - 1) + 1;
 }
 
 #endif // BLISS_COMMON_BIT_OPS_H
