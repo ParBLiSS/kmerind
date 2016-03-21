@@ -60,7 +60,10 @@
 #include <io/file_loader.hpp>
 #include <io/fastq_loader.hpp>
 #include <io/fasta_loader.hpp>
+#include <io/unix_domain_socket.h>
 #include <partition/range.hpp>
+
+
 
 #include <utils/exception_handling.hpp>
 
@@ -83,7 +86,7 @@
 //        https://forums.freebsd.org/threads/48980/
 //    c. sliding mmapped window may reduce number of Page Table Entries and thus invalidation for other processes.
 //      overhead of map/unmap is potentially expensive.  no test to indicate this is beneficial, so don't do it.
-//    conclusion:  map access region.
+//    CONCLUSION:  map access region.
 
 //    concurrent access to same file:
 //      open64 is used with mmap.  fds are assigned sequentially and separately by each process. if they are the same, it's coincidental.
@@ -101,17 +104,17 @@
 //      however, the physical memory for the mapping is shared if MAP_SHARED is used.
 //        https://www.mkssoftware.com/docs/man3/mmap.3.asp
 //        each proc is going to read different pages. so this does not matter.
-//    conclusion:  the number of concurrent open file descriptors is an issue.  See TODO below
+//    CONCLUSION:  the number of concurrent open file descriptors is an issue.  See TODO below
 
 //    MAP_SHARED can exceed physical + swap memory.  MAP_PRIVATE requires reservation.
 //        on linux, MAP_PRIVATE + MAP_NORESERVE allows swapspace overcommitting.
 //        http://stackoverflow.com/questions/7222164/mmap-an-entire-large-file
 //    MAP_NORESERVE prevents allocating swap (swap is more relevant to write).
 //        http://stackoverflow.com/questions/8506366/does-mmap-with-map-noreserve-reserve-physical-memory
-//      conclusion:  use MAP_SHARED | MAP_NORESERVE
+//    CONCLUSION:  use MAP_SHARED | MAP_NORESERVE
 
 //    largest file size for mmap?  length up to size_t, but is probably limited by addressable memory addresses + ulimit.
-//      conclusion:  change nothing here.
+//    CONCLUSION:  change nothing here.
 
 //  TODO: minimize the number of open files.
 //    1 proc per node open file.  then
@@ -128,12 +131,14 @@
 //      2. use open/lseek/read instead of fopen/fseek/fread
 //
 
-// DONE:  open/lseek/read
+// DONE:  open/lseek/read instead of fopen/fseek/fread
 // DONE:  refactored mmap_file with a mapped_data object
-// DONE:  remove 1 extra mmap
+// DONE:  remove 1 extra mmap from FASTQParser partitioned_file
 // TODO:  move file open/close to closer to actual reading
-// TODO:  close right after map, before unmap
-// TODO:  copy file descriptor to processes - only the root closes.
+//          close right after map, before unmap
+// TODO:  copy file descriptor to processes - only 1 on each node opens.
+//          all closes (same behavior as when using dup)
+//          require sequential constructors to reuse fd.
 
 
 
@@ -282,6 +287,7 @@ class mapped_data {
       data = other.data;      other.data = nullptr;
       range_bytes = other.range_bytes;   other.range_bytes.start = other.range_bytes.end;
 
+      return *this;
     }
 
 
@@ -338,6 +344,8 @@ protected:
 	/// virtual function for computing the size of a file.
 	size_t get_file_size() {
 
+    if (this->filename.length() == 0) return 0UL;
+
 //	  printf("base file get_file_size\n");
 
 		// get the file size.
@@ -355,6 +363,40 @@ protected:
 
 		return static_cast<size_t>(filestat.st_size);
 	}
+
+  /// opens a file. side effect computes size of the file.
+  void open_file() {
+    if (this->filename.length() == 0) return;
+
+    // first close file.
+    this->close_file();
+
+    // open the file and get a handle.
+    this->fd = open64(this->filename.c_str(), O_RDONLY);
+    if (this->fd == -1)
+    {
+      this->file_range_bytes.end = 0;
+
+      // if open failed, throw exception.
+      ::std::stringstream ss;
+      int myerr = errno;
+      ss << "ERROR in base_file open: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
+      throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
+    }
+  }
+
+  /// funciton for closing a file
+  void close_file() {
+    if (this->fd >= 0) {
+      close(this->fd);
+      this->fd = -1;
+      this->file_range_bytes.end = 0;
+    }
+  }
+
+
+
+
   /**
    * @brief initializes a file for reading/writing.  for use when the size is already obtained, as in the compositional parallel file case.
    * @note  do not call get_file_size here because
@@ -364,8 +406,21 @@ protected:
    * @param _filename   name of file to open
    * @param _file_size  size of file, previously obtained.
    */
-  base_file(std::string const & _filename, size_t const & _file_size) :
-    filename(_filename), fd(-1), file_range_bytes(0, _file_size) {};
+  base_file(std::string const & _filename, size_t const & _file_size, size_t const & delay_ms = 0) :
+    filename(_filename), fd(-1), file_range_bytes(0, _file_size) {
+
+    if (delay_ms > 0) usleep(delay_ms * 1000UL);
+
+    this->open_file();
+  };
+
+  /**
+   * @brief constructor that takes an existing open file descriptor and size.
+   * @param _fd   open file descriptor
+   * @param _file_size  size of file, previously obtained.
+   */
+  base_file(int const & _fd, size_t const & _file_size) :
+    filename(::std::string()), fd(dup(_fd)), file_range_bytes(0, _file_size) {};
 
 public:
 
@@ -401,10 +456,15 @@ public:
 	 * @param _filename 	name of file to open
 	 */
 	base_file(std::string const & _filename) :
-		filename(_filename), fd(-1), file_range_bytes(0, 0) {};
+		filename(_filename), fd(-1), file_range_bytes(0, 0) {
+    this->file_range_bytes.end = this->get_file_size();
+	  this->open_file();
+	};
 
 	/// default destructor
-	virtual ~base_file() {};
+	virtual ~base_file() {
+    this->close_file();
+	};
 
 
 	/**
@@ -445,43 +505,10 @@ public:
  */
 class mmap_file : public ::bliss::io::base_file {
 
-
 	// share open and close with file class.
 protected:
 	/// BASE type
 	using BASE = ::bliss::io::base_file;
-
-
-	/// opens a file. side effect computes size of the file.
-	void open_file() {
-		// first close file.
-		close_file();
-
-		// open the file and get a handle.
-		this->fd = open64(this->filename.c_str(), O_RDONLY);
-		if (this->fd == -1)
-		{
-			this->file_range_bytes.end = 0;
-
-			// if open failed, throw exception.
-			::std::stringstream ss;
-			int myerr = errno;
-			ss << "ERROR in mmap_file open: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
-			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
-		}
-	}
-
-
-	/// funciton for closing a file
-	void close_file() {
-		if (this->fd >= 0) {
-			close(this->fd);
-			this->fd = -1;
-			this->file_range_bytes.end = 0;
-		}
-	}
-
-
 
 public:
 
@@ -544,10 +571,6 @@ public:
 	mmap_file(std::string const & _filename) :
 		::bliss::io::base_file(_filename) {
 
-    this->file_range_bytes.end = get_file_size();
-
-    this->open_file();
-
 //    // for testing:  multiple processes on the same node maps to the same ptr address
 //    map(this->file_range_bytes);
 //    std::cout << " serial fd = " << this->fd << " mapped region = " << mapped_range_bytes << " pointer is " << (const void*)mapped_data << std::endl;
@@ -560,23 +583,18 @@ public:
    * @param _file_size  previously determined file size.
    */
   mmap_file(std::string const & _filename, size_t const & _file_size, size_t const & delay_ms = 0) :
-    ::bliss::io::base_file(_filename, _file_size) {
+    ::bliss::io::base_file(_filename, _file_size, delay_ms) {}
 
-    // don't delay
-//    if (delay_ms > 0) usleep(delay_ms * 1000);
-
-    this->open_file();
-
-
-//    // for testing:  multiple processes on the same node maps to the same ptr address
-//    map(this->file_range_bytes);
-//    std::cout << " serial 2 fd = " << this->fd << " mapped region = " << mapped_range_bytes << " pointer is " << (const void*)mapped_data << std::endl;
-//    unmap();
-  };
+  /**
+   * initializes a file for reading/writing via memmap.  for use by parallel file (composition)
+   * @param _filename   name of file to open
+   * @param _file_size  previously determined file size.
+   */
+  mmap_file(int const & _fd, size_t const & _file_size) :
+    ::bliss::io::base_file(_fd, _file_size) {}
 
 	/// default destructor
 	virtual ~mmap_file() {
-		this->close_file();
 	};
 
 
@@ -599,22 +617,8 @@ protected:
 	FILE *fp;
 
 	/// virtual function for opening a file. side effect computes size of the file.
-	void open_file() {
-		this->close_file();
-
-    this->fd = open64(this->filename.c_str(), O_RDONLY);
-    if (this->fd == -1)
-    {
-      this->file_range_bytes.end = 0;
-
-      // if open failed, throw exception.
-      ::std::stringstream ss;
-      int myerr = errno;
-      ss << "ERROR in stdio_file open: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
-      throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
-    }
-
-		fp = fdopen(this->fd, "r");
+	void open_file_stream() {
+		fp = fdopen(dup(this->fd), "r");  // make a copy of file descriptor first.  this allows closing file pointer.
 
 		if (fp == nullptr) {
 			this->file_range_bytes.end = 0;
@@ -630,10 +634,11 @@ protected:
 	}
 
 	/// virtual funciton for closing a file
-	void close_file() {
+	void close_file_stream() {
 		if (fp != nullptr) {
-			fclose(fp);
+			fclose(fp);    // okay to close since fd is dup'ed
 			fp = nullptr;
+			this->fd = -1;
 			this->file_range_bytes.end = 0;
 		}
 	}
@@ -652,9 +657,7 @@ public:
 	 * @param output		vector containing data as bytes.
 	 */
 	virtual range_type read_range(std::vector<unsigned char> & output, range_type const & range_bytes) {
-		if (fp == nullptr) {
-			throw ::bliss::utils::make_exception<std::logic_error>("ERROR: read_range: file pointer is null");
-		}
+	  this->open_file_stream();
 
 		// ensure the portion to copy is within the mapped region.
 		typename BASE::range_type target =
@@ -677,6 +680,8 @@ public:
 			throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 		}
 
+		std::cout << "curr pos in fd is " << ftell(this->fp) << std::endl;
+
 		// resize output's capacity
 		if (output.capacity() < target.size()) output.resize(target.size());
 
@@ -690,6 +695,9 @@ public:
 			throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 		}
 
+    std::cout << "curr pos in fd after read is " << ftell(this->fp) << std::endl;
+
+		this->close_file_stream();
 		return target;
 	}
 
@@ -697,10 +705,7 @@ public:
 	 * initializes a file for reading/writing
 	 * @param _filename 	name of file to open
 	 */
-	stdio_file(std::string const & _filename) : ::bliss::io::base_file(_filename), fp(nullptr) {
-		this->file_range_bytes.end = get_file_size();
-		this->open_file();
-	};
+	stdio_file(std::string const & _filename) : ::bliss::io::base_file(_filename), fp(nullptr) {};
 
 
   /**
@@ -709,16 +714,20 @@ public:
    * @param _file_size  previously computed file size.
    */
   stdio_file(std::string const & _filename, size_t const & _file_size, size_t const & delay_ms) :
-    ::bliss::io::base_file(_filename, _file_size), fp(nullptr) {
+    ::bliss::io::base_file(_filename, _file_size, delay_ms), fp(nullptr) {};
 
-    if (delay_ms > 0) usleep(delay_ms * 1000);
-
-    this->open_file();
+  /**
+   * initializes a file for reading/writing.  for use by a parallel file (composition pattern)
+   * @param _fd    previously opened file descriptor.
+   * @param _file_size  previously computed file size.
+   */
+  stdio_file(int const & _fd, size_t const & _file_size) :
+    ::bliss::io::base_file(_fd, _file_size), fp(nullptr) {
   };
 
 	/// destructor
 	virtual ~stdio_file() {
-		this->close_file();
+		this->close_file_stream();
 	};
 
 	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
@@ -738,35 +747,6 @@ class posix_file : public ::bliss::io::base_file {
 protected:
 
   using BASE = ::bliss::io::base_file;
-
-  /// virtual function for opening a file. side effect computes size of the file.
-  void open_file() {
-    this->close_file();
-
-    this->fd = open64(this->filename.c_str(), O_RDONLY);
-    if (this->fd == -1)
-    {
-      this->file_range_bytes.end = 0;
-
-      // if open failed, throw exception.
-      ::std::stringstream ss;
-      int myerr = errno;
-      ss << "ERROR in posix_file open: ["  << this->filename << "] error " << myerr << ": " << strerror(myerr);
-      throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
-    }
-  }
-
-  /// virtual funciton for closing a file
-  void close_file() {
-    if (this->fd >= 0) {
-      close(this->fd);
-      this->fd = -1;
-      this->file_range_bytes.end = 0;
-    }
-
-  }
-
-
 
 public:
 
@@ -795,15 +775,17 @@ public:
       return target;
     }
 
-    // use fseek instead lseek to preserve buffering.
-    int res = lseek64(this->fd, target.start, SEEK_SET);
-    if ( res == -1 ) {
-      std::stringstream ss;
-      int myerr = errno;
-      ss << "ERROR: lseek64: file " << this->filename << " error " << myerr << ": " << strerror(myerr);
+//    // use fseek instead lseek to preserve buffering.
+//    int res = lseek64(this->fd, target.start, SEEK_SET);
+//    if ( res == -1 ) {
+//      std::stringstream ss;
+//      int myerr = errno;
+//      ss << "ERROR: lseek64: file " << this->filename << " error " << myerr << ": " << strerror(myerr);
+//
+//      throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
+//    }
 
-      throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
-    }
+    std::cout << "curr pos in fd is " << lseek64(this->fd, 0, SEEK_CUR) << ::std::endl;
 
     // resize output's capacity
     if (output.capacity() < target.size()) output.resize(target.size());
@@ -825,10 +807,7 @@ public:
    * initializes a file for reading/writing
    * @param _filename   name of file to open
    */
-  posix_file(std::string const & _filename) : ::bliss::io::base_file(_filename) {
-    this->file_range_bytes.end = get_file_size();
-    this->open_file();
-  };
+  posix_file(std::string const & _filename) : ::bliss::io::base_file(_filename) {};
 
 
   /**
@@ -837,17 +816,18 @@ public:
    * @param _file_size  previously computed file size.
    */
   posix_file(std::string const & _filename, size_t const & _file_size, size_t const & delay_ms) :
-    ::bliss::io::base_file(_filename, _file_size) {
+    ::bliss::io::base_file(_filename, _file_size, delay_ms) {};
 
-    if (delay_ms > 0) usleep(delay_ms * 1000);
-
-    this->open_file();
-  };
+  /**
+   * initializes a file for reading/writing.  for use by a parallel file (composition pattern)
+   * @param _fd   previously opened file descriptor
+   * @param _file_size  previously computed file size.
+   */
+  posix_file(int const & _fd, size_t const & _file_size) :
+    ::bliss::io::base_file(_fd, _file_size) {};
 
   /// destructor
-  virtual ~posix_file() {
-    this->close_file();
-  };
+  virtual ~posix_file() {};
 
   // this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
   using BASE::read_file;
@@ -867,6 +847,9 @@ namespace parallel {
 class base_file : public ::bliss::io::base_file {
 protected:
 	using BASE = ::bliss::io::base_file;
+
+	using range_type = typename BASE::range_type;
+
 
 	/// communicator used.  object instead of being a reference - lifetime of a src comm temp object in constructor is just that of the constructor call.
 	const ::mxx::comm comm;
@@ -888,6 +871,12 @@ protected:
 		return file_size;
 	}
 
+  base_file(::mxx::comm const & _comm = ::mxx::comm()) :
+    ::bliss::io::base_file(static_cast<int>(-1), static_cast<size_t>(0)), // will find real size very soon
+     comm(::std::move(_comm.copy())) {  // _comm could be a temporary constructed from MPI_Comm.
+  };
+
+
 public:
 
 	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
@@ -903,9 +892,14 @@ public:
 	 * @param _comm				MPI communicator to use.
 	 */
 	base_file(std::string const & _filename, ::mxx::comm const & _comm = ::mxx::comm()) :
-		::bliss::io::base_file(_filename), comm(::std::move(_comm.copy())) {  // _comm could be a temporary constructed from MPI_Comm.
-		this->file_range_bytes.end = this->::bliss::io::parallel::base_file::get_file_size();
+		::bliss::io::base_file(static_cast<int>(-1), static_cast<size_t>(0)), // will find real size very soon
+		 comm(::std::move(_comm.copy())) {  // _comm could be a temporary constructed from MPI_Comm.
+	  this->filename = _filename;
+		this->file_range_bytes.end = this->get_file_size();
+		this->BASE::open_file();
 	};
+
+
 
 	/// destructor
 	virtual ~base_file() {};  // will call super's unmap.
@@ -916,11 +910,79 @@ public:
 };
 
 
-template <typename FileReader, typename FileParser = ::bliss::io::BaseFileParser<unsigned char*> >
-class partitioned_file : public ::bliss::io::parallel::base_file {
+
+class base_shared_fd_file : public ::bliss::io::parallel::base_file {
+protected:
+  using BASE = ::bliss::io::parallel::base_file;
+
+  using range_type = typename BASE::range_type;
+
+
+  /// opens a file. side effect computes size of the file.
+  void open_file() {
+    // first split the communicator
+
+    ::mxx::comm shared = this->comm.split_shared();
+
+    if (shared.rank() == 0) {
+      this->::bliss::io::base_file::open_file();  // fd is populated on shared comm rank 0.
+    }
+
+    shared.barrier();
+
+    if (shared.size() > 1) {
+      // if we have more than 1, then we broadcast the file id via interprocess communicator, so that
+      // all mpi processes on the same node share the same file handle.
+
+      ::bliss::io::util::broadcast_file_descriptor(this->fd, shared);
+    }
+    // that's it.
+
+    std::cout << "after copying, curr pos in fd is " << lseek64(this->fd, 0, SEEK_CUR) << std::endl;
+
+    shared.barrier();
+  }
+
+public:
+
+  // this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
+  using BASE::read_range;
+
+  /**
+   * @brief constructor
+   * @note  _comm could be a temporary constructed from MPI_Comm.  in which case, the lifetime is the call of the constructor.
+   *      to save it, we cannot just save the reference - the underlying object would go out of scope and die.
+   *      we have to copy it.  ::mxx::comm does not have copy constructor, but has explict copy function and move constructor.  so use them.
+   *      note that copy function is collective.  move constructor is not collective, so it could cause deadlock.
+   * @param _filename     name of file to open
+   * @param _comm       MPI communicator to use.
+   */
+  base_shared_fd_file(std::string const & _filename, ::mxx::comm const & _comm = ::mxx::comm()) :
+    ::bliss::io::parallel::base_file(_comm) {  // _comm could be a temporary constructed from MPI_Comm.
+    this->filename = _filename;
+    this->file_range_bytes.end = this->BASE::get_file_size();
+    this->open_file();
+  };
+
+  /// destructor
+  virtual ~base_shared_fd_file() {
+    this->close_file();
+  };  // will call super's close.
+
+  // this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
+  using BASE::read_file;
+
+};
+
+
+
+template <typename FileReader,
+          typename FileParser = ::bliss::io::BaseFileParser<unsigned char*>,
+          typename BaseType = ::bliss::io::parallel::base_file >
+class partitioned_file : public BaseType {
 
 protected:
-	using BASE = ::bliss::io::parallel::base_file;
+	using BASE = BaseType;
 
 	using range_type = typename ::bliss::io::base_file::range_type;
 
@@ -931,7 +993,7 @@ protected:
 	const size_t overlap;
 
 	/// partitioner to use.
-	::bliss::partition::BlockPartitioner<range_type> partitioner;
+	::bliss::partition::BlockPartitioner<typename BASE::range_type> partitioner;
 
 
 	/**
@@ -940,8 +1002,8 @@ protected:
 	 * 			if overlap is needed, use the overload version.
 	 * @note  assumes input parameter is in memory and inside file.
 	 */
-	range_type partition(range_type const & range_bytes) {
-		range_type target =
+	typename BASE::range_type partition(typename BASE::range_type const & range_bytes) {
+	  typename BASE::range_type target =
 				BASE::range_type::intersect(range_bytes, this->file_range_bytes);
 
 		if (this->comm.size() == 1) {
@@ -959,18 +1021,18 @@ protected:
 	 * 			beyong initial in_mem_range.
 	 * @note	assumes that both input parameters are within file range and in memory.
 	 */
-	::std::pair<range_type, range_type>
-	partition(range_type const & in_mem_range_bytes,
-			range_type const & valid_range_bytes) {
+	::std::pair<typename BASE::range_type, typename BASE::range_type>
+	partition(typename BASE::range_type const & in_mem_range_bytes,
+	          typename BASE::range_type const & valid_range_bytes) {
 //		::std::cout << "rank " << this->comm.rank() << " partition comm_size " << this->comm.size() << ::std::endl;
 //		std::cout << " partition comm object at " << &(this->comm) << " for this " << this << std::endl;
 //        std::cout << " partition comm is set to world ? " <<  (MPI_COMM_WORLD == this->comm ? "y" : "n") << std::endl;
 
-		range_type in_mem =
+	  typename BASE::range_type in_mem =
 				BASE::range_type::intersect(in_mem_range_bytes, this->file_range_bytes);
 
 		// and restrict valid to in memory data.
-		range_type valid =
+		typename BASE::range_type valid =
 				BASE::range_type::intersect(valid_range_bytes, in_mem);
 
 		// single process, just return
@@ -984,7 +1046,7 @@ protected:
 		valid = partitioner.getNext(this->comm.rank());
 
 		// compute the in mem range.  extend by overlap
-		range_type in_mem_valid = valid;
+		typename BASE::range_type in_mem_valid = valid;
 		in_mem_valid.end += overlap;
 
 		in_mem_valid.intersect(in_mem);
@@ -1002,10 +1064,10 @@ public:
 	 * @param range_bytes	range to read, in bytes
 	 * @param output		vector containing data as bytes.
 	 */
-	virtual range_type read_range(std::vector<unsigned char> & output,
-				range_type const & range_bytes) {
+	virtual typename BASE::range_type read_range(std::vector<unsigned char> & output,
+	                                             typename BASE::range_type const & range_bytes) {
 		// first get rough partition
-		range_type target = partition(range_bytes);
+	  typename BASE::range_type target = partition(range_bytes);
 
 		// then read the range via sequential version
 		reader.read_range(output, target);
@@ -1019,8 +1081,8 @@ public:
 	 * @param _comm				MPI communicator to use.
 	 */
 	partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-		::bliss::io::parallel::base_file(_filename, _comm),
-		 reader(_filename, this->file_range_bytes.end, _comm.rank() % 16), overlap(_overlap) {};
+		BaseType(_filename, _comm),
+		 reader(this->fd, this->file_range_bytes.end), overlap(_overlap) {};
 
 	/// destructor
 	virtual ~partitioned_file() {};  // will call super's unmap.
@@ -1036,8 +1098,8 @@ public:
 	 */
 	virtual void read_file(::bliss::io::file_data & output) {
 
-		range_type in_mem_partitioned;
-		range_type valid_partitioned;
+	  typename BASE::range_type in_mem_partitioned;
+	  typename BASE::range_type valid_partitioned;
 
 		::std::tie(in_mem_partitioned, valid_partitioned) =
 				partition(this->file_range_bytes, this->file_range_bytes);
@@ -1046,16 +1108,16 @@ public:
 		output.in_mem_range_bytes = reader.read_range(output.data, in_mem_partitioned);
 
 		output.valid_range_bytes = valid_partitioned;
-		output.parent_range_bytes = file_range_bytes;
+		output.parent_range_bytes = this->file_range_bytes;
 	}
 };
 
-template <typename FileReader >
-class partitioned_file<FileReader, ::bliss::io::FASTQParser<unsigned char* > > :
-	public ::bliss::io::parallel::base_file {
+template <typename FileReader, typename BaseType>
+class partitioned_file<FileReader, ::bliss::io::FASTQParser<unsigned char* >, BaseType > :
+	public BaseType {
 
 protected:
-	using BASE = ::bliss::io::parallel::base_file;
+	using BASE = BaseType;
 
 	/// FileReader
 	FileReader reader;
@@ -1064,7 +1126,7 @@ protected:
 	const size_t overlap;
 
 	/// partitioner to use.
-	::bliss::partition::BlockPartitioner<range_type> partitioner;
+	::bliss::partition::BlockPartitioner<typename BASE::range_type> partitioner;
 
 	/**
 	 * @brief partitions the specified range by the number of processes in communicator
@@ -1072,11 +1134,11 @@ protected:
 	 * 			if overlap is needed, use the overload version.
 	 * @note  assumes input parameter is in memory and inside file.
 	 */
-	range_type partition(range_type const & range_bytes) {
+	typename BASE::range_type partition(typename BASE::range_type const & range_bytes) {
 
 		// ensure that the search range is inside the file
 		// restrict in_mem to within file
-		range_type target =
+	  typename BASE::range_type target =
 				BASE::range_type::intersect(range_bytes, this->file_range_bytes);
 
 		// covers whole file, so done.
@@ -1085,27 +1147,27 @@ protected:
 		std::cout << "rank " << this->comm.rank() << " partitioning map" << std::endl;
 
 		// allocate a mmap file for doing the search.
-		::bliss::io::mmap_file record_finder(this->filename);
+		::bliss::io::mmap_file record_finder(this->fd, this->size());
 
 
 		// configure the partitioner and get the local partition.
 		partitioner.configure(target, this->comm.size());
-		range_type hint = partitioner.getNext(this->comm.rank());
+		typename BASE::range_type hint = partitioner.getNext(this->comm.rank());
 
 		// now define the search ranges.  for case when partition is smaller than a record,
 		// we need to search more, so make the end of search range (page_size + end).
-		range_type search = hint;
+		typename BASE::range_type search = hint;
 		// but with staggered start
 		search.end = hint.start + ::std::max(sysconf(_SC_PAGE_SIZE), (1024L * 1024L));  // assume FileParser can check the previous char.
 
 		// ensure that previous char is inspected.
-		range_type load = search;
+		typename BASE::range_type load = search;
 		load.start = (search.start == this->file_range_bytes.start ?
 				this->file_range_bytes.start : search.start - 1);  // read extra char before
 
 
 		//===  search the region for the starting position, using mmap file
-		range_type found;
+		typename BASE::range_type found;
 
 		// map the search region
 		mapped_data md = record_finder.map(load);
@@ -1153,22 +1215,22 @@ protected:
 	 * 			beyong initial in_mem_range.
 	 * @note	assumes that both input parameters are within file range and in memory.
 	 */
-	::std::pair<range_type, range_type>
-	partition(range_type const & in_mem_range_bytes,
-				range_type const & valid_range_bytes) {
+	::std::pair<typename BASE::range_type, typename BASE::range_type>
+	partition(typename BASE::range_type const & in_mem_range_bytes,
+	          typename BASE::range_type const & valid_range_bytes) {
 
 		// search for starting point using valid_range_bytes
 
 		// restrict in_mem to within file
-		range_type in_mem =
-				range_type::intersect(in_mem_range_bytes, this->file_range_bytes);
+	  typename BASE::range_type in_mem =
+				BASE::range_type::intersect(in_mem_range_bytes, this->file_range_bytes);
 
 		// and restrict valid to in memory data.
-		range_type valid =
-				range_type::intersect(valid_range_bytes, in_mem);
+	  typename BASE::range_type valid =
+	      BASE::range_type::intersect(valid_range_bytes, in_mem);
 
 
-		range_type found = partition(valid);
+	  typename BASE::range_type found = partition(valid);
 
 		return std::make_pair(found, found);
 	}
@@ -1183,11 +1245,11 @@ public:
 	 * @param range_bytes	range to read, in bytes
 	 * @param output		vector containing data as bytes.
 	 */
-	virtual range_type read_range(std::vector<unsigned char> & output,
-				range_type const & range_bytes) {
+	virtual typename BASE::range_type read_range(std::vector<unsigned char> & output,
+	                                             typename BASE::range_type const & range_bytes) {
 
 		// first get rough partition
-	  range_type target = partition(range_bytes);
+	  typename BASE::range_type target = partition(range_bytes);
 
 
 		// then read the range via sequential version
@@ -1202,8 +1264,8 @@ public:
 	 * @param _comm				MPI communicator to use.
 	 */
 	partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-		::bliss::io::parallel::base_file(_filename, _comm),
-		 reader(_filename, this->file_range_bytes.end, _comm.rank() % 16), overlap(_overlap) {};
+		BaseType(_filename, _comm),
+		 reader(this->fd, this->file_range_bytes.end), overlap(_overlap) {};
 
 	/// destructor
 	virtual ~partitioned_file() {};  // will call super's unmap.
@@ -1218,27 +1280,17 @@ public:
 	 * @param output 		file_data object containing data and various ranges.
 	 */
 	virtual void read_file(::bliss::io::file_data & output) {
-		range_type in_mem_partitioned;
-		range_type valid_partitioned;
-
-
-    if (this->comm.rank() == 0) {
-//      ::bliss::io::mmap_file test(this->filename);
+	  typename BASE::range_type in_mem_partitioned;
+	  typename BASE::range_type valid_partitioned;
 
       ::std::tie(in_mem_partitioned, valid_partitioned) =
           partition(this->file_range_bytes, this->file_range_bytes);
-    } else {
-      ::std::tie(in_mem_partitioned, valid_partitioned) =
-          partition(this->file_range_bytes, this->file_range_bytes);
-    }
-
-
 
 		// then read the range via sequential version
 		output.in_mem_range_bytes = reader.read_range(output.data, in_mem_partitioned);
 
 		output.valid_range_bytes = valid_partitioned;
-		output.parent_range_bytes = file_range_bytes;
+		output.parent_range_bytes = this->file_range_bytes;
 	}
 };
 
@@ -1246,12 +1298,12 @@ public:
 /**
  * @brief partitioned_file specialization that minimizes
  */
-template <>
-class partitioned_file<::bliss::io::mmap_file, ::bliss::io::FASTQParser<unsigned char* > > :
-  public ::bliss::io::parallel::base_file {
+template <typename BaseType>
+class partitioned_file<::bliss::io::mmap_file, ::bliss::io::FASTQParser<unsigned char* >, BaseType > :
+  public BaseType {
 
 protected:
-  using BASE = ::bliss::io::parallel::base_file;
+  using BASE = BaseType;
 
   /// FileReader
   ::bliss::io::mmap_file reader;
@@ -1260,7 +1312,7 @@ protected:
   const size_t overlap;
 
   /// partitioner to use.
-  ::bliss::partition::BlockPartitioner<range_type> partitioner;
+  ::bliss::partition::BlockPartitioner<typename BASE::range_type> partitioner;
 
   /**
    * @brief partitions the specified range by the number of processes in communicator
@@ -1268,11 +1320,11 @@ protected:
    *      if overlap is needed, use the overload version.
    * @note  assumes input parameter is in memory and inside file.
    */
-  range_type partition(range_type const & range_bytes) {
+  typename BASE::range_type partition(typename BASE::range_type const & range_bytes) {
 
     // ensure that the search range is inside the file
     // restrict in_mem to within file
-    range_type target =
+    typename BASE::range_type target =
         BASE::range_type::intersect(range_bytes, this->file_range_bytes);
 
     // covers whole file, so done.
@@ -1284,22 +1336,22 @@ protected:
 
     // configure the partitioner and get the local partition.
     partitioner.configure(target, this->comm.size());
-    range_type hint = partitioner.getNext(this->comm.rank());
+    typename BASE::range_type hint = partitioner.getNext(this->comm.rank());
 
     // now define the search ranges.  for case when partition is smaller than a record,
     // we need to search more, so make the end of search range (page_size + end).
-    range_type search = hint;
+    typename BASE::range_type search = hint;
     // but with staggered start
     search.end = hint.start + ::std::max(sysconf(_SC_PAGE_SIZE), (1024L * 1024L));  // assume FileParser can check the previous char.
 
     // ensure that previous char is inspected.
-    range_type load = search;
+    typename BASE::range_type load = search;
     load.start = (search.start == this->file_range_bytes.start ?
         this->file_range_bytes.start : search.start - 1);  // read extra char before
 
 
     //===  search the region for the starting position, using mmap file
-    range_type found;
+    typename BASE::range_type found;
 
     {
       // map the search region
@@ -1348,22 +1400,22 @@ protected:
    *      beyong initial in_mem_range.
    * @note  assumes that both input parameters are within file range and in memory.
    */
-  ::std::pair<range_type, range_type>
-  partition(range_type const & in_mem_range_bytes,
-        range_type const & valid_range_bytes) {
+  ::std::pair<typename BASE::range_type, typename BASE::range_type>
+  partition(typename BASE::range_type const & in_mem_range_bytes,
+            typename BASE::range_type const & valid_range_bytes) {
 
     // search for starting point using valid_range_bytes
 
     // restrict in_mem to within file
-    range_type in_mem =
-        range_type::intersect(in_mem_range_bytes, this->file_range_bytes);
+    typename BASE::range_type in_mem =
+        BASE::range_type::intersect(in_mem_range_bytes, this->file_range_bytes);
 
     // and restrict valid to in memory data.
-    range_type valid =
-        range_type::intersect(valid_range_bytes, in_mem);
+    typename BASE::range_type valid =
+        BASE::range_type::intersect(valid_range_bytes, in_mem);
 
 
-    range_type found = partition(valid);
+    typename BASE::range_type found = partition(valid);
 
     return std::make_pair(found, found);
   }
@@ -1378,11 +1430,11 @@ public:
    * @param range_bytes range to read, in bytes
    * @param output    vector containing data as bytes.
    */
-  virtual range_type read_range(std::vector<unsigned char> & output,
-        range_type const & range_bytes) {
+  virtual typename BASE::range_type read_range(std::vector<unsigned char> & output,
+                                               typename BASE::range_type const & range_bytes) {
 
     // first get rough partition
-    range_type target = partition(range_bytes);
+    typename BASE::range_type target = partition(range_bytes);
 
 
     // then read the range via sequential version
@@ -1397,8 +1449,8 @@ public:
    * @param _comm       MPI communicator to use.
    */
   partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-    ::bliss::io::parallel::base_file(_filename, _comm),
-     reader(_filename, this->file_range_bytes.end, _comm.rank() % 16), overlap(_overlap) {};
+    BaseType(_filename, _comm),
+     reader(this->fd, this->file_range_bytes.end), overlap(_overlap) {};
 
   /// destructor
   virtual ~partitioned_file() {};  // will call super's unmap.
@@ -1413,42 +1465,46 @@ public:
    * @param output    file_data object containing data and various ranges.
    */
   virtual void read_file(::bliss::io::file_data & output) {
-    range_type in_mem_partitioned;
-    range_type valid_partitioned;
-
-
-    if (this->comm.rank() == 0) {
-//      ::bliss::io::mmap_file test(this->filename);
+    typename BASE::range_type in_mem_partitioned;
+    typename BASE::range_type valid_partitioned;
 
       ::std::tie(in_mem_partitioned, valid_partitioned) =
           partition(this->file_range_bytes, this->file_range_bytes);
-    } else {
-      ::std::tie(in_mem_partitioned, valid_partitioned) =
-          partition(this->file_range_bytes, this->file_range_bytes);
-    }
-
-
 
     // then read the range via sequential version
     output.in_mem_range_bytes = reader.read_range(output.data, in_mem_partitioned);
 
     output.valid_range_bytes = valid_partitioned;
-    output.parent_range_bytes = file_range_bytes;
+    output.parent_range_bytes = this->file_range_bytes;
   }
+};
+
+
+template <typename FileParser>
+class partitioned_file<::bliss::io::stdio_file, FileParser, ::bliss::io::parallel::base_shared_fd_file >
+{
+  public:
+    partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) {
+      static_assert(false, "ERROR: stdio_file is not compatible with base_shared_fd_file, as there is no fread that will maintain the old position");
+    }
+    ~partitioned_file() {};
 };
 
 
 
 // multilevel parallel file io relies on MPIIO.
-class mpiio_base_file : public ::bliss::io::parallel::base_file {
+class mpiio_base_file : public ::bliss::io::base_file {
 
 	static_assert(sizeof(MPI_Offset) > 4, "ERROR: MPI_Offset is defined as an integer 4 bytes or less.  Do not use mpiio_file ");
 
 protected:
-	using BASE = ::bliss::io::parallel::base_file;
+	using BASE = ::bliss::io::base_file;
 
 	/// overlap amount
 	const size_t overlap;
+
+  /// communicator used.  object instead of being a reference - lifetime of a src comm temp object in constructor is just that of the constructor call.
+  const ::mxx::comm comm;
 
 	/// MPI file handle
 	MPI_File fh;
@@ -1713,12 +1769,12 @@ public:
 
 
 	mpiio_base_file(::std::string const & _filename, size_t const _overlap = 0UL,  ::mxx::comm const & _comm = ::mxx::comm()) :
-		::bliss::io::parallel::base_file(_filename, _comm), overlap(_overlap), fh(MPI_FILE_NULL) {
-		open_file();
+		::bliss::io::base_file(_filename), overlap(_overlap), comm(::std::move(_comm.copy())), fh(MPI_FILE_NULL) {
+		this->open_file();
 		this->file_range_bytes.end = this->::bliss::io::parallel::mpiio_base_file::get_file_size();  // call after opening file
 	};
 
-	~mpiio_base_file() { close_file(); };
+	~mpiio_base_file() { this->close_file(); };
 
 	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
 	using BASE::read_file;

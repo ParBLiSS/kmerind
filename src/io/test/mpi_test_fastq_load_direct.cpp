@@ -224,17 +224,16 @@ TEST_P(FASTQParseProcedureTest, parse_posix)
 #endif
 
 }
-
 #ifdef USE_MPI
 TEST_P(FASTQParseProcedureTest, parse_mmap_mpi)
 {
-	  constexpr size_t overlap = FileLoaderType::get_overlap_size();
+    constexpr size_t overlap = FileLoaderType::get_overlap_size();
 
-	::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
+  ::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
 
-	this->parse_mpi(fobj, MPI_COMM_WORLD);
+  this->parse_mpi(fobj, MPI_COMM_WORLD);
 
-	  MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
 }
 #endif
 
@@ -243,13 +242,13 @@ TEST_P(FASTQParseProcedureTest, parse_mmap_mpi)
 #ifdef USE_MPI
 TEST_P(FASTQParseProcedureTest, parse_stdio_mpi)
 {
-	  constexpr size_t overlap = FileLoaderType::get_overlap_size();
+    constexpr size_t overlap = FileLoaderType::get_overlap_size();
 
-	::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
+  ::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
 
-	this->parse_mpi(fobj, MPI_COMM_WORLD);
+  this->parse_mpi(fobj, MPI_COMM_WORLD);
 
-	  MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
 }
 #endif
 
@@ -261,6 +260,33 @@ TEST_P(FASTQParseProcedureTest, parse_posix_mpi)
     constexpr size_t overlap = FileLoaderType::get_overlap_size();
 
   ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
+
+  this->parse_mpi(fobj, MPI_COMM_WORLD);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+}
+#endif
+
+#ifdef USE_MPI
+TEST_P(FASTQParseProcedureTest, parse_mmap_shared_mpi)
+{
+	  constexpr size_t overlap = FileLoaderType::get_overlap_size();
+
+	::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, ParserType, ::bliss::io::parallel::base_shared_fd_file> fobj(this->fileName, overlap, MPI_COMM_WORLD);
+
+	this->parse_mpi(fobj, MPI_COMM_WORLD);
+
+	  MPI_Barrier(MPI_COMM_WORLD);
+}
+#endif
+
+
+#ifdef USE_MPI
+TEST_P(FASTQParseProcedureTest, parse_posix_shared_mpi)
+{
+    constexpr size_t overlap = FileLoaderType::get_overlap_size();
+
+  ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ParserType, ::bliss::io::parallel::base_shared_fd_file> fobj(this->fileName, overlap, MPI_COMM_WORLD);
 
   this->parse_mpi(fobj, MPI_COMM_WORLD);
 

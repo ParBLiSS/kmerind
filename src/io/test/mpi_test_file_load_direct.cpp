@@ -178,27 +178,27 @@ TYPED_TEST_P(FileLoadProcedureTest, open_posix)
 #ifdef USE_MPI
 TYPED_TEST_P(FileLoadProcedureTest, open_mmap_mpi)
 {
-//	::mxx::comm comm;
-	  constexpr size_t overlap = TypeParam::get_overlap_size();
+//  ::mxx::comm comm;
+    constexpr size_t overlap = TypeParam::get_overlap_size();
 
-	::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
+  ::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, ParserType> fobj(this->fileName, overlap, MPI_COMM_WORLD);
 
-	this->open_mpi(fobj, MPI_COMM_WORLD);
+  this->open_mpi(fobj, MPI_COMM_WORLD);
 
-	MPI_Barrier(MPI_COMM_WORLD);
-//	comm.barrier();
+  MPI_Barrier(MPI_COMM_WORLD);
+//  comm.barrier();
 }
 
 TYPED_TEST_P(FileLoadProcedureTest, open_stdio_mpi)
 {
-	::mxx::comm comm;
-	  constexpr size_t overlap = TypeParam::get_overlap_size();
+  ::mxx::comm comm;
+    constexpr size_t overlap = TypeParam::get_overlap_size();
 
-	::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ParserType> fobj(this->fileName, overlap, comm);
+  ::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ParserType> fobj(this->fileName, overlap, comm);
 
-	this->open_mpi(fobj, comm);
+  this->open_mpi(fobj, comm);
 
-	comm.barrier();
+  comm.barrier();
 }
 
 
@@ -208,6 +208,32 @@ TYPED_TEST_P(FileLoadProcedureTest, open_posix_mpi)
     constexpr size_t overlap = TypeParam::get_overlap_size();
 
   ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ParserType> fobj(this->fileName, overlap, comm);
+
+  this->open_mpi(fobj, comm);
+
+  comm.barrier();
+}
+
+TYPED_TEST_P(FileLoadProcedureTest, open_mmap_shared_mpi)
+{
+//	::mxx::comm comm;
+	  constexpr size_t overlap = TypeParam::get_overlap_size();
+
+	::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, ParserType, ::bliss::io::parallel::base_shared_fd_file> fobj(this->fileName, overlap, MPI_COMM_WORLD);
+
+	this->open_mpi(fobj, MPI_COMM_WORLD);
+
+	MPI_Barrier(MPI_COMM_WORLD);
+//	comm.barrier();
+}
+
+
+TYPED_TEST_P(FileLoadProcedureTest, open_posix_shared_mpi)
+{
+  ::mxx::comm comm;
+    constexpr size_t overlap = TypeParam::get_overlap_size();
+
+  ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ParserType, ::bliss::io::parallel::base_shared_fd_file> fobj(this->fileName, overlap, comm);
 
   this->open_mpi(fobj, comm);
 
@@ -237,6 +263,9 @@ REGISTER_TYPED_TEST_CASE_P(FileLoadProcedureTest,
 		open_mmap_mpi,
 		open_stdio_mpi,
     open_posix_mpi,
+    open_mmap_shared_mpi,
+    open_stdio_shared_mpi,
+    open_posix_shared_mpi,
 		open_mpiio_mpi,
 #endif
  open_mmap,

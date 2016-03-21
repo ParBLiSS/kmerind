@@ -131,7 +131,7 @@ bool validate(const std::string &fileName, const size_t offset,
 
 //    constexpr size_t overlap = KP::kmer_type::size;  specify as 0 - which allows overlap to be computed.
 
-    // TODO: check if prefetch makes a difference.
+    // prefetch makes little difference in performance, but memory use is much higher.
     using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, prefetch>; // raw data type :  use CharType
 
     //====  now process the file, one L1 block (block partition by MPI Rank) at a time
@@ -276,7 +276,6 @@ bool validate(const std::string &fileName, const size_t offset,
 
 
       // scatter the ranges to rest of group
-      // TODO: mxx::bcast function
       range = mxx::scatter_one(ranges, 0, group);
       // now create the L2Blocks from the data  (reuse block)
       block.assign(&(data[0]), &(data[0]) + range.size(), range);
@@ -524,6 +523,13 @@ int main(int argc, char** argv) {
 		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::stdio_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi stdio");
 		  comm.barrier();
 	  }
+
+    if (which == -1 || which == 8)
+    {
+      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi posix");
+      comm.barrier();
+    }
+
 	  if (which == -1 || which == 5)
 	  {
 		  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi-io");
@@ -541,6 +547,18 @@ int main(int argc, char** argv) {
 		  testIndexSubComm< PARSER_TYPE, false > (comm, filename, "fileloader with mpi subcomm.");
 		  comm.barrier();
 	  }
+
+    if (which == -1 || which == 9)
+    {
+      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<unsigned char *>, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd mmap");
+      comm.barrier();
+    }
+
+    if (which == -1 || which == 10)
+    {
+      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE<unsigned char *>, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd posix");
+      comm.barrier();
+    }
 
   }
 
