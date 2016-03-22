@@ -70,7 +70,7 @@
 #define _LARGE_FILE_API
 
 // TODO: possible a variant for mmap without caching.  (directly expose the mmapped region)
-// TODO: large number of PARALLEL FOPEN AND FREAD is not good.  mmap is okay because of common file descriptor between processes?  can that be guaranteed?  or is it okay because of open?
+// DONE: large number of PARALLEL FOPEN AND FREAD is not good.  mmap is okay because of common file descriptor between processes?  can that be guaranteed?  or is it okay because of open?
 //        lseek and read may be better, provide the same file descriptor can be used for processes on the same node.
 // TODO: read then shuffle boundaries for partitioned file, FASTQ case.
 // TODO: change file open behavior to reduce congestion. - open when using, retry until success.
@@ -117,19 +117,20 @@
 //    largest file size for mmap?  length up to size_t, but is probably limited by addressable memory addresses + ulimit.
 //    CONCLUSION:  change nothing here.
 
-//  TODO: minimize the number of open files.
+//  DONE: minimize the number of open files.
 //    1 proc per node open file.  then
-//        1. share file description, or
+//        1. share file descriptor, or
 //        2. mmap cache/fread on 1 and share (require contiguous, and idle C-1 cores, communication at worst shared mem at best)
 //        3. don't open file multiple times.
 //        4. serialize/space out file open over time.
 //            delay,
 //            open only when doing something
 //        5. map remains even when file is closed.
+//    chose 1.
 
-//  TODO: other things to change:
-//      1. for mmap, reuse file handle/mmap, and mremap as needed.
-//      2. use open/lseek/read instead of fopen/fseek/fread
+//  DONE: other things to change:
+//      1. DONE. for mmap, reuse file handle/mmap, and mremap as needed (not needed).
+//      2. DONE. use open/lseek/pread instead of fopen/fseek/fread/
 //
 
 // DONE:  open/lseek/read instead of fopen/fseek/fread
@@ -137,9 +138,11 @@
 // DONE:  remove 1 extra mmap from FASTQParser partitioned_file
 // TODO:  move file open/close to closer to actual reading
 //          close right after map, before unmap
-// TODO:  copy file descriptor to processes - only 1 on each node opens.
+// DONE:  copy file descriptor to processes - only 1 on each node opens.
 //          all closes (same behavior as when using dup)
 //          require sequential constructors to reuse fd.
+//          NOTE: fread will move the fd, so sharing a file descriptor does not work.
+//          NOTE: pread64 can only read 2GB chunks at a time.  offset is 64bit though.
 
 
 
@@ -814,7 +817,6 @@ public:
     if (s != target.size()) {
         std::stringstream ss;
         ss << "ERROR: pread64: file " << this->filename << " read " << s << " less than range: " << target.size();
-
         throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 
     }
