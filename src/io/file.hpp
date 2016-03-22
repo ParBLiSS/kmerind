@@ -63,10 +63,11 @@
 #include <io/unix_domain_socket.h>
 #include <partition/range.hpp>
 
-
-
 #include <utils/exception_handling.hpp>
 
+// define so that pread64 can support reading larger than int bytes.
+// http://www.ibm.com/support/knowledgecenter/ssw_i5_54/apis/pread64.htm
+#define _LARGE_FILE_API
 
 // TODO: possible a variant for mmap without caching.  (directly expose the mmapped region)
 // TODO: large number of PARALLEL FOPEN AND FREAD is not good.  mmap is okay because of common file descriptor between processes?  can that be guaranteed?  or is it okay because of open?
@@ -790,20 +791,29 @@ public:
     // resize output's capacity
     if (output.capacity() < target.size()) output.resize(target.size());
 
-    long read = pread64(this->fd, output.data(), target.size(), static_cast<__off64_t>(target.start));
+    size_t s = 0;
+    long count;
 
-    if (read < 0) {
-      std::stringstream ss;
-      int myerr = errno;
-      ss << "ERROR: pread64: file " << this->filename << " error " << myerr << ": " << strerror(myerr);
+    //pread64 can only read 2GB at a time
+    for (; s < target.size(); ) {
+     	count = pread64(this->fd, output.data() + s, std::min(1UL << 30, target.size() - s ),
+    			static_cast<__off64_t>(target.start + s));
 
-      throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
+        if (count < 0) {
+          std::stringstream ss;
+          int myerr = errno;
+          ss << "ERROR: pread64: file " << this->filename << " error " << myerr << ": " << strerror(myerr);
+
+          throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
+        }
+
+    	s += count;
     }
 
-    if (static_cast<size_t>(read) != target.size()) {
+
+    if (s != target.size()) {
         std::stringstream ss;
-        int myerr = errno;
-        ss << "ERROR: pread64: file " << this->filename << " read " << read << " less than range: " << target.size();
+        ss << "ERROR: pread64: file " << this->filename << " read " << s << " less than range: " << target.size();
 
         throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 
