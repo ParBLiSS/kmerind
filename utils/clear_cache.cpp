@@ -38,10 +38,11 @@ void clear_cache() {
   size_t avail = MemUsage::get_usable_mem();
   size_t rem = avail;
 
-  size_t minchunk = 1 << 23;
+  size_t minchunk = 1UL << 24;    // 16MB chunks
   size_t chunk = minchunk;
 
-  while (chunk < (avail >> 4)) chunk <<= 1;   // keep increasing chunks until larger than 1/16 of avail.
+  size_t maxchunk = std::min(1UL << 30, (avail >> 4));
+  for ( ;chunk < maxchunk; chunk <<= 1) ;   // keep increasing chunks until larger than 1/16 of avail, or until 1GB.
 
   std::vector<size_t *> dummy;
 
@@ -51,20 +52,22 @@ void clear_cache() {
   size_t j = 0;
 
   printf("begin clearing %lu bytes\n", avail);
+  size_t iter_cleared = 0;
 
-  while ((chunk >= minchunk) && (rem > chunk)) {
+  while ((chunk >= minchunk) && (rem > minchunk)) {
     nchunks = rem / chunk;
+    iter_cleared = 0;
 
     for (i = 0; i < nchunks; ++i, ++j) {
-      if ((j % 16) == 0) {
-        printf("%lu ", j);  // 16 outputs.
-        fflush(stdout);
-      }
+//      if ((j % 16) == 0) {
+//        printf("%lu ", j);  // 16 outputs.
+//        fflush(stdout);
+//      }
 
       // (c|m)alloc/free seems to be optimized out.  using new works.
       ptr = new size_t[(chunk / sizeof(size_t))];
 
-      rem -= chunk;
+      iter_cleared += chunk;
       memset(ptr, 0, chunk);
       ptr[0] = i;
 
@@ -76,12 +79,17 @@ void clear_cache() {
     //      avail = MemUsage::get_usable_mem();
     //      if (avail < (64 << 20)) break;   // less than 64MB available.
     //    }
+    rem -= iter_cleared;
+
+    printf("cleared %lu bytes using %lu chunk %lu bytes. total cleared %lu bytes, rem %lu bytes \n", iter_cleared, i, chunk, avail - rem, rem);
+    fflush(stdout);
+
 
     // reduce the size of the chunk by 4
     chunk >>= 2;
+
   }
-  printf("\n");
-  printf("attempting to allocate %lu bytes\n", avail - rem);
+  printf("finished clearing %lu/%lu bytes with %lu remaining\n", avail - rem, avail, rem);
   fflush(stdout);
 
   size_t sum = 0;
@@ -90,10 +98,10 @@ void clear_cache() {
     ptr = dummy[ii];
 
     if (ptr != nullptr) {
-      if ((ii % 16) == 0) {
-        printf("%lu ", ii);  // 16 outputs.
-        fflush(stdout);
-      }
+//      if ((ii % 16) == 0) {
+//        printf("%lu ", ii);  // 16 outputs.
+//        fflush(stdout);
+//      }
       sum += ptr[ii >> 10];
       delete [] ptr;
       //free(ptr);
