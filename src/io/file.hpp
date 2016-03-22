@@ -790,14 +790,23 @@ public:
     // resize output's capacity
     if (output.capacity() < target.size()) output.resize(target.size());
 
-    long read = pread64(this->fd, output.data(), target.size(), static_cast<long>(target.start));
+    long read = pread64(this->fd, output.data(), target.size(), static_cast<__off64_t>(target.start));
 
     if (read < 0) {
       std::stringstream ss;
       int myerr = errno;
-      ss << "ERROR: fread: file " << this->filename << " error " << myerr << ": " << strerror(myerr);
+      ss << "ERROR: pread64: file " << this->filename << " error " << myerr << ": " << strerror(myerr);
 
       throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
+    }
+
+    if (static_cast<size_t>(read) != target.size()) {
+        std::stringstream ss;
+        int myerr = errno;
+        ss << "ERROR: pread64: file " << this->filename << " read " << read << " less than range: " << target.size();
+
+        throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
+
     }
 
     return target;
