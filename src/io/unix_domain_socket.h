@@ -56,7 +56,7 @@ namespace bliss {
 
 
       /// serialize a unix domain socket message as a file descriptor
-      static int send_fd(int socket, int fd_to_send)
+      static int send_fd(int const & socket, int const & fd_to_send)
       {
         struct msghdr socket_message;
         struct iovec io_vector[1];
@@ -97,7 +97,7 @@ namespace bliss {
       }
 
       /// deserialize a unix domain socket message as a file descriptor
-      static int recv_fd(int socket)
+      static int recv_fd(int const & socket)
       {
         int sent_fd;
         struct msghdr socket_message;
@@ -181,7 +181,7 @@ namespace bliss {
       }
 
       /// bind the socket for receiving an fd
-      static void bind_receiver(int const socket_fd, struct sockaddr_un const & address, socklen_t const & address_length) {
+      static void bind_receiver(int const & socket_fd, struct sockaddr_un const & address, socklen_t const & address_length) {
 
         unlink(address.sun_path);
         if (bind(socket_fd, (const struct sockaddr *) &address, address_length) < 0)
@@ -193,20 +193,21 @@ namespace bliss {
       }
 
       /// close the socket that receives an fd
-      static void shutdown_receiver(int socket_fd, struct sockaddr_un & address) {
+      static void shutdown_receiver(int const & socket_fd, struct sockaddr_un & address) {
         unlink(address.sun_path);
         close(socket_fd);
       }
 
       /// send file descriptor from src rank to target_rank
-      static void send_file_descriptor(int & fd, ::mxx::comm const & shared, int target_rank) {
-        assert(shared.rank() < target_rank);
+      static void send_file_descriptor(int & fd, int const & id,
+    		  int const & nprocs, int const & src_rank, int const & target_rank) {
+        assert(src_rank < target_rank);
 
-        if (target_rank >= shared.size()) return;  // nothing to do
+        if (target_rank >= nprocs) return;  // nothing to do
 
         // get the file name for the target
         std::stringstream ss;
-        ss << "#FD_DEST_" << target_rank;
+        ss << "#FD_W" << id << "_H" << target_rank;
         std::string target_name = ss.str();
         socklen_t address_length;
 
@@ -238,7 +239,7 @@ namespace bliss {
           };
 
           sent = 1;
-          printf("successful send fd %d from %d to %d\n", fd, shared.rank(), target_rank);
+          printf("successful send fd %d from %d to %d\n", fd, src_rank, target_rank);
 
         } while (sent == 0);
 
@@ -246,14 +247,15 @@ namespace bliss {
       }
 
       /// send file descriptor from src rank to target_rank
-      static void recv_file_descriptor(int & fd, ::mxx::comm const & shared, int src_rank) {
-        assert(src_rank < shared.rank());
+      static void recv_file_descriptor(int & fd, int const & id,
+    		  int const & nprocs, int const & src_rank, int const & target_rank) {
+        assert(src_rank < target_rank);
 
         if (src_rank < 0) return;  // nothing to do
 
         // get the file name for the target
         std::stringstream ss;
-        ss << "#FD_DEST_" << shared.rank();
+        ss << "#FD_W" << id << "_H" << target_rank;
         std::string target_name = ss.str();
         socklen_t address_length;
 
@@ -269,7 +271,7 @@ namespace bliss {
         // wait for receiving fd.
         fd = recv_fd(socket_fd);
 
-        printf("successful recved fd %d from %d to %d\n", fd, src_rank, shared.rank());
+        printf("successful recved fd %d from %d to %d\n", fd, src_rank, target_rank);
 
         // shutdown.
         shutdown_receiver(socket_fd, local);
@@ -279,34 +281,21 @@ namespace bliss {
 
 
       /// broadcast fd from rank 0 to all other processes on the same node, log iterations.
-      static void broadcast_file_descriptor(int & fd, mxx::comm const & shared) {
-        int p = shared.size();
+      static void broadcast_file_descriptor(int & fd, int const & id,  int const & nprocs, int const & rank) {
 
         // first get the smallest power of 2 >= p;
         int step = 1;
-        while (step < p) step <<= 1;
+        while (step < nprocs) step <<= 1;
         step >>= 1;  // step is half of above
 
-        int target_rank;
-        int source_rank;
-
         for (; step > 0; step >>= 1 ) {
-          if ((shared.rank() % (step * 2)) == 0) {
+          if ((rank % (step * 2)) == 0) {
             // this is source
-            target_rank = shared.rank() + step;
-
-            send_file_descriptor(fd, shared, target_rank);
-
-
-          } else if ((shared.rank() % (step * 2)) == step) {
+            send_file_descriptor(fd, id, nprocs, rank, rank + step);
+          } else if ((rank % (step * 2)) == step) {
             // this is target.
-
-            source_rank = shared.rank() - step;
-
-            recv_file_descriptor(fd, shared, source_rank);
-
+            recv_file_descriptor(fd, id, nprocs, rank - step, rank);
           }
-
         }
 
 

@@ -928,13 +928,15 @@ protected:
       this->::bliss::io::base_file::open_file();  // fd is populated on shared comm rank 0.
     }
 
+    int id = ::mxx::allreduce(this->comm.rank(), [](int const & x, int const & y){ return ::std::min(x, y); }, shared);
+
     shared.barrier();
 
     if (shared.size() > 1) {
       // if we have more than 1, then we broadcast the file id via interprocess communicator, so that
       // all mpi processes on the same node share the same file handle.
 
-      ::bliss::io::util::broadcast_file_descriptor(this->fd, shared);
+      ::bliss::io::util::broadcast_file_descriptor(this->fd, id, shared.size(), shared.rank());
     }
     // that's it.
 
@@ -1483,11 +1485,18 @@ public:
 template <typename FileParser>
 class partitioned_file<::bliss::io::stdio_file, FileParser, ::bliss::io::parallel::base_shared_fd_file >
 {
-  public:
+  private:
+	template <typename dummy = FileParser>
     partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) {
-      static_assert(false, "ERROR: stdio_file is not compatible with base_shared_fd_file, as there is no fread that will maintain the old position");
+		// static_assert(false, "ERROR: stdio_file is not compatible with base_shared_fd_file, as there is no fread that will maintain the old position");
     }
-    ~partitioned_file() {};
+
+	template <typename dummy = FileParser>
+	partitioned_file() {
+		// static_assert(false, "ERROR: stdio_file is not compatible with base_shared_fd_file, as there is no fread that will maintain the old position");
+	};
+
+	~partitioned_file() {};
 };
 
 

@@ -264,7 +264,6 @@ REGISTER_TYPED_TEST_CASE_P(FileLoadProcedureTest,
 		open_stdio_mpi,
     open_posix_mpi,
     open_mmap_shared_mpi,
-    open_stdio_shared_mpi,
     open_posix_shared_mpi,
 		open_mpiio_mpi,
 #endif
