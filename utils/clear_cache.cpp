@@ -36,45 +36,52 @@
  */
 void clear_cache() {
   size_t avail = MemUsage::get_usable_mem();
+  size_t rem = avail;
 
-  size_t blocks = avail >> 20;   // in 2^20 (1MB) blocks);
+  size_t minchunk = 1 << 23;
+  size_t chunk = minchunk;
 
-  std::vector<size_t *> dummy(blocks, nullptr);
+  while (chunk < (avail >> 4)) chunk <<= 1;   // keep increasing chunks until larger than 1/16 of avail.
 
-  printf("attempting to allocate %lu bytes\n", avail);
+  std::vector<size_t *> dummy;
 
-  // (c|m)alloc/free seems to be optimized out.  using new works.
-
-  size_t i = 0;
+  size_t nchunks;
+  size_t i;
   size_t *ptr;
-  for (; i < blocks; ++i) {
+  size_t j = 0;
 
-    if ((i % (blocks >> 4)) == 0) {
-      printf("%lu ", i);  // 16 outputs.
-      fflush(stdout);
+  printf("begin clearing %lu bytes\n", avail);
+
+  while ((chunk >= minchunk) && (rem > chunk)) {
+    nchunks = rem / chunk;
+
+    for (i = 0; i < nchunks; ++i, ++j) {
+      if ((j % 16) == 0) {
+        printf("%lu ", j);  // 16 outputs.
+        fflush(stdout);
+      }
+
+      // (c|m)alloc/free seems to be optimized out.  using new works.
+      ptr = new size_t[(chunk / sizeof(size_t))];
+
+      rem -= chunk;
+      memset(ptr, 0, chunk);
+      ptr[0] = i;
+
+      dummy.push_back(ptr);
     }
 
-    // check for available memory, every 64 MBs
-    if ((i % 64) == 0) {
-      avail = MemUsage::get_usable_mem();
-      if (avail < (64 << 20)) break;   // less than 64MB available.
-    }
+    //    // check for available memory, every 64 MBs
+    //    if ((i % 64) == 0) {
+    //      avail = MemUsage::get_usable_mem();
+    //      if (avail < (64 << 20)) break;   // less than 64MB available.
+    //    }
 
-//    // try malloc.
-//    ptr = (size_t*)calloc((1 << 20) / sizeof(size_t), sizeof(size_t));
-//    if (ptr == nullptr) {  // out of mem
-//      break;
-//    }
-    ptr = new size_t[((1 << 20) / sizeof(size_t))];
-
-    memset(ptr, 0, 1 << 20);
-    ptr[i >> 10] = i;
-
-    dummy[i] = ptr;
+    // reduce the size of the chunk by 4
+    chunk >>= 2;
   }
   printf("\n");
-
-  printf("mem allocated. %lu blocks %lu bytes\n", i, i * (1 << 20));
+  printf("attempting to allocate %lu bytes\n", avail - rem);
   fflush(stdout);
 
   size_t sum = 0;
@@ -83,8 +90,8 @@ void clear_cache() {
     ptr = dummy[ii];
 
     if (ptr != nullptr) {
-      if ((ii % (blocks >> 4)) == 0) {
-        printf("%lu ", ptr[ii >> 10]);  // 16 outputs.
+      if ((ii % 16) == 0) {
+        printf("%lu ", ii);  // 16 outputs.
         fflush(stdout);
       }
       sum += ptr[ii >> 10];
@@ -96,7 +103,7 @@ void clear_cache() {
     }
   }
   printf("\n");
-  printf("disk cache cleared (dummy %lu). %lu blocks %lu bytes\n", sum, ii, ii * (1 << 20));
+  printf("disk cache cleared (dummy %lu). %lu blocks %lu bytes\n", sum, j, avail - rem);
 }
 
 
