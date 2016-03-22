@@ -239,7 +239,7 @@ namespace bliss {
           };
 
           sent = 1;
-          printf("successful send fd %d from %d to %d\n", fd, src_rank, target_rank);
+          //printf("successful send fd %d from %d to %d\n", fd, src_rank, target_rank);
 
         } while (sent == 0);
 
@@ -271,7 +271,7 @@ namespace bliss {
         // wait for receiving fd.
         fd = recv_fd(socket_fd);
 
-        printf("successful recved fd %d from %d to %d\n", fd, src_rank, target_rank);
+        //printf("successful recved fd %d from %d to %d\n", fd, src_rank, target_rank);
 
         // shutdown.
         shutdown_receiver(socket_fd, local);

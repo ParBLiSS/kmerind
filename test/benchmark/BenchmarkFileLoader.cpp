@@ -137,7 +137,7 @@ bool validate(const std::string &fileName, const size_t offset,
     using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, prefetch>; // raw data type :  use CharType
 
     //====  now process the file, one L1 block (block partition by MPI Rank) at a time
-    if (_comm.rank() == 0) printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
+    //if (_comm.rank() == 0) printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
 
     typename FileLoaderType::L1BlockType partition;
     BL_BENCH_INIT(file);
@@ -190,7 +190,7 @@ bool validate(const std::string &fileName, const size_t offset,
     mxx::comm group_leaders = _comm.split(group.rank() == 0);
 
 //    constexpr size_t overlap = KP::kmer_type::size;  specify as 0 - which allows overlap to be computed.
-    if (_comm.rank() == 0) printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
+    //if (_comm.rank() == 0) printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
 
     // raw data type :  use CharType.   block partition at L1 and L2.  no buffering at all, since we will be copying data to the group members anyways.
     using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, prefetch,

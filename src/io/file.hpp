@@ -65,16 +65,18 @@
 
 #include <utils/exception_handling.hpp>
 
+#include <utils/memory_usage.hpp>
+
 // define so that pread64 can support reading larger than int bytes.
 // http://www.ibm.com/support/knowledgecenter/ssw_i5_54/apis/pread64.htm
 #define _LARGE_FILE_API
 
-// TODO: possible a variant for mmap without caching.  (directly expose the mmapped region)
+// DONE: directly expose the mmapped region  (possible a variant for mmap without caching.)
 // DONE: large number of PARALLEL FOPEN AND FREAD is not good.  mmap is okay because of common file descriptor between processes?  can that be guaranteed?  or is it okay because of open?
 //        lseek and read may be better, provide the same file descriptor can be used for processes on the same node.
 // TODO: read then shuffle boundaries for partitioned file, FASTQ case.
 // TODO: change file open behavior to reduce congestion. - open when using, retry until success.
-// TODO: util to clear linux disk cache  http://www.linuxatemyram.com/play.html,  or O_DIRECT is supposed to bypass cache,
+// DONE: util to clear linux disk cache  http://www.linuxatemyram.com/play.html,  or O_DIRECT is supposed to bypass cache,
 //        but seems to carry a lot of complications.
 
 // mmap_file
@@ -259,7 +261,7 @@ class mapped_data {
         throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
       }
       // for testing
-      std::cout << "serial fd=" << _fd << " mapped region = " << range_bytes << " pointer is " << (const void*)data << ::std::endl;
+      //std::cout << "serial fd=" << _fd << " mapped region = " << range_bytes << " pointer is " << (const void*)data << ::std::endl;
     }
 
     ~mapped_data() {
@@ -370,6 +372,7 @@ protected:
 
   /// opens a file. side effect computes size of the file.
   void open_file() {
+
     if (this->filename.length() == 0) return;
 
     // first close file.
@@ -627,12 +630,12 @@ protected:
 		if (fp == nullptr) {
 			this->file_range_bytes.end = 0;
 
-			// if open failed, throw exception.
-			::std::stringstream ss;
-			int myerr = errno;
-			ss << "ERROR in stdio_file open: this->fd "  << this->fd << " error " << myerr << ": " << strerror(myerr);
+      // if open failed, throw exception.
+      ::std::stringstream ss;
+      int myerr = errno;
+      ss << "ERROR in stdio_file open: this->fd "  << this->fd << " error " << myerr << ": " << strerror(myerr);
 
-			throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
+      throw ::bliss::utils::make_exception<::std::ios_base::failure>(ss.str());
 
 		}
 	}
@@ -684,7 +687,7 @@ public:
 			throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 		}
 
-		std::cout << "curr pos in fd is " << ftell(this->fp) << std::endl;
+		//std::cout << "curr pos in fd is " << ftell(this->fp) << std::endl;
 
 		// resize output's capacity
 		if (output.capacity() < target.size()) output.resize(target.size());
@@ -699,7 +702,7 @@ public:
 			throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 		}
 
-    std::cout << "curr pos in fd after read is " << ftell(this->fp) << std::endl;
+    //std::cout << "curr pos in fd after read is " << ftell(this->fp) << std::endl;
 
 		this->close_file_stream();
 		return target;
@@ -789,7 +792,7 @@ public:
 //      throw ::bliss::utils::make_exception<std::ios_base::failure>(ss.str());
 //    }
 
-    std::cout << "curr pos in fd is " << lseek64(this->fd, 0, SEEK_CUR) << ::std::endl;
+    //std::cout << "curr pos in fd is " << lseek64(this->fd, 0, SEEK_CUR) << ::std::endl;
 
     // resize output's capacity
     if (output.capacity() < target.size()) output.resize(target.size());
@@ -961,7 +964,7 @@ protected:
     }
     // that's it.
 
-    std::cout << "after copying, curr pos in fd is " << lseek64(this->fd, 0, SEEK_CUR) << std::endl;
+    //std::cout << "after copying, curr pos in fd is " << lseek64(this->fd, 0, SEEK_CUR) << std::endl;
 
     shared.barrier();
   }
@@ -1167,7 +1170,7 @@ protected:
 		// covers whole file, so done.
 		if (target.size() == 0) return target;
 
-		std::cout << "rank " << this->comm.rank() << " partitioning map" << std::endl;
+		//std::cout << "rank " << this->comm.rank() << " partitioning map" << std::endl;
 
 		// allocate a mmap file for doing the search.
 		::bliss::io::mmap_file record_finder(this->fd, this->size());
@@ -1353,7 +1356,7 @@ protected:
     // covers whole file, so done.
     if (target.size() == 0) return target;
 
-    std::cout << "rank " << this->comm.rank() << " partitioning map" << std::endl;
+    // std::cout << "rank " << this->comm.rank() << " partitioning map" << std::endl;
 
     // allocate a mmap file for doing the search.
 
