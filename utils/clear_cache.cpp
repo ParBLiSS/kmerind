@@ -28,6 +28,10 @@
 
 #include "utils/memory_usage.hpp"
 
+#ifdef USE_OPENMP
+#include <omp.h>
+#endif
+
 /**
  * @brief  clear the disk cache in linux by allocating a bunch of memory.
  * @details  in 1MB chunks to workaround memory fragmentation preventing allocation.
@@ -47,32 +51,35 @@ void clear_cache() {
   std::vector<size_t *> dummy;
 
   size_t nchunks;
-  size_t i;
-  size_t *ptr;
-  size_t j = 0;
+  size_t j = 0, lj;
 
   printf("begin clearing %lu bytes\n", avail);
   size_t iter_cleared = 0;
 
   while ((chunk >= minchunk) && (rem > minchunk)) {
     nchunks = rem / chunk;
-    iter_cleared = 0;
 
-    for (i = 0; i < nchunks; ++i, ++j) {
-//      if ((j % 16) == 0) {
-//        printf("%lu ", j);  // 16 outputs.
-//        fflush(stdout);
-//      }
+    iter_cleared = 0;
+    lj = 0;
+#pragma omp parallel for shared(nchunks, chunk, dummy) reduction(+:lj, iter_cleared)
+    for (size_t i = 0; i < nchunks; ++i) {
 
       // (c|m)alloc/free seems to be optimized out.  using new works.
-      ptr = new size_t[(chunk / sizeof(size_t))];
+      size_t * ptr = new size_t[(chunk / sizeof(size_t))];
 
       iter_cleared += chunk;
       memset(ptr, 0, chunk);
       ptr[0] = i;
 
-      dummy.push_back(ptr);
+#pragma omp critical
+      {
+        dummy.push_back(ptr);
+      }
+
+      ++lj;
     }
+
+    j += lj;
 
     //    // check for available memory, every 64 MBs
     //    if ((i % 64) == 0) {
@@ -81,7 +88,7 @@ void clear_cache() {
     //    }
     rem -= iter_cleared;
 
-    printf("cleared %lu bytes using %lu chunk %lu bytes. total cleared %lu bytes, rem %lu bytes \n", iter_cleared, i, chunk, avail - rem, rem);
+    printf("cleared %lu bytes using %lu chunk %lu bytes. total cleared %lu bytes, rem %lu bytes \n", iter_cleared, nchunks, chunk, avail - rem, rem);
     fflush(stdout);
 
 
@@ -94,6 +101,7 @@ void clear_cache() {
 
   size_t sum = 0;
   size_t ii = 0;
+  size_t *ptr;
   for (; ii < dummy.size(); ++ii) {
     ptr = dummy[ii];
 
