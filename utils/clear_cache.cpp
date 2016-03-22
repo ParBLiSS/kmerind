@@ -45,7 +45,7 @@ void clear_cache() {
   size_t minchunk = 1UL << 24;    // 16MB chunks
   size_t chunk = minchunk;
 
-  size_t maxchunk = std::min(1UL << 30, (avail >> 4));
+  size_t maxchunk = std::min(1UL << 36, (avail >> 4));
   for ( ;chunk < maxchunk; chunk <<= 1) ;   // keep increasing chunks until larger than 1/16 of avail, or until 1GB.
 
   std::vector<size_t *> dummy;
@@ -93,7 +93,7 @@ void clear_cache() {
 
 
     // reduce the size of the chunk by 4
-    chunk >>= 2;
+    chunk >>= 4;
 
   }
   printf("finished clearing %lu/%lu bytes with %lu remaining\n", avail - rem, avail, rem);

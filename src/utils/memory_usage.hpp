@@ -144,7 +144,7 @@ class MemUsage {
         fclose(meminfo);
         size_t avail = free_ram + ::std::max(active_file, cached);
         size_t used = total - avail;  // get the used part
-        used += (used >> 3);  // increase used by 12.5%
+        used += (used >> 2);  // increase used by 25%
 
         return (total - used) * 1024UL;
     }
