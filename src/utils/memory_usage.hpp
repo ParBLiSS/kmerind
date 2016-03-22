@@ -18,8 +18,12 @@
  * @file    memory_usage.hpp
  * @ingroup
  * @author  tpan
- * @brief
- * @details
+ * @brief   functions to track memory usage during program execution (for marked functional blocks)
+ * @details each "mark" call snapshots the current memory usage and peak memory usage.
+ *          relies on http://nadeausoftware.com/articles/2012/07/c_c_tip_how_get_process_resident_set_size_physical_memory_use#GetProcessMemoryInfonbspforpeakandcurrentresidentsetsize
+ *
+ *          also see http://www.linuxatemyram.com/play.html and
+ *          http://stackoverflow.com/questions/349889/how-do-you-determine-the-amount-of-linux-system-ram-in-c
  *
  */
 #ifndef SRC_UTILS_MEMORY_USAGE_HPP_
@@ -31,6 +35,8 @@
 #if BL_BENCHMARK_MEM == 1
 
 #include <sys/resource.h>  // getrusage
+#include <sys/types.h>     // meminfo
+#include <sys/sysinfo.h>    // sysinfo
 
 #include <chrono>   // clock
 //#include <cstdio>   // printf
@@ -46,7 +52,7 @@
 // note:  reports in bytes.
 #include "getRSS.h"
 
-
+// also see http://www.linuxatemyram.com/play.html
 
 //#include "stdlib.h"
 //#include "stdio.h"
@@ -85,17 +91,65 @@
 //}
 
 
-
+///// get the physical mem size in bytes.
+//static size_t get_physical_mem() {
+//  //from http://stackoverflow.com/questions/63166/how-to-determine-cpu-and-memory-consumption-from-inside-a-process
+//  struct sysinfo memInfo;
+//
+//  sysinfo (&memInfo);
+//  printf("total %ld, buffer %ld, shared %ld, free %ld\n", memInfo.totalram, memInfo.bufferram, memInfo.sharedram, memInfo.freeram);
+//
+//  return memInfo.totalram * memInfo.mem_unit;
+//}
 
 
 
 class MemUsage {
   protected:
-	std::vector<std::string> names;
+    std::vector<std::string> names;
     std::vector<double> mem_curr;
     std::vector<double> mem_max;
 
   public:
+
+    /// return the program usable ram in bytes.
+    static size_t get_usable_mem() {
+       FILE *meminfo = fopen("/proc/meminfo", "r");
+       if(meminfo == NULL) {
+         // if open failed, throw exception.
+         ::std::stringstream ss;
+         int myerr = errno;
+         ss << "ERROR opening /proc/meminfo: " << myerr << ": " << strerror(myerr);
+
+         throw ::std::ios_base::failure(ss.str());
+       }
+       char line[256];
+       size_t total = 0;
+       size_t free_ram = 0;
+       size_t buffered = 0;
+       size_t cached = 0;
+       size_t active_file = 0;
+
+       while(fgets(line, sizeof(line), meminfo))
+        {
+         sscanf(line, "MemTotal: %lu kB", &total);
+         sscanf(line, "MemFree: %lu kB", &free_ram);
+         sscanf(line, "Buffers: %lu kB", &buffered);
+         sscanf(line, "Cached: %lu kB", &cached);
+         sscanf(line, "Active(file): %lu kB", &active_file);
+        }
+
+        // If we got here, then we couldn't find the proper line in the meminfo file:
+        // do something appropriate like return an error code, throw an exception, etc.
+        fclose(meminfo);
+        size_t avail = free_ram + ::std::max(active_file, cached);
+        size_t used = total - avail;  // get the used part
+        used += (used >> 3);  // increase used by 12.5%
+
+        return (total - used) * 1024UL;
+    }
+
+
 
     void reset() {
       names.clear();
@@ -106,10 +160,9 @@ class MemUsage {
 
 //============ memory_usage start
     void mark(::std::string const & name) {
-
-		names.push_back(name);
-		mem_curr.push_back(::getCurrentRSS());
-		mem_max.push_back(::getPeakRSS());
+      names.push_back(name);
+      mem_curr.push_back(::getCurrentRSS());
+      mem_max.push_back(::getPeakRSS());
     }
     void collective_mark(::std::string const & name, ::mxx::comm const & comm) {
 
@@ -337,6 +390,8 @@ class MemUsage {
 
 
 #define BL_MEMUSE_INIT(title)      MemUsage title##_memusage;
+
+
 #define BL_MEMUSE_RESET(title)     do {  title##_memusage.reset(); } while (0)
 
 #define BL_MEMUSE_COLLECTIVE_MARK(title, name, comm) do { title##_memusage.collective_mark(name, comm); } while (0)
