@@ -84,7 +84,7 @@ bool validate(const std::string &fileName, const size_t offset,
   for (size_t l = 0; l < length; l += tmp_size) {
     read_size = std::min(tmp_size, length - l);
 
-	  count = fread_unlocked(tmp, sizeof(valtype), read_size , fp);  // pointer is advanced.
+	  count = fread_unlocked(tmp, sizeof(valtype), read_size, fp);  // pointer is advanced.
 
 
 		if (count < read_size) {
@@ -99,10 +99,12 @@ bool validate(const std::string &fileName, const size_t offset,
 	  auto diff_iters = ::std::mismatch(tmp, tmp + count, iter);
 	  iter += count;
 
-	  if (diff_iters.first != (tmp + count))
+	  if (diff_iters.first != (tmp + count)) {
 		  std::cout << "ERROR: diff at offset " << (offset + l + std::distance(tmp, diff_iters.first))
+		  	  << " internal offset " << std::distance(tmp, diff_iters.first)
 		  	  << " val " << *(diff_iters.second) << " gold " << *(diff_iters.first) << " count " << count << std::endl;
-
+		  return false;
+	  }
   }
 
   fclose(fp);
@@ -156,10 +158,11 @@ bool validate(const std::string &fileName, const size_t offset,
       bool same = validate(filename, offset, len, partition.begin(), partition.end());
       BL_BENCH_END(file, "compare", len);
 
-      if (!same)
+      if (!same) {
     	  std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! "
           	  << " range " << partition.getRange() << std::endl;
-
+    	  exit(1);
+      }
 
 //      // not reusing the SeqParser in loader.  instead, reinitializing one.
 //      BL_BENCH_START(file);
@@ -291,11 +294,11 @@ bool validate(const std::string &fileName, const size_t offset,
       bool same = validate(filename, offset, len, block.begin(), block.end());
       BL_BENCH_END(file_subcomm, "compare", len);
 
-      if (!same)
+      if (!same) {
     	  std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! "
           	  << " range " << block.getRange() << std::endl;
-
-
+    	  exit(1);
+      }
 
 //      // not reusing the SeqParser in loader.  instead, reinitializing one.
 //      BL_BENCH_START(file);
@@ -363,10 +366,11 @@ bool validate(const std::string &fileName, const size_t offset,
       bool same = validate(filename, offset, len, partition.begin(), partition.end());
       BL_BENCH_END(file_direct, "compare", len);
 
-      if (!same)
+      if (!same) {
     	  std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! "
           	  << " range " << partition.getRange() << std::endl;
-
+    	  exit(1);
+      }
 
 //      // not reusing the SeqParser in loader.  instead, reinitializing one.
 //      BL_BENCH_START(file);
