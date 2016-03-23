@@ -21,7 +21,10 @@ K-merind provides basic parallel sequence file access and k-mer index constructi
 
 Required:
 
-- `g++` (version 4.8.1+ due to "decltype" and other c++11 features), `icpc` (version 16+ due to constexpr functions and initializers), `clang` (version 3.5+ - cmake generated make file has problems. or 3.7+ if openmp is used)
+- c++11 supporting compiler
+-- `g++` (version 4.8.1+ due to "decltype" and other c++11 features) or
+-- `icpc` (version 16+ due to constexpr functions and initializers) or
+-- `clang` (version 3.5+ - cmake generated make file has problems with prior versions. or 3.7+ if openmp is used)
 - `cmake` (version 2.8+)
 - `openmpi` or `mpich2` or `mvapich` or `intel mpi library`
 

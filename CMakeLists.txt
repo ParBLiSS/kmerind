@@ -1,6 +1,6 @@
 # CMakeLists.txt for the BLISS
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8)
 
 
 # project settings
@@ -14,7 +14,11 @@ INCLUDE(CMakeDependentOption)
 
 ### REQUIRE C++11
 # Initialize CXXFLAGS.
-add_definitions(-Wall -std=c++11 -fPIC)
+#add_definitions(-Wall -Wuninitialized -std=c++11 -fPIC)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wuninitialized --std=c++11 -fPIC")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -funroll-loops")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELEASE} -g")
 
 set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
@@ -23,16 +27,16 @@ set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
 # Compiler-specific C++11 activation.
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
-#    message(FATAL_ERROR "${PROJECT_NAME} currently does not support Intel compiler due to constexpr not allowing math function calls")
-  execute_process(
-    COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE ICPC_VERSION)
-  if (NOT (ICPC_VERSION VERSION_GREATER 14.0 OR ICPC_VERSION VERSION_EQUAL 14.0))
-    message(FATAL_ERROR "${PROJECT_NAME} requires icpc 14.0 or greater.")
-  endif ()
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0")
+    message(FATAL_ERROR "Intel (icpc) compiler version 16.0 or later is required.")
+  endif()
+
+  #add_definitions(-Wabi)
+
   SET(SUPPORTS_SANITIZER OFF CACHE INTERNAL "compiler supports sanitizer?")
   SET(SUPPORTS_COVERAGE OFF CACHE INTERNAL "compiler supports coverage?")
 
-# dependency on gcc.  not compatible with gcc 5.  should search.
+# intel dependency on gcc.  not compatible with gcc 5.  should search.
   set(GCC_BINARY "/usr/bin/gcc" CACHE PATH "Path to gcc binary. Requires version 4.9 or earlier.  Intel compiler uses GCC headers.")
   EXECUTE_PROCESS( COMMAND ${GCC_BINARY} --version OUTPUT_VARIABLE gcc_full_version_string )
   string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
@@ -42,54 +46,72 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
   endif ()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gcc-name=${GCC_BINARY}")
 
-  SET(EXTRA_WARNING_FLAGS "" CACHE INTERNAL "extra compiler warning flags")
-  SET(TYPE_CONVERSION_WARNING_FLAGS "" CACHE INTERNAL "compiler flags to check type conversions")
-  SET(SUGGESTION_WARNING_FLAGS CACHE INTERNAL "compiler flags that suggest keywords for better type resolutions")
+  SET(EXTRA_WARNING_FLAGS "-Wextra -Wno-unused-parameter -Wcheck")
+  SET(TYPE_CONVERSION_WARNING_FLAGS "-Wconversion")
+  SET(SUGGESTION_WARNING_FLAGS "-Wremarks")
 
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
-  EXECUTE_PROCESS( COMMAND ${CMAKE_CXX_COMPILER} --version OUTPUT_VARIABLE gcc_full_version_string )
-  string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.1")
+    message(FATAL_ERROR "GNU CXX compiler version 4.8.1 or later is required.")
+  endif()
 
-  if (NOT (GCC_VERSION VERSION_GREATER 4.8.1 OR GCC_VERSION VERSION_EQUAL 4.8.1))
-    message(FATAL_ERROR "${PROJECT_NAME} requires g++ 4.8.1 or greater.  found version ${GCC_VERSION} from ${gcc_full_version_string}")
-  endif ()
   SET(SUPPORTS_SANITIZER ON CACHE INTERNAL "compiler supports sanitizer?")
   SET(SUPPORTS_COVERAGE ON CACHE INTERNAL "compiler supports coverage?")
   
-# -Wzero-as-null-pointer-constant : causes a lot of errors in system headers.
+  # -Wzero-as-null-pointer-constant : causes a lot of errors in system headers.
   # -Wfloat-equal : most of comparisons are not with float.
-  SET(EXTRA_WARNING_FLAGS "-Wextra -Wuninitialized -Wswitch-default -Wundef")
+  SET(EXTRA_WARNING_FLAGS "-Wextra -Wno-unused-parameter") #-Wundef 
   SET(TYPE_CONVERSION_WARNING_FLAGS "-Wdouble-promotion -Wconversion -Wsign-conversion -Wcast-qual -Wuseless-cast")
   SET(SUGGESTION_WARNING_FLAGS "-Wsuggest-override -Wsuggest-final-types -Wsuggest-final-methods")
   # gcc 4.9 colorize via: -fdiagnostics-color=always
   
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-  EXECUTE_PROCESS( COMMAND ${CMAKE_CXX_COMPILER} --version OUTPUT_VARIABLE clang_full_version_string )
-  string (REGEX REPLACE ".*clang version ([0-9]+\\.[0-9]+).*" "\\1" CLANG_VERSION ${clang_full_version_string})
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "3.5")
+    message(FATAL_ERROR "Clang++ compiler version 3.5 or later is required.")
+  endif()
     
-  if (NOT (CLANG_VERSION VERSION_GREATER 3.1 OR CLANG_VERSION VERSION_EQUAL 3.1))
-    message(FATAL_ERROR "${PROJECT_NAME} requires clang 3.1 or greater.")
-  endif ()
+  #add_definitions(-Wabi)
+    
+  # intel dependency on gcc.  not compatible with gcc 5.  should search.
+#  set(GCC_BINARY "/usr/bin/gcc" CACHE PATH "Path to gcc binary. Requires version 4.9 or earlier due to ABI change.  Clang uses GCC headers.")
+#  EXECUTE_PROCESS( COMMAND ${GCC_BINARY} --version OUTPUT_VARIABLE gcc_full_version_string )
+#  string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
+#  
+#  if (GCC_VERSION VERSION_GREATER 5.0.0 OR GCC_VERSION VERSION_EQUAL 5.0.0)
+#    message(FATAL_ERROR "${PROJECT_NAME} is using Clang compiler, which requires gcc headers from version 4.9 or earlier.")
+#  endif ()
+    
     # message(FATAL_ERROR "${PROJECT_NAME} currently does not support clang due to include path issues")
   #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")   # do not use libc++ - may not be there . libstdc++ (from gnu) is a safer bet.
   #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -v -E")		      # for debugging to see how clang finds header files.
 #  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp=libomp")  # not sure if needed for openmp. 
-#  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp=libomp")  # not sure if needed for openmp. 
-  set(_CMAKE_TOOLCHAIN_PREFIX "llvm-")
-  string (REGEX REPLACE ".*clang version ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" CLANG_VERSION_FULL ${clang_full_version_string})
+#  set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -fopenmp=libomp")  # not sure if needed for openmp. 
+#  set(_CMAKE_TOOLCHAIN_PREFIX "llvm-")
   
   get_filename_component(CLANG_COMPILER_DIR ${CMAKE_CXX_COMPILER} PATH)
-  include_directories("${CLANG_COMPILER_DIR}/../lib/clang/${CLANG_VERSION_FULL}/include")		      # this is here for SSE headers.
-	# clang uses gcc headers, and can find most by itself.
+  # not needed
+  # include_directories("${CLANG_COMPILER_DIR}/../lib/clang/${CMAKE_CXX_COMPILER_VERSION}/include")		      # this is here for SSE headers.
+  # not needed  
+  # include_directories("${CLANG_COMPILER_DIR}/../include")  # this is here for omp header, if one is installed.
+  link_directories(${CLANG_COMPILER_DIR}/../lib)
+  
+  set(CMAKE_EXE_LINK_FLAGS "${CMAKE_EXE_LINK_FLAGS} -lstdc++")
+  set(CMAKE_MODULE_LINK_FLAGS "${CMAKE_MODULE_LINK_FLAGS} -lstdc++")
+  set(CMAKE_SHARED_LINK_FLAGS "${CMAKE_SHARED_LINK_FLAGS} -lstdc++")
+  set(CMAKE_STATIC_LINK_FLAGS "${CMAKE_STATIC_LINK_FLAGS} -lstdc++")
+  
+  
+  
+  # clang uses gcc headers, and can find most by itself.
   SET(SUPPORTS_SANITIZER ON CACHE INTERNAL "compiler supports sanitizer?")
   SET(SUPPORTS_COVERAGE ON CACHE INTERNAL "compiler supports coverage?")
 
-  SET(EXTRA_WARNING_FLAGS "" CACHE INTERNAL "extra compiler warning flags")
-  SET(TYPE_CONVERSION_WARNING_FLAGS "" CACHE INTERNAL "compiler flags to check type conversions")
+  SET(EXTRA_WARNING_FLAGS "-Wextra -Wno-unused-parameter" CACHE INTERNAL "extra compiler warning flags")
+  SET(TYPE_CONVERSION_WARNING_FLAGS "-W" CACHE INTERNAL "compiler flags to check type conversions")
   SET(SUGGESTION_WARNING_FLAGS CACHE INTERNAL "compiler flags that suggest keywords for better type resolutions")
   
 else ()
-  message(FATAL_ERROR "Your C++ compiler does not support C++11.")
+  message(FATAL_ERROR "Your C++ compiler is not supported.")
 endif ()
 ### from http://stackoverflow.com/questions/10984442/how-to-detect-c11-support-of-a-compiler-with-cmake
 
@@ -114,6 +136,7 @@ endif()
 if(COMMAND cmake_policy)
   cmake_policy(SET CMP0003 NEW)
 
+  #for recognizing numbers and boolean constants in if()
   if(CMAKE_VERSION VERSION_GREATER 2.6.4)
     cmake_policy(SET CMP0012 NEW)
   endif()
@@ -137,10 +160,7 @@ CMAKE_DEPENDENT_OPTION(COMPILER_WARNINGS_ENABLE_CONVERSIONS "Enable compiler to 
 CMAKE_DEPENDENT_OPTION(COMPILER_WARNINGS_ENABLE_SUGGESTIONS "Enable compiler to generate suggestions for polymorphic type analysis?" OFF "COMPILER_WARNINGS" OFF)
            
 include("${PROJECT_SOURCE_DIR}/cmake/GCCFilter.cmake")
-
-
 include("${PROJECT_SOURCE_DIR}/cmake/CompilerProfiling.cmake")
-
 
 ###### LOGGING ENGINE configuration
 SET(LOGGER_VERBOSITY "WARNING" CACHE STRING "Logger verbosity.  Valid entries are ERROR, WARNING, INFO, DEBUG, TRACE.  Each level includes all levels with smaller value")  
@@ -229,7 +249,6 @@ endfunction(update_logging_engine varname cacheaccess varval)
 
 
 # if OMP_DEBUGGING is enabled, default(none) is set in the omp pragmas.   this means that only NO_LOG and PRINTF logging are compatible.
-
 
 CMAKE_DEPENDENT_OPTION(OPENMP_STRICT_SCOPING "Enable OpenMP debugging (turns on default(none) in omp pragma)" ON
                         "OMP_DEBUGGING" OFF)
@@ -342,7 +361,7 @@ else(OPENMP_FOUND)
 	  	set(OpenMP_C_FLAGS "-fopenmp=libomp")
 	  	set(OpenMP_CXX_FLAGS "-fopenmp=libomp")
 	  	
-   	    set(CLANG_OPENMP_HOME "" CACHE PATH "Path to Clang OpenMP root directory.")
+   	    set(CLANG_OPENMP_HOME "${CLANG_COMPILER_DIR}/../blah" CACHE PATH "Path to Clang OpenMP root directory.")
    	    include_directories(${CLANG_OPENMP_HOME}/include)  # clang uses gcc headers, but can't find all gcc headers by itself.  this is for omp.h
    	    link_directories(${CLANG_OPENMP_HOME}/lib)
    	
@@ -373,8 +392,8 @@ if (USE_SIMD_IF_AVAILABLE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
     
     if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
-	    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fabi-version=6")
-	    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fabi-version=6")    
+	    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fabi-version=0")
+	    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fabi-version=0")    
     endif()
     
     add_definitions(-DUSE_SIMD)
@@ -420,14 +439,10 @@ else()
   endif()
 endif()
 
-
-
 CMAKE_DEPENDENT_OPTION(ENABLE_COVERAGE "Enable Code Coverage Reporting" OFF
                         "ENABLE_TESTING;SUPPORTS_COVERAGE" OFF)
 CMAKE_DEPENDENT_OPTION(ENABLE_SANITIZER "Enable Sanitizer.  Choose via SANITIZER_STYLE" OFF
                         "ENABLE_TESTING;SUPPORTS_SANITIZER" OFF)
-
-
 
 
 ## LOGGING ENGINE configuration
