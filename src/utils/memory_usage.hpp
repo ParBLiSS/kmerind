@@ -46,6 +46,7 @@
 #include <algorithm>  // std::min
 #include <sstream>
 
+#include <io/io_exception.hpp>
 #include <mxx/reduction.hpp>
 
 //http://nadeausoftware.com/articles/2012/07/c_c_tip_how_get_process_resident_set_size_physical_memory_use#GetProcessMemoryInfonbspforpeakandcurrentresidentsetsize
@@ -121,7 +122,7 @@ class MemUsage {
          int myerr = errno;
          ss << "ERROR opening /proc/meminfo: " << myerr << ": " << strerror(myerr);
 
-         throw ::std::ios_base::failure(ss.str());
+         throw ::bliss::io::IOException(ss.str());
        }
        char line[256];
        size_t total = 0;

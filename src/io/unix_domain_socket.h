@@ -174,7 +174,7 @@ namespace bliss {
         if((socket_fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0)
         {
           perror("server: socket");
-          throw ::std::ios_base::failure("ERROR: unable to create socket");
+          throw ::bliss::io::IOException("ERROR: unable to create socket");
         }
 
         return socket_fd;
@@ -188,7 +188,7 @@ namespace bliss {
             {
           close(socket_fd);
           perror("server: bind");
-          throw ::std::ios_base::failure("ERROR: unable to bind socket to server address");
+          throw ::bliss::io::IOException("ERROR: unable to bind socket to server address");
             }
       }
 
