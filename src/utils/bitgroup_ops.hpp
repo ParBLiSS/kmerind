@@ -938,10 +938,20 @@ namespace bliss {
       template <>
       BITS_INLINE __m128i zero() {
         __m128i tmp;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wuninitialized"
+
+#if defined(__INTEL_COMPILER)
+  #pragma warning push
+  #pragma warning disable 592
+#else  // last one is gcc, since everyone defines __GNUC__.  clang can use the same as well.
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wuninitialized"
+#endif
         tmp = _mm_xor_si128(tmp, tmp);
-#pragma GCC diagnostic pop
+#if defined(__INTEL_COMPILER)
+  #pragma warning pop
+#else  // last one is gcc, since everyone defines __GNUC__
+  #pragma GCC diagnostic pop
+#endif
 
         return tmp;
 //        return _mm_setzero_si128();
@@ -949,10 +959,21 @@ namespace bliss {
       template <>
       BITS_INLINE __m128i bit_max() {
         __m128i tmp;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wuninitialized"
+
+#if defined(__INTEL_COMPILER)
+  #pragma warning push
+  #pragma warning disable 592
+#else  // last one is gcc, since everyone defines __GNUC__
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wuninitialized"
+#endif
         tmp = _mm_cmpeq_epi8(tmp, tmp);
-#pragma GCC diagnostic pop
+#if defined(__INTEL_COMPILER)
+  #pragma warning pop
+#else  // last one is gcc, since everyone defines __GNUC__
+  #pragma GCC diagnostic pop
+#endif
+
         return tmp;
       }
 
@@ -1124,7 +1145,7 @@ namespace bliss {
 
           // groupsize =1 version:  4 loads, 3 shuffles, 3 logical ops, 1 shift op
           template <unsigned int BITS = BIT_GROUP_SIZE>
-          BITS_INLINE typename std::enable_if<(BITS < 8) && (BITS & (BITS - 1) == 0), __m128i>::type
+          BITS_INLINE typename std::enable_if<(BITS < 8) && ((BITS & (BITS - 1)) == 0), __m128i>::type
           reverse_bits_in_byte(__m128i const & u) const {
 
             // load from memory in reverse is not appropriate here - since we may not have aligned memory, and we have v instead of a memory location.
@@ -1570,19 +1591,39 @@ namespace bliss {
       BITS_INLINE __m256i zero() {
 //        return _mm256_setzero_si256();
         __m256i tmp;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wuninitialized"
+#if defined(__INTEL_COMPILER)
+  #pragma warning push
+  #pragma warning disable 592
+#else  // last one is gcc, since everyone defines __GNUC__
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wuninitialized"
+#endif
         tmp = _mm256_xor_si256(tmp, tmp);
-#pragma GCC diagnostic pop
+#if defined(__INTEL_COMPILER)
+  #pragma warning pop
+#else  // last one is gcc, since everyone defines __GNUC__
+  #pragma GCC diagnostic pop
+#endif
         return tmp;
       }
       template <>
       BITS_INLINE __m256i bit_max() {
         __m256i tmp;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wuninitialized"
+
+#if defined(__INTEL_COMPILER)
+  #pragma warning push
+  #pragma warning disable 592
+#else  // last one is gcc, since everyone defines __GNUC__
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wuninitialized"
+#endif
         tmp = _mm256_cmpeq_epi8(tmp, tmp);
-#pragma GCC diagnostic pop
+#if defined(__INTEL_COMPILER)
+  #pragma warning pop
+#else  // last one is gcc, since everyone defines __GNUC__
+  #pragma GCC diagnostic pop
+#endif
+
         return tmp;
 
       }
@@ -3127,7 +3168,7 @@ namespace bliss {
             u -= 1;
             rem += 1;
             w += 1;
-            bit_offset = 8 - bit_offset;
+            bit_offset = static_cast<unsigned short>(8) - bit_offset;
           } // else no adjustment is needed.
         }
         if (rem > 0) {
