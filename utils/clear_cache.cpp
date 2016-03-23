@@ -27,6 +27,12 @@
  */
 
 #include "utils/memory_usage.hpp"
+#include <cstring>
+
+#ifdef USE_MPI
+#include <mxx/env.hpp>
+#include <mxx/comm.hpp>
+#endif
 
 #ifdef USE_OPENMP
 #include <omp.h>
@@ -125,7 +131,23 @@ void clear_cache() {
 
 int main(int argc, char** argv) {
 
+#ifdef USE_MPI
+  ::mxx::env e(argc, argv);
+  ::mxx::comm world;
+
+
+  if (world.size() > 1) {
+    ::mxx::comm node = world.split_shared();
+
+    if (node.rank() == 0) {
+      clear_cache();
+    }
+  } else
+
+#endif
+
   clear_cache();
+
 
   return 0;
 }
