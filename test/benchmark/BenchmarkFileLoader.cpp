@@ -516,53 +516,57 @@ int main(int argc, char** argv) {
 		  comm.barrier();
 	  }
 
-	  if (which == -1 || which == 3)
+    if (which == -1 || which == 3)
+    {
+      testIndexSubComm< PARSER_TYPE, true > (comm, filename, "fileloader with mpi subcomm, preload.");
+      comm.barrier();
+    }
+
+    if (which == -1 || which == 4)
+    {
+      testIndexSubComm< PARSER_TYPE, false > (comm, filename, "fileloader with mpi subcomm.");
+      comm.barrier();
+    }
+
+
+	  if (which == -1 || which == 5)
 	  {
 		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi mmap");
 		  comm.barrier();
 	  }
 
-	  if (which == -1 || which == 4)
+	  if (which == -1 || which == 6)
 	  {
 		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::stdio_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi stdio");
 		  comm.barrier();
 	  }
 
-    if (which == -1 || which == 8)
+    if (which == -1 || which == 7)
     {
       testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi posix");
       comm.barrier();
     }
 
-	  if (which == -1 || which == 5)
-	  {
-		  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi-io");
-		  comm.barrier();
-	  }
-
-	  if (which == -1 || which == 6)
-	  {
-		  testIndexSubComm< PARSER_TYPE, true > (comm, filename, "fileloader with mpi subcomm, preload.");
-		  comm.barrier();
-	  }
-
-	  if (which == -1 || which == 7)
-	  {
-		  testIndexSubComm< PARSER_TYPE, false > (comm, filename, "fileloader with mpi subcomm.");
-		  comm.barrier();
-	  }
-
-    if (which == -1 || which == 9)
+    if (which == -1 || which == 8)
     {
       testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<unsigned char *>, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd mmap");
       comm.barrier();
     }
 
-    if (which == -1 || which == 10)
+    if (which == -1 || which == 9)
     {
       testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE<unsigned char *>, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd posix");
       comm.barrier();
     }
+
+
+	  if (which == -1 || which == 10)
+	  {
+		  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi-io");
+		  comm.barrier();
+	  }
+
+
 
   }
 
