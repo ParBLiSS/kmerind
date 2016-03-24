@@ -246,10 +246,10 @@ class Timer {
 
         // compute partial sum of times.
         ::std::partial_sum(cumulative.begin(), cumulative.end(), cumulative.begin());
-    	auto cum_mins = ::mxx::reduce(cumulative, 0,
-    			[](double const & x, double const & y) { return ::std::min(x, y); }, comm);
+        auto cum_mins = ::mxx::reduce(cumulative, 0,
+                                      [](double const & x, double const & y) { return ::std::min(x, y); }, comm);
         auto cum_maxs = ::mxx::reduce(cumulative, 0,
-        		[](double const & x, double const & y) { return ::std::max(x, y); }, comm);
+                                      [](double const & x, double const & y) { return ::std::max(x, y); }, comm);
         auto cum_means = ::mxx::reduce(cumulative, 0, ::std::plus<double>(), comm);
         ::std::for_each(cumulative.begin(), cumulative.end(), [](double &x) { x = x*x; });
         auto cum_stdevs = ::mxx::reduce(cumulative, 0, ::std::plus<double>(), comm);
@@ -311,19 +311,19 @@ class Timer {
 
           output.precision(9);
           output << "[TIME] " << title << "\tcum_min\t[,";
-          std::copy(dur_mins.begin(), dur_mins.end(), dit);
+          std::copy(cum_mins.begin(), cum_mins.end(), dit);
           output << "]" << std::endl;
 
           output << "[TIME] " << title << "\tcum_max\t[,";
-          std::copy(dur_maxs.begin(), dur_maxs.end(), dit);
+          std::copy(cum_maxs.begin(), cum_maxs.end(), dit);
           output << "]" << std::endl;
 
           output << "[TIME] " << title << "\tcum_mean\t[,";
-          std::copy(dur_means.begin(), dur_means.end(), dit);
+          std::copy(cum_means.begin(), cum_means.end(), dit);
           output << "]" << std::endl;
 
           output << "[TIME] " << title << "\tcum_stdev\t[,";
-          std::copy(dur_stdevs.begin(), dur_stdevs.end(), dit);
+          std::copy(cum_stdevs.begin(), cum_stdevs.end(), dit);
           output << "]" << std::endl;
 
 
