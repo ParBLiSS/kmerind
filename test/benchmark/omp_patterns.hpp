@@ -25,6 +25,8 @@
 #ifndef OMP_PATTERNS_HPP_
 #define OMP_PATTERNS_HPP_
 
+#include "bliss-config.hpp"
+
 #ifdef USE_OPENMP
 #include <omp.h>
 #endif

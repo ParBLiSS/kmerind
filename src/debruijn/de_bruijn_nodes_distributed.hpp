@@ -24,6 +24,8 @@
 #ifndef DE_BRUIJN_NODES_DISTRIBUTED_HPP_
 #define DE_BRUIJN_NODES_DISTRIBUTED_HPP_
 
+#include "bliss-config.hpp"
+
 #include <unordered_map>  // local storage hash table  // for multimap
 #include <unordered_set>  // local storage hash table  // for multimap
 #include <utility> 			  // for std::pair

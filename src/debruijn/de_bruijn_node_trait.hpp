@@ -23,6 +23,10 @@
 
 #ifndef DE_BRUIJN_NODE_TRAIT_HPP_
 #define DE_BRUIJN_NODE_TRAIT_HPP_
+
+#include "bliss-config.hpp"
+
+
 #if defined(USE_MPI)
 #include "mpi.h"
 #endif
