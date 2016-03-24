@@ -1,6 +1,6 @@
 # CMakeLists.txt for the BLISS
 
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.6)
 
 
 # project settings
@@ -27,7 +27,11 @@ set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
 # Compiler-specific C++11 activation.
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0")
+# below 2 lines are only for cmake < 2.8.10
+   execute_process(
+     COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE
+BLISS_CXX_COMPILER_VERSION)
+  if(BLISS_CXX_COMPILER_VERSION VERSION_LESS "16.0")
     message(FATAL_ERROR "Intel (icpc) compiler version 16.0 or later is required.")
   endif()
 
@@ -51,8 +55,16 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
   SET(SUGGESTION_WARNING_FLAGS "-Wremarks")
 
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.1")
-    message(FATAL_ERROR "GNU CXX compiler version 4.8.1 or later is required.")
+# next 2 lines needed for cmake < 2.8.10
+   EXECUTE_PROCESS( COMMAND ${CMAKE_CXX_COMPILER} --version OUTPUT_VARIABLE
+   gcc_full_version_string )
+   string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1"
+BLISS_CXX_COMPILER_VERSION
+   ${gcc_full_version_string})
+
+  if(BLISS_CXX_COMPILER_VERSION VERSION_LESS "4.8.1")
+    message(FATAL_ERROR "GNU CXX compiler version 4.8.1 or later is required.
+Found ${CMAKE_CXX_COMPILER_VERSION}")
   endif()
 
   SET(SUPPORTS_SANITIZER ON CACHE INTERNAL "compiler supports sanitizer?")
@@ -66,12 +78,18 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   # gcc 4.9 colorize via: -fdiagnostics-color=always
   
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "3.5")
+  # these 3 lines are needed because cmake < 2.8.10
+  EXECUTE_PROCESS( COMMAND ${CMAKE_CXX_COMPILER} --version OUTPUT_VARIABLE
+     clang_full_version_string )
+  string (REGEX REPLACE ".*clang version ([0-9]+\\.[0-9]+).*" "\\1"
+   BLISS_CXX_COMPILER_VERSION ${clang_full_version_string})
+
+  if(BLISS_CXX_COMPILER_VERSION VERSION_LESS "3.5")
     message(FATAL_ERROR "Clang++ compiler version 3.5 or later is required.")
   endif()
     
   #add_definitions(-Wabi)
-    
+ 
   # intel dependency on gcc.  not compatible with gcc 5.  should search.
 #  set(GCC_BINARY "/usr/bin/gcc" CACHE PATH "Path to gcc binary. Requires version 4.9 or earlier due to ABI change.  Clang uses GCC headers.")
 #  EXECUTE_PROCESS( COMMAND ${GCC_BINARY} --version OUTPUT_VARIABLE gcc_full_version_string )
