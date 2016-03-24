@@ -36,6 +36,8 @@
 #ifndef FILE_HPP_
 #define FILE_HPP_
 
+#include "bliss-config.hpp"
+
 #include <string>
 #include <cstring>      // memcpy, strerror
 
@@ -46,8 +48,6 @@
 #include <fcntl.h>      // for open64 and close
 #include <sstream>      // stringstream
 #include <exception>    // std exception
-
-#define USE_MPI
 
 #if defined(USE_MPI)
 #include <mpi.h>

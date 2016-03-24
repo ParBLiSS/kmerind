@@ -24,6 +24,7 @@
 #ifndef DE_BRUIJN_CONSTRUCT_ENGINE_HPP_
 #define DE_BRUIJN_CONSTRUCT_ENGINE_HPP_
 
+#include "bliss-config.hpp"
 
 #if defined(USE_MPI)
 #include "mpi.h"
