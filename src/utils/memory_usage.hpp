@@ -42,6 +42,7 @@
 //#include <cstdio>   // printf
 #include <unistd.h>  // getpid()
 #include <vector>
+#include <cstring>	// strerror
 #include <string>
 #include <algorithm>  // std::min
 #include <sstream>
