@@ -25,6 +25,7 @@
  *
  * TODO add License
  */
+#include "bliss-config.hpp"
 
 #include "utils/memory_usage.hpp"
 #include <cstring>
@@ -140,14 +141,27 @@ int main(int argc, char** argv) {
     ::mxx::comm node = world.split_shared();
 
     if (node.rank() == 0) {
-      clear_cache();
+	printf("rank %d clearing\n", world.rank());
+	clear_cache();
+    } else {
+	printf("rank %d waiting\n", world.rank());
     }
-  } else
 
+    node.barrier();
+    if (node.rank() == 0) 
+	printf("rank %d cache cleared\n", world.rank());
+  } else {
+//	std::cout << "world size is " << world.size() << std::endl;
+
+//#else
+//	std::cout << "non-mpi." << std::endl;
 #endif
-
+	
   clear_cache();
 
+#ifdef USE_MPI
+}
+#endif
 
   return 0;
 }

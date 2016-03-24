@@ -374,6 +374,7 @@ protected:
 
   /// opens a file. side effect computes size of the file.
   void open_file() {
+printf("open seq file\n");
 
     if (this->filename.length() == 0) return;
 
@@ -627,6 +628,9 @@ protected:
 
 	/// virtual function for opening a file. side effect computes size of the file.
 	void open_file_stream() {
+		printf("open seq file stream\n");
+
+
 		fp = fdopen(dup(this->fd), "r");  // make a copy of file descriptor first.  this allows closing file pointer.
 
 		if (fp == nullptr) {
@@ -948,6 +952,8 @@ protected:
   void open_file() {
     // first split the communicator
 
+
+	printf("open parallel file, grouped by node");
     ::mxx::comm shared = this->comm.split_shared();
 
     if (shared.rank() == 0) {
@@ -963,6 +969,9 @@ protected:
       // all mpi processes on the same node share the same file handle.
 
       ::bliss::io::util::broadcast_file_descriptor(this->fd, id, shared.size(), shared.rank());
+
+	if (this->comm.rank() == id) 
+		printf("broadcasting file descriptor %d from rank G%d N%d to rest.\n", this->fd, id, shared.rank()); 
     }
     // that's it.
 
@@ -1603,7 +1612,10 @@ protected:
 
 	/// opens a file. side effect computes size of the file.
 	void open_file() {
-		// first clear previously open file
+printf("open mpiio file");
+	
+
+	// first clear previously open file
 		close_file();
 
 		// open the file
