@@ -103,21 +103,26 @@ class Timer {
     void report(::std::string const & title) {
         std::stringstream output;
 
-        output << std::fixed;
         std::ostream_iterator<std::string> nit(output, ",");
+        std::ostream_iterator<double> dit(output, ",");
 
+        output << std::fixed;
         output << "[TIME] " << title << "\theader (s)\t[,";
         std::copy(names.begin(), names.end(), nit);
         output << "]" << std::endl;
 
-        output << "[TIME] " << title << "\tdur\t[,";
         output.precision(9);
-        std::ostream_iterator<double> dit(output, ",");
+
+        output << "[TIME] " << title << "\tdur\t[,";
         std::copy(durations.begin(), durations.end(), dit);
         output << "]" << ::std::endl;
 
-        output << "[TIME] " << title << "\tcount\t[,";
+        output << "[TIME] " << title << "\tcum\t[,";
+        std::partial_sum(durations.begin(), durations.end(), dit);
+        output << "]" << ::std::endl;
+
         output.precision(0);
+        output << "[TIME] " << title << "\tcount\t[,";
         std::copy(counts.begin(), counts.end(), dit);
         output << "]";
 
@@ -229,6 +234,7 @@ class Timer {
 #endif
 
     void report(::std::string const & title, ::mxx::comm const & comm) {
+    	std::vector<double> cumulative(durations);
 
     	auto dur_mins = ::mxx::reduce(durations, 0,
     			[](double const & x, double const & y) { return ::std::min(x, y); }, comm);
@@ -237,6 +243,17 @@ class Timer {
         auto dur_means = ::mxx::reduce(durations, 0, ::std::plus<double>(), comm);
         ::std::for_each(durations.begin(), durations.end(), [](double &x) { x = x*x; });
         auto dur_stdevs = ::mxx::reduce(durations, 0, ::std::plus<double>(), comm);
+
+        // compute partial sum of times.
+        ::std::partial_sum(cumulative.begin(), cumulative.end(), cumulative.begin());
+    	auto cum_mins = ::mxx::reduce(cumulative, 0,
+    			[](double const & x, double const & y) { return ::std::min(x, y); }, comm);
+        auto cum_maxs = ::mxx::reduce(cumulative, 0,
+        		[](double const & x, double const & y) { return ::std::max(x, y); }, comm);
+        auto cum_means = ::mxx::reduce(cumulative, 0, ::std::plus<double>(), comm);
+        ::std::for_each(cumulative.begin(), cumulative.end(), [](double &x) { x = x*x; });
+        auto cum_stdevs = ::mxx::reduce(cumulative, 0, ::std::plus<double>(), comm);
+
 
         auto cnt_mins = ::mxx::reduce(counts, 0,
         		[](double const & x, double const & y) { return ::std::min(x, y); }, comm);
@@ -253,6 +270,10 @@ class Timer {
 
           ::std::for_each(dur_means.begin(), dur_means.end(), [p](double & x) { x /= p; });
           ::std::transform(dur_stdevs.begin(), dur_stdevs.end(), dur_means.begin(), dur_stdevs.begin(),
+                           [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+
+          ::std::for_each(cum_means.begin(), cum_means.end(), [p](double & x) { x /= p; });
+          ::std::transform(cum_stdevs.begin(), cum_stdevs.end(), cum_means.begin(), cum_stdevs.begin(),
                            [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
 
           ::std::for_each(cnt_means.begin(), cnt_means.end(), [p](double & x) { x /= p; });
@@ -286,6 +307,25 @@ class Timer {
           output << "[TIME] " << title << "\tdur_stdev\t[,";
           std::copy(dur_stdevs.begin(), dur_stdevs.end(), dit);
           output << "]" << std::endl;
+
+
+          output.precision(9);
+          output << "[TIME] " << title << "\tcum_min\t[,";
+          std::copy(dur_mins.begin(), dur_mins.end(), dit);
+          output << "]" << std::endl;
+
+          output << "[TIME] " << title << "\tcum_max\t[,";
+          std::copy(dur_maxs.begin(), dur_maxs.end(), dit);
+          output << "]" << std::endl;
+
+          output << "[TIME] " << title << "\tcum_mean\t[,";
+          std::copy(dur_means.begin(), dur_means.end(), dit);
+          output << "]" << std::endl;
+
+          output << "[TIME] " << title << "\tcum_stdev\t[,";
+          std::copy(dur_stdevs.begin(), dur_stdevs.end(), dit);
+          output << "]" << std::endl;
+
 
           output.precision(0);
           output << "[TIME] " << title << "\tcnt_min\t[,";
