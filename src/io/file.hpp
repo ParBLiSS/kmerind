@@ -374,7 +374,7 @@ protected:
 
   /// opens a file. side effect computes size of the file.
   void open_file() {
-printf("open seq file\n");
+//printf("open seq file\n");
 
     if (this->filename.length() == 0) return;
 
@@ -628,7 +628,7 @@ protected:
 
 	/// virtual function for opening a file. side effect computes size of the file.
 	void open_file_stream() {
-		printf("open seq file stream\n");
+//		printf("open seq file stream\n");
 
 
 		fp = fdopen(dup(this->fd), "r");  // make a copy of file descriptor first.  this allows closing file pointer.
@@ -953,7 +953,8 @@ protected:
     // first split the communicator
 
 
-	printf("open parallel file, grouped by node");
+//	if (this->comm.rank() == 0) printf("open parallel file, grouped by node\n");
+
     ::mxx::comm shared = this->comm.split_shared();
 
     if (shared.rank() == 0) {
@@ -1612,7 +1613,7 @@ protected:
 
 	/// opens a file. side effect computes size of the file.
 	void open_file() {
-printf("open mpiio file");
+//	  if (this->comm.rank() == 0) printf("open mpiio file\n");
 	
 
 	// first clear previously open file
@@ -1816,9 +1817,10 @@ public:
 
 
 	mpiio_base_file(::std::string const & _filename, size_t const _overlap = 0UL,  ::mxx::comm const & _comm = ::mxx::comm()) :
-		::bliss::io::base_file(_filename), overlap(_overlap), comm(_comm.copy()), fh(MPI_FILE_NULL) {
-		this->open_file();
-		this->file_range_bytes.end = this->::bliss::io::parallel::mpiio_base_file::get_file_size();  // call after opening file
+	  BASE(static_cast<int>(-1), static_cast<size_t>(0)), overlap(_overlap), comm(_comm.copy()), fh(MPI_FILE_NULL) {
+		this->filename = _filename;
+	  this->open_file();
+		this->file_range_bytes.end = this->get_file_size();  // call after opening file
 	};
 
 	~mpiio_base_file() { this->close_file(); };
