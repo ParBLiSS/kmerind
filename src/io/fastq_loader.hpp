@@ -446,6 +446,10 @@ namespace bliss
 
         /**
          * @brief   get the average record size in the supplied range
+         * @param _data.    points to start of in memory range.
+         * @param parentRange     the complete range to which the inMemRange belongs
+         * @param inMemRange    the part of parentRange that is in memory, represented by _data
+         * @param searchRange   the part of inMemRange to search.
          * @return  return the records size and the internal data size
          */
         virtual ::std::pair<size_t, size_t> get_record_size(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, size_t const count = 10) {
@@ -458,7 +462,11 @@ namespace bliss
           if (!(parentRange.contains(inMemRange))) throw std::invalid_argument("ERROR: parentRange does not container inMemRange");
           if (!(inMemRange.contains(searchRange)))  throw std::invalid_argument("ERROR: inMemRange does not container searchRange");
 
-          Iterator local_data = _data + searchRange.start - inMemRange.start;
+          // find the first record that starts within search range
+          size_t start = this->find_first_record(_data, parentRange, inMemRange, searchRange);
+
+          Iterator local_data = _data + start - inMemRange.start;
+
 
           if (*local_data != '@') throw std::logic_error("calling FASTQParser get_record_size with _data not pointing to start of a record.  call init_parser first.");
 

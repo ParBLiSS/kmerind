@@ -116,6 +116,8 @@ public:
 	using TupleType =      std::pair<KmerType, ValueType>;
 	using Alphabet = typename KmerType::KmerAlphabet;
 
+	using KmerParserType = KmerParser;
+
 	Index(const mxx::comm& _comm) : map(_comm), comm(_comm) {
 	}
 
@@ -183,14 +185,30 @@ public:
 	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
 	 * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 */
-	template <template <typename> class SeqParser, typename KP = KmerParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
+	template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity, typename KP = KmerParser>
 	static size_t read_file(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
 
 
+	     // file extension determines SeqParserType
+	     std::string extension = ::bliss::utils::file::get_file_extension(filename);
+	     std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+	     if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+	       throw std::invalid_argument("input filename extension is not supported.");
+	     }
+
+	     // check to make sure that the file parser will work
+	     if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
+	       throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
+	     } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
+	       throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
+	     }
+
 //		constexpr size_t overlap = KP::kmer_type::size;  specify as 0 - which allows overlap to be computed.
 
-		// TODO: check if prefetch makes a difference.
-		using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, true>; // raw data type :  use CharType
+		// prefetch makes a difference is overall faster when accessed linearly immedicately after open.
+	  // however in that case mmap_file and sometime mpi-io may perform better.
+	  // if we do some computationally intensive processing on the data, then no preloading would be better.
+		using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, false>; // raw data type :  use CharType
 
 		//====  now process the file, one L1 block (block partition by MPI Rank) at a time
 
@@ -245,20 +263,35 @@ public:
 			BL_BENCH_END(file, "canonicalize", result.size());
 		}
 
-		BL_BENCH_REPORT_MPI(file, _comm.rank(), _comm);
+		BL_BENCH_REPORT_MPI_NAMED(file, "index:read:fileloader", _comm);
 		return result.size() - before;
 	}
 
+	//============== subcomm stuff to be deprecated
 
 	/**
 	 * @tparam KmerParser		parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.  template template parameter, param is iterator
 	 */
-	template <template <typename> class SeqParser, typename KP = KmerParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
+	template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity, typename KP = KmerParser>
 	static size_t read_file_mpi_subcomm(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm& comm) {
 
+      // file extension determines SeqParserType
+      std::string extension = ::bliss::utils::file::get_file_extension(filename);
+      std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+      if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+        throw std::invalid_argument("input filename extension is not supported.");
+      }
+
+      // check to make sure that the file parser will work
+      if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
+        throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
+      } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
+        throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
+      }
+
 		if (comm.size() == 1) {
-			return read_file<SeqParser, KP, PreCanonicalizer>(filename, result, comm);
+			return read_file<SeqParser, PreCanonicalizer, KP>(filename, result, comm);
 		}
 
 		// split the communcator so 1 proc from each host does the read, then redistribute.
@@ -368,7 +401,7 @@ public:
 			BL_BENCH_END(file, "canonicalize", result.size());
 		}
 
-		BL_BENCH_REPORT_MPI(file, comm.rank(), comm);
+    BL_BENCH_REPORT_MPI_NAMED(file, "index:read:fileloader_subcomm", comm);
 
 		return result.size() - before;
 	}
@@ -381,13 +414,26 @@ public:
 	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
 	 * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 */
-	template <template <typename> class SeqParser, typename KP = KmerParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
-	static size_t read_file_direct(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
+	template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity, typename KP = KmerParser>
+	static size_t read_file_mpiio(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
+
+      // file extension determines SeqParserType
+      std::string extension = ::bliss::utils::file::get_file_extension(filename);
+      std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+      if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+        throw std::invalid_argument("input filename extension is not supported.");
+      }
+
+      // check to make sure that the file parser will work
+      if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
+        throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
+      } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
+        throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
+      }
 
 
-	    // TODO: check if prefetch makes a difference.
-	    //using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, true>; // raw data type :  use CharType
-	    using FileType = ::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, SeqParser<unsigned char *> >;
+	    // partitioned file with mmap or posix do not seem to be much faster than mpiio and may result in more jitter when congested.
+	    using FileType = ::bliss::io::parallel::mpiio_file<SeqParser<unsigned char *> >;  // well tested.  seems faster when congested.
 	    //====  now process the file, one L1 block (block partition by MPI Rank) at a time
 
 	    size_t before = result.size();
@@ -404,6 +450,8 @@ public:
 	      ::bliss::io::file_data partition = fobj.read_file();
 	      BL_BENCH_END(file, "open", partition.getRange().size());
 
+	      std::cout << "rank " << _comm.rank() << " mpiio " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
+
 
 	      // not reusing the SeqParser in loader.  instead, reinitializing one.
 	      BL_BENCH_START(file);
@@ -419,7 +467,7 @@ public:
 	      // call after getting first L1Block to ensure that file is loaded.  (rank 0 reads and broadcast)
 	      size_t record_size = 0;
 	      size_t seq_len = 0;
-	      std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.in_mem_range_bytes, partition.getRange());
+	      std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.getRange(), partition.getRange());
 	      size_t est_size = (record_size == 0) ? 0 : (partition.getRange().size() + record_size - 1) / record_size;  // number of records
 	      est_size *= (seq_len < KmerType::size) ? 0 : (seq_len - KmerType::size + 1) ;  // number of kmers in a record
 	      result.reserve(est_size);
@@ -443,10 +491,96 @@ public:
 	      BL_BENCH_END(file, "canonicalize", result.size());
 	    }
 
-	    BL_BENCH_REPORT_MPI(file, _comm.rank(), _comm);
+      BL_BENCH_REPORT_MPI_NAMED(file, "index:read:mpiio", _comm);
 	    return result.size() - before;
 	}
 
+
+  /**
+   * @brief read a file's content and generate kmers, place in a vector as return result.
+   * @note  static so can be used wihtout instantiating a internal map.
+   * @tparam SeqParser    parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
+   * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
+   */
+  template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity, typename KP = KmerParser>
+  static size_t read_file_mmap(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
+
+      // file extension determines SeqParserType
+      std::string extension = ::bliss::utils::file::get_file_extension(filename);
+      std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+      if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+        throw std::invalid_argument("input filename extension is not supported.");
+      }
+
+      // check to make sure that the file parser will work
+      if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
+        throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
+      } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
+        throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
+      }
+
+
+      // partitioned file with mmap or posix do not seem to be much faster than mpiio and may result in more jitter when congested.
+      using FileType = ::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, SeqParser<unsigned char *> >;
+	    //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+
+      size_t before = result.size();
+
+      BL_BENCH_INIT(file);
+      {  // ensure that fileloader is closed at the end.
+
+        BL_BENCH_START(file);
+        //==== create file Loader
+  //      FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+  //      typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
+
+        FileType fobj(filename, KmerType::size, _comm);
+        ::bliss::io::file_data partition = fobj.read_file();
+        BL_BENCH_END(file, "open", partition.getRange().size());
+
+        std::cout << "rank " << _comm.rank() << " mpiio " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
+
+        // not reusing the SeqParser in loader.  instead, reinitializing one.
+        BL_BENCH_START(file);
+        SeqParser<unsigned char *> l1parser;
+        l1parser.init_parser(partition.data.data(), partition.parent_range_bytes, partition.in_mem_range_bytes, partition.getRange(), _comm);
+        BL_BENCH_END(file, "mark_seqs", partition.getRange().size());
+
+        //== reserve
+        BL_BENCH_START(file);
+        // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
+        // index reserve internally sends a message to itself.
+
+        // call after getting first L1Block to ensure that file is loaded.  (rank 0 reads and broadcast)
+        size_t record_size = 0;
+        size_t seq_len = 0;
+        std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.getRange(), partition.getRange());
+        size_t est_size = (record_size == 0) ? 0 : (partition.getRange().size() + record_size - 1) / record_size;  // number of records
+        est_size *= (seq_len < KmerType::size) ? 0 : (seq_len - KmerType::size + 1) ;  // number of kmers in a record
+        result.reserve(est_size);
+        BL_BENCH_END(file, "reserve", est_size);
+
+        BL_BENCH_START(file);
+        //=== copy into array
+        if (partition.getRange().size() > 0) {
+          read_block<KP>(partition, l1parser, result);
+        }
+        BL_BENCH_END(file, "read", result.size());
+        // std::cout << "Last: pos - kmer " << result.back() << std::endl;
+      }
+
+      if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
+        BL_BENCH_START(file);
+
+        ::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
+        ::std::for_each(result.begin(), result.end(), tuple_trans);
+
+        BL_BENCH_END(file, "canonicalize", result.size());
+      }
+
+      BL_BENCH_REPORT_MPI_NAMED(file, "index:read:mmap_file", _comm);
+      return result.size() - before;
+  }
 
 
 	std::vector<TupleType> find(std::vector<KmerType> &query) {
@@ -501,7 +635,7 @@ public:
 	 */
 	 template <typename T>
 	void insert(std::vector<T> &temp) {
-		BL_BENCH_INIT(build);
+		BL_BENCH_INIT(insert);
 
 		// do not reserve until insertion - less transient memory used.
 //		BL_BENCH_START(build);
@@ -509,26 +643,28 @@ public:
 //		BL_BENCH_END(build, "reserve", temp.size());
 
 		// distribute
-		BL_BENCH_START(build);
+		BL_BENCH_START(insert);
 		this->map.insert(temp);
-		BL_BENCH_END(build, "insert", this->map.local_size());
+		BL_BENCH_END(insert, "map_insert", this->map.local_size());
 
 
 #if (BENCHMARK == 1)
-		BL_BENCH_START(build);
+		BL_BENCH_START(insert);
 		size_t m = 0;
     m = this->map.update_multiplicity();
-		BL_BENCH_END(build, "multiplicity", m);
+		BL_BENCH_END(insert, "multiplicity", m);
 #else
     (void) (this->map.update_multiplicity());
 #endif
-		BL_BENCH_REPORT_MPI(build, this->comm.rank(), this->comm);
+		BL_BENCH_REPORT_MPI_NAMED(insert, "index:insert", this->comm);
 
 	 }
 
 	 // Note that KmerParserType may depend on knowing the Sequence Parser Type (e.g. provide quality score iterators)
 	 //	Output type of KmerParserType may not match Map value type, in which case the map needs to do its own transform.
 	 //     since Kmer template parameter is not explicitly known, we can't hard code the return types of KmerParserType.
+
+	 //============= THESE ARE TO BE DEPRECATED
 
 	 /// convenience function for building index.
 	 template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
@@ -547,10 +683,13 @@ public:
 		 } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
 			 throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
 		 }
+	    BL_BENCH_INIT(build);
 
 		 // proceed
+	     BL_BENCH_START(build);
 		 ::std::vector<typename KmerParser::value_type> temp;
-		 this->read_file<SeqParser, KmerParser, PreCanonicalizer >(filename, temp, comm);
+		 this->read_file<SeqParser, PreCanonicalizer, KmerParser >(filename, temp, comm);
+	    BL_BENCH_END(build, "read", temp.size());
 
 
 		 //        // dump the generated kmers to see if they look okay.
@@ -562,8 +701,13 @@ public:
 		 //         }
 		 //         ofs.close();
 
-		 BL_DEBUG("Last: pos - kmer " << temp.back());
+//		 BL_DEBUG("Last: pos - kmer " << temp.back());
+	    BL_BENCH_START(build);
 		 this->insert(temp);
+	    BL_BENCH_END(build, "insert", temp.size());
+
+
+	    BL_BENCH_REPORT_MPI_NAMED(build, "index:build", this->comm);
 
 	 }
 
@@ -584,13 +728,20 @@ public:
      } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
        throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
      }
+     BL_BENCH_INIT(build);
 
      // proceed
+     BL_BENCH_START(build);
      ::std::vector<typename KmerParser::value_type> temp;
-     this->read_file_mpi_subcomm<SeqParser, KmerParser, PreCanonicalizer  >(filename, temp, comm);
+     this->read_file_mpi_subcomm<SeqParser, PreCanonicalizer, KmerParser  >(filename, temp, comm);
+     BL_BENCH_END(build, "read", temp.size());
 
-     BL_DEBUG("Last: pos - kmer " << temp.back());
+     BL_BENCH_START(build);
      this->insert(temp);
+     BL_BENCH_END(build, "insert", temp.size());
+
+
+     BL_BENCH_REPORT_MPI_NAMED(build, "index:build_subcomm", this->comm);
 
 	 }
 
@@ -600,7 +751,7 @@ public:
 
 	 /// convenience function for building index.
 	 template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
-	 void build_direct(const std::string & filename, MPI_Comm comm) {
+	 void build_mpiio(const std::string & filename, MPI_Comm comm) {
 
 		 // file extension determines SeqParserType
 		 std::string extension = ::bliss::utils::file::get_file_extension(filename);
@@ -615,10 +766,13 @@ public:
 		 } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
 			 throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
 		 }
+     BL_BENCH_INIT(build);
 
 		 // proceed
+     BL_BENCH_START(build);
 		 ::std::vector<typename KmerParser::value_type> temp;
-		 this->read_file_direct<SeqParser, KmerParser, PreCanonicalizer >(filename, temp, comm);
+		 this->read_file_mpiio<SeqParser, PreCanonicalizer, KmerParser >(filename, temp, comm);
+     BL_BENCH_END(build, "read", temp.size());
 
 
 		 //        // dump the generated kmers to see if they look okay.
@@ -630,10 +784,59 @@ public:
 		 //         }
 		 //         ofs.close();
 
-		 BL_DEBUG("Last: pos - kmer " << temp.back());
+     BL_BENCH_START(build);
 		 this->insert(temp);
+     BL_BENCH_END(build, "insert", temp.size());
+
+
+     BL_BENCH_REPORT_MPI_NAMED(build, "index:build_mpiio", this->comm);
 
 	 }
+
+
+	  /// convenience function for building index.
+	   template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
+	   void build_mmap(const std::string & filename, MPI_Comm comm) {
+
+	     // file extension determines SeqParserType
+	     std::string extension = ::bliss::utils::file::get_file_extension(filename);
+	     std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+	     if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+	       throw std::invalid_argument("input filename extension is not supported.");
+	     }
+
+	     // check to make sure that the file parser will work
+	     if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
+	       throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
+	     } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
+	       throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
+	     }
+	     BL_BENCH_INIT(build);
+
+	     // proceed
+	     BL_BENCH_START(build);
+	     ::std::vector<typename KmerParser::value_type> temp;
+	     this->read_file_mmap<SeqParser, PreCanonicalizer, KmerParser >(filename, temp, comm);
+	      BL_BENCH_END(build, "read", temp.size());
+
+
+	     //        // dump the generated kmers to see if they look okay.
+	     //         std::stringstream ss;
+	     //         ss << "test." << commRank << ".log";
+	     //         std::ofstream ofs(ss.str());
+	     //         for (int i = 0; i < temp.size(); ++i) {
+	     //          ofs << "item: " << i << " value: " << temp[i] << std::endl;
+	     //         }
+	     //         ofs.close();
+
+	     BL_BENCH_START(build);
+	     this->insert(temp);
+	      BL_BENCH_END(build, "insert", temp.size());
+
+
+	     BL_BENCH_REPORT_MPI_NAMED(build, "index:build_mmap", this->comm);
+
+	   }
 
    typename MapType::const_iterator cbegin() const
    {
