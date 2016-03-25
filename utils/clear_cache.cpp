@@ -60,7 +60,17 @@ void clear_cache() {
   size_t nchunks;
   size_t j = 0, lj;
 
-  printf("begin clearing %lu bytes\n", avail);
+#if defined(USE_OPENMP)
+	int max_threads = omp_get_max_threads();
+
+	if (max_threads > 8) max_threads -= 2;
+	else if (max_threads > 4) max_threads -= 1;
+#else
+	int max_threads = 1;
+#endif
+
+
+  printf("begin clearing %lu bytes using %d threads\n", avail, max_threads);
   size_t iter_cleared = 0;
 
   while ((chunk >= minchunk) && (rem > minchunk)) {
@@ -68,7 +78,7 @@ void clear_cache() {
 
     iter_cleared = 0;
     lj = 0;
-#pragma omp parallel for shared(nchunks, chunk, dummy) reduction(+:lj, iter_cleared)
+#pragma omp parallel for num_threads(max_threads) shared(nchunks, chunk, dummy) reduction(+:lj, iter_cleared)
     for (size_t i = 0; i < nchunks; ++i) {
 
       // (c|m)alloc/free seems to be optimized out.  using new works.
