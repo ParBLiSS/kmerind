@@ -26,41 +26,21 @@
 
 #include "bliss-config.hpp"
 
-#include <unistd.h>  // get hostname
-
-
-#include <functional>
-#include <random>
-#include <algorithm>
 #include <string>
 #include <sstream>
-#include <chrono>
 #include <iostream>  // for system("pause");
+
 #include "utils/logging.h"
-#include "common/alphabets.hpp"
-#include "common/kmer.hpp"
-#include "common/base_types.hpp"
-#include "utils/kmer_utils.hpp"
 
-#include "io/mxx_support.hpp"
-#include "io/sequence_iterator.hpp"
-#include "io/sequence_id_iterator.hpp"
-#include "iterators/transform_iterator.hpp"
-#include "common/kmer_iterators.hpp"
-#include "iterators/zip_iterator.hpp"
-#include "index/quality_score_iterator.hpp"
-
-#include "index/kmer_index.hpp"
+#include "io/file.hpp"
 
 #include "utils/benchmark_utils.hpp"
-
-#include "utils/mxx_fast_comm.hpp"
+#include "utils/exception_handling.hpp"
 
 #include "tclap/CmdLine.h"
 
-#include "utils/exception_handling.hpp"
+#include "utils/mxx_fast_comm.hpp"
 
-#include "utils/memory_usage.hpp"
 
 template <typename ITER>
 bool validate(const std::string &fileName, const size_t offset,
