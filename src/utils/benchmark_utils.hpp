@@ -42,6 +42,8 @@
   #define BL_BENCH_END(title, name, n_elem)               do { BL_TIMER_END(title, name, n_elem); BL_MEMUSE_MARK(title, name); } while (0)
   #define BL_BENCH_REPORT(title, rank)                    do { BL_TIMER_REPORT(title); BL_MEMUSE_REPORT(title); } while (0)
   #define BL_BENCH_REPORT_MPI(title, rank, comm)          do { BL_TIMER_REPORT_MPI(title, comm); BL_MEMUSE_REPORT_MPI(title, comm); } while (0)
+  #define BL_BENCH_REPORT_NAMED(title, name)                    do { BL_TIMER_REPORT_NAMED(title, name); BL_MEMUSE_REPORT_NAMED(title, name); } while (0)
+  #define BL_BENCH_REPORT_MPI_NAMED(title, name, comm)          do { BL_TIMER_REPORT_MPI_NAMED(title, name, comm); BL_MEMUSE_REPORT_MPI_NAMED(title, name, comm); } while (0)
 
 //#else
 //

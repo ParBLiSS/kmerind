@@ -369,6 +369,7 @@ class Timer {
 #define BL_TIMER_COLLECTIVE_START(title, name, comm) do { title##_timer.collective_start(name, comm); } while (0)
 #define BL_TIMER_COLLECTIVE_END(title, name, n_elem, comm) do { title##_timer.collective_end(name, n_elem, comm); } while (0)
 #define BL_TIMER_REPORT(title) do { title##_timer.report(#title); } while (0)
+#define BL_TIMER_REPORT_NAMED(title, name) do { title##_timer.report(name); } while (0)
 
 #if 0
 // do not use this function for now.  mxx::min_element and max_element has invalid read problem, reported by valgrind.
@@ -376,6 +377,7 @@ class Timer {
 #endif
 
 #define BL_TIMER_REPORT_MPI(title, comm) do { title##_timer.report(#title, comm); } while (0)
+#define BL_TIMER_REPORT_MPI_NAMED(title, name, comm) do { title##_timer.report(name, comm); } while (0)
 
 
 #else
@@ -392,6 +394,8 @@ class Timer {
 #define BL_TIMER_COLLECTIVE_end(title, name, n_elem, comm)
 #define BL_TIMER_REPORT(title)
 #define BL_TIMER_REPORT_MPI(title, comm)
+#define BL_TIMER_REPORT_NAMED(title, name)
+#define BL_TIMER_REPORT_MPI_NAMED(title, name, comm)
 
 #endif
 

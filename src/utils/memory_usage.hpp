@@ -399,13 +399,15 @@ class MemUsage {
 #define BL_MEMUSE_COLLECTIVE_MARK(title, name, comm) do { title##_memusage.collective_mark(name, comm); } while (0)
 #define BL_MEMUSE_MARK(title, name) do { title##_memusage.mark(name); } while (0)
 #define BL_MEMUSE_REPORT(title) do { title##_memusage.report(#title); } while (0)
+#define BL_MEMUSE_REPORT_NAMED(title, name) do { title##_memusage.report(name); } while (0)
 
 #if 0
 // do not use this function for now.  mxx::min_element and max_element has invalid read problem, reported by valgrind.
-#define BL_MEMUSE_REPORT_MPI_LOC(title, comm) do { title##_memusage.report_loc(#title, comm); } while (0)
+#define BL_MEMUSE_REPORT_MPI_LOC(title, name, comm) do { title##_memusage.report_loc(name, comm); } while (0)
 #endif
 
 #define BL_MEMUSE_REPORT_MPI(title, comm) do { title##_memusage.report(#title, comm); } while (0)
+#define BL_MEMUSE_REPORT_MPI_NAMED(title, name, comm) do { title##_memusage.report(name, comm); } while (0)
 
 
 #else
@@ -416,6 +418,8 @@ class MemUsage {
 #define BL_MEMUSE_MARK(title, name)
 #define BL_MEMUSE_REPORT(title)
 #define BL_MEMUSE_REPORT_MPI(title, comm)
+#define BL_MEMUSE_REPORT_NAMED(title, name)
+#define BL_MEMUSE_REPORT_MPI_NAMED(title, name, comm)
 
 #endif
 
