@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
 	printf("rank %d clearing\n", world.rank());
 	clear_cache();
     } else {
-	printf("rank %d waiting\n", world.rank());
+	//printf("rank %d waiting\n", world.rank());
     }
 
     node.barrier();
