@@ -566,7 +566,7 @@ namespace dsc  // distributed std container
 
           }
 
-          BL_BENCH_REPORT_MPI(find, this->comm.rank(), this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_a2a", this->comm);
 
           return results;
       }
@@ -574,6 +574,9 @@ namespace dsc  // distributed std container
 
       /**
        * @brief find elements with the specified keys in the distributed sorted_multimap.
+       *
+       * process request from a single processor at a time.
+       *
        * @param first
        * @param last
        */
@@ -756,7 +759,7 @@ namespace dsc  // distributed std container
 
           }
 
-          BL_BENCH_REPORT_MPI(find, this->comm.rank(), this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_isend", this->comm);
 
           return results;
       }
@@ -973,7 +976,7 @@ namespace dsc  // distributed std container
           BL_BENCH_END(count, "local_count", results.size());
 
         }
-        BL_BENCH_REPORT_MPI(count, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(count, "base_sorted_map:count", this->comm);
 
         return results;
 
@@ -1018,7 +1021,7 @@ namespace dsc  // distributed std container
 //          BL_BENCH_END(insert, "insert", count);
 //
 //
-//          BL_BENCH_REPORT_MPI(insert, this->comm.rank(), this->comm);
+//          BL_BENCH_REPORT_MPI_NAMED(insert, "map:", this->comm);
 //
 //          return count;
 //      }
@@ -1056,7 +1059,7 @@ namespace dsc  // distributed std container
           BL_BENCH_END(insert, "insert", count);
 
 
-          BL_BENCH_REPORT_MPI(insert, this->comm.rank(), this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(insert, "base_sorted_map:insert", this->comm);
 
           return count;
       }
@@ -1473,7 +1476,7 @@ namespace dsc  // distributed std container
         this->sorted = true; this->balanced = true; this->globally_sorted = true;
         //printf("c size after: %lu\n", this->c.size());
 
-        BL_BENCH_REPORT_MPI(rehash, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(rehash, "base_sorted_map:rehash", this->comm);
 
       }
   };
@@ -1677,7 +1680,7 @@ namespace dsc  // distributed std container
         }
         this->sorted = true; this->balanced = true; this->globally_sorted = true;
 
-        BL_BENCH_REPORT_MPI(rehash, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_multimap:rehash", this->comm);
 
       }
 
@@ -2012,7 +2015,7 @@ namespace dsc  // distributed std container
         BL_BENCH_END(count_insert, "insert", this->c.size());
 
         // distribute
-        BL_BENCH_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_sorted_map:rehash", this->comm);
         return count;
       }
 
@@ -2035,7 +2038,7 @@ namespace dsc  // distributed std container
         BL_BENCH_END(count_insert, "insert", this->c.size());
 
         // distribute
-        BL_BENCH_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_sorted_map:insert", this->comm);
         return count;
       }
 

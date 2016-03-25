@@ -411,7 +411,7 @@ namespace dsc  // distributed std container
           BL_BENCH_END(find, "local_find", results.size());
         }
 
-        BL_BENCH_REPORT_MPI(find, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(find, "base_map:find", this->comm);
 
         return results;
 
@@ -589,7 +589,7 @@ namespace dsc  // distributed std container
           BL_BENCH_END(count, "local_count", results.size());
         }
 
-        BL_BENCH_REPORT_MPI(count, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(count, "base_map:count", this->comm);
 
         return results;
 
@@ -805,7 +805,7 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "insert", this->c.size());
 
-        BL_BENCH_REPORT_MPI(insert, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "map:insert", this->comm);
 
         return count;
       }
@@ -1094,7 +1094,7 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "insert", this->c.size());
 
-        BL_BENCH_REPORT_MPI(insert, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "multimap:insert", this->comm);
         return count;
       }
 
@@ -1216,7 +1216,7 @@ namespace dsc  // distributed std container
         input.assign(temp.begin(), temp.end());
         BL_BENCH_END(reduce_tuple, "copy", input.size());
 
-        BL_BENCH_REPORT_MPI(reduce_tuple, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(reduce_tuple, "reduction_map:local_reduce", this->comm);
       }
 
 
@@ -1268,7 +1268,7 @@ namespace dsc  // distributed std container
           count = this->local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "local_insert", this->local_size());
 
-        BL_BENCH_REPORT_MPI(insert, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_map:insert", this->comm);
 
         return count;
 
@@ -1371,7 +1371,7 @@ namespace dsc  // distributed std container
 
 
         // distribute
-        BL_BENCH_REPORT_MPI(count_insert, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_map:insert_key", this->comm);
 
         return count;
 
@@ -1396,7 +1396,7 @@ namespace dsc  // distributed std container
 
 
         // distribute
-        BL_BENCH_REPORT_MPI(count_insert, this->comm_rank, this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_map:insert_pair", this->comm);
 
         return count;
 

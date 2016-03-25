@@ -411,8 +411,7 @@ int main(int argc, char** argv) {
 
   mxx::env e(argc, argv);
   mxx::comm comm_world;
-
-  MPI_Barrier(comm_world);
+  comm_world.barrier();
 
   //////////////// parse parameters
 

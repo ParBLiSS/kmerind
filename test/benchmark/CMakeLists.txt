@@ -29,6 +29,15 @@ SET_TARGET_PROPERTIES(testFASTA_load PROPERTIES COMPILE_FLAGS -DUSE_FASTA_PARSER
 target_link_libraries(testFASTA_load ${EXTRA_LIBS})
 
 
+add_executable(testBuildIndex_fastq BenchmarkKmerIndexBuild.cpp)
+SET_TARGET_PROPERTIES(testBuildIndex_fastq PROPERTIES COMPILE_FLAGS -DUSE_FASTQ_PARSER)
+target_link_libraries(testBuildIndex_fastq ${EXTRA_LIBS})
+
+add_executable(testBuildIndex_fasta BenchmarkKmerIndexBuild.cpp)
+SET_TARGET_PROPERTIES(testBuildIndex_fasta PROPERTIES COMPILE_FLAGS -DUSE_FASTA_PARSER)
+target_link_libraries(testBuildIndex_fasta ${EXTRA_LIBS})
+
+
 if (USE_OPENMP)
 
 # EXECUTABLES

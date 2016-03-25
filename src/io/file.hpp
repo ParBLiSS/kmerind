@@ -175,9 +175,12 @@ struct file_data {
 	// storage for actual data
 	std::vector<unsigned char> data;
 
+	/// beginning of the valid range
 	unsigned char * begin() {
 		return data.data() + valid_range_bytes.start - in_mem_range_bytes.start;
 	}
+
+	/// end of valid range
 	unsigned char * end() {
 		return data.data() + valid_range_bytes.end - in_mem_range_bytes.start;
 	}

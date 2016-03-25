@@ -439,7 +439,7 @@ namespace dsc  // distributed std container
           BL_BENCH_END(find, "local_find", results.size());
         }
 
-        BL_BENCH_REPORT_MPI(find, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_a2a", this->comm);
 
         return results;
 
@@ -447,6 +447,10 @@ namespace dsc  // distributed std container
 
       /**
        * @brief find elements with the specified keys in the distributed unordered_multimap.
+       *
+       * why this version that uses isend and irecv?  because all2all version requires all result data to be in memory.
+       * this one can do it one source process at a time.
+       *
        * @param first
        * @param last
        */
@@ -614,7 +618,7 @@ namespace dsc  // distributed std container
           BL_BENCH_END(find, "local_find", results.size());
         }
 
-        BL_BENCH_REPORT_MPI(find, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_isend", this->comm);
 
         return results;
 
@@ -824,7 +828,7 @@ namespace dsc  // distributed std container
           BL_BENCH_END(count, "local_count", results.size());
         }
 
-        BL_BENCH_REPORT_MPI(count, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(count, "base_hashmap:count", this->comm);
 
         return results;
 
@@ -1060,7 +1064,7 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "insert", this->c.size());
 
-        BL_BENCH_REPORT_MPI(insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "hashmap:insert", this->comm);
 
         return count;
       }
@@ -1322,7 +1326,7 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "insert", this->c.size());
 
-        BL_BENCH_REPORT_MPI(insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "hash_multimap:insert", this->comm);
         return count;
       }
 
@@ -1469,7 +1473,7 @@ namespace dsc  // distributed std container
 
         //local_container_type().swap(temp);   // doing the swap to clear helps?
 
-        BL_BENCH_REPORT_MPI(reduce_tuple, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(reduce_tuple, "reduction_hashmap:local_reduce", this->comm);
       }
 
 
@@ -1525,7 +1529,7 @@ namespace dsc  // distributed std container
           count = this->local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "local_insert", this->local_size());
 
-        BL_BENCH_REPORT_MPI(insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_map:insert", this->comm);
 
         return count;
       }
@@ -1634,7 +1638,7 @@ namespace dsc  // distributed std container
 
 
         // distribute
-        BL_BENCH_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_hashmap:insert_key", this->comm);
 
         return count;
 
@@ -1651,7 +1655,7 @@ namespace dsc  // distributed std container
 
 
         // distribute
-        BL_BENCH_REPORT_MPI(count_insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_hashmap:insert_pair", this->comm);
 
         return count;
       }
@@ -1882,7 +1886,7 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "insert", this->c.size());
 
-        BL_BENCH_REPORT_MPI(insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "vecmap:insert", this->comm);
         return count;
 
       }
@@ -2112,7 +2116,7 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "insert", this->c.size());
 
-        BL_BENCH_REPORT_MPI(insert, this->comm.rank(), this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "compact_vecmap:insert", this->comm);
         return count;
 
       }
