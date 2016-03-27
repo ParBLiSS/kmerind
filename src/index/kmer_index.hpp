@@ -450,7 +450,7 @@ public:
 	      ::bliss::io::file_data partition = fobj.read_file();
 	      BL_BENCH_END(file, "open", partition.getRange().size());
 
-	      std::cout << "rank " << _comm.rank() << " mpiio " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
+	      //std::cout << "rank " << _comm.rank() << " mpiio " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
 
 
 	      // not reusing the SeqParser in loader.  instead, reinitializing one.
@@ -538,7 +538,7 @@ public:
         ::bliss::io::file_data partition = fobj.read_file();
         BL_BENCH_END(file, "open", partition.getRange().size());
 
-        std::cout << "rank " << _comm.rank() << " mmap " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
+        //std::cout << "rank " << _comm.rank() << " mmap " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
 
         // not reusing the SeqParser in loader.  instead, reinitializing one.
         BL_BENCH_START(file);
@@ -625,7 +625,7 @@ public:
         ::bliss::io::file_data partition = fobj.read_file();
         BL_BENCH_END(file, "open", partition.getRange().size());
 
-        std::cout << "rank " << _comm.rank() << " posix " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
+        //std::cout << "rank " << _comm.rank() << " posix " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
 
         // not reusing the SeqParser in loader.  instead, reinitializing one.
         BL_BENCH_START(file);

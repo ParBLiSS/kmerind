@@ -1174,9 +1174,7 @@ namespace dsc  // distributed std container
     public:
 
 
-      multimap(::mxx::comm const & _comm) : Base(_comm) {
-        this->key_multiplicity = 50;
-      }
+      multimap(::mxx::comm const & _comm) : Base(_comm) { }
 
       virtual ~multimap() {}
 
@@ -1210,6 +1208,7 @@ namespace dsc  // distributed std container
         // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
         size_t uniq_count = 0;
+
         //        ::std::vector< ::std::pair<Key, T> > temp;
         //        KeyTransform<Key> trans;
         //        for (int i = 0, max = this->c.bucket_count(); i < max; ++i) {
@@ -1245,7 +1244,12 @@ namespace dsc  // distributed std container
           unique_set.emplace(it->first);
         }
         uniq_count = unique_set.size();
-        this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
+        if (uniq_count == 0) {
+        	this->key_multiplicity = 1;
+        } else {
+
+        	this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
+        }
         //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
 
 

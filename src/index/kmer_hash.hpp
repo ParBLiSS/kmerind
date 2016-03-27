@@ -213,7 +213,7 @@ namespace bliss {
 
           /// constructor
           identity(const unsigned int prefix_bits = default_init_value) : bits(prefix_bits) {
-            if ((prefix_bits == 0) || (prefix_bits > default_init_value)) throw ::std::invalid_argument("ERROR: prefix size outside of supported range");
+            if (prefix_bits > default_init_value) throw ::std::invalid_argument("ERROR: prefix size outside of supported range");
           };
 
           /// operator to compute hash value

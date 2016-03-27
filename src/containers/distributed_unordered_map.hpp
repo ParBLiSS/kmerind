@@ -1213,9 +1213,7 @@ namespace dsc  // distributed std container
     public:
 
 
-      unordered_multimap(const mxx::comm& _comm) : Base(_comm) {
-        this->key_multiplicity = 50;
-      }
+      unordered_multimap(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~unordered_multimap() {}
 
@@ -1236,7 +1234,7 @@ namespace dsc  // distributed std container
           return Base::find(find_element, pred);
       }
 
-/*
+
       /// update the multiplicity.  only multimap needs to do this.
       virtual size_t update_multiplicity() {
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
@@ -1250,6 +1248,11 @@ namespace dsc  // distributed std container
         // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
         size_t uniq_count = 0;
+        if (this->c.size() <= 1) {
+        	this->key_multiplicity = 1;
+        	return this->key_multiplicity;
+        }
+
         //        ::std::vector< ::std::pair<Key, T> > temp;
         //        KeyTransform<Key> trans;
         //        for (int i = 0, max = this->c.bucket_count(); i < max; ++i) {
@@ -1284,7 +1287,10 @@ namespace dsc  // distributed std container
           unique_set.emplace(it->first);
         }
         uniq_count = unique_set.size();
-        this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
+        if (uniq_count == 0)
+        	this->key_multiplicity = 1;
+        else
+        	this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
         //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
 
 
@@ -1318,13 +1324,13 @@ namespace dsc  // distributed std container
 
         return this->key_multiplicity;
       }
-*/
-      virtual size_t update_multiplicity() {
-        printf("unordered map bucket count: %lu\n", this->c.bucket_count());
-        printf("unordered map load factor: %f\n", this->c.load_factor());
-        printf("unordered map unique entries: %lu\n", this->c.size());
-        return this->key_multiplicity;
-      }
+
+//      virtual size_t update_multiplicity() {
+////        printf("unordered map bucket count: %lu\n", this->c.bucket_count());
+////        printf("unordered map load factor: %f\n", this->c.load_factor());
+////        printf("unordered map unique entries: %lu\n", this->c.size());
+//        return this->key_multiplicity;
+//      }
 
       /**
        * @brief insert new elements in the distributed unordered_multimap.
@@ -1822,9 +1828,7 @@ namespace dsc  // distributed std container
     public:
 
 
-      unordered_multimap_vec(const mxx::comm& _comm) : Base(_comm) {
-        //this->key_multiplicity = 10;
-      }
+      unordered_multimap_vec(const mxx::comm& _comm) : Base(_comm) { }
 
       virtual ~unordered_multimap_vec() {}
 
@@ -1907,6 +1911,11 @@ namespace dsc  // distributed std container
         // This is precise, and is faster than the approach above.  (0.0078125 humanMaM MaMaÿ?: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
         size_t uniq_count = this->c.unique_size();
+        if (uniq_count <= 1) {
+        	this->key_multiplicity = 1;
+        	return this->key_multiplicity;
+        }
+
         this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
         //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
 
@@ -2098,9 +2107,7 @@ namespace dsc  // distributed std container
     public:
 
 
-      unordered_multimap_compact_vec(const mxx::comm& _comm) : Base(_comm) {
-        //this->key_multiplicity = 10;
-      }
+      unordered_multimap_compact_vec(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~unordered_multimap_compact_vec() {}
 
@@ -2183,6 +2190,10 @@ namespace dsc  // distributed std container
         // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
         size_t uniq_count = this->c.unique_size();
+        if (uniq_count <= 1) {
+        	this->key_multiplicity = 1;
+        	return this->key_multiplicity;
+        }
         this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
         //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
 

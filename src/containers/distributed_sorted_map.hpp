@@ -1608,9 +1608,7 @@ namespace dsc  // distributed std container
     public:
 
 
-      sorted_multimap(const mxx::comm& _comm) : Base(_comm) {
-        this->key_multiplicity = 50;
-      }
+      sorted_multimap(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~sorted_multimap() {}
 
@@ -1703,6 +1701,7 @@ namespace dsc  // distributed std container
 
       /// update the multiplicity.  only multimap needs to do this.
       virtual size_t update_multiplicity() {
+          BL_BENCH_INIT(multiplicity);
 
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
@@ -1714,9 +1713,13 @@ namespace dsc  // distributed std container
         // To find unique set, we take each bucket, copy to vector, sort it, and then count unique.
         // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
+          BL_BENCH_START(multiplicity);
 
         this->rehash();
-/*
+        BL_BENCH_END(multiplicity, "rehash", this->c.size());
+
+        BL_BENCH_START(multiplicity);
+
         size_t uniq_count = 0;
         ::std::pair<Key, T> v;
         for (auto it = this->c.begin(), max = this->c.end(); it != max;) {
@@ -1729,7 +1732,8 @@ namespace dsc  // distributed std container
         else
           this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
         //printf("%lu elements, %lu unique, key multiplicity = %lu\n", this->c.size(), uniq_count, this->key_multiplicity);
-*/
+
+        BL_BENCH_END(multiplicity, "update", uniq_count);
 
         //        // third approach is to assume each bucket contains only 1 kmer/kmolecule.
         //        // This is not generally true for all hash functions, so this is an over estimation of the repeat count.
@@ -1742,6 +1746,8 @@ namespace dsc  // distributed std container
 
         // finally, hard coding.  (0.0078125 human:  50 sec.  synth:  32 s)
         // this->key_multiplicity = 50;
+
+        BL_BENCH_REPORT_MPI_NAMED(multiplicity, "sorted_multimap:multiplicity", this->comm);
 
         return this->key_multiplicity;
       }

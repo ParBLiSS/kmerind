@@ -461,7 +461,6 @@ int main(int argc, char** argv) {
 
 	  BL_BENCH_START(test);
 	  idx.erase(query);
-	  printf("new local size = %lu\n", idx.local_size());
 	  BL_BENCH_COLLECTIVE_END(test, "erase", idx.local_size(), comm);
   }
 
