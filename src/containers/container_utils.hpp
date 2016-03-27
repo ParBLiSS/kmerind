@@ -232,6 +232,7 @@ namespace fsc {
 
   /// keep the unique entries within each bucket.  complexity is b * O(N/b), where b is the bucket size, and O(N/b) is complexity of inserting into and copying from set.
   /// when used within bucket, scales with O(N/b), not with b.  this is as good as it gets wrt complexity.
+  /// sortedness is MAINTAINED within buckets
   template<typename SET, typename EQUAL, typename T = typename SET::key_type, typename count_t = int>
   void bucket_unique(std::vector<T>& input, std::vector<count_t> &send_counts, bool sorted = false) {
   

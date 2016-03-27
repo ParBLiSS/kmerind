@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <cmath>   // ceil
 
+#include "utils/logging.h"
 
 namespace fsc {  // fast standard container
 

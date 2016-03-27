@@ -26,8 +26,14 @@
 #define SRC_CONTAINERS_DISTRIBUTED_MAP_BASE_HPP_
 
 #include <functional>
+#include <algorithm>
 #include <iterator>
+#include <vector>
+#include <unordered_set>
 #include "containers/container_utils.hpp"
+#include <mxx/collective.hpp>
+
+#include "utils/benchmark_utils.hpp"
 
 namespace dsc
 {
@@ -112,7 +118,23 @@ namespace dsc
           inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) const {
             return this->operator()(x.first, y.first);
           }
+      };
 
+
+      struct TransformedFarmHash {
+          ::bliss::kmer::hash::farm<Key, false> h;
+
+          inline uint64_t operator()(Key const& k) const {
+            return h(trans(k));
+          }
+          template<typename V>
+          inline uint64_t operator()(::std::pair<Key, V> const& x) const {
+            return this->operator()(x.first);
+          }
+          template<typename V>
+          inline uint64_t operator()(::std::pair<const Key, V> const& x) const {
+            return this->operator()(x.first);
+          }
       };
 
 
@@ -155,6 +177,177 @@ namespace dsc
       map_base(const mxx::comm& _comm) :
           key_multiplicity(1), comm(_comm), comm_size(comm.size()) {
       }
+
+      /**
+       * @param[IN/OUT] keys  	keys to distribute. sortedness is NOT kept because of inplace bucketing.,
+       * @param[IN/OUT] sorted_input  	indicates if input is sorted.  and whether each bucket is sorted.
+       * @return received counts
+       */
+      template <typename V, typename ToRank>
+      ::std::vector<size_t> distribute_unique(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input) const {
+    	  BL_BENCH_INIT(distribute);
+
+          BL_BENCH_START(distribute);
+          // distribute (communication part)
+          std::vector<size_t> send_counts = mxx::bucketing_inplace(vals, to_rank, this->comm.size());
+          sorted_input = false;
+          BL_BENCH_END(distribute, "bucket", vals.size());
+
+          BL_BENCH_START(distribute);
+          // distribute (communication part)
+          ::fsc::bucket_unique<::std::unordered_set<V,
+                                                   TransformedFarmHash,
+                                                   TransformedEqual >,
+                                                   TransformedEqual >(vals, send_counts, sorted_input);
+          BL_BENCH_END(distribute, "unique", vals.size());
+
+
+          // distribute (communication part)
+          BL_BENCH_COLLECTIVE_START(distribute, "a2a", this->comm);
+          vals = mxx::all2allv(vals, send_counts, this->comm);
+          BL_BENCH_END(distribute, "a2a", vals.size());
+
+          BL_BENCH_START(distribute);
+          std::vector<size_t> recv_counts= mxx::all2all(send_counts, this->comm);
+          BL_BENCH_END(distribute, "a2a_counts", vals.size());
+
+          BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", this->comm);
+
+
+          return recv_counts;
+      }
+
+      /**
+       * @param[IN/OUT] vals  	vals to distribute.  sortedness is NOT kept because of inplace bucketing.
+       * @param[IN/OUT] sorted_input  	indicates if input is sorted.  and whether each bucket is sorted.
+       *
+       * @return received counts.
+       */
+      template <typename V, typename ToRank>
+      ::std::vector<size_t> distribute(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input) const {
+    	  BL_BENCH_INIT(distribute);
+
+          BL_BENCH_START(distribute);
+          // distribute (communication part)
+          std::vector<size_t> send_counts = mxx::bucketing_inplace(vals, to_rank, this->comm.size());
+          sorted_input = false;
+          BL_BENCH_END(distribute, "bucket", vals.size());
+
+          // distribute (communication part)
+          BL_BENCH_COLLECTIVE_START(distribute, "a2a", this->comm);
+          vals = mxx::all2allv(vals, send_counts, this->comm);
+          BL_BENCH_END(distribute, "a2a", vals.size());
+
+          BL_BENCH_START(distribute);
+          std::vector<size_t> recv_counts= mxx::all2all(send_counts, this->comm);
+          BL_BENCH_END(distribute, "a2a_counts", vals.size());
+
+          BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", this->comm);
+
+
+          return recv_counts;
+      }
+
+
+      /**
+       * @param[IN/OUT] keys  	keys to distribute. sortedness is KEPT.,
+       * @param[IN/OUT] sorted_input  	indicates if input is sorted.  and whether each bucket is sorted.
+       * @return received counts
+       */
+      template <typename V, typename ToRank>
+      ::std::vector<size_t> stable_distribute_unique(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input) const {
+    	  BL_BENCH_INIT(distribute);
+
+          BL_BENCH_START(distribute);
+          // distribute (communication part)
+          std::vector<size_t> send_counts = mxx::bucketing(vals, to_rank, this->comm.size());
+          BL_BENCH_END(distribute, "bucket", vals.size());
+
+          BL_BENCH_START(distribute);
+          // distribute (communication part)
+          ::fsc::bucket_unique<::std::unordered_set<V,
+                                                   TransformedFarmHash,
+                                                   TransformedEqual >,
+                                                   TransformedEqual >(vals, send_counts, sorted_input);
+          BL_BENCH_END(distribute, "unique", vals.size());
+
+
+          // distribute (communication part)
+          BL_BENCH_COLLECTIVE_START(distribute, "a2a", this->comm);
+          vals = mxx::all2allv(vals, send_counts, this->comm);
+          BL_BENCH_END(distribute, "a2a", vals.size());
+
+          BL_BENCH_START(distribute);
+          std::vector<size_t> recv_counts= mxx::all2all(send_counts, this->comm);
+          BL_BENCH_END(distribute, "a2a_counts", vals.size());
+
+          BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", this->comm);
+
+
+          return recv_counts;
+      }
+
+      /**
+       * @param[IN/OUT] vals  	vals to distribute.  sortedness is KEPT within each bucket
+       * @param[IN/OUT] sorted_input  	indicates if input is sorted.  and whether each bucket is sorted.
+       *
+       * @return received counts.
+       */
+      template <typename V, typename ToRank>
+      ::std::vector<size_t> stable_distribute(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input) const {
+    	  BL_BENCH_INIT(distribute);
+
+          BL_BENCH_START(distribute);
+          // distribute (communication part)
+          std::vector<size_t> send_counts = mxx::bucketing(vals, to_rank, this->comm.size());
+          BL_BENCH_END(distribute, "bucket", vals.size());
+
+          // distribute (communication part)
+          BL_BENCH_COLLECTIVE_START(distribute, "a2a", this->comm);
+          vals = mxx::all2allv(vals, send_counts, this->comm);
+          BL_BENCH_END(distribute, "a2a", vals.size());
+
+          BL_BENCH_START(distribute);
+          std::vector<size_t> recv_counts= mxx::all2all(send_counts, this->comm);
+          BL_BENCH_END(distribute, "a2a_counts", vals.size());
+
+          BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", this->comm);
+
+
+          return recv_counts;
+      }
+
+
+
+      ///  keep the unique keys in the input. primarily for reducing comm volume.
+      ///  sortedness is NOT changed.  equal operator forces comparison to Key
+      template <typename V>
+      void hash_unique(::std::vector< V >& input, bool & sorted_input) const {
+        if (input.size() == 0) return;
+        if (sorted_input) {  // already sorted, then just get the unique stuff and remove rest.
+          auto end = ::std::unique(input.begin(), input.end(), this->equal);
+          input.erase(end, input.end());
+        } else {  // not sorted, so use a set to keep the first occurence.
+
+          // sorting is SLOW and not scalable.  use unordered set instead.  memory use is higher.
+          // unordered_set for large data is memory intensive.  depending on use, bucket per processor first.
+          ::std::unordered_set<V, TransformedFarmHash, TransformedEqual> temp(input.begin(),
+        		  input.end(), input.size());
+          input.assign(temp.begin(), temp.end());
+        }
+      }
+
+      ///  keep the unique keys in the input.   output is SORTED.  equal operator forces comparison to Key
+      template <typename V>
+      void sort_unique(::std::vector< V >& input, bool & sorted_input) const {
+        if (input.size() == 0) return;
+        if (!sorted_input) map_base::sort_ascending(input.begin(), input.end());
+        auto end = ::std::unique(input.begin(), input.end(), this->equal);
+        input.erase(end, input.end());
+
+        sorted_input = true;
+      }
+
 
     public:
       virtual ~map_base() {};

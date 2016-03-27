@@ -94,7 +94,7 @@ namespace dsc  // distributed std container
    *
    *  note: KeyTransform is applied before Hash, and Equal operators.  These operators should have NO KNOWLEDGE of any transform applied, including kmolecule to kmer mapping.
    *
-   *  any operation that uses sort is not going to scale well.  this includes "retain_unique_key, retain_unique_tuple, local_reduction"...
+   *  any operation that uses sort is not going to scale well.  this includes "sort_unique_key, sort_unique_tuple, local_reduction"...
    *  to reduce this, we can try by using a hash set instead.  http://www.vldb.org/pvldb/2/vldb09-257.pdf, http://www.vldb.org/pvldb/vol7/p85-balkesen.pdf
    *
    *  conditional version of insert/erase/find/count supports predicate that operate on INTERMEDIATE RESULTS.  input (key,key-value pair) can be pre-filtered.
@@ -330,21 +330,6 @@ namespace dsc  // distributed std container
       }
 
 
-      ///  keep the unique keys in the input. primarily for reducing comm volume.   output is sorted.  equal operator forces comparison to Key
-      template <typename V>
-      void retain_unique(::std::vector< V >& input, bool sorted_input = false) const {
-        if (input.size() == 0) return;
-        if (sorted_input) {  // already sorted, then just get the unique stuff and remove rest.
-          auto end = ::std::unique(input.begin(), input.end(), this->equal);
-          input.erase(end, input.end());
-        } else {  // not sorted, so use an set to keep the first occurence.
-
-          // sorting is SLOW and not scalable.  use unordered set instead.
-
-          ::std::unordered_set<V, TransformedHash, typename Base::TransformedEqual > temp(input.begin(), input.end(), input.size());
-          input.assign(temp.begin(), temp.end());
-        }
-      }
       /**
        * @brief find elements with the specified keys in the distributed unordered_multimap.
        * @param first
@@ -361,25 +346,10 @@ namespace dsc  // distributed std container
         BL_BENCH_END(find, "begin", keys.size());
 
         if (this->comm_size > 1) {
-          BL_BENCH_START(find);
-          // distribute (communication part)
-          std::vector<size_t> send_counts = mxx::bucketing(keys, this->key_to_rank, this->comm_size);
-          BL_BENCH_END(find, "bucket", keys.size());
-
-          BL_BENCH_START(find);
-          // distribute (communication part)
-          fsc::bucket_unique<::std::unordered_set<Key,
-                                                   TransformedHash,
-                                                   typename Base::TransformedEqual >, typename Base::TransformedEqual >(keys, send_counts, sorted_input);
-          BL_BENCH_END(find, "unique", keys.size());
-
-
-          BL_BENCH_COLLECTIVE_START(find, "a2a1", this->comm);
-          // distribute (communication part)
-          // TODO: reuse recv_count
-          std::vector<size_t> recv_counts= mxx::all2all(send_counts, this->comm);
-          keys = mxx::all2allv(keys, send_counts, this->comm);
-          BL_BENCH_END(find, "a2a1", keys.size());
+            BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
+            // distribute (communication part)
+            std::vector<size_t> recv_counts(this->distribute_unique(keys, this->key_to_rank, sorted_input));
+            BL_BENCH_END(find, "dist_query", keys.size());
 
           // local find. memory utilization a potential problem.
           // do for each src proc one at a time.
@@ -387,16 +357,18 @@ namespace dsc  // distributed std container
           BL_BENCH_START(find);
           results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
-          BL_BENCH_END(find, "reserve", keys.size());
+          BL_BENCH_END(find, "reserve", results.capacity());
 
           BL_BENCH_START(find);
+          std::vector<size_t> send_counts(this->comm.size(), 0);
+
           auto start = keys.begin();
           auto end = start;
           for (int i = 0; i < this->comm_size; ++i) {
             ::std::advance(end, recv_counts[i]);
 
             // work on query from process i.
-            send_counts[i] = QueryProcessor::process(c, start, end, emplace_iter, find_element, true, pred);
+            send_counts[i] = QueryProcessor::process(c, start, end, emplace_iter, find_element, sorted_input, pred);
            // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
 
             start = end;
@@ -412,16 +384,16 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(find);
           // keep unique keys
-          this->retain_unique(keys, sorted_input);
+          this->sort_unique(keys, sorted_input);
           BL_BENCH_END(find, "uniq1", keys.size());
 
           BL_BENCH_START(find);
           results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
-          BL_BENCH_END(find, "reserve", keys.size() );
+          BL_BENCH_END(find, "reserve", results.capacity() );
 
           BL_BENCH_START(find);
-          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, true, pred);
+          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, sorted_input, pred);
           BL_BENCH_END(find, "local_find", results.size());
         }
 
@@ -456,25 +428,11 @@ namespace dsc  // distributed std container
         BL_BENCH_END(find, "begin", keys.size());
 
         if (this->comm_size > 1) {
-          BL_BENCH_START(find);
-          // distribute (communication part)
-          std::vector<size_t> send_counts = mxx::bucketing(keys, this->key_to_rank, this->comm_size);
-          BL_BENCH_END(find, "bucket", keys.size());
+            BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
+            // distribute (communication part)
+            std::vector<size_t> recv_counts(this->distribute_unique(keys, this->key_to_rank, sorted_input));
+            BL_BENCH_END(find, "dist_query", keys.size());
 
-          BL_BENCH_START(find);
-          // distribute (communication part)
-          fsc::bucket_unique<::std::unordered_set<Key,
-                                                   TransformedHash,
-                                                   typename Base::TransformedEqual >,
-                              typename Base::TransformedEqual >(keys, send_counts, sorted_input);
-          BL_BENCH_END(find, "unique", keys.size());
-
-
-          BL_BENCH_COLLECTIVE_START(find, "a2a1", this->comm);
-          // distribute (communication part)
-          std::vector<size_t> recv_counts = mxx::all2all(send_counts, this->comm);
-          keys = mxx::all2allv(keys, send_counts, this->comm);
-          BL_BENCH_END(find, "a2a1", keys.size());
 
           // local count to determine amount of memory to allocate at destination.
           BL_BENCH_START(find);
@@ -482,6 +440,8 @@ namespace dsc  // distributed std container
           size_t max_key_count = *(::std::max_element(recv_counts.begin(), recv_counts.end()));
           count_results.reserve(max_key_count);
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+
+          std::vector<size_t> send_counts(this->comm.size(), 0);
 
           auto start = keys.begin();
           auto end = start;
@@ -491,7 +451,7 @@ namespace dsc  // distributed std container
 
             // count results for process i
             count_results.clear();
-            QueryProcessor::process(c, start, end, count_emplace_iter, count_element, true, pred);
+            QueryProcessor::process(c, start, end, count_emplace_iter, count_element, sorted_input, pred);
             send_counts[i] =
                 ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                   [](size_t v, ::std::pair<Key, size_t> const & x) {
@@ -512,6 +472,7 @@ namespace dsc  // distributed std container
           std::vector<size_t> resp_counts = mxx::all2all(send_counts, this->comm);  // compute counts of response to receive
           BL_BENCH_END(find, "a2a_count", keys.size());
 
+          //==== reserve
           BL_BENCH_START(find);
           auto resp_displs = mxx::impl::get_displacements(resp_counts);  // compute response displacements.
 
@@ -528,11 +489,12 @@ namespace dsc  // distributed std container
           size_t found;
           total = 0;
           std::vector<MPI_Request> reqs(2 * this->comm_size);
+
+          mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T> >();
           for (int i = 0; i < this->comm_size; ++i) {
             recv_from = (this->comm.rank() + (this->comm_size - i)) % this->comm_size; // rank to recv data from
 
             // set up receive.
-            mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T> >();
             MPI_Irecv(&results[resp_displs[recv_from]], resp_counts[recv_from], dt.type(),
                       recv_from, i, this->comm, &reqs[2 * i]);
 
@@ -547,7 +509,7 @@ namespace dsc  // distributed std container
 
             local_results.clear();
             // work on query from process i.
-            found = QueryProcessor::process(c, start, end, local_emplace_iter, find_element, true, pred);
+            found = QueryProcessor::process(c, start, end, local_emplace_iter, find_element, sorted_input, pred);
            // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
             total += found;
             //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
@@ -576,7 +538,7 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(find);
           // keep unique keys
-          this->retain_unique(keys, sorted_input);
+          this->sort_unique(keys, sorted_input);
           BL_BENCH_END(find, "uniq1", keys.size());
 
 
@@ -586,7 +548,7 @@ namespace dsc  // distributed std container
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
 
           // count now.
-          QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
+          QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, sorted_input, pred);
           size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                             [](size_t v, ::std::pair<Key, size_t> const & x) {
                         return v + x.second;
@@ -602,7 +564,7 @@ namespace dsc  // distributed std container
           BL_BENCH_END(find, "reserve", count);
 
           BL_BENCH_START(find);
-          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, true, pred);
+          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, sorted_input, pred);
           BL_BENCH_END(find, "local_find", results.size());
         }
 
@@ -622,6 +584,9 @@ namespace dsc  // distributed std container
         results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
 
         QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, true, pred);
+
+        if (this->comm_size > 1) this->comm.barrier();
+
         return results;
       }
 
@@ -708,7 +673,7 @@ namespace dsc  // distributed std container
       void reserve( size_t n) {
         // direct reserve + barrier
         this->local_reserve(n);
-        if (this->comm_size > 1) MPI_Barrier(this->comm);
+        if (this->comm_size > 1) this->comm.barrier();
       }
 
 
@@ -716,7 +681,7 @@ namespace dsc  // distributed std container
       void rehash( size_type n) {
         // direct rehash + barrier
         local_rehash(n);
-        if (this->comm_size > 1) MPI_Barrier(this->comm);
+        if (this->comm_size > 1) this->comm.barrier();
       }
 
 
@@ -739,32 +704,16 @@ namespace dsc  // distributed std container
 
         if (this->comm_size > 1) {
 
-          BL_BENCH_START(count);
-          // distribute (communication part)
-          std::vector<size_t> send_counts = mxx::bucketing(keys, this->key_to_rank, this->comm_size);
-          BL_BENCH_END(count, "bucket", keys.size());
-
-          BL_BENCH_START(count);
-          // distribute (communication part)
-          fsc::bucket_unique<::std::unordered_set<Key,
-                                                   TransformedHash,
-                                                   typename Base::TransformedEqual >, typename Base::TransformedEqual >(keys, send_counts, sorted_input);
-          BL_BENCH_END(count, "unique", keys.size());
-
-
-          BL_BENCH_COLLECTIVE_START(count, "a2a1", this->comm);
-          // distribute (communication part)
-          // TODO: reuse recv_counts
-          std::vector<size_t> recv_counts = mxx::all2all(send_counts, this->comm);
-          keys = mxx::all2allv(keys, send_counts);
-          BL_BENCH_END(count, "a2a1", keys.size());
+            BL_BENCH_START(count);
+            std::vector<size_t> recv_counts(this->distribute_unique(keys, this->key_to_rank, sorted_input));
+            BL_BENCH_END(count, "dist_query", keys.size());
 
 
           // local count. memory utilization a potential problem.
           // do for each src proc one at a time.
           BL_BENCH_START(count);
           results.reserve(keys.size());                   // TODO:  should estimate coverage.
-          BL_BENCH_END(count, "reserve", keys.size());
+          BL_BENCH_END(count, "reserve", results.capacity());
 
           BL_BENCH_START(count);
           auto start = keys.begin();
@@ -773,7 +722,7 @@ namespace dsc  // distributed std container
             ::std::advance(end, recv_counts[i]);
 
             // within start-end, values are unique, so don't need to set unique to true.
-            QueryProcessor::process(c, start, end, emplace_iter, count_element, true, pred);
+            QueryProcessor::process(c, start, end, emplace_iter, count_element, sorted_input, pred);
 
             if (this->comm.rank() == 0)
             	BL_DEBUGF("R %d added %lu results for %lu queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
@@ -790,19 +739,19 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(count);
           // keep unique keys
-          retain_unique(keys, sorted_input);
+          this->sort_unique(keys, sorted_input);
           BL_BENCH_END(count, "uniq1", keys.size());
 
 
 
           BL_BENCH_START(count);
           results.reserve(keys.size());                   // TODO:  should estimate coverage.
-          BL_BENCH_END(count, "reserve", keys.size());
+          BL_BENCH_END(count, "reserve", results.capacity());
 
 
           BL_BENCH_START(count);
           // within start-end, values are unique, so don't need to set unique to true.
-          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, count_element, true, pred);
+          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, count_element, sorted_input, pred);
           BL_BENCH_END(count, "local_count", results.size());
         }
 
@@ -824,7 +773,7 @@ namespace dsc  // distributed std container
 
         QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, count_element, true, pred);
 
-        if (this->comm_size > 1) MPI_Barrier(this->comm);
+        if (this->comm_size > 1) this->comm.barrier();
         return results;
       }
 
@@ -841,39 +790,26 @@ namespace dsc  // distributed std container
           size_t before = this->c.size();
           BL_BENCH_INIT(erase);
 
-          bool si = sorted_input;
         if (this->comm_size > 1) {
 
             BL_BENCH_START(erase);
-          // distribute (communication part)
-          std::vector<size_t> send_counts = mxx::bucketing(keys, this->key_to_rank, this->comm_size);
-          BL_BENCH_END(erase, "bucket", keys.size());
+            auto recv_counts(this->distribute_unique(keys, this->key_to_rank, sorted_input));
+            BLISS_UNUSED(recv_counts);
+            BL_BENCH_END(erase, "dist_query", keys.size());
 
-          BL_BENCH_START(erase);
-          // unique within bucket
-          fsc::bucket_unique<::std::unordered_set<Key,
-                                                   TransformedHash,
-                                                   typename Base::TransformedEqual >,
-                              typename Base::TransformedEqual >(keys, send_counts, si);
-          BL_BENCH_END(erase, "bucket_unique", keys.size());
-
-          BL_BENCH_START(erase);
-          // distribute (communication part)
-          keys = mxx::all2allv(keys, send_counts, this->comm);
-          BL_BENCH_END(erase, "a2a", keys.size());
-
-          si = false;
         }
 
-        BL_BENCH_START(erase);
-        // remove duplicates
-        retain_unique(keys, si);
-        BL_BENCH_END(erase, "unique", keys.size());
+        // this uses sort order to remove duplicates.  map handled sorted access better,
+        // and log access is slow, so get unique first.
+		BL_BENCH_START(erase);
+		// remove duplicates
+		this->sort_unique(keys, sorted_input);
+		BL_BENCH_END(erase, "unique", keys.size());
 
         BL_BENCH_START(erase);
         // then call local remove.
         auto dummy_iter = keys.end();  // process requires a reference.
-        QueryProcessor::process(c, keys.begin(), keys.end(), dummy_iter, erase_element, true, pred);
+        QueryProcessor::process(c, keys.begin(), keys.end(), dummy_iter, erase_element, sorted_input, pred);
         BL_BENCH_END(erase, "erase", keys.size());
 
         BL_BENCH_REPORT_MPI_NAMED(erase, "base_map:erase", this->comm);
@@ -886,12 +822,25 @@ namespace dsc  // distributed std container
 
       template <typename Predicate = Identity>
       size_t erase(Predicate const & pred = Predicate()) {
+
+    	  size_t count = 0;
+
+          if (!::std::is_same<Predicate, Identity>::value) {
+
+
         auto keys = this->keys();
 
         auto dummy_iter = keys.end();  // process requires a reference.
-        size_t count = QueryProcessor::process(c, keys.begin(), keys.end(), dummy_iter, erase_element, true, pred);
 
-        if (this->comm_size > 1) MPI_Barrier(this->comm);
+        // keys are ordered because this is based on a map.
+        count = QueryProcessor::process(c, keys.begin(), keys.end(), dummy_iter, erase_element, true, pred);
+
+          } else {  // identity matches all, so all are cleared.
+        	  count = this->local_size();
+
+        	  this->local_clear();
+          }
+        if (this->comm_size > 1) this->comm.barrier();
 
         return count;
       }
@@ -988,8 +937,8 @@ namespace dsc  // distributed std container
       } find_element;
 
 
-      virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
-        this->Base::retain_unique(input, sorted_input);
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool & sorted_input) {
+        this->sort_unique(input, sorted_input);
       }
 
 
@@ -1034,23 +983,15 @@ namespace dsc  // distributed std container
         if (this->comm_size > 1) {
             BL_BENCH_START(insert);
             // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-            this->local_reduction(input);
+            this->local_reduction(input, sorted_input);
             BL_BENCH_END(insert, "local_reduce", input.size());
 
-
-          BL_BENCH_START(insert);
-          // get mapping to proc
-          ::std::vector<size_t> send_counts = mxx::bucketing(input, this->key_to_rank, this->comm_size);
-          BL_BENCH_END(insert, "bucket", input.size());
-
-//          BL_BENCH_START(insert);
-//          // keep unique only.  may not be needed - comm speed may be faster than we can compute unique.
-//          mxx2::bucket_unique<local_container_type, typename Base::TransformedEqual>(input, send_counts, sorted_input);
-//          BL_BENCH_END(insert, "uniq1", input.size());
-
-          BL_BENCH_COLLECTIVE_START(insert, "a2a", this->comm);
-          input = mxx::all2allv(input, send_counts, this->comm);
-          BL_BENCH_END(insert, "a2a", input.size());
+            BL_BENCH_START(insert);
+            // get mapping to proc
+            // keep unique only may not be needed - comm speed may be faster than we can compute unique.
+            auto recv_counts(this->distribute(input, this->key_to_rank, sorted_input));
+            BLISS_UNUSED(recv_counts);
+            BL_BENCH_END(insert, "dist_data", input.size());
         }
 
 
@@ -1345,14 +1286,11 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm_size > 1) {
-          BL_BENCH_START(insert);
-          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          ::std::vector<size_t> send_counts = mxx::bucketing(input, this->key_to_rank, this->comm_size);
-          BL_BENCH_END(insert, "bucket", input.size());
-
-          BL_BENCH_COLLECTIVE_START(insert, "a2a", this->comm);
-          input = mxx::all2allv(input, send_counts, this->comm);
-          BL_BENCH_END(insert, "a2a", input.size());
+            BL_BENCH_START(insert);
+            // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+            auto recv_counts = this->distribute(input, this->key_to_rank, sorted_input);
+            BLISS_UNUSED(recv_counts);
+            BL_BENCH_END(insert, "dist_data", input.size());
         }
 
         //        count_unique(input);
@@ -1465,7 +1403,7 @@ namespace dsc  // distributed std container
 
       }
 
-      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input, bool sorted_input = false) {
+      virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input, bool& sorted_input) {
 
         if (input.size() == 0) return;
 
@@ -1519,24 +1457,14 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          this->local_reduction(input);
+          this->local_reduction(input, sorted_input);
           BL_BENCH_END(insert, "local_reduce", input.size());
 
           BL_BENCH_START(insert);
-          // find mapping to proc
-          ::std::vector<size_t> send_counts = mxx::bucketing(input, this->key_to_rank, this->comm_size);
-          BL_BENCH_END(insert, "bucket", input.size());
-
-//          BL_BENCH_START(insert);
-//          // locally reduce  may not be needed
-//          mxx2::bucket_reduce<local_container_type>(input, send_counts, this->r, sorted_input);
-//          BL_BENCH_END(insert, "reduce", input.size());
-
-          BL_BENCH_COLLECTIVE_START(insert, "a2a", this->comm);
-          // move the data to the target proc
-          input = mxx::all2allv(input, send_counts, this->comm);
-          BL_BENCH_END(insert, "a2a", input.size());
-
+          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          auto recv_counts = this->distribute(input, this->key_to_rank, sorted_input);
+          BLISS_UNUSED(recv_counts);
+          BL_BENCH_END(insert, "dist_data", input.size());
         }
         //
         //        // after communication, sort again to keep unique  - may not be needed
