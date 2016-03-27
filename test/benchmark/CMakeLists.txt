@@ -21,7 +21,7 @@ foreach(dna 4 5 16)
   
     # count maps.  note SORTED PATH ignores hash but uses transformation
     foreach(map SORTED UNORDERED) 
-      add_executable(testKmerIndex_FASTQ_4_COUNT BenchmarkKmerIndex.cpp)
+      add_executable(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_COUNT BenchmarkKmerIndex.cpp)
       SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_COUNT
          PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=${dna} -DpK=31 -DpTRANS=${trans} -DpHASH=FARM -DpMAP=${map} -DpINDEX=COUNT")
       target_link_libraries(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_COUNT ${EXTRA_LIBS})
