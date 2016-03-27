@@ -73,7 +73,7 @@
 #include "io/mxx_support.hpp"
 #include "containers/distributed_unordered_map.hpp"
 #include "containers/distributed_sorted_map.hpp"
-// way too slow.  also not updated.  #include "containers/distributed_map.hpp"
+#include "containers/distributed_map.hpp"
 
 #include "io/sequence_iterator.hpp"
 #include "io/sequence_id_iterator.hpp"
@@ -538,7 +538,7 @@ public:
         ::bliss::io::file_data partition = fobj.read_file();
         BL_BENCH_END(file, "open", partition.getRange().size());
 
-        std::cout << "rank " << _comm.rank() << " mpiio " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
+        std::cout << "rank " << _comm.rank() << " mmap " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
 
         // not reusing the SeqParser in loader.  instead, reinitializing one.
         BL_BENCH_START(file);
@@ -583,8 +583,101 @@ public:
   }
 
 
+  /**
+   * @brief read a file's content and generate kmers, place in a vector as return result.
+   * @note  static so can be used wihtout instantiating a internal map.
+   * @tparam SeqParser    parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
+   * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
+   */
+  template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity, typename KP = KmerParser>
+  static size_t read_file_posix(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
+
+      // file extension determines SeqParserType
+      std::string extension = ::bliss::utils::file::get_file_extension(filename);
+      std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+      if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+        throw std::invalid_argument("input filename extension is not supported.");
+      }
+
+      // check to make sure that the file parser will work
+      if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
+        throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
+      } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
+        throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
+      }
+
+
+      // partitioned file with mmap or posix do not seem to be much faster than mpiio and may result in more jitter when congested.
+      using FileType = ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, SeqParser<unsigned char *> >;
+	    //====  now process the file, one L1 block (block partition by MPI Rank) at a time
+
+      size_t before = result.size();
+
+      BL_BENCH_INIT(file);
+      {  // ensure that fileloader is closed at the end.
+
+        BL_BENCH_START(file);
+        //==== create file Loader
+  //      FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
+  //      typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
+
+        FileType fobj(filename, KmerType::size, _comm);
+        ::bliss::io::file_data partition = fobj.read_file();
+        BL_BENCH_END(file, "open", partition.getRange().size());
+
+        std::cout << "rank " << _comm.rank() << " posix " << partition.getRange() << " in mem " << partition.in_mem_range_bytes << std::endl;
+
+        // not reusing the SeqParser in loader.  instead, reinitializing one.
+        BL_BENCH_START(file);
+        SeqParser<unsigned char *> l1parser;
+        l1parser.init_parser(partition.data.data(), partition.parent_range_bytes, partition.in_mem_range_bytes, partition.getRange(), _comm);
+        BL_BENCH_END(file, "mark_seqs", partition.getRange().size());
+
+        //== reserve
+        BL_BENCH_START(file);
+        // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
+        // index reserve internally sends a message to itself.
+
+        // call after getting first L1Block to ensure that file is loaded.  (rank 0 reads and broadcast)
+        size_t record_size = 0;
+        size_t seq_len = 0;
+        std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.getRange(), partition.getRange());
+        size_t est_size = (record_size == 0) ? 0 : (partition.getRange().size() + record_size - 1) / record_size;  // number of records
+        est_size *= (seq_len < KmerType::size) ? 0 : (seq_len - KmerType::size + 1) ;  // number of kmers in a record
+        result.reserve(est_size);
+        BL_BENCH_END(file, "reserve", est_size);
+
+        BL_BENCH_START(file);
+        //=== copy into array
+        if (partition.getRange().size() > 0) {
+          read_block<KP>(partition, l1parser, result);
+        }
+        BL_BENCH_END(file, "read", result.size());
+        // std::cout << "Last: pos - kmer " << result.back() << std::endl;
+      }
+
+      if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
+        BL_BENCH_START(file);
+
+        ::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
+        ::std::for_each(result.begin(), result.end(), tuple_trans);
+
+        BL_BENCH_END(file, "canonicalize", result.size());
+      }
+
+      BL_BENCH_REPORT_MPI_NAMED(file, "index:read:posix_file", _comm);
+      return result.size() - before;
+  }
+
+
+
+
+
 	std::vector<TupleType> find(std::vector<KmerType> &query) {
 		return map.find(query);
+	}
+	std::vector<TupleType> find_collective(std::vector<KmerType> &query) {
+		return map.find_collective(query);
 	}
 
 	std::vector< std::pair<KmerType, size_t> > count(std::vector<KmerType> &query) {
@@ -598,37 +691,38 @@ public:
 
 	template <typename Predicate>
 	std::vector<TupleType> find_if(std::vector<KmerType> &query, Predicate const &pred) {
-		return map.find_if(query, pred);
+		return map.find(query, pred);
+	}
+	template <typename Predicate>
+	std::vector<TupleType> find_if_collective(std::vector<KmerType> &query, Predicate const &pred) {
+		return map.find_collective(query, pred);
 	}
 	template <typename Predicate>
 	std::vector<TupleType> find_if(Predicate const &pred) {
-		return map.find_if(pred);
+		return map.find(pred);
 	}
 
 	template <typename Predicate>
 	std::vector<std::pair<KmerType, size_t> > count_if(std::vector<KmerType> &query, Predicate const &pred) {
-		return map.count_if(query, pred);
+		return map.count(query, pred);
 	}
 
 	template <typename Predicate>
 	std::vector<std::pair<KmerType, size_t> > count_if(Predicate const &pred) {
-		return map.count_if(pred);
+		return map.count(pred);
 	}
 
 
 	template <typename Predicate>
 	void erase_if(std::vector<KmerType> &query, Predicate const &pred) {
-		map.erase_if(query, pred);
+		map.erase(query, pred);
 	}
 
 	template <typename Predicate>
 	void erase_if(Predicate const &pred) {
-		map.erase_if(pred);
+		map.erase(pred);
 	}
 
-	size_t local_size() {
-		return map.local_size();
-	}
 
 	/**
 	 * @tparam T 	input type may not be same as map's value types, so map need to provide overloads (and potentially with transform operators)

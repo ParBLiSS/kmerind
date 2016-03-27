@@ -206,7 +206,7 @@ namespace dsc  // distributed std container
           template <class DBIter, class QueryIter, class OutputIter, class Operator, class Predicate = Identity>
           static size_t process(DBIter range_begin, DBIter range_end,
                                 QueryIter query_begin, QueryIter query_end,
-                                OutputIter &output, Operator const & op,
+                                OutputIter &output, Operator & op,
                                 bool sorted_query = false, Predicate const &pred = Predicate()) {
 
               // no matches in container.
@@ -378,8 +378,6 @@ namespace dsc  // distributed std container
           template<bool linear, class DBIter, typename Query, class Predicate = Identity>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, DBIter &output,
                             Predicate const & pred) {
-              DBIter output_orig = output;
-
               // find start of segment to delete == end of prev segment to keep
               range_begin = lower_bound<linear>(el_end, range_end, v);
 
@@ -474,7 +472,7 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class LocalFind, class Predicate = Identity >
-      ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind const & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(find);
 
@@ -581,7 +579,7 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class LocalFind, class Predicate = Identity >
-      ::std::vector<::std::pair<Key, T> > find(LocalFind const & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find(LocalFind & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(find);
 //
@@ -766,7 +764,7 @@ namespace dsc  // distributed std container
 
 
       template <class LocalFind, class Predicate = Identity>
-      ::std::vector<::std::pair<Key, T> > find(LocalFind const & local_find,
+      ::std::vector<::std::pair<Key, T> > find(LocalFind & local_find,
     		  Predicate const & pred = Predicate()) const {
           ::std::vector<::std::pair<Key, T> > results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
@@ -1073,22 +1071,34 @@ namespace dsc  // distributed std container
       template <typename Predicate = Identity>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const & pred = Predicate() ) {
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
+          BL_BENCH_INIT(erase);
 
         bool si = sorted_input;
         if (this->comm_size > 1) {
           // remove duplicates
+            BL_BENCH_START(erase);
           retain_unique(keys, si);
+          BL_BENCH_END(erase, "unique", keys.size());
 
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          BL_BENCH_START(erase);
           ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(keys, this->key_to_rank.map, Base::less);
+          BL_BENCH_END(erase, "bucket_size", keys.size());
 
+          BL_BENCH_START(erase);
           keys = mxx::all2allv(keys, send_counts, this->comm);
+          BL_BENCH_END(erase, "a2a", keys.size());
 
           si = false;
         }
 
-        return this->local_erase(keys, si, pred);
+        BL_BENCH_START(erase);
+        size_t result = this->local_erase(keys, si, pred);
+        BL_BENCH_END(erase, "erase", keys.size());
 
+        BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
+
+        return result;
       }
 
       template <typename Predicate = Identity>
@@ -1277,6 +1287,12 @@ namespace dsc  // distributed std container
     		  Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+    		  Predicate const& pred = Predicate()) const {
+          return Base::find_a2a(find_element, keys, sorted_input, pred);
+      }
+
 
       template <class Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
@@ -1768,6 +1784,11 @@ namespace dsc  // distributed std container
           return result;
 */
       }
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+    		  Predicate const& pred = Predicate()) const {
+          return Base::find_a2a(find_element, keys, sorted_input, pred);
+      }
 
       template <class Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
@@ -2028,17 +2049,11 @@ namespace dsc  // distributed std container
       size_t insert(::std::vector<std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
 
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        BL_BENCH_INIT(count_insert);
 
         // distribute
-        BL_BENCH_START(count_insert);
         // local compute part.  called by the communicator.
         size_t count = this->Base::insert(input, sorted_input, pred);
 
-        BL_BENCH_END(count_insert, "insert", this->c.size());
-
-        // distribute
-        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_sorted_map:insert", this->comm);
         return count;
       }
 

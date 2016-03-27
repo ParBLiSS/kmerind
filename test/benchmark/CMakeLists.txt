@@ -28,15 +28,103 @@ add_executable(testFASTA_load BenchmarkFileLoader.cpp)
 SET_TARGET_PROPERTIES(testFASTA_load PROPERTIES COMPILE_FLAGS -DUSE_FASTA_PARSER)
 target_link_libraries(testFASTA_load ${EXTRA_LIBS})
 
+#================= 96 targets
+# vary alphabet, which affects kmer transformations as well.  this in turn has impact on type of backend containers.
+foreach(dna 4 5 16)
+  foreach(trans IDEN LEX XOR PRELEX)
+  
+    # count maps.  note SORTED PATH ignores hash but uses transformation
+    foreach(map SORTED ORDERED UNORDERED) 
+      add_executable(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_COUNT BenchmarkKmerIndex.cpp)
+      SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_COUNT
+         PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=${dna} -DpK=31 -DpTRANS=${trans} -DpHASH=FARM -DpMAP=${map} -DpINDEX=COUNT")
+      target_link_libraries(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_COUNT ${EXTRA_LIBS})
+    endforeach(map)
+    
+    # position maps.  note SORTED PATH ignores hash but uses transformation
+    foreach(map SORTED ORDERED VEC COMPACTVEC UNORDERED) 
+      add_executable(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_POS BenchmarkKmerIndex.cpp)
+      SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_POS
+         PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=${dna} -DpK=31 -DpTRANS=${trans} -DpHASH=FARM -DpMAP=${map} -DpINDEX=POS")
+      target_link_libraries(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_POS ${EXTRA_LIBS})
+    endforeach(map)
+    
+  endforeach(trans)
 
-add_executable(testBuildIndex_fastq BenchmarkKmerIndexBuild.cpp)
-SET_TARGET_PROPERTIES(testBuildIndex_fastq PROPERTIES COMPILE_FLAGS -DUSE_FASTQ_PARSER)
-target_link_libraries(testBuildIndex_fastq ${EXTRA_LIBS})
+endforeach(dna)
 
-add_executable(testBuildIndex_fasta BenchmarkKmerIndexBuild.cpp)
-SET_TARGET_PROPERTIES(testBuildIndex_fasta PROPERTIES COMPILE_FLAGS -DUSE_FASTA_PARSER)
-target_link_libraries(testBuildIndex_fasta ${EXTRA_LIBS})
+#=================  12 targets
+#vary K, fix Alphabet, hash, transform, and map types.  do for count and position (map vs multimap)
+foreach(k 21 63 127)  # 31 already compiled.
 
+  # sorted array indices
+  add_executable(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_SORTED_COUNT BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_SORTED_COUNT
+     PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=${k} -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=SORTED -DpINDEX=COUNT")
+  target_link_libraries(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_SORTED_COUNT ${EXTRA_LIBS})
+  
+  add_executable(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_UNORDERED_COUNT BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_UNORDERED_COUNT
+     PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=${k} -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=UNORDERED -DpINDEX=COUNT")
+  target_link_libraries(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_UNORDERED_COUNT ${EXTRA_LIBS})
+  
+  # Position indices
+  add_executable(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_SORTED_POS BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_SORTED_POS
+     PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=${k} -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=SORTED -DpINDEX=POS")
+  target_link_libraries(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_SORTED_POS ${EXTRA_LIBS})
+  
+  add_executable(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_COMPACTVEC_POS BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_COMPACTVEC_POS
+     PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=${k} -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=COMPACTVEC -DpINDEX=POS")
+  target_link_libraries(testKmerIndex_FASTQ_A4_K${k}_PRELEX_FARM_COMPACTVEC_POS ${EXTRA_LIBS})
+
+endforeach(k)
+
+#=====================  18 targets
+# vary hash method.  FARM already compiled.  check ordered and unordered
+
+foreach(hash IDEN STD MURMUR)
+
+  # count maps
+  foreach(map ORDERED UNORDERED) 
+    add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_${hash}_${map}_COUNT BenchmarkKmerIndex.cpp)
+    SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_${hash}_${map}_COUNT
+       PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=${hash} -DpMAP=${map} -DpINDEX=COUNT")
+    target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_${hash}_${map}_COUNT ${EXTRA_LIBS})
+  endforeach(map)
+  
+  # position maps
+  foreach(map ORDERED VEC COMPACTVEC UNORDERED) 
+    add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_${hash}_${map}_POS BenchmarkKmerIndex.cpp)
+    SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_${hash}_${map}_POS
+       PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=${hash} -DpMAP=${map} -DpINDEX=POS")
+    target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_${hash}_${map}_POS ${EXTRA_LIBS})
+  endforeach(map)
+  
+endforeach(hash)
+
+#=================  2 target
+# FASTA 
+add_executable(testKmerIndex_FASTA_A4_K31_PRELEX_FARM_UNORDERED_COUNT BenchmarkKmerIndex.cpp)
+SET_TARGET_PROPERTIES(testKmerIndex_FASTA_A4_K31_PRELEX_FARM_UNORDERED_COUNT 
+  PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTA -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=UNORDERED -DpINDEX=COUNT")
+target_link_libraries(testKmerIndex_FASTA_A4_K31_PRELEX_FARM_UNORDERED_COUNT ${EXTRA_LIBS})
+
+
+add_executable(testKmerIndex_FASTA_A4_K31_PRELEX_FARM_COMPACTVEC_POS BenchmarkKmerIndex.cpp)
+SET_TARGET_PROPERTIES(testKmerIndex_FASTA_A4_K31_PRELEX_FARM_COMPACTVEC_POS 
+  PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTA -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=COMPACTVEC -DpINDEX=POS")
+target_link_libraries(testKmerIndex_FASTA_A4_K31_PRELEX_FARM_COMPACTVEC_POS ${EXTRA_LIBS})
+
+#==================  1 target
+# pos quality maps.. 
+add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_COMPACTVEC_POSQUAL BenchmarkKmerIndex.cpp)
+SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_COMPACTVEC_POSQUAL 
+  PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=COMPACTVEC -DpINDEX=POSQUAL")
+target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_COMPACTVEC_POSQUAL ${EXTRA_LIBS})
+
+#==================
 
 if (USE_OPENMP)
 
