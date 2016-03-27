@@ -1186,11 +1186,10 @@ namespace fsc {  // fast standard container
 
 
       void report() {
-        printf("vecmap bucket count: %lu\n", map.bucket_count());
-        printf("vecmap load factor: %f\n", map.load_factor());
-        printf("vecmap unique entries: %lu\n", map.size());
-        printf("vecmap total size: %lu\n", s);
-
+          BL_INFOF("vecmap bucket count: %lu\n", map.bucket_count());
+          BL_INFOF("vecmap load factor: %f\n", map.load_factor());
+          BL_INFOF("vecmap unique entries: %lu\n", map.size());
+          BL_INFOF("vecmap total size: %lu\n", s);
       }
 
 
