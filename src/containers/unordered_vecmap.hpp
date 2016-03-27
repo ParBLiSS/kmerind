@@ -596,11 +596,30 @@ namespace fsc {  // fast standard container
           }
       }
 
+      template <typename Pred>
+      size_t erase(const key_type& key, Pred const & pred) {
+    	  auto vec = map.at(key);
+    	  size_t before = vec.size();
 
-      iterator erase(const key_type& key) {
-        s -= count(key);
-        auto iter = map.erase(key);
-        return iterator(iter, map.end(), iter->second.begin(), 0);
+    	  auto new_end = ::std::remove_if(vec.begin(), vec.end(),
+    			  [key, pred](mapped_type const & v){
+    		  return pred(value_type(key, v));
+    	  });
+
+    	  vec.erase(new_end, vec.end());
+
+    	  size_t c = before - vec.size();
+    	  s -= c;
+    	  return c;
+      }
+
+
+
+      size_t erase(const key_type& key) {
+    	  size_t c = count(key);
+    	  s -= c;
+    	  map.erase(key);
+        return c;
       }
 
       size_type count(Key const & key) const {
@@ -705,11 +724,11 @@ namespace fsc {  // fast standard container
   typename T,
   typename Hash = ::std::hash<Key>,
   typename Equal = ::std::equal_to<Key>,
-  typename Allocator = ::std::allocator<::std::pair<const Key, T> > >
+  typename Allocator = ::std::allocator<::std::pair<Key, T> > >
   class unordered_vecmap {
 
     protected:
-      using subcontainer_type = ::std::vector<::std::pair<const Key, T>, Allocator >;
+      using subcontainer_type = ::std::vector<::std::pair<Key, T>, Allocator >;
       using superallocator_type = ::std::allocator<::std::pair<const Key, subcontainer_type > >;
       using supercontainer_type =
           ::std::unordered_map<Key, subcontainer_type, Hash, Equal, superallocator_type >;
@@ -745,6 +764,8 @@ namespace fsc {  // fast standard container
               typename supercontainer_type::const_iterator, typename supercontainer_type::iterator>::type;
           using type = concat_iter<V>;
 
+          using inner_value_type = typename ::std::iterator_traits<subiterator_type>::value_type;
+
         public:
           template <typename KK, typename TT, typename HH, typename EE, typename AA, typename OutputIterator>
           OutputIterator
@@ -771,6 +792,10 @@ namespace fsc {  // fast standard container
           };
           concat_iter(superiterator_type _iter, superiterator_type _end, subiterator_type _pos) :
             curr_iter(_iter), end_iter(_end), curr_pos(_pos) {};
+
+          /// constructor for end concat iterator.  _end refers to end of supercontainer.
+          concat_iter(superiterator_type _end) : curr_iter(_end), end_iter(_end) {};
+
 
           // note that explicit keyword cannot be on copy and move constructors else the constructors are not defined/found.
 
@@ -849,29 +874,19 @@ namespace fsc {  // fast standard container
             return !(this->operator==(rhs));
             }
 
-          /// get pointer
-          inline V* operator->() const
-          {
-            return &(*curr_pos);
-          }
 
-          /// dereference operator.  normal iterator: returns a rvalue
-          inline V operator*() const
-          {
+
+          template <
+              typename VV = V,
+              typename IV = inner_value_type,
+              typename = typename ::std::enable_if<::std::is_constructible<VV, IV>::value>::type>
+          inline V operator*() const {
             return *curr_pos;
           }
 
-          //== output iterator requirement.
+          /*=== NOT output iterator.  this is a map, does not make sense to change the  */
+          /* content via iterator.                                                      */
 
-          /// dereference operator.  return lvalue  for non-const item
-          template<typename VV = V>
-          inline typename std::enable_if<
-          !std::is_const<VV>::value,
-          VV&
-          >::type operator*()
-          {
-            return *curr_pos;
-          }
 
           //=== NOT full forward iterator - no default constructor
 
@@ -1132,9 +1147,25 @@ namespace fsc {  // fast standard container
       }
 
 
-      iterator erase(const key_type& key) {
-        s -= count(key);
-        return iterator(map.erase(key), map.end());
+      template <typename Pred>
+      size_t erase(const key_type& key, Pred const & pred) {
+    	  auto vec = map.at(key);
+    	  size_t before = vec.size();
+
+    	  auto new_end = ::std::remove_if(vec.begin(), vec.end(), pred);
+    	  vec.erase(new_end, vec.end());
+
+    	  size_t c = before - vec.size();
+    	  s -= c;
+
+    	  return c;
+      }
+
+      size_t erase(const key_type& key) {
+    	  size_t c = count(key);
+        s -= c;
+        map.erase(key);
+        return c;
       }
 
       size_type count(Key const & key) const {
@@ -1196,14 +1227,14 @@ namespace fsc {  // fast standard container
 
 
 
-      ::std::pair<subiter_type, subiter_type> equal_range(Key const & key) {
+      ::std::pair<subiter_type, subiter_type> equal_range_value_only(Key const & key) {
         auto iter = map.find(key);
 
         if (iter == map.end()) return ::std::make_pair(subiter_type(), subiter_type());
 
         return ::std::make_pair(iter->second.begin(), iter->second.end());
       }
-      ::std::pair<const_subiter_type, const_subiter_type> equal_range(Key const & key) const {
+      ::std::pair<const_subiter_type, const_subiter_type> equal_range_value_only(Key const & key) const {
         auto iter = map.find(key);
 
         if (iter == map.end()) return ::std::make_pair(const_subiter_type(), const_subiter_type());
@@ -1213,6 +1244,23 @@ namespace fsc {  // fast standard container
       }
 
 
+      ::std::pair<iterator, iterator> equal_range(Key const & key) {
+        auto iter = map.find(key);
+
+        if (iter == map.end()) return ::std::make_pair(iterator(map.end(), map.end()), iterator(map.end(), map.end()));
+
+        return ::std::make_pair(iterator(iter, map.end(), iter->second.begin()),
+                                iterator(iter, map.end(), iter->second.end()));
+      }
+      ::std::pair<const_iterator, const_iterator> equal_range(Key const & key) const {
+        auto iter = map.find(key);
+
+        if (iter == map.cend()) return ::std::make_pair(const_iterator(map.cend(), map.cend()), const_iterator(map.cend(), map.cend()));
+
+        return ::std::make_pair(const_iterator(iter, map.cend(), iter->second.cbegin()),
+                                const_iterator(iter, map.cend(), iter->second.cend()));
+
+      }
       // NO bucket interfaces
 
   };

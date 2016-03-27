@@ -185,7 +185,7 @@ namespace dsc  // distributed std container
           template <class DB, class QueryIter, class OutputIter, class Operator, class Predicate = Identity>
           static size_t process(DB &db,
                                 QueryIter query_begin, QueryIter query_end,
-                                OutputIter &output, Operator const & op,
+                                OutputIter &output, Operator & op,
                                 bool sorted_query = false, Predicate const &pred = Predicate()) {
 
               if (query_begin == query_end) return 0;
@@ -264,7 +264,7 @@ namespace dsc  // distributed std container
       struct LocalErase {
           /// Return how much was KEPT.
           template<class DB, typename Query, class OutputIter>
-          size_t operator()(DB &db, Query const &v, OutputIter &output) {
+          size_t operator()(DB &db, Query const &v, OutputIter &) {
               size_t before = db.size();
               db.erase(v);
               return before - db.size();
@@ -273,7 +273,7 @@ namespace dsc  // distributed std container
           template<class DB, typename Query, class OutputIter, class Predicate = Identity>
           size_t operator()(DB &db, Query const &v, OutputIter &,
                             Predicate const & pred) {
-              auto range = db.equal_range(v);
+              auto range = (const_cast<DB const &>(db)).equal_range(v);
 
               // check range first.  then erase.  only removed iterators are invalidated.
               // order of remaining elements preserved.  true for map/multimap, unordered or not.
@@ -365,7 +365,7 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class LocalFind, typename Predicate = Identity>
-      ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind const & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+      ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
         BL_BENCH_INIT(find);
 
         BL_BENCH_START(find);
@@ -399,7 +399,7 @@ namespace dsc  // distributed std container
           // do for each src proc one at a time.
 
           BL_BENCH_START(find);
-          results.reserve(keys.size());                   // TODO:  should estimate coverage.
+          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
           BL_BENCH_END(find, "reserve", keys.size());
 
@@ -430,7 +430,7 @@ namespace dsc  // distributed std container
           BL_BENCH_END(find, "uniq1", keys.size());
 
           BL_BENCH_START(find);
-          results.reserve(keys.size());                   // TODO:  should estimate coverage.
+          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
           BL_BENCH_END(find, "reserve", keys.size() );
 
@@ -455,7 +455,7 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class LocalFind, typename Predicate = Identity>
-      ::std::vector<::std::pair<Key, T> > find(LocalFind const & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+      ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
         BL_BENCH_INIT(find);
 
         BL_BENCH_START(find);
@@ -625,7 +625,7 @@ namespace dsc  // distributed std container
       }
 
       template <class LocalFind, typename Predicate = Identity>
-      ::std::vector<::std::pair<Key, T> > find(LocalFind const & find_element, Predicate const& pred = Predicate()) const {
+      ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, Predicate const& pred = Predicate()) const {
         ::std::vector<::std::pair<Key, T> > results;
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
@@ -650,6 +650,66 @@ namespace dsc  // distributed std container
         return results;
       }
 
+      template <class LocalErase, typename Predicate = Identity>
+      size_t erase(LocalErase & erase_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) {
+          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
+            size_t before = this->c.size();
+            BL_BENCH_INIT(erase);
+
+            bool si = sorted_input;
+          if (this->comm_size > 1) {
+
+              BL_BENCH_START(erase);
+            // distribute (communication part)
+            std::vector<size_t> send_counts = mxx::bucketing(keys, this->key_to_rank, this->comm_size);
+            BL_BENCH_END(erase, "bucket", keys.size());
+
+            BL_BENCH_START(erase);
+            // unique within bucket
+            fsc::bucket_unique<::std::unordered_set<Key,
+                                                     TransformedHash,
+                                                     typename Base::TransformedEqual >,
+                                typename Base::TransformedEqual >(keys, send_counts, si);
+            BL_BENCH_END(erase, "bucket_unique", keys.size());
+
+            BL_BENCH_START(erase);
+            // distribute (communication part)
+            keys = mxx::all2allv(keys, send_counts, this->comm);
+            BL_BENCH_END(erase, "a2a", keys.size());
+
+            si = false;
+          }
+
+          BL_BENCH_START(erase);
+          // remove duplicates
+          retain_unique(keys, si);
+          BL_BENCH_END(erase, "unique", keys.size());
+
+          BL_BENCH_START(erase);
+          // then call local remove.
+          auto dummy_iter = keys.end();  // process requires a reference.
+          QueryProcessor::process(this->c, keys.begin(), keys.end(), dummy_iter, erase_element, true, pred);
+          BL_BENCH_END(erase, "erase", keys.size());
+
+          BL_BENCH_REPORT_MPI_NAMED(erase, "base_hashmap:erase", this->comm);
+
+
+
+          return before - this->c.size();
+      }
+
+
+      template <class LocalErase, typename Predicate = Identity>
+      size_t erase(LocalErase & erase_element, Predicate const& pred = Predicate()) {
+          auto keys = this->keys();
+
+          auto dummy_iter = keys.end();  // process requires a reference.
+          size_t count = QueryProcessor::process(c, keys.begin(), keys.end(), dummy_iter, erase_element, true, pred);
+
+          if (this->comm_size > 1) MPI_Barrier(this->comm);
+
+          return count;
+      }
 
       unordered_map_base(const mxx::comm& _comm) : Base(_comm),
           key_to_rank(_comm.size()) {}
@@ -858,47 +918,13 @@ namespace dsc  // distributed std container
        */
       template <class Predicate = Identity>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
-        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
-          size_t before = this->c.size();
-
-          bool si = sorted_input;
-        if (this->comm_size > 1) {
-
-          // distribute (communication part)
-          std::vector<size_t> send_counts = mxx::bucketing(keys, this->key_to_rank, this->comm_size);
-
-          // distribute (communication part)
-          fsc::bucket_unique<::std::unordered_set<::std::pair<Key, T>,
-                                                   TransformedHash,
-                                                   typename Base::TransformedEqual >,
-                              typename Base::TransformedEqual >(keys, send_counts, si);
-
-
-          // distribute (communication part)
-          keys = mxx::all2allv(keys, send_counts, this->comm);
-
-          si = false;
-        }
-
-        // remove duplicates
-        retain_unique(keys, si);
-
-        // then call local remove.
-        QueryProcessor::process(c, keys.begin(), keys.end(), keys.end(), erase_element, true, pred);
-
-        return before - this->c.size();
+        return this->erase(erase_element, keys, sorted_input, pred);
       }
 
 
       template <typename Predicate = Identity>
       size_t erase(Predicate const & pred = Predicate()) {
-        auto keys = this->keys();
-
-        size_t count = QueryProcessor::process(c, keys.begin(), keys.end(), keys.end(), erase_element, true, pred);
-
-        if (this->comm_size > 1) MPI_Barrier(this->comm);
-
-        return count;
+    	  return this->erase(erase_element, pred);
       }
 
       // update done via erase/insert.
@@ -1015,6 +1041,12 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
+      }
+
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+    		  Predicate const& pred = Predicate()) const {
+          return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
 
       template <class Predicate = Identity>
@@ -1191,6 +1223,12 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
+      }
+
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+    		  Predicate const& pred = Predicate()) const {
+          return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
 
       template <class Predicate = Identity>
@@ -1529,7 +1567,7 @@ namespace dsc  // distributed std container
           count = this->local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "local_insert", this->local_size());
 
-        BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_map:insert", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_hashmap:insert", this->comm);
 
         return count;
       }
@@ -1646,16 +1684,8 @@ namespace dsc  // distributed std container
 
       template <typename Predicate = Identity>
       size_t insert(std::vector< ::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
-        BL_BENCH_INIT(count_insert);
-        BL_BENCH_START(count_insert);
         // local compute part.  called by the communicator.
         size_t count = this->Base::insert(input, sorted_input, pred);
-
-        BL_BENCH_END(count_insert, "insert", this->c.size());
-
-
-        // distribute
-        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_hashmap:insert_pair", this->comm);
 
         return count;
       }
@@ -1735,14 +1765,6 @@ namespace dsc  // distributed std container
           size_t operator()(DB &db, Query const &v, OutputIter &output) const {
               auto range = db.equal_range(v);
 
-//              // DEBUG
-//              bool equal = true;
-//              typename Base::TransformedEqual eq;
-//              for (auto it = range.first; it != range.second; ++it) {
-//                equal &= eq(*it, v);
-//              }
-//              if (!equal)  printf("ERROR: NOT EQUAL!");
-
               output = ::std::copy(range.first, range.second, output);  // tons faster to emplace - almost 3x faster
               return db.count(v);
           }
@@ -1768,6 +1790,34 @@ namespace dsc  // distributed std container
           // no filter by range AND elemenet for now.
       } find_element;
 
+      // need to deal with fact that vector's iterators are invalidated.
+      struct LocalErase {
+          /// Return how much was KEPT.
+          template<class DB, typename Query, class OutputIter>
+          size_t operator()(DB &db, Query const &v, OutputIter &) {
+              size_t before = db.size();
+              db.erase(v);
+              return before - db.size();
+          }
+          /// Return how much was KEPT.
+          template<class DB, typename Query, class OutputIter, class Predicate = Identity>
+          size_t operator()(DB &db, Query const &v, OutputIter &,
+                            Predicate const & pred) {
+              auto range = db.equal_range(v);  // get the range as values
+
+
+
+              // check range first.  then erase.  only removed iterators are invalidated.
+              // order of remaining elements preserved.  true for map/multimap, unordered or not.
+              size_t count = 0;
+              if (pred(range.first, range.second)) { // operator to decide if range matches.
+            	  count = db.erase(v, pred);
+              }
+
+              return count;
+          }
+          // no filter by range AND elemenet for now.
+      } erase_element;
 
     public:
 
@@ -1818,10 +1868,31 @@ namespace dsc  // distributed std container
       }
 
       template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+    		  Predicate const& pred = Predicate()) const {
+          return Base::find_a2a(find_element, keys, sorted_input, pred);
+      }
+
+      template <class Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
 
+      /**
+       * @brief erase elements with the specified keys in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class Predicate = Identity>
+      size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
+        return Base::erase(erase_element, keys, sorted_input, pred);
+      }
+
+
+      template <typename Predicate = Identity>
+      size_t erase(Predicate const & pred = Predicate()) {
+    	  return Base::erase(erase_element, pred);
+      }
 
       /// update the multiplicity.  only multimap needs to do this.
       virtual size_t update_multiplicity() {
@@ -1998,6 +2069,31 @@ namespace dsc  // distributed std container
           // no filter by range AND elemenet for now.
       } find_element;
 
+      struct LocalErase {
+          /// Return how much was KEPT.
+          template<class DB, typename Query, class OutputIter>
+          size_t operator()(DB &db, Query const &v, OutputIter &) {
+              size_t before = db.size();
+              db.erase(v);
+              return before - db.size();
+          }
+          /// Return how much was KEPT.
+          template<class DB, typename Query, class OutputIter, class Predicate = Identity>
+          size_t operator()(DB &db, Query const &v, OutputIter &,
+                            Predicate const & pred) {
+              auto range = db.equal_range(v);
+
+              // check range first.  then erase.  only removed iterators are invalidated.
+              // order of remaining elements preserved.  true for map/multimap, unordered or not.
+              size_t count = 0;
+              if (pred(range.first, range.second)) { // operator to decide if range matches.
+            	  db.erase(v, pred);
+              }
+
+              return count;
+          }
+          // no filter by range AND elemenet for now.
+      } erase_element;
 
     public:
 
@@ -2012,8 +2108,6 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate()) const {
 /*
-
-
           // DEBUG
 
           auto keys2 = keys;
@@ -2046,11 +2140,34 @@ namespace dsc  // distributed std container
 */
           return Base::find(find_element, keys, sorted_input, pred);
       }
+      template <class Predicate = Identity>
+      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+    		  Predicate const& pred = Predicate()) const {
+          return Base::find_a2a(find_element, keys, sorted_input, pred);
+      }
+
 
       template <class Predicate = Identity>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
+
+      /**
+       * @brief erase elements with the specified keys in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class Predicate = Identity>
+      size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
+        return Base::erase(erase_element, keys, sorted_input, pred);
+      }
+
+
+      template <typename Predicate = Identity>
+      size_t erase(Predicate const & pred = Predicate()) {
+    	  return Base::erase(erase_element, pred);
+      }
+
 
 
       /// update the multiplicity.  only multimap needs to do this.
