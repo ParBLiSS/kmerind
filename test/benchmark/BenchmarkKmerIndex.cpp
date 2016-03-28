@@ -91,6 +91,7 @@
 #define COMPACTVEC 4
 #define UNORDERED 5
 
+
 //================= define types - changeable here...
 
 
@@ -442,14 +443,14 @@ int main(int argc, char** argv) {
 	  BL_BENCH_COLLECTIVE_END(test, "sample", query.size(), comm);
 
 
-
+#ifndef pCollective
 	  {
 		  auto lquery = query;
-	  BL_BENCH_START(test);
-	  auto counts = idx.count(lquery);
-	  BL_BENCH_COLLECTIVE_END(test, "count", counts.size(), comm);
+		  BL_BENCH_START(test);
+		  auto counts = idx.count(lquery);
+		  BL_BENCH_COLLECTIVE_END(test, "count", counts.size(), comm);
 	  }
-
+#endif
 	  {
 		  auto lquery = query;
 	  BL_BENCH_START(test);
@@ -457,6 +458,8 @@ int main(int argc, char** argv) {
 	  BL_BENCH_COLLECTIVE_END(test, "find", found.size(), comm);
 	  }
 
+#if defined(pCollective)
+	  // separate test because of it being potentially very slow depending on imbalance.
 	  {
 		  auto lquery = query;
 
@@ -464,10 +467,14 @@ int main(int argc, char** argv) {
 	  auto found = idx.find_collective(lquery);
 	  BL_BENCH_COLLECTIVE_END(test, "find_collective", found.size(), comm);
 	  }
+#endif
 
+#ifndef pCollective
 	  BL_BENCH_START(test);
 	  idx.erase(query);
 	  BL_BENCH_COLLECTIVE_END(test, "erase", idx.local_size(), comm);
+#endif
+
   }
 
   

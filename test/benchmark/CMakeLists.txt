@@ -108,6 +108,15 @@ SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_ORDERED_POS
    PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=ORDERED -DpINDEX=POS")
 target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_ORDERED_POS ${EXTRA_LIBS})
 
+#================== 4 targets,  pos only  - potentially slow hence their own separate tests.
+# collective find tests.
+  foreach(map SORTED VEC COMPACTVEC UNORDERED) 
+    add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS_COLLECTIVE BenchmarkKmerIndex.cpp)
+    SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS_COLLECTIVE
+       PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=${map} -DpINDEX=POS -DpCollective")
+    target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS_COLLECTIVE ${EXTRA_LIBS})
+  endforeach(map)
+
 #==================  1 target
 # pos quality maps.. 
 add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_COMPACTVEC_POSQUAL BenchmarkKmerIndex.cpp)
