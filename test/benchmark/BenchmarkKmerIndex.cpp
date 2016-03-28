@@ -428,7 +428,7 @@ int main(int argc, char** argv) {
 	  BL_BENCH_START(test);
 	  if (temp.size() > 0)
 		idx.insert(temp);
-	  BL_BENCH_COLLECTIVE_END(test, "insert", temp.size(), comm);
+	  BL_BENCH_COLLECTIVE_END(test, "insert", idx.size(), comm);
   }
 
   {
@@ -441,21 +441,27 @@ int main(int argc, char** argv) {
 	  sample(query, query.size() / sample_ratio, comm.rank());
 	  BL_BENCH_COLLECTIVE_END(test, "sample", query.size(), comm);
 
+
+
 	  {
+		  auto lquery = query;
 	  BL_BENCH_START(test);
-	  auto counts = idx.count(query);
+	  auto counts = idx.count(lquery);
 	  BL_BENCH_COLLECTIVE_END(test, "count", counts.size(), comm);
 	  }
 
 	  {
+		  auto lquery = query;
 	  BL_BENCH_START(test);
-	  auto found = idx.find(query);
+	  auto found = idx.find(lquery);
 	  BL_BENCH_COLLECTIVE_END(test, "find", found.size(), comm);
 	  }
 
 	  {
+		  auto lquery = query;
+
 	  BL_BENCH_START(test);
-	  auto found = idx.find_collective(query);
+	  auto found = idx.find_collective(lquery);
 	  BL_BENCH_COLLECTIVE_END(test, "find_collective", found.size(), comm);
 	  }
 

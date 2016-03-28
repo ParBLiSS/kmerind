@@ -742,13 +742,14 @@ public:
 		BL_BENCH_END(insert, "map_insert", this->map.local_size());
 
 
-#if (BENCHMARK == 1)
+#if (BL_BENCHMARK == 1)
 		BL_BENCH_START(insert);
 		size_t m = 0;
-    m = this->map.update_multiplicity();
+		m = this->map.update_multiplicity();
 		BL_BENCH_END(insert, "multiplicity", m);
 #else
-    (void) (this->map.update_multiplicity());
+		auto result = this->map.update_multiplicity();
+		BLISS_UNUSED(result);
 #endif
 		BL_BENCH_REPORT_MPI_NAMED(insert, "index:insert", this->comm);
 
