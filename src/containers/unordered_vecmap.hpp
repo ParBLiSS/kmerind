@@ -777,6 +777,322 @@ namespace fsc {  // fast standard container
         protected:
           /// the current position in the ranges list
           superiterator_type curr_iter;
+
+          /// the current iterator position in the range of interest.
+          subiterator_type curr_pos;
+
+          superiterator_type max_iter;
+
+          bool at_max;
+
+          /// enforce that iterator is at a dereferenceable position
+          void ensure_dereferenceable() {
+            if (at_max) return;
+
+            if (curr_iter == max_iter) {
+              at_max = true;
+              return;
+            }
+
+            // check to see if we are at end of subcontainer.  if so, move to next dereferenceable position.
+            // end of a subcontainer is treated as same position as beginning of next subcontainer.
+            while (curr_pos == curr_iter->second.end()) {
+              ++curr_iter;
+              if (curr_iter == max_iter) {
+                at_max = true;
+                break; // reached the very end, can't deref max_iter.
+              }
+              else curr_pos = curr_iter->second.begin();
+            }
+          }
+
+        public:
+          using difference_type = typename ::std::iterator_traits<subiterator_type>::difference_type;
+
+
+          /// constructor for end concat iterator.  _end refers to end of supercontainer.
+          concat_iter(superiterator_type _end) : curr_iter(_end), max_iter(_end), at_max(true) {};
+
+
+          /// constructor for start concatenating iterator.  general version
+          concat_iter(superiterator_type _iter, superiterator_type _end, subiterator_type _pos) :
+            curr_iter(_iter), curr_pos(_pos), max_iter(_end), at_max(_iter == _end) {
+            ensure_dereferenceable();
+          };
+
+          /// constructor for start concatenating iterator.  general version with checking that _pos belongs to _iter subcontainer via distance check.
+          concat_iter(superiterator_type _iter, superiterator_type _end, subiterator_type _pos, difference_type distance_check) :
+            concat_iter<V>(_iter, _end, _pos) {
+            if (!at_max && (distance_check != ::std::distance(_iter->second.begin(), _pos) ) )
+              throw std::logic_error("unordered_compact_vecmap constructor failing distance check, suggesting that _pos is not from same subcontainer as what _iter points to");
+            ensure_dereferenceable();
+          };
+
+
+          // note that explicit keyword cannot be on copy and move constructors else the constructors are not defined/found.
+
+          // copy constructor, assignment operator, move constructor, assignment operator should
+          // should be default since the member vars are simple.
+
+          bool is_at_max() const {
+            at_max = (curr_iter == max_iter);
+            return at_max;
+          }
+
+          /**
+           * @brief increment:  move to the next position in the concatenating iterator, which may cross range boundaries.
+           * @note  side effect: set at_end variable.
+           * @return
+           */
+          type& operator++() {
+            // if at end, return
+            if (!at_max) {
+              // now increment.  since we are careful to leave iterator at a dereferenceable state, curr_pos is not at a subcontainer's end.
+              // so just increment.
+              ++curr_pos;
+
+              // now make sure we don't end up at a subcontainer's end.
+              ensure_dereferenceable();
+            }
+            return *this;
+          }
+
+
+          /**
+           * post increment.  make a copy then increment that.
+           */
+          type operator++(int)
+          {
+            type output(*this);
+            this->operator++();
+            return output;
+          }
+
+          //=== input iterator specific
+
+          /// comparison operator
+          bool operator==(const type& rhs) const
+            {
+            if (max_iter != rhs.max_iter) throw std::logic_error("the iterators being compared do not have the same internal end iterators so they are not comparable.");
+
+            if (at_max && rhs.at_max) return true;
+            if (at_max || rhs.at_max) return false;
+
+            return ((curr_iter == rhs.curr_iter) && (curr_pos == rhs.curr_pos));
+            }
+
+          /// comparison operator
+          bool operator!=(const type& rhs) const
+            {
+            if (max_iter != rhs.max_iter) throw std::logic_error("the iterators being compared do not have the same internal end iterators so they are not comparable.");
+
+            if (at_max && rhs.at_max) return false;
+            if (at_max || rhs.at_max) return true;
+
+            return ((curr_iter != rhs.curr_iter) || (curr_pos != rhs.curr_pos));
+            }
+
+
+          template <
+              typename VV = V,
+              typename IV = inner_value_type,
+              typename = typename ::std::enable_if<::std::is_constructible<VV, IV>::value>::type>
+          inline V operator*() const {
+            return *curr_pos;
+          }
+
+          /*=== NOT output iterator.  this is a map, does not make sense to change the  */
+          /* content via iterator.                                                      */
+
+
+          //=== NOT full forward iterator - no default constructor
+
+          //=== NOT bidirectional iterator - no decrement because map produces forward iterator only.
+
+          //=== NOT full random access iterator - only have +, += but not -. -=.  no comparison operators. have offset dereference operator [].
+
+
+          /**
+           * @brief     Advances this iterator by `n` positions.
+           *            used by std::advance when randomaccess iterator.
+           * @param n   The number of positions to advance.
+           * @return    A reference to this after advancing.
+           */
+          type& operator+=(difference_type n)
+          {
+            // ::std::advance will use this or the ++ operator.
+            if (n < 0) throw ::std::logic_error("::fsc::unordered_compact_vecmap::iterator does not support decrement.");
+            if (n == 0) return *this;  // nothing to add.
+            if (at_max) return *this;  // iterator at the end.
+
+            auto orig_iter = curr_iter;
+
+            // dereferenceable right now
+            auto curr_dist = ::std::distance(curr_pos, curr_iter->second.end());
+            while (n >= curr_dist) {
+              // not at end, and n is larger than curr dist, so go to next subcontainer.
+              n -= curr_dist;  // consume some entries
+              ++curr_iter;     // go to next container.
+              at_max = (curr_iter == max_iter);
+              if (at_max) return *this;  // if we are at end right now, then we can just return.
+              else curr_dist = curr_iter->second.size();    // see how much the next container has.
+
+            }  // when exiting here, we are at a subcontainer that has more entries than n.  n could be 0.
+
+            // now reset the curr_pos if curr_iter has been moved.
+            if (curr_iter != orig_iter) curr_pos = curr_iter->second.begin();
+            ::std::advance(curr_pos, n);
+
+            //
+            //
+            //            while ((!at_end) && (n > 0)) {
+            //              curr_dist = ::std::distance(curr_pos, curr_iter->second.end());
+            //
+            //              if (curr_dist > n) {
+            //                ::std::advance(curr_pos, n); // curr_pos would not be at subcontainer end, so derefernceable, and not at end.
+            //                break;
+            //              } else if (curr_dist == n) {
+            //                // n goes to 0, curr_pos should go to next subcontainer's start if possible,
+            //               ++curr_iter;
+            //               at_end = (curr_iter == max_iter);
+            //               if (!at_end) curr_pos = curr_iter->second.begin();
+            //               break;
+            //              } else { // if (curr_dist < n)
+            //                n -= curr_dist;
+            //                // go to next subcontainer's beginning.
+            //         ++curr_iter;
+            //         at_end = (curr_iter == max_iter);
+            //         if (!at_end) curr_pos = curr_iter->second.begin();
+            //              }
+            //            }
+            return *this;
+          }
+
+
+          /**
+           * @brief     Advances a copy of this iterator by `n` positions.
+           *
+           * @param n   The number of positions to advance.
+           * @return    The advanced iterator.
+           */
+          type operator+(difference_type n)
+          {
+            // reduced to += operator
+            type output(*this);
+            output += n;
+            return output;
+          }
+
+          /**
+           * @brief     Advances a copy of the `right` iterator by `n` positions.
+           *
+           * @param n   The number of positions to advance.
+           * @return    The advanced iterator.
+           */
+          friend type operator+(difference_type n, const type& right)
+          {
+            // reduced to + operator
+            return right + n;
+          }
+
+          /**
+           * @brief     Returns the n'th element as seen from the current iterator
+           *            position.
+           *
+           * @param n   The offset.
+           *
+           * @return    The element at offset `n` from the current position.
+           */
+          V operator[](difference_type n)
+          {
+            // reduce to the following:
+            return *(*this + n);
+          }
+
+          /// difference between 2 iterators.  used by std::distance.
+          friend difference_type operator-(const type& last, const type& first) {
+            if (last == first) return 0;  // if both are at end, then we say dist is 0.
+            if (first.at_max) return ::std::numeric_limits<difference_type>::lowest();  // first is at end, can't get to last.
+
+
+            // now try to increment first until we get to last, or fail at getting to last.
+            difference_type n = 0;
+            auto cit = first.curr_iter;
+
+            // init distance.  only meaningful here when first and last are not on same subcontainer.
+            auto dist = cit->second.end() - first.curr_pos;
+
+            // walk until either we are in same subcontainer, or at end of first iterator.
+            while (cit != last.curr_iter) {
+              n += dist;  //
+              ++cit;
+              if (cit == first.max_iter) break;
+              else dist = cit->second.size();
+            }
+
+            // at this point, we have cit == last.curr_iter, or cit == eit (cit == eit == last_curr_iter possible)
+            if (cit == first.max_iter) {  // cit = eit
+              // if at end of first, but not at curr of last, not reachable.
+              // else if at end of first, and at curr of last (== end), then reached.  return n.
+              return ((cit != last.curr_iter) ? ::std::numeric_limits<difference_type>::lowest() : n);
+            }
+
+            // else we have cit == last.curr_iter.  dist is either size of cit subcontainer, or from curr_pos to subcontainer's end, both not correct.
+            // need to recalculate dist now.  first move cpos
+
+            // recalc distance. if cit hasn't moved, use original.  else use beginning of current subcontainer.
+            dist = last.curr_pos - ((cit == first.curr_iter) ? first.curr_pos : cit->second.begin());
+            // if dist is negative, then last.curr_pos is before cpos.  not reachable.
+            // else add the distance to running total.
+            return ((dist < 0) ? ::std::numeric_limits<difference_type>::lowest() : (n + dist));
+
+
+            //            // iterate until both are in the same subcontainer, or first is at end.
+            //            while (!it.at_end() && (it.curr_iter != last.curr_iter)) {
+            //              n += ::std::distance(it.curr_pos, it.curr_iter->second.end());
+            //              ++(it.curr_iter);
+            //              if (it.curr_iter != it.max_iter) it.curr_pos = (it.curr_iter)->second.begin();
+            //            }
+            //
+            //            // both are at same place (including end)
+            //            if (it == last) return n;
+            //            // if first is at its end, and first != last, then last is not reachable.
+            //            if (it.at_end) return ::std::numeric_limits<difference_type>::lowest();
+            //
+            //            // first is not at end, and first != last, then last is in same container as first.
+            //            n += ::std::distance(it.curr_pos, (last.curr_iter == last.max_iter) ? last.curr_iter->second.begin() : last.curr_pos);
+            //
+            //            return n;
+          }
+      };
+
+#if 0
+      template<typename V>
+      class concat_iter :
+    public ::std::iterator<
+    typename ::std::random_access_iterator_tag,
+    V
+    >
+      {
+        protected:
+          using subiterator_type = typename ::std::conditional<::std::is_const<V>::value,
+              typename subcontainer_type::const_iterator, typename subcontainer_type::iterator>::type;
+          using superiterator_type = typename ::std::conditional<::std::is_const<V>::value,
+              typename supercontainer_type::const_iterator, typename supercontainer_type::iterator>::type;
+          using type = concat_iter<V>;
+
+          using inner_value_type = typename ::std::iterator_traits<subiterator_type>::value_type;
+
+        public:
+          template <typename KK, typename TT, typename HH, typename EE, typename AA, typename OutputIterator>
+          OutputIterator
+          copy(typename ::fsc::unordered_vecmap<KK, TT, HH, EE, AA>::template concat_iter<V> first,
+               typename ::fsc::unordered_vecmap<KK, TT, HH, EE, AA>::template concat_iter<V> last, OutputIterator result);
+
+
+        protected:
+          /// the current position in the ranges list
+          superiterator_type curr_iter;
           superiterator_type end_iter;
 
           /// the current iterator position in the range of interest.
@@ -987,7 +1303,7 @@ namespace fsc {  // fast standard container
             return n;
           }
       };
-
+#endif
 
       supercontainer_type map;
       size_t s;
@@ -1036,25 +1352,25 @@ namespace fsc {  // fast standard container
 
 
       iterator begin() {
-        return iterator(map.begin(), map.end());
+        return iterator(map.begin(), map.end(), map.begin()->second.begin(), 0);
       }
       const_iterator begin() const {
         return cbegin();
       }
       const_iterator cbegin() const {
-        return const_iterator(map.cbegin(), map.cend());
+        return const_iterator(map.cbegin(), map.cend(), map.cbegin()->second.cbegin(), 0);
       }
 
 
 
       iterator end() {
-        return iterator(map.end(), map.end());
+        return iterator(map.end());
       }
       const_iterator end() const {
         return cend();
       }
       const_iterator cend() const {
-        return const_iterator(map.cend(), map.cend());
+        return const_iterator(map.cend());
       }
 
 
@@ -1115,10 +1431,10 @@ namespace fsc {  // fast standard container
           iter = map.emplace(key, subcontainer_type()).first;
 //          map.at(key).reserve(multiplicity);
         }
-        map.at(key).emplace_back(::std::forward<value_type>(value));
-        auto pos = map.at(key).end();
+        iter->second.emplace_back(::std::forward<value_type>(value));
+        auto pos = iter->second.end();
         ++s;
-        return iterator(iter, map.end(), --pos);
+        return iterator(iter, map.end(), --pos, iter->second.size() - 1);
       }
       iterator emplace(Key&& key, T&& value) {
         auto iter = map.find(key);
@@ -1126,23 +1442,18 @@ namespace fsc {  // fast standard container
           iter = map.emplace(key, subcontainer_type()).first;
 //          map[key].reserve(multiplicity);
         }
-        map.at(key).emplace_back(::std::forward<Key>(key), ::std::forward<T>(value));
-        auto pos = map.at(key).end();
+        iter->second.emplace_back(::std::forward<Key>(key), ::std::forward<T>(value));
+        auto pos = iter->second.end();
         ++s;
-        return iterator(iter, map.end(), --pos);
+        return iterator(iter, map.end(), --pos, iter->second.size() - 1);
       }
 
       // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n)
       template <class InputIt>
       void insert(InputIt first, InputIt last) {
           for (; first != last; ++first) {
-            if (map.find(first->first) == map.end()) {
-              // emplace, and take the result iterator, get the second component (subcontainer), reserve the size.
-              map.emplace(first->first, subcontainer_type());
-//              map[k].reserve(multiplicity);
-            }
-            map.at(first->first).emplace_back(::std::forward<value_type>(*first));
 
+            map[first->first].emplace_back(::std::forward<value_type>(*first));
             ++s;
           }
       }
@@ -1247,18 +1558,18 @@ namespace fsc {  // fast standard container
       ::std::pair<iterator, iterator> equal_range(Key const & key) {
         auto iter = map.find(key);
 
-        if (iter == map.end()) return ::std::make_pair(iterator(map.end(), map.end()), iterator(map.end(), map.end()));
+        if (iter == map.end()) return ::std::make_pair(iterator(map.end()), iterator(map.end()));
 
-        return ::std::make_pair(iterator(iter, map.end(), iter->second.begin()),
-                                iterator(iter, map.end(), iter->second.end()));
+        return ::std::make_pair(iterator(iter, map.end(), iter->second.begin(), 0),
+                                iterator(iter, map.end(), iter->second.end(), iter->second.size()));
       }
       ::std::pair<const_iterator, const_iterator> equal_range(Key const & key) const {
         auto iter = map.find(key);
 
-        if (iter == map.cend()) return ::std::make_pair(const_iterator(map.cend(), map.cend()), const_iterator(map.cend(), map.cend()));
+        if (iter == map.cend()) return ::std::make_pair(const_iterator(map.cend()), const_iterator(map.cend()));
 
-        return ::std::make_pair(const_iterator(iter, map.cend(), iter->second.cbegin()),
-                                const_iterator(iter, map.cend(), iter->second.cend()));
+        return ::std::make_pair(const_iterator(iter, map.cend(), iter->second.cbegin(), 0),
+                                const_iterator(iter, map.cend(), iter->second.cend(), iter->second.size()));
 
       }
       // NO bucket interfaces
@@ -1368,23 +1679,27 @@ namespace std {
   OutputIterator
   copy(typename ::fsc::unordered_vecmap<Key, T, Hash, Equal, Allocator>::iterator first,
        typename ::fsc::unordered_vecmap<Key, T, Hash, Equal, Allocator>::iterator last, OutputIterator result) {
+
+    // can last be reach from first?
+    if ((last - first) <= 0) return result;
+
+    // reachable.  so now walk.  do not need to do as much checking.
     auto out_iter = result;
 
-    // iterate until both are in the same subcontainer, or first is at end.
-    while (!first.at_end() && (first.curr_iter != last.curr_iter)) {
-      out_iter = ::std::copy(first.curr_pos, (first.curr_iter)->second.end(), out_iter);
-      ++(first.curr_iter);
-      if (first.curr_iter != first.end_iter) first.curr_pos = (first.curr_iter)->second.begin();
+    // now try to increment first until we get to last, or fail at getting to last.
+    auto cit = first.curr_iter;
+    auto cpos = first.curr_pos;
+
+    // walk until either we are in same subcontainer.
+    // since last is reachable from first, we don't need to check first's end_iter.
+    while (cit != last.curr_iter) {
+      out_iter = ::std::copy(cpos, cit->second.end(), out_iter);
+      ++cit;
+      cpos = cit->second.begin();
     }
 
-    // both are at same place (including end)
-    if (first == last) return out_iter;
-
-    // if first is at its end, and first != last, then last is not reachable.
-    if (first.at_end()) return result;
-
-    // first is not at end, and first != last, then last is in same container as first.
-    out_iter = ::std::copy(first.curr_pos, (last.curr_iter == last.end_iter) ? last.curr_iter->second.begin() : last.curr_pos, out_iter);
+    // now we're in same container.  take care the rest.  cpos was updated if cit was moved.
+    out_iter = ::std::copy(cpos, last.curr_pos, out_iter);
 
     return out_iter;
   }
@@ -1393,23 +1708,28 @@ namespace std {
   OutputIterator
   copy(typename ::fsc::unordered_vecmap<Key, T, Hash, Equal, Allocator>::const_iterator first,
        typename ::fsc::unordered_vecmap<Key, T, Hash, Equal, Allocator>::const_iterator last, OutputIterator result) {
+
+    // can last be reach from first?
+    if ((last - first) <= 0) return result;
+
+    // reachable.  so now walk.  do not need to do as much checking.
     auto out_iter = result;
 
-    // iterate until both are in the same subcontainer, or first is at end.
-    while (!first.at_end() && (first.curr_iter != last.curr_iter)) {
-      out_iter = ::std::copy(first.curr_pos, (first.curr_iter)->second.end(), out_iter);
-      ++(first.curr_iter);
-      if (first.curr_iter != first.end_iter) first.curr_pos = (first.curr_iter)->second.begin();
+    // now try to increment first until we get to last, or fail at getting to last.
+    auto cit = first.curr_iter;
+    auto cpos = first.curr_pos;
+
+    // walk until either we are in same subcontainer.
+    // since last is reachable from first, we don't need to check first's end_iter.
+    while (cit != last.curr_iter) {
+      out_iter = ::std::copy(cpos, cit->second.end(), out_iter);
+      ++cit;
+      cpos = cit->second.begin();
     }
 
-    // both are at same place (including end)
-    if (first == last) return out_iter;
+    // now we're in same container.  take care the rest.  cpos was updated if cit was moved.
+    out_iter = ::std::copy(cpos, last.curr_pos, out_iter);
 
-    // if first is at its end, and first != last, then last is not reachable.
-    if (first.at_end()) return result;
-
-    // first is not at end, and first != last, then last is in same container as first.
-    out_iter = ::std::copy(first.curr_pos, (last.curr_iter == last.end_iter) ? last.curr_iter->second.begin() : last.curr_pos, out_iter);
 
     return out_iter;
   }

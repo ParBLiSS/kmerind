@@ -1727,8 +1727,6 @@ namespace dsc  // distributed std container
                             Predicate const & pred) {
               auto range = db.equal_range(v);  // get the range as values
 
-
-
               // check range first.  then erase.  only removed iterators are invalidated.
               // order of remaining elements preserved.  true for map/multimap, unordered or not.
               size_t count = 0;

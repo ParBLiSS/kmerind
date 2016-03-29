@@ -146,6 +146,7 @@ TYPED_TEST_P(UnorderedCompactVecMapTest, equal_range)
 	      test_vals.push_back((*it).second);
 	      ++jmax;
 	    }
+
 	    int kmax = 0;
       for (auto it = gold_range.first; it != gold_range.second; ++it) {
         gold_vals.push_back(it->second);
@@ -392,7 +393,6 @@ TYPED_TEST_P(UnorderedVecMapTest, equal_range)
     for (int i = 0; i < 99; ++i) {
       auto test_range = this->test.equal_range(i);
       auto gold_range = this->gold.equal_range(i);
-
 
       ::std::vector<TypeParam> test_vals;
       ::std::vector<TypeParam> gold_vals;
