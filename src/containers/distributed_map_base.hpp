@@ -37,38 +37,37 @@
 
 namespace dsc
 {
-
-  /**
-   * @brief base class for a IteratorFilter.  uses CRTP
-   * @details   goal of the class is to provide subclasses that adhere to the same interface without introducing dynamic polymorphism.
-   *        4 types of subclasses are possible, the first is provided here.
-   *          1. static so that every evaluation returns the same "true" or "false"
-   *          2. depend on element only.  operator(iter, iter) always return 0, indicating dependence on element.
-   *          3. depend on range only.  constructor evaluates, and the value is return for both operators.
-   *          4. combination of both.  developer should implement the appropriate logic.
-   */
-  template<typename Iter, typename Derived>
-  struct IteratorFilter {
-
-
-      /// default constructor
-      IteratorFilter() {};
-
-      /// constructor with start and end iterator.  This is to allow for evaluation based on range alone, or range + element.
-      IteratorFilter(Iter b, Iter e) {};
-
-      /// return result for an element.  value may be based on the range.  subclass define eval function.
-      bool operator()(typename ::std::iterator_traits<Iter>::value_type const & x) {
-        return static_cast<Derived>(*this).eval(x);
-      }
-
-      /// return result for a range.  subclass define eval function
-      int operator()() {
-        return static_cast<Derived>(*this).eval();
-      }
-  };
-
-  struct Identity {
+//
+//  /**
+//   * @brief base class for a IteratorFilter.  uses CRTP  for find_if, erase_if, count_if
+//   * @details   goal of the class is to provide subclasses that adhere to the same interface without introducing dynamic polymorphism.
+//   *        4 types of subclasses are possible, the first is provided here.
+//   *          1. static so that every evaluation returns the same "true" or "false"
+//   *          2. depend on element only.  operator(iter, iter) always return 0, indicating dependence on element.
+//   *          3. depend on range only.  constructor evaluates, and the value is return for both operators.
+//   *          4. combination of both.  developer should implement the appropriate logic.
+//   */
+//  template<typename Iter, typename Derived>
+//  struct IteratorFilter {
+//
+//      /// default constructor
+//      IteratorFilter() {};
+//
+//      /// constructor with start and end iterator.  This is to allow for evaluation based on range alone, or range + element.
+//      IteratorFilter(Iter b, Iter e) {};
+//
+//      /// return result for an element.  value may be based on the range.  subclass define eval function.
+//      bool operator()(typename ::std::iterator_traits<Iter>::value_type const & x) {
+//        return static_cast<Derived>(*this).eval(x);
+//      }
+//
+//      /// return result for a range.  subclass define eval function
+//      int operator()() {
+//        return static_cast<Derived>(*this).eval();
+//      }
+//  };
+//
+  struct TruePredicate {
       template <typename T>
       bool operator()(T const & x) const { return true; }
       template <typename Iter>
@@ -89,61 +88,10 @@ namespace dsc
       static KeyTransform<Key> trans;
 
       template <typename Comparator>
-      struct TransformedComp {
-          Comparator comp;
-          inline bool operator()(Key const & x, Key const & y) const {
-            return comp(trans(x), trans(y));
-          }
-          template<typename V>
-          inline bool operator()(::std::pair<Key, V> const & x, Key const & y) const {
-            return this->operator()(x.first, y);
-          }
-          template<typename V>
-          inline bool operator()(::std::pair<const Key, V> const & x, Key const & y) const {
-            return this->operator()(x.first, y);
-          }
-          template<typename V>
-          inline bool operator()(Key const & x, ::std::pair<Key, V> const & y) const {
-            return this->operator()(x, y.first);
-          }
-          template<typename V>
-          inline bool operator()(Key const & x, ::std::pair<const Key, V> const & y) const {
-            return this->operator()(x, y.first);
-          }
-          template<typename V>
-          inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) const {
-            return this->operator()(x.first, y.first);
-          }
-          template<typename V>
-          inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) const {
-            return this->operator()(x.first, y.first);
-          }
-      };
+      using TransformedComp = ::fsc::TransformedComparator<Key, Comparator, KeyTransform>;
 
-
-      struct TransformedFarmHash {
-          ::bliss::kmer::hash::farm<Key, false> h;
-
-          inline uint64_t operator()(Key const& k) const {
-            return h(trans(k));
-          }
-          template<typename V>
-          inline uint64_t operator()(::std::pair<Key, V> const& x) const {
-            return this->operator()(x.first);
-          }
-          template<typename V>
-          inline uint64_t operator()(::std::pair<const Key, V> const& x) const {
-            return this->operator()(x.first);
-          }
-      };
-
-
-//      struct Greater {
-//          Less lt;
-//          inline bool operator()(Key const &x, Key const &y) const {
-//            return lt(y, x);
-//          }
-//      };
+      using TransformedFarmHash = ::fsc::TransformedHash<Key, ::bliss::kmer::hash::farm<Key, false>, KeyTransform>;
+      static TransformedFarmHash local_hash;
 
       using TransformedEqual = TransformedComp<Equal>;
       using TransformedLess = TransformedComp<Less>;
@@ -151,6 +99,9 @@ namespace dsc
       static TransformedEqual equal;
       static TransformedLess less;
 //      static TransformedGreater greater;
+
+      template <typename V>
+      using UniqueKeySetUtilityType = ::std::unordered_set<V, TransformedFarmHash, TransformedEqual>;
 
       mutable size_t key_multiplicity;
 
@@ -413,6 +364,16 @@ namespace dsc
       class Alloc>
   typename map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::TransformedEqual
       map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::equal;
+
+
+  template<typename Key, typename T,
+      class Comm,
+      template <typename> class KeyTransform,
+      class Less,
+      class Equal,
+      class Alloc>
+  typename map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::TransformedFarmHash
+      map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::local_hash;
 
 //  template<typename Key, typename T,
 //      class Comm,

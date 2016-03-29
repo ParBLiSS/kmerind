@@ -31,18 +31,37 @@
 
 namespace fsc {
 
+  template <typename Key, typename Hash, template <typename> class Transform>
+  struct TransformedHash {
+      Hash h;
+      Transform<Key> trans;
 
-  struct Identity {
-      template <typename T>
+      inline uint64_t operator()(Key const& k) const {
+        return h(trans(k));
+      }
+      template<typename V>
+      inline uint64_t operator()(::std::pair<Key, V> const& x) const {
+        return this->operator()(x.first);
+      }
+      template<typename V>
+      inline uint64_t operator()(::std::pair<const Key, V> const& x) const {
+        return this->operator()(x.first);
+      }
+  };
+
+
+
+  template <typename T>
+  struct IdentityTransform {
       T operator()(T const& v) {return v;};
   };
 
-  template <typename Key, typename Comp, typename Transform = Identity>
-  struct Comparator {
-      Comp comp;
-      Transform trans;
+  template <typename Key, typename Comparator, template <typename> class Transform>
+  struct TransformedComparator {
+      Comparator comp;
+      Transform<Key> trans;
 
-      Comparator(Comp const & _cmp = Comp(), Transform const _trans = Transform()) : comp(_cmp), trans(_trans) {};
+      TransformedComparator(Comparator const & _cmp = Comparator(), Transform<Key> const _trans = Transform<Key>()) : comp(_cmp), trans(_trans) {};
 
       inline bool operator()(Key const & x, Key const & y) const {
         return comp(trans(x), trans(y));
@@ -73,11 +92,11 @@ namespace fsc {
       }
   };
 
-  template <typename Key, typename Comp>
-  struct Comparator<Key, Comp, Identity> {
-      Comp comp;
+  template <typename Key, typename Comparator>
+  struct TransformedComparator<Key, Comparator, IdentityTransform> {
+      Comparator comp;
 
-      Comparator(Comp const & cmp = Comp()) : comp(cmp) {};
+      TransformedComparator(Comparator const & cmp = Comparator()) : comp(cmp) {};
 
       inline bool operator()(Key const & x, Key const & y) const {
         return comp(x, y);

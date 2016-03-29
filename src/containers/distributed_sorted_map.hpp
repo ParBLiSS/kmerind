@@ -207,7 +207,7 @@ namespace dsc  // distributed std container
           }
 
           // assumes that container is sorted. and exact overlap region is provided.  do not filter output here since it's an output iterator.
-          template <class DBIter, class QueryIter, class OutputIter, class Operator, class Predicate = Identity>
+          template <class DBIter, class QueryIter, class OutputIter, class Operator, class Predicate = TruePredicate>
           static size_t process(DBIter range_begin, DBIter range_end,
                                 QueryIter query_begin, QueryIter query_end,
                                 OutputIter &output, Operator & op,
@@ -235,13 +235,13 @@ namespace dsc  // distributed std container
                 // iterate through the input and search in output -
                 for (auto it = query_begin; it != query_end;) {
                   v = *it;
-                  if (!::std::is_same<Predicate, Identity>::value)
+                  if (!::std::is_same<Predicate, TruePredicate>::value)
                 	  count += op.template operator()<true>(range_begin, el_end, range_end, v, output, pred);
                   else
                 	  count += op.template operator()<true>(range_begin, el_end, range_end, v, output);
 
                   // compiler optimize out the conditional.
-                  if (unique) it = upper_bound<true>(it, query_end, v);
+                  if (unique) it = ::fsc::upper_bound<true>(it, query_end, v, Base::less);
                   else ++it;
                 }
               } else {
@@ -250,13 +250,13 @@ namespace dsc  // distributed std container
                 // iterate through the input and search in output -
                 for (auto it = query_begin; it != query_end;) {
                   v = *it;
-                  if (!::std::is_same<Predicate, Identity>::value)
+                  if (!::std::is_same<Predicate, TruePredicate>::value)
                 	  count += op.template operator()<false>(range_begin, el_end, range_end, v, output, pred);
                   else
                 	  count += op.template operator()<false>(range_begin, el_end, range_end, v, output);
 
                   // compiler optmizes out the conditional
-                  if (unique) it = upper_bound<true>(it, query_end, v);
+                  if (unique) it = ::fsc::upper_bound<true>(it, query_end, v, Base::less);
                   else ++it;
                 }
               }
@@ -294,24 +294,6 @@ namespace dsc  // distributed std container
       }
 
 
-      template <bool linear, class DBIter, class Query = typename ::std::iterator_traits<DBIter>::value_type>
-      static inline DBIter lower_bound(DBIter b, DBIter e, Query& v) {
-          // compiler choose one.
-          if (linear) while ((b != e) && Base::less(*b, v)) ++b;
-          else b = ::std::lower_bound(b, e, v, Base::less);
-          return b;
-      }
-
-
-      template <bool linear, class DBIter, class Query = typename ::std::iterator_traits<DBIter>::value_type>
-      static inline DBIter upper_bound(DBIter b, DBIter e,  Query& v) {
-          // compiler choose one.
-          if (linear) while ((b != e) && !Base::less(v, *b)) ++b;
-          else b = ::std::upper_bound(b, e, v, Base::less);
-          return b;
-      }
-
-
       /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_sort() {
         if (sorted) return;
@@ -327,8 +309,8 @@ namespace dsc  // distributed std container
           template<bool linear, class DBIter, typename Query, class OutputIter>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, OutputIter &output) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
-              range_begin = lower_bound<linear>(el_end, range_end, v);  // range_begin at equal or greater than v.
-              el_end = upper_bound<linear>(range_begin, range_end, v);  // el_end at greater than v.
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);  // range_begin at equal or greater than v.
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);  // el_end at greater than v.
               // difference between the 2 iterators is the part that's equal.
 
               // add the output entry.
@@ -339,12 +321,12 @@ namespace dsc  // distributed std container
               return 1;
           }
           // filtered element-wise.
-          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = Identity>
+          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = TruePredicate>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, OutputIter &output,
                             Predicate const& pred) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
-              range_begin = lower_bound<linear>(el_end, range_end, v);  // range_begin at equal or greater than v.
-              el_end = upper_bound<linear>(range_begin, range_end, v);  // el_end at greater than v.
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);  // range_begin at equal or greater than v.
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);  // el_end at greater than v.
               // difference between the 2 iterators is the part that's equal.
 
               // add the output entry.
@@ -365,7 +347,7 @@ namespace dsc  // distributed std container
           template<bool linear, class DBIter, typename Query>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, DBIter &output) {
               // find start of segment to delete == end of prev segment to keep
-              range_begin = lower_bound<linear>(el_end, range_end, v);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
 
               // if the keep range is larger than 0, then move data and update insert pos.
               auto dist = ::std::distance(el_end, range_begin);
@@ -375,22 +357,22 @@ namespace dsc  // distributed std container
                 ::std::advance(output, dist);
               }
               // find of end of the segment to delete == start of next segment to keep
-              el_end = upper_bound<linear>(range_begin, range_end, v);
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);
               return dist;
           }
           /// Return how much was KEPT.
-          template<bool linear, class DBIter, typename Query, class Predicate = Identity>
+          template<bool linear, class DBIter, typename Query, class Predicate = TruePredicate>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, DBIter &output,
                             Predicate const & pred) {
               // find start of segment to delete == end of prev segment to keep
-              range_begin = lower_bound<linear>(el_end, range_end, v);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
 
               if (::std::distance(el_end, range_begin) > 0) {
                 // condense a portion.
                 output = ::std::move(el_end, range_begin, output);
               }
               // find of end of the segment to delete == start of next segment to keep
-              el_end = upper_bound<linear>(range_begin, range_end, v);
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);
 
 
               if (!pred(range_begin, range_end)) {  // if NOTHING in range matches, then no erase.
@@ -422,7 +404,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate = Identity>
+      template <typename Predicate = TruePredicate>
       size_t local_erase(::std::vector<Key>& keys, bool & sorted_input, Predicate const & pred = Predicate() ) {
         if (keys.size() == 0) return 0;
         if (c.size() == 0) return 0;
@@ -469,7 +451,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class LocalFind, class Predicate = Identity >
+      template <class LocalFind, class Predicate = TruePredicate >
       ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & local_find,
     		  ::std::vector<Key>& keys, bool & sorted_input,
     		  Predicate const& pred = Predicate() ) const {
@@ -579,7 +561,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class LocalFind, class Predicate = Identity >
+      template <class LocalFind, class Predicate = TruePredicate >
       ::std::vector<::std::pair<Key, T> > find(LocalFind & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(find);
@@ -772,7 +754,7 @@ namespace dsc  // distributed std container
       }
 
 
-      template <class LocalFind, class Predicate = Identity>
+      template <class LocalFind, class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(LocalFind & local_find,
     		  Predicate const & pred = Predicate()) const {
           ::std::vector<::std::pair<Key, T> > results;
@@ -901,7 +883,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate = Identity>
+      template <typename Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const & pred = Predicate()) const {
 
@@ -985,7 +967,7 @@ namespace dsc  // distributed std container
       }
 
 
-      template <typename Predicate = Identity>
+      template <typename Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
@@ -1007,7 +989,7 @@ namespace dsc  // distributed std container
 //       * @param src_begin
 //       * @param src_end
 //       */
-//      template <class InputIter, class Predicate = Identity>
+//      template <class InputIter, class Predicate = TruePredicate>
 //      size_t insert(InputIter src_begin, InputIter src_end, bool sorted_input = false, Predicate const &pred = Predicate()) {
 //          if (src_begin == src_end) return 0;
 //          BL_BENCH_INIT(insert);
@@ -1017,7 +999,7 @@ namespace dsc  // distributed std container
 //          this->sorted = false; this->balanced = false; this->globally_sorted = false;
 //          ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
 //
-//          if (::std::is_same<Predicate, Identity>::value) ::std::copy(src_begin, src_end, emplace_iter);
+//          if (::std::is_same<Predicate, TruePredicate>::value) ::std::copy(src_begin, src_end, emplace_iter);
 //          else ::std::copy_if(src_begin, src_end, emplace_iter, pred);
 //
 //          size_t count = ::std::distance(src_begin, src_end);
@@ -1034,7 +1016,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class Predicate = Identity>
+      template <class Predicate = TruePredicate>
       size_t insert(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
           if (input.size() == 0) return 0;
           BL_BENCH_INIT(insert);
@@ -1044,7 +1026,7 @@ namespace dsc  // distributed std container
           BL_BENCH_START(insert);
 
           ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
-          if (::std::is_same<Predicate, Identity>::value) {
+          if (::std::is_same<Predicate, TruePredicate>::value) {
             if (c.size() == 0)   // container is empty, so swap it in.
               c.swap(input);
             else {
@@ -1073,7 +1055,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate = Identity>
+      template <typename Predicate = TruePredicate>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const & pred = Predicate() ) {
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           BL_BENCH_INIT(erase);
@@ -1103,12 +1085,12 @@ namespace dsc  // distributed std container
         return result;
       }
 
-      template <typename Predicate = Identity>
+      template <typename Predicate = TruePredicate>
       size_t erase(Predicate const & pred = Predicate()) {
         size_t before = c.size();
-        if (!::std::is_same<Predicate, Identity>::value) {
+        if (!::std::is_same<Predicate, TruePredicate>::value) {
 
-          local_sort();
+          this->local_sort();
 
           auto end = ::std::partition(c.begin(), c.end(), [pred](value_type const &x) { return !pred(x.first); });
           c.erase(end, c.end());
@@ -1191,7 +1173,7 @@ namespace dsc  // distributed std container
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
 
               // map, so only 1 entry.
-              range_begin = Base::template lower_bound<linear>(el_end, range_end, v);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
               el_end = range_begin;
 
               // add the output entry, if found.
@@ -1205,13 +1187,13 @@ namespace dsc  // distributed std container
             	  return 0;
 
           }
-          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = Identity>
+          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = TruePredicate>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end,
         		  Query const &v, OutputIter &output, Predicate const &pred) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
 
               // map, so only 1 entry.
-              range_begin = Base::template lower_bound<linear>(el_end, range_end, v);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
               el_end = range_begin;
 
               // add the output entry, if found.
@@ -1284,19 +1266,19 @@ namespace dsc  // distributed std container
 
       virtual ~sorted_map() {};
 
-      template <class Predicate = Identity>
+      template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = Identity>
+      template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
 
 
-      template <class Predicate = Identity>
+      template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
@@ -1563,9 +1545,9 @@ namespace dsc  // distributed std container
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
 
 
-              range_begin = Base::template lower_bound<linear>(el_end, range_end, v);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
 
-              el_end = Base::template upper_bound<linear>(range_begin, range_end, v);
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);
 
               // difference between the 2 iterators is the part that's equal.
               if (range_begin == range_end) return 0;
@@ -1575,15 +1557,15 @@ namespace dsc  // distributed std container
 
               return ::std::distance(range_begin, el_end);
           }
-          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = Identity>
+          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = TruePredicate>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end,
         		  Query const &v, OutputIter &output, Predicate const &pred) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
         	  //OutputIter output_orig = output;
 
-              range_begin = Base::template lower_bound<linear>(el_end, range_end, v);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
 
-              el_end = Base::template upper_bound<linear>(range_begin, range_end, v);
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);
 
               // difference between the 2 iterators is the part that's equal.
               if (range_begin == range_end) return 0;
@@ -1673,7 +1655,7 @@ namespace dsc  // distributed std container
 
           // redistribute.  in trouble if we have a value that takes up a large part of the partition.
           BL_BENCH_START(rehash);
-          ::std::vector<size_t> send_counts = fsc::get_bucket_sizes(this->c, this->key_to_rank.map, Base::Base::less);
+          ::std::vector<size_t> send_counts = ::fsc::get_bucket_sizes(this->c, this->key_to_rank.map, Base::Base::less);
           BL_BENCH_END(rehash, "bucket", this->c.size());
 
 
@@ -1733,7 +1715,7 @@ namespace dsc  // distributed std container
         for (auto it = this->c.begin(), max = this->c.end(); it != max;) {
           v = *it;
           ++uniq_count;
-          it = Base::template upper_bound<true>(it, max, v);
+          it = ::fsc::upper_bound<true>(it, max, v, Base::less);
         }
         if (uniq_count == 0)
           this->key_multiplicity = 1;
@@ -1760,7 +1742,7 @@ namespace dsc  // distributed std container
         return this->key_multiplicity;
       }
 
-      template <class Predicate = Identity>
+      template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
@@ -1798,13 +1780,13 @@ namespace dsc  // distributed std container
           return result;
 */
       }
-      template <class Predicate = Identity>
+      template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = Identity>
+      template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
@@ -2028,7 +2010,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class Predicate = Identity>
+      template <class Predicate = TruePredicate>
       size_t insert(::std::vector<Key> &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
 
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
@@ -2059,7 +2041,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class Predicate = Identity>
+      template <class Predicate = TruePredicate>
       size_t insert(::std::vector<std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
 
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
