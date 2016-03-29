@@ -469,13 +469,14 @@ namespace dsc  // distributed std container
 
           this->assert_sorted_locally();
 
-          if (this->comm_size > 1) {
+          if (this->comm.size() > 1) {
 
 
               BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
               // distribute (communication part)
-              std::vector<size_t> recv_counts(this->stable_distribute_unique(keys,
-            		  this->key_to_rank, sorted_input));
+              std::vector<size_t> recv_counts(::dsc::distribute_sorted_unique(keys,
+                                                                              this->key_to_rank, sorted_input, this->comm,
+                                                                              typename Base::TransformedLess(), typename Base::TransformedEqual()));
               BL_BENCH_END(find, "dist_query", keys.size());
 
 
@@ -491,7 +492,7 @@ namespace dsc  // distributed std container
 
             auto start = keys.begin();
             auto end = start;
-            for (int i = 0; i < this->comm_size; ++i) {
+            for (int i = 0; i < this->comm.size(); ++i) {
               ::std::advance(end, recv_counts[i]);
 
               // work on query from process i.
@@ -581,11 +582,13 @@ namespace dsc  // distributed std container
 
           this->assert_sorted_locally();
 
-          if (this->comm_size > 1) {
+          if (this->comm.size() > 1) {
 
               BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
               // distribute (communication part)
-              std::vector<size_t> recv_counts(this->stable_distribute_unique(keys, this->key_to_rank, sorted_input));
+              std::vector<size_t> recv_counts(::dsc::distribute_sorted_unique(keys,
+                                                                              this->key_to_rank, sorted_input, this->comm,
+                                                                              typename Base::TransformedLess(), typename Base::TransformedEqual()));
               BL_BENCH_END(find, "dist_query", keys.size());
 
 
@@ -601,7 +604,7 @@ namespace dsc  // distributed std container
             auto start = keys.begin();
             auto end = start;
             size_t total = 0;
-            for (int i = 0; i < this->comm_size; ++i) {
+            for (int i = 0; i < this->comm.size(); ++i) {
               ::std::advance(end, recv_counts[i]);
 
               // count results for process i
@@ -636,7 +639,7 @@ namespace dsc  // distributed std container
             BL_BENCH_START(find);
             auto resp_displs = mxx::impl::get_displacements(resp_counts);  // compute response displacements.
 
-            auto resp_total = resp_displs[this->comm_size - 1] + resp_counts[this->comm_size - 1];
+            auto resp_total = resp_displs[this->comm.size() - 1] + resp_counts[this->comm.size() - 1];
             auto max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
             results.resize(resp_total);   // allocate, not just reserve
             local_results.reserve(max_send_count);
@@ -648,18 +651,18 @@ namespace dsc  // distributed std container
             int recv_from, send_to;
             size_t found;
             total = 0;
-            std::vector<MPI_Request> reqs(2 * this->comm_size);
+            std::vector<MPI_Request> reqs(2 * this->comm.size());
 
             mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T>>();
-            for (int i = 0; i < this->comm_size; ++i) {
-              recv_from = (this->comm.rank() + (this->comm_size - i)) % this->comm_size; // rank to recv data from
+            for (int i = 0; i < this->comm.size(); ++i) {
+              recv_from = (this->comm.rank() + (this->comm.size() - i)) % this->comm.size(); // rank to recv data from
 
               // set up receive.
               MPI_Irecv(&results[resp_displs[recv_from]], resp_counts[recv_from], dt.type(),
                         recv_from, i, this->comm, &reqs[2 * i]);
 
 
-              send_to = (this->comm.rank() + i) % this->comm_size;    // rank to send data to
+              send_to = (this->comm.rank() + i) % this->comm.size();    // rank to send data to
 
               //== get data for the dest rank
               start = keys.begin();                                   // keys for the query for the dest rank
@@ -783,7 +786,7 @@ namespace dsc  // distributed std container
           Intersect<false>::process(this->c.begin(), this->c.end(),
         		  keys.begin(), keys.end(), emplace_iter, local_find, true, pred);
 
-          if (this->comm_size > 1) this->comm.barrier();
+          if (this->comm.size() > 1) this->comm.barrier();
           return results;
       }
 
@@ -871,7 +874,7 @@ namespace dsc  // distributed std container
       void reserve( size_t n) {
         // direct reserve + barrier
         this->local_reserve(n);
-        if (this->comm_size > 1) MPI_Barrier(this->comm);
+        if (this->comm.size() > 1) MPI_Barrier(this->comm);
       }
 
 
@@ -901,10 +904,12 @@ namespace dsc  // distributed std container
         BL_BENCH_END(count, "begin", keys.size());
 
 
-        if (this->comm_size > 1) {
+        if (this->comm.size() > 1) {
 
             BL_BENCH_START(count);
-            std::vector<size_t> recv_counts(this->stable_distribute_unique(keys, this->key_to_rank, sorted_input));
+            std::vector<size_t> recv_counts(::dsc::distribute_sorted_unique(keys,
+                                                                            this->key_to_rank, sorted_input, this->comm,
+                                                                            typename Base::TransformedLess(), typename Base::TransformedEqual()));
             BL_BENCH_END(count, "dist_query", keys.size());
 
 
@@ -917,7 +922,7 @@ namespace dsc  // distributed std container
           BL_BENCH_START(count);
           auto start = keys.begin();
           auto end = start;
-          for (int i = 0; i < this->comm_size; ++i) {
+          for (int i = 0; i < this->comm.size(); ++i) {
             ::std::advance(end, recv_counts[i]);
 
             // work on query from process i.
@@ -979,7 +984,7 @@ namespace dsc  // distributed std container
         Intersect<false>::process(c.begin(), c.end(), keys.begin(), keys.end(),
         		emplace_iter, count_element, true, pred);
 
-        if (this->comm_size > 1) this->comm.barrier();
+        if (this->comm.size() > 1) this->comm.barrier();
         return results;
       }
 
@@ -1060,10 +1065,10 @@ namespace dsc  // distributed std container
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           BL_BENCH_INIT(erase);
 
-        if (this->comm_size > 1) {
+        if (this->comm.size() > 1) {
           // remove duplicates
             BL_BENCH_START(erase);
-            auto recv_counts(this->stable_distribute_unique(keys, this->key_to_rank, sorted_input));
+            auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
             BLISS_UNUSED(recv_counts);
             BL_BENCH_END(erase, "dist_query", keys.size());
         }
@@ -1101,7 +1106,7 @@ namespace dsc  // distributed std container
           this->local_clear();
         }
 
-        if (this->comm_size > 1) this->comm.barrier();
+        if (this->comm.size() > 1) this->comm.barrier();
 
         return before - c.size();
       }
@@ -1164,8 +1169,6 @@ namespace dsc  // distributed std container
 
     protected:
 
-      // defined Communicator as a friend
-      friend Comm;
 
       struct LocalFind {
           template<bool linear, class DBIter, typename Query, class OutputIter>
@@ -1291,7 +1294,7 @@ namespace dsc  // distributed std container
         //printf("c size before: %lu\n", this->c.size());
         BL_BENCH_START(rehash);
         BL_BENCH_END(rehash, "begin", this->c.size());
-        if (this->comm_size > 1) {
+        if (this->comm.size() > 1) {
           // first balance
 
 
@@ -1396,7 +1399,7 @@ namespace dsc  // distributed std container
 // //            // sample
 // //            mxx::datatype<::std::pair<Key, T> > dt;
 // //            MPI_Datatype mpi_dt = dt.type();
-// //            this->key_to_rank.map = ::mxx::impl::sample_arbit_decomp(this->c.begin(), this->c.end(), Base::Base::less, this->comm_size - 1, this->comm, mpi_dt);
+// //            this->key_to_rank.map = ::mxx::impl::sample_arbit_decomp(this->c.begin(), this->c.end(), Base::Base::less, this->comm.size() - 1, this->comm, mpi_dt);
 // //            for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
 // //              // modify the splitters destinations
 // //              //printf("R %d splitters %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
@@ -1600,7 +1603,7 @@ namespace dsc  // distributed std container
         BL_BENCH_INIT(rehash);
 
 
-        if (this->comm_size > 1) {
+        if (this->comm.size() > 1) {
           // first balance
 
           // TODO: stable_block_decompose uses all2all internally.  is it better to move the deltas ourselves?
@@ -1651,7 +1654,7 @@ namespace dsc  // distributed std container
 
           //			  mxx::datatype<::std::pair<Key, T> > dt;
           //			  MPI_Datatype mpi_dt = dt.type();
-          //			  this->key_to_rank.map = ::mxx::sample_block_decomp(d.begin(), d.end(), Base::Base::less, this->comm_size - 1, this->comm, mpi_dt);
+          //			  this->key_to_rank.map = ::mxx::sample_block_decomp(d.begin(), d.end(), Base::Base::less, this->comm.size() - 1, this->comm, mpi_dt);
 
           // redistribute.  in trouble if we have a value that takes up a large part of the partition.
           BL_BENCH_START(rehash);
@@ -1660,7 +1663,7 @@ namespace dsc  // distributed std container
 
 
           // this should always be true.
-          assert(send_counts.size() == static_cast<size_t>(this->comm_size));
+          assert(send_counts.size() == static_cast<size_t>(this->comm.size()));
 
           for (size_t i = 0; i < send_counts.size(); ++i) {
             BL_DEBUGF("R %d send_counts[%lu] = %lu", this->comm.rank(), i, send_counts[i]);

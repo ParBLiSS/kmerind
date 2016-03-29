@@ -237,10 +237,10 @@ namespace bliss{
 
 
 				 // communication part
-				 if (this->comm_size > 1) {
+				 if (this->comm.size() > 1) {
 				   BL_BENCH_START(insert);
 				   // get mapping to proc
-				   ::std::vector<size_t> send_counts = mxx::bucketing(input, this->key_to_rank, this->comm_size);
+				   ::std::vector<size_t> send_counts = mxx::bucketing(input, this->key_to_rank, this->comm.size());
 				   BL_BENCH_END(insert, "bucket", input.size());
 
 		 //          BL_BENCH_START(insert);

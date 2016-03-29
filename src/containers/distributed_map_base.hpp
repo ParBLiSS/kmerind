@@ -107,10 +107,9 @@ namespace dsc
 
       // communication stuff...
       const mxx::comm& comm;
-      int comm_size;
 
       // defined Communicator as a friend
-      friend Comm;
+      //friend Comm;
 
       template <class Iter>
       static void sort_ascending(Iter b, Iter e) {
@@ -126,147 +125,9 @@ namespace dsc
 
 
       map_base(const mxx::comm& _comm) :
-          key_multiplicity(1), comm(_comm), comm_size(comm.size()) {
+          key_multiplicity(1), comm(_comm) {
       }
 
-      /**
-       * @param[IN/OUT] keys  	keys to distribute. sortedness is NOT kept because of inplace bucketing.,
-       * @param[IN/OUT] sorted_input  	indicates if input is sorted.  and whether each bucket is sorted.
-       * @return received counts
-       */
-      template <typename V, typename ToRank>
-      ::std::vector<size_t> distribute_unique(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input) const {
-    	  BL_BENCH_INIT(distribute);
-
-          BL_BENCH_START(distribute);
-          // distribute (communication part)
-          std::vector<size_t> send_counts = mxx::bucketing_inplace(vals, to_rank, this->comm.size());
-          sorted_input = false;
-          BL_BENCH_END(distribute, "bucket", vals.size());
-
-          BL_BENCH_START(distribute);
-          // distribute (communication part)
-          ::fsc::bucket_unique<::std::unordered_set<V,
-                                                   TransformedFarmHash,
-                                                   TransformedEqual >,
-                                                   TransformedEqual >(vals, send_counts, sorted_input);
-          BL_BENCH_END(distribute, "unique", vals.size());
-
-
-          // distribute (communication part)
-          BL_BENCH_COLLECTIVE_START(distribute, "a2a", this->comm);
-          vals = mxx::all2allv(vals, send_counts, this->comm);
-          BL_BENCH_END(distribute, "a2a", vals.size());
-
-          BL_BENCH_START(distribute);
-          std::vector<size_t> recv_counts= mxx::all2all(send_counts, this->comm);
-          BL_BENCH_END(distribute, "a2a_counts", vals.size());
-
-          BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", this->comm);
-
-
-          return recv_counts;
-      }
-
-      /**
-       * @param[IN/OUT] vals  	vals to distribute.  sortedness is NOT kept because of inplace bucketing.
-       * @param[IN/OUT] sorted_input  	indicates if input is sorted.  and whether each bucket is sorted.
-       *
-       * @return received counts.
-       */
-      template <typename V, typename ToRank>
-      ::std::vector<size_t> distribute(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input) const {
-    	  BL_BENCH_INIT(distribute);
-
-          BL_BENCH_START(distribute);
-          // distribute (communication part)
-          std::vector<size_t> send_counts = mxx::bucketing_inplace(vals, to_rank, this->comm.size());
-          sorted_input = false;
-          BL_BENCH_END(distribute, "bucket", vals.size());
-
-          // distribute (communication part)
-          BL_BENCH_COLLECTIVE_START(distribute, "a2a", this->comm);
-          vals = mxx::all2allv(vals, send_counts, this->comm);
-          BL_BENCH_END(distribute, "a2a", vals.size());
-
-          BL_BENCH_START(distribute);
-          std::vector<size_t> recv_counts= mxx::all2all(send_counts, this->comm);
-          BL_BENCH_END(distribute, "a2a_counts", vals.size());
-
-          BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", this->comm);
-
-
-          return recv_counts;
-      }
-
-
-      /**
-       * @param[IN/OUT] keys  	keys to distribute. sortedness is KEPT.,
-       * @param[IN/OUT] sorted_input  	indicates if input is sorted.  and whether each bucket is sorted.
-       * @return received counts
-       */
-      template <typename V, typename ToRank>
-      ::std::vector<size_t> stable_distribute_unique(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input) const {
-    	  BL_BENCH_INIT(distribute);
-
-          BL_BENCH_START(distribute);
-          // distribute (communication part)
-          std::vector<size_t> send_counts = mxx::bucketing(vals, to_rank, this->comm.size());
-          BL_BENCH_END(distribute, "bucket", vals.size());
-
-          BL_BENCH_START(distribute);
-          // distribute (communication part)
-          ::fsc::bucket_unique<::std::unordered_set<V,
-                                                   TransformedFarmHash,
-                                                   TransformedEqual >,
-                                                   TransformedEqual >(vals, send_counts, sorted_input);
-          BL_BENCH_END(distribute, "unique", vals.size());
-
-
-          // distribute (communication part)
-          BL_BENCH_COLLECTIVE_START(distribute, "a2a", this->comm);
-          vals = mxx::all2allv(vals, send_counts, this->comm);
-          BL_BENCH_END(distribute, "a2a", vals.size());
-
-          BL_BENCH_START(distribute);
-          std::vector<size_t> recv_counts= mxx::all2all(send_counts, this->comm);
-          BL_BENCH_END(distribute, "a2a_counts", vals.size());
-
-          BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", this->comm);
-
-
-          return recv_counts;
-      }
-
-      /**
-       * @param[IN/OUT] vals  	vals to distribute.  sortedness is KEPT within each bucket
-       * @param[IN/OUT] sorted_input  	indicates if input is sorted.  and whether each bucket is sorted.
-       *
-       * @return received counts.
-       */
-      template <typename V, typename ToRank>
-      ::std::vector<size_t> stable_distribute(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input) const {
-    	  BL_BENCH_INIT(distribute);
-
-          BL_BENCH_START(distribute);
-          // distribute (communication part)
-          std::vector<size_t> send_counts = mxx::bucketing(vals, to_rank, this->comm.size());
-          BL_BENCH_END(distribute, "bucket", vals.size());
-
-          // distribute (communication part)
-          BL_BENCH_COLLECTIVE_START(distribute, "a2a", this->comm);
-          vals = mxx::all2allv(vals, send_counts, this->comm);
-          BL_BENCH_END(distribute, "a2a", vals.size());
-
-          BL_BENCH_START(distribute);
-          std::vector<size_t> recv_counts= mxx::all2all(send_counts, this->comm);
-          BL_BENCH_END(distribute, "a2a_counts", vals.size());
-
-          BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", this->comm);
-
-
-          return recv_counts;
-      }
 
 
 
@@ -311,27 +172,27 @@ namespace dsc
 
       /// check if empty.
       virtual bool empty() const noexcept {
-        if (comm_size == 1)
+        if (comm.size() == 1)
           return this->local_empty();
         else // all reduce
           return mxx::all_of(this->local_empty(), comm);
       }
 
-      /// get size of distributed container
+      /// get TOTAL size of distributed container
       virtual size_t size() const noexcept {
         size_t s = this->local_size();
-        if (comm_size == 1)
+        if (comm.size() == 1)
           return s;
         else
           return mxx::allreduce(s, comm);
       }
 
 
-      /// clears the unordered_map
+      /// clears the distributed container.
       void clear() noexcept {
         // clear + barrier.
         this->local_clear();
-        if (comm_size > 1)
+        if (comm.size() > 1)
           comm.barrier();
       }
 

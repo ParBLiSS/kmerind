@@ -29,6 +29,8 @@
 #include <unordered_set>
 #include <algorithm>  // upper bound, unique, sort, etc.
 
+#include "utils/benchmark_utils.hpp"
+
 namespace fsc {
 
   template <typename Key, typename Hash, template <typename> class Transform>
@@ -213,6 +215,125 @@ namespace fsc {
     input.erase(end, input.end());
   }
 
+  /// keep the unique entries within each bucket.  complexity is b * O(N/b), where b is the bucket size, and O(N/b) is complexity of inserting into and copying from set.
+  /// when used within bucket, scales with O(N/b), not with b.  this is as good as it gets wrt complexity.
+  /// sortedness is MAINTAINED within buckets
+  template<typename T, typename count_t, typename Hash, typename Eq>
+  void bucket_unique(std::vector<T>& input, std::vector<count_t> &send_counts, bool & sorted_input,
+                          const Hash & hash = Hash(), const Eq & equal = Eq()) {
+
+    auto newstart = input.begin();
+    auto newend = newstart;
+    auto start = input.begin();
+    auto end = start;
+
+
+    if (sorted_input) {
+
+      for (size_t i = 0; i < send_counts.size(); ++i) {
+        end = start + send_counts[i];
+
+        if (i == 0)
+          newend = ::std::unique(start, end, equal);
+        else
+          newend = ::std::unique_copy(start, end, newstart, equal);
+
+        send_counts[i] = ::std::distance(newstart, newend);
+
+        start = end;
+        newstart = newend;
+      }
+
+    } else {
+
+      count_t max = *(::std::max_element(send_counts.begin(), send_counts.end()));
+      ::std::unordered_set<T, Hash, Eq> set(max, hash, equal);
+
+      for (size_t i = 0; i < send_counts.size(); ++i) {
+        end = start + send_counts[i];
+
+        // sorting is SLOW and not scalable.  use unordered set instead.
+        // unordered_set for large data is memory intensive.  depending on use, bucket per processor first.
+        set.clear();
+        set.insert(start, end);
+        newend = ::std::copy(set.begin(), set.end(), newstart);
+
+        send_counts[i] = ::std::distance(newstart, newend);
+
+        start = end;
+        newstart = newend;
+      }
+
+    }
+
+    // compact.
+    input.erase(newend, input.end());
+  }
+
+
+  /// keep the unique entries within each bucket.  complexity is b * O(N/b), where b is the bucket size, and O(N/b) is complexity of inserting into and copying from set.
+  /// when used within bucket, scales with O(N/b), not with b.  this is as good as it gets wrt complexity.
+  /// sortedness is MAINTAINED within buckets
+  template<typename T, typename count_t, typename Less>
+  void bucket_sort(std::vector<T>& input, std::vector<count_t> &send_counts, bool & sorted_input,
+                          const Less & less = Less()) {
+
+    if (!sorted_input) {
+      auto newstart = input.begin();
+      auto newend = newstart;
+      auto start = input.begin();
+      auto end = start;
+
+      for (size_t i = 0; i < send_counts.size(); ++i) {
+        end = start + send_counts[i];
+
+        ::std::sort(start, end, less);
+
+        start = end;
+      }
+      sorted_input = true;
+    }
+
+  }
+
+  /// keep the unique entries within each bucket.  complexity is b * O(N/b), where b is the bucket size, and O(N/b) is complexity of inserting into and copying from set.
+  /// when used within bucket, scales with O(N/b), not with b.  this is as good as it gets wrt complexity.
+  /// sortedness is MAINTAINED within buckets
+  template<typename T, typename count_t, typename Less, typename Eq>
+  void bucket_sorted_unique(std::vector<T>& input, std::vector<count_t> &send_counts, bool & sorted_input,
+                          const Less & less = Less(), const Eq & equal = Eq()) {
+
+    auto newstart = input.begin();
+    auto newend = newstart;
+    auto start = input.begin();
+    auto end = start;
+
+    for (size_t i = 0; i < send_counts.size(); ++i) {
+      end = start + send_counts[i];
+
+      if (!sorted_input) {
+        ::std::sort(start, end, less);
+      }
+
+      if (i == 0)
+        newend = ::std::unique(start, end, equal);
+      else
+        newend = ::std::unique_copy(start, end, newstart, equal);
+
+      send_counts[i] = ::std::distance(newstart, newend);
+
+      start = end;
+      newstart = newend;
+    }
+
+
+    // compact.
+    input.erase(newend, input.end());
+
+    sorted_input = true;
+  }
+
+
   // finds splitter positions for the given splitters (`map`)
   // in the sorted buffer, sorted according to the `comp` comparator.
   template<typename T, typename Key, typename Comp>
@@ -249,48 +370,174 @@ namespace fsc {
     return send_counts;
   }
 
-  /// keep the unique entries within each bucket.  complexity is b * O(N/b), where b is the bucket size, and O(N/b) is complexity of inserting into and copying from set.
-  /// when used within bucket, scales with O(N/b), not with b.  this is as good as it gets wrt complexity.
-  /// sortedness is MAINTAINED within buckets
-  template<typename SET, typename EQUAL, typename T = typename SET::key_type, typename count_t = int>
-  void bucket_unique(std::vector<T>& input, std::vector<count_t> &send_counts, bool sorted = false) {
-  
-    auto newstart = input.begin();
-    auto newend = newstart;
-    auto start = input.begin();
-    auto end = start;
-    
-    count_t max = *(::std::max_element(send_counts.begin(), send_counts.end()));
-    SET set(max);
 
-    for (size_t i = 0; i < send_counts.size(); ++i) {
-      end = start + send_counts[i];
-        
-      if (sorted) {  // already sorted, then just get the unique stuff and remove rest.
-        if (i == 0)
-          newend = ::std::unique(start, end, EQUAL());
-        else 
-          newend = ::std::unique_copy(start, end,
-                                      newstart, EQUAL());
-      } else {  // not sorted, so use an unordered_set to keep the first occurence.
+}  // namespace fsc
 
-        // sorting is SLOW and not scalable.  use unordered set instead.
-        // unordered_set for large data is memory intensive.  depending on use, bucket per processor first.
-        set.clear();
-        set.insert(start, end);
-        newend = ::std::copy(set.begin(), set.end(), newstart);
-      }
-      
-      send_counts[i] = ::std::distance(newstart, newend);  
 
-      start = end;
-      newstart = newend;
+namespace dsc {
+
+
+  // =============== convenience functions for distribution of vector via all to all and a rank mapping function
+
+  /**
+   * @brief       distribute.  speed version.  no guarantee of output ordering, but actually is same.
+   * @param[IN/OUT] vals    vals to distribute.  sortedness is NOT kept because of inplace bucketing.
+   * @param[IN/OUT] sorted_input    indicates if input is sorted.  and whether each bucket is sorted.
+   *
+   * @return received counts.
+   */
+  template <typename V, typename ToRank>
+  ::std::vector<size_t> distribute(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input,
+                                   mxx::comm const &_comm) {
+    BL_BENCH_INIT(distribute);
+
+      // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
+
+      BL_BENCH_START(distribute);
+      // distribute (communication part)
+      std::vector<size_t> send_counts = mxx::bucketing(vals, to_rank, _comm.size());
+      BL_BENCH_END(distribute, "bucket", vals.size());
+
+      // distribute (communication part)
+      BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
+      vals = mxx::all2allv(vals, send_counts, _comm);
+      BL_BENCH_END(distribute, "a2a", vals.size());
+
+      BL_BENCH_START(distribute);
+      std::vector<size_t> recv_counts= mxx::all2all(send_counts, _comm);
+      BL_BENCH_END(distribute, "a2a_counts", vals.size());
+
+      BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+
+      return recv_counts;
+  }
+
+
+    /**
+     * @brief       distribute and ensure uniqueness within each bucket.  speed version.  no guarantee of output ordering.
+     * @param[IN/OUT] keys    keys to distribute. sortedness is NOT kept because of inplace bucketing.,
+     * @param[IN/OUT] sorted_input    indicates if input is sorted.  and whether each bucket is sorted.
+     * @return received counts
+     */
+    template <typename V, typename ToRank, typename Hash, typename Eq>
+    ::std::vector<size_t> distribute_unique(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input,
+                                            mxx::comm const &_comm, const Hash & hash = Hash(), const Eq & equal = Eq()) {
+
+      BL_BENCH_INIT(distribute);
+        // go for speed.   mxx::bucketing uses extra copy.  okay, since all2all also does.
+
+        BL_BENCH_START(distribute);
+        // distribute (communication part)
+        std::vector<size_t> send_counts = mxx::bucketing(vals, to_rank, _comm.size());
+        BL_BENCH_END(distribute, "bucket", vals.size());
+
+        // using set is okay.
+        BL_BENCH_START(distribute);
+        // distribute (communication part)
+        ::fsc::bucket_unique(vals, send_counts, sorted_input, hash, equal);
+        BL_BENCH_END(distribute, "unique", vals.size());
+
+        // distribute (communication part)
+        BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
+        vals = mxx::all2allv(vals, send_counts, _comm);
+        BL_BENCH_END(distribute, "a2a", vals.size());
+
+        BL_BENCH_START(distribute);
+        std::vector<size_t> recv_counts= mxx::all2all(send_counts, _comm);
+        BL_BENCH_END(distribute, "a2a_counts", vals.size());
+
+        BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+
+
+        return recv_counts;
     }
 
-    // compact.
-    input.erase(newend, input.end());
-  }
-}
+
+    /**
+     * @brief       distribute.  order preserving version.  guarantees output ordering.
+     * @param[IN/OUT] vals    vals to distribute.  sortedness is KEPT within each bucket
+     * @param[IN/OUT] sorted_input    indicates if input is sorted.  and whether each bucket is sorted.
+     *
+     * @return received counts.
+     */
+    template <typename V, typename ToRank, typename Less>
+    ::std::vector<size_t> distribute_sorted(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input,
+                                            mxx::comm const &_comm, const Less & less = Less()) {
+      BL_BENCH_INIT(distribute);
+
+      // ordering over speed/mem use.
+
+        BL_BENCH_START(distribute);
+        // distribute (communication part)
+        std::vector<size_t> send_counts = mxx::bucketing(vals, to_rank, _comm.size());
+        BL_BENCH_END(distribute, "bucket", vals.size());
+
+        // using set is okay.
+        BL_BENCH_START(distribute);
+        // distribute (communication part)
+        ::fsc::bucket_sort(vals, send_counts, sorted_input, less);
+        BL_BENCH_END(distribute, "sort", vals.size());
+
+        // distribute (communication part)
+        BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
+        vals = mxx::all2allv(vals, send_counts, _comm);
+        BL_BENCH_END(distribute, "a2a", vals.size());
+
+        BL_BENCH_START(distribute);
+        std::vector<size_t> recv_counts= mxx::all2all(send_counts, _comm);
+        BL_BENCH_END(distribute, "a2a_counts", vals.size());
+
+        BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+
+
+        return recv_counts;
+    }
+
+    /**
+     * @brief       distribute.  order preserving version.  guarantees output ordering.
+     *
+     * @param[IN/OUT] keys    keys to distribute. sortedness is KEPT.,
+     * @param[IN/OUT] sorted_input    indicates if input is sorted.  and whether each bucket is sorted.
+     * @return received counts
+     */
+    template <typename V, typename ToRank, typename Less, typename Eq>
+    ::std::vector<size_t> distribute_sorted_unique(::std::vector<V>& vals, ToRank const & to_rank, bool & sorted_input,
+                                                   mxx::comm const &_comm, const Less & less = Less(), const Eq & equal = Eq()) {
+      BL_BENCH_INIT(distribute);
+      // ordering over speed/mem use.
+
+        BL_BENCH_START(distribute);
+        // distribute (communication part)
+        std::vector<size_t> send_counts = mxx::bucketing(vals, to_rank, _comm.size());
+        BL_BENCH_END(distribute, "bucket", vals.size());
+
+        BL_BENCH_START(distribute);
+        // distribute (communication part)
+        ::fsc::bucket_sorted_unique(vals, send_counts, sorted_input, less, equal);
+        BL_BENCH_END(distribute, "sort_unique", vals.size());
+
+
+        // distribute (communication part)
+        BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
+        vals = mxx::all2allv(vals, send_counts, _comm);
+        BL_BENCH_END(distribute, "a2a", vals.size());
+
+        BL_BENCH_START(distribute);
+        std::vector<size_t> recv_counts= mxx::all2all(send_counts, _comm);
+        BL_BENCH_END(distribute, "a2a_counts", vals.size());
+
+        BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+
+
+        return recv_counts;
+	}
+
+
+
+
+
+
+}  // namespace dsc
 
 
 #endif /* SRC_CONTAINERS_CONTAINER_UTILS_HPP_ */
