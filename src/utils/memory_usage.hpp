@@ -305,28 +305,29 @@ class MemUsage {
 
     void report(::std::string const & title, ::mxx::comm const & comm) {
 
+      ::std::vector<double> curr_mins, curr_maxs, curr_means, curr_stdevs;
+      ::std::vector<double> peak_mins, peak_maxs, peak_means, peak_stdevs;
+      int p = comm.size();
+      int rank = comm.rank();
 
-    	auto curr_mins = ::mxx::reduce(mem_curr, 0,
+      if (mem_curr.size() > 0) {
+    	  curr_mins = ::mxx::reduce(mem_curr, 0,
     			[](double const & x, double const & y) { return ::std::min(x, y); }, comm);
-        auto curr_maxs = ::mxx::reduce(mem_curr, 0,
+        curr_maxs = ::mxx::reduce(mem_curr, 0,
         		[](double const & x, double const & y) { return ::std::max(x, y); }, comm);
-        auto curr_means = ::mxx::reduce(mem_curr, 0, ::std::plus<double>(), comm);
+        curr_means = ::mxx::reduce(mem_curr, 0, ::std::plus<double>(), comm);
         ::std::for_each(mem_curr.begin(), mem_curr.end(), [](double &x) { x = x*x; });
-        auto curr_stdevs = ::mxx::reduce(mem_curr, 0, ::std::plus<double>(), comm);
+        curr_stdevs = ::mxx::reduce(mem_curr, 0, ::std::plus<double>(), comm);
 
-        auto peak_mins = ::mxx::reduce(mem_max, 0,
+        peak_mins = ::mxx::reduce(mem_max, 0,
         		[](double const & x, double const & y) { return ::std::min(x, y); }, comm);
-        auto peak_maxs = ::mxx::reduce(mem_max, 0,
+        peak_maxs = ::mxx::reduce(mem_max, 0,
         		[](double const & x, double const & y) { return ::std::max(x, y); }, comm);
-        auto peak_means = ::mxx::reduce(mem_max, 0, ::std::plus<double>(), comm);
+        peak_means = ::mxx::reduce(mem_max, 0, ::std::plus<double>(), comm);
         ::std::for_each(mem_max.begin(), mem_max.end(), [](double &x) { x = x*x; });
-        auto peak_stdevs = ::mxx::reduce(mem_max, 0, ::std::plus<double>(), comm);
-
-    	int rank = comm.rank();
+        peak_stdevs = ::mxx::reduce(mem_max, 0, ::std::plus<double>(), comm);
 
         if (rank == 0) {
-        	int p = comm.size();
-            auto BtoMB = [](double const & x) { return x / (1024.0 * 1024.0); };
 
           ::std::for_each(curr_means.begin(), curr_means.end(), [p](double & x) { x /= p; });
           ::std::transform(curr_stdevs.begin(), curr_stdevs.end(), curr_means.begin(), curr_stdevs.begin(),
@@ -335,6 +336,11 @@ class MemUsage {
           ::std::for_each(peak_means.begin(), peak_means.end(), [p](double & x) { x /= p; });
           ::std::transform(peak_stdevs.begin(), peak_stdevs.end(), peak_means.begin(), peak_stdevs.begin(),
                            [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+        }
+      }
+
+      if (rank == 0) {
+        auto BtoMB = [](double const & x) { return x / (1024.0 * 1024.0); };
 
           std::stringstream output;
           std::ostream_iterator<std::string> nit(output, ",");

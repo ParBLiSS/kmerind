@@ -72,26 +72,26 @@ class Timer {
     void start() { t1 = std::chrono::steady_clock::now(); }
     void collective_start(::std::string const & name, ::mxx::comm const & comm) {
 
-		// time a barrier.
-		t1 = std::chrono::steady_clock::now();
-		comm.barrier();
-		t2 = std::chrono::steady_clock::now();
-		time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1));
+      // time a barrier.
+      t1 = std::chrono::steady_clock::now();
+      comm.barrier();
+      t2 = std::chrono::steady_clock::now();
+      time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1));
 
-		::std::string tmp("barrier_"); tmp.append(name);
-		names.push_back(tmp);
-		durations.push_back(time_span.count());
-		counts.push_back(0);
+      ::std::string tmp("barrier_"); tmp.append(name);
+      names.push_back(tmp);
+      durations.push_back(time_span.count());
+      counts.push_back(0);
 
-		t1 = std::chrono::steady_clock::now();
+      t1 = std::chrono::steady_clock::now();
     }
     void end(::std::string const & name, double const & n_elem) {
-		t2 = std::chrono::steady_clock::now();
-		time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1));
+      t2 = std::chrono::steady_clock::now();
+      time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1));
 
-		names.push_back(name);
-		durations.push_back(time_span.count());
-		counts.push_back(n_elem);
+      names.push_back(name);
+      durations.push_back(time_span.count());
+      counts.push_back(n_elem);
     }
     void collective_end(::std::string const & name, double const & n_elem, ::mxx::comm const & comm) {
 
@@ -234,39 +234,43 @@ class Timer {
 #endif
 
     void report(::std::string const & title, ::mxx::comm const & comm) {
-    	std::vector<double> cumulative(durations);
+      std::vector<double> cumulative(durations);
+      std::vector<double> dur_mins, dur_maxs, dur_means, dur_stdevs;
+      std::vector<double> cum_mins, cum_maxs, cum_means, cum_stdevs;
+      std::vector<double> cnt_mins, cnt_maxs, cnt_means, cnt_stdevs;
+      int p = comm.size();
+      int rank = comm.rank();
 
-    	auto dur_mins = ::mxx::reduce(durations, 0,
+      if (durations.size() > 0) {
+
+    	  dur_mins = ::mxx::reduce(durations, 0,
     			[](double const & x, double const & y) { return ::std::min(x, y); }, comm);
-        auto dur_maxs = ::mxx::reduce(durations, 0,
+        dur_maxs = ::mxx::reduce(durations, 0,
         		[](double const & x, double const & y) { return ::std::max(x, y); }, comm);
-        auto dur_means = ::mxx::reduce(durations, 0, ::std::plus<double>(), comm);
+        dur_means = ::mxx::reduce(durations, 0, ::std::plus<double>(), comm);
         ::std::for_each(durations.begin(), durations.end(), [](double &x) { x = x*x; });
-        auto dur_stdevs = ::mxx::reduce(durations, 0, ::std::plus<double>(), comm);
+        dur_stdevs = ::mxx::reduce(durations, 0, ::std::plus<double>(), comm);
 
         // compute partial sum of times.
         ::std::partial_sum(cumulative.begin(), cumulative.end(), cumulative.begin());
-        auto cum_mins = ::mxx::reduce(cumulative, 0,
+        cum_mins = ::mxx::reduce(cumulative, 0,
                                       [](double const & x, double const & y) { return ::std::min(x, y); }, comm);
-        auto cum_maxs = ::mxx::reduce(cumulative, 0,
+        cum_maxs = ::mxx::reduce(cumulative, 0,
                                       [](double const & x, double const & y) { return ::std::max(x, y); }, comm);
-        auto cum_means = ::mxx::reduce(cumulative, 0, ::std::plus<double>(), comm);
+        cum_means = ::mxx::reduce(cumulative, 0, ::std::plus<double>(), comm);
         ::std::for_each(cumulative.begin(), cumulative.end(), [](double &x) { x = x*x; });
-        auto cum_stdevs = ::mxx::reduce(cumulative, 0, ::std::plus<double>(), comm);
+        cum_stdevs = ::mxx::reduce(cumulative, 0, ::std::plus<double>(), comm);
 
 
-        auto cnt_mins = ::mxx::reduce(counts, 0,
+        cnt_mins = ::mxx::reduce(counts, 0,
         		[](double const & x, double const & y) { return ::std::min(x, y); }, comm);
-        auto cnt_maxs = ::mxx::reduce(counts, 0,
+        cnt_maxs = ::mxx::reduce(counts, 0,
         		[](double const & x, double const & y) { return ::std::max(x, y); }, comm);
-        auto cnt_means = ::mxx::reduce(counts, 0, ::std::plus<double>(), comm);
+        cnt_means = ::mxx::reduce(counts, 0, ::std::plus<double>(), comm);
         ::std::for_each(counts.begin(), counts.end(), [](double &x) { x = x*x; });
-        auto cnt_stdevs = ::mxx::reduce(counts, 0, ::std::plus<double>(), comm);
-
-    	int rank = comm.rank();
+        cnt_stdevs = ::mxx::reduce(counts, 0, ::std::plus<double>(), comm);
 
         if (rank == 0) {
-        	int p = comm.size();
 
           ::std::for_each(dur_means.begin(), dur_means.end(), [p](double & x) { x /= p; });
           ::std::transform(dur_stdevs.begin(), dur_stdevs.end(), dur_means.begin(), dur_stdevs.begin(),
@@ -279,7 +283,13 @@ class Timer {
           ::std::for_each(cnt_means.begin(), cnt_means.end(), [p](double & x) { x /= p; });
           ::std::transform(cnt_stdevs.begin(), cnt_stdevs.end(), cnt_means.begin(), cnt_stdevs.begin(),
                            [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+        }
 
+
+      }
+
+
+    	if (rank == 0) {
           std::stringstream output;
           std::ostream_iterator<std::string> nit(output, ",");
           std::ostream_iterator<double> dit(output, ",");
@@ -344,7 +354,6 @@ class Timer {
           output << "[TIME] " << title << "\tcnt_stdev\t[,";
           std::copy(cnt_stdevs.begin(), cnt_stdevs.end(), dit);
           output << "]";
-
 
           fflush(stdout);
           printf("%s\n", output.str().c_str());
