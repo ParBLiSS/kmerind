@@ -738,7 +738,7 @@ public:
 
 		// distribute
 		BL_BENCH_START(insert);
-		this->map.insert(temp);
+		if (temp.size() > 0) this->map.insert(temp);
 		BL_BENCH_END(insert, "map_insert", this->map.local_size());
 
 

@@ -427,8 +427,7 @@ int main(int argc, char** argv) {
 	  BL_BENCH_COLLECTIVE_END(test, "read", temp.size(), comm);
 
 	  BL_BENCH_START(test);
-	  if (temp.size() > 0)
-		idx.insert(temp);
+	  idx.insert(temp);
 	  BL_BENCH_COLLECTIVE_END(test, "insert", idx.size(), comm);
   }
 

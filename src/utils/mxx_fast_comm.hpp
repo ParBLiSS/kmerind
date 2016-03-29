@@ -77,9 +77,11 @@ namespace bliss {
 
    }
 
-  }
 
-}
+
+  }  // namespace mxx
+
+}  // namespace bliss
 
 
 #endif /* SRC_UTILS_MXX_FAST_COMM_HPP_ */
