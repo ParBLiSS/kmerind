@@ -390,7 +390,7 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(find);
           // keep unique keys
-          this->hash_unique(keys, sorted_input);
+          ::fsc::unique(keys, sorted_input, typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
           BL_BENCH_END(find, "uniq1", keys.size());
 
           BL_BENCH_START(find);
@@ -543,7 +543,7 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(find);
           // keep unique keys
-          this->hash_unique(keys, sorted_input);
+          ::fsc::unique(keys, sorted_input, typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
           BL_BENCH_END(find, "uniq1", keys.size());
 
           // memory is constrained.  find EXACT count.
@@ -625,7 +625,7 @@ namespace dsc  // distributed std container
 
 			  BL_BENCH_START(erase);
 			  // remove duplicates
-			  this->hash_unique(keys, sorted_input);
+        ::fsc::unique(keys, sorted_input, typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
 			  BL_BENCH_END(erase, "unique", keys.size());
           }
 
@@ -808,7 +808,7 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(count);
           // keep unique keys
-          this->hash_unique(keys, sorted_input);
+          ::fsc::unique(keys, sorted_input, typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
           BL_BENCH_END(count, "uniq1", keys.size());
 
 
@@ -962,7 +962,7 @@ namespace dsc  // distributed std container
 
 
       virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool & sorted_input) {
-        this->hash_unique(input, sorted_input);
+        ::fsc::unique(input, sorted_input, typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
       }
 
 

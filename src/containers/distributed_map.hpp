@@ -371,7 +371,8 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(find);
           // keep unique keys
-          this->sort_unique(keys, sorted_input);
+          ::fsc::unique(keys, sorted_input,
+                            typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
           BL_BENCH_END(find, "uniq1", keys.size());
 
           BL_BENCH_START(find);
@@ -521,7 +522,8 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(find);
           // keep unique keys
-          this->sort_unique(keys, sorted_input);
+          ::fsc::unique(keys, sorted_input,
+                            typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
           BL_BENCH_END(find, "uniq1", keys.size());
 
 
@@ -722,7 +724,8 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(count);
           // keep unique keys
-          this->sort_unique(keys, sorted_input);
+          ::fsc::unique(keys, sorted_input,
+                            typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
           BL_BENCH_END(count, "uniq1", keys.size());
 
 
@@ -787,7 +790,8 @@ namespace dsc  // distributed std container
         // and log access is slow, so get unique first.
 		BL_BENCH_START(erase);
 		// remove duplicates
-		this->sort_unique(keys, sorted_input);
+    ::fsc::unique(keys, sorted_input,
+                      typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
 		BL_BENCH_END(erase, "unique", keys.size());
 
         BL_BENCH_START(erase);
@@ -922,7 +926,7 @@ namespace dsc  // distributed std container
 
 
       virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool & sorted_input) {
-        this->sort_unique(input, sorted_input);
+        ::fsc::sorted_unique(input, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
       }
 
 
@@ -965,10 +969,6 @@ namespace dsc  // distributed std container
 
         // communication part
         if (this->comm.size() > 1) {
-            BL_BENCH_START(insert);
-            // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-            this->local_reduction(input, sorted_input);
-            BL_BENCH_END(insert, "local_reduce", input.size());
 
             BL_BENCH_START(insert);
             // get mapping to proc

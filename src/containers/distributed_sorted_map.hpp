@@ -285,6 +285,7 @@ namespace dsc  // distributed std container
       bool sorted;
       bool balanced;
       bool globally_sorted;
+      bool all_empty;
 
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
@@ -442,6 +443,8 @@ namespace dsc  // distributed std container
       virtual void local_clear() noexcept {
         c.clear();
         this->sorted = true; this->balanced = true; this->globally_sorted = true;
+
+        all_empty = this->empty();
       }
 
 
@@ -455,6 +458,7 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & local_find,
     		  ::std::vector<Key>& keys, bool & sorted_input,
     		  Predicate const& pred = Predicate() ) const {
+
           BL_BENCH_INIT(find);
 
 //          for (int j = 0; j < keys.size(); ++j) {
@@ -463,6 +467,9 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(find);
           ::std::vector<::std::pair<Key, T> > results;
+
+          if (all_empty) return results;
+
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
           BL_BENCH_END(find, "begin", keys.size());
@@ -525,7 +532,8 @@ namespace dsc  // distributed std container
 
               // keep unique keys
               BL_BENCH_START(find);
-              this->sort_unique(keys, sorted_input);
+              ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
+
               BL_BENCH_END(find, "uniq1", keys.size());
 
 
@@ -573,6 +581,9 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(find);
           ::std::vector<::std::pair<Key, T> > results;
+
+          if (all_empty) return results;
+
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
@@ -710,7 +721,7 @@ namespace dsc  // distributed std container
 
               // keep unique keys
               BL_BENCH_START(find);
-              this->sort_unique(keys, sorted_input);
+              ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
               BL_BENCH_END(find, "uniq1", keys.size());
 
 
@@ -761,6 +772,9 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, T> > find(LocalFind & local_find,
     		  Predicate const & pred = Predicate()) const {
           ::std::vector<::std::pair<Key, T> > results;
+
+          if (all_empty) return results;
+
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
           auto keys = this->keys();
@@ -796,7 +810,7 @@ namespace dsc  // distributed std container
 
 
       sorted_map_base(const mxx::comm& _comm) : Base(_comm),
-          key_to_rank(_comm.size()), sorted(false), balanced(false), globally_sorted(false) {}
+          key_to_rank(_comm.size()), sorted(false), balanced(false), globally_sorted(false), all_empty(true) {}
 
     public:
 
@@ -854,7 +868,8 @@ namespace dsc  // distributed std container
 
         // and then find unique.
         bool temp = this->sorted;
-        this->sort_unique(result, temp);
+        ::fsc::sorted_unique(result, temp, typename Base::TransformedLess(), typename Base::TransformedEqual());
+
       }
 
       // note that for each method, there is a local version of the operartion.
@@ -897,6 +912,10 @@ namespace dsc  // distributed std container
 
                   // keep unique keys
         ::std::vector<::std::pair<Key, size_type> > results;
+
+        if (all_empty) return results;
+
+
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
 
@@ -946,7 +965,8 @@ namespace dsc  // distributed std container
         } else {
             BL_BENCH_START(count);
             // keep unique keys
-            this->sort_unique(keys, sorted_input);
+            ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
+
             BL_BENCH_END(count, "uniq1", keys.size());
 
           BL_BENCH_START(count);
@@ -975,6 +995,10 @@ namespace dsc  // distributed std container
       template <typename Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
+
+        if (all_empty) return results;
+
+
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
 
         auto keys = this->keys();
@@ -1023,7 +1047,7 @@ namespace dsc  // distributed std container
        */
       template <class Predicate = TruePredicate>
       size_t insert(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
-          if (input.size() == 0) return 0;
+          if (input.size() == 0) return 0;  // OKAY HERE ONLY BECAUSE NO COMMUNICATION IS HERE.
           BL_BENCH_INIT(insert);
           this->sorted = false; this->balanced = false; this->globally_sorted = false;
 
@@ -1051,6 +1075,8 @@ namespace dsc  // distributed std container
 
           BL_BENCH_REPORT_MPI_NAMED(insert, "base_sorted_map:insert", this->comm);
 
+          all_empty = this->empty();
+
           return count;
       }
 
@@ -1065,6 +1091,8 @@ namespace dsc  // distributed std container
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           BL_BENCH_INIT(erase);
 
+          if (all_empty) return 0;
+
         if (this->comm.size() > 1) {
           // remove duplicates
             BL_BENCH_START(erase);
@@ -1077,7 +1105,7 @@ namespace dsc  // distributed std container
         // and log access is slow, so get unique first.
 		BL_BENCH_START(erase);
 		// remove duplicates
-		this->sort_unique(keys, sorted_input);
+        ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
 		BL_BENCH_END(erase, "unique", keys.size());
 
 
@@ -1087,11 +1115,17 @@ namespace dsc  // distributed std container
 
         BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
 
+        all_empty = this->empty();
+
         return result;
       }
 
       template <typename Predicate = TruePredicate>
       size_t erase(Predicate const & pred = Predicate()) {
+
+        if (all_empty) return 0;
+
+
         size_t before = c.size();
         if (!::std::is_same<Predicate, TruePredicate>::value) {
 
@@ -1107,6 +1141,8 @@ namespace dsc  // distributed std container
         }
 
         if (this->comm.size() > 1) this->comm.barrier();
+
+        all_empty = this->empty();
 
         return before - c.size();
       }
@@ -1260,7 +1296,8 @@ namespace dsc  // distributed std container
       //      }
 
       virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
-        this->Base::sort_unique(input, sorted_input);
+
+        ::fsc::sorted_unique(input, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
       }
 
     public:
@@ -1289,21 +1326,29 @@ namespace dsc  // distributed std container
 
       // default is for map
       virtual void rehash() {
+
         BL_BENCH_INIT(rehash);
 
         //printf("c size before: %lu\n", this->c.size());
         BL_BENCH_START(rehash);
         BL_BENCH_END(rehash, "begin", this->c.size());
+
+        // stop if there are no data to rehash on any of the nodes.
+        this->all_empty = this->empty();
+        if (this->all_empty) {
+          this->key_to_rank.map.clear();
+          BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_map:rehash", this->comm);
+          return;
+        }
+
         if (this->comm.size() > 1) {
           // first balance
-
 
           if (!this->balanced) {
             BL_BENCH_START(rehash);
             this->c = ::mxx::stable_distribute(this->c, this->comm);
             BL_BENCH_END(rehash, "block1", this->c.size());
           }
-
 
           // sort if needed
 //          if (!this->globally_sorted) {
@@ -1600,8 +1645,17 @@ namespace dsc  // distributed std container
 
       // default is for multimap
       virtual void rehash() {
+
         BL_BENCH_INIT(rehash);
 
+        // stop if there are no data to rehash on any of the nodes.
+        this->all_empty = this->empty();
+
+        if (this->all_empty) {
+          this->key_to_rank.map.clear();
+          BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_multimap:rehash", this->comm);
+          return;
+        }
 
         if (this->comm.size() > 1) {
           // first balance
@@ -1617,6 +1671,7 @@ namespace dsc  // distributed std container
           // sort if needed
           if (!this->globally_sorted) {
             BL_BENCH_START(rehash);
+            printf("rank %d size %lu\n", this->comm.rank(), this->c.size());
             ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm);
             BL_BENCH_END(rehash, "mxxsort", this->c.size());
           }
@@ -1645,7 +1700,6 @@ namespace dsc  // distributed std container
             }
           assert(this->key_to_rank.map.size() > 0);
 
-
 //          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
 //            printf("R %d key to rank %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
 //          }
@@ -1658,12 +1712,8 @@ namespace dsc  // distributed std container
 
           // redistribute.  in trouble if we have a value that takes up a large part of the partition.
           BL_BENCH_START(rehash);
-          ::std::vector<size_t> send_counts = ::fsc::get_bucket_sizes(this->c, this->key_to_rank.map, Base::Base::less);
+          ::std::vector<size_t> send_counts = ::fsc::sorted_bucketing(this->c, this->key_to_rank.map, Base::Base::less, this->comm.size());
           BL_BENCH_END(rehash, "bucket", this->c.size());
-
-
-          // this should always be true.
-          assert(send_counts.size() == static_cast<size_t>(this->comm.size()));
 
           for (size_t i = 0; i < send_counts.size(); ++i) {
             BL_DEBUGF("R %d send_counts[%lu] = %lu", this->comm.rank(), i, send_counts[i]);
@@ -1671,8 +1721,8 @@ namespace dsc  // distributed std container
 //				  printf("rank %d bucket %lu empty.\n", this->comm.rank(), i);
           }
           size_t tt = std::accumulate(send_counts.begin(), send_counts.end(), 0UL);
-          if (tt == 0) printf("rank %d total to send %lu\n", this->comm.rank(), tt);
-          if ((tt - send_counts[this->comm.rank()]) == 0) printf("rank %d nothing to send\n", this->comm.rank());
+          if (tt == 0) printf("rank %d has nothing.\n", this->comm.rank());
+          if (tt == send_counts[this->comm.rank()]) printf("rank %d nothing to send to others\n", this->comm.rank());
 
           BL_BENCH_COLLECTIVE_START(rehash, "a2a", this->comm);
           // TODO: readjust boundaries using all2all.  is it better to move the deltas ourselves?
@@ -1709,6 +1759,8 @@ namespace dsc  // distributed std container
           BL_BENCH_START(multiplicity);
 
         this->rehash();
+        printf("all empty? %s\n", this->all_empty ? "y" : "n");
+
         BL_BENCH_END(multiplicity, "rehash", this->c.size());
 
         BL_BENCH_START(multiplicity);

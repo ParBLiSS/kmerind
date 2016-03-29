@@ -130,37 +130,6 @@ namespace dsc
 
 
 
-
-      ///  keep the unique keys in the input. primarily for reducing comm volume.
-      ///  sortedness is NOT changed.  equal operator forces comparison to Key
-      template <typename V>
-      void hash_unique(::std::vector< V >& input, bool & sorted_input) const {
-        if (input.size() == 0) return;
-        if (sorted_input) {  // already sorted, then just get the unique stuff and remove rest.
-          auto end = ::std::unique(input.begin(), input.end(), this->equal);
-          input.erase(end, input.end());
-        } else {  // not sorted, so use a set to keep the first occurence.
-
-          // sorting is SLOW and not scalable.  use unordered set instead.  memory use is higher.
-          // unordered_set for large data is memory intensive.  depending on use, bucket per processor first.
-          ::std::unordered_set<V, TransformedFarmHash, TransformedEqual> temp(input.begin(),
-        		  input.end(), input.size());
-          input.assign(temp.begin(), temp.end());
-        }
-      }
-
-      ///  keep the unique keys in the input.   output is SORTED.  equal operator forces comparison to Key
-      template <typename V>
-      void sort_unique(::std::vector< V >& input, bool & sorted_input) const {
-        if (input.size() == 0) return;
-        if (!sorted_input) map_base::sort_ascending(input.begin(), input.end());
-        auto end = ::std::unique(input.begin(), input.end(), this->equal);
-        input.erase(end, input.end());
-
-        sorted_input = true;
-      }
-
-
     public:
       virtual ~map_base() {};
 
@@ -184,7 +153,7 @@ namespace dsc
         if (comm.size() == 1)
           return s;
         else
-          return mxx::allreduce(s, comm);
+          return ::mxx::allreduce(s, comm);
       }
 
 

@@ -738,9 +738,8 @@ public:
 
 		// distribute
 		BL_BENCH_START(insert);
-		if (temp.size() > 0) this->map.insert(temp);
+		this->map.insert(temp);  // COLLECTIVE CALL...
 		BL_BENCH_END(insert, "map_insert", this->map.local_size());
-
 
 #if (BL_BENCHMARK == 1)
 		BL_BENCH_START(insert);
