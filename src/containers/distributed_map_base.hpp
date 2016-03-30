@@ -102,20 +102,8 @@ namespace dsc
       template <typename V>
       using UniqueKeySetUtilityType = ::std::unordered_set<V, TransformedFarmHash, TransformedEqual>;
 
-      mutable float key_multiplicity;
-
       // communication stuff...
       const mxx::comm& comm;
-
-
-      // helper function
-
-      template <class Iter>
-      static void sort_ascending(Iter b, Iter e) {
-          if (!::std::is_sorted(b, e, less)) {
-            ::std::sort(b, e, less);
-          }
-      }
 
       // ============= local modifiers.  not directly accessible publically.  meant to be called via collective calls.
 
@@ -123,15 +111,10 @@ namespace dsc
       virtual void local_clear() = 0;
       virtual void local_reserve(size_t n) = 0;
 
-      map_base(const mxx::comm& _comm) :
-          key_multiplicity(1.0), comm(_comm) {
-      }
+      map_base(const mxx::comm& _comm) : comm(_comm) {}
 
     public:
       virtual ~map_base() {};
-
-      // ================ map state management
-      virtual void organize() const = 0;
 
 
       // ================ data access functions
@@ -152,7 +135,7 @@ namespace dsc
         return result;
       }
 
-      // =========== local accessors
+      // =========== local accessors.  abstract methods since they need access to local containers.
       virtual bool local_empty() const = 0;
       virtual size_t local_size() const = 0;
       virtual size_t local_unique_size() const = 0;
@@ -176,7 +159,7 @@ namespace dsc
           return ::mxx::allreduce(s, comm);
       }
 
-      virtual void unique_size() const {
+      virtual size_t unique_size() const {
           size_t s = this->local_unique_size();
           if (comm.size() == 1)
             return s;
@@ -184,18 +167,19 @@ namespace dsc
             return ::mxx::allreduce(s, comm);
       }
 
-      /// update the multiplicity.  only multimap needs to do this.
-      float get_multiplicity() {
-        return this->key_multiplicity();
+      /// access the current the multiplicity.  only multimap needs to override this.
+      virtual float get_multiplicity() const {
+        // multimaps would add a collective function to change the multiplicity
+        return 1.0f;
       }
 
       // ============= collective modifiers
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void reserve( size_t n) {
+      virtual void reserve( size_t n) {
         // direct reserve + barrier
         this->local_reserve(n);
-        if (this->comm.size() > 1) MPI_Barrier(this->comm);
+        if (this->comm.size() > 1) comm.barrier();
       }
 
       /// clears the distributed container.

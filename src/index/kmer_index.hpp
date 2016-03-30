@@ -744,10 +744,10 @@ public:
 #if (BL_BENCHMARK == 1)
 		BL_BENCH_START(insert);
 		size_t m = 0;
-		m = this->map.update_multiplicity();
+		m = this->map.get_multiplicity();
 		BL_BENCH_END(insert, "multiplicity", m);
 #else
-		auto result = this->map.update_multiplicity();
+		auto result = this->map.get_multiplicity()();
 		BLISS_UNUSED(result);
 #endif
 		BL_BENCH_REPORT_MPI_NAMED(insert, "index:insert", this->comm);

@@ -205,6 +205,8 @@ namespace dsc  // distributed std container
     protected:
       local_container_type c;
 
+      mutable bool local_changed;
+
       struct LocalCount {
           // unfiltered.
           template<class DB, typename Query, class OutputIter>
@@ -280,6 +282,9 @@ namespace dsc  // distributed std container
 
           size_t before = c.size();
           c.insert(first, last);
+
+          if (c.size() != before) local_changed = true;
+
           return c.size() - before;
       }
 
@@ -296,14 +301,12 @@ namespace dsc  // distributed std container
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) c.emplace(::std::move(*it));
           }
+          if (c.size() != before) local_changed = true;
+
+
           return c.size() - before;
       }
 
-
-      /// clears the map
-      virtual void local_clear() noexcept {
-          c.clear();
-      }
 
 
       /**
@@ -315,8 +318,16 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
         BL_BENCH_INIT(find);
 
-        BL_BENCH_START(find);
         ::std::vector<::std::pair<Key, T> > results;
+
+
+        if (this->empty()) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_a2a", this->comm);
+          return results;
+        }
+
+
+        BL_BENCH_START(find);
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
         BL_BENCH_END(find, "begin", keys.size());
@@ -333,7 +344,7 @@ namespace dsc  // distributed std container
           // do for each src proc one at a time.
 
           BL_BENCH_START(find);
-          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+          results.reserve(keys.size() * this->get_multiplicity());                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
           BL_BENCH_END(find, "reserve", results.capacity());
 
@@ -367,7 +378,7 @@ namespace dsc  // distributed std container
           BL_BENCH_END(find, "uniq1", keys.size());
 
           BL_BENCH_START(find);
-          results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+          results.reserve(keys.size() * this->get_multiplicity());                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
           BL_BENCH_END(find, "reserve", results.capacity() );
 
@@ -397,8 +408,15 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
         BL_BENCH_INIT(find);
 
-        BL_BENCH_START(find);
         ::std::vector<::std::pair<Key, T> > results;
+
+        if (this->empty()) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find", this->comm);
+            return results;
+        }
+
+
+        BL_BENCH_START(find);
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
 
@@ -554,10 +572,13 @@ namespace dsc  // distributed std container
       template <class LocalFind, typename Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, Predicate const& pred = Predicate()) const {
         ::std::vector<::std::pair<Key, T> > results;
+
+        if (this->local_empty()) return results;
+
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
         auto keys = this->keys();
-        results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
+        results.reserve(keys.size() * this->get_multiplicity());                   // TODO:  should estimate coverage.
 
         QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, true, pred);
 
@@ -570,6 +591,15 @@ namespace dsc  // distributed std container
       distributed_map_base(::mxx::comm const & _comm) : Base(_comm),
           key_to_rank(_comm.size()) {}
 
+
+      // ================ local overrides
+
+      /// clears the map
+      virtual void local_clear() noexcept {
+          c.clear();
+      }
+      // no reserve.
+      virtual void local_reserve( size_t n) {}
 
     public:
 
@@ -588,11 +618,6 @@ namespace dsc  // distributed std container
       const_iterator cend() const {
         return c.cend();
       }
-
-
-
-      /// update the multiplicity.  only multimap needs to do this.
-      virtual size_t update_multiplicity() { return this->key_multiplicity; }
 
 
       /// convert the map to a vector
@@ -617,27 +642,6 @@ namespace dsc  // distributed std container
       }
 
 
-
-      // note that for each method, there is a local version of the operartion.
-      // this is for use by the asynchronous version of communicator as callback for any messages received.
-      /// check if empty.
-      virtual bool local_empty() const noexcept {
-        return c.empty();
-      }
-
-      /// get size of local container
-      virtual size_t local_size() const noexcept {
-        return c.size();
-      }
-
-      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void reserve( size_t n) {}
-
-
-      /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void rehash( size_type n) {}
-
-
       /**
        * @brief count elements with the specified keys in the distributed unordered_multimap.
        * @param first
@@ -648,8 +652,15 @@ namespace dsc  // distributed std container
                                                         Predicate const& pred = Predicate() ) const {
         BL_BENCH_INIT(count);
 
-        BL_BENCH_START(count);
         ::std::vector<::std::pair<Key, size_type> > results;
+
+        if (this->empty()) {
+            BL_BENCH_REPORT_MPI_NAMED(count, "base_ordered_map:count", this->comm);
+          return results;
+        }
+
+
+        BL_BENCH_START(count);
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
         BL_BENCH_END(count, "begin", keys.size());
@@ -721,6 +732,9 @@ namespace dsc  // distributed std container
       template <typename Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
+
+        if (this->local_empty()) return results;
+
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > emplace_iter(results);
 
         auto keys = this->keys();
@@ -745,6 +759,12 @@ namespace dsc  // distributed std container
           size_t before = this->c.size();
           BL_BENCH_INIT(erase);
 
+          if (this->empty()) {
+              BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
+            return 0;
+          }
+
+
         if (this->comm.size() > 1) {
 
             BL_BENCH_START(erase);
@@ -753,6 +773,7 @@ namespace dsc  // distributed std container
             BLISS_UNUSED(recv_counts);
             BL_BENCH_END(erase, "dist_query", keys.size());
 
+            sorted_input = false;
         }
 
         // this uses sort order to remove duplicates.  map handled sorted access better,
@@ -771,6 +792,7 @@ namespace dsc  // distributed std container
 
         BL_BENCH_REPORT_MPI_NAMED(erase, "base_map:erase", this->comm);
 
+        if (before != this->c.size()) local_changed = true;
 
 
         return before - this->c.size();
@@ -781,11 +803,12 @@ namespace dsc  // distributed std container
       size_t erase(Predicate const & pred = Predicate()) {
 
     	  size_t count = 0;
+        if (this->local_empty()) return 0;
 
           if (!::std::is_same<Predicate, TruePredicate>::value) {
 
 
-        auto keys = this->keys();
+        auto keys = this->keys();  // already unique
 
         auto dummy_iter = keys.end();  // process requires a reference.
 
@@ -797,12 +820,32 @@ namespace dsc  // distributed std container
 
         	  this->local_clear();
           }
+
+          if (count > 0) local_changed = true;
+
+
         if (this->comm.size() > 1) this->comm.barrier();
 
         return count;
       }
 
       // update done via erase/insert.
+
+
+      // note that for each method, there is a local version of the operartion.
+      // this is for use by the asynchronous version of communicator as callback for any messages received.
+      /// check if empty.
+      virtual bool local_empty() const noexcept {
+        return c.empty();
+      }
+
+      /// get size of local container
+      virtual size_t local_size() const noexcept {
+        return c.size();
+      }
+
+      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
+      void reserve( size_t n) {}
 
   };
 
@@ -901,6 +944,10 @@ namespace dsc  // distributed std container
       map(::mxx::comm const & _comm) : Base(_comm) {}
 
       virtual ~map() {};
+
+      using Base::count;
+      using Base::erase;
+
 
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
@@ -1059,14 +1106,20 @@ namespace dsc  // distributed std container
           // no filter by range AND elemenet for now.
       } find_element;
 
+      mutable size_t local_unique_count;
+
 
 
     public:
 
 
-      multimap(::mxx::comm const & _comm) : Base(_comm) { }
+      multimap(::mxx::comm const & _comm) : Base(_comm), local_unique_count(0) { }
 
       virtual ~multimap() {}
+
+      using Base::count;
+      using Base::erase;
+
 
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
@@ -1085,8 +1138,11 @@ namespace dsc  // distributed std container
       }
 
 
-      /// update the multiplicity.  only multimap needs to do this.
-      virtual size_t update_multiplicity() {
+      /// access the current the multiplicity.  only multimap needs to override this.
+      virtual float get_multiplicity() const {
+        // multimaps would add a collective function to change the multiplicity
+
+
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
         // problem with this approach is that for unordered map, to get the count for a key is essentially O(count), so we get quadratic time.
@@ -1097,7 +1153,16 @@ namespace dsc  // distributed std container
         // To find unique set, we take each bucket, copy to vector, sort it, and then count unique.
         // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
-        size_t uniq_count = 0;
+
+        size_t n_unique = this->unique_size();
+        float multiplicity = 1.0f;
+        if (n_unique > 0) {
+          // local unique
+           multiplicity =
+              static_cast<float>(this->size()) /
+              static_cast<float>(n_unique);
+        }
+
 
         //        ::std::vector< ::std::pair<Key, T> > temp;
         //        KeyTransform<Key> trans;
@@ -1127,20 +1192,7 @@ namespace dsc  // distributed std container
         //          }
         //        }
         //        printf("%lu elements, %lu buckets, %lu unique\n", this->c.size(), this->c.bucket_count(), uniq_count);
-        // alternative approach to get number of unique keys is to use an set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
-        typename Base::Base::template UniqueKeySetUtilityType<Key> unique_set(this->c.size());
-        auto max = this->c.end();
-        for (auto it = this->c.begin(); it != max; ++it) {
-          unique_set.emplace(it->first);
-        }
-        uniq_count = unique_set.size();
-        if (uniq_count == 0) {
-        	this->key_multiplicity = 1;
-        } else {
-
-        	this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
-        }
-        //printf("%lu elements, %lu buckets, %lu unique, key multiplicity = %lu\n", this->c.size(), this->c.bucket_count(), uniq_count, this->key_multiplicity);
+        // alternative approach to get number of unique keys is to use an unordered_set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
 
 
         //        // third approach is to assume each bucket contains only 1 kmer/kmolecule.
@@ -1171,51 +1223,8 @@ namespace dsc  // distributed std container
         // finally, hard coding.  (0.0078125 human:  50 sec.  synth:  32 s)
         // this->key_multiplicity = 50;
 
-        return this->key_multiplicity;
+        return multiplicity;
       }
-
-
-//
-//
-//      size_t count_unique(::std::vector<::std::pair<Key, T> > const & input) const {
-//        // alternative approach to get number of unique keys is to use an unordered_set.  this will take more memory but probably will be faster than sort for large buckets (high repeats).
-//        ::std::unordered_set<Key, typename Base::TransformedHash, typename Base::Base::TransformedEqual > unique_set(this->c.size());
-//        for (auto it = input.begin(), max = input.end(); it != max; ++it) {
-//          unique_set.insert(it->first);
-//        }
-//       // printf("r %d: %lu elements, %lu unique\n", this->comm_rank, input.size(), unique_set.size());
-//        return unique_set.size();
-//      }
-//
-//      template <typename _TargetP>
-//      ::std::vector<::std::pair<Key, T> > bucketing(::std::vector<::std::pair<Key, T> > const & msgs, _TargetP target_p_fun, MPI_Comm comm) {
-//
-//        int p;
-//        MPI_Comm_size(comm, &p);
-//
-//        // bucket input by their target processor
-//        // TODO: in-place bucketing??
-//        std::vector<int> send_counts(p, 0);
-//        std::vector<int> pids(msgs.size());
-//        for (int i = 0; i < msgs.size(); ++i)
-//        {
-//          pids[i] = target_p_fun(msgs[i]);
-//          send_counts[pids[i]]++;
-//        }
-//
-//        // get all2all params
-//        std::vector<int> offset = mxx::get_displacements(send_counts);
-//
-//        // copy.  need to be able to track current position within each block.
-//        ::std::vector<::std::pair<Key, T> > send_buffer;
-//        if (msgs.size() > 0)
-//          send_buffer.resize(msgs.size());
-//        for (int i = 0; i < msgs.size(); ++i)
-//        {
-//          send_buffer[offset[pids[i]]++] = msgs[i];
-//        }
-//        return send_buffer;
-//      }
 
 
       /**
@@ -1258,6 +1267,21 @@ namespace dsc  // distributed std container
         return count;
       }
 
+
+      /// get the size of unique keys in the current local container.
+      virtual size_t local_unique_size() const {
+        if (this->local_changed) {
+
+          typename Base::template UniqueKeySetUtilityType<Key> unique_set(this->c.size());
+          for (auto it = this->c.begin(), max = this->c.end(); it != max; ++it) {
+            unique_set.emplace(it->first);
+          }
+          local_unique_count = unique_set.size();
+
+          this->local_changed = false;
+        }
+        return local_unique_count;
+      }
   };
 
 
@@ -1331,6 +1355,9 @@ namespace dsc  // distributed std container
           for (auto it = first; it != last; ++it) {
             this->c[it->first] = r(this->c[it->first], it->second);
           }
+
+          if (this->c.size() != before) this->local_changed = true;
+
           return this->c.size() - before;
       }
 
@@ -1346,6 +1373,9 @@ namespace dsc  // distributed std container
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) this->c[it->first] = r(this->c[it->first], it->second);
           }
+
+          if (this->c.size() != before) this->local_changed = true;
+
           return this->c.size() - before;
 
       }
@@ -1383,6 +1413,10 @@ namespace dsc  // distributed std container
       reduction_map(::mxx::comm const & _comm) : Base(_comm) {}
 
       virtual ~reduction_map() {};
+
+      using Base::count;
+      using Base::find;
+      using Base::erase;
 
       /**
        * @brief insert new elements in the distributed multimap.
@@ -1496,6 +1530,10 @@ namespace dsc  // distributed std container
 
       virtual ~counting_map() {};
 
+      using Base::insert;
+      using Base::count;
+      using Base::find;
+      using Base::erase;
 
       /**
        * @brief insert new elements in the distributed multimap.
@@ -1530,21 +1568,6 @@ namespace dsc  // distributed std container
       }
 
 
-
-      /**
-       * @brief insert new elements in the distributed multimap.
-       * @param first
-       * @param last
-       */
-      template <typename Predicate = TruePredicate>
-      size_t insert(std::vector< std::pair< Key, T> >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
-        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        // local compute part.  called by the communicator.
-        size_t count = this->Base::insert(input, sorted_input, pred);
-
-        return count;
-
-      }
 
   };
 

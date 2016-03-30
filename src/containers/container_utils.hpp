@@ -215,7 +215,6 @@ namespace fsc {
   template <typename V, typename Less>
   void sort(::std::vector<V> & input, bool & sorted_input,
                    const Less & less = Less()) {
-    if (input.size() == 0) return;
     if (!sorted_input) ::std::sort(input.begin(), input.end(), less);
 
     sorted_input = true;
