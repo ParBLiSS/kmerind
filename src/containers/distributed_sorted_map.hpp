@@ -1775,9 +1775,17 @@ namespace dsc  // distributed std container
 
         // update the local unique_count.  only when redistributed.
         local_unique_count = 0;
-        // now count unique
-        while (::std::adjacent_find(this->c.begin(), this->c.end(), Base::Base::less) != this->c.end()) ++local_unique_count;
-
+        if (this->c.size() > 1) {
+          // now count unique
+          auto start = this->c.begin();
+          while ((start = ::std::adjacent_find(start, this->c.end(), Base::Base::less)) != this->c.end()) {
+            ++start;
+            ++local_unique_count;
+          }
+          ++local_unique_count; // for the last one?
+        } else {
+          local_unique_count = this->c.size();
+        }
 
 
         BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_multimap:rehash", this->comm);
@@ -1874,14 +1882,22 @@ namespace dsc  // distributed std container
 
       /// get the size of unique keys in the current local container.
       virtual size_t local_unique_size() const {
-        size_t count = 0;
 
         // first make sure that the global vector is sorted.
         this->local_sort();
 
         // now count unique
-        while (::std::adjacent_find(this->c.begin(), this->c.end(), Base::less) != this->c.end()) ++count;
-
+        size_t count = 0;
+        if (this->c.size() > 1) {
+          auto start = this->c.begin();
+          while ((start = ::std::adjacent_find(start, this->c.end(), Base::less)) != this->c.end()) {
+            ++start;
+            ++count;
+          }
+          ++count; // for the last one?
+        } else {
+          count = this->c.size();
+        }
         return count;
       }
 

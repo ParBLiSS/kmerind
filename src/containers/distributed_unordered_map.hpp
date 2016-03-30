@@ -2046,18 +2046,18 @@ namespace dsc  // distributed std container
       } erase_element;
 
 
-      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
-      virtual void local_reserve( size_t n) {
-        if (!this->empty()) {// nothing is available.   so assume multiplicity of 1.
-          // has some data. so try to reserve buckets based on local information
-          float multiplicity = static_cast<float>(this->c.size()) / static_cast<float>(this->c.unique_size());
-
-          n = std::ceil(n / multiplicity);
-        }
-
-        this->Base::local_reserve(n);
-
-      }
+//      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
+//      virtual void local_reserve( size_t n) {
+//        if (!this->empty()) {// nothing is available.   so assume multiplicity of 1.
+//          // has some data. so try to reserve buckets based on local information
+//          float multiplicity = static_cast<float>(this->c.size()) / static_cast<float>(this->c.unique_size());
+//
+//          n = std::ceil(n / multiplicity);
+//        }
+//
+//        this->Base::local_reserve(n);
+//
+//      }
 
 
     public:

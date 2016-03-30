@@ -847,6 +847,13 @@ namespace dsc  // distributed std container
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       void reserve( size_t n) {}
 
+
+      /// get size of local container
+      virtual size_t local_unique_size() const {
+        return this->local_size();
+      }
+
+
   };
 
 

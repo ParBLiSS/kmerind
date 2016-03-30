@@ -297,9 +297,25 @@ std::vector<KmerType> readForQuery_posix(const std::string & filename, MPI_Comm 
 
 
 template<typename KmerType>
-void sample(std::vector<KmerType> &query, size_t n, unsigned int seed) {
+void sample(std::vector<KmerType> &query, size_t n, unsigned int seed, mxx::comm const & comm) {
   std::shuffle(query.begin(), query.end(), std::default_random_engine(seed));
-  query.erase(query.begin() + n, query.end());
+
+  size_t n_p = (n / comm.size());
+  std::vector<size_t> send_counts(comm.size(), n_p);
+
+  if (n < static_cast<size_t>(comm.size())) {
+    n_p = 1;
+
+    for (size_t i = 0; i < n; ++i) {
+      send_counts[(i + comm.rank()) % comm.size()] = 1;
+    }
+    for (int i = n; i < comm.size(); ++i) {
+      send_counts[(i + comm.rank()) % comm.size()] = 0;
+    }
+  }
+
+  std::vector<KmerType> out = ::mxx::all2allv(query, send_counts, comm);
+  query.swap(out);
 }
 
 
@@ -438,7 +454,7 @@ int main(int argc, char** argv) {
 	  BL_BENCH_COLLECTIVE_END(test, "read_query", query.size(), comm);
 
 	  BL_BENCH_START(test);
-	  sample(query, query.size() / sample_ratio, comm.rank());
+	  sample(query, query.size() / sample_ratio, comm.rank(), comm);
 	  BL_BENCH_COLLECTIVE_END(test, "sample", query.size(), comm);
 
 
