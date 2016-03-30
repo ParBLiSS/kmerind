@@ -420,6 +420,8 @@ namespace dsc {
 
 
   // =============== convenience functions for distribution of vector via all to all and a rank mapping function
+	// TODO: make this cleaner...
+
 
   /**
    * @brief       distribute.  speed version.  no guarantee of output ordering, but actually is same.

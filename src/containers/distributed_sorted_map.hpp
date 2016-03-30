@@ -175,9 +175,10 @@ namespace dsc  // distributed std container
        *
        * @param first
        * @param last
+       * @tparam unique 		indicates that only first of duplicated queries should be processed.
        */
-      template <bool unique = false>
-      struct Intersect {
+      template <bool skip_duplicate_query = false>
+      struct QueryProcessor {
 
 
           // get the overlapping range in container.  container must be sorted.
@@ -190,17 +191,15 @@ namespace dsc  // distributed std container
 
             auto dist_query = ::std::distance(query_begin, query_end);
 
-            // make sure both are sorted.
+            // make sure query is sorted sorted.
             if (!sorted_query) {
-            	Base::sort_ascending(query_begin, query_end);
+            	::std::sort(query_begin, query_end, Base::less);
             	sorted_query = true;
             }
 
-            //            if (!sorted_dest) Base::sort_ascending(db_begin, db_end);  can't sort the container because its begin()/end() keeps returning const iterators if "this" is const.
-
             // find the bounds.
             auto range_begin = ::std::lower_bound(db_begin, db_end, *query_begin, Base::less);
-            auto query_last = query_begin; ::std::advance(query_last, dist_query - 1);  // last real entry.
+            auto query_last = query_begin; ::std::advance(query_last, dist_query - 1);  // last real entry because query end may not be derefernceable.
             auto range_end = ::std::upper_bound(range_begin, db_end, *query_last, Base::less);
 
             return ::std::make_pair(range_begin, range_end);
@@ -223,7 +222,8 @@ namespace dsc  // distributed std container
               auto dist_query = ::std::distance(query_begin, query_end);
 
               //if (!sorted_target) Base::sort_ascending(range_begin, range_end);  range_begin and range_end often are const iterators.
-              if (!sorted_query) Base::sort_ascending(query_begin, query_end);
+              if (!sorted_query)
+            	  ::std::sort(query_begin, query_end, Base::less);
 
               auto el_end = range_begin;
               size_t count = 0;
@@ -241,7 +241,7 @@ namespace dsc  // distributed std container
                 	  count += op.template operator()<true>(range_begin, el_end, range_end, v, output);
 
                   // compiler optimize out the conditional.
-                  if (unique) it = ::fsc::upper_bound<true>(it, query_end, v, Base::less);
+                  if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, Base::less);
                   else ++it;
                 }
               } else {
@@ -256,7 +256,7 @@ namespace dsc  // distributed std container
                 	  count += op.template operator()<false>(range_begin, el_end, range_end, v, output);
 
                   // compiler optmizes out the conditional
-                  if (unique) it = ::fsc::upper_bound<true>(it, query_end, v, Base::less);
+                  if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, Base::less);
                   else ++it;
                 }
               }
@@ -282,28 +282,11 @@ namespace dsc  // distributed std container
 
     protected:
       local_container_type c;
+
       bool sorted;
       bool balanced;
       bool globally_sorted;
       bool all_empty;
-
-
-      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void local_reserve( size_t n) {
-        // vector's reserve will only do something if n > capacity.
-        c.reserve(n);
-      }
-
-
-      /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void local_sort() {
-        if (sorted) return;
-        Base::sort_ascending(c.begin(), c.end());
-        sorted = true;
-      }
-
-      void assert_sorted_locally() const { if (!sorted) throw ::std::logic_error("local_sort needed to be called to sort local vector"); }
-      bool is_sorted_locally() const { return sorted; }
 
       struct LocalCount {
           // unfiltered.
@@ -341,7 +324,6 @@ namespace dsc  // distributed std container
           }
           // no filter by range AND elemenet for now.
       } count_element;
-
 
       struct LocalErase {
           /// Return how much was KEPT.
@@ -399,55 +381,23 @@ namespace dsc  // distributed std container
           // no filter by range AND elemenet for now.
       } erase_element;
 
-      /**
-       * @brief erase elements with the specified keys in the distributed sorted_multimap.  return how much was erased.
-       * @note  this method is here because need to move the end segment.
-       * @param first
-       * @param last
-       */
-      template <typename Predicate = TruePredicate>
-      size_t local_erase(::std::vector<Key>& keys, bool & sorted_input, Predicate const & pred = Predicate() ) {
-        if (keys.size() == 0) return 0;
-        if (c.size() == 0) return 0;
 
-        this->balanced = false;
+      // ==================== sorted vector specific functions.
 
-        this->local_sort();
+      /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
+      void local_sort() {
+        if (sorted) return;
+        ::std::sort(c.begin(), c.end(), Base::less);
+        sorted = true;
+      }
 
-        //== now call local remove.
-        // first get the range of intersection
-        auto overlap = Intersect<true>::intersect(this->c.begin(), this->c.end(),
-        		keys.begin(), keys.end(), sorted_input);
-
-        if (::std::distance(overlap.first, overlap.second) == 0) return 0;
-        size_t before = c.size();
-
-        // do the work.  unique = true
-        size_t kept = Intersect<true>::process(overlap.first, overlap.second,
-        		keys.begin(), keys.end(), overlap.first, erase_element, sorted_input, pred);
-
-        // move the last part.
-        auto end = overlap.first;
-        ::std::advance(end, kept);
-        if (end == overlap.second) return 0;  // nothing was removed.
-
-        end = ::std::move(overlap.second, this->c.end(), end);
-        this->c.erase(end, this->c.end());
-
-        return before - c.size();
+      /// const version that sorts the local container.
+      void local_sort() const {
+        const_cast<sorted_map_base *>(this)->local_sort();
       }
 
 
-
-      /// clears the sorted_map
-      virtual void local_clear() noexcept {
-        c.clear();
-        this->sorted = true; this->balanced = true; this->globally_sorted = true;
-
-        all_empty = this->empty();
-      }
-
-
+      // ======================== local map functions
 
       /**
        * @brief find elements with the specified keys in the distributed sorted_multimap.
@@ -455,28 +405,29 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class LocalFind, class Predicate = TruePredicate >
-      ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & local_find,
+      ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & lf,
     		  ::std::vector<Key>& keys, bool & sorted_input,
     		  Predicate const& pred = Predicate() ) const {
 
           BL_BENCH_INIT(find);
 
-//          for (int j = 0; j < keys.size(); ++j) {
-//            printf("fa2a rank %d originally has key %s\n", this->comm.rank(), keys[j].toAlphabetString().c_str());
-//          }
+          if (all_empty) {
+              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_a2a", this->comm);
+        	  return ::std::vector<::std::pair<Key, T> >;
+          }
+
 
           BL_BENCH_START(find);
           ::std::vector<::std::pair<Key, T> > results;
-
-          if (all_empty) return results;
-
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
           BL_BENCH_END(find, "begin", keys.size());
 
-          this->assert_sorted_locally();
-
           if (this->comm.size() > 1) {
+              // ensure that the container splitters are setup properly, and load balanced.
+              BL_BENCH_COLLECTIVE_START(find, "global_sort", this->comm);
+              this->organize();
+              BL_BENCH_END(find, "global_sort", c.local_size());
 
 
               BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
@@ -500,57 +451,49 @@ namespace dsc  // distributed std container
             auto start = keys.begin();
             auto end = start;
             for (int i = 0; i < this->comm.size(); ++i) {
-              ::std::advance(end, recv_counts[i]);
+              ::std::advance(end, recv_counts[i]);  // recv queries are unique in each bucket.
 
-              // work on query from process i.
-              auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), start, end, sorted_input);
+              // work on query from process i.  specify no skip_duplicate.
+              auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(), start, end, sorted_input);
 
               // within start-end, values are unique, so don't need to set unique to true.
-              send_counts[i] = Intersect<false>::process(overlap.first, overlap.second,
-            		  start, end, emplace_iter, local_find, sorted_input, pred);
-
-//              if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+              send_counts[i] = QueryProcessor<false>::process(overlap.first, overlap.second,
+            		  start, end, emplace_iter, lf, sorted_input, pred);
 
               start = end;
             }
             BL_BENCH_END(find, "local_find", results.size());
-
-//            for (int j = 0; j < results.size(); ++j) {
-//              printf("rank %d found %s\n", this->comm.rank(), results[j].first.toAlphabetString().c_str());
-//            }
 
             // send back using the constructed recv count
             BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
             results = mxx::all2allv(results, send_counts, this->comm);
             BL_BENCH_END(find, "a2a2", results.size());
 
-//            for (int j = 0; j < results.size(); ++j) {
-//              printf("rank %d moved results %s\n", this->comm.rank(), results[j].first.toAlphabetString().c_str());
-//            }
-
           } else {
+        	  // ensure data is sorted locally.
+              // ensure that the container splitters are setup properly, and load balanced.
+              BL_BENCH_COLLECTIVE_START(find, "local_sort", this->comm);
+              this->local_sort();
+              BL_BENCH_END(find, "local_sort", c.local_size());
+
 
               // keep unique keys
               BL_BENCH_START(find);
               ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
-
               BL_BENCH_END(find, "uniq1", keys.size());
-
-
 
         	  BL_BENCH_START(find);
               results.reserve(keys.size() * this->key_multiplicity);                   // TODO:  should estimate coverage.
-              //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
               BL_BENCH_END(find, "reserve", results.capacity());
 
 
             BL_BENCH_START(find);
-            auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(),
+            auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(),
             		keys.begin(), keys.end(), sorted_input);
 
             // within start-end, values are unique, so don't need to set unique to true.
-            Intersect<false>::process(overlap.first, overlap.second, keys.begin(), keys.end(),
-            		emplace_iter, local_find, sorted_input, pred);
+            QueryProcessor<false>::process(overlap.first, overlap.second, keys.begin(), keys.end(),
+            		emplace_iter, lf, sorted_input, pred);
 
             BL_BENCH_END(find, "local_find", results.size());
 
@@ -571,19 +514,17 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class LocalFind, class Predicate = TruePredicate >
-      ::std::vector<::std::pair<Key, T> > find(LocalFind & local_find, ::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find(LocalFind & lf, ::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(find);
-//
-//          for (int j = 0; j < keys.size(); ++j) {
-//            printf("rank %d originally has key %s\n", this->comm.rank(), keys[j].toAlphabetString().c_str());
-//          }
+
+          if (all_empty) {
+              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
+        	  return ::std::vector<::std::pair<Key, T> >;
+          }
 
           BL_BENCH_START(find);
           ::std::vector<::std::pair<Key, T> > results;
-
-          if (all_empty) return results;
-
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
@@ -591,9 +532,13 @@ namespace dsc  // distributed std container
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
           BL_BENCH_END(find, "begin", keys.size());
 
-          this->assert_sorted_locally();
 
           if (this->comm.size() > 1) {
+
+              // ensure that the container splitters are setup properly, and load balanced.
+              BL_BENCH_COLLECTIVE_START(find, "global_sort", this->comm);
+              this->organize();
+              BL_BENCH_END(find, "global_sort", c.local_size());
 
               BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
               // distribute (communication part)
@@ -620,9 +565,9 @@ namespace dsc  // distributed std container
 
               // count results for process i
               count_results.clear();
-              auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), start, end,
+              auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(), start, end,
             		  sorted_input);
-              Intersect<false>::process(overlap.first, overlap.second, start, end,
+              QueryProcessor<false>::process(overlap.first, overlap.second, start, end,
             		  count_emplace_iter, count_element, sorted_input, pred);
               send_counts[i] = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                                  [](size_t v, ::std::pair<Key, size_t> const & x) {
@@ -683,17 +628,12 @@ namespace dsc  // distributed std container
 
               local_results.clear();
               // work on query from process i.
-              auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(),
+              auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(),
             		  start, end, sorted_input);
-              found = Intersect<false>::process(overlap.first, overlap.second,
-            		  start, end, local_emplace_iter, local_find, sorted_input, pred);
-             // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+              found = QueryProcessor<false>::process(overlap.first, overlap.second,
+            		  start, end, local_emplace_iter, lf, sorted_input, pred);
               total += found;
               //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
-
-//              for (int j = 0; j < local_results.size(); ++j) {
-//                printf("rank %d -> %d sent %s\n", this->comm.rank(), send_to, local_results[j].first.toAlphabetString().c_str());
-//              }
 
               MPI_Isend(&(local_results[0]), found, dt.type(), send_to,
                         i, this->comm, &reqs[2 * i + 1]);
@@ -701,23 +641,17 @@ namespace dsc  // distributed std container
               // wait for both requests to complete.
               MPI_Waitall(2, &reqs[2 * i], MPI_STATUSES_IGNORE);
 
-//              for (int j = 0; j < resp_counts[recv_from]; ++j) {
-//                printf("rank %d -> %d recv %s\n", recv_from, this->comm.rank(), results[resp_displs[recv_from] + j].first.toAlphabetString().c_str());
-//              }
-
               // within start-end, values are unique, so don't need to set unique to true.
 
             }
 
             BL_BENCH_END(find, "find_send", results.size());
-//
-//            // send back using the constructed recv count
-//            BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
-//            mxx2::all2all(results, send_counts, this->comm);
-//            BL_BENCH_END(find, "a2a2", results.size());
-//
 
           } else {
+              // ensure that the container splitters are setup properly, and load balanced.
+              BL_BENCH_COLLECTIVE_START(find, "local_sort", this->comm);
+              this->local_sort();  // ensure data is locally sorted
+              BL_BENCH_END(find, "local_sort", c.local_size());
 
               // keep unique keys
               BL_BENCH_START(find);
@@ -734,17 +668,14 @@ namespace dsc  // distributed std container
             ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
 
             // count now.
-            auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(),
+            auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(),
             		keys.begin(), keys.end(), sorted_input);
-            Intersect<false>::process(overlap.first, overlap.second,
+            QueryProcessor<false>::process(overlap.first, overlap.second,
             		keys.begin(), keys.end(), count_emplace_iter, count_element, sorted_input, pred);
             size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                           [](size_t v, ::std::pair<Key, size_t> const & x) {
                       return v + x.second;
                     });
-//            for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-//              count += it->second;
-//            }
             BL_BENCH_END(find, "local_count", count);
 
             BL_BENCH_START(find);
@@ -753,11 +684,9 @@ namespace dsc  // distributed std container
 
 
             BL_BENCH_START(find);
-
             // within start-end, values are unique, so don't need to set unique to true.
-            Intersect<false>::process(overlap.first, overlap.second,
-            		keys.begin(), keys.end(), emplace_iter, local_find, sorted_input, pred);
-
+            QueryProcessor<false>::process(overlap.first, overlap.second,
+            		keys.begin(), keys.end(), emplace_iter, lf, sorted_input, pred);
             BL_BENCH_END(find, "local_find", results.size());
 
           }
@@ -767,50 +696,119 @@ namespace dsc  // distributed std container
           return results;
       }
 
-
+      /// version using predicate, applies to entire container.
       template <class LocalFind, class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(LocalFind & local_find,
+      ::std::vector<::std::pair<Key, T> > find(LocalFind & lf,
     		  Predicate const & pred = Predicate()) const {
           ::std::vector<::std::pair<Key, T> > results;
 
+          // TODO: directly iterate over the vector?
+
           if (all_empty) return results;
+
+          this->local_sort();
 
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
           auto keys = this->keys();
 
           ::std::vector<::std::pair<Key, size_t> > count_results;
-          count_results.reserve(keys.size() * this->key_multiplicity);
+          count_results.reserve(keys.size());
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
 
           // count now.
-          Intersect<false>::process(this->c.begin(), this->c.end(),
+          QueryProcessor<false>::process(this->c.begin(), this->c.end(),
         		  keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
           size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
                                            [](size_t v, ::std::pair<Key, size_t> const & x) {
                        return v + x.second;
                      });
-//          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-//            count += it->second;
-//          }
-
           results.reserve(count);  // 1 result per key.
 
           // within start-end, values are unique, so don't need to set unique to true.
-          Intersect<false>::process(this->c.begin(), this->c.end(),
-        		  keys.begin(), keys.end(), emplace_iter, local_find, true, pred);
+          QueryProcessor<false>::process(this->c.begin(), this->c.end(),
+        		  keys.begin(), keys.end(), emplace_iter, lf, true, pred);
 
           if (this->comm.size() > 1) this->comm.barrier();
           return results;
       }
 
 
-      virtual void rehash() = 0;
+      /**
+       * @brief erase elements with the specified keys in the distributed sorted_multimap.  return how much was erased.
+       * @note  this method is here because need to move the end segment.
+       * @param first
+       * @param last
+       */
+      template <typename Predicate = TruePredicate>
+      size_t local_erase(::std::vector<Key>& keys, bool & sorted_input, Predicate const & pred = Predicate() ) {
+        if (keys.size() == 0) return 0;
+        if (c.size() == 0) return 0;
+
+        this->balanced = false;
+
+        this->local_sort();  // sort container before deleting.
+
+        // keep unique keys
+        ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
+
+        //== now call local remove.
+        // first get the range of intersection
+        auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(),
+        		keys.begin(), keys.end(), sorted_input);
+
+        if (::std::distance(overlap.first, overlap.second) == 0) return 0;
+        size_t before = c.size();
+
+        // do the work.  skip duplicates = true
+        size_t kept = QueryProcessor<false>::process(overlap.first, overlap.second,
+        		keys.begin(), keys.end(), overlap.first, erase_element, sorted_input, pred);
+
+        // move the last part.
+        auto end = overlap.first;
+        ::std::advance(end, kept);
+        if (end == overlap.second) return 0;  // nothing was removed.
+
+        end = ::std::move(overlap.second, this->c.end(), end);
+        this->c.erase(end, this->c.end());
+
+        return before - c.size();
+      }
 
 
 
+
+
+      /// constructor
       sorted_map_base(const mxx::comm& _comm) : Base(_comm),
           key_to_rank(_comm.size()), sorted(false), balanced(false), globally_sorted(false), all_empty(true) {}
+
+
+
+      // ===================  sorted map specific virtual functions
+      /// ensures container is globally sorted/organized and balanced, and splitters are capatured.
+      virtual void organize() = 0;
+
+
+      // ===================== overrides
+
+      /// clears the sorted_map
+      virtual void local_clear() {
+        c.clear();
+
+        this->sorted = true;
+        this->balanced = true;
+        this->globally_sorted = true;
+      }
+
+      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
+      virtual void local_reserve( size_t n) {
+        // vector's reserve will only do something if n > capacity.
+        c.reserve(n);
+      }
+
+
+
 
     public:
 
@@ -828,12 +826,6 @@ namespace dsc  // distributed std container
         return c.cend();
       }
 
-      /// update the multiplicity.  only multimap needs to do this.
-      virtual size_t update_multiplicity() {
-        this->rehash();
-        return this->key_multiplicity;
-      }
-
       /// convert the map to a vector.
       virtual std::vector<std::pair<Key, T> > to_vector() const {
         std::vector<std::pair<Key, T> > result(c.begin(), c.end());
@@ -846,13 +838,6 @@ namespace dsc  // distributed std container
         if (c.empty()) return;
 
         result.assign(c.begin(), c.end());
-      }
-
-      /// extract the keys of a map.
-      virtual std::vector<Key> keys() const {
-        std::vector<Key> result;
-        this->keys(result);
-        return result;
       }
 
       /// extract the unique keys of a map.
@@ -872,25 +857,6 @@ namespace dsc  // distributed std container
 
       }
 
-      // note that for each method, there is a local version of the operartion.
-      // this is for use by the asynchronous version of communicator as callback for any messages received.
-      /// check if empty.
-      virtual bool local_empty() const noexcept {
-        return c.empty();
-      }
-
-      /// get size of local container
-      virtual size_t local_size() const noexcept {
-        return c.size();
-      }
-
-
-      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void reserve( size_t n) {
-        // direct reserve + barrier
-        this->local_reserve(n);
-        if (this->comm.size() > 1) MPI_Barrier(this->comm);
-      }
 
 
 
@@ -908,22 +874,26 @@ namespace dsc  // distributed std container
 
         BL_BENCH_INIT(count);
 
+        if (all_empty) {
+            BL_BENCH_REPORT_MPI_NAMED(count, "base_sorted_map:count", this->comm);
+      	  return ::std::vector<::std::pair<Key, size_type> >;
+        }
+
+
         BL_BENCH_START(count);
-
-                  // keep unique keys
+        // keep unique keys
         ::std::vector<::std::pair<Key, size_type> > results;
-
-        if (all_empty) return results;
-
-
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
-
-        this->assert_sorted_locally();
         BL_BENCH_END(count, "begin", keys.size());
 
 
         if (this->comm.size() > 1) {
+            // ensure that the container splitters are setup properly, and load balanced.
+            BL_BENCH_COLLECTIVE_START(count, "global_sort", this->comm);
+            this->organize();
+            BL_BENCH_END(count, "global_sort", c.local_size());
+
 
             BL_BENCH_START(count);
             std::vector<size_t> recv_counts(::dsc::distribute_sorted_unique(keys,
@@ -945,10 +915,10 @@ namespace dsc  // distributed std container
             ::std::advance(end, recv_counts[i]);
 
             // work on query from process i.
-            auto overlap = Intersect<false>::intersect(this->c.begin(), this->c.end(), start, end, sorted_input);
+            auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(), start, end, sorted_input);
 
             // within start-end, values are unique, so don't need to set unique to true.
-            Intersect<false>::process(overlap.first, overlap.second,
+            QueryProcessor<false>::process(overlap.first, overlap.second,
             		start, end, emplace_iter, count_element, sorted_input, pred);
 
             start = end;
@@ -956,31 +926,33 @@ namespace dsc  // distributed std container
           BL_BENCH_END(count, "local_count", results.size());
 
           BL_BENCH_COLLECTIVE_START(count, "a2a2", this->comm);
-
           // send back using the constructed recv count
           results = mxx::all2allv(results, recv_counts, this->comm);
           BL_BENCH_END(count, "a2a2", results.size());
 
 
         } else {
+            // ensure that the container splitters are setup properly, and load balanced.
+            BL_BENCH_COLLECTIVE_START(count, "local_sort", this->comm);
+            this->local_sort();
+            BL_BENCH_END(count, "local_sort", c.local_size());
+
             BL_BENCH_START(count);
             // keep unique keys
             ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
-
             BL_BENCH_END(count, "uniq1", keys.size());
 
           BL_BENCH_START(count);
-
           results.reserve(keys.size());
           BL_BENCH_END(count, "reserve", results.capacity());
 
           BL_BENCH_START(count);
           // work on query from process i.
-          auto overlap = Intersect<true>::intersect(this->c.begin(), this->c.end(),
+          auto overlap = QueryProcessor<true>::intersect(this->c.begin(), this->c.end(),
         		  keys.begin(), keys.end(), sorted_input);
 
           // within key, values may not be unique,
-          Intersect<true>::process(overlap.first, overlap.second,
+          QueryProcessor<true>::process(overlap.first, overlap.second,
         		  keys.begin(), keys.end(), emplace_iter, count_element, sorted_input, pred);
           BL_BENCH_END(count, "local_count", results.size());
 
@@ -998,6 +970,11 @@ namespace dsc  // distributed std container
 
         if (all_empty) return results;
 
+        // ensure that the container splitters are setup properly, and load balanced.
+        BL_BENCH_COLLECTIVE_START(count, "local_sort", this->comm);
+        this->local_sort();
+        BL_BENCH_END(count, "local_sort", c.local_size());
+
 
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
 
@@ -1005,7 +982,7 @@ namespace dsc  // distributed std container
         results.reserve(keys.size());
 
         // keys already unique
-        Intersect<false>::process(c.begin(), c.end(), keys.begin(), keys.end(),
+        QueryProcessor<false>::process(c.begin(), c.end(), keys.begin(), keys.end(),
         		emplace_iter, count_element, true, pred);
 
         if (this->comm.size() > 1) this->comm.barrier();
@@ -1042,6 +1019,7 @@ namespace dsc  // distributed std container
 
       /**
        * @brief insert new elements in the distributed sorted_multimap.  example use: stop inserting if more than x entries.
+       * TODO: split this into insert (into empty), and an append (into existing)
        * @param first
        * @param last
        */
@@ -1091,7 +1069,10 @@ namespace dsc  // distributed std container
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           BL_BENCH_INIT(erase);
 
-          if (all_empty) return 0;
+          if (all_empty) {
+              BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
+        	  return 0;
+          }
 
         if (this->comm.size() > 1) {
           // remove duplicates
@@ -1101,13 +1082,7 @@ namespace dsc  // distributed std container
             BL_BENCH_END(erase, "dist_query", keys.size());
         }
 
-        // this uses sort order to remove duplicates.  map handled sorted access better,
-        // and log access is slow, so get unique first.
-		BL_BENCH_START(erase);
-		// remove duplicates
-        ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
-		BL_BENCH_END(erase, "unique", keys.size());
-
+        // local erase does a sorted_unique internally.
 
         BL_BENCH_START(erase);
         size_t result = this->local_erase(keys, sorted_input, pred);
@@ -1147,7 +1122,43 @@ namespace dsc  // distributed std container
         return before - c.size();
       }
 
-      // update done via erase/insert.
+
+      // =============================  overrides.
+
+
+      // note that for each method, there is a local version of the operartion.
+      // this is for use by the asynchronous version of communicator as callback for any messages received.
+      /// check if empty.
+      virtual bool local_empty() const {
+        return c.empty();
+      }
+
+      /// get size of local container
+      virtual size_t local_size() const {
+        return c.size();
+      }
+
+      /// get the size of unique keys.
+      virtual size_t local_unique_size() const {
+    	  size_t count = 0;
+
+    	  // first make sure that the global vector is sorted.
+    	  this->local_sort();
+
+    	  // now count unique
+    	  while (::std::adjacent_find(c.begin(), c.end(), Base::less) != c.end()) ++count;
+
+    	  return count;
+      }
+
+
+      /// clear the local store
+      virtual void clear() {
+    	  Base::clear();
+
+    	  all_empty = this->empty();
+      }
+
 
 
   };
@@ -1295,6 +1306,7 @@ namespace dsc  // distributed std container
       //          }
       //      }
 
+      // ============= local reduction override.
       virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
 
         ::fsc::sorted_unique(input, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
@@ -1306,6 +1318,7 @@ namespace dsc  // distributed std container
 
       virtual ~sorted_map() {};
 
+      // specialized here so that the local_find functor can be used.
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
@@ -1316,16 +1329,19 @@ namespace dsc  // distributed std container
     		  Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
-
-
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
 
+      // explicitly get the base class version of insert.
+      using Base::insert;
+      using Base::erase;
+      using Base::count;
+
 
       // default is for map
-      virtual void rehash() {
+      virtual void organize() {
 
         BL_BENCH_INIT(rehash);
 
@@ -1350,14 +1366,7 @@ namespace dsc  // distributed std container
             BL_BENCH_END(rehash, "block1", this->c.size());
           }
 
-          // sort if needed
-//          if (!this->globally_sorted) {
-//          BL_BENCH_START(rehash);
-//          // kway merge / sort
-//          Base::Base::sort_ascending(this->c.begin(), this->c.end());
-//          BL_BENCH_END(rehash, "sort1", this->c.size());
-//
-          // sort if needed
+          // global sort if needed
           BL_BENCH_START(rehash);
           if (!this->globally_sorted) ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm);
           BL_BENCH_END(rehash, "mxxsort", this->c.size());
@@ -1398,7 +1407,7 @@ namespace dsc  // distributed std container
               if (dist > 1) {  // if > 1, then value crossed boundary and need to reduce.
 
                 size_t offset = ::std::distance(boundary_values.begin(), range.second);
-                if (boundary_ids[offset - 1] == this->comm.rank()) { // this processor owns this value
+                if (boundary_ids[offset - 1] == this->comm.rank()) { // this processor owns the value
                   // copy and reduce this range.
                   ::std::vector<value_type > reduced(range.first, range.second);
                   this->local_reduction(reduced, true);  //
@@ -1422,76 +1431,12 @@ namespace dsc  // distributed std container
             }
             BL_BENCH_END(rehash, "reduced boundaries", this->c.size());
 
-            // then reblock.
-
-
-//            // goal of the next block of code is to rebalance of the blocks, while keeping all of same elements in the same processor
-//            // first thought is to resample using the sample sort logic.  however this is flawed and will introduce imbalance.
-//            // for sorted input using the sample_arbit_decomp would result in imbalance that increases with decreasing p:
-//            // first p-1 get (p-1) partitions, last p get p+1 partitions.  we can increase sampling rate,
-//            // but that still does not remove the imbalance.  in addition, sampling is even within the blocks, which is not good for sorted blocks.
-//
-//            // alternative is to reblock first.  for there to be a run > 2 of same element, a processor would have had a single element.
-//            // this means that the number of elements for the processor with the run post rebalance is not going to be very different,
-//            // so we can just let the some procs idle (after their size 1 partitions are moved entirely.)
-//
-//            // rebalance block first
-//            BL_BENCH_START(rehash);
-//            this->c = ::mxx::stable_block_decompose(this->c, this->comm);
-//            BL_BENCH_END(rehash, "block1", this->c.size());
-//
-// //            BL_BENCH_START(rehash);
-// //            // sample
-// //            mxx::datatype<::std::pair<Key, T> > dt;
-// //            MPI_Datatype mpi_dt = dt.type();
-// //            this->key_to_rank.map = ::mxx::impl::sample_arbit_decomp(this->c.begin(), this->c.end(), Base::Base::less, this->comm.size() - 1, this->comm, mpi_dt);
-// //            for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
-// //              // modify the splitters destinations
-// //              //printf("R %d splitters %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
-// //              this->key_to_rank.map[i].second = i;
-// //            }
-// //            BL_BENCH_END(rehash, "splitter1", this->key_to_rank.map.size());
-//
-//            // get pivots using the last elements.
-//            BL_BENCH_START(rehash);
-//            this->key_to_rank.map.clear();
-//            if ((this->comm.rank() > 0) && (this->c.size() > 0)) {  // splitters need to be the first entry of the next partition.
-//              // only send for the first p-1 proc, and only if they have a kmer to split with.
-//              this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
-//            }
-//            this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
-//            BL_BENCH_END(rehash, "splitter1", this->c.size());
-//
-//            // rebucket by pivots, so no value crosses boundaries
-//            BL_BENCH_START(rehash);
-//            ::std::vector<size_t> send_counts = mxx2::bucketing<size_t>(this->c, this->key_to_rank.map, Base::Base::less);
-//            BL_BENCH_END(rehash, "bucket", this->c.size());
-//
-//            BL_BENCH_COLLECTIVE_START(rehash, "a2a", this->comm);
-//            mxx2::all2all(this->c, send_counts, this->comm);
-//            BL_BENCH_END(rehash, "a2a", this->c.size());
-//
-//
-////          BL_BENCH_START(rehash);
-////          // kway merge / sort
-////          Base::Base::sort_ascending(this->c.begin(), this->c.end());
-////          BL_BENCH_END(rehash, "sort2", this->c.size());
-////
-//
-//            // final reduction - nothing crosses boundaries now.
-//            BL_BENCH_START(rehash);
-//            // local unique
-//            this->local_reduction(this->c, true);
-//            BL_BENCH_END(rehash, "reduc2", this->c.size());
-
             // and final rebalance
             BL_BENCH_START(rehash);
             // rebalance
             this->c = ::mxx::stable_distribute(this->c, this->comm);
             BL_BENCH_END(rehash, "block2", this->c.size());
 
-//          }
-//
           BL_BENCH_START(rehash);
           // get new pivots
           // next compute the splitters.
@@ -1506,9 +1451,6 @@ namespace dsc  // distributed std container
           this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
 
 
-//          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
-//            printf("R %d key to rank %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
-//          }
           BL_BENCH_END(rehash, "splitter2", this->c.size());
           // no need to redistribute - each entry is unique so nothing is going to span processor boundaries.
 
@@ -1516,15 +1458,19 @@ namespace dsc  // distributed std container
           BL_BENCH_START(rehash);
           // local unique
           this->local_reduction(this->c, this->sorted);
-
           BL_BENCH_END(rehash, "reduc", this->c.size());
         }
-        this->sorted = true; this->balanced = true; this->globally_sorted = true;
+        this->sorted = true;
+        this->balanced = true;
+        this->globally_sorted = true;
         //printf("c size after: %lu\n", this->c.size());
+
 
         BL_BENCH_REPORT_MPI_NAMED(rehash, "base_sorted_map:rehash", this->comm);
 
       }
+
+
   };
 
 
@@ -1584,9 +1530,6 @@ namespace dsc  // distributed std container
 
     protected:
 
-      // defined Communicator as a friend
-      friend Comm;
-
       struct LocalFind {
           template<bool linear, class DBIter, typename Query, class OutputIter>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, OutputIter &output) const {
@@ -1643,8 +1586,29 @@ namespace dsc  // distributed std container
       virtual ~sorted_multimap() {}
 
 
+      //========= override find, so can pass in LocalFind object.
+      template <class Predicate = TruePredicate>
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+    		  Predicate const& pred = Predicate()) const {
+          return Base::find(find_element, keys, sorted_input, pred);
+      }
+      template <class Predicate = TruePredicate>
+      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+    		  Predicate const& pred = Predicate()) const {
+          return Base::find_a2a(find_element, keys, sorted_input, pred);
+      }
+      template <class Predicate = TruePredicate>
+      ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
+          return Base::find(find_element, pred);
+      }
+
+      // explicitly get the base class version of insert.
+      using Base::insert;
+      using Base::erase;
+      using Base::count;
+
       // default is for multimap
-      virtual void rehash() {
+      virtual void organize() {
 
         BL_BENCH_INIT(rehash);
 
@@ -1671,7 +1635,6 @@ namespace dsc  // distributed std container
           // sort if needed
           if (!this->globally_sorted) {
             BL_BENCH_START(rehash);
-            printf("rank %d size %lu\n", this->comm.rank(), this->c.size());
             ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm);
             BL_BENCH_END(rehash, "mxxsort", this->c.size());
           }
@@ -1694,15 +1657,8 @@ namespace dsc  // distributed std container
                                      Base::Base::equal);
           this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
 
-          if (this->comm.rank() == 0)
-            for (size_t i = 0; i < this->key_to_rank.map.size(); ++i) {
-              BL_DEBUGF("R %d unique key_to_rank.map[%lu] = (%s->%d)", this->comm.rank(), i, bliss::utils::KmerUtils::toASCIIString(this->key_to_rank.map[i].first).c_str() , this->key_to_rank.map[i].second );
-            }
           assert(this->key_to_rank.map.size() > 0);
 
-//          for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
-//            printf("R %d key to rank %s -> %d\n", this->comm.rank(), this->key_to_rank.map[i].first.toAlphabetString().c_str(), this->key_to_rank.map[i].second);
-//          }
           BL_BENCH_END(rehash, "splitter1", this->key_to_rank.map.size());
 
 
@@ -1715,11 +1671,7 @@ namespace dsc  // distributed std container
           ::std::vector<size_t> send_counts = ::fsc::sorted_bucketing(this->c, this->key_to_rank.map, Base::Base::less, this->comm.size());
           BL_BENCH_END(rehash, "bucket", this->c.size());
 
-          for (size_t i = 0; i < send_counts.size(); ++i) {
-            BL_DEBUGF("R %d send_counts[%lu] = %lu", this->comm.rank(), i, send_counts[i]);
-//			  if (send_counts[i] == 0)
-//				  printf("rank %d bucket %lu empty.\n", this->comm.rank(), i);
-          }
+
           size_t tt = std::accumulate(send_counts.begin(), send_counts.end(), 0UL);
           if (tt == 0) printf("rank %d has nothing.\n", this->comm.rank());
           if (tt == send_counts[this->comm.rank()]) printf("rank %d nothing to send to others\n", this->comm.rank());
@@ -1732,10 +1684,11 @@ namespace dsc  // distributed std container
         } else {
           BL_BENCH_START(rehash);
           this->local_sort();
-          BL_BENCH_END(rehash, "stdsort", this->c.size());
+          BL_BENCH_END(rehash, "local_sort", this->c.size());
 
         }
         this->sorted = true; this->balanced = true; this->globally_sorted = true;
+
 
         BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_multimap:rehash", this->comm);
 
@@ -1756,29 +1709,15 @@ namespace dsc  // distributed std container
         // To find unique set, we take each bucket, copy to vector, sort it, and then count unique.
         // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
-          BL_BENCH_START(multiplicity);
-
-        this->rehash();
-        printf("all empty? %s\n", this->all_empty ? "y" : "n");
-
+        BL_BENCH_START(multiplicity);
+        this->organize();
         BL_BENCH_END(multiplicity, "rehash", this->c.size());
 
+        // compute new multiplicity
         BL_BENCH_START(multiplicity);
-
-        size_t uniq_count = 0;
-        ::std::pair<Key, T> v;
-        for (auto it = this->c.begin(), max = this->c.end(); it != max;) {
-          v = *it;
-          ++uniq_count;
-          it = ::fsc::upper_bound<true>(it, max, v, Base::less);
-        }
-        if (uniq_count == 0)
-          this->key_multiplicity = 1;
-        else
-          this->key_multiplicity = (this->c.size() + uniq_count - 1) / uniq_count + 1;
-        //printf("%lu elements, %lu unique, key multiplicity = %lu\n", this->c.size(), uniq_count, this->key_multiplicity);
-
-        BL_BENCH_END(multiplicity, "update", uniq_count);
+        // local unique
+        this->key_multiplicity = static_cast<float>(this->size()) / static_cast<float>(this->unique_size());
+        BL_BENCH_END(multiplicity, "multiplicity", this->c.size());
 
         //        // third approach is to assume each bucket contains only 1 kmer/kmolecule.
         //        // This is not generally true for all hash functions, so this is an over estimation of the repeat count.
@@ -1796,56 +1735,6 @@ namespace dsc  // distributed std container
 
         return this->key_multiplicity;
       }
-
-      template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
-    		  Predicate const& pred = Predicate()) const {
-          return Base::find(find_element, keys, sorted_input, pred);
-
-/*         // DEBUG
-
-          auto keys2 = keys;
-          auto result = Base::find(find_element, keys, sorted_input, pred);
-          auto result_a2a =  Base::find_a2a(find_element, keys2, sorted_input, pred);
-
-
-          // DEBUG
-          if (result.size() != result_a2a.size()) {
-              throw ::std::logic_error("ERROR: not same size");
-
-          }
-
-          ::std::stable_sort(result.begin(), result.end(), this->less);
-          ::std::stable_sort(result_a2a.begin(), result_a2a.end(), this->less);
-
-
-          for (int i = 0; i < result_a2a.size(); ++i) {
-            if (!this->equal(result[i], result_a2a[i])) {
-              printf("rank %d failing at %d:  result: %s, result_a2a: %s\n", this->comm.rank(), i, result[i].first.toAlphabetString().c_str(), result_a2a[i].first.toAlphabetString().c_str());
-              if ( i > 0)
-                printf("rank %d   before   %d:  result: %s, result_a2a: %s\n", this->comm.rank(), i-1, result[i-1].first.toAlphabetString().c_str(), result_a2a[i-1].first.toAlphabetString().c_str());
-              if (i < result_a2a.size() - 1)
-                printf("rank %d   after    %d:  result: %s, result_a2a: %s\n", this->comm.rank(), i+1, result[i+1].first.toAlphabetString().c_str(), result_a2a[i+1].first.toAlphabetString().c_str());
-              throw ::std::logic_error("ERROR: not same.");
-            }
-          }
-//          bool same = ::std::equal(result.begin(), result.end(), result_a2a.begin(), typename Base::Base::TransformedEqual());
-//          if (!same) throw ::std::logic_error("ERROR: not same.");
-
-          return result;
-*/
-      }
-      template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
-    		  Predicate const& pred = Predicate()) const {
-          return Base::find_a2a(find_element, keys, sorted_input, pred);
-      }
-
-      template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
-          return Base::find(find_element, pred);
-      }
-
 
   };
 
@@ -1909,57 +1798,6 @@ namespace dsc  // distributed std container
     protected:
       Reduc r;
 
-      // defined Communicator as a friend
-      friend Comm;
-
-
-      //=== below does local insert while reducing. doing reduction after, and letting insert be simple appending vector has lower complexity overall.
-      //      /**
-      //       * @brief insert new elements in the distributed sorted_map.  example use: stop inserting if more than x entries.
-      //       * @param first
-      //       * @param last
-      //       */
-      //      template <class InputIterator, class Predicate>
-      //      void local_insert_if(InputIterator first, InputIterator last, Predicate const &pred, bool sorted_input = false) {
-      //          if (first == last) return;
-      //
-      //          this->local_rehash();
-      //
-      //          // has to be locally reduced first.
-      //          auto newlast = local_reduction(first, last, sorted_input);
-      //
-      //          // walk through.  if exiting entry, remove from input.
-      //          // now walk through the input to count stuff.
-      //          auto t_start = ::std::lower_bound(this->c.begin(), this->c.end(), *first, Base::Base::less);
-      //          auto t_end = ::std::upper_bound(t_start, this->c.end(), *(newlast - 1), Base::Base::less);
-      //
-      //          // go through the input and search the container.
-      //          // iterate through the input and search in output,  moving items up as we go.
-      //          auto end = first;
-      //          for (auto it = first; it != newlast; ++it) {  // walk though all input entries
-      //              auto v = *it;
-      //
-      //              if (pred(v)) {
-      //                // find entry in container.
-      //                t_start = this->template lower_bound<true>(t_start, t_end, v);
-      //
-      //                if ((t_start == t_end) || (!this->equal(v, *t_start))) {
-      //                  // not matched.  copy the value, move pos up by 1.
-      //                  if (end != it) *end = v;
-      //                  ++end;
-      //                } else {
-      //                  // matched.  so need to reduce
-      //                  t_start->second = r(t_start->second, v.second);
-      //                }
-      //              }
-      //            }
-      //          // insert at the end.
-      //          if (first != end) {
-      //            this->c.insert(this->c.end(), first, end);
-      //            this->sorted = false;
-      //          }
-      //
-      //      }
 
       virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input, bool sorted_input = false) {
         if (input.size() == 0) return;
@@ -1987,11 +1825,15 @@ namespace dsc  // distributed std container
 
     public:
 
-
       reduction_sorted_map(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~reduction_sorted_map() {};
 
+      // explicitly get the base class version of insert.
+      using Base::insert;
+      using Base::erase;
+      using Base::count;
+      using Base::find;
   };
 
 
@@ -2038,7 +1880,6 @@ namespace dsc  // distributed std container
     public:
       using local_container_type = typename Base::local_container_type;
 
-      // std::unordered_multimap public members.
       using key_type              = Key;
       using mapped_type           = T;
       using value_type            = ::std::pair<Key, T>;
@@ -2048,20 +1889,18 @@ namespace dsc  // distributed std container
       using difference_type       = typename local_container_type::difference_type;
 
 
-    protected:
-
-      // defined Communicator as a friend
-      friend Comm;
-
-
-    public:
       counting_sorted_map(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~counting_sorted_map() {};
 
+      // explicitly get the base class version of insert.
+      using Base::insert;
+      using Base::erase;
+      using Base::count;
+      using Base::find;
 
       /**
-       * @brief insert new elements in the distributed sorted_multimap.
+       * @brief insert new elements in the distributed sorted_multimap.  convert from Key to Key-count pair
        * @param first
        * @param last
        */
@@ -2091,22 +1930,7 @@ namespace dsc  // distributed std container
         return count;
       }
 
-      /**
-       * @brief insert new elements in the distributed sorted_multimap.
-       * @param first
-       * @param last
-       */
-      template <class Predicate = TruePredicate>
-      size_t insert(::std::vector<std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
 
-        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-
-        // distribute
-        // local compute part.  called by the communicator.
-        size_t count = this->Base::insert(input, sorted_input, pred);
-
-        return count;
-      }
 
   };
 

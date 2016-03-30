@@ -212,6 +212,11 @@ namespace dsc  // distributed std container
     protected:
       local_container_type c;
 
+      /// clears the unordered_map
+      virtual void local_clear() noexcept {
+          c.clear();
+      }
+
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       virtual void local_reserve( size_t n) {
         local_rehash(std::ceil(static_cast<float>(n) / this->c.max_load_factor()) );
@@ -321,12 +326,6 @@ namespace dsc  // distributed std container
             if (pred(*it)) c.emplace(*it);
           }
           return c.size() - before;
-      }
-
-
-      /// clears the unordered_map
-      virtual void local_clear() noexcept {
-          c.clear();
       }
 
 
@@ -684,14 +683,7 @@ namespace dsc  // distributed std container
 
 
       /// update the multiplicity.  only multimap needs to do this.
-      virtual size_t update_multiplicity() { return this->key_multiplicity; }
-
-      /// convert the map to a vector.
-      virtual std::vector<std::pair<Key, T> > to_vector() const {
-        std::vector<std::pair<Key, T> > result;
-        this->to_vector(result);
-        return result;
-      }
+      virtual void organize() { return this->key_multiplicity; }
 
       /// convert the map to a vector
       virtual void to_vector(std::vector<std::pair<Key, T> > & result) const {
@@ -701,14 +693,6 @@ namespace dsc  // distributed std container
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(result);
         ::std::copy(c.begin(), c.end(), emplace_iter);
       }
-
-      /// extract the keys of a map.
-      virtual std::vector<Key> keys() const {
-        std::vector<Key> result;
-        this->keys(result);
-        return result;
-      }
-
       /// extract the unique keys of a map.
       virtual void keys(std::vector<Key> & result) const {
         result.clear();
@@ -727,29 +711,15 @@ namespace dsc  // distributed std container
       // note that for each method, there is a local version of the operartion.
       // this is for use by the asynchronous version of communicator as callback for any messages received.
       /// check if empty.
-      virtual bool local_empty() const noexcept {
+      virtual bool local_empty() const {
         return c.empty();
       }
 
       /// get size of local container
-      virtual size_t local_size() const noexcept {
+      virtual size_t local_size() const {
         return c.size();
       }
 
-      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void reserve( size_t n) {
-        // direct reserve + barrier
-        this->local_reserve(n);
-        if (this->comm.size() > 1) this->comm.barrier();
-      }
-
-
-      /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void rehash( size_type n) {
-        // direct rehash + barrier
-        this->local_rehash(n);
-        if (this->comm.size() > 1) this->comm.barrier();
-      }
 
 
       /**
@@ -924,9 +894,6 @@ namespace dsc  // distributed std container
 
     protected:
 
-      // defined Communicator as a friend
-      friend Comm;
-
       struct LocalFind {
           // unfiltered.
           template<class DB, typename Query, class OutputIter>
@@ -1094,9 +1061,6 @@ namespace dsc  // distributed std container
       using difference_type       = typename local_container_type::difference_type;
 
     protected:
-
-      // defined Communicator as a friend
-      friend Comm;
 
       struct LocalFind {
           // unfiltered.
@@ -1367,9 +1331,6 @@ namespace dsc  // distributed std container
     protected:
       Reduc r;
 
-      // defined Communicator as a friend
-      friend Comm;
-
       /**
        * @brief insert new elements in the distributed unordered_multimap.
        * @param first
@@ -1559,13 +1520,8 @@ namespace dsc  // distributed std container
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
-    protected:
-
-      // defined Communicator as a friend
-      friend Comm;
 
 
-    public:
       counting_unordered_map(const mxx::comm& _comm) : Base(_comm) {}
 
       virtual ~counting_unordered_map() {};
@@ -1738,6 +1694,17 @@ namespace dsc  // distributed std container
           }
           // no filter by range AND elemenet for now.
       } erase_element;
+
+      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
+      virtual void local_reserve( size_t n) {
+        local_rehash(std::ceil(static_cast<float>(n) / this->c.max_load_factor()) );
+      }
+
+      /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
+      virtual void local_rehash( size_type n) {
+        if (this->c.bucket_count() < n) this->c.rehash(n);
+      }
+
 
     public:
 
@@ -2015,6 +1982,18 @@ namespace dsc  // distributed std container
           }
           // no filter by range AND elemenet for now.
       } erase_element;
+
+
+      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
+      virtual void local_reserve( size_t n) {
+        local_rehash(std::ceil(static_cast<float>(n) / this->c.max_load_factor()) );
+      }
+
+      /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
+      virtual void local_rehash( size_type n) {
+        if (this->c.bucket_count() < n) this->c.rehash(n);
+      }
+
 
     public:
 

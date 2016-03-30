@@ -94,22 +94,21 @@ namespace dsc
       static TransformedFarmHash local_hash;
 
       using TransformedEqual = TransformedComp<Equal>;
-      using TransformedLess = TransformedComp<Less>;
-//      using TransformedGreater = TransformedComp<Greater>;
       static TransformedEqual equal;
+
+      using TransformedLess = TransformedComp<Less>;
       static TransformedLess less;
-//      static TransformedGreater greater;
 
       template <typename V>
       using UniqueKeySetUtilityType = ::std::unordered_set<V, TransformedFarmHash, TransformedEqual>;
 
-      mutable size_t key_multiplicity;
+      mutable float key_multiplicity;
 
       // communication stuff...
       const mxx::comm& comm;
 
-      // defined Communicator as a friend
-      //friend Comm;
+
+      // helper function
 
       template <class Iter>
       static void sort_ascending(Iter b, Iter e) {
@@ -118,29 +117,50 @@ namespace dsc
           }
       }
 
-      virtual void local_clear() noexcept = 0;
-      //virtual void local_reserve(size_t n) = 0;
-      virtual bool local_empty() const noexcept = 0;
-      virtual size_t local_size() const noexcept = 0;
+      // ============= local modifiers.  not directly accessible publically.  meant to be called via collective calls.
 
+      // abstract declarations - need to access the local containers, therefore override in subclases.
+      virtual void local_clear() = 0;
+      virtual void local_reserve(size_t n) = 0;
 
       map_base(const mxx::comm& _comm) :
-          key_multiplicity(1), comm(_comm) {
+          key_multiplicity(1.0), comm(_comm) {
       }
-
-
 
     public:
       virtual ~map_base() {};
 
-      virtual size_t update_multiplicity() = 0;
-      virtual std::vector<std::pair<Key, T> > to_vector() const = 0;
+      // ================ map state management
+      virtual void organize() const = 0;
+
+
+      // ================ data access functions
       virtual void to_vector(std::vector<std::pair<Key, T> > & result) const  = 0;
-      virtual std::vector<Key> keys() const = 0;
       virtual void keys(std::vector<Key> & result) const = 0;
 
+      /// convert the map to a vector.
+      virtual std::vector<std::pair<Key, T> > to_vector() const {
+        std::vector<std::pair<Key, T> > result;
+        this->to_vector(result);
+        return result;
+      }
+
+      /// extract the keys of a map.
+      virtual std::vector<Key> keys() const {
+        std::vector<Key> result;
+        this->keys(result);
+        return result;
+      }
+
+      // =========== local accessors
+      virtual bool local_empty() const = 0;
+      virtual size_t local_size() const = 0;
+      virtual size_t local_unique_size() const = 0;
+
+      // =========== collective accessors
+
       /// check if empty.
-      virtual bool empty() const noexcept {
+      bool empty() const {
         if (comm.size() == 1)
           return this->local_empty();
         else // all reduce
@@ -148,7 +168,7 @@ namespace dsc
       }
 
       /// get TOTAL size of distributed container
-      virtual size_t size() const noexcept {
+      size_t size() const {
         size_t s = this->local_size();
         if (comm.size() == 1)
           return s;
@@ -156,14 +176,37 @@ namespace dsc
           return ::mxx::allreduce(s, comm);
       }
 
+      virtual void unique_size() const {
+          size_t s = this->local_unique_size();
+          if (comm.size() == 1)
+            return s;
+          else
+            return ::mxx::allreduce(s, comm);
+      }
+
+      /// update the multiplicity.  only multimap needs to do this.
+      float get_multiplicity() {
+        return this->key_multiplicity();
+      }
+
+      // ============= collective modifiers
+
+      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
+      void reserve( size_t n) {
+        // direct reserve + barrier
+        this->local_reserve(n);
+        if (this->comm.size() > 1) MPI_Barrier(this->comm);
+      }
 
       /// clears the distributed container.
-      void clear() noexcept {
+      virtual void clear() {
         // clear + barrier.
         this->local_clear();
         if (comm.size() > 1)
           comm.barrier();
       }
+
+
 
   };
 

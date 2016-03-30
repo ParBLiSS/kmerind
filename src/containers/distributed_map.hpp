@@ -205,15 +205,6 @@ namespace dsc  // distributed std container
     protected:
       local_container_type c;
 
-      /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void local_reserve( size_t n) {
-
-      }
-
-      /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void local_rehash( size_type n) {
-      }
-
       struct LocalCount {
           // unfiltered.
           template<class DB, typename Query, class OutputIter>
@@ -603,12 +594,6 @@ namespace dsc  // distributed std container
       /// update the multiplicity.  only multimap needs to do this.
       virtual size_t update_multiplicity() { return this->key_multiplicity; }
 
-      /// convert the map to a vector.
-      virtual std::vector<std::pair<Key, T> > to_vector() const {
-        std::vector<std::pair<Key, T> > result;
-        this->to_vector(result);
-        return result;
-      }
 
       /// convert the map to a vector
       virtual void to_vector(std::vector<std::pair<Key, T> > & result) const {
@@ -618,14 +603,6 @@ namespace dsc  // distributed std container
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(result);
         ::std::copy(c.begin(), c.end(), emplace_iter);
       }
-
-      /// extract the keys of a map.
-      virtual std::vector<Key> keys() const {
-        std::vector<Key> result;
-        this->keys(result);
-        return result;
-      }
-
       /// extract the unique keys of a map.
       virtual void keys(std::vector<Key> & result) const {
         result.clear();
@@ -654,19 +631,11 @@ namespace dsc  // distributed std container
       }
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void reserve( size_t n) {
-        // direct reserve + barrier
-        this->local_reserve(n);
-        if (this->comm.size() > 1) this->comm.barrier();
-      }
+      void reserve( size_t n) {}
 
 
       /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
-      void rehash( size_type n) {
-        // direct rehash + barrier
-        local_rehash(n);
-        if (this->comm.size() > 1) this->comm.barrier();
-      }
+      void rehash( size_type n) {}
 
 
       /**
@@ -888,9 +857,6 @@ namespace dsc  // distributed std container
 
     protected:
 
-      // defined Communicator as a friend
-      friend Comm;
-
       struct LocalFind {
           // unfiltered.
           template<class DB, typename Query, class OutputIter>
@@ -1053,9 +1019,6 @@ namespace dsc  // distributed std container
       using difference_type       = typename local_container_type::difference_type;
 
     protected:
-
-      // defined Communicator as a friend
-      friend Comm;
 
       struct LocalFind {
           // unfiltered.
@@ -1357,9 +1320,6 @@ namespace dsc  // distributed std container
     protected:
       Reduc r;
 
-      // defined Communicator as a friend
-      friend Comm;
-
       /**
        * @brief insert new elements in the distributed multimap.
        * @param first
@@ -1531,13 +1491,7 @@ namespace dsc  // distributed std container
       using size_type             = typename local_container_type::size_type;
       using difference_type       = typename local_container_type::difference_type;
 
-    protected:
 
-      // defined Communicator as a friend
-      friend Comm;
-
-
-    public:
       counting_map(::mxx::comm const &_comm) : Base(_comm) {}
 
       virtual ~counting_map() {};
