@@ -483,6 +483,16 @@ int main(int argc, char** argv) {
 	  BL_BENCH_COLLECTIVE_END(test, "find_collective", found.size(), comm);
 	  }
 #endif
+#if defined(pIrecv)
+    // separate test because of it being potentially very slow depending on imbalance.
+    {
+      auto lquery = query;
+
+    BL_BENCH_START(test);
+    auto found = idx.find_irecv(lquery);
+    BL_BENCH_COLLECTIVE_END(test, "find_irecv", found.size(), comm);
+    }
+#endif
 
 #ifndef pCollective
 	  BL_BENCH_START(test);

@@ -14,7 +14,7 @@ endif()
 
 if (BL_BENCHMARK)
 
-#================= 72 targets
+#================= 60 targets
 # vary alphabet, which affects kmer transformations as well.  this in turn has impact on type of backend containers.
 foreach(dna 4 5 16)
   foreach(trans IDEN LEX XOR PRELEX)
@@ -28,7 +28,7 @@ foreach(dna 4 5 16)
     endforeach(map)
     
     # position maps.  note SORTED PATH ignores hash but uses transformation
-    foreach(map SORTED VEC COMPACTVEC UNORDERED) 
+    foreach(map SORTED VEC COMPACTVEC) 
       add_executable(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_POS BenchmarkKmerIndex.cpp)
       SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A${dna}_K31_${trans}_FARM_${map}_POS
          PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=${dna} -DpK=31 -DpTRANS=${trans} -DpHASH=FARM -DpMAP=${map} -DpINDEX=POS")
@@ -96,26 +96,34 @@ SET_TARGET_PROPERTIES(testKmerIndex_FASTA_A4_K31_PRELEX_FARM_COMPACTVEC_POS
   PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTA -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=COMPACTVEC -DpINDEX=POS")
 target_link_libraries(testKmerIndex_FASTA_A4_K31_PRELEX_FARM_COMPACTVEC_POS ${EXTRA_LIBS})
 
-#================== 2 targets
-# ORDERED
-add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_ORDERED_COUNT BenchmarkKmerIndex.cpp)
-SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_ORDERED_COUNT
-   PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=ORDERED -DpINDEX=COUNT")
-target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_ORDERED_COUNT ${EXTRA_LIBS})
+#================== 3 targets
+foreach(map ORDERED) 
+	add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_COUNT BenchmarkKmerIndex.cpp)
+	SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_COUNT
+	   PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=${map} -DpINDEX=COUNT")
+	target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_COUNT ${EXTRA_LIBS})
+endforeach(map)
+	
+foreach(map ORDERED UNORDERED) 
+	add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS BenchmarkKmerIndex.cpp)
+	SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS
+	   PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=${map} -DpINDEX=POS")
+	target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS ${EXTRA_LIBS})
+endforeach(map)
 
-add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_ORDERED_POS BenchmarkKmerIndex.cpp)
-SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_ORDERED_POS
-   PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=ORDERED -DpINDEX=POS")
-target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_ORDERED_POS ${EXTRA_LIBS})
-
-#================== 4 targets,  pos only  - potentially slow hence their own separate tests.
+#================== 8 targets,  pos only  - potentially slow hence their own separate tests.
 # collective find tests.
-  foreach(map SORTED VEC COMPACTVEC UNORDERED) 
+foreach(map SORTED VEC COMPACTVEC UNORDERED) 
     add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS_COLLECTIVE BenchmarkKmerIndex.cpp)
     SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS_COLLECTIVE
        PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=${map} -DpINDEX=POS -DpCollective")
     target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS_COLLECTIVE ${EXTRA_LIBS})
-  endforeach(map)
+    
+    add_executable(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS_IRECV BenchmarkKmerIndex.cpp)
+    SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS_IRECV
+       PROPERTIES COMPILE_FLAGS "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpTRANS=PRELEX -DpHASH=FARM -DpMAP=${map} -DpINDEX=POS -DpIrecv")
+    target_link_libraries(testKmerIndex_FASTQ_A4_K31_PRELEX_FARM_${map}_POS_IRECV ${EXTRA_LIBS})
+endforeach(map)
 
 #==================  1 target
 # pos quality maps.. 

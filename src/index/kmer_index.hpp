@@ -679,7 +679,9 @@ public:
 	std::vector<TupleType> find_collective(std::vector<KmerType> &query) {
 		return map.find_collective(query);
 	}
-
+  std::vector<TupleType> find_irecv(std::vector<KmerType> &query) {
+    return map.find_irecv(query);
+  }
 	std::vector< std::pair<KmerType, size_t> > count(std::vector<KmerType> &query) {
 		return map.count(query);
 	}
@@ -697,6 +699,10 @@ public:
 	std::vector<TupleType> find_if_collective(std::vector<KmerType> &query, Predicate const &pred) {
 		return map.find_collective(query, pred);
 	}
+  template <typename Predicate>
+  std::vector<TupleType> find_if_irecv(std::vector<KmerType> &query, Predicate const &pred) {
+    return map.find_irecv(query, pred);
+  }
 	template <typename Predicate>
 	std::vector<TupleType> find_if(Predicate const &pred) {
 		return map.find(pred);
