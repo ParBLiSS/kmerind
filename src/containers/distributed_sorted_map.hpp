@@ -214,7 +214,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
             // find the bounds.
             auto range_begin = ::std::lower_bound(db_begin, db_end, *query_begin, typename Base::StoreTransformedFunc());
-            auto query_last = query_begin; ::std::advance(query_last, dist_query - 1);  // last real entry because query end may not be derefernceable.
+            auto query_last = query_begin; ::std::advance(query_last, (dist_query - 1));  // last real entry because query end may not be derefernceable.
             auto range_end = ::std::upper_bound(range_begin, db_end, *query_last, typename Base::StoreTransformedFunc());
 
             return ::std::make_pair(range_begin, range_end);
@@ -394,57 +394,64 @@ using SortedMapParams = ::dsc::DistributedMapParams<
       struct LocalErase {
           typename Base::StoreTransformedFunc store_comp;
 
-          /// Return how much was KEPT.
+          /// Return how much was KEPT.  range_begin and range end point to beginning and end of the range to search
+          /// last_end points to the end of the last kept segment == where to copy to in this iteration.
           template<bool linear, class DBIter, typename Query>
-          size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, DBIter &output) {
+          size_t operator()(DBIter &curr_start, DBIter &last_end, DBIter const &range_end, Query const &v, DBIter &output) {
               // find start of segment to delete == end of prev segment to keep
-              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);
+              curr_start = ::fsc::lower_bound<linear>(last_end, range_end, v, store_comp);
 
               // if the keep range is larger than 0, then move data and update insert pos.
-              auto dist = ::std::distance(el_end, range_begin);
-              if (dist > 0) {
-                // condense a portion.
-                ::std::move(el_end, range_begin, output);
-                ::std::advance(output, dist);
+              if (output == last_end) {  // if they point to same place, no copy is needed.  just advance
+            	  output = curr_start;
+              } else {
+            	  // need to copy in order to condense.
+            	  output = ::std::move(last_end, curr_start, output);
               }
+              size_t dist = std::distance(last_end, curr_start);
+
               // find of end of the segment to delete == start of next segment to keep
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);
+              last_end = ::fsc::upper_bound<linear>(curr_start, range_end, v, store_comp);
               return dist;
           }
           /// Return how much was KEPT.
           template<bool linear, class DBIter, typename Query, class Predicate = TruePredicate>
-          size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, DBIter &output,
+          size_t operator()(DBIter &curr_start, DBIter &last_end, DBIter const &range_end, Query const &v, DBIter &output,
                             Predicate const & pred) {
               // find start of segment to delete == end of prev segment to keep
-              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);
+              curr_start = ::fsc::lower_bound<linear>(last_end, range_end, v, store_comp);
 
-              if (::std::distance(el_end, range_begin) > 0) {
-                // condense a portion.
-                output = ::std::move(el_end, range_begin, output);
+              // if the keep range is larger than 0, then move data and update insert pos.
+              if (output == last_end) {  // if they point to same place, no copy is needed.  just advance
+            	  output = curr_start;
+              } else {
+            	  // need to copy in order to condense.
+            	  output = ::std::move(last_end, curr_start, output);
               }
+              size_t dist = std::distance(last_end, curr_start);
+
               // find of end of the segment to delete == start of next segment to keep
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);
+              last_end = ::fsc::upper_bound<linear>(curr_start, range_end, v, store_comp);
 
-
-              if (!pred(range_begin, range_end)) {  // if NOTHING in range matches, then no erase.
-            	  output = ::std::move(range_begin, el_end, output);
-            	  return 0;
+              typename ::std::iterator_traits<DBIter>::value_type x;
+              if (!pred(curr_start, last_end)) {  // if NOTHING in range matches, then no erase.
+            	  output = ::std::move(curr_start, last_end, output);
+            	  dist += std::distance(curr_start, last_end);
               } else {  // some elements match, need to erase those
-            	  size_t count = 0;
 
-                //output = ::std::copy_if(range_begin, el_end, output, ::std::unary_negate<Predicate>(pred));
-            	  for (auto it = range_begin; it < el_end; ++it) {
-            	    if (!pred(*it)) {
-            	      *output = *it;
+            	  //output = ::std::copy_if(curr_start, last_end, output, ::std::unary_negate<Predicate>(pred));
+            	  for (auto it = curr_start; it < last_end; ++it) {
+            	    x = *it;
+            		if (!pred(x)) {
+            	      *output = x;
             	      ++output;
-            	      ++count;
+            	      ++dist;
             	    }
             	  }
-            	  return count;
               }
 
               // all erased.
-              return ::std::distance(range_begin, el_end);
+              return dist;
           }
           // no filter by range AND elemenet for now.
       } erase_element;
@@ -1305,14 +1312,22 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           BL_BENCH_INIT(erase);
 
+          int r = 39;
+
+          if (this->comm.rank() == r) printf("R %d begin\n", this->comm.rank());  fflush(stdout);
+
           if (this->empty()) {
               BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
         	  return 0;
           }
+          if (this->comm.rank() == r) printf("R %d checked empty\n", this->comm.rank());  fflush(stdout);
+
 
           BL_BENCH_START(erase);
           this->transform_input(keys);
           BL_BENCH_END(erase, "transform_input", keys.size());
+
+          if (this->comm.rank() == r) printf("R %d transform input \n", this->comm.rank());  fflush(stdout);
 
         size_t before = c.size();
 
@@ -1322,12 +1337,16 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           this->redistribute();
           BL_BENCH_END(erase, "global_sort", this->local_size());
 
+          if (this->comm.rank() == r) printf("R %d global sort\n", this->comm.rank());  fflush(stdout);
 
           // remove duplicates
           BL_BENCH_START(erase);
           auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
           BLISS_UNUSED(recv_counts);
           BL_BENCH_END(erase, "dist_query", keys.size());
+
+          if (this->comm.rank() == r) printf("R %d distribute query\n", this->comm.rank());  fflush(stdout);
+
 
           sorted_input = false;  // keys not sorted across buckets.
 
@@ -1336,6 +1355,9 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_START(erase);
           this->local_sort();  // sort container before deleting.
           BL_BENCH_END(erase, "local_sort", keys.size());
+
+          printf("R 0 local_sort\n");  fflush(stdout);
+
 
         }
 
@@ -1346,6 +1368,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 				  typename Base::StoreTransformedEqual());
         BL_BENCH_END(erase, "unique_keys", keys.size());
 
+        if (this->comm.rank() == r) printf("R %d unique keys\n", this->comm.rank());  fflush(stdout);
 
         BL_BENCH_START(erase);
         //== now call local remove.
@@ -1353,15 +1376,27 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(),
             keys.begin(), keys.end(), sorted_input);
 
+        if (this->comm.rank() == r) printf("R %d intersect\n", this->comm.rank());  fflush(stdout);
+
+        auto orig = overlap.first;
+        auto new_end = overlap.first;
         // do the work.  skip duplicates = true
         size_t kept = QueryProcessor<false>::process(overlap.first, overlap.second,
-            keys.begin(), keys.end(), overlap.first, erase_element, sorted_input, pred);
+            keys.begin(), keys.end(), new_end, erase_element, sorted_input, pred);
+
+        if (this->comm.rank() == r) printf("R %d erase.  kept %lu. overlap pointer moved? %s\n",
+        		this->comm.rank(), kept, orig == overlap.first ? "n" : "y");  fflush(stdout);
+
 
         // move the last part.
-        auto end = overlap.first;
-        ::std::advance(end, kept);   // last valid position within overlap range.
-        end = ::std::move(overlap.second, this->c.end(), end);   // move everything after the overlap range
-        this->c.erase(end, this->c.end());  // and clear the rest.
+        new_end = ::std::move(overlap.second, this->c.end(), new_end);   // move everything after the overlap range
+
+        if (this->comm.rank() == r) printf("R %d moved last\n", this->comm.rank());  fflush(stdout);
+
+        this->c.erase(new_end, this->c.end());  // and clear the rest.
+
+        if (this->comm.rank() == r) printf("R %d erased last\n", this->comm.rank());  fflush(stdout);
+
         BL_BENCH_END(erase, "erase", keys.size());
 
 
