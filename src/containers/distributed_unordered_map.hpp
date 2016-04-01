@@ -198,15 +198,15 @@ namespace dsc  // distributed std container
 
               if (query_begin == query_end) return 0;
 
-              typename ::std::iterator_traits<QueryIter>::value_type v;
               size_t count = 0;  // before size.
-              for (auto it = query_begin; it != query_end; ++it) {
-                v = *it;
-                if (!::std::is_same<Predicate, TruePredicate>::value)
-                  count += op(db, v, output, pred);
-                else
-                  count += op(db, v, output);
-              }
+              if (!::std::is_same<Predicate, TruePredicate>::value)
+                for (auto it = query_begin; it != query_end; ++it) {
+                  count += op(db, *it, output, pred);
+                }
+              else
+                for (auto it = query_begin; it != query_end; ++it) {
+                  count += op(db, *it, output);
+                }
               return count;
           }
 
@@ -652,8 +652,12 @@ namespace dsc  // distributed std container
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
 
-          ::std::vector<::std::pair<Key, T> > local_results;
-          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
+          std::vector<::std::vector<::std::pair<Key, T> > > local_results(2);  // allocate 2, one foreground, 1 background.
+          std::vector<::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > > local_emplace_iters {
+            ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > >(local_results[0]),
+                ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > >(local_results[1])
+          };
+
           this->transform_input(keys);
           BL_BENCH_END(find, "transform_input", keys.size());
 
@@ -715,7 +719,9 @@ namespace dsc  // distributed std container
             auto resp_total = resp_displs[this->comm.size() - 1] + resp_counts[this->comm.size() - 1];
             auto max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
             results.resize(resp_total);   // allocate, not just reserve
-            local_results.reserve(max_send_count);
+            local_results[0].resize(max_send_count);
+            local_results[1].resize(max_send_count);
+
             //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
             BL_BENCH_END(find, "reserve", resp_total);
 
@@ -736,6 +742,11 @@ namespace dsc  // distributed std container
               MPI_Irecv(&(results[resp_displs[recv_from]]), resp_counts[recv_from], dt.type(),
                         recv_from, i, this->comm, &(reqs[i]));
             }
+            BL_BENCH_END(find, "recv_request", this->comm.size());
+
+            BL_BENCH_START(find);
+
+            MPI_Request send_req = MPI_REQUEST_NULL;
 
             for (int i = 0; i < this->comm.size(); ++i) {
               send_to = (this->comm.rank() + i) % this->comm.size();    // rank to send data to
@@ -746,25 +757,38 @@ namespace dsc  // distributed std container
               end = start;
               ::std::advance(end, recv_counts[send_to]);
 
-              local_results.clear();
+              //local_results[i % 2].clear();
               // work on query from process i.
-              found = QueryProcessor::process(c, start, end, local_emplace_iter, find_element, sorted_input, pred);
+              auto oiter = local_results[i%2].begin();
+              found = QueryProcessor::process(c, start, end,
+                                              oiter, // local_emplace_iters[i % 2],
+                                              find_element, sorted_input, pred);
               // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
               total += found;
               //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
 
-              MPI_Send(&(local_results[0]), found, dt.type(), send_to,
-                        i, this->comm);
+              // wait for previous to finish
+              if (send_req != MPI_REQUEST_NULL) MPI_Wait(&send_req, MPI_STATUS_IGNORE);
+
+              // then send current.
+              MPI_Isend(&(local_results[i%2][0]), found, dt.type(), send_to,
+                        i, this->comm, &send_req);
             }
 
-            // wait for both requests to complete.
-            MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE);
+            // wait for last send to finish
+            if (send_req != MPI_REQUEST_NULL) MPI_Wait(&send_req, MPI_STATUS_IGNORE);
+            BL_BENCH_END(find, "sent", total);
+
+
+            // wait for all recv requests to complete.
+            BL_BENCH_START(find);
+           MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE);
 
 
               // verify correct? done by comparing to previous code.
 
             //printf("Rank %d total find %lu\n", this->comm.rank(), total);
-            BL_BENCH_END(find, "find_send", results.size());
+            BL_BENCH_END(find, "recved", results.size());
 
           } else {
 

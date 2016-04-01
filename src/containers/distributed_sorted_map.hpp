@@ -248,32 +248,50 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               if (linear) {  // based on number of input and search source, choose a method to search.
 
                 // iterate through the input and search in output -
-                for (auto it = query_begin; it != query_end;) {
-                  v = *it;
-                  if (!::std::is_same<Predicate, TruePredicate>::value)
-                	  count += op.template operator()<true>(range_begin, el_end, range_end, v, output, pred);
-                  else
-                	  count += op.template operator()<true>(range_begin, el_end, range_end, v, output);
+                if (!::std::is_same<Predicate, TruePredicate>::value)
+                  for (auto it = query_begin; it != query_end;) {
+                    v = *it;
+                    count += op.template operator()<true>(range_begin, el_end, range_end, v, output, pred);
 
-                  // compiler optimize out the conditional.
-                  if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, typename Base::StoreTransformedFunc());
-                  else ++it;
-                }
+                    // compiler optimize out the conditional.
+                    if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, typename Base::StoreTransformedFunc());
+                    else ++it;
+                  }
+                else
+
+                  for (auto it = query_begin; it != query_end;) {
+                    v = *it;
+                      count += op.template operator()<true>(range_begin, el_end, range_end, v, output);
+
+                    // compiler optimize out the conditional.
+                    if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, typename Base::StoreTransformedFunc());
+                    else ++it;
+                  }
+
+
               } else {
                 // use logarithmic search
 
                 // iterate through the input and search in output -
-                for (auto it = query_begin; it != query_end;) {
-                  v = *it;
-                  if (!::std::is_same<Predicate, TruePredicate>::value)
-                	  count += op.template operator()<false>(range_begin, el_end, range_end, v, output, pred);
-                  else
-                	  count += op.template operator()<false>(range_begin, el_end, range_end, v, output);
+                if (!::std::is_same<Predicate, TruePredicate>::value)
+                  for (auto it = query_begin; it != query_end;) {
+                    v = *it;
+                      count += op.template operator()<false>(range_begin, el_end, range_end, v, output, pred);
 
-                  // compiler optmizes out the conditional
-                  if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, typename Base::StoreTransformedFunc());
-                  else ++it;
-                }
+                    // compiler optmizes out the conditional
+                    if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, typename Base::StoreTransformedFunc());
+                    else ++it;
+                  }
+                else
+                  for (auto it = query_begin; it != query_end;) {
+                    v = *it;
+                      count += op.template operator()<false>(range_begin, el_end, range_end, v, output);
+
+                    // compiler optmizes out the conditional
+                    if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, typename Base::StoreTransformedFunc());
+                    else ++it;
+                  }
+
               }
 
               return count;
@@ -785,8 +803,11 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
-          ::std::vector<::std::pair<Key, T> > local_results;
-          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
+          std::vector<::std::vector<::std::pair<Key, T> > > local_results(2);  // allocate 2, one foreground, 1 background.
+          std::vector<::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > > local_emplace_iters {
+            ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > >(local_results[0]),
+                ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > >(local_results[1])
+          };
           this->transform_input(keys);
 		  BL_BENCH_END(find, "begin", keys.size());
 
@@ -857,7 +878,9 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             auto resp_total = resp_displs[this->comm.size() - 1] + resp_counts[this->comm.size() - 1];
             auto max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
             results.resize(resp_total);   // allocate, not just reserve
-            local_results.reserve(max_send_count);
+            local_results[0].resize(max_send_count);
+            local_results[1].resize(max_send_count);
+
             BL_BENCH_END(find, "reserve", resp_total);
 
             //=== process queries and send results.  O(p) iterations
@@ -876,6 +899,11 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               MPI_Irecv(&(results[resp_displs[recv_from]]), resp_counts[recv_from], dt.type(),
                         recv_from, i, this->comm, &(reqs[i]));
             }
+            BL_BENCH_END(find, "recv_request", this->comm.size());
+
+            BL_BENCH_START(find);
+
+            MPI_Request send_req = MPI_REQUEST_NULL;
 
             for (int i = 0; i < this->comm.size(); ++i) {
               send_to = (this->comm.rank() + i) % this->comm.size();    // rank to send data to
@@ -886,25 +914,38 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               end = start;
               ::std::advance(end, recv_counts[send_to]);
 
-              local_results.clear();
+              //local_results[i%2].clear();
               // work on query from process i.
               auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(),
                   start, end, sorted_input);
+              auto oiter = local_results[i%2].begin();
               found = QueryProcessor<false>::process(overlap.first, overlap.second,
-                  start, end, local_emplace_iter, lf, sorted_input, pred);
+                  start, end, oiter, // local_emplace_iters[i%2],
+                  lf, sorted_input, pred);
               total += found;
               //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
 
-              MPI_Send(&(local_results[0]), found, dt.type(), send_to,
-                        i, this->comm);
+              // wait for previous to finish
+              if (send_req != MPI_REQUEST_NULL) MPI_Wait(&send_req, MPI_STATUS_IGNORE);
 
+              // then send current.
+              MPI_Isend(&(local_results[i%2][0]), found, dt.type(), send_to,
+                        i, this->comm, &send_req);
               // within start-end, values are unique, so don't need to set unique to true.
 
             }
+            // wait for last send to finish
+            if (send_req != MPI_REQUEST_NULL) MPI_Wait(&send_req, MPI_STATUS_IGNORE);
+            BL_BENCH_END(find, "sent", total);
+
+
+            // wait for all recv requests to complete.
+            BL_BENCH_START(find);
+
             // wait for both requests to complete.
             MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE);
 
-            BL_BENCH_END(find, "find_send", results.size());
+            BL_BENCH_END(find, "recved", results.size());
 
           } else {
               // ensure that the container splitters are setup properly, and load balanced.
