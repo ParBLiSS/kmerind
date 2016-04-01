@@ -397,7 +397,9 @@ namespace dsc  // distributed std container
             // do for each src proc one at a time.
 
             BL_BENCH_START(find);
-            results.reserve(keys.size() * this->get_multiplicity());                   // TODO:  should estimate coverage.
+            float multi = this->get_multiplicity();
+            if (this->comm.rank() == 0) printf("rank %d multiplicity %f\n", this->comm.rank(), multi);
+            results.reserve(keys.size() * multi);                   // TODO:  should estimate coverage.
             BL_BENCH_END(find, "reserve", results.capacity());
 
             BL_BENCH_START(find);
@@ -414,6 +416,8 @@ namespace dsc  // distributed std container
               start = end;
             }
             BL_BENCH_END(find, "local_find", results.size());
+            if (this->comm.rank() == 0) printf("rank %d result size %lu capacity %lu\n", this->comm.rank(), results.size(), results.capacity());
+
 
             BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
             // send back using the constructed recv count
@@ -430,13 +434,18 @@ namespace dsc  // distributed std container
             BL_BENCH_END(find, "uniq1", keys.size());
 
             BL_BENCH_START(find);
-            results.reserve(keys.size() * this->get_multiplicity());                   // TODO:  should estimate coverage.
+            float multi = this->get_multiplicity();
+            if (this->comm.rank() == 0) printf("rank %d multiplicity %f\n", this->comm.rank(), multi);
+            results.reserve(keys.size() * multi);                   // TODO:  should estimate coverage.
             //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
             BL_BENCH_END(find, "reserve", keys.capacity() );
 
             BL_BENCH_START(find);
             QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, sorted_input, pred);
             BL_BENCH_END(find, "local_find", results.size());
+
+            if (this->comm.rank() == 0) printf("rank %d result size %lu capacity %lu\n", this->comm.rank(), results.size(), results.capacity());
+
           }
 
           BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_a2a", this->comm);
@@ -534,6 +543,10 @@ namespace dsc  // distributed std container
             auto max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
             results.resize(resp_total);   // allocate, not just reserve
             local_results.reserve(max_send_count);
+
+            float multi = this->get_multiplicity();
+            if (this->comm.rank() == 0) printf("rank %d multiplicity %f\n", this->comm.rank(), multi);
+
             //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
             BL_BENCH_END(find, "reserve", resp_total);
 
@@ -612,6 +625,9 @@ namespace dsc  // distributed std container
             BL_BENCH_END(find, "local_count", count);
 
             BL_BENCH_START(find);
+            float multi = this->get_multiplicity();
+            if (this->comm.rank() == 0) printf("rank %d multiplicity %f\n", this->comm.rank(), multi);
+
             results.reserve(count);                   // TODO:  should estimate coverage.
             //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
             BL_BENCH_END(find, "reserve", results.capacity());
@@ -722,6 +738,10 @@ namespace dsc  // distributed std container
             local_results[0].resize(max_send_count);
             local_results[1].resize(max_send_count);
 
+            float multi = this->get_multiplicity();
+            if (this->comm.rank() == 0) printf("rank %d multiplicity %f\n", this->comm.rank(), multi);
+
+
             //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
             BL_BENCH_END(find, "reserve", resp_total);
 
@@ -817,6 +837,10 @@ namespace dsc  // distributed std container
             BL_BENCH_END(find, "local_count", count);
 
             BL_BENCH_START(find);
+            float multi = this->get_multiplicity();
+            if (this->comm.rank() == 0) printf("rank %d multiplicity %f\n", this->comm.rank(), multi);
+
+
             results.reserve(count);                   // TODO:  should estimate coverage.
             //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
             BL_BENCH_END(find, "reserve", results.capacity());
@@ -963,6 +987,10 @@ namespace dsc  // distributed std container
         return c.cend();
       }
 
+      using Base::size;
+      using Base::unique_size;
+      using Base::get_multiplicity;
+      using Base::local_size;
 
       /// convert the map to a vector
       virtual void to_vector(std::vector<std::pair<Key, T> > & result) const {
@@ -1117,12 +1145,14 @@ namespace dsc  // distributed std container
       // this is for use by the asynchronous version of communicator as callback for any messages received.
       /// check if empty.
       virtual bool local_empty() const {
-        return c.empty();
+        return this->c.empty();
       }
 
       /// get size of local container
       virtual size_t local_size() const {
-        return c.size();
+        if (this->comm.rank() == 0) printf("rank %d hashmap_base local size %lu\n", this->comm.rank(), this->c.size());
+
+        return this->c.size();
       }
 
       /// get size of local container
@@ -1238,6 +1268,8 @@ namespace dsc  // distributed std container
 
       using Base::count;
       using Base::erase;
+      using Base::unique_size;
+
 
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
@@ -1413,6 +1445,7 @@ namespace dsc  // distributed std container
 
       using Base::count;
       using Base::erase;
+      using Base::unique_size;
 
 
       template <class Predicate = TruePredicate>
@@ -1441,6 +1474,7 @@ namespace dsc  // distributed std container
       /// access the current the multiplicity.  only multimap needs to override this.
       virtual float get_multiplicity() const {
         // multimaps would add a collective function to change the multiplicity
+        if (this->comm.rank() == 0) printf("rank %d unordered_multimap get_multiplicity called\n", this->comm.rank());
 
 
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
@@ -1742,6 +1776,7 @@ namespace dsc  // distributed std container
       using Base::count;
       using Base::find;
       using Base::erase;
+      using Base::unique_size;
 
       /**
        * @brief insert new elements in the distributed unordered_multimap.
@@ -1857,6 +1892,7 @@ namespace dsc  // distributed std container
       using Base::count;
       using Base::find;
       using Base::erase;
+      using Base::unique_size;
 
       /**
        * @brief insert new elements in the distributed unordered_multimap.
@@ -1911,7 +1947,6 @@ namespace dsc  // distributed std container
         return count;
 
       }
-
 
 
   };
@@ -2096,6 +2131,7 @@ namespace dsc  // distributed std container
       virtual ~unordered_multimap_vec() {}
 
       using Base::count;
+      using Base::unique_size;
 
 
       template <class Predicate = TruePredicate>
@@ -2219,6 +2255,7 @@ namespace dsc  // distributed std container
       /// access the current the multiplicity.  only multimap needs to override this.
       virtual float get_multiplicity() const {
         // multimaps would add a collective function to change the multiplicity
+        if (this->comm.rank() == 0) printf("rank %d vec get_multiplicity called\n", this->comm.rank());
 
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
@@ -2437,6 +2474,10 @@ namespace dsc  // distributed std container
       virtual ~unordered_multimap_compact_vec() {}
 
       using Base::count;
+      using Base::unique_size;
+      using Base::size;
+      using Base::local_size;
+
 
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
@@ -2552,8 +2593,18 @@ namespace dsc  // distributed std container
 
       }
 
+
       /// update the multiplicity.  only multimap needs to do this.
-      virtual float get_multiplicity() {
+      virtual float get_multiplicity() const {
+        if (this->comm.rank() == 0) printf("rank %d compactvec get_multiplicity called\n", this->comm.rank());
+
+        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity min %lu\n", this->comm.rank(), this->c.get_min_multiplicity());
+        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity max %lu\n", this->comm.rank(), this->c.get_max_multiplicity());
+        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity mean %f\n", this->comm.rank(), this->c.get_mean_multiplicity());
+        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity stdev %f\n", this->comm.rank(), this->c.get_stdev_multiplicity());
+
+
+
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
         // problem with this approach is that for unordered map, to get the count for a key is essentially O(count), so we get quadratic time.
@@ -2565,13 +2616,17 @@ namespace dsc  // distributed std container
         // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
         size_t unique_count = this->unique_size();
+        size_t total = this->size();
+        if (this->comm.rank() == 0) printf("rank %d compactvec unique_count is %lu, size is %lu\n", this->comm.rank(), unique_count, total);
         float multiplicity = 1.0f;
         if (unique_count > 0) {
           // local unique
           multiplicity =
-              static_cast<float>(this->size()) /
+              static_cast<float>(total) /
               static_cast<float>(unique_count);
         }
+
+
 
         return multiplicity;
 

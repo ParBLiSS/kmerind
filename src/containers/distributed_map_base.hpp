@@ -207,6 +207,9 @@ namespace dsc
       /// get TOTAL size of distributed container
       size_t size() const {
         size_t s = this->local_size();
+
+        if (comm.rank() == 0) printf("rank %d map_base local_size in size() is %lu\n", comm.rank(), s);
+
         if (comm.size() == 1)
           return s;
         else
@@ -224,6 +227,8 @@ namespace dsc
       /// access the current the multiplicity.  only multimap needs to override this.
       virtual float get_multiplicity() const {
         // multimaps would add a collective function to change the multiplicity
+        if (this->comm.rank() == 0) printf("rank %d map_base get_multiplicity called\n", this->comm.rank());
+
         return 1.0f;
       }
 

@@ -520,7 +520,9 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             // local find. memory utilization a potential problem.
             // do for each src proc one at a time.
             BL_BENCH_START(find);
-            results.reserve(keys.size() * this->get_multiplicity());                   // TODO:  should estimate coverage.
+            float multi = this->get_multiplicity();
+            if (this->comm.rank() == 0) printf("rank %d multiplicity %f\n", this->comm.rank(), multi);
+            results.reserve(keys.size() * multi);                   // TODO:  should estimate coverage.
             BL_BENCH_END(find, "reserve", results.capacity());
 
 
@@ -542,6 +544,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               start = end;
             }
             BL_BENCH_END(find, "local_find", results.size());
+            if (this->comm.rank() == 0) printf("rank %d result size %lu capacity %lu\n", this->comm.rank(), results.size(), results.capacity());
 
             // send back using the constructed recv count
             BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
@@ -564,7 +567,9 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               BL_BENCH_END(find, "uniq1", keys.size());
 
         	  BL_BENCH_START(find);
-              results.reserve(keys.size() * this->get_multiplicity());                   // TODO:  should estimate coverage.
+            float multi = this->get_multiplicity();
+            if (this->comm.rank() == 0) printf("rank %d multiplicity %f\n", this->comm.rank(), multi);
+            results.reserve(keys.size() * multi);                   // TODO:  should estimate coverage.
               BL_BENCH_END(find, "reserve", results.capacity());
 
 
@@ -577,6 +582,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             		emplace_iter, lf, sorted_input, pred);
 
             BL_BENCH_END(find, "local_find", results.size());
+            if (this->comm.rank() == 0) printf("rank %d result size %lu capacity %lu\n", this->comm.rank(), results.size(), results.capacity());
 
           }
 

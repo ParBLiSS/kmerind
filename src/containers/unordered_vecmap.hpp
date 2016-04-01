@@ -593,8 +593,8 @@ namespace fsc {  // fast standard container
             //            }
             //            map.at(first->first).emplace_back(::std::forward<value_type>(*first));
             map[first->first].emplace_back(::std::forward<T>(first->second));
-            ++s;
           }
+          s += std::distance(first, last);
       }
 
       /// inserting sorted range
@@ -603,7 +603,7 @@ namespace fsc {  // fast standard container
     	  key_equal eq;
     	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
     	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
-    		return !(eq(x.first, y.first));
+    	    return !(eq(x.first, y.first));
     	  };
 
     	  size_t ss;
@@ -621,13 +621,26 @@ namespace fsc {  // fast standard container
     				  [](InputValueType const & x){
     			  return x.second;
     		  });
-    		  s += ss;
 
     		  // advance the pointers
     		  start = end;
     		  end = ::std::adjacent_find(start, last, key_neq);
     		  if (end != last) ++end;
     	  }
+    	  // can have end at last, because start is at last-1.  need to copy the last part.,
+    	  if (start != last) {
+    	    // end is at last.
+          ss = map[start->first].size();
+          map[start->first].reserve(ss + std::distance(start, end));
+
+          // copy the range
+          std::transform(start, end, std::back_inserter(map[start->first]),
+              [](InputValueType const & x){
+            return x.second;
+          });
+    	  }
+
+    	  s += std::distance(first, last);
       }
 
       template <typename Pred>
@@ -1512,13 +1525,23 @@ namespace fsc {  // fast standard container
 
     		  // copy the range
     		  std::copy(start, end, std::back_inserter(map[start->first]));
-    		  s += ss;
 
     		  // advance the pointers
     		  start = end;
     		  end = ::std::adjacent_find(start, last, key_neq);
     		  if (end != last) ++end;
     	  }
+    	  // can have end at last, because start is at last-1.  need to copy the last part.,
+    	  if (start != last) {
+          // get current size.
+          ss = map[start->first].size();
+          map[start->first].reserve(ss + std::distance(start, end));
+
+          // copy the range
+          std::copy(start, end, std::back_inserter(map[start->first]));
+    	  }
+
+    	  s += std::distance(first, last);
       }
 
       template <typename Pred>
