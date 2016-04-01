@@ -183,7 +183,7 @@ foreach(hash IDEN STD MURMUR)
 endforeach(hash)  
 
 
-#================== 2 targets,  pos only (need the data volume)  - potentially slow hence their own separate tests.
+#================== 3 targets,  pos only (need the data volume)  - potentially slow hence their own separate tests.
 # collective find tests.  want high collision (imbalance) to see how all2all handles.
 
 add_executable(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_COMPACTVEC_POS_dtIDEN_dhFARM_shFARM_COLLECTIVE BenchmarkKmerIndex.cpp)
@@ -195,14 +195,26 @@ SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_COMPACTVEC_POS_dtIDE
 target_link_libraries(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_COMPACTVEC_POS_dtIDEN_dhFARM_shFARM_COLLECTIVE
  ${EXTRA_LIBS})
 
-add_executable(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_SORTED_POS_dtIDEN_dhFARM_shFARM_COLLECTIVE BenchmarkKmerIndex.cpp)
+add_executable(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_VEC_POS_dtIDEN_dhFARM_shFARM_COLLECTIVE BenchmarkKmerIndex.cpp)
 
-SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_SORTED_POS_dtIDEN_dhFARM_shFARM_COLLECTIVE
+SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_VEC_POS_dtIDEN_dhFARM_shFARM_COLLECTIVE
    PROPERTIES COMPILE_FLAGS 
-   "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=BIMOLECULE -DpMAP=SORTED -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCollective")
+   "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=BIMOLECULE -DpMAP=VEC -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCollective")
 
-target_link_libraries(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_SORTED_POS_dtIDEN_dhFARM_shFARM_COLLECTIVE
+target_link_libraries(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_VEC_POS_dtIDEN_dhFARM_shFARM_COLLECTIVE
  ${EXTRA_LIBS})
+
+
+add_executable(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_SORTED_POS_COLLECTIVE BenchmarkKmerIndex.cpp)
+
+SET_TARGET_PROPERTIES(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_SORTED_POS_COLLECTIVE
+   PROPERTIES COMPILE_FLAGS 
+   "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=BIMOLECULE -DpMAP=SORTED -DpINDEX=POS -DpCollective")
+
+target_link_libraries(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_SORTED_POS_COLLECTIVE
+ ${EXTRA_LIBS})
+
+
 
 #add_executable(testKmerIndex_FASTQ_a4_k31_BIMOLECULE_COMPACTVEC_POS_dtIDEN_dhFARM_shFARM_IRECV BenchmarkKmerIndex.cpp)
 #

@@ -1980,7 +1980,7 @@ namespace dsc  // distributed std container
         // unfiltered.
         template<class DB, typename Query, class OutputIter>
         size_t operator()(DB &db, Query const &v, OutputIter &output) const {
-            auto range = db.equal_range(v);
+            auto range = db.equal_range_value_only(v);
 
             output = ::std::copy(range.first, range.second, output);  // tons faster to emplace - almost 3x faster
             return db.count(v);
@@ -1989,14 +1989,18 @@ namespace dsc  // distributed std container
         template<class DB, typename Query, class OutputIter, class Predicate = TruePredicate>
         size_t operator()(DB &db, Query const &v, OutputIter &output,
                           Predicate const& pred) const {
-            auto range = db.equal_range(v);
+            auto range = db.equal_range_value_only(v);
 
             // add the output entry.
             size_t count = 0;
+
+            typename std::iterator_traits<decltype(range.first)>::value_type w;
+
             if (pred(range.first, range.second)) {
               for (auto it2 = range.first; it2 != range.second; ++it2) {
-                if (pred(*it2)) {
-                  *output = *it2;
+                w = *it2;
+                if (pred(w)) {
+                  *output = w;
                   ++output;
                   ++count;
                 }
