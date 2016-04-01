@@ -621,7 +621,7 @@ namespace dsc {
         std::vector<size_t> recv_counts= mxx::all2all(send_counts, _comm);
         BL_BENCH_END(distribute, "a2a_counts", vals.size());
 
-        BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+        BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute_unique", _comm);
 
 
         return recv_counts;
@@ -663,7 +663,7 @@ namespace dsc {
         std::vector<size_t> recv_counts= mxx::all2all(send_counts, _comm);
         BL_BENCH_END(distribute, "a2a_counts", vals.size());
 
-        BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+        BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute_sorted", _comm);
 
 
         return recv_counts;
@@ -702,7 +702,7 @@ namespace dsc {
         std::vector<size_t> recv_counts= mxx::all2all(send_counts, _comm);
         BL_BENCH_END(distribute, "a2a_counts", vals.size());
 
-        BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+        BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute_sorted_unique", _comm);
 
 
         return recv_counts;

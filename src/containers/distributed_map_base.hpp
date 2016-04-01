@@ -150,6 +150,9 @@ namespace dsc
 	  using StoreTransform = typename MapParams<Key>::template StorageTransform<K>;
 	  using StoreTransformedFarmHash = ::fsc::TransformedHash<Key, StoreFarmHash, StoreTransform>;
 
+	  // primarily for use fpr sorting by hashmaps.
+	  using StoreTransformedLess = ::fsc::TransformedComparator<Key, ::std::less, StoreTransform>;
+
       template <typename V>
       using UniqueKeySetUtilityType = ::std::unordered_set<V, StoreTransformedFarmHash, StoreTransformedEqual>;
 

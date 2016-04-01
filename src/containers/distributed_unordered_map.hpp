@@ -309,18 +309,26 @@ namespace dsc  // distributed std container
        */
       template <class InputIterator>
       size_t local_insert(InputIterator first, InputIterator last) {
+    	  BL_BENCH_INIT(local_insert);
 
+    	  BL_BENCH_START(local_insert);
           this->local_reserve(c.size() + ::std::distance(first, last));  // before branching, because reserve calls collective "empty()"
+          BL_BENCH_END(local_insert, "reserve", this->c.size());
 
           if (first == last) return 0;
 
           size_t before = c.size();
 
+          BL_BENCH_START(local_insert);
           for (auto it = first; it != last; ++it) {
             c.emplace(*it);
           }
+          BL_BENCH_END(local_insert, "emplace", this->c.size());
 
           if (c.size() != before) local_changed = true;
+
+
+          BL_BENCH_REPORT_MPI_NAMED(local_insert, "base_hashmap:local_insert", this->comm);
 
           //          c.insert(first, last);  // mem usage?
           return c.size() - before;
@@ -2002,6 +2010,43 @@ namespace dsc  // distributed std container
           // no filter by range AND elemenet for now.
       } erase_element;
 
+      /**
+       * @brief insert new elements in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class InputIterator>
+      size_t local_insert(InputIterator first, InputIterator last) {
+    	  BL_BENCH_INIT(local_insert);
+
+    	  size_t dist = ::std::distance(first, last);
+
+    	  BL_BENCH_START(local_insert);
+          this->local_reserve(this->c.size() + dist);  // before branching, because reserve calls collective "empty()"
+          BL_BENCH_END(local_insert, "reserve", this->c.size() + dist);
+
+          if (first == last) return 0;
+
+
+          BL_BENCH_START(local_insert);
+          ::std::sort(first, last, typename Base::Base::StoreTransformedLess());
+          BL_BENCH_END(local_insert, "sort", dist);
+
+
+          size_t before = this->c.size();
+
+          BL_BENCH_START(local_insert);
+          this->c.insert_sorted(first, last);
+          BL_BENCH_END(local_insert, "insert_sorted", this->c.size());
+
+          if (this->c.size() != before) this->local_changed = true;
+
+
+          BL_BENCH_REPORT_MPI_NAMED(local_insert, "vecmap:local_insert", this->comm);
+
+          //          c.insert(first, last);  // mem usage?
+          return this->c.size() - before;
+      }
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       virtual void local_reserve( size_t n) {
@@ -2133,7 +2178,7 @@ namespace dsc  // distributed std container
         if (!::std::is_same<Predicate, TruePredicate>::value)
           count = this->Base::local_insert(input.begin(), input.end(), pred);
         else
-          count = this->Base::local_insert(input.begin(), input.end());
+          count = this->local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "insert", this->c.size());
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "vecmap:insert", this->comm);
@@ -2302,6 +2347,46 @@ namespace dsc  // distributed std container
       } erase_element;
 
 
+      /**
+       * @brief insert new elements in the distributed unordered_multimap.
+       * @param first
+       * @param last
+       */
+      template <class InputIterator>
+      size_t local_insert(InputIterator first, InputIterator last) {
+    	  BL_BENCH_INIT(local_insert);
+
+    	  size_t dist = ::std::distance(first, last);
+
+    	  BL_BENCH_START(local_insert);
+          this->local_reserve(this->c.size() + dist);  // before branching, because reserve calls collective "empty()"
+          BL_BENCH_END(local_insert, "reserve", this->c.size() + dist);
+
+          if (first == last) return 0;
+
+          BL_BENCH_START(local_insert);
+          ::std::sort(first, last, typename Base::Base::StoreTransformedLess());
+          BL_BENCH_END(local_insert, "sort", dist);
+
+
+          size_t before = this->c.size();
+
+          BL_BENCH_START(local_insert);
+          this->c.insert_sorted(first, last);
+          BL_BENCH_END(local_insert, "insert_sorted", this->c.size());
+
+          if (this->c.size() != before) this->local_changed = true;
+
+
+          BL_BENCH_REPORT_MPI_NAMED(local_insert, "compactvecmap:local_insert", this->comm);
+
+          //          c.insert(first, last);  // mem usage?
+          return this->c.size() - before;
+      }
+
+
+
+
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       virtual void local_reserve( size_t n) {
         if (!this->empty()) {// nothing is available.   so assume multiplicity of 1.
@@ -2424,8 +2509,6 @@ namespace dsc  // distributed std container
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
-        // reserve should be done outside of insert.
-
 
         BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
@@ -2433,7 +2516,7 @@ namespace dsc  // distributed std container
         if (!::std::is_same<Predicate, TruePredicate>::value)
           count = this->Base::local_insert(input.begin(), input.end(), pred);
         else
-          count = this->Base::local_insert(input.begin(), input.end());
+          count = this->local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "insert", this->c.size());
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "compact_vecmap:insert", this->comm);

@@ -597,6 +597,39 @@ namespace fsc {  // fast standard container
           }
       }
 
+      /// inserting sorted range
+      template <class InputIt>
+      void insert_sorted(InputIt first, InputIt last) {
+    	  key_equal eq;
+    	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
+    	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
+    		return !(eq(x.first, y.first));
+    	  };
+
+    	  size_t ss;
+    	  InputIt start = first;
+    	  InputIt end = ::std::adjacent_find(start, last, key_neq);
+    	  if (end != last) ++end;
+
+    	  while (end != last) {
+    		  // get current size.
+    		  ss = map[start->first].size();
+    		  map[start->first].reserve(ss + std::distance(start, end));
+
+    		  // copy the range
+    		  std::transform(start, end, std::back_inserter(map[start->first]),
+    				  [](InputValueType const & x){
+    			  return x.second;
+    		  });
+    		  s += ss;
+
+    		  // advance the pointers
+    		  start = end;
+    		  end = ::std::adjacent_find(start, last, key_neq);
+    		  if (end != last) ++end;
+    	  }
+      }
+
       template <typename Pred>
       size_t erase(const key_type& key, Pred const & pred) {
     	  auto vec = map.at(key);
@@ -1448,7 +1481,7 @@ namespace fsc {  // fast standard container
         return iterator(iter, map.end(), --pos, iter->second.size() - 1);
       }
 
-      // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n)
+      // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n) but pays the random access and mem realloc cost
       template <class InputIt>
       void insert(InputIt first, InputIt last) {
           for (; first != last; ++first) {
@@ -1458,6 +1491,35 @@ namespace fsc {  // fast standard container
           }
       }
 
+      /// inserting sorted range
+      template <class InputIt>
+      void insert_sorted(InputIt first, InputIt last) {
+    	  key_equal eq;
+    	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
+    	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
+    		return !(eq(x.first, y.first));
+    	  };
+
+    	  size_t ss;
+    	  InputIt start = first;
+    	  InputIt end = ::std::adjacent_find(start, last, key_neq);
+    	  if (end != last) ++end;
+
+    	  while (end != last) {
+    		  // get current size.
+    		  ss = map[start->first].size();
+    		  map[start->first].reserve(ss + std::distance(start, end));
+
+    		  // copy the range
+    		  std::copy(start, end, std::back_inserter(map[start->first]));
+    		  s += ss;
+
+    		  // advance the pointers
+    		  start = end;
+    		  end = ::std::adjacent_find(start, last, key_neq);
+    		  if (end != last) ++end;
+    	  }
+      }
 
       template <typename Pred>
       size_t erase(const key_type& key, Pred const & pred) {
