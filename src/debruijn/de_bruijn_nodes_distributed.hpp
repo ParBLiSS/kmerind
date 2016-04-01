@@ -41,7 +41,6 @@
 #include "debruijn/de_bruijn_node_trait.hpp"	//node trait data structure storing the linkage information to the node
 #include "containers/distributed_map_base.hpp"
 #include "containers/distributed_unordered_map.hpp"
-#include "containers/unordered_vecmap.hpp"
 
 #include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
@@ -50,15 +49,15 @@
 namespace bliss{
 	namespace de_bruijn{
 
+
+	// NOTE:  DOES NOT work with canonicalized. in other words, input transform should be Identity.
+
 		template<typename Key, typename T,
-		  class Comm,
-		  template <typename> class KeyTransform,
-		  template <typename, bool> class Hash,
-		  class Equal = ::std::equal_to<Key>,
-		  class Alloc = ::std::allocator< ::std::pair<const Key, T> >
+			template <typename> class MapParams,
+		class Alloc = ::std::allocator< ::std::pair<const Key, T> >
 		  >
-		  class de_bruijn_nodes_distributed : public ::dsc::unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc> {
-			  using Base = ::dsc::unordered_map<Key, T, Comm, KeyTransform, Hash, Equal, Alloc>;
+		  class de_bruijn_nodes_distributed : public ::dsc::unordered_map<Key, T, MapParams, Alloc> {
+			  using Base = ::dsc::unordered_map<Key, T, MapParams, Alloc>;
 
 			public:
 			  using local_container_type = typename Base::local_container_type;
@@ -80,8 +79,7 @@ namespace bliss{
 			  using difference_type       = typename local_container_type::difference_type;
 
 			protected:
-			  // defined Communicator as a friend
-			  friend Comm;
+
 
 			  /**
 			   * @brief insert new elements in the distributed unordered_multimap.
@@ -232,25 +230,21 @@ namespace bliss{
 				 // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 				 BL_BENCH_INIT(insert);
 
-				 BL_BENCH_START(insert);
-				 BL_BENCH_END(insert, "start", input.size());
+//				 BL_BENCH_START(insert);
+//				 this->transform_input(input);
+//				 BL_BENCH_END(insert, "start", input.size());
+				 static_assert(std::is_same<typename Base::Base::Base::InputTransform, ::bliss::kmer::transform::identity<Key>>::value,
+						 "de bruijn graph does not support transform of input Kmers. (e.g. canonicalizing).  Hash can use transformed values, though.");
 
 
 				 // communication part
 				 if (this->comm.size() > 1) {
-				   BL_BENCH_START(insert);
-				   // get mapping to proc
-				   ::std::vector<size_t> send_counts = mxx::bucketing(input, this->key_to_rank, this->comm.size());
-				   BL_BENCH_END(insert, "bucket", input.size());
+					 BL_BENCH_COLLECTIVE_START(insert, "distribute", this->comm);
+				   ::std::vector<size_t> recv_counts =
+						   ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
+				   BLISS_UNUSED(recv_counts);
+				   BL_BENCH_END(insert, "distribute", input.size());
 
-		 //          BL_BENCH_START(insert);
-		 //          // keep unique only.  may not be needed - comm speed may be faster than we can compute unique.
-		 //          mxx2::retain_unique<local_container_type, typename Base::TransformedEqual>(input, send_counts, sorted_input);
-		 //          BL_BENCH_END(insert, "uniq1", input.size());
-
-				   BL_BENCH_COLLECTIVE_START(insert, "a2a", this->comm);
-				   input = mxx::all2allv(input, send_counts, this->comm);
-				   BL_BENCH_END(insert, "a2a", input.size());
 				 }
 
 				 BL_BENCH_START(insert);

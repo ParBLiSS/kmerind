@@ -157,13 +157,13 @@ class Timer {
             auto get_second = [](const std::pair<double, int>& x){return x.second;};
 
 
-          ::std::for_each(dur_means.begin(), dur_means.end(), [p](double & x) { x /= p; });
+          ::std::for_each(dur_means.begin(), dur_means.end(), [&p](double & x) { x /= p; });
           ::std::transform(dur_stdevs.begin(), dur_stdevs.end(), dur_means.begin(), dur_stdevs.begin(),
-                           [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+                           [&p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
 
-          ::std::for_each(cnt_means.begin(), cnt_means.end(), [p](double & x) { x /= p; });
+          ::std::for_each(cnt_means.begin(), cnt_means.end(), [&p](double & x) { x /= p; });
           ::std::transform(cnt_stdevs.begin(), cnt_stdevs.end(), cnt_means.begin(), cnt_stdevs.begin(),
-                           [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+                           [&p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
 
           std::stringstream output;
           std::ostream_iterator<std::string> nit(output, ",");
@@ -272,17 +272,17 @@ class Timer {
 
         if (rank == 0) {
 
-          ::std::for_each(dur_means.begin(), dur_means.end(), [p](double & x) { x /= p; });
+          ::std::for_each(dur_means.begin(), dur_means.end(), [&p](double & x) { x /= p; });
           ::std::transform(dur_stdevs.begin(), dur_stdevs.end(), dur_means.begin(), dur_stdevs.begin(),
-                           [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+                           [&p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
 
-          ::std::for_each(cum_means.begin(), cum_means.end(), [p](double & x) { x /= p; });
+          ::std::for_each(cum_means.begin(), cum_means.end(), [&p](double & x) { x /= p; });
           ::std::transform(cum_stdevs.begin(), cum_stdevs.end(), cum_means.begin(), cum_stdevs.begin(),
-                           [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+                           [&p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
 
-          ::std::for_each(cnt_means.begin(), cnt_means.end(), [p](double & x) { x /= p; });
+          ::std::for_each(cnt_means.begin(), cnt_means.end(), [&p](double & x) { x /= p; });
           ::std::transform(cnt_stdevs.begin(), cnt_stdevs.end(), cnt_means.begin(), cnt_stdevs.begin(),
-                           [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+                           [&p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
         }
 
 

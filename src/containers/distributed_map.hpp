@@ -63,10 +63,30 @@
 #include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
 #include "containers/distributed_map_base.hpp"
+#include "common/kmer_transform.hpp"
+#include "containers/container_utils.hpp"
 
 
 namespace dsc  // distributed std container
 {
+template <typename Key,
+  	  template <typename> class InputTrans,
+  	  template <typename> class DistTrans,
+  	  template <typename> class DistHash,
+  	  template <typename> class DistEqual,
+  	  template <typename> class StoreTrans,
+  	  template <typename> class StoreLess,
+  	  template <typename> class StoreEqual
+  	  >
+using OrderedMapParams = ::dsc::DistributedMapParams<
+		Key, InputTrans, DistTrans, DistHash, DistEqual, StoreTrans, StoreLess, StoreEqual,
+		::fsc::TransformedHash, ::fsc::TransformedComparator>;
+
+
+
+// =================
+// NOTE: when using this, need to further alias so that only Key param remains.
+// =================
 
 
   /**
@@ -121,28 +141,28 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-    template <typename, typename, typename, typename> class Container,
-    class Comm,
-    template <typename> class KeyTransform,
-    template <typename, bool> class Hash,
-    class Less = ::std::less<Key>,
+    template <typename, typename, typename, typename...> class Container,
+    template <typename> class MapParams,
     class Alloc = ::std::allocator< ::std::pair<const Key, T> >
-  > class distributed_map_base : public ::dsc::map_base<Key, T, Comm, KeyTransform, Less, ::std::equal_to<Key>, Alloc> {
+  > class distributed_map_base : public ::dsc::map_base<Key, T, MapParams, Alloc> {
 
     protected:
-      using Base = ::dsc::map_base<Key, T, Comm, KeyTransform, Less, ::std::equal_to<Key>, Alloc>;
+      using Base = ::dsc::map_base<Key, T, MapParams, Alloc>;
 
 
       struct KeyToRank {
-          Hash<Key, true> proc_hash;
+    	  typename Base::DistTransformedFunc proc_trans_hash;
           const int p;
 
           // 2x comm size to allow more even distribution?
-          KeyToRank(int comm_size) : proc_hash(ceilLog2(comm_size)), p(comm_size) {};
+          KeyToRank(int comm_size) :
+        	  proc_trans_hash(typename Base::DistFunc(ceilLog2(comm_size)),
+        			  	  	  typename Base::DistTrans()),
+        			  	  	  p(comm_size) {};
 
           inline int operator()(Key const & x) const {
             //            printf("KeyToRank operator. commsize %d  key.  hashed to %d, mapped to proc %d \n", p, proc_hash(Base::trans(x)), proc_hash(Base::trans(x)) % p);
-            return proc_hash(Base::trans(x)) % p;
+            return proc_trans_hash(x) % p;
           }
           template<typename V>
           inline int operator()(::std::pair<Key, V> const & x) const {
@@ -191,7 +211,7 @@ namespace dsc  // distributed std container
 
 
     public:
-      using local_container_type = Container<Key, T, typename Base::TransformedLess, Alloc>;
+      using local_container_type = Container<Key, T, typename Base::StoreTransformedFunc, Alloc>;
 
       // std::multimap public members.
       using key_type              = typename local_container_type::key_type;
@@ -330,13 +350,16 @@ namespace dsc  // distributed std container
         BL_BENCH_START(find);
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+        this->transform_input(keys);
         BL_BENCH_END(find, "begin", keys.size());
 
         if (this->comm.size() > 1) {
             BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
             // distribute (communication part)
-            std::vector<size_t> recv_counts(::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-                                                             typename Base::TransformedFarmHash(), typename Base::TransformedEqual()));
+            std::vector<size_t> recv_counts(
+            		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+								 	 	 	 typename Base::StoreTransformedFarmHash(),
+								 	 	 	 typename Base::StoreTransformedEqual()));
 
             BL_BENCH_END(find, "dist_query", keys.size());
 
@@ -374,7 +397,8 @@ namespace dsc  // distributed std container
           BL_BENCH_START(find);
           // keep unique keys
           ::fsc::unique(keys, sorted_input,
-                            typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
+		 	 	 	 typename Base::StoreTransformedFarmHash(),
+		 	 	 	 typename Base::StoreTransformedEqual());
           BL_BENCH_END(find, "uniq1", keys.size());
 
           BL_BENCH_START(find);
@@ -422,13 +446,16 @@ namespace dsc  // distributed std container
 
         ::std::vector<::std::pair<Key, T> > local_results;
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
+        this->transform_input(keys);
         BL_BENCH_END(find, "begin", keys.size());
 
         if (this->comm.size() > 1) {
             BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
             // distribute (communication part)
-            std::vector<size_t> recv_counts(::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-                                                                     typename Base::TransformedFarmHash(), typename Base::TransformedEqual()));
+            std::vector<size_t> recv_counts(
+            		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+				 	 	 	 typename Base::StoreTransformedFarmHash(),
+				 	 	 	 typename Base::StoreTransformedEqual()));
             BL_BENCH_END(find, "dist_query", keys.size());
 
 
@@ -532,7 +559,8 @@ namespace dsc  // distributed std container
           BL_BENCH_START(find);
           // keep unique keys
           ::fsc::unique(keys, sorted_input,
-                            typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
+		 	 	 	 typename Base::StoreTransformedFarmHash(),
+		 	 	 	 typename Base::StoreTransformedEqual());
           BL_BENCH_END(find, "uniq1", keys.size());
 
 
@@ -596,13 +624,16 @@ namespace dsc  // distributed std container
 
         ::std::vector<::std::pair<Key, T> > local_results;
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
+        this->transform_input(keys);
         BL_BENCH_END(find, "begin", keys.size());
 
         if (this->comm.size() > 1) {
             BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
             // distribute (communication part)
-            std::vector<size_t> recv_counts(::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-                                                                     typename Base::TransformedFarmHash(), typename Base::TransformedEqual()));
+            std::vector<size_t> recv_counts(
+            		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+				 	 	 	 typename Base::StoreTransformedFarmHash(),
+				 	 	 	 typename Base::StoreTransformedEqual()));
             BL_BENCH_END(find, "dist_query", keys.size());
 
 
@@ -704,7 +735,8 @@ namespace dsc  // distributed std container
           BL_BENCH_START(find);
           // keep unique keys
           ::fsc::unique(keys, sorted_input,
-                            typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
+		 	 	 	 typename Base::StoreTransformedFarmHash(),
+		 	 	 	 typename Base::StoreTransformedEqual());
           BL_BENCH_END(find, "uniq1", keys.size());
 
 
@@ -834,14 +866,17 @@ namespace dsc  // distributed std container
         BL_BENCH_START(count);
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+        this->transform_input(keys);
         BL_BENCH_END(count, "begin", keys.size());
 
 
         if (this->comm.size() > 1) {
 
             BL_BENCH_START(count);
-            std::vector<size_t> recv_counts(::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-                                                                     typename Base::TransformedFarmHash(), typename Base::TransformedEqual()));
+            std::vector<size_t> recv_counts(
+            		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+				 	 	 	 typename Base::StoreTransformedFarmHash(),
+				 	 	 	 typename Base::StoreTransformedEqual()));
             BL_BENCH_END(count, "dist_query", keys.size());
 
 
@@ -876,7 +911,8 @@ namespace dsc  // distributed std container
           BL_BENCH_START(count);
           // keep unique keys
           ::fsc::unique(keys, sorted_input,
-                            typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
+		 	 	 	 typename Base::StoreTransformedFarmHash(),
+		 	 	 	 typename Base::StoreTransformedEqual());
           BL_BENCH_END(count, "uniq1", keys.size());
 
 
@@ -934,13 +970,17 @@ namespace dsc  // distributed std container
               BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
             return 0;
           }
+          BL_BENCH_START(erase);
+          this->transform_input(keys);
+          BL_BENCH_END(erase, "transform_input", keys.size());
 
 
         if (this->comm.size() > 1) {
 
             BL_BENCH_START(erase);
             auto recv_counts(::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-                                                      typename Base::TransformedFarmHash(), typename Base::TransformedEqual()));
+		 	 	 	 typename Base::StoreTransformedFarmHash(),
+		 	 	 	 typename Base::StoreTransformedEqual()));
             BLISS_UNUSED(recv_counts);
             BL_BENCH_END(erase, "dist_query", keys.size());
 
@@ -952,7 +992,8 @@ namespace dsc  // distributed std container
 		BL_BENCH_START(erase);
 		// remove duplicates
     ::fsc::unique(keys, sorted_input,
-                      typename Base::TransformedFarmHash(), typename Base::TransformedEqual());
+	 	 	 typename Base::StoreTransformedFarmHash(),
+	 	 	 typename Base::StoreTransformedEqual());
 		BL_BENCH_END(erase, "unique", keys.size());
 
         BL_BENCH_START(erase);
@@ -1053,15 +1094,12 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  class Comm,
-  template <typename> class KeyTransform,
-  template <typename, bool> class Hash,
-  class Less = ::std::less<Key>,
+  	  template <typename> class MapParams,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class map : public distributed_map_base<Key, T, ::std::map, Comm, KeyTransform, Hash, Less, Alloc> {
+  class map : public distributed_map_base<Key, T, ::std::map, MapParams, Alloc> {
     protected:
-      using Base = distributed_map_base<Key, T, ::std::map, Comm, KeyTransform, Hash, Less, Alloc>;
+      using Base = distributed_map_base<Key, T, ::std::map, MapParams, Alloc>;
 
 
     public:
@@ -1113,7 +1151,9 @@ namespace dsc  // distributed std container
 
 
       virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool & sorted_input) {
-        ::fsc::sorted_unique(input, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
+        ::fsc::unique(input, sorted_input,
+	 	 	 	 typename Base::Base::StoreTransformedFarmHash(),
+	 	 	 	 typename Base::Base::StoreTransformedEqual());
       }
 
 
@@ -1160,6 +1200,7 @@ namespace dsc  // distributed std container
         BL_BENCH_INIT(insert);
 
         BL_BENCH_START(insert);
+        this->transform_input(input);
         BL_BENCH_END(insert, "start", input.size());
 
 
@@ -1170,7 +1211,8 @@ namespace dsc  // distributed std container
             // get mapping to proc
             // keep unique only may not be needed - comm speed may be faster than we can compute unique.
             auto recv_counts(::dsc::distribute_unique(input, this->key_to_rank, sorted_input, this->comm,
-                                                             typename Base::TransformedFarmHash(), typename Base::TransformedEqual()));
+		 	 	 	 typename Base::Base::toreTransformedFarmHash(),
+		 	 	 	 typename Base::Base::toreTransformedEqual()));
 
             BLISS_UNUSED(recv_counts);
             BL_BENCH_END(insert, "dist_data", input.size());
@@ -1225,15 +1267,12 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  class Comm,
-  template <typename> class KeyTransform,
-  template <typename, bool> class Hash,
-  class Less = ::std::less<Key>,
+  template <typename> class MapParams,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class multimap : public distributed_map_base<Key, T, ::std::multimap, Comm, KeyTransform, Hash, Less, Alloc> {
+  class multimap : public distributed_map_base<Key, T, ::std::multimap, MapParams, Alloc> {
     protected:
-      using Base = distributed_map_base<Key, T, ::std::multimap, Comm, KeyTransform, Hash, Less, Alloc>;
+      using Base = distributed_map_base<Key, T, ::std::multimap, MapParams, Alloc>;
 
 
     public:
@@ -1426,6 +1465,11 @@ namespace dsc  // distributed std container
         BL_BENCH_INIT(insert);
 
 
+        BL_BENCH_START(insert);
+        this->transform_input(input);
+        BL_BENCH_END(insert, "transform_input", input.size());
+
+
         //        printf("r %d key size %lu, val size %lu, pair size %lu, tuple size %lu\n", this->comm.rank(), sizeof(Key), sizeof(T), sizeof(::std::pair<Key, T>), sizeof(::std::tuple<Key, T>));
         //        count_unique(input);
         //        count_unique(bucketing(input, this->key_to_rank, this->comm));
@@ -1503,18 +1547,15 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  class Comm,
-  template <typename> class KeyTransform,
-  template <typename, bool> class Hash,
+  template <typename> class MapParams,
   typename Reduc = ::std::plus<T>,
-  class Less = ::std::less<Key>,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class reduction_map : public map<Key, T, Comm, KeyTransform, Hash, Less, Alloc> {
+  class reduction_map : public map<Key, T, MapParams, Alloc> {
       static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     protected:
-      using Base = map<Key, T, Comm, KeyTransform, Hash, Less, Alloc>;
+      using Base = map<Key, T, MapParams, Alloc>;
 
 
     public:
@@ -1619,6 +1660,7 @@ namespace dsc  // distributed std container
         BL_BENCH_INIT(insert);
 
         BL_BENCH_START(insert);
+        this->transform_input(input);
         BL_BENCH_END(insert, "begin", input.size());
 
         // communication part
@@ -1689,17 +1731,14 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  class Comm,
-  template <typename> class KeyTransform,
-  template <typename, bool> class Hash,
-  class Less = ::std::less<Key>,
+  template<typename> class MapParams,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class counting_map : public reduction_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Less,Alloc> {
+  class counting_map : public reduction_map<Key, T, MapParams, ::std::plus<T>, Alloc> {
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
 
     protected:
-      using Base = reduction_map<Key, T, Comm, KeyTransform, Hash, ::std::plus<T>, Less, Alloc>;
+      using Base = reduction_map<Key, T, MapParams, ::std::plus<T>, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -1733,23 +1772,50 @@ namespace dsc  // distributed std container
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(count_insert);
 
+        typename Base::Base::Base::Base::InputTransform trans;
+
+
         BL_BENCH_START(count_insert);
         ::std::vector<::std::pair<Key, T> > temp;
         temp.reserve(input.size());
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
-        ::std::transform(input.begin(), input.end(), emplace_iter, [](Key const & x) { return ::std::make_pair(x, T(1)); });
+        ::std::transform(input.begin(), input.end(), emplace_iter, [&trans](Key const & x) {
+        	return ::std::make_pair(trans(x), T(1));
+        });
         BL_BENCH_END(count_insert, "convert", input.size());
 
 
-        BL_BENCH_START(count_insert);
+        // communication part
+        if (this->comm.size() > 1) {
+
+          BL_BENCH_START(count_insert);
+          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          this->local_reduction(temp, sorted_input);
+          BL_BENCH_END(count_insert, "local_reduce", temp.size());
+
+          BL_BENCH_START(count_insert);
+          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          auto recv_counts(::dsc::distribute(temp, this->key_to_rank, sorted_input, this->comm));
+          BLISS_UNUSED(recv_counts);
+          BL_BENCH_END(count_insert, "dist_data", temp.size());
+        }
+        //
+        //        // after communication, sort again to keep unique  - may not be needed
+        //        local_reduction(input);
+
         // local compute part.  called by the communicator.
-        size_t count = this->Base::insert(temp, sorted_input, pred);
+        BL_BENCH_START(count_insert);
+        size_t count = 0;
+        if (!::std::is_same<Predicate, TruePredicate>::value)
+          count = this->Base::local_insert(temp.begin(), temp.end(), pred);
+        else
+          count = this->Base::local_insert(temp.begin(), temp.end());
+        BL_BENCH_END(count_insert, "local_insert", this->local_size());
+
         ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
-        BL_BENCH_END(count_insert, "insert", this->c.size());
 
 
-        // distribute
-        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_map:insert_key", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_map:insert", this->comm);
 
         return count;
 

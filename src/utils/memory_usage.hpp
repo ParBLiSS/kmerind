@@ -228,13 +228,13 @@ class MemUsage {
             auto get_second = [](const std::pair<double, int>& x){ return x.second / (1024.0 * 1024.0); };
 
 
-          ::std::for_each(curr_means.begin(), curr_means.end(), [p](double & x) { x /= p; });
+          ::std::for_each(curr_means.begin(), curr_means.end(), [&p](double & x) { x /= p; });
           ::std::transform(curr_stdevs.begin(), curr_stdevs.end(), curr_means.begin(), curr_stdevs.begin(),
-                           [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+                           [&p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
 
-          ::std::for_each(peak_means.begin(), peak_means.end(), [p](double & x) { x /= p; });
+          ::std::for_each(peak_means.begin(), peak_means.end(), [&p](double & x) { x /= p; });
           ::std::transform(peak_stdevs.begin(), peak_stdevs.end(), peak_means.begin(), peak_stdevs.begin(),
-                           [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+                           [&p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
 
           std::stringstream output;
           std::ostream_iterator<std::string> nit(output, ",");
@@ -329,13 +329,13 @@ class MemUsage {
 
         if (rank == 0) {
 
-          ::std::for_each(curr_means.begin(), curr_means.end(), [p](double & x) { x /= p; });
+          ::std::for_each(curr_means.begin(), curr_means.end(), [&p](double & x) { x /= p; });
           ::std::transform(curr_stdevs.begin(), curr_stdevs.end(), curr_means.begin(), curr_stdevs.begin(),
-                           [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+                           [&p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
 
-          ::std::for_each(peak_means.begin(), peak_means.end(), [p](double & x) { x /= p; });
+          ::std::for_each(peak_means.begin(), peak_means.end(), [&p](double & x) { x /= p; });
           ::std::transform(peak_stdevs.begin(), peak_stdevs.end(), peak_means.begin(), peak_stdevs.begin(),
-                           [p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
+                           [&p](double const & x, double const & y) { return ::std::sqrt(x / p - y * y); });
         }
       }
 

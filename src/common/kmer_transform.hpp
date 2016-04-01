@@ -77,6 +77,10 @@ namespace bliss {
           inline KMER operator()(KMER const & x) const {
             return x;
           }
+          template <typename VAL>
+          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> & x) const {
+            return x;
+          }
       };
 
       template <typename KMER>
@@ -84,8 +88,12 @@ namespace bliss {
           inline KMER operator()(KMER const & x) const {
             return x ^ x.reverse_complement();
           }
-          inline KMER operator()(::std::pair<KMER, KMER> const & x) const  {
-            return x.first ^ x.second;
+          inline KMER operator()(KMER const & x, KMER const & rc) const  {
+            return x ^ rc;
+          }
+          template <typename VAL>
+          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> const & x) const {
+              return std::pair<KMER, VAL>(operator()(x.first), x.second);
           }
       };
 
@@ -95,8 +103,12 @@ namespace bliss {
             auto y = x.reverse_complement();
             return (x < y) ? x : y;
           }
-          inline KMER operator()(::std::pair<KMER, KMER> const & x) const  {
-            return (x.first < x.second) ? x.first : x.second;
+          inline KMER operator()(KMER const & x, KMER const & rc) const  {
+            return (x < rc) ? x : rc;
+          }
+          template <typename VAL>
+          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> const & x) const {
+              return std::pair<KMER, VAL>(operator()(x.first), x.second);
           }
       };
 
@@ -106,28 +118,33 @@ namespace bliss {
             auto y = x.reverse_complement();
             return (x > y) ? x : y;
           }
-          inline KMER operator()(::std::pair<KMER, KMER> const & x) const  {
-            return (x.first > x.second) ? x.first : x.second;
+          inline KMER operator()(KMER const & x, KMER const & rc) const  {
+            return (x > rc) ? x : rc;
           }
-      };
-
-
-      template <typename KMER, template <typename> class TRANS>
-      struct tuple_transform {
-          TRANS<KMER> transform;
-
-          inline KMER operator()(KMER & x) {
-            x = transform(x);
-            return x;
-          }
-
           template <typename VAL>
-          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> & x) {
-            x.first = transform(x.first);
-            return x;
+          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> const & x) const {
+            return std::pair<KMER, VAL>(operator()(x.first), x.second);
           }
 
       };
+
+
+//      template <typename KMER, template <typename> class TRANS>
+//      struct tuple_transform {
+//          TRANS<KMER> transform;
+//
+//          inline KMER operator()(KMER & x) {
+//            x = transform(x);
+//            return x;
+//          }
+//
+//          template <typename VAL>
+//          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> & x) {
+//            x.first = transform(x.first);
+//            return x;
+//          }
+//
+//      };
 
     } // namespace transform
 

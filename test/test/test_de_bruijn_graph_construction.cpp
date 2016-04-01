@@ -64,7 +64,7 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
   std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
   if (extension.compare("fastq") == 0) {
     // default to including quality score iterators.
-    IndexType::template read_file<::bliss::io::FASTQParser, bliss::kmer::transform::identity, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+    IndexType::template read_file<::bliss::io::FASTQParser, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
   } else {
     throw std::invalid_argument("input filename extension is not supported.");
   }
@@ -125,17 +125,16 @@ using Alphabet = bliss::common::DNA;
 using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
 using EdgeEncoder = bliss::common::DNA16;
 
+template <typename K>
+using MapParams = ::bliss::index::kmer::BimoleculeHashMapParams<K>;
+
 template <typename EdgeEnc>
 using CountNodeMapType = bliss::de_bruijn::de_bruijn_nodes_distributed<
-		KmerType, bliss::de_bruijn::node::edge_counts<EdgeEnc, int32_t>, int,
-		bliss::kmer::transform::lex_less,
-		bliss::kmer::hash::farm>;
+		KmerType, bliss::de_bruijn::node::edge_counts<EdgeEnc, int32_t>, MapParams >;
 
 template <typename EdgeEnc>
 using ExistNodeMapType = bliss::de_bruijn::de_bruijn_nodes_distributed<
-    KmerType, bliss::de_bruijn::node::edge_exists<EdgeEnc>, int,
-    bliss::kmer::transform::lex_less,
-    bliss::kmer::hash::farm>;
+    KmerType, bliss::de_bruijn::node::edge_exists<EdgeEnc>, MapParams >;
 /**
  *
  * @param argc

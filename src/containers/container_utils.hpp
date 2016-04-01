@@ -33,10 +33,19 @@
 
 namespace fsc {
 
-  template <typename Key, typename Hash, template <typename> class Transform>
+//template <typename T>
+//struct IdentityTransform {
+//    inline T operator()(T const& v) const {return v;};
+//};
+
+
+  template <typename Key, template <typename> class Hash, template <typename> class Transform>
   struct TransformedHash {
-      Hash h;
+      Hash<Key> h;
       Transform<Key> trans;
+
+      TransformedHash(Hash<Key> const & _hash = Hash<Key>(),
+    		  Transform<Key> const _trans = Transform<Key>()) : h(_hash), trans(_trans) {};
 
       inline uint64_t operator()(Key const& k) const {
         return h(trans(k));
@@ -52,18 +61,34 @@ namespace fsc {
   };
 
 
+//  template <typename Key, template <typename> class Hash>
+//  struct TransformedHash<Key, Hash, IdentityTransform> {
+//      Hash<Key> h;
+//
+//      TransformedHash(Hash<Key> const & _hash = Hash<Key>(),
+//    		  IdentityTransform<Key> const &_trans = IdentityTransform<Key>()) : h(_hash) {};
+//
+//      inline uint64_t operator()(Key const& k) const {
+//        return h(k);
+//      }
+//      template<typename V>
+//      inline uint64_t operator()(::std::pair<Key, V> const& x) const {
+//        return this->operator()(x.first);
+//      }
+//      template<typename V>
+//      inline uint64_t operator()(::std::pair<const Key, V> const& x) const {
+//        return this->operator()(x.first);
+//      }
+//  };
+//
 
-  template <typename T>
-  struct IdentityTransform {
-      T operator()(T const& v) {return v;};
-  };
-
-  template <typename Key, typename Comparator, template <typename> class Transform>
+  template <typename Key, template <typename> class Comparator, template <typename> class Transform>
   struct TransformedComparator {
-      Comparator comp;
+      Comparator<Key> comp;
       Transform<Key> trans;
 
-      TransformedComparator(Comparator const & _cmp = Comparator(), Transform<Key> const _trans = Transform<Key>()) : comp(_cmp), trans(_trans) {};
+      TransformedComparator(Comparator<Key> const & _cmp = Comparator<Key>(),
+    		  Transform<Key> const &_trans = Transform<Key>()) : comp(_cmp), trans(_trans) {};
 
       inline bool operator()(Key const & x, Key const & y) const {
         return comp(trans(x), trans(y));
@@ -94,49 +119,50 @@ namespace fsc {
       }
   };
 
-  template <typename Key, typename Comparator>
-  struct TransformedComparator<Key, Comparator, IdentityTransform> {
-      Comparator comp;
+//  template <typename Key, template <typename> class Comparator>
+//  struct TransformedComparator<Key, Comparator, IdentityTransform> {
+//      Comparator<Key> comp;
+//
+//      TransformedComparator(Comparator<Key> const & cmp = Comparator<Key>(),
+//    		  IdentityTransform<Key> const &_trans = IdentityTransform<Key>()) : comp(cmp) {};
+//
+//      inline bool operator()(Key const & x, Key const & y) const {
+//        return comp(x, y);
+//      }
+//      template<typename V>
+//      inline bool operator()(::std::pair<Key, V> const & x, Key const & y) const {
+//        return this->operator()(x.first, y);
+//      }
+//      template<typename V>
+//      inline bool operator()(::std::pair<const Key, V> const & x, Key const & y) const {
+//        return this->operator()(x.first, y);
+//      }
+//      template<typename V>
+//      inline bool operator()(Key const & x, ::std::pair<Key, V> const & y) const {
+//        return this->operator()(x, y.first);
+//      }
+//      template<typename V>
+//      inline bool operator()(Key const & x, ::std::pair<const Key, V> const & y) const {
+//        return this->operator()(x, y.first);
+//      }
+//      template<typename V>
+//      inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) const {
+//        return this->operator()(x.first, y.first);
+//      }
+//      template<typename V>
+//      inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) const {
+//        return this->operator()(x.first, y.first);
+//      }
+//  };
 
-      TransformedComparator(Comparator const & cmp = Comparator()) : comp(cmp) {};
 
-      inline bool operator()(Key const & x, Key const & y) const {
-        return comp(x, y);
-      }
-      template<typename V>
-      inline bool operator()(::std::pair<Key, V> const & x, Key const & y) const {
-        return this->operator()(x.first, y);
-      }
-      template<typename V>
-      inline bool operator()(::std::pair<const Key, V> const & x, Key const & y) const {
-        return this->operator()(x.first, y);
-      }
-      template<typename V>
-      inline bool operator()(Key const & x, ::std::pair<Key, V> const & y) const {
-        return this->operator()(x, y.first);
-      }
-      template<typename V>
-      inline bool operator()(Key const & x, ::std::pair<const Key, V> const & y) const {
-        return this->operator()(x, y.first);
-      }
-      template<typename V>
-      inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) const {
-        return this->operator()(x.first, y.first);
-      }
-      template<typename V>
-      inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) const {
-        return this->operator()(x.first, y.first);
-      }
-  };
-
-
-  template <typename Key, typename Less = ::std::less<Key> >
-  struct Greater {
-      Less lt;
-      inline bool operator()(Key const &x, Key const &y) const {
-        return lt(y, x);
-      }
-  };
+//  template <typename Key, typename Less = ::std::less<Key> >
+//  struct Greater {
+//      Less lt;
+//      inline bool operator()(Key const &x, Key const &y) const {
+//        return lt(y, x);
+//      }
+//  };
 
 
 
@@ -189,6 +215,111 @@ namespace fsc {
       return b;
   }
 
+//  ///  keep the unique keys in the input. primarily for reducing comm volume.
+//  ///  when sorted, ordering is unchanged.  when unsorted, ordering is not preserved.
+//  ///  equal operator forces comparison to Key only (not pairs or tuples)
+//  template <typename V, typename Hash, typename Equal>
+//  struct unique_op {
+//	  Hash h;
+//	  Equal eq;
+//
+//	  unique_op(const Hash & hash = Hash(), const Equal & equal = Equal()) :
+//	  	  h(hash), eq(equal) {};
+//
+//	  inline void process(::std::vector<V> & input, bool & sorted_input) {
+//		  auto end = process(input.begin(), input.end(), sorted_input);
+//		  input.erase(end, input.end());
+//	  }
+//
+//	  template <typename Iter>
+//	  inline Iter process(Iter first, Iter last, bool & sorted_input) {
+//
+//		if (first == last) return;
+//		if (sorted_input) {  // already sorted, then just get the unique stuff and remove rest.
+//		  return ::std::unique(first, last, eq);
+//		} else {  // not sorted, so use an unordered_set to keep the first occurence.
+//		  // sorting is SLOW and not scalable.  use unordered set instead.
+//		  ::std::unordered_set<V, Hash, Equal> temp(first, last, std::distance(first, last), h, eq);
+//		  return std::copy(temp.begin(), temp.end(), first);
+//		}
+//	  }
+//  };
+//
+//  template <typename V, typename Hash, typename Equal>
+//  void unique(::std::vector<V> & input, bool & sorted_input,
+//                   const Hash & h = Hash(), const Equal & eq = Equal) {
+//	  unique_op<V, Hash, Equal>(h, eq).process(input, sorted_input);
+//  }
+//
+//
+//  ///  keep the unique keys in the input. primarily for reducing comm volume.
+//  /// output is SORTED.  when input is sorted, ordering is unchanged.
+//  /// equal operator forces comparison to Key only (not pairs or tuples)
+//  template <typename V, typename Less>
+//  struct sort_op {
+//	  Less ls;
+//
+//	  sort_op(const Less & less = Less()) :
+//	  	  ls(less) {};
+//
+//	  inline void process(::std::vector<V> & input, bool & sorted_input) {
+//		  process(input.begin(), input.end(), sorted_input);
+//	  }
+//
+//	  template <typename Iter>
+//	  inline Iter process(Iter first, Iter last, bool & sorted_input) {
+//		  if (!sorted_input) {
+//			  ::std::sort(first, last, ls);
+//			  sorted_input = true;
+//		  }
+//		  return last;
+//	  }
+//  };
+//
+//  template <typename V, typename Less>
+//  void sort(::std::vector<V> & input, bool & sorted_input,
+//                   const Less & less = Less()) {
+//	  sort_op<V, Less>(less).process(input, sorted_input);
+//  }
+//
+//
+//  ///  keep the unique keys in the input. primarily for reducing comm volume.
+//  /// output is SORTED.  when input is sorted, ordering is unchanged.
+//  /// equal operator forces comparison to Key only (not pairs or tuples)
+//  template <typename V, typename Less, typename Equal>
+//  struct sorted_unique_op {
+//	  Less ls;
+//	  Equal eq;
+//
+//	  sorted_unique_op(const Less & less = Less(), const Equal & equal = Equal()) :
+//	  	  ls(less), eq(equal) {};
+//
+//	  inline void process(::std::vector<V> & input, bool & sorted_input) {
+//		  auto end = process(input.begin(), input.end(), sorted_input);
+//		  input.erase(end, input.end());
+//	  }
+//
+//	  template <typename Iter>
+//	  inline Iter process(Iter first, Iter last, bool & sorted_input) {
+//
+//		if (first == last) return last;
+//
+//	    if (!sorted_input) {
+//	    	::std::sort(first, last, ls);
+//		    sorted_input = true;
+//	    }
+//	    // then just get the unique stuff and remove rest.
+//
+//	    return ::std::unique(first, last, eq);
+//	  }
+//  };
+//
+//  template <typename V, typename Hash, typename Equal>
+//  void sorted_unique(::std::vector<V> & input, bool & sorted_input,
+//                   const Hash & h = Hash(), const Equal & eq = Equal) {
+//	  sorted_unique_op<V, Hash, Equal>(h, eq).process(input, sorted_input);
+//  }
+
   ///  keep the unique keys in the input. primarily for reducing comm volume.
   ///  when sorted, ordering is unchanged.  when unsorted, ordering is not preserved.
   ///  equal operator forces comparison to Key only (not pairs or tuples)
@@ -235,7 +366,7 @@ namespace fsc {
 
     sorted_input = true;
   }
-  
+
   /// keep the unique entries within each bucket.  complexity is b * O(N/b), where b is the bucket size, and O(N/b) is complexity of inserting into and copying from set.
   /// when used within bucket, scales with O(N/b), not with b.  this is as good as it gets wrt complexity.
   /// sortedness is MAINTAINED within buckets
@@ -458,6 +589,7 @@ namespace dsc {
 
     /**
      * @brief       distribute and ensure uniqueness within each bucket.  speed version.  no guarantee of output ordering.
+     *				to_rank uses distribution hash and transform.  unique should use the storage hash and transform
      * @param[IN/OUT] keys    keys to distribute. sortedness is NOT kept because of inplace bucketing.,
      * @param[IN/OUT] sorted_input    indicates if input is sorted.  and whether each bucket is sorted.
      * @return received counts
@@ -498,6 +630,7 @@ namespace dsc {
 
     /**
      * @brief       distribute.  order preserving version.  guarantees output ordering.
+     *				to_rank uses distribution hash and transform.  unique should use the storage hash and transform
      * @param[IN/OUT] vals    vals to distribute.  sortedness is KEPT within each bucket
      * @param[IN/OUT] sorted_input    indicates if input is sorted.  and whether each bucket is sorted.
      *
@@ -538,7 +671,7 @@ namespace dsc {
 
     /**
      * @brief       distribute.  order preserving version.  guarantees output ordering.
-     *
+     *				to_rank uses distribution hash and transform.  unique should use the storage hash and transform
      * @param[IN/OUT] keys    keys to distribute. sortedness is KEPT.,
      * @param[IN/OUT] sorted_input    indicates if input is sorted.  and whether each bucket is sorted.
      * @return received counts

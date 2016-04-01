@@ -72,40 +72,37 @@
 #define FASTQ 0
 
 #define IDEN 10
+#define LEX 11
+#define XOR 12
 
-#define LEX 1
-#define XOR 2
-#define PRELEX 3
+#define STD 21
+#define MURMUR 22
+#define FARM 23
 
-#define STD 1
-#define MURMUR 2
-#define FARM 3
+#define POS 31
+#define POSQUAL 32
+#define COUNT 33
 
-#define POS 1
-#define POSQUAL 2
-#define COUNT 3
+#define SORTED 41
+#define ORDERED 42
+#define VEC 43
+#define COMPACTVEC 44
+#define UNORDERED 45
 
-#define SORTED 1
-#define ORDERED 2
-#define VEC 3
-#define COMPACTVEC 4
-#define UNORDERED 5
+#define SINGLE 51
+#define CANONICAL 52
+#define BIMOLECULE 53
+
 
 
 //================= define types - changeable here...
 
-
-#if (pPARSER == FASTA)
-#define PARSER_TYPE ::bliss::io::FASTAParser
-#else
-#define PARSER_TYPE ::bliss::io::FASTQParser
-#endif
-
+//========   Kmer parameters
 #if (pDNA == 16)
 using Alphabet = bliss::common::DNA16;
 #elif (pDNA == 5)
 using Alphabet = bliss::common::DNA5;
-#else
+#elif (pDNA == 4)
 using Alphabet = bliss::common::DNA;
 #endif
 
@@ -115,56 +112,18 @@ using KmerType = bliss::common::Kmer<pK, Alphabet, WordType>;
 using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
 #endif
 
-
-
-#if (pTRANS == LEX)
-	template <typename KM>
-	using KmerTrans = bliss::kmer::transform::lex_less<KM>;
-
-	template <typename KM>
-	using PreCanonicalizer = bliss::kmer::transform::identity<KM>;
-#elif (pTRANS == XOR)
-	template <typename KM>
-	using KmerTrans = bliss::kmer::transform::xor_rev_comp<KM>;
-
-	template <typename KM>
-	using PreCanonicalizer = bliss::kmer::transform::identity<KM>;
-#elif (pTRANS == PRELEX)
-	template <typename KM>
-	using KmerTrans = bliss::kmer::transform::identity<KM>;
-
-	template <typename KM>
-	using PreCanonicalizer = bliss::kmer::transform::lex_less<KM>;
-#else
-	template <typename KM>
-	using KmerTrans = bliss::kmer::transform::identity<KM>;
-
-	template <typename KM>
-	using PreCanonicalizer = bliss::kmer::transform::identity<KM>;
-#endif
-
-
-#if (pHASH == STD)
-	template <typename KM, bool pre=false>
-	using KmerHash = bliss::kmer::hash::cpp_std<KM, pre>;
-#elif (pHASH == IDEN)
-	template <typename KM, bool pre=false>
-	using KmerHash = bliss::kmer::hash::identity<KM, pre>;
-#elif (pHASH == MURMUR)
-	template <typename KM, bool pre=false>
-	using KmerHash = bliss::kmer::hash::murmur<KM, pre>;
-#else
-	template <typename KM, bool pre=false>
-	using KmerHash = bliss::kmer::hash::farm<KM, pre>;
-#endif
-
-
+//============== index input file format
 #if (pPARSER == FASTA)
 	using IdType = bliss::common::LongSequenceKmerId;
-#else
+#define PARSER_TYPE ::bliss::io::FASTAParser
+#elif (pPARSER == FASTQ)
 	using IdType = bliss::common::ShortSequenceKmerId;
+#define PARSER_TYPE ::bliss::io::FASTQParser
 #endif
 
+
+
+// ============  index value type
 using QualType = float;
 using KmerInfoType = std::pair<IdType, QualType>;
 using CountType = uint32_t;
@@ -173,59 +132,149 @@ using CountType = uint32_t;
 	using ValType = IdType;
 #elif (pINDEX == POSQUAL)
 	using ValType = KmerInfoType;
-#else
+#elif (pINDEX == COUNT)
 	using ValType = CountType;
 #endif
 
-#if (pINDEX == POS) || (pINDEX == POSQUAL)
-	#if (pMAP == SORTED)
+
+
+
+//============== MAP properties
+
+
+//----- get them all. may not use subsequently.
+
+// distribution trasnforms
+#if (pDistTrans == LEX)
+	template <typename KM>
+	using DistTrans = bliss::kmer::transform::lex_less<KM>;
+#elif (pDistTrans == XOR)
+	template <typename KM>
+	using DistTrans = bliss::kmer::transform::xor_rev_comp<KM>;
+#elif (pDistTrans == IDEN)
+	template <typename KM>
+	using DistTrans = bliss::kmer::transform::identity<KM>;
+#endif
+
+// distribution hash
+#if (pDistHash == STD)
+	template <typename KM>
+	using DistHash = bliss::kmer::hash::cpp_std<KM, true>;
+#elif (pDistHash == IDEN)
+	template <typename KM>
+	using DistHash = bliss::kmer::hash::identity<KM, true>;
+#elif (pDistHash == MURMUR)
+	template <typename KM>
+	using DistHash = bliss::kmer::hash::murmur<KM, true>;
+#elif (pDistHash == FARM)
+	template <typename KM>
+	using DistHash = bliss::kmer::hash::farm<KM, true>;
+#endif
+
+
+// storage hash type
+#if (pStoreHash == STD)
+	template <typename KM>
+	using StoreHash = bliss::kmer::hash::cpp_std<KM, false>;
+#elif (pStoreHash == IDEN)
+	template <typename KM>
+	using StoreHash = bliss::kmer::hash::identity<KM, false>;
+#elif (pStoreHash == MURMUR)
+	template <typename KM>
+	using StoreHash = bliss::kmer::hash::murmur<KM, false>;
+#elif (pStoreHash == FARM)
+	template <typename KM>
+	using StoreHash = bliss::kmer::hash::farm<KM, false>;
+#endif
+
+
+
+// ==== define Map parameter
+#if (pMAP == SORTED)
+	// choose a MapParam based on type of map and kmer model (canonical, original, bimolecule)
+	#if (pKmerStore == SINGLE)  // single stranded
+		template <typename Key>
+		using MapParams = ::bliss::index::kmer::SingleStrandSortedMapParams<Key>;
+	#elif (pKmerStore == CANONICAL)
+		template <typename Key>
+		using MapParams = ::bliss::index::kmer::CanonicalSortedMapParams<Key>;
+	#elif (pKmerStore == BIMOLECULE)  // bimolecule
+		template <typename Key>
+		using MapParams = ::bliss::index::kmer::BimoleculeSortedMapParams<Key>;
+	#endif
+
+	// DEFINE THE MAP TYPE base on the type of data to be stored.
+	#if (pINDEX == POS) || (pINDEX == POSQUAL)  // multimap
 		using MapType = ::dsc::sorted_multimap<
-			  KmerType, ValType, int,
-			  KmerTrans>;
+				KmerType, ValType, MapParams>;
+	#elif (pINDEX == COUNT)  // map
+		using MapType = ::dsc::counting_sorted_map<
+				KmerType, ValType, MapParams>;
+	#endif
 
-	#elif (pMAP == ORDERED)
+
+#elif (pMAP == ORDERED)
+	// choose a MapParam based on type of map and kmer model (canonical, original, bimolecule)
+	#if (pKmerStore == SINGLE)  // single stranded
+		template <typename Key>
+		using MapParams = ::bliss::index::kmer::SingleStrandOrderedMapParams<Key, DistHash, ::std::less, DistTrans>;
+	#elif (pKmerStore == CANONICAL)
+		template <typename Key>
+		using MapParams = ::bliss::index::kmer::CanonicalOrderedMapParams<Key, DistHash>;
+	#elif (pKmerStore == BIMOLECULE)  // bimolecule
+		template <typename Key>
+		using MapParams = ::bliss::index::kmer::BimoleculeOrderedMapParams<Key, DistHash>;
+	#endif
+
+	// DEFINE THE MAP TYPE base on the type of data to be stored.
+	#if (pINDEX == POS) || (pINDEX == POSQUAL)  // multimap
 		using MapType = ::dsc::multimap<
-			  KmerType, ValType, int,
-			  KmerTrans,
-			  KmerHash>;
-
-	#elif (pMAP == VEC)
-		using MapType = ::dsc::unordered_multimap_vec<
-			  KmerType, ValType, int,
-			  KmerTrans,
-			  KmerHash>;
-
-	#elif (pMAP == COMPACTVEC)
-		using MapType = ::dsc::unordered_multimap_compact_vec<
-			  KmerType, ValType, int,
-			  KmerTrans,
-			  KmerHash>;
-	#else
-		using MapType = ::dsc::unordered_multimap<
-			  KmerType, ValType, int,
-			  KmerTrans,
-			  KmerHash>;
+				KmerType, ValType, MapParams>;
+	#elif (pINDEX == COUNT)  // map
+		using MapType = ::dsc::counting_map<
+				KmerType, ValType, MapParams>;
 	#endif
 
-#else
-	#if (pMAP == SORTED)
-	  using MapType = ::dsc::counting_sorted_map<
-		  KmerType, ValType, int,
-		  KmerTrans>;
-	#elif (pMAP == ORDERED)
-	  using MapType = ::dsc::counting_map<
-		  KmerType, ValType, int,
-		  KmerTrans,
-		  KmerHash>;
-	#else
-	  using MapType = ::dsc::counting_unordered_map<
-		  KmerType, ValType, int,
-		  KmerTrans,
-		  KmerHash>;
+
+#else  // hashmap
+	// choose a MapParam based on type of map and kmer model (canonical, original, bimolecule)
+	#if (pKmerStore == SINGLE)  // single stranded
+		template <typename Key>
+		using MapParams = ::bliss::index::kmer::SingleStrandHashMapParams<Key, DistHash, StoreHash, DistTrans>;
+	#elif (pKmerStore == CANONICAL)
+		template <typename Key>
+		using MapParams = ::bliss::index::kmer::CanonicalHashMapParams<Key, DistHash, StoreHash>;
+	#elif (pKmerStore == BIMOLECULE)  // bimolecule
+		template <typename Key>
+		using MapParams = ::bliss::index::kmer::BimoleculeHashMapParams<Key, DistHash, StoreHash>;
 	#endif
+
+	// DEFINE THE MAP TYPE base on the type of data to be stored.
+	#if (pINDEX == POS) || (pINDEX == POSQUAL)  // multimap
+		#if (pMAP == VEC)
+			using MapType = ::dsc::unordered_multimap_vec<
+				  KmerType, ValType, MapParams>;
+
+		#elif (pMAP == UNORDERED)
+			using MapType = ::dsc::unordered_multimap<
+				  KmerType, ValType, MapParams>;
+		#elif (pMAP == COMPACTVEC)
+			using MapType = ::dsc::unordered_multimap_compact_vec<
+					KmerType, ValType, MapParams>;
+		#endif
+	#elif (pINDEX == COUNT)  // map
+		using MapType = ::dsc::counting_unordered_map<
+				KmerType, ValType, MapParams>;
+	#endif
+
+
 
 #endif
 
+
+
+
+//================ FINALLY, the actual index type.
 
 #if (pINDEX == POS)
 	using IndexType = bliss::index::kmer::PositionIndex<MapType>;
@@ -233,7 +282,7 @@ using CountType = uint32_t;
 #elif (pINDEX == POSQUAL)
   using IndexType = bliss::index::kmer::PositionQualityIndex<MapType>;
 
-#else
+#elif (pINDEX == COUNT)  // map
 	using IndexType = bliss::index::kmer::CountIndex<MapType>;
 #endif
 
@@ -256,7 +305,7 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
 
   ::std::vector<KmerType> query;
 
-  IndexType::template read_file<PARSER_TYPE, PreCanonicalizer, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  IndexType::template read_file<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
 
   return query;
 }
@@ -267,7 +316,7 @@ std::vector<KmerType> readForQuery_mpiio(const std::string & filename, MPI_Comm 
 
   ::std::vector<KmerType> query;
 
-  IndexType::template read_file_mpiio<PARSER_TYPE, PreCanonicalizer, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  IndexType::template read_file_mpiio<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
 
   return query;
 }
@@ -278,7 +327,7 @@ std::vector<KmerType> readForQuery_mmap(const std::string & filename, MPI_Comm c
   ::std::vector<KmerType> query;
 
   // default to including quality score iterators.
-  IndexType::template read_file_mmap<PARSER_TYPE, PreCanonicalizer, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  IndexType::template read_file_mmap<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
 
   return query;
 }
@@ -290,7 +339,7 @@ std::vector<KmerType> readForQuery_posix(const std::string & filename, MPI_Comm 
   ::std::vector<KmerType> query;
 
   // default to including quality score iterators.
-  IndexType::template read_file_posix<PARSER_TYPE, PreCanonicalizer, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  IndexType::template read_file_posix<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
 
   return query;
 }
@@ -347,7 +396,7 @@ int main(int argc, char** argv) {
   filename.assign(PROJ_SRC_DIR);
 #if (pPARSER == FASTA)
       filename.append("/test/data/test.fasta");
-#else
+#elif (pPARSER == FASTQ)
       filename.append("/test/data/test.fastq");
 #endif
   std::string queryname(filename);
@@ -424,19 +473,19 @@ int main(int argc, char** argv) {
 	  {
 		if (comm.rank() == 0) printf("reading %s via fileloader\n", filename.c_str());
 
-		idx.read_file<PARSER_TYPE, PreCanonicalizer, typename IndexType::KmerParserType>(filename, temp, comm);
+		idx.read_file<PARSER_TYPE, typename IndexType::KmerParserType>(filename, temp, comm);
 
 	  } else if (reader_algo == 5) {
 		if (comm.rank() == 0) printf("reading %s via mmap\n", filename.c_str());
-		idx.read_file_mmap<PARSER_TYPE, PreCanonicalizer, typename IndexType::KmerParserType>(filename, temp, comm);
+		idx.read_file_mmap<PARSER_TYPE, typename IndexType::KmerParserType>(filename, temp, comm);
 
 	  } else if (reader_algo == 7) {
 		if (comm.rank() == 0) printf("reading %s via posix\n", filename.c_str());
-		idx.read_file_posix<PARSER_TYPE, PreCanonicalizer, typename IndexType::KmerParserType>(filename, temp, comm);
+		idx.read_file_posix<PARSER_TYPE, typename IndexType::KmerParserType>(filename, temp, comm);
 
 	  } else if (reader_algo == 10){
 		if (comm.rank() == 0) printf("reading %s via mpiio\n", filename.c_str());
-		idx.read_file_mpiio<PARSER_TYPE, PreCanonicalizer, typename IndexType::KmerParserType>(filename, temp, comm);
+		idx.read_file_mpiio<PARSER_TYPE, typename IndexType::KmerParserType>(filename, temp, comm);
 	  } else {
 		throw std::invalid_argument("missing file reader type");
 	  }
@@ -482,8 +531,6 @@ int main(int argc, char** argv) {
 	  auto found = idx.find_collective(lquery);
 	  BL_BENCH_COLLECTIVE_END(test, "find_collective", found.size(), comm);
 	  }
-#endif
-#if defined(pIrecv)
     // separate test because of it being potentially very slow depending on imbalance.
     {
       auto lquery = query;

@@ -60,10 +60,27 @@
 #include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
 #include "containers/distributed_map_base.hpp"
+#include "common/kmer_transform.hpp"
+#include "containers/container_utils.hpp"
 
 
 namespace dsc  // distributed std container
 {
+
+template <typename Key,
+  	  template <typename> class InputTrans,
+  	  template <typename> class Trans,
+  	  template <typename> class Less,
+  	  template <typename> class Equal
+  	  >
+using SortedMapParams = ::dsc::DistributedMapParams<
+		Key, InputTrans, Trans, Less, Equal, Trans, Less, Equal,
+		::fsc::TransformedComparator, ::fsc::TransformedComparator>;
+
+// =================
+// NOTE: when using this, need to further alias so that only Key param remains.
+// =================
+
 
   /**
    * @brief  distributed unordered map following std unordered map's interface.
@@ -132,18 +149,15 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  template <typename, typename> class Container,
-  class Comm,
-  template <typename> class KeyTransform,
-  class Less = ::std::less<Key>,
-  class Equal = ::std::equal_to<Key>,
-  class Alloc = ::std::allocator< ::std::pair<Key, T> >
+	  template <typename, typename...> class Container,
+	  template <typename> class MapParams,
+	  class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
-  class sorted_map_base : public ::dsc::map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc> {
+  class sorted_map_base : public ::dsc::map_base<Key, T, MapParams, Alloc> {
 
       // TODO: this should not be public but clang complains.
     protected:
-      using Base = ::dsc::map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>;
+      using Base = ::dsc::map_base<Key, T, MapParams, Alloc>;
 
       // splitters.  there should be p-1 entries.
 
@@ -152,11 +166,12 @@ namespace dsc  // distributed std container
       struct KeyToRank {
           ::std::vector<::std::pair<Key, int> > map;  // the splitters need to support [map[i], map[i+1]), so they need to be constructed from the first element of the next range, and map to curr range = next-1.
           int p;
+          typename Base::DistTransformedFunc comp;
           KeyToRank(int _comm_size) : p(_comm_size) {};
 
           /// return id of selected element based on lookup table.  ranges are [map[i], map[i+1])
           inline int operator()(Key const & x) const {
-            auto pos = ::std::upper_bound(map.begin(), map.end(), x, Base::less);  // if equal, goes to next range.
+            auto pos = ::std::upper_bound(map.begin(), map.end(), x, comp);  // if equal, goes to next range.
             return (pos == map.end()) ? (p-1) : pos->second;
           }
           template<typename V>
@@ -168,7 +183,6 @@ namespace dsc  // distributed std container
             return this->operator()(x.first);
           }
       } key_to_rank;
-
 
       /**
        * @brief count elements with the specified keys in the distributed sorted_multimap.
@@ -194,14 +208,14 @@ namespace dsc  // distributed std container
 
             // make sure query is sorted sorted.
             if (!sorted_query) {
-            	::std::sort(query_begin, query_end, Base::less);
+            	::std::sort(query_begin, query_end, typename Base::StoreTransformedFunc());
             	sorted_query = true;
             }
 
             // find the bounds.
-            auto range_begin = ::std::lower_bound(db_begin, db_end, *query_begin, Base::less);
+            auto range_begin = ::std::lower_bound(db_begin, db_end, *query_begin, typename Base::StoreTransformedFunc());
             auto query_last = query_begin; ::std::advance(query_last, dist_query - 1);  // last real entry because query end may not be derefernceable.
-            auto range_end = ::std::upper_bound(range_begin, db_end, *query_last, Base::less);
+            auto range_end = ::std::upper_bound(range_begin, db_end, *query_last, typename Base::StoreTransformedFunc());
 
             return ::std::make_pair(range_begin, range_end);
           }
@@ -224,7 +238,7 @@ namespace dsc  // distributed std container
 
               //if (!sorted_target) Base::sort_ascending(range_begin, range_end);  range_begin and range_end often are const iterators.
               if (!sorted_query)
-            	  ::std::sort(query_begin, query_end, Base::less);
+            	  ::std::sort(query_begin, query_end, typename Base::StoreTransformedFunc());
 
               auto el_end = range_begin;
               size_t count = 0;
@@ -242,7 +256,7 @@ namespace dsc  // distributed std container
                 	  count += op.template operator()<true>(range_begin, el_end, range_end, v, output);
 
                   // compiler optimize out the conditional.
-                  if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, Base::less);
+                  if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, typename Base::StoreTransformedFunc());
                   else ++it;
                 }
               } else {
@@ -257,7 +271,7 @@ namespace dsc  // distributed std container
                 	  count += op.template operator()<false>(range_begin, el_end, range_end, v, output);
 
                   // compiler optmizes out the conditional
-                  if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, Base::less);
+                  if (skip_duplicate_query) it = ::fsc::upper_bound<true>(it, query_end, v, typename Base::StoreTransformedFunc());
                   else ++it;
                 }
               }
@@ -339,12 +353,14 @@ namespace dsc  // distributed std container
       // ============ shared functors.
 
       struct LocalCount {
+          typename Base::StoreTransformedFunc store_comp;
+
           // unfiltered.
           template<bool linear, class DBIter, typename Query, class OutputIter>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, OutputIter &output) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
-              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);  // range_begin at equal or greater than v.
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);  // el_end at greater than v.
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);  // range_begin at equal or greater than v.
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);  // el_end at greater than v.
               // difference between the 2 iterators is the part that's equal.
 
               // add the output entry.
@@ -359,8 +375,8 @@ namespace dsc  // distributed std container
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, OutputIter &output,
                             Predicate const& pred) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
-              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);  // range_begin at equal or greater than v.
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);  // el_end at greater than v.
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);  // range_begin at equal or greater than v.
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);  // el_end at greater than v.
               // difference between the 2 iterators is the part that's equal.
 
               // add the output entry.
@@ -376,11 +392,13 @@ namespace dsc  // distributed std container
       } count_element;
 
       struct LocalErase {
+          typename Base::StoreTransformedFunc store_comp;
+
           /// Return how much was KEPT.
           template<bool linear, class DBIter, typename Query>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, DBIter &output) {
               // find start of segment to delete == end of prev segment to keep
-              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);
 
               // if the keep range is larger than 0, then move data and update insert pos.
               auto dist = ::std::distance(el_end, range_begin);
@@ -390,7 +408,7 @@ namespace dsc  // distributed std container
                 ::std::advance(output, dist);
               }
               // find of end of the segment to delete == start of next segment to keep
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);
               return dist;
           }
           /// Return how much was KEPT.
@@ -398,14 +416,14 @@ namespace dsc  // distributed std container
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, DBIter &output,
                             Predicate const & pred) {
               // find start of segment to delete == end of prev segment to keep
-              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);
 
               if (::std::distance(el_end, range_begin) > 0) {
                 // condense a portion.
                 output = ::std::move(el_end, range_begin, output);
               }
               // find of end of the segment to delete == start of next segment to keep
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);
 
 
               if (!pred(range_begin, range_end)) {  // if NOTHING in range matches, then no erase.
@@ -456,6 +474,7 @@ namespace dsc  // distributed std container
           BL_BENCH_START(find);
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+          this->transform_input(keys);
           BL_BENCH_END(find, "begin", keys.size());
 
           if (this->comm.size() > 1) {
@@ -466,9 +485,10 @@ namespace dsc  // distributed std container
 
               BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
               // distribute (communication part)
-              std::vector<size_t> recv_counts(::dsc::distribute_sorted_unique(keys,
-                                                                              this->key_to_rank, sorted_input, this->comm,
-                                                                              typename Base::TransformedLess(), typename Base::TransformedEqual()));
+              std::vector<size_t> recv_counts(
+            		  ::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
+            				  typename Base::StoreTransformedFunc(),
+            				  typename Base::StoreTransformedEqual()));
               BL_BENCH_END(find, "dist_query", keys.size());
 
 
@@ -513,7 +533,9 @@ namespace dsc  // distributed std container
 
               // keep unique keys
               BL_BENCH_START(find);
-              ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
+              ::fsc::sorted_unique(keys, sorted_input,
+    				  typename Base::StoreTransformedFunc(),
+    				  typename Base::StoreTransformedEqual());
               BL_BENCH_END(find, "uniq1", keys.size());
 
         	  BL_BENCH_START(find);
@@ -563,6 +585,7 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > local_results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
+          this->transform_input(keys);
           BL_BENCH_END(find, "begin", keys.size());
 
 
@@ -575,9 +598,10 @@ namespace dsc  // distributed std container
 
               BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
               // distribute (communication part)
-              std::vector<size_t> recv_counts(::dsc::distribute_sorted_unique(keys,
-                                                                              this->key_to_rank, sorted_input, this->comm,
-                                                                              typename Base::TransformedLess(), typename Base::TransformedEqual()));
+              std::vector<size_t> recv_counts(
+            		  ::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
+            				  typename Base::StoreTransformedFunc(),
+            				  typename Base::StoreTransformedEqual()));
               BL_BENCH_END(find, "dist_query", keys.size());
 
 
@@ -688,7 +712,9 @@ namespace dsc  // distributed std container
 
               // keep unique keys
               BL_BENCH_START(find);
-              ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
+              ::fsc::sorted_unique(keys, sorted_input,
+            		              				  typename Base::StoreTransformedFunc(),
+            		              				  typename Base::StoreTransformedEqual());
               BL_BENCH_END(find, "uniq1", keys.size());
 
 
@@ -754,7 +780,8 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > local_results;
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
-          BL_BENCH_END(find, "begin", keys.size());
+          this->transform_input(keys);
+		  BL_BENCH_END(find, "begin", keys.size());
 
 
           if (this->comm.size() > 1) {
@@ -766,9 +793,10 @@ namespace dsc  // distributed std container
 
               BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
               // distribute (communication part)
-              std::vector<size_t> recv_counts(::dsc::distribute_sorted_unique(keys,
-                                                                              this->key_to_rank, sorted_input, this->comm,
-                                                                              typename Base::TransformedLess(), typename Base::TransformedEqual()));
+              std::vector<size_t> recv_counts(
+            		  ::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
+            				  typename Base::StoreTransformedFunc(),
+            				  typename Base::StoreTransformedEqual()));
               BL_BENCH_END(find, "dist_query", keys.size());
 
 
@@ -879,7 +907,9 @@ namespace dsc  // distributed std container
 
               // keep unique keys
               BL_BENCH_START(find);
-              ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
+              ::fsc::sorted_unique(keys, sorted_input,
+    				  typename Base::StoreTransformedFunc(),
+    				  typename Base::StoreTransformedEqual());
               BL_BENCH_END(find, "uniq1", keys.size());
 
 
@@ -958,48 +988,6 @@ namespace dsc  // distributed std container
       }
 
 
-      // ======================== local operations
-      /**
-       * @brief insert new elements in the distributed sorted_multimap.  example use: stop inserting if more than x entries.
-       * TODO: split this into insert (into empty), and an append (into existing)
-       * @param first
-       * @param last
-       */
-      template <class Predicate = TruePredicate>
-      size_t local_insert(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
-          if (input.size() == 0) return 0;  // OKAY HERE ONLY BECAUSE NO COMMUNICATION IS HERE.
-          BL_BENCH_INIT(insert);
-
-          size_t before = c.size();
-          BL_BENCH_START(insert);
-
-          ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
-          if (::std::is_same<Predicate, TruePredicate>::value) {
-            if (c.size() == 0)   // container is empty, so swap it in.
-              c.swap(input);
-            else {
-              this->local_reserve(before + input.size());
-                ::std::move(input.begin(), input.end(), emplace_iter);    // else move it in.
-            }
-          }
-          else {
-            this->local_reserve(before + input.size());
-            ::std::copy_if(::std::make_move_iterator(input.begin()),
-                      ::std::make_move_iterator(input.end()), emplace_iter, pred);  // predicate needed.  move it though.
-          }
-
-          size_t count = c.size() - before;
-          BL_BENCH_END(insert, "insert", count);
-
-
-          BL_BENCH_REPORT_MPI_NAMED(insert, "base_sorted_map:insert", this->comm);
-
-          this->sorted = false;
-
-          return count;
-      }
-
-
 
 
       // ==================== constructor
@@ -1036,7 +1024,7 @@ namespace dsc  // distributed std container
 
       /// rehash the local container.  n is the local container size.  this allows different processes to individually adjust its own size.
       void local_sort() {
-        ::fsc::sort(c, sorted, Base::less);
+        ::fsc::sort(c, sorted, typename Base::StoreTransformedFunc());
       }
 
       /// const version that sorts the local container.
@@ -1089,7 +1077,9 @@ namespace dsc  // distributed std container
 
         // and then find unique.
         bool temp = this->sorted;
-        ::fsc::sorted_unique(result, temp, typename Base::TransformedLess(), typename Base::TransformedEqual());
+        ::fsc::sorted_unique(result, temp,
+				  typename Base::StoreTransformedFunc(),
+				  typename Base::StoreTransformedEqual());
 
       }
 
@@ -1118,6 +1108,7 @@ namespace dsc  // distributed std container
         // keep unique keys
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
+        this->transform_input(keys);
         BL_BENCH_END(count, "begin", keys.size());
 
 
@@ -1129,9 +1120,10 @@ namespace dsc  // distributed std container
 
 
             BL_BENCH_START(count);
-            std::vector<size_t> recv_counts(::dsc::distribute_sorted_unique(keys,
-                                                                            this->key_to_rank, sorted_input, this->comm,
-                                                                            typename Base::TransformedLess(), typename Base::TransformedEqual()));
+            std::vector<size_t> recv_counts(
+            		::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
+          				  typename Base::StoreTransformedFunc(),
+          				  typename Base::StoreTransformedEqual()));
             BL_BENCH_END(count, "dist_query", keys.size());
 
 
@@ -1172,7 +1164,9 @@ namespace dsc  // distributed std container
 
             BL_BENCH_START(count);
             // keep unique keys
-            ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
+            ::fsc::sorted_unique(keys, sorted_input,
+  				  typename Base::StoreTransformedFunc(),
+  				  typename Base::StoreTransformedEqual());
             BL_BENCH_END(count, "uniq1", keys.size());
 
           BL_BENCH_START(count);
@@ -1256,11 +1250,45 @@ namespace dsc  // distributed std container
        */
       template <class Predicate = TruePredicate>
       size_t insert(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
+          if (input.size() == 0) return 0;  // OKAY HERE ONLY BECAUSE NO COMMUNICATION IS HERE.
 
           this->set_balanced(false);
           this->set_globally_sorted(false);
 
-          return this->local_insert(input, sorted_input, pred);
+          BL_BENCH_INIT(insert);
+
+          BL_BENCH_START(insert);
+          this->transform_input(input);
+          BL_BENCH_END(insert, "transform_input", input.size());
+
+
+          size_t before = c.size();
+          BL_BENCH_START(insert);
+
+          ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
+          if (::std::is_same<Predicate, TruePredicate>::value) {
+            if (c.size() == 0)   // container is empty, so swap it in.
+              c.swap(input);
+            else {
+              this->local_reserve(before + input.size());
+                ::std::move(input.begin(), input.end(), emplace_iter);    // else move it in.
+            }
+          }
+          else {
+            this->local_reserve(before + input.size());
+            ::std::copy_if(::std::make_move_iterator(input.begin()),
+                      ::std::make_move_iterator(input.end()), emplace_iter, pred);  // predicate needed.  move it though.
+          }
+
+          size_t count = c.size() - before;
+          BL_BENCH_END(insert, "insert", count);
+
+
+          BL_BENCH_REPORT_MPI_NAMED(insert, "base_sorted_map:insert", this->comm);
+
+          this->sorted = false;
+
+          return count;
       }
 
 
@@ -1281,6 +1309,10 @@ namespace dsc  // distributed std container
               BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
         	  return 0;
           }
+
+          BL_BENCH_START(erase);
+          this->transform_input(keys);
+          BL_BENCH_END(erase, "transform_input", keys.size());
 
         size_t before = c.size();
 
@@ -1309,7 +1341,9 @@ namespace dsc  // distributed std container
 
         BL_BENCH_START(erase);
         // keep unique keys
-        ::fsc::sorted_unique(keys, sorted_input, typename Base::TransformedLess(), typename Base::TransformedEqual());
+        ::fsc::sorted_unique(keys, sorted_input,
+				  typename Base::StoreTransformedFunc(),
+				  typename Base::StoreTransformedEqual());
         BL_BENCH_END(erase, "unique_keys", keys.size());
 
 
@@ -1349,7 +1383,9 @@ namespace dsc  // distributed std container
 
           this->local_sort();
 
-          auto end = ::std::partition(c.begin(), c.end(), [pred](value_type const &x) { return !pred(x.first); });
+          auto end = ::std::partition(c.begin(), c.end(), [&pred](value_type const &x) {
+        	  return !pred(x.first);
+          });
           c.erase(end, c.end());
 
         } else {
@@ -1416,15 +1452,12 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  class Comm,
-  template <typename> class KeyTransform,
-  class Less = ::std::less<Key>,
-  class Equal = ::std::equal_to<Key>,
+  	  template <typename> class MapParams,
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
-  class sorted_map : public sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc> {
+  class sorted_map : public sorted_map_base<Key, T, ::std::vector, MapParams, Alloc> {
     protected:
-      using Base = sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc>;
+      using Base = sorted_map_base<Key, T, ::std::vector, MapParams, Alloc>;
 
 
     public:
@@ -1444,17 +1477,20 @@ namespace dsc  // distributed std container
 
 
       struct LocalFind {
+          typename Base::StoreTransformedFunc store_comp;
+          typename Base::Base::StoreTransformedEqual store_equal;
+
           template<bool linear, class DBIter, typename Query, class OutputIter>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, OutputIter &output) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
 
               // map, so only 1 entry.
-              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);
               el_end = range_begin;
 
               // add the output entry, if found.
               if (range_begin == range_end) return 0;
-              if (Base::equal(*range_begin, v)) {
+              if (store_equal(*range_begin, v)) {
                 *output = *range_begin;
                 ++output;
                 ++el_end;
@@ -1469,12 +1505,12 @@ namespace dsc  // distributed std container
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
 
               // map, so only 1 entry.
-              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);
               el_end = range_begin;
 
               // add the output entry, if found.
               if (range_begin == range_end) return 0;
-              if (Base::equal(*range_begin, v) && pred(v)) {
+              if (store_equal(*range_begin, v) && pred(v)) {
                 *output = *range_begin;
                 ++output;
                 ++el_end;
@@ -1500,9 +1536,9 @@ namespace dsc  // distributed std container
 //
 //          // walk through.  if exiting entry, remove from input.
 //          // now walk through the input to count stuff.
-//          auto t_start = ::std::lower_bound(this->c.begin(), this->c.end(), *first, Base::Base::less);
+//          auto t_start = ::std::lower_bound(this->c.begin(), this->c.end(), *first, Base::store_comp);
 //          auto last2 = first; ::std::advance(last2, ::std::distance(first, last) - 1);
-//          auto t_end = ::std::upper_bound(t_start, this->c.end(), *last2, Base::Base::less);
+//          auto t_end = ::std::upper_bound(t_start, this->c.end(), *last2, Base::store_comp);
 //
 //          // go through the input and search the container.
 //          // iterate through the input and search in output,  moving items up as we go.
@@ -1535,7 +1571,9 @@ namespace dsc  // distributed std container
       // ============= local reduction override.
       virtual void local_reduction(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false) {
 
-        ::fsc::sorted_unique(input, sorted_input, typename Base::Base::TransformedLess(), typename Base::Base::TransformedEqual());
+        ::fsc::sorted_unique(input, sorted_input,
+				  typename Base::StoreTransformedFunc(),
+				  typename Base::StoreTransformedEqual());
       }
 
       using Base::redistribute;
@@ -1544,6 +1582,8 @@ namespace dsc  // distributed std container
       virtual void redistribute() {
 
         BL_BENCH_INIT(rehash);
+
+        typename Base::Base::StoreTransformedFunc store_comp;
 
         bool balanced = this->is_balanced();
         bool gsorted = this->is_globally_sorted();
@@ -1591,7 +1631,7 @@ namespace dsc  // distributed std container
           // global sort if needed
           BL_BENCH_START(rehash);
           if (!gsorted)
-            ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm);
+            ::mxx::sort(this->c.begin(), this->c.end(), typename Base::Base::StoreTransformedFunc(), this->comm);
           BL_BENCH_END(rehash, "mxxsort", this->c.size());
 
 
@@ -1625,7 +1665,7 @@ namespace dsc  // distributed std container
             if (this->c.size() > 0) {
               // now reduce the range matching the left element and assign to last rank in that range.
               auto range = ::std::equal_range(boundary_values.begin(), boundary_values.end(), this->c.front(),
-                                              Base::Base::less);
+                                              store_comp);
               size_t dist = ::std::distance(range.first, range.second);
               if (dist > 1) {  // if > 1, then value crossed boundary and need to reduce.
 
@@ -1640,7 +1680,7 @@ namespace dsc  // distributed std container
 
               // now remove the other entries from the local container
               range = ::std::equal_range(boundary_values.begin(), boundary_values.end(), this->c.back(),
-                                                          Base::Base::less);
+                                                          store_comp);
               dist = ::std::distance(range.first, range.second);
               if (dist > 1) {  // if > 1, the value crossed boundary and we have extra entries to remove.
 
@@ -1672,7 +1712,7 @@ namespace dsc  // distributed std container
           }
           this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
           // note that key_to_rank.map needs to be unique.
-          auto map_end = std::unique(this->key_to_rank.map.begin(), this->key_to_rank.map.end(), Base::Base::equal);
+          auto map_end = std::unique(this->key_to_rank.map.begin(), this->key_to_rank.map.end(), typename Base::Base::StoreTransformedEqual());
           this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
 
 
@@ -1777,16 +1817,13 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  class Comm,
-  template <typename> class KeyTransform,
-  class Less = ::std::less<Key>,
-  class Equal = ::std::equal_to<Key>,
+  	  template <typename> class MapParams,
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
-  class sorted_multimap : public sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc> {
+  class sorted_multimap : public sorted_map_base<Key, T, ::std::vector, MapParams, Alloc> {
 
     protected:
-      using Base = sorted_map_base<Key, T, ::std::vector, Comm, KeyTransform, Less, Equal, Alloc>;
+      using Base = sorted_map_base<Key, T, ::std::vector, MapParams, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -1805,14 +1842,16 @@ namespace dsc  // distributed std container
       mutable size_t local_unique_count;
 
       struct LocalFind {
+          typename Base::Base::StoreTransformedFunc store_comp;
+
           template<bool linear, class DBIter, typename Query, class OutputIter>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, OutputIter &output) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
 
 
-              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);
 
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);
 
               // difference between the 2 iterators is the part that's equal.
               if (range_begin == range_end) return 0;
@@ -1828,9 +1867,9 @@ namespace dsc  // distributed std container
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
         	  //OutputIter output_orig = output;
 
-              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, Base::less);
+              range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);
 
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, Base::less);
+              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);
 
               // difference between the 2 iterators is the part that's equal.
               if (range_begin == range_end) return 0;
@@ -1857,7 +1896,7 @@ namespace dsc  // distributed std container
       virtual void redistribute() {
 
         BL_BENCH_INIT(rehash);
-
+        typename Base::Base::StoreTransformedFunc store_comp;
 
         bool balanced = this->is_balanced();
         bool gsorted = this->is_globally_sorted();
@@ -1915,7 +1954,7 @@ namespace dsc  // distributed std container
           // sort if needed
           if (!gsorted) {
             BL_BENCH_START(rehash);
-            ::mxx::sort(this->c.begin(), this->c.end(), Base::Base::less, this->comm);
+            ::mxx::sort(this->c.begin(), this->c.end(), store_comp, this->comm);
             BL_BENCH_END(rehash, "mxxsort", this->c.size());
           }
 
@@ -1931,7 +1970,7 @@ namespace dsc  // distributed std container
 
           // note that key_to_rank.map needs to be unique.
           auto map_end = std::unique(this->key_to_rank.map.begin(), this->key_to_rank.map.end(),
-                                     Base::Base::equal);
+        		  typename Base::Base::StoreTransformedEqual());
           this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
           assert(this->key_to_rank.map.size() > 0);
 
@@ -1940,12 +1979,12 @@ namespace dsc  // distributed std container
 
           //        mxx::datatype<::std::pair<Key, T> > dt;
           //        MPI_Datatype mpi_dt = dt.type();
-          //        this->key_to_rank.map = ::mxx::sample_block_decomp(d.begin(), d.end(), Base::Base::less, this->comm.size() - 1, this->comm, mpi_dt);
+          //        this->key_to_rank.map = ::mxx::sample_block_decomp(d.begin(), d.end(), Base::store_comp, this->comm.size() - 1, this->comm, mpi_dt);
 
           // redistribute using new pivots.  in trouble if we have a value that takes up a large part of the partition.
           BL_BENCH_START(rehash);
           ::std::vector<size_t> send_counts =
-              ::fsc::sorted_bucketing(this->c, this->key_to_rank.map, Base::Base::less, this->comm.size());
+              ::fsc::sorted_bucketing(this->c, this->key_to_rank.map, store_comp, this->comm.size());
           BL_BENCH_END(rehash, "bucket", this->c.size());
 
 //          size_t tt = std::accumulate(send_counts.begin(), send_counts.end(), 0UL);
@@ -1975,7 +2014,7 @@ namespace dsc  // distributed std container
         if (this->c.size() > 1) {
           // now count unique
           auto start = this->c.begin();
-          while ((start = ::std::adjacent_find(start, this->c.end(), Base::Base::less)) != this->c.end()) {
+          while ((start = ::std::adjacent_find(start, this->c.end(), store_comp)) != this->c.end()) {
             ++start;
             ++local_unique_count;
           }
@@ -2085,6 +2124,7 @@ namespace dsc  // distributed std container
 
       /// get the size of unique keys in the current local container.
       virtual size_t local_unique_size() const {
+    	 typename Base::Base::StoreTransformedFunc store_comp;
 
         // first make sure that the global vector is sorted.
         this->local_sort();
@@ -2093,7 +2133,7 @@ namespace dsc  // distributed std container
         size_t count = 0;
         if (this->c.size() > 1) {
           auto start = this->c.begin();
-          while ((start = ::std::adjacent_find(start, this->c.end(), Base::less)) != this->c.end()) {
+          while ((start = ::std::adjacent_find(start, this->c.end(), store_comp)) != this->c.end()) {
             ++start;
             ++count;
           }
@@ -2139,18 +2179,15 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  class Comm,
-  template <typename> class KeyTransform,
-  class Less = ::std::less<Key>,
+  template <typename> class MapParams,
   typename Reduc = ::std::plus<T>,
-  class Equal = ::std::equal_to<Key>,
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
-  class reduction_sorted_map : public sorted_map<Key, T, Comm, KeyTransform, Less, Equal, Alloc> {
+  class reduction_sorted_map : public sorted_map<Key, T, MapParams, Alloc> {
       static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     protected:
-      using Base = sorted_map<Key, T, Comm, KeyTransform, Less, Equal, Alloc>;
+      using Base = sorted_map<Key, T, MapParams, Alloc>;
 
 
     public:
@@ -2172,7 +2209,9 @@ namespace dsc  // distributed std container
       virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input, bool sorted_input = false) {
         if (input.size() == 0) return;
 
-        ::fsc::sort(input, sorted_input, Base::Base::Base::less);
+        ::fsc::sort(input, sorted_input, typename Base::Base::Base::StoreTransformedFunc());
+
+        typename Base::Base::Base::StoreTransformedEqual store_equal;
 
         auto b = input.begin();
         auto e = input.end();
@@ -2181,7 +2220,7 @@ namespace dsc  // distributed std container
         auto reduc_target = b;
         auto curr = b;  ++curr;
         while (curr != e) {
-          if (this->equal(*reduc_target, *curr))  // if same, do reduction
+          if (store_equal(*reduc_target, *curr))  // if same, do reduction
             reduc_target->second = r(reduc_target->second, curr->second);
           else {  // else reset b.
             ++reduc_target;
@@ -2236,17 +2275,14 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  class Comm,
-  template <typename> class KeyTransform,
-  class Less = ::std::less<Key>,
-  class Equal = ::std::equal_to<Key>,
+  	  template <typename> class MapParams,
   class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >
-  class counting_sorted_map : public reduction_sorted_map<Key, T, Comm, KeyTransform, Less, ::std::plus<T>, Equal,Alloc> {
+  class counting_sorted_map : public reduction_sorted_map<Key, T, MapParams, ::std::plus<T>, Alloc> {
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
 
     protected:
-      using Base = reduction_sorted_map<Key, T, Comm, KeyTransform, Less, ::std::plus<T>, Equal, Alloc>;
+      using Base = reduction_sorted_map<Key, T, MapParams, ::std::plus<T>, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -2278,23 +2314,48 @@ namespace dsc  // distributed std container
       template <class Predicate = TruePredicate>
       size_t insert(::std::vector<Key> &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
 
+          if (input.size() == 0) return 0;  // OKAY HERE ONLY BECAUSE NO COMMUNICATION IS HERE.
+
+          this->set_balanced(false);
+          this->set_globally_sorted(false);
+
+          typename Base::Base::Base::Base::InputTransform trans;
+
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(count_insert);
 
         BL_BENCH_START(count_insert);
         ::std::vector<::std::pair<Key, T> > temp;
         temp.reserve(input.size());
-        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
-        ::std::transform(input.begin(), input.end(), emplace_iter, [](Key const & x) { return ::std::make_pair(x, T(1)); });
+        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > temp_emplacer(temp);
+        ::std::transform(input.begin(), input.end(), temp_emplacer, [&trans](Key const & x) {
+        	return ::std::make_pair(trans(x), T(1));
+        });
         BL_BENCH_END(count_insert, "convert", input.size());
 
-        // distribute
+        size_t before = this->c.size();
         BL_BENCH_START(count_insert);
-        // local compute part.  called by the communicator.
-        size_t count = this->Base::insert(temp, sorted_input, pred);
-        ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
 
-        BL_BENCH_END(count_insert, "insert", this->c.size());
+        ::fsc::back_emplace_iterator<local_container_type> emplace_iter(this->c);
+        if (::std::is_same<Predicate, TruePredicate>::value) {
+          if (this->c.size() == 0)   // container is empty, so swap it in.
+            this->c.swap(temp);
+          else {
+            this->local_reserve(before + temp.size());
+              ::std::move(temp.begin(), temp.end(), emplace_iter);    // else move it in.
+          }
+        }
+        else {
+          this->local_reserve(before + temp.size());
+          ::std::copy_if(::std::make_move_iterator(temp.begin()),
+                    ::std::make_move_iterator(temp.end()), emplace_iter, pred);  // predicate needed.  move it though.
+        }
+
+        size_t count = this->c.size() - before;
+        BL_BENCH_END(count_insert, "insert", count);
+
+        ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
+        this->sorted = false;
 
         // distribute
         BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_sorted_map:insert", this->comm);

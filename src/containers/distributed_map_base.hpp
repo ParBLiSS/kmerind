@@ -35,6 +35,9 @@
 
 #include "utils/benchmark_utils.hpp"
 
+
+
+
 namespace dsc
 {
 //
@@ -74,33 +77,81 @@ namespace dsc
       bool operator()(Iter b, Iter e) const { return true; }
   };
 
+  /**
+   * @brief parameter pack for distributed map
+   * @tparam Key	Key to be transformed.
+   * @tparam InputTrans		template template parameter for converting input key (to another key)
+   * @tparam DistTrans		template template parameter for converting key (to another key) prior to computing distribution function, e.g. lex_less
+   * @tparam DistFunc		template template parameter for computing mapping from key to rank. e.g. std::hash<>, or std::less
+   * @tparam DistEqual
+   * @tparam StoreTrans		template template parameter for converting key (to another key) prior to computing storage function, e.g. lex_less
+   * @tparam StoreFunc		template template parameter for storing key. e.g. std::hash<> or std::less.
+   * @tparam StoreEqual
+   * @tparam DistTransFunc  fsc transformedHash or fsc transformedComparator
+   * @tparam StoreTransFunc  fsc transformedHash or fsc transformedComparator
+   */
+  template <typename Key,
+  	  	  	  template <typename> class InputTrans,
+  	  	  	  template <typename> class DistTrans,
+  	  	  	  template <typename> class DistFunc,
+  	  	  	  template <typename> class DistEqual,
+  	  	  	  template <typename> class StoreTrans,
+  	  	  	  template <typename> class StoreFunc,
+  	  	  	  template <typename> class StoreEqual,
+  	  	  	  template <typename, template <typename> class, template <typename> class> class DistTransFunc,
+  	  	  	  template <typename, template <typename> class, template <typename> class> class StoreTransFunc
+  	  	  	  >
+  struct DistributedMapParams {
+	  using InputTransform = InputTrans<Key>;
 
+	  template <typename K>
+	  using DistFunction = DistFunc<K>;
+	  template <typename K>
+	  using DistTransform = DistTrans<K>;
+
+	  using DistributionTransformedFunction = DistTransFunc<Key, DistFunc, DistTrans>;
+	  using DistributionTransformedEqual = ::fsc::TransformedComparator<Key, DistEqual, DistTrans>;
+
+	  template <typename K>
+	  using StorageFunction = StoreFunc<K>;
+	  template <typename K>
+	  using StorageTransform = StoreTrans<K>;
+
+	  using StorageTransformedFunction = StoreTransFunc<Key, StoreFunc, StoreTrans>;
+	  using StorageTransformedEqual = ::fsc::TransformedComparator<Key, StoreEqual, StoreTrans>;
+  };
+
+  /**
+   * KeyTransformParams should be an alias of a specialization of DistributedMapParams.  see subclass for example.
+   */
   template<typename Key, typename T,
-      class Comm,
-      template <typename> class KeyTransform,
-      class Less = ::std::less<Key>,
-      class Equal = ::std::equal_to<Key>,
+      template <typename> class MapParams,
       class Alloc = ::std::allocator< ::std::pair<Key, T> >
   >  class map_base {
 
     protected:
 
-      static KeyTransform<Key> trans;
+	  using InputTransform = typename MapParams<Key>::InputTransform;
 
-      template <typename Comparator>
-      using TransformedComp = ::fsc::TransformedComparator<Key, Comparator, KeyTransform>;
+	  using DistFunc = typename MapParams<Key>::template DistFunction<Key>;
+	  using DistTrans = typename MapParams<Key>::template DistTransform<Key>;
 
-      using TransformedFarmHash = ::fsc::TransformedHash<Key, ::bliss::kmer::hash::farm<Key, false>, KeyTransform>;
-      static TransformedFarmHash local_hash;
+	  using DistTransformedFunc  = typename MapParams<Key>::DistributionTransformedFunction;
+	  using DistTransformedEqual = typename MapParams<Key>::DistributionTransformedEqual;
 
-      using TransformedEqual = TransformedComp<Equal>;
-      static TransformedEqual equal;
+	  using StoreTransformedFunc = typename MapParams<Key>::StorageTransformedFunction;
+	  using StoreTransformedEqual = typename MapParams<Key>::StorageTransformedEqual;
 
-      using TransformedLess = TransformedComp<Less>;
-      static TransformedLess less;
+	  // primarily for use with distributed_map and sorted_map, where the TransformedFunction is
+	  // a comparator, but we need a hash function.
+	  template <typename K>
+	  using StoreFarmHash = ::bliss::kmer::hash::farm<K, false>;
+	  template <typename K>
+	  using StoreTransform = typename MapParams<Key>::template StorageTransform<K>;
+	  using StoreTransformedFarmHash = ::fsc::TransformedHash<Key, StoreFarmHash, StoreTransform>;
 
       template <typename V>
-      using UniqueKeySetUtilityType = ::std::unordered_set<V, TransformedFarmHash, TransformedEqual>;
+      using UniqueKeySetUtilityType = ::std::unordered_set<V, StoreTransformedFarmHash, StoreTransformedEqual>;
 
       // communication stuff...
       const mxx::comm& comm;
@@ -190,56 +241,12 @@ namespace dsc
           comm.barrier();
       }
 
-
+      template <typename V>
+      void transform_input(std::vector<V> & input) const {
+    	  std::for_each(input.begin(), input.end(), InputTransform());
+      }
 
   };
-
-
-
-  template<typename Key, typename T,
-      class Comm,
-      template <typename> class KeyTransform,
-      class Less,
-      class Equal,
-      class Alloc>
-  KeyTransform<Key> map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::trans;
-
-  template<typename Key, typename T,
-      class Comm,
-      template <typename> class KeyTransform,
-      class Less,
-      class Equal,
-      class Alloc>
-  typename map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::TransformedLess
-      map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::less;
-
-  template<typename Key, typename T,
-      class Comm,
-      template <typename> class KeyTransform,
-      class Less,
-      class Equal,
-      class Alloc>
-  typename map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::TransformedEqual
-      map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::equal;
-
-
-  template<typename Key, typename T,
-      class Comm,
-      template <typename> class KeyTransform,
-      class Less,
-      class Equal,
-      class Alloc>
-  typename map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::TransformedFarmHash
-      map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::local_hash;
-
-//  template<typename Key, typename T,
-//      class Comm,
-//      template <typename> class KeyTransform,
-//      class Less,
-//      class Equal,
-//      class Alloc>
-//  typename map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::TransformedGreater
-//      map_base<Key, T, Comm, KeyTransform, Less, Equal, Alloc>::greater;
 
 }
 

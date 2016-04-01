@@ -185,7 +185,7 @@ public:
 	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
 	 * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 */
-	template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity, typename KP = KmerParser>
+	template <template <typename> class SeqParser, typename KP = KmerParser>
 	static size_t read_file(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
 
 
@@ -254,15 +254,6 @@ public:
 			// std::cout << "Last: pos - kmer " << result.back() << std::endl;
 		}
 
-		if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
-			BL_BENCH_START(file);
-
-			::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
-			::std::for_each(result.begin(), result.end(), tuple_trans);
-
-			BL_BENCH_END(file, "canonicalize", result.size());
-		}
-
 		BL_BENCH_REPORT_MPI_NAMED(file, "index:read:fileloader", _comm);
 		return result.size() - before;
 	}
@@ -273,7 +264,7 @@ public:
 	 * @tparam KmerParser		parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.  template template parameter, param is iterator
 	 */
-	template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity, typename KP = KmerParser>
+	template <template <typename> class SeqParser, typename KP = KmerParser>
 	static size_t read_file_mpi_subcomm(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm& comm) {
 
       // file extension determines SeqParserType
@@ -291,7 +282,7 @@ public:
       }
 
 		if (comm.size() == 1) {
-			return read_file<SeqParser, PreCanonicalizer, KP>(filename, result, comm);
+			return read_file<SeqParser, KP>(filename, result, comm);
 		}
 
 		// split the communcator so 1 proc from each host does the read, then redistribute.
@@ -392,14 +383,6 @@ public:
 			BL_INFO("Last: pos - kmer " << result.back());
 		}
 
-		if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
-			BL_BENCH_START(file);
-
-			::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
-			::std::for_each(result.begin(), result.end(), tuple_trans);
-
-			BL_BENCH_END(file, "canonicalize", result.size());
-		}
 
     BL_BENCH_REPORT_MPI_NAMED(file, "index:read:fileloader_subcomm", comm);
 
@@ -414,7 +397,7 @@ public:
 	 * @tparam SeqParser		parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
 	 * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 */
-	template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity, typename KP = KmerParser>
+	template <template <typename> class SeqParser, typename KP = KmerParser>
 	static size_t read_file_mpiio(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
 
       // file extension determines SeqParserType
@@ -482,14 +465,6 @@ public:
 	      // std::cout << "Last: pos - kmer " << result.back() << std::endl;
 	    }
 
-	    if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
-	      BL_BENCH_START(file);
-
-	      ::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
-	      ::std::for_each(result.begin(), result.end(), tuple_trans);
-
-	      BL_BENCH_END(file, "canonicalize", result.size());
-	    }
 
       BL_BENCH_REPORT_MPI_NAMED(file, "index:read:mpiio", _comm);
 	    return result.size() - before;
@@ -502,7 +477,7 @@ public:
    * @tparam SeqParser    parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
    * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
    */
-  template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity, typename KP = KmerParser>
+  template <template <typename> class SeqParser, typename KP = KmerParser>
   static size_t read_file_mmap(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
 
       // file extension determines SeqParserType
@@ -569,15 +544,6 @@ public:
         // std::cout << "Last: pos - kmer " << result.back() << std::endl;
       }
 
-      if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
-        BL_BENCH_START(file);
-
-        ::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
-        ::std::for_each(result.begin(), result.end(), tuple_trans);
-
-        BL_BENCH_END(file, "canonicalize", result.size());
-      }
-
       BL_BENCH_REPORT_MPI_NAMED(file, "index:read:mmap_file", _comm);
       return result.size() - before;
   }
@@ -589,7 +555,7 @@ public:
    * @tparam SeqParser    parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
    * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
    */
-  template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity, typename KP = KmerParser>
+  template <template <typename> class SeqParser, typename KP = KmerParser>
   static size_t read_file_posix(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
 
       // file extension determines SeqParserType
@@ -656,14 +622,6 @@ public:
         // std::cout << "Last: pos - kmer " << result.back() << std::endl;
       }
 
-      if (!::std::is_same<PreCanonicalizer<KmerType>, ::bliss::kmer::transform::identity<KmerType> >::value) {
-        BL_BENCH_START(file);
-
-        ::bliss::kmer::transform::tuple_transform<KmerType, PreCanonicalizer> tuple_trans;
-        ::std::for_each(result.begin(), result.end(), tuple_trans);
-
-        BL_BENCH_END(file, "canonicalize", result.size());
-      }
 
       BL_BENCH_REPORT_MPI_NAMED(file, "index:read:posix_file", _comm);
       return result.size() - before;
@@ -767,7 +725,7 @@ public:
 	 //============= THESE ARE TO BE DEPRECATED
 
 	 /// convenience function for building index.
-	 template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
+	 template <template <typename> class SeqParser>
 	 void build(const std::string & filename, MPI_Comm comm) {
 
 		 // file extension determines SeqParserType
@@ -788,7 +746,7 @@ public:
 		 // proceed
 	     BL_BENCH_START(build);
 		 ::std::vector<typename KmerParser::value_type> temp;
-		 this->read_file<SeqParser, PreCanonicalizer, KmerParser >(filename, temp, comm);
+		 this->read_file<SeqParser, KmerParser >(filename, temp, comm);
 	    BL_BENCH_END(build, "read", temp.size());
 
 
@@ -812,7 +770,7 @@ public:
 	 }
 
 
-   template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
+   template <template <typename> class SeqParser>
 	 void build_with_mpi_subcomm(const std::string & filename, MPI_Comm comm) {
 
      // file extension determines SeqParserType
@@ -833,7 +791,7 @@ public:
      // proceed
      BL_BENCH_START(build);
      ::std::vector<typename KmerParser::value_type> temp;
-     this->read_file_mpi_subcomm<SeqParser, PreCanonicalizer, KmerParser  >(filename, temp, comm);
+     this->read_file_mpi_subcomm<SeqParser, KmerParser  >(filename, temp, comm);
      BL_BENCH_END(build, "read", temp.size());
 
      BL_BENCH_START(build);
@@ -850,7 +808,7 @@ public:
 	 //     since Kmer template parameter is not explicitly known, we can't hard code the return types of KmerParserType.
 
 	 /// convenience function for building index.
-	 template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
+	 template <template <typename> class SeqParser>
 	 void build_mpiio(const std::string & filename, MPI_Comm comm) {
 
 		 // file extension determines SeqParserType
@@ -871,7 +829,7 @@ public:
 		 // proceed
      BL_BENCH_START(build);
 		 ::std::vector<typename KmerParser::value_type> temp;
-		 this->read_file_mpiio<SeqParser, PreCanonicalizer, KmerParser >(filename, temp, comm);
+		 this->read_file_mpiio<SeqParser, KmerParser >(filename, temp, comm);
      BL_BENCH_END(build, "read", temp.size());
 
 
@@ -895,7 +853,7 @@ public:
 
 
 	  /// convenience function for building index.
-	   template <template <typename> class SeqParser, template<typename> class PreCanonicalizer=bliss::kmer::transform::identity>
+	   template <template <typename> class SeqParser>
 	   void build_mmap(const std::string & filename, MPI_Comm comm) {
 
 	     // file extension determines SeqParserType
@@ -916,7 +874,7 @@ public:
 	     // proceed
 	     BL_BENCH_START(build);
 	     ::std::vector<typename KmerParser::value_type> temp;
-	     this->read_file_mmap<SeqParser, PreCanonicalizer, KmerParser >(filename, temp, comm);
+	     this->read_file_mmap<SeqParser, KmerParser >(filename, temp, comm);
 	      BL_BENCH_END(build, "read", temp.size());
 
 
@@ -1338,7 +1296,155 @@ using CountIndex = Index<MapType, KmerCountTupleParser<std::pair<typename MapTyp
 template <typename MapType>
 using CountIndex2 = Index<MapType, KmerParser<typename MapType::key_type> >;
 
+// template aliases for hash to be used as distribution hash
+template <typename Key>
+using DistHashFarm = ::bliss::kmer::hash::farm<Key, true>;
+template <typename Key>
+using DistHashMurmur = ::bliss::kmer::hash::murmur<Key, true>;
+template <typename Key>
+using DistHashStd = ::bliss::kmer::hash::cpp_std<Key, true>;
+template <typename Key>
+using DistHashIdentity = ::bliss::kmer::hash::identity<Key, true>;
 
+
+template <typename Key>
+using StoreHashFarm = ::bliss::kmer::hash::farm<Key, false>;
+template <typename Key>
+using StoreHashMurmur = ::bliss::kmer::hash::murmur<Key, false>;
+template <typename Key>
+using StoreHashStd = ::bliss::kmer::hash::cpp_std<Key, false>;
+template <typename Key>
+using StoreHashIdentity = ::bliss::kmer::hash::identity<Key, false>;
+
+// =================  Partially defined aliases for MapParams, for distributed_xxx_maps.
+// NOTE: when using this, need to further alias so that only Key param remains.
+// =================
+template <typename Key,
+			template <typename> class DistHash  = DistHashFarm,
+			template <typename> class StoreHash = StoreHashFarm,
+			template <typename> class DistTrans = ::bliss::kmer::transform::identity
+			>
+using SingleStrandHashMapParams = ::dsc::HashMapParams<
+		Key,
+		::bliss::kmer::transform::identity,  // precanonalizer
+		 DistTrans,  				// could be iden, xor, lex_less
+		  DistHash,
+		  ::std::equal_to,
+		   ::bliss::kmer::transform::identity,  // only one that makes sense given InputTransform
+		    StoreHash,
+		    ::std::equal_to
+		  >;
+
+
+template <typename Key,
+	template <typename> class DistHash  = DistHashFarm,
+	template <typename> class StoreHash = StoreHashFarm
+>
+using CanonicalHashMapParams = ::dsc::HashMapParams<
+		Key,
+		::bliss::kmer::transform::lex_less,  // precanonalizer
+		 ::bliss::kmer::transform::identity,  // only one that makes sense given InputTransform
+		  DistHash,
+		  ::std::equal_to,
+		   ::bliss::kmer::transform::identity,
+		    StoreHash,
+		    ::std::equal_to
+		  >;
+
+template <typename Key,
+	template <typename> class DistHash  = DistHashFarm,
+	template <typename> class StoreHash = StoreHashFarm
+	>
+using BimoleculeHashMapParams = ::dsc::HashMapParams<
+		Key,
+		::bliss::kmer::transform::identity,  // precanonalizer - only one that makes sense for bimole
+		 ::bliss::kmer::transform::lex_less,  // only one that makes sense for bimole
+		  DistHash,
+		  ::std::equal_to,
+		   ::bliss::kmer::transform::lex_less,
+		    StoreHash,
+		    ::std::equal_to
+		  >;
+template <typename Key,
+			template <typename> class DistHash = DistHashFarm,
+			template <typename> class StoreLess = ::std::less,
+			template <typename> class DistTrans = ::bliss::kmer::transform::identity >
+using SingleStrandOrderedMapParams = ::dsc::OrderedMapParams<
+		Key,
+		::bliss::kmer::transform::identity,  // precanonalizer
+		 DistTrans,  				// could be iden, xor, lex_less
+		  DistHash,
+		  ::std::equal_to,
+		   ::bliss::kmer::transform::identity,  // only one that makes sense given InputTransform
+		    StoreLess,
+		    ::std::equal_to
+		  >;
+
+
+template <typename Key,
+			template <typename> class DistHash = DistHashFarm,
+			template <typename> class StoreLess = ::std::less
+			>
+using CanonicalOrderedMapParams = ::dsc::OrderedMapParams<
+		Key,
+		::bliss::kmer::transform::lex_less,  // precanonalizer
+		 ::bliss::kmer::transform::identity,  // only one that makes sense given InputTransform
+		  DistHash,
+		  ::std::equal_to,
+		   ::bliss::kmer::transform::identity,
+		    StoreLess,
+		    ::std::equal_to
+		  >;
+
+template <typename Key,
+			template <typename> class DistHash = DistHashFarm,
+			template <typename> class StoreLess = ::std::less
+			>
+using BimoleculeOrderedMapParams = ::dsc::OrderedMapParams<
+		Key,
+		::bliss::kmer::transform::identity,  // precanonalizer - only one that makes sense for bimole
+		 ::bliss::kmer::transform::lex_less,  // only one that makes sense for bimole
+		  DistHash,
+		  ::std::equal_to,
+		   ::bliss::kmer::transform::lex_less,
+		    StoreLess,
+		    ::std::equal_to
+		  >;
+
+
+template <typename Key,
+  template <typename> class Less = ::std::less
+>
+using SingleStrandSortedMapParams = ::dsc::SortedMapParams<
+		Key,
+		::bliss::kmer::transform::identity,  // precanonalizer
+		   ::bliss::kmer::transform::identity,  // only one that makes sense given InputTransform
+		    Less,
+		    ::std::equal_to
+		  >;
+
+
+template <typename Key,
+			template <typename> class Less = ::std::less
+>
+using CanonicalSortedMapParams = ::dsc::SortedMapParams<
+		Key,
+		::bliss::kmer::transform::lex_less,  // precanonalizer
+		 ::bliss::kmer::transform::identity,  // only one that makes sense given InputTransform
+		    Less,
+		    ::std::equal_to
+		  >;
+
+template <typename Key,
+			template <typename> class Less = ::std::less
+>
+using BimoleculeSortedMapParams = ::dsc::SortedMapParams<
+		Key,
+		::bliss::kmer::transform::identity,  // precanonalizer - only one that makes sense for bimole
+		 ::bliss::kmer::transform::lex_less,  // only one that makes sense for bimole
+		    Less,
+		    ::std::equal_to
+		  >;
 } /* namespace kmer */
 
 } /* namespace index */

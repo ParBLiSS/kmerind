@@ -112,7 +112,7 @@ TYPED_TEST_P(KmerTransformTest, trans_xor)
 
   for (size_t i = 0; i < this->iterations; ++i) {
     // check symmetry.
-	local_same = (op(std::make_pair(km, rev)) == op(std::make_pair(rev, km)));
+	local_same = (op(km, rev) == op(rev, km));
     if (!local_same) {
       BL_ERRORF("ERROR: seq xor is not symmetric at iter %lu:\n\tkmer %s\n\trevcomp %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str());
     }
@@ -120,14 +120,14 @@ TYPED_TEST_P(KmerTransformTest, trans_xor)
     same &= local_same;
 
 	// check reversable.
-	local_same = (gold == op(std::make_pair(op(std::make_pair(km, rev)), rev)));
+	local_same = (gold == op(op(km, rev), rev));
     if (!local_same) {
       BL_ERRORF("ERROR: seq xor is not reversable with revcomp at iter %lu:\n\tkmer %s\n\trevcomp %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str());
     }
     ASSERT_TRUE(local_same);
     same &= local_same;
 
-	local_same = (rev == op(std::make_pair(op(std::make_pair(rev, km)), km)));
+	local_same = (rev == op(op(rev, km), km));
     if (!local_same) {
       BL_ERRORF("ERROR: seq xor is not reversable with km at iter %lu:\n\tkmer %s\n\trevcomp %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str());
     }
@@ -135,7 +135,7 @@ TYPED_TEST_P(KmerTransformTest, trans_xor)
     same &= local_same;
 
     // check single operand is same as double operand.
-    local_same = (op(std::make_pair(km, rev)) == op(km));
+    local_same = (op(km, rev) == op(km));
     if (!local_same) {
       BL_ERRORF("ERROR: seq xor single vs double operands are not the same at iter %lu:\n\tkmer %s\n\trevcomp %s", i, km.toAlphabetString().c_str(), rev.toAlphabetString().c_str());
     }
