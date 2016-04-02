@@ -859,12 +859,14 @@ namespace dsc  // distributed std container
               // set up receive.
               MPI_Irecv(&(results[recv_total]), recved[1], dt.type(),
                         recv_from, i + this->comm.size(), this->comm, &reqs[2 * i]);
-              recv_total += recved[1];
-
-
-
               MPI_Isend(&(local_results[0]), found[1], dt.type(),
             		  send_to, i + this->comm.size(), this->comm, &reqs[2 * i + 1]);
+
+//              MPI_Sendrecv(&(local_results[0]), found[1], dt.type(), send_to, i + this->comm.size(),
+//            		  &(results[recv_total]), recved[1], dt.type(), recv_from, i + this->comm.size(),
+//            		  this->comm, MPI_STATUS_IGNORE);
+
+              recv_total += recved[1];
 
             }
 
@@ -1769,12 +1771,12 @@ namespace dsc  // distributed std container
         // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
 
-        size_t n_unique = this->unique_size();
+        size_t n_unique = this->local_unique_size();
         float multiplicity = 1.0f;
         if (n_unique > 0) {
           // local unique
           multiplicity =
-              static_cast<float>(this->size()) /
+              static_cast<float>(this->local_size()) /
               static_cast<float>(n_unique);
         }
 
@@ -2373,7 +2375,9 @@ namespace dsc  // distributed std container
 
 
           BL_BENCH_START(local_insert);
-          ::std::sort(first, last, typename Base::Base::StoreTransformedLess());
+//          ::std::sort(first, last, typename Base::Base::StoreTransformedLess());
+          ::std::sort(first, last, ::fsc::TransformedComparator<Key, ::std::less, ::bliss::kmer::transform::identity>());
+
           BL_BENCH_END(local_insert, "sort", dist);
 
 
@@ -2540,7 +2544,7 @@ namespace dsc  // distributed std container
       /// access the current the multiplicity.  only multimap needs to override this.
       virtual float get_multiplicity() const {
         // multimaps would add a collective function to change the multiplicity
-        if (this->comm.rank() == 0) printf("rank %d vec get_multiplicity called\n", this->comm.rank());
+       // if (this->comm.rank() == 0) printf("rank %d vec get_multiplicity called\n", this->comm.rank());
 
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
         //  sum(count per key) / c.size.
@@ -2552,17 +2556,17 @@ namespace dsc  // distributed std container
         // To find unique set, we take each bucket, copy to vector, sort it, and then count unique.
         // This is precise, and is faster than the approach above.  (0.0078125 humanMaM MaMaÿ?: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
-        size_t unique_count = this->unique_size();
-        float multiplicity = 1.0f;
-        if (unique_count > 0) {
-          // local unique
-          multiplicity =
-              static_cast<float>(this->size()) /
-              static_cast<float>(unique_count);
-        }
+//        size_t unique_count = this->unique_size();
+//        float multiplicity = 1.0f;
+//        if (unique_count > 0) {
+//          // local unique
+//          multiplicity =
+//              static_cast<float>(this->size()) /
+//              static_cast<float>(unique_count);
+//        }
 
-        return multiplicity;
-
+        return this->c.get_mean_multiplicity();
+//    	  return 1.0f;
       }
 
       /// get the size of unique keys in the current local container.
@@ -2715,7 +2719,8 @@ namespace dsc  // distributed std container
           if (first == last) return 0;
 
           BL_BENCH_START(local_insert);
-          ::std::sort(first, last, typename Base::Base::StoreTransformedLess());
+//          ::std::sort(first, last, typename Base::Base::StoreTransformedLess());
+          ::std::sort(first, last, ::fsc::TransformedComparator<Key, ::std::less, ::bliss::kmer::transform::identity>());
           BL_BENCH_END(local_insert, "sort", dist);
 
 
@@ -2887,12 +2892,12 @@ namespace dsc  // distributed std container
 
       /// update the multiplicity.  only multimap needs to do this.
       virtual float get_multiplicity() const {
-        if (this->comm.rank() == 0) printf("rank %d compactvec get_multiplicity called\n", this->comm.rank());
-
-        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity min %lu\n", this->comm.rank(), this->c.get_min_multiplicity());
-        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity max %lu\n", this->comm.rank(), this->c.get_max_multiplicity());
-        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity mean %f\n", this->comm.rank(), this->c.get_mean_multiplicity());
-        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity stdev %f\n", this->comm.rank(), this->c.get_stdev_multiplicity());
+//        if (this->comm.rank() == 0) printf("rank %d compactvec get_multiplicity called\n", this->comm.rank());
+//
+//        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity min %lu\n", this->comm.rank(), this->c.get_min_multiplicity());
+//        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity max %lu\n", this->comm.rank(), this->c.get_max_multiplicity());
+//        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity mean %f\n", this->comm.rank(), this->c.get_mean_multiplicity());
+//        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity stdev %f\n", this->comm.rank(), this->c.get_stdev_multiplicity());
 
 
 
@@ -2906,21 +2911,20 @@ namespace dsc  // distributed std container
         // To find unique set, we take each bucket, copy to vector, sort it, and then count unique.
         // This is precise, and is faster than the approach above.  (0.0078125 human: 54 sec.  synth: 57sec.)
         // but the n log(n) sort still grows with the duplicate count
-        size_t unique_count = this->unique_size();
-        size_t total = this->size();
-        if (this->comm.rank() == 0) printf("rank %d compactvec unique_count is %lu, size is %lu\n", this->comm.rank(), unique_count, total);
-        float multiplicity = 1.0f;
-        if (unique_count > 0) {
-          // local unique
-          multiplicity =
-              static_cast<float>(total) /
-              static_cast<float>(unique_count);
-        }
+//        size_t unique_count = this->unique_size();
+//        size_t total = this->size();
+//        if (this->comm.rank() == 0) printf("rank %d compactvec unique_count is %lu, size is %lu\n", this->comm.rank(), unique_count, total);
+//        float multiplicity = 1.0f;
+//        if (unique_count > 0) {
+//          // local unique
+//          multiplicity =
+//              static_cast<float>(total) /
+//              static_cast<float>(unique_count);
+//        }
 
 
 
-        return multiplicity;
-
+        return this->c.get_mean_multiplicity();
       }
 
 

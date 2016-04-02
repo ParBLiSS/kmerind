@@ -714,7 +714,7 @@ public:
 
 #if (BL_BENCHMARK == 1)
 		BL_BENCH_START(insert);
-		size_t m = 0;
+		size_t m = 0;  // here because sortmap needs it.
 		m = this->map.get_multiplicity();
 		BL_BENCH_END(insert, "multiplicity", m);
 #else
