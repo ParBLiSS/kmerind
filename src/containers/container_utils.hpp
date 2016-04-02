@@ -489,7 +489,7 @@ namespace fsc {
   // finds splitter positions for the given splitters (`map`)
   // in the sorted buffer, sorted according to the `comp` comparator, and maps to communicator rank order.
   template<typename T, typename Key, typename Comparator>
-  std::vector<size_t> sorted_bucketing(std::vector<T>& buffer, ::std::vector<::std::pair<Key, int> > map, Comparator comp, size_t comm_size) {
+  std::vector<size_t> sorted_bucketing(std::vector<T>& buffer, ::std::vector<::std::pair<Key, int> > map, Comparator comp, int comm_size) {
     //== track the send count
     std::vector<size_t> send_counts(comm_size, 0);
 
@@ -497,14 +497,14 @@ namespace fsc {
 
     // check the map a little.
     {
-      assert(map.size() < comm.size);
+      assert(map.size() < static_cast<size_t>(comm_size));
       std::vector<int> ranks(map.size(), 0);
       std::transform(map.begin(), map.end(), ranks.begin(), [](::std::pair<Key, int> const & x){
         return x.second;
       });
       // check min max values are within comm rank values.
-      assert(std::min_element(ranks.begin(), ranks.end()) >= 0);
-      assert(std::max_element(ranks.begin(), ranks.end()) < comm_size);
+      assert(*(std::min_element(ranks.begin(), ranks.end())) >= 0);
+      assert(*(std::max_element(ranks.begin(), ranks.end())) < comm_size);
       // check ranks are sorted (since it was generated that way).
       assert(std::is_sorted(ranks.begin(), ranks.end()));
       // check no duplicates.
