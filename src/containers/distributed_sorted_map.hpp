@@ -853,7 +853,8 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             		  start, end, emplace_iter, lf, sorted_input, pred);
 
               // use the first one to estimate the rest.
-              if (i == std::ceil(static_cast<double>(this->comm.size()) * 0.05)) {
+              //if (i == std::ceil(static_cast<double>(this->comm.size()) * 0.05)) {
+			  if ((results.size() + send_counts[i]) > results.capacity()) {  // guess that next batch is going to get us similar size, and that may cause results to resize too much.
             	  // count so far
             	  size_t new_est = std::ceil((static_cast<double>(results.size()) / static_cast<double>(std::distance(keys.begin(), end))) * static_cast<double>(keys.size()) * 1.1f);
             	  if (this->comm.rank() == 0) printf("rank %d nkeys %lu nresuts %lu est result size %lu original estimate %lu\n", this->comm.rank(), keys.size(), results.size(), new_est, results.capacity());
