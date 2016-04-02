@@ -465,13 +465,13 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class LocalFind, typename Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+      ::std::vector<::std::pair<Key, T> > find_overlap(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
           ::std::vector<::std::pair<Key, T> > results;
 
           if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_overlap", this->comm);
             return results;
           }
 
@@ -632,7 +632,7 @@ namespace dsc  // distributed std container
             BL_BENCH_END(find, "local_find", results.size());
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_paired", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_overlap", this->comm);
 
           return results;
 
@@ -645,13 +645,13 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class LocalFind, typename Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_est(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+      ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
           ::std::vector<::std::pair<Key, T> > results;
 
           if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_a2a", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find", this->comm);
             return results;
           }
 
@@ -743,7 +743,7 @@ namespace dsc  // distributed std container
 
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_est", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find", this->comm);
 
           return results;
 
@@ -760,13 +760,13 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <class LocalFind, typename Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_irecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+      ::std::vector<::std::pair<Key, T> > find_sendrecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
           ::std::vector<::std::pair<Key, T> > results;
 
           if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_irecv", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_sendrecv", this->comm);
             return results;
           }
 
@@ -917,7 +917,7 @@ namespace dsc  // distributed std container
             BL_BENCH_END(find, "local_find", results.size());
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_irecv", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_sendrecv", this->comm);
 
           return results;
 
@@ -1546,9 +1546,9 @@ namespace dsc  // distributed std container
 
 
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
                                                Predicate const& pred = Predicate()) const {
-          return Base::find(find_element, keys, sorted_input, pred);
+          return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
 
       template <class Predicate = TruePredicate>
@@ -1557,14 +1557,14 @@ namespace dsc  // distributed std container
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_est(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_est(find_element, keys, sorted_input, pred);
+          return Base::find(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_irecv(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_irecv(find_element, keys, sorted_input, pred);
+          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
       template <class Predicate = TruePredicate>
@@ -1728,14 +1728,14 @@ namespace dsc  // distributed std container
 
 
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
                                                Predicate const& pred = Predicate()) const {
-          return Base::find(find_element, keys, sorted_input, pred);
+          return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_est(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_est(find_element, keys, sorted_input, pred);
+          return Base::find(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
@@ -1743,9 +1743,9 @@ namespace dsc  // distributed std container
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_irecv(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_irecv(find_element, keys, sorted_input, pred);
+          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
 
@@ -2420,7 +2420,7 @@ namespace dsc  // distributed std container
 
 
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
                                                Predicate const& pred = Predicate()) const {
           /*
 
@@ -2455,12 +2455,12 @@ namespace dsc  // distributed std container
 
           return result;
            */
-          return Base::find(find_element, keys, sorted_input, pred);
+          return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_est(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_est(find_element, keys, sorted_input, pred);
+          return Base::find(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
@@ -2468,9 +2468,9 @@ namespace dsc  // distributed std container
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_irecv(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_irecv(find_element, keys, sorted_input, pred);
+          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
       template <class Predicate = TruePredicate>
@@ -2564,6 +2564,8 @@ namespace dsc  // distributed std container
 //              static_cast<float>(this->size()) /
 //              static_cast<float>(unique_count);
 //        }
+          if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity max %lu\n", this->comm.rank(), this->c.get_max_multiplicity());
+          if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity mean %f\n", this->comm.rank(), this->c.get_mean_multiplicity());
 
         return this->c.get_mean_multiplicity();
 //    	  return 1.0f;
@@ -2770,7 +2772,7 @@ namespace dsc  // distributed std container
 
 
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
                                                Predicate const& pred = Predicate()) const {
           /*
           // DEBUG
@@ -2803,13 +2805,13 @@ namespace dsc  // distributed std container
 
           return result;
            */
-          return Base::find(find_element, keys, sorted_input, pred);
+          return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
 
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_est(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_est(find_element, keys, sorted_input, pred);
+          return Base::find(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
@@ -2817,9 +2819,9 @@ namespace dsc  // distributed std container
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_irecv(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_irecv(find_element, keys, sorted_input, pred);
+          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
 
@@ -2895,8 +2897,8 @@ namespace dsc  // distributed std container
 //        if (this->comm.rank() == 0) printf("rank %d compactvec get_multiplicity called\n", this->comm.rank());
 //
 //        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity min %lu\n", this->comm.rank(), this->c.get_min_multiplicity());
-//        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity max %lu\n", this->comm.rank(), this->c.get_max_multiplicity());
-//        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity mean %f\n", this->comm.rank(), this->c.get_mean_multiplicity());
+        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity max %lu\n", this->comm.rank(), this->c.get_max_multiplicity());
+        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity mean %f\n", this->comm.rank(), this->c.get_mean_multiplicity());
 //        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity stdev %f\n", this->comm.rank(), this->c.get_stdev_multiplicity());
 
 

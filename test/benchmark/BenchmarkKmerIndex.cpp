@@ -535,16 +535,16 @@ int main(int argc, char** argv) {
 	      auto lquery = query;
 
 	    BL_BENCH_START(test);
-	    auto found = idx.find_est(lquery);
-	    BL_BENCH_COLLECTIVE_END(test, "find_est", found.size(), comm);
+	    auto found = idx.find_overlap(lquery);
+	    BL_BENCH_COLLECTIVE_END(test, "find_overlap", found.size(), comm);
 	    }
     // separate test because of it being potentially very slow depending on imbalance.
     {
       auto lquery = query;
 
     BL_BENCH_START(test);
-    auto found = idx.find_irecv(lquery);
-    BL_BENCH_COLLECTIVE_END(test, "find_irecv", found.size(), comm);
+    auto found = idx.find_sendrecv(lquery);
+    BL_BENCH_COLLECTIVE_END(test, "find_sendrecv", found.size(), comm);
     }
 #endif
 

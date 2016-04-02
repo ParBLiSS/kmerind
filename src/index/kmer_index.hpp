@@ -631,17 +631,17 @@ public:
 
 
 
+	std::vector<TupleType> find_overlap(std::vector<KmerType> &query) {
+		return map.find_overlap(query);
+	}
 	std::vector<TupleType> find(std::vector<KmerType> &query) {
 		return map.find(query);
-	}
-	std::vector<TupleType> find_est(std::vector<KmerType> &query) {
-		return map.find_est(query);
 	}
 	std::vector<TupleType> find_collective(std::vector<KmerType> &query) {
 		return map.find_collective(query);
 	}
-  std::vector<TupleType> find_irecv(std::vector<KmerType> &query) {
-    return map.find_irecv(query);
+  std::vector<TupleType> find_sendrecv(std::vector<KmerType> &query) {
+    return map.find_sendrecv(query);
   }
 	std::vector< std::pair<KmerType, size_t> > count(std::vector<KmerType> &query) {
 		return map.count(query);
@@ -653,20 +653,20 @@ public:
 
 
 	template <typename Predicate>
-	std::vector<TupleType> find_if(std::vector<KmerType> &query, Predicate const &pred) {
-		return map.find(query, pred);
+	std::vector<TupleType> find_if_overlap(std::vector<KmerType> &query, Predicate const &pred) {
+		return map.find_overlap(query, pred);
 	}
 	template <typename Predicate>
-	std::vector<TupleType> find_if_est(std::vector<KmerType> &query, Predicate const &pred) {
-		return map.find_est(query, pred);
+	std::vector<TupleType> find_if(std::vector<KmerType> &query, Predicate const &pred) {
+		return map.find(query, pred);
 	}
 	template <typename Predicate>
 	std::vector<TupleType> find_if_collective(std::vector<KmerType> &query, Predicate const &pred) {
 		return map.find_collective(query, pred);
 	}
   template <typename Predicate>
-  std::vector<TupleType> find_if_irecv(std::vector<KmerType> &query, Predicate const &pred) {
-    return map.find_irecv(query, pred);
+  std::vector<TupleType> find_if_sendrecv(std::vector<KmerType> &query, Predicate const &pred) {
+    return map.find_sendrecv(query, pred);
   }
 	template <typename Predicate>
 	std::vector<TupleType> find_if(Predicate const &pred) {

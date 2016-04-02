@@ -601,13 +601,13 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param last
        */
       template <class LocalFind, class Predicate = TruePredicate >
-      ::std::vector<::std::pair<Key, T> > find(LocalFind & lf, ::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_overlap(LocalFind & lf, ::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(find);
           ::std::vector<::std::pair<Key, T> > results;
 
           if (this->empty()) {
-              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
+              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_overlap", this->comm);
               return results;
           }
 
@@ -782,7 +782,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_isend", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_overlap", this->comm);
 
           return results;
       }
@@ -794,7 +794,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param last
        */
       template <class LocalFind, class Predicate = TruePredicate >
-      ::std::vector<::std::pair<Key, T> > find_est(LocalFind & lf,
+      ::std::vector<::std::pair<Key, T> > find(LocalFind & lf,
     		  ::std::vector<Key>& keys, bool & sorted_input,
     		  Predicate const& pred = Predicate() ) const {
 
@@ -802,7 +802,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           ::std::vector<::std::pair<Key, T> > results;
 
           if (this->empty()) {
-              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_a2a", this->comm);
+              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
               return results;
           }
 
@@ -922,7 +922,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_est", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
 
           return results;
       }
@@ -938,13 +938,13 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param last
        */
       template <class LocalFind, typename Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_irecv(LocalFind & lf, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+      ::std::vector<::std::pair<Key, T> > find_sendrecv(LocalFind & lf, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
           ::std::vector<::std::pair<Key, T> > results;
 
           if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_irecv", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_sendrecv", this->comm);
             return results;
           }
 
@@ -1115,7 +1115,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             BL_BENCH_END(find, "local_find", results.size());
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_irecv", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_sendrecv", this->comm);
 
           return results;
 
@@ -2164,14 +2164,14 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
       // specialized here so that the local_find functor can be used.
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
-          return Base::find(find_element, keys, sorted_input, pred);
+          return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_est(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_est(find_element, keys, sorted_input, pred);
+          return Base::find(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
@@ -2179,9 +2179,9 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_irecv(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_irecv(find_element, keys, sorted_input, pred);
+          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
       template <class Predicate = TruePredicate>
@@ -2462,14 +2462,14 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
       //========= override find, so can pass in LocalFind object.
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
-          return Base::find(find_element, keys, sorted_input, pred);
+          return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_est(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_est(find_element, keys, sorted_input, pred);
+          return Base::find(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
@@ -2477,9 +2477,9 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_irecv(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
-          return Base::find_irecv(find_element, keys, sorted_input, pred);
+          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
       template <class Predicate = TruePredicate>
