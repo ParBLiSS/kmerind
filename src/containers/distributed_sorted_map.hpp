@@ -490,6 +490,11 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_INIT(find);
           ::std::vector<::std::pair<Key, T> > results;
 
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_a2a", this->comm);
+            return results;
+          }
+
           if (this->empty()) {
               BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_a2a", this->comm);
               return results;
@@ -606,6 +611,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_INIT(find);
           ::std::vector<::std::pair<Key, T> > results;
 
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_overlap", this->comm);
+            return results;
+          }
           if (this->empty()) {
               BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_overlap", this->comm);
               return results;
@@ -801,6 +810,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_INIT(find);
           ::std::vector<::std::pair<Key, T> > results;
 
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
+            return results;
+          }
           if (this->empty()) {
               BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
               return results;
@@ -943,6 +956,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
           ::std::vector<::std::pair<Key, T> > results;
 
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_sendrecv", this->comm);
+            return results;
+          }
           if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_sendrecv", this->comm);
             return results;
@@ -1137,8 +1154,12 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 //          BL_BENCH_INIT(find);
 //          ::std::vector<::std::pair<Key, T> > results;
 //
+//      if (::dsc::empty(keys, this->comm)) {
+//        BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_irecv", this->comm);
+//        return results;
+//      }
 //          if (this->empty()) {
-//              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
+//              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_irecv", this->comm);
 //              return results;
 //          }
 //
@@ -1489,6 +1510,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
         BL_BENCH_INIT(count);
 
+        if (::dsc::empty(keys, this->comm)) {
+          BL_BENCH_REPORT_MPI_NAMED(count, "base_sorted_map:count", this->comm);
+          return results;
+        }
         if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(count, "base_sorted_map:count", this->comm);
             return results;
@@ -1634,7 +1659,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 //      }
 
       /**
-       * @brief insert new elements in the distributed sorted_multimap.  example use: stop inserting if more than x entries.
+       * @brief insert new elements in the distributed sorted_multimap.  example use: stop inserting if more than x entries.  LOCAL INSERT
        * TODO: split this into insert (into empty), and an append (into existing)
        * @param first
        * @param last
@@ -1696,22 +1721,19 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           BL_BENCH_INIT(erase);
 
-          int r = 39;
-
-          if (this->comm.rank() == r) printf("R %d begin\n", this->comm.rank());  fflush(stdout);
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
+            return 0;
+          }
 
           if (this->empty()) {
               BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
         	  return 0;
           }
-          if (this->comm.rank() == r) printf("R %d checked empty\n", this->comm.rank());  fflush(stdout);
-
 
           BL_BENCH_START(erase);
           this->transform_input(keys);
           BL_BENCH_END(erase, "transform_input", keys.size());
-
-          if (this->comm.rank() == r) printf("R %d transform input \n", this->comm.rank());  fflush(stdout);
 
         size_t before = c.size();
 
@@ -1721,16 +1743,11 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           this->redistribute();
           BL_BENCH_END(erase, "global_sort", this->local_size());
 
-          if (this->comm.rank() == r) printf("R %d global sort\n", this->comm.rank());  fflush(stdout);
-
           // remove duplicates
           BL_BENCH_START(erase);
           auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
           BLISS_UNUSED(recv_counts);
           BL_BENCH_END(erase, "dist_query", keys.size());
-
-          if (this->comm.rank() == r) printf("R %d distribute query\n", this->comm.rank());  fflush(stdout);
-
 
           sorted_input = false;  // keys not sorted across buckets.
 
@@ -1739,10 +1756,6 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_START(erase);
           this->local_sort();  // sort container before deleting.
           BL_BENCH_END(erase, "local_sort", keys.size());
-
-          printf("R 0 local_sort\n");  fflush(stdout);
-
-
         }
 
         BL_BENCH_START(erase);
@@ -1752,34 +1765,22 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 				  typename Base::StoreTransformedEqual());
         BL_BENCH_END(erase, "unique_keys", keys.size());
 
-        if (this->comm.rank() == r) printf("R %d unique keys\n", this->comm.rank());  fflush(stdout);
-
         BL_BENCH_START(erase);
         //== now call local remove.
         // first get the range of intersection
         auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(),
             keys.begin(), keys.end(), sorted_input);
 
-        if (this->comm.rank() == r) printf("R %d intersect\n", this->comm.rank());  fflush(stdout);
-
-        auto orig = overlap.first;
         auto new_end = overlap.first;
         // do the work.  skip duplicates = true
         size_t kept = QueryProcessor<false>::process(overlap.first, overlap.second,
             keys.begin(), keys.end(), new_end, erase_element, sorted_input, pred);
-
-        if (this->comm.rank() == r) printf("R %d erase.  kept %lu. overlap pointer moved? %s\n",
-        		this->comm.rank(), kept, orig == overlap.first ? "n" : "y");  fflush(stdout);
-
+        BLISS_UNUSED(kept);
 
         // move the last part.
         new_end = ::std::move(overlap.second, this->c.end(), new_end);   // move everything after the overlap range
 
-        if (this->comm.rank() == r) printf("R %d moved last\n", this->comm.rank());  fflush(stdout);
-
         this->c.erase(new_end, this->c.end());  // and clear the rest.
-
-        if (this->comm.rank() == r) printf("R %d erased last\n", this->comm.rank());  fflush(stdout);
 
         BL_BENCH_END(erase, "erase", keys.size());
 
@@ -2736,7 +2737,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
       using Base::find;
 
       /**
-       * @brief insert new elements in the distributed sorted_multimap.  convert from Key to Key-count pair
+       * @brief insert new elements in the distributed sorted_multimap.  convert from Key to Key-count pair.  LOCAL INSERT
        * @param first
        * @param last
        */
@@ -2751,19 +2752,19 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           typename Base::Base::Base::Base::InputTransform trans;
 
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        BL_BENCH_INIT(count_insert);
+        BL_BENCH_INIT(insert);
 
-        BL_BENCH_START(count_insert);
+        BL_BENCH_START(insert);
         ::std::vector<::std::pair<Key, T> > temp;
         temp.reserve(input.size());
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > temp_emplacer(temp);
         ::std::transform(input.begin(), input.end(), temp_emplacer, [&trans](Key const & x) {
         	return ::std::make_pair(trans(x), T(1));
         });
-        BL_BENCH_END(count_insert, "convert", input.size());
+        BL_BENCH_END(insert, "convert", input.size());
 
         size_t before = this->c.size();
-        BL_BENCH_START(count_insert);
+        BL_BENCH_START(insert);
 
         ::fsc::back_emplace_iterator<local_container_type> emplace_iter(this->c);
         if (::std::is_same<Predicate, TruePredicate>::value) {
@@ -2781,13 +2782,13 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         }
 
         size_t count = this->c.size() - before;
-        BL_BENCH_END(count_insert, "insert", count);
+        BL_BENCH_END(insert, "insert", count);
 
         ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
         this->sorted = false;
 
         // distribute
-        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_sorted_map:insert", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "count_sorted_map:insert", this->comm);
         return count;
       }
 

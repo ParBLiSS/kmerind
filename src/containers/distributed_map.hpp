@@ -340,6 +340,10 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
 
         ::std::vector<::std::pair<Key, T> > results;
 
+        if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_a2a", this->comm);
+          return results;
+        }
 
         if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_a2a", this->comm);
@@ -433,6 +437,12 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
         BL_BENCH_INIT(find);
 
         ::std::vector<::std::pair<Key, T> > results;
+
+        if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_overlap", this->comm);
+          return results;
+        }
+
 
         if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_overlap", this->comm);
@@ -608,6 +618,10 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
 
         ::std::vector<::std::pair<Key, T> > results;
 
+        if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find", this->comm);
+          return results;
+        }
 
         if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find", this->comm);
@@ -723,6 +737,11 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_INIT(find);
 
           ::std::vector<::std::pair<Key, T> > results;
+
+          if (::dsc::empty(keys, this->comm)) {
+              BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_sendrecv", this->comm);
+            return results;
+          }
 
           if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_sendrecv", this->comm);
@@ -896,8 +915,13 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
 //
 //        ::std::vector<::std::pair<Key, T> > results;
 //
+//      if (::dsc::empty(keys, this->comm)) {
+//          BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_irecv", this->comm);
+//        return results;
+//      }
+//
 //        if (this->empty()) {
-//            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find", this->comm);
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_irecv", this->comm);
 //            return results;
 //        }
 //
@@ -1162,6 +1186,12 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
 
         ::std::vector<::std::pair<Key, size_type> > results;
 
+        if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(count, "base_ordered_map:count", this->comm);
+          return results;
+        }
+
+
         if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(count, "base_ordered_map:count", this->comm);
           return results;
@@ -1271,8 +1301,13 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
           size_t before = this->c.size();
           BL_BENCH_INIT(erase);
 
+          if (::dsc::empty(keys, this->comm)) {
+              BL_BENCH_REPORT_MPI_NAMED(erase, "base_ordered_map:erase", this->comm);
+            return 0;
+          }
+
           if (this->empty()) {
-              BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
+              BL_BENCH_REPORT_MPI_NAMED(erase, "base_ordered_map:erase", this->comm);
             return 0;
           }
           BL_BENCH_START(erase);
@@ -1509,6 +1544,13 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
 
+
+        if (::dsc::empty(input, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(insert, "map:insert", this->comm);
+          return 0;
+        }
+
+
         BL_BENCH_START(insert);
         this->transform_input(input);
         BL_BENCH_END(insert, "start", input.size());
@@ -1538,7 +1580,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
           count = this->Base::local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "insert", this->c.size());
 
-        BL_BENCH_REPORT_MPI_NAMED(insert, "hashmap:insert", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "map:insert", this->comm);
 
         return count;
       }
@@ -1779,6 +1821,10 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
 
+        if (::dsc::empty(input, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(insert, "ordered_multimap:insert", this->comm);
+          return 0;
+        }
 
         BL_BENCH_START(insert);
         this->transform_input(input);
@@ -1974,6 +2020,12 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
 
+        if (::dsc::empty(input, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_map:insert", this->comm);
+          return 0;
+        }
+
+
         BL_BENCH_START(insert);
         this->transform_input(input);
         BL_BENCH_END(insert, "begin", input.size());
@@ -2085,52 +2137,58 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
       template <typename Predicate = TruePredicate>
       size_t insert(std::vector< Key >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        BL_BENCH_INIT(count_insert);
+        BL_BENCH_INIT(insert);
 
         typename Base::Base::Base::Base::InputTransform trans;
 
+        if (::dsc::empty(input, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(insert, "count_map:insert", this->comm);
+          return 0;
+        }
 
-        BL_BENCH_START(count_insert);
+
+
+        BL_BENCH_START(insert);
         ::std::vector<::std::pair<Key, T> > temp;
         temp.reserve(input.size());
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
         ::std::transform(input.begin(), input.end(), emplace_iter, [&trans](Key const & x) {
         	return ::std::make_pair(trans(x), T(1));
         });
-        BL_BENCH_END(count_insert, "convert", input.size());
+        BL_BENCH_END(insert, "convert", input.size());
 
 
         // communication part
         if (this->comm.size() > 1) {
 
-          BL_BENCH_START(count_insert);
+          BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
           this->local_reduction(temp, sorted_input);
-          BL_BENCH_END(count_insert, "local_reduce", temp.size());
+          BL_BENCH_END(insert, "local_reduce", temp.size());
 
-          BL_BENCH_START(count_insert);
+          BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
           auto recv_counts(::dsc::distribute(temp, this->key_to_rank, sorted_input, this->comm));
           BLISS_UNUSED(recv_counts);
-          BL_BENCH_END(count_insert, "dist_data", temp.size());
+          BL_BENCH_END(insert, "dist_data", temp.size());
         }
         //
         //        // after communication, sort again to keep unique  - may not be needed
         //        local_reduction(input);
 
         // local compute part.  called by the communicator.
-        BL_BENCH_START(count_insert);
+        BL_BENCH_START(insert);
         size_t count = 0;
         if (!::std::is_same<Predicate, TruePredicate>::value)
           count = this->Base::local_insert(temp.begin(), temp.end(), pred);
         else
           count = this->Base::local_insert(temp.begin(), temp.end());
-        BL_BENCH_END(count_insert, "local_insert", this->local_size());
+        BL_BENCH_END(insert, "local_insert", this->local_size());
 
         ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
 
 
-        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_map:insert", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "count_map:insert", this->comm);
 
         return count;
 

@@ -428,7 +428,7 @@ int main(int argc, char** argv) {
 
     TCLAP::ValueArg<int> sampleArg("S",
                                  "query-sample", "sampling ratio for the query kmers. default=100",
-                                 false, 100, "int", cmd);
+                                 false, sample_ratio, "int", cmd);
 
 
     // Parse the argv array.
@@ -517,9 +517,9 @@ int main(int argc, char** argv) {
 #endif
 	  {
 		  auto lquery = query;
-	  BL_BENCH_START(test);
-	  auto found = idx.find(lquery);
-	  BL_BENCH_COLLECTIVE_END(test, "find", found.size(), comm);
+		  BL_BENCH_START(test);
+		  auto found = idx.find(lquery);
+		  BL_BENCH_COLLECTIVE_END(test, "find", found.size(), comm);
 	  }
 
 #if defined(pCollective)

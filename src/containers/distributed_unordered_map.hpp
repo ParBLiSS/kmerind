@@ -371,10 +371,17 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > results;
 
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_a2a", this->comm);
+            return results;
+          }
+
+
           if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_a2a", this->comm);
             return results;
           }
+
 
           BL_BENCH_START(find);
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
@@ -469,6 +476,12 @@ namespace dsc  // distributed std container
           BL_BENCH_INIT(find);
 
           ::std::vector<::std::pair<Key, T> > results;
+
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_overlap", this->comm);
+            return results;
+          }
+
 
           if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_overlap", this->comm);
@@ -650,6 +663,11 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > results;
 
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find", this->comm);
+            return results;
+          }
+
           if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find", this->comm);
             return results;
@@ -764,6 +782,11 @@ namespace dsc  // distributed std container
           BL_BENCH_INIT(find);
 
           ::std::vector<::std::pair<Key, T> > results;
+
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_sendrecv", this->comm);
+            return results;
+          }
 
           if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_sendrecv", this->comm);
@@ -939,8 +962,12 @@ namespace dsc  // distributed std container
 //
 //          ::std::vector<::std::pair<Key, T> > results;
 //
+//      if (::dsc::empty(keys, this->comm)) {
+//        BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_irecv", this->comm);
+//        return results;
+//      }
 //          if (this->empty()) {
-//            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find", this->comm);
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_irecv", this->comm);
 //            return results;
 //          }
 //
@@ -1166,6 +1193,11 @@ namespace dsc  // distributed std container
           size_t before = this->c.size();
           BL_BENCH_INIT(erase);
 
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
+            return 0;
+          }
+
           if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
             return 0;
@@ -1299,6 +1331,11 @@ namespace dsc  // distributed std container
                                                         Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(count);
           ::std::vector<::std::pair<Key, size_type> > results;
+
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(count, "base_unordered_map:count", this->comm);
+            return results;
+          }
 
           if (this->empty()) {
             BL_BENCH_REPORT_MPI_NAMED(count, "base_unordered_map:count", this->comm);
@@ -1583,6 +1620,11 @@ namespace dsc  // distributed std container
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
 
+        if (::dsc::empty(input, this->comm)) {
+          BL_BENCH_REPORT_MPI_NAMED(insert, "hashmap:insert", this->comm);
+          return 0;
+        }
+
         BL_BENCH_START(insert);
         this->transform_input(input);
         BL_BENCH_END(insert, "transform_intput", input.size());
@@ -1854,6 +1896,12 @@ namespace dsc  // distributed std container
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
 
+        if (::dsc::empty(input, this->comm)) {
+          BL_BENCH_REPORT_MPI_NAMED(insert, "hash_multimap:insert", this->comm);
+          return 0;
+        }
+
+
         BL_BENCH_START(insert);
         this->transform_input(input);
         BL_BENCH_END(insert, "transform_intput", input.size());
@@ -2071,6 +2119,12 @@ namespace dsc  // distributed std container
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
 
+        if (::dsc::empty(input, this->comm)) {
+          BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_hashmap:insert", this->comm);
+          return 0;
+        }
+
+
         BL_BENCH_START(insert);
         this->transform_input(input);
         BL_BENCH_END(insert, "transform_intput", input.size());
@@ -2185,27 +2239,33 @@ namespace dsc  // distributed std container
       template <typename Predicate = TruePredicate>
       size_t insert(std::vector< Key >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
-        BL_BENCH_INIT(count_insert);
+        BL_BENCH_INIT(insert);
+
+        if (::dsc::empty(input, this->comm)) {
+          BL_BENCH_REPORT_MPI_NAMED(insert, "count_hashmap:insert", this->comm);
+          return 0;
+        }
+
 
         typename Base::Base::Base::Base::InputTransform trans;
 
-        BL_BENCH_START(count_insert);
+        BL_BENCH_START(insert);
         ::std::vector<::std::pair<Key, T> > temp;
         temp.reserve(input.size());
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
         ::std::transform(input.begin(), input.end(), emplace_iter, [&trans](Key const & x) {
         	return ::std::make_pair(trans(x), T(1));
         });
-        BL_BENCH_END(count_insert, "convert", input.size());
+        BL_BENCH_END(insert, "convert", input.size());
 
 
         // communication part
         if (this->comm.size() > 1) {
-          BL_BENCH_START(count_insert);
+          BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
           auto recv_counts = ::dsc::distribute(temp, this->key_to_rank, sorted_input, this->comm);
           BLISS_UNUSED(recv_counts);
-          BL_BENCH_END(count_insert, "dist_data", input.size());
+          BL_BENCH_END(insert, "dist_data", input.size());
         }
 
         //
@@ -2213,19 +2273,19 @@ namespace dsc  // distributed std container
         //        local_reduction(input, sorted_input);
 
         // local compute part.  called by the communicator.
-        BL_BENCH_START(count_insert);
+        BL_BENCH_START(insert);
         size_t count = 0;
         if (!::std::is_same<Predicate, TruePredicate>::value)
           count = this->Base::local_insert(temp.begin(), temp.end(), pred);
         else
           count = this->Base::local_insert(temp.begin(), temp.end());
-        BL_BENCH_END(count_insert, "local_insert", this->local_size());
+        BL_BENCH_END(insert, "local_insert", this->local_size());
 
 
         ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
 
 
-        BL_BENCH_REPORT_MPI_NAMED(count_insert, "count_hashmap:insert_key", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "count_hashmap:insert_key", this->comm);
 
         return count;
 
@@ -2503,6 +2563,12 @@ namespace dsc  // distributed std container
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
+
+        if (::dsc::empty(input, this->comm)) {
+          BL_BENCH_REPORT_MPI_NAMED(insert, "vecmap:insert", this->comm);
+          return 0;
+        }
+
 
         BL_BENCH_START(insert);
         this->transform_input(input);
@@ -2858,6 +2924,12 @@ namespace dsc  // distributed std container
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
+
+        if (::dsc::empty(input, this->comm)) {
+          BL_BENCH_REPORT_MPI_NAMED(insert, "compact_vecmap:insert", this->comm);
+          return 0;
+        }
+
 
         BL_BENCH_START(insert);
         this->transform_input(input);

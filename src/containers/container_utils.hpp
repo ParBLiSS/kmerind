@@ -548,6 +548,19 @@ namespace fsc {
 
 namespace dsc {
 
+	template <typename CONTAINER>
+	bool empty(CONTAINER const & c, mxx::comm const & comm) {
+		bool local_empty = (c.size() == 0);
+	  if (comm.size() == 1) {
+			if (local_empty) printf("rank 0/1 input is EMPTY.\n");
+		return local_empty;
+	} else { // all reduce
+		local_empty =  mxx::all_of(local_empty, comm);
+		if (local_empty && comm.rank() == 0) printf("rank ALL/%d inputs are all EMPTY.\n", comm.size());
+		return local_empty;
+	  }
+	}
+
 
   // =============== convenience functions for distribution of vector via all to all and a rank mapping function
 	// TODO: make this cleaner...
