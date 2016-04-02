@@ -439,7 +439,7 @@ namespace fsc {  // fast standard container
 
       supercontainer_type map;
       size_t s;
-      size_t multiplicity;
+      size_t max_multiplicity;
 
 
     public:
@@ -467,7 +467,7 @@ namespace fsc {  // fast standard container
                        const Allocator& alloc = Allocator()) :
                          map(bucket_count, hash, equal, alloc),
                          s(0UL),
-                         multiplicity(load_factor) {};
+                         max_multiplicity(0UL) {};
 
       template<class InputIt>
       unordered_compact_vecmap(InputIt first, InputIt last,
@@ -518,14 +518,13 @@ namespace fsc {  // fast standard container
       }
 
       void clear() {
+    	  max_multiplicity = 0;
+    	  s = 0;
         map.clear();
       }
 
       /// rehash for new count number of BUCKETS.  iterators are invalidated.  side effect is multiplicity is updated.
       void rehash(size_type count) {
-        // compute current average number of entries per vector.  this is side effect.
-        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
-
         // only rehash if new bucket count is greater than old bucket count
         if (count > map.bucket_count())
           map.rehash(count);
@@ -536,19 +535,13 @@ namespace fsc {  // fast standard container
 
       /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
       float max_load_factor() {
-        // compute current average number of entries per vector.  this is side effect.
-        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
-
-        return (map.size() == 0) ? map.max_load_factor() : map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
+    	  return (map.size() == 0) ? map.max_load_factor() : map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
       }
 
 
       /// reserve for new count of elements.  iterators may be invalidated.
       void reserve(size_type count) {
-        // compute current average number of entries per vector.  this is side effect
-        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
-
-        // compute number of buckets required.
+    	// compute number of buckets required.
         this->rehash(std::ceil(static_cast<float>(count) / this->max_load_factor()));
       }
 
@@ -559,13 +552,14 @@ namespace fsc {  // fast standard container
         return emplace(::std::forward<value_type>(value));
       }
       iterator emplace(value_type && value) {
+
         auto key = value.first;
         auto iter = map.find(key);
         if (iter == map.end()) {
           iter = map.emplace(key, subcontainer_type()).first;
-          //          map.at(key).reserve(multiplicity);
         }
         iter->second.emplace_back(::std::forward<T>(value.second));
+        this->update_max_multiplicity(0UL, iter->second.size());
         auto pos = iter->second.end();
         ++s;
         return iterator(iter, map.end(), --pos, iter->second.size() - 1);
@@ -574,9 +568,10 @@ namespace fsc {  // fast standard container
         auto iter = map.find(key);
         if (iter == map.end()) {
           iter = map.emplace(key, subcontainer_type()).first;
-          //          map[key].reserve(multiplicity);
         }
         iter->second.emplace_back(::std::forward<T>(value));
+        this->update_max_multiplicity(0UL, iter->second.size());
+
         auto pos = iter->second.end();
         ++s;
         return iterator(iter, map.end(), --pos, iter->second.size() - 1);
@@ -585,23 +580,22 @@ namespace fsc {  // fast standard container
       // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n)
       template <class InputIt>
       void insert(InputIt first, InputIt last) {
+    	  size_t after = 0;
           for (; first != last; ++first) {
-            //            if (map.find(first->first) == map.end()) {
-            //              // emplace, and take the result iterator, get the second component (subcontainer), reserve the size.
-            //              map.emplace(first->first, subcontainer_type());
-            // //              map[k].reserve(multiplicity);
-            //            }
-            //            map.at(first->first).emplace_back(::std::forward<value_type>(*first));
             map[first->first].emplace_back(::std::forward<T>(first->second));
+            after = std::max(after, map[first->first].size());
           }
           s += std::distance(first, last);
+          this->update_max_multiplicity(0UL, after);
       }
 
       /// inserting sorted range
       template <class InputIt>
       void insert_sorted(InputIt first, InputIt last) {
-    	  key_equal eq;
+    	  size_t after = 0;
+
     	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
+    	  key_equal eq;
     	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
     	    return !(eq(x.first, y.first));
     	  };
@@ -621,6 +615,7 @@ namespace fsc {  // fast standard container
     				  [](InputValueType const & x){
     			  return x.second;
     		  });
+    		  after = std::max(after, map[start->first].size());
 
     		  // advance the pointers
     		  start = end;
@@ -629,18 +624,21 @@ namespace fsc {  // fast standard container
     	  }
     	  // can have end at last, because start is at last-1.  need to copy the last part.,
     	  if (start != last) {
-    	    // end is at last.
-          ss = map[start->first].size();
-          map[start->first].reserve(ss + std::distance(start, end));
+				// end is at last.
+			  ss = map[start->first].size();
+			  map[start->first].reserve(ss + std::distance(start, end));
 
-          // copy the range
-          std::transform(start, end, std::back_inserter(map[start->first]),
-              [](InputValueType const & x){
-            return x.second;
-          });
+			  // copy the range
+			  std::transform(start, end, std::back_inserter(map[start->first]),
+				  [](InputValueType const & x){
+				return x.second;
+			  });
+    		  after = std::max(after, map[start->first].size());
+
     	  }
 
     	  s += std::distance(first, last);
+          this->update_max_multiplicity(0UL, after);
       }
 
       template <typename Pred>
@@ -655,9 +653,11 @@ namespace fsc {  // fast standard container
 
     	  vec.erase(new_end, vec.end());
 
-    	  size_t c = before - vec.size();
-    	  s -= c;
-    	  return c;
+    	  size_t after = vec.size();
+          this->update_max_multiplicity(before, after);
+
+          s -= (before - after);
+    	  return before - after;
       }
 
 
@@ -666,7 +666,8 @@ namespace fsc {  // fast standard container
     	  size_t c = count(key);
     	  s -= c;
     	  map.erase(key);
-        return c;
+          this->update_max_multiplicity(c, 0);
+          return c;
       }
 
       size_type count(Key const & key) const {
@@ -675,9 +676,6 @@ namespace fsc {  // fast standard container
       }
 
       void shrink_to_fit() {
-        // update multiplicity.
-        this->multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
-
         // for each vector, shrink it.
         auto max = map.end();
         for (auto it = map.begin(); it != max; ++it) {
@@ -697,14 +695,26 @@ namespace fsc {  // fast standard container
         return map.size();
       }
       size_type get_max_multiplicity() const {
-        size_type max_multiplicity = 0;
-        auto max = map.cend();
-        for (auto it = map.cbegin(); it != max; ++it) {
-          max_multiplicity = ::std::max(max_multiplicity, it->second.size());
-        }
         return max_multiplicity;
       }
-      size_type get_min_multiplicity() const {
+      void update_max_multiplicity(size_type before, size_type after) {
+		  // after is larger, so set it whether we're inserting or deleting
+		  if (after >= max_multiplicity) {
+			  max_multiplicity = after;
+			  return;
+		  }
+
+		  // else after is smaller than max.  check if delete or insert
+		  if (before < max_multiplicity)  // delete or insert, but was not max.  return
+			  return;
+
+		  // delete and before was >= max, and after is less than max.  may have been max.
+		  // need a full check.
+		  max_multiplicity = map.cbegin()->second.size();
+    	  for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+    		  max_multiplicity = ::std::max(max_multiplicity, it->second.size());
+    	  }
+      }      size_type get_min_multiplicity() const {
         size_type min_multiplicity = ::std::numeric_limits<size_type>::max();
         auto max = map.cend();
         for (auto it = map.cbegin(); it != max; ++it) {
@@ -1353,7 +1363,7 @@ namespace fsc {  // fast standard container
 
       supercontainer_type map;
       size_t s;
-      size_t multiplicity;
+      size_t max_multiplicity;
 
 
     public:
@@ -1381,7 +1391,7 @@ namespace fsc {  // fast standard container
                          const Allocator& alloc = Allocator()) :
                            map(bucket_count, hash, equal, alloc),
                            s(0UL),
-                           multiplicity(load_factor) {};
+                           max_multiplicity(0UL) {};
 
       template<class InputIt>
       unordered_vecmap(InputIt first, InputIt last,
@@ -1430,14 +1440,13 @@ namespace fsc {  // fast standard container
       }
 
       void clear() {
+    	  s = 0;
+    	  max_multiplicity = 0;
         map.clear();
       }
 
       /// rehash for new count number of BUCKETS.  iterators are invalidated.  side effect is multiplicity is updated.
       void rehash(size_type count) {
-        // compute current average number of entries per vector.  this is side effect.
-        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
-
         // only rehash if new bucket count is greater than old bucket count
         if (count > map.bucket_count())
           map.rehash(count);
@@ -1448,18 +1457,12 @@ namespace fsc {  // fast standard container
 
       /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
       float max_load_factor() {
-        // compute current average number of entries per vector.  this is side effect.
-        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
-
         return (map.size() == 0) ? map.max_load_factor() : map.max_load_factor() * (static_cast<float>(s) / static_cast<float>(map.size()));
       }
 
 
       /// reserve for new count of elements.  iterators may be invalidated.
       void reserve(size_type count) {
-        // compute current average number of entries per vector.  this is side effect
-        multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
-
         // compute number of buckets required.
         this->rehash(std::ceil(static_cast<float>(count) / this->max_load_factor()));
       }
@@ -1475,9 +1478,10 @@ namespace fsc {  // fast standard container
         auto iter = map.find(key);
         if (iter == map.end()) {
           iter = map.emplace(key, subcontainer_type()).first;
-//          map.at(key).reserve(multiplicity);
         }
         iter->second.emplace_back(::std::forward<value_type>(value));
+        this->update_max_multiplicity(0, iter->second.size());
+
         auto pos = iter->second.end();
         ++s;
         return iterator(iter, map.end(), --pos, iter->second.size() - 1);
@@ -1486,9 +1490,10 @@ namespace fsc {  // fast standard container
         auto iter = map.find(key);
         if (iter == map.end()) {
           iter = map.emplace(key, subcontainer_type()).first;
-//          map[key].reserve(multiplicity);
         }
         iter->second.emplace_back(::std::forward<Key>(key), ::std::forward<T>(value));
+        this->update_max_multiplicity(0, iter->second.size());
+
         auto pos = iter->second.end();
         ++s;
         return iterator(iter, map.end(), --pos, iter->second.size() - 1);
@@ -1497,18 +1502,24 @@ namespace fsc {  // fast standard container
       // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n) but pays the random access and mem realloc cost
       template <class InputIt>
       void insert(InputIt first, InputIt last) {
+    	  size_t after = 0;
+
           for (; first != last; ++first) {
 
             map[first->first].emplace_back(::std::forward<value_type>(*first));
-            ++s;
+            after = std::max(after, map[first->first].size());
           }
+          s += std::distance(first, last);
+          this->update_max_multiplicity(0UL, after);
       }
 
       /// inserting sorted range
       template <class InputIt>
       void insert_sorted(InputIt first, InputIt last) {
-    	  key_equal eq;
+    	  size_t after = 0;
+
     	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
+    	  key_equal eq;
     	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
     		return !(eq(x.first, y.first));
     	  };
@@ -1525,6 +1536,7 @@ namespace fsc {  // fast standard container
 
     		  // copy the range
     		  std::copy(start, end, std::back_inserter(map[start->first]));
+    		  after = std::max(after, map[start->first].size());
 
     		  // advance the pointers
     		  start = end;
@@ -1533,15 +1545,17 @@ namespace fsc {  // fast standard container
     	  }
     	  // can have end at last, because start is at last-1.  need to copy the last part.,
     	  if (start != last) {
-          // get current size.
-          ss = map[start->first].size();
-          map[start->first].reserve(ss + std::distance(start, end));
+			  // get current size.
+			  ss = map[start->first].size();
+			  map[start->first].reserve(ss + std::distance(start, end));
+    		  after = std::max(after, map[start->first].size());
 
-          // copy the range
-          std::copy(start, end, std::back_inserter(map[start->first]));
+			  // copy the range
+			  std::copy(start, end, std::back_inserter(map[start->first]));
     	  }
 
     	  s += std::distance(first, last);
+          this->update_max_multiplicity(0UL, after);
       }
 
       template <typename Pred>
@@ -1552,16 +1566,19 @@ namespace fsc {  // fast standard container
     	  auto new_end = ::std::remove_if(vec.begin(), vec.end(), pred);
     	  vec.erase(new_end, vec.end());
 
-    	  size_t c = before - vec.size();
-    	  s -= c;
+    	  size_t after = vec.size();
+          this->update_max_multiplicity(before, after);
 
-    	  return c;
+          s -= (before - after);
+    	  return before - after;
       }
 
       size_t erase(const key_type& key) {
     	  size_t c = count(key);
         s -= c;
         map.erase(key);
+        this->update_max_multiplicity(c, 0);
+
         return c;
       }
 
@@ -1571,9 +1588,6 @@ namespace fsc {  // fast standard container
       }
 
       void shrink_to_fit() {
-        // update multiplicity.
-        this->multiplicity = (map.size() == 0) ? 1 : (s + map.size() - 1) / map.size();
-
         // for each vector, shrink it.
         auto max = map.end();
         for (auto it = map.begin(); it != max; ++it) {
@@ -1594,13 +1608,27 @@ namespace fsc {  // fast standard container
         return map.size();
       }
       size_type get_max_multiplicity() const {
-        size_type max_multiplicity = 0;
-        auto max = map.cend();
-        for (auto it = map.cbegin(); it != max; ++it) {
-          max_multiplicity = ::std::max(max_multiplicity, it->second.size());
-        }
         return max_multiplicity;
       }
+      void update_max_multiplicity(size_type before, size_type after) {
+		  // after is larger, so set it whether we're inserting or deleting
+		  if (after >= max_multiplicity) {
+			  max_multiplicity = after;
+			  return;
+		  }
+
+		  // else after is smaller than max.  check if delete or insert
+		  if (before < max_multiplicity)  // delete or insert, but was not max.  return
+			  return;
+
+		  // delete and before was >= max, and after is less than max.  may have been max.
+		  // need a full check.
+		  max_multiplicity = map.cbegin()->second.size();
+    	  for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+    		  max_multiplicity = ::std::max(max_multiplicity, it->second.size());
+    	  }
+      }
+
       size_type get_min_multiplicity() const {
         size_type min_multiplicity = ::std::numeric_limits<size_type>::max();
         auto max = map.cend();
